@@ -16,10 +16,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::farm::{
-        RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
-        RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
+    use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
     use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
     #[cfg(feature = "serde_json")]
     use radroots_events::kinds::KIND_FARM;
@@ -43,43 +40,12 @@ mod tests {
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmLocation {
-                primary: None,
-                city: None,
-                region: None,
-                country: None,
-                gcs: Some(RadrootsGcsLocation {
-                    lat: 37.0,
-                    lng: -122.0,
-                    geohash: "9q8yy".to_string(),
-                    point: RadrootsGeoJsonPoint {
-                        r#type: "Point".to_string(),
-                        coordinates: [-122.0, 37.0],
-                    },
-                    polygon: RadrootsGeoJsonPolygon {
-                        r#type: "Polygon".to_string(),
-                        coordinates: vec![vec![
-                            [-122.0, 37.0],
-                            [-122.0, 37.0001],
-                            [-122.0001, 37.0001],
-                            [-122.0, 37.0],
-                        ]],
-                    },
-                    accuracy: None,
-                    altitude: None,
-                    tag_0: None,
-                    label: None,
-                    area: None,
-                    elevation: None,
-                    soil: None,
-                    climate: None,
-                    gc_id: None,
-                    gc_name: None,
-                    gc_admin1_id: None,
-                    gc_admin1_name: None,
-                    gc_country_id: None,
-                    gc_country_name: None,
-                }),
+            location: Some(RadrootsFarmPublicLocation {
+                primary: "Test Farm".to_string(),
+                city: Some("Santa Cruz".to_string()),
+                region: Some("California".to_string()),
+                country: Some("US".to_string()),
+                geohash: "9q8yy".to_string(),
             }),
             tags: Some(vec!["orchard".to_string()]),
         };
@@ -209,43 +175,12 @@ mod tests {
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmLocation {
-                primary: None,
-                city: None,
-                region: None,
-                country: None,
-                gcs: Some(RadrootsGcsLocation {
-                    lat: 37.0,
-                    lng: -122.0,
-                    geohash: "9q8yy".to_string(),
-                    point: RadrootsGeoJsonPoint {
-                        r#type: "Point".to_string(),
-                        coordinates: [-122.0, 37.0],
-                    },
-                    polygon: RadrootsGeoJsonPolygon {
-                        r#type: "Polygon".to_string(),
-                        coordinates: vec![vec![
-                            [-122.0, 37.0],
-                            [-122.0, 37.0001],
-                            [-122.0001, 37.0001],
-                            [-122.0, 37.0],
-                        ]],
-                    },
-                    accuracy: None,
-                    altitude: None,
-                    tag_0: None,
-                    label: None,
-                    area: None,
-                    elevation: None,
-                    soil: None,
-                    climate: None,
-                    gc_id: None,
-                    gc_name: None,
-                    gc_admin1_id: None,
-                    gc_admin1_name: None,
-                    gc_country_id: None,
-                    gc_country_name: None,
-                }),
+            location: Some(RadrootsFarmPublicLocation {
+                primary: "Test Farm".to_string(),
+                city: Some("Santa Cruz".to_string()),
+                region: Some("California".to_string()),
+                country: Some("US".to_string()),
+                geohash: "9q8yy".to_string(),
             }),
             tags: None,
         };
@@ -260,26 +195,19 @@ mod tests {
         assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
 
         farm.name = "Test Farm".to_string();
-        farm.location
-            .as_mut()
-            .expect("location")
-            .gcs
-            .as_mut()
-            .expect("gcs")
-            .geohash = " ".to_string();
+        farm.location.as_mut().expect("location").geohash = " ".to_string();
         let err = farm_build_tags(&farm).expect_err("expected empty geohash");
         assert!(matches!(
             err,
-            EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+            EventEncodeError::EmptyRequiredField("location.geohash")
         ));
 
-        farm.location.as_mut().expect("location").gcs = None;
-        let tags = farm_build_tags(&farm).expect("string-only farm location should be allowed");
-        assert!(
-            !tags
-                .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
-        );
+        farm.location.as_mut().expect("location").geohash = "9q8yy6".to_string();
+        let err = farm_build_tags(&farm).expect_err("expected invalid geohash");
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("location.geohash")
+        ));
 
         let err = farm_ref_tags(&RadrootsFarmRef {
             pubkey: " ".to_string(),

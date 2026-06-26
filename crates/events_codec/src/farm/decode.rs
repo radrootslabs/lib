@@ -6,13 +6,20 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{RadrootsNostrEvent, farm::RadrootsFarm, kinds::KIND_FARM, tags::TAG_D};
+use radroots_events::{
+    RadrootsNostrEvent,
+    farm::RadrootsFarm,
+    kinds::KIND_FARM,
+    location::{has_textual_locality, is_public_geohash5},
+    tags::TAG_D,
+};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_FARM;
+const TAG_G: &str = "g";
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
@@ -45,6 +52,7 @@ pub fn farm_from_event(
         return Err(EventParseError::InvalidJson("content"));
     }
     let d_tag = parse_d_tag(tags)?;
+    reject_private_farm_location_tags(tags)?;
     reject_private_farm_ops_content(content)?;
     let mut farm: RadrootsFarm =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
@@ -54,8 +62,45 @@ pub fn farm_from_event(
     } else if farm.d_tag != d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    if let Some(location) = farm.location.as_ref() {
+        if !is_public_geohash5(&location.geohash)
+            || !has_textual_locality(
+                &location.primary,
+                location.city.as_deref(),
+                location.region.as_deref(),
+                location.country.as_deref(),
+            )
+        {
+            return Err(EventParseError::InvalidTag(TAG_G));
+        }
+    }
 
     Ok(farm)
+}
+
+fn reject_private_farm_location_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
+    for tag in tags {
+        let Some(key) = tag.first().map(|value| value.as_str()) else {
+            continue;
+        };
+        match key {
+            TAG_G => {
+                let Some(value) = tag.get(1).map(|value| value.trim()) else {
+                    return Err(EventParseError::InvalidTag(TAG_G));
+                };
+                if !is_public_geohash5(value) {
+                    return Err(EventParseError::InvalidTag(TAG_G));
+                }
+            }
+            "dd" => return Err(EventParseError::InvalidTag("dd")),
+            "dd.lat" => return Err(EventParseError::InvalidTag("dd.lat")),
+            "dd.lon" => return Err(EventParseError::InvalidTag("dd.lon")),
+            "l" => return Err(EventParseError::InvalidTag("l")),
+            "L" => return Err(EventParseError::InvalidTag("L")),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn reject_private_farm_ops_content(content: &str) -> Result<(), EventParseError> {
@@ -81,6 +126,25 @@ fn reject_private_farm_ops_content(content: &str) -> Result<(), EventParseError>
     ] {
         if object.contains_key(key) {
             return Err(EventParseError::InvalidJson("content"));
+        }
+    }
+    if let Some(location) = object.get("location").and_then(|value| value.as_object()) {
+        for key in [
+            "gcs",
+            "lat",
+            "lng",
+            "lon",
+            "point",
+            "polygon",
+            "coordinates",
+            "accuracy",
+            "altitude",
+            "label",
+            "tag_0",
+        ] {
+            if location.contains_key(key) {
+                return Err(EventParseError::InvalidJson("content"));
+            }
         }
     }
     Ok(())

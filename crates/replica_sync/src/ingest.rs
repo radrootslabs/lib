@@ -30,17 +30,20 @@ use radroots_events_codec::list_set::decode as list_set_decode;
 use radroots_events_codec::listing::decode as listing_decode;
 use radroots_events_codec::plot::decode as plot_decode;
 use radroots_events_codec::profile::decode as profile_decode;
+#[cfg(test)]
+use radroots_replica_db::farm_gcs_location;
 use radroots_replica_db::{
-    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
-    nostr_event_head, nostr_profile, plot, plot_gcs_location, plot_tag, trade_product,
+    farm, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_event_head, nostr_profile,
+    plot, plot_gcs_location, plot_tag, trade_product,
 };
 use radroots_replica_db_schema::farm::{
     FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
     IFarmUpdate,
 };
+#[cfg(test)]
 use radroots_replica_db_schema::farm_gcs_location::{
-    FarmGcsLocationQueryBindValues, IFarmGcsLocationDelete, IFarmGcsLocationFields,
-    IFarmGcsLocationFieldsFilter, IFarmGcsLocationFindMany, IFarmGcsLocationFindOneArgs,
+    FarmGcsLocationQueryBindValues, IFarmGcsLocationDelete, IFarmGcsLocationFieldsFilter,
+    IFarmGcsLocationFindMany, IFarmGcsLocationFindOneArgs,
 };
 use radroots_replica_db_schema::farm_member::{
     FarmMemberQueryBindValues, IFarmMemberDelete, IFarmMemberFields, IFarmMemberFieldsFilter,
@@ -295,7 +298,7 @@ fn ingest_profile_event(
 fn ingest_farm_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsNostrEvent,
-    factory: &dyn RadrootsReplicaIdFactory,
+    _factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let farm = farm_decode::farm_from_event(event.kind, &event.tags, &event.content)?;
     let decision = event_head_decision(exec, event)?;
@@ -370,7 +373,6 @@ fn ingest_farm_event(
     };
 
     upsert_farm_tags(exec, &farm_id, farm.tags)?;
-    upsert_farm_location(exec, &farm_id, location, factory)?;
 
     upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
@@ -1120,27 +1122,6 @@ fn upsert_plot_tags(
     Ok(())
 }
 
-fn upsert_farm_location(
-    exec: &dyn SqlExecutor,
-    farm_id: &str,
-    location: Option<radroots_events::farm::RadrootsFarmLocation>,
-    factory: &dyn RadrootsReplicaIdFactory,
-) -> Result<(), RadrootsReplicaEventsError> {
-    clear_farm_locations(exec, farm_id)?;
-    if let Some(location) = location
-        && let Some(gcs) = location.gcs
-    {
-        let gcs_id = create_gcs_location(exec, gcs, factory)?;
-        let fields = IFarmGcsLocationFields {
-            farm_id: farm_id.to_string(),
-            gcs_location_id: gcs_id,
-            role: ROLE_PRIMARY.to_string(),
-        };
-        let _ = farm_gcs_location::create(exec, &fields)?;
-    }
-    Ok(())
-}
-
 fn upsert_plot_location(
     exec: &dyn SqlExecutor,
     plot_id: &str,
@@ -1160,6 +1141,7 @@ fn upsert_plot_location(
     Ok(())
 }
 
+#[cfg(test)]
 fn clear_farm_locations(
     exec: &dyn SqlExecutor,
     farm_id: &str,
@@ -1220,7 +1202,7 @@ fn clear_plot_locations(
 
 fn create_gcs_location(
     exec: &dyn SqlExecutor,
-    gcs: radroots_events::farm::RadrootsGcsLocation,
+    gcs: radroots_events::gcs::RadrootsGcsLocation,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<String, RadrootsReplicaEventsError> {
     let d_tag = factory.new_d_tag();
@@ -1272,7 +1254,7 @@ fn map_gcs_polygon_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEv
 
 #[cfg(test)]
 fn serialize_gcs_point(
-    point: &radroots_events::farm::RadrootsGeoJsonPoint,
+    point: &radroots_events::gcs::RadrootsGeoJsonPoint,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_point_serialize_error() {
@@ -1282,13 +1264,13 @@ fn serialize_gcs_point(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_point(point: &radroots_events::farm::RadrootsGeoJsonPoint) -> String {
+fn serialize_gcs_point(point: &radroots_events::gcs::RadrootsGeoJsonPoint) -> String {
     serde_json::to_string(point).expect("gcs.point serializes")
 }
 
 #[cfg(test)]
 fn serialize_gcs_polygon(
-    polygon: &radroots_events::farm::RadrootsGeoJsonPolygon,
+    polygon: &radroots_events::gcs::RadrootsGeoJsonPolygon,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_polygon_serialize_error() {
@@ -1298,7 +1280,7 @@ fn serialize_gcs_polygon(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_polygon(polygon: &radroots_events::farm::RadrootsGeoJsonPolygon) -> String {
+fn serialize_gcs_polygon(polygon: &radroots_events::gcs::RadrootsGeoJsonPolygon) -> String {
     serde_json::to_string(polygon).expect("gcs.polygon serializes")
 }
 
@@ -1431,7 +1413,7 @@ enum ListSetRole {
 }
 
 fn unpack_farm_location_strings(
-    location: Option<&radroots_events::farm::RadrootsFarmLocation>,
+    location: Option<&radroots_events::farm::RadrootsFarmPublicLocation>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -1440,7 +1422,7 @@ fn unpack_farm_location_strings(
 ) {
     match location {
         Some(location) => (
-            location.primary.clone(),
+            Some(location.primary.clone()),
             location.city.clone(),
             location.region.clone(),
             location.country.clone(),
@@ -1528,10 +1510,8 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
         RadrootsCoreUnit,
     };
-    use radroots_events::farm::{
-        RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
-        RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
+    use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+    use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     use radroots_events::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
     use radroots_events::list::RadrootsListEntry;
     use radroots_events::list_set::RadrootsListSet;
@@ -1783,7 +1763,7 @@ mod tests {
         created_at: u32,
         d_tag: &str,
         name: &str,
-        location: Option<RadrootsFarmLocation>,
+        location: Option<RadrootsFarmPublicLocation>,
         tags: Option<Vec<String>>,
     ) -> RadrootsNostrEvent {
         let farm = RadrootsFarm {
@@ -2294,12 +2274,12 @@ mod tests {
             10,
             farm_d_tag,
             "farm-a",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
+                geohash: "9q8yy".to_string(),
             }),
             Some(vec![
                 "coffee".to_string(),
@@ -2509,12 +2489,12 @@ mod tests {
         assert!(parse_farm_list_set_d_tag("farm:AAAAAAAAAAAAAAAAAAAAAA:plots").is_some());
         assert_eq!(to_value_opt(Some("x".to_string())), Some(Value::from("x")));
         assert_eq!(to_value_opt(None), Some(Value::Null));
-        let location = RadrootsFarmLocation {
-            primary: Some("p".to_string()),
+        let location = RadrootsFarmPublicLocation {
+            primary: "p".to_string(),
             city: Some("c".to_string()),
             region: Some("r".to_string()),
             country: Some("k".to_string()),
-            gcs: Some(sample_gcs(12.0, 22.0, "s2")),
+            geohash: "9q8yy".to_string(),
         };
         assert_eq!(
             unpack_farm_location_strings(Some(&location)).0,
@@ -2806,7 +2786,6 @@ mod tests {
         .expect("plot")
         .result;
 
-        let _ = upsert_farm_location(&exec, &farm_row.id, None, &FixedFactory).expect("farm none");
         let _ = upsert_plot_location(&exec, &plot_row.id, None, &FixedFactory).expect("plot none");
     }
 
@@ -2852,63 +2831,6 @@ mod tests {
                 &exec,
                 &plot_id,
                 Some(vec!["next".to_string(), " ".to_string()])
-            )
-            .is_ok()
-        );
-
-        let not_found_farm_locations = DeleteErrorExecutor {
-            inner: &exec,
-            table_name: "farm_gcs_location",
-            err: SqlError::NotFound("farm_gcs_location".to_string()),
-        };
-        assert!(
-            upsert_farm_location(
-                &not_found_farm_locations,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(1.0, 2.0, "s4")),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
-        assert!(
-            upsert_farm_location(
-                &exec,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: Some("manual".to_string()),
-                    city: Some("San Francisco".to_string()),
-                    region: Some("CA".to_string()),
-                    country: Some("US".to_string()),
-                    gcs: None,
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
-        assert!(
-            farm_gcs_location::find_many(&exec, &IFarmGcsLocationFindMany { filter: None })
-                .expect("farm locations after string-only upsert")
-                .results
-                .is_empty()
-        );
-        assert!(
-            upsert_farm_location(
-                &exec,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(2.0, 3.0, "s6")),
-                }),
-                &FixedFactory,
             )
             .is_ok()
         );
@@ -3012,27 +2934,6 @@ mod tests {
             upsert_plot_tags(&internal_plot_tags, &plot_id, Some(vec!["x".to_string()])).is_err()
         );
 
-        let internal_farm_locations = DeleteErrorExecutor {
-            inner: &exec,
-            table_name: "farm_gcs_location",
-            err: SqlError::Internal,
-        };
-        assert!(
-            upsert_farm_location(
-                &internal_farm_locations,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(2.0, 3.0, "s6")),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
-
         let internal_plot_locations = DeleteErrorExecutor {
             inner: &exec,
             table_name: "plot_gcs_location",
@@ -3122,12 +3023,12 @@ mod tests {
             51,
             farm_d_tag,
             "pass-farm",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
+                geohash: "9q8yy".to_string(),
             }),
             Some(vec!["coffee".to_string(), "coffee".to_string()]),
         );
@@ -3252,12 +3153,12 @@ mod tests {
             60,
             farm_d_tag,
             "wrapper-farm",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
+                geohash: "9q8yy".to_string(),
             }),
             Some(vec!["coffee".to_string()]),
         );
@@ -3369,12 +3270,12 @@ mod tests {
             71,
             farm_d_tag,
             "txn-farm",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(sample_gcs(12.0, 22.0, "s2")),
+                geohash: "9q8yy".to_string(),
             }),
             Some(vec!["coffee".to_string()]),
         );
@@ -3419,21 +3320,6 @@ mod tests {
         assert!(clear_plot_locations(&pass_txn, &plot_id).is_ok());
         assert!(
             create_gcs_location(&pass_txn, sample_gcs(14.0, 24.0, "s4"), &FixedFactory).is_ok()
-        );
-        assert!(
-            upsert_farm_location(
-                &pass_txn,
-                &farm_row.id,
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(15.0, 25.0, "s5")),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
         );
         assert!(
             upsert_plot_location(
@@ -3486,21 +3372,6 @@ mod tests {
         assert!(clear_farm_locations(&txn, "farm-id").is_err());
         assert!(clear_plot_locations(&txn, "plot-id").is_err());
         assert!(create_gcs_location(&txn, sample_gcs(14.0, 24.0, "s4"), &FixedFactory).is_err());
-        assert!(
-            upsert_farm_location(
-                &txn,
-                "farm-id",
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(15.0, 25.0, "s5")),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
         assert!(
             upsert_plot_location(
                 &txn,
@@ -3617,12 +3488,12 @@ mod tests {
             90,
             farm_d_tag,
             "farm-seed",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
+                geohash: "9q8yy".to_string(),
             }),
             Some(vec!["seed".to_string()]),
         );
@@ -3710,12 +3581,12 @@ mod tests {
             95,
             farm_d_tag,
             "farm-gcs",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(sample_gcs(11.0, 21.0, "s1")),
+                geohash: "9q8yy".to_string(),
             }),
             None,
         );
@@ -3732,12 +3603,12 @@ mod tests {
             96,
             farm_d_tag,
             "farm-rel",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(sample_gcs(12.0, 22.0, "s2")),
+                geohash: "9q8yy".to_string(),
             }),
             None,
         );
@@ -3767,12 +3638,12 @@ mod tests {
             98,
             farm_d_tag,
             "farm-bad-point",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(bad_point),
+                geohash: "9q8yy".to_string(),
             }),
             None,
         );
@@ -3786,12 +3657,12 @@ mod tests {
             99,
             farm_d_tag,
             "farm-bad-polygon",
-            Some(RadrootsFarmLocation {
-                primary: Some("primary".to_string()),
+            Some(RadrootsFarmPublicLocation {
+                primary: "primary".to_string(),
                 city: None,
                 region: None,
                 country: None,
-                gcs: Some(bad_polygon),
+                geohash: "9q8yy".to_string(),
             }),
             None,
         );
@@ -4194,48 +4065,6 @@ mod tests {
                 &plot_tag_insert_fail,
                 &plot_id,
                 Some(vec!["epsilon".to_string()])
-            )
-            .is_err()
-        );
-
-        let farm_gcs_insert_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "insert into gcs_location",
-            err: SqlError::Internal,
-        };
-        assert!(
-            upsert_farm_location(
-                &farm_gcs_insert_fail,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(31.0, 41.0, "s8")),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
-
-        let farm_rel_insert_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "insert into farm_gcs_location",
-            err: SqlError::Internal,
-        };
-        assert!(
-            upsert_farm_location(
-                &farm_rel_insert_fail,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: Some(sample_gcs(32.0, 42.0, "s9")),
-                }),
-                &FixedFactory,
             )
             .is_err()
         );

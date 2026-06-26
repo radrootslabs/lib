@@ -11,11 +11,9 @@ use radroots_events::app_data::RadrootsAppData;
 use radroots_events::comment::RadrootsComment;
 use radroots_events::coop::RadrootsCoop;
 use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_events::farm::{
-    RadrootsFarm, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
-    RadrootsGeoJsonPolygon,
-};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
 use radroots_events::follow::{RadrootsFollow, RadrootsFollowProfile};
+use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::geochat::RadrootsGeoChat;
 use radroots_events::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
@@ -30,7 +28,7 @@ use radroots_events::list::{RadrootsList, RadrootsListEntry};
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingImage,
-    RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingImageSize, RadrootsListingProduct, RadrootsListingPublicLocation,
     RadrootsListingStatus,
 };
 use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
@@ -479,14 +477,12 @@ fn listing_and_message_builders_cover_optional_shapes() {
     listing.product.location = Some("Moyobamba".to_string());
     listing.product.profile = Some("fruity".to_string());
     listing.product.year = Some("2024".to_string());
-    listing.location = Some(RadrootsListingLocation {
+    listing.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
         city: Some("Moyobamba".to_string()),
         region: Some("San Martin".to_string()),
         country: Some("PE".to_string()),
-        lat: Some(-6.03),
-        lng: Some(-76.97),
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
     listing.images = Some(vec![RadrootsListingImage {
         url: cdn_url("a.jpg"),
@@ -542,31 +538,27 @@ fn listing_and_message_builders_cover_optional_shapes() {
     }));
 
     let mut listing_geohash_only = listing_with_trade.clone();
-    listing_geohash_only.location = Some(RadrootsListingLocation {
+    listing_geohash_only.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: None,
-        lng: None,
-        geohash: Some("6gkzwgjzn".to_string()),
+        geohash: "6gkzw".to_string(),
     });
     let geohash_tags =
         listing_tags_with_options(&listing_geohash_only, ListingTagOptions::default()).unwrap();
     assert!(geohash_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("g")
-            && tag.get(1).map(|v| v.as_str()) == Some("6gkzwgjzn")
+            && tag.get(1).map(|v| v.as_str()) == Some("6gkzw")
     }));
 
     let mut listing_no_coordinates = listing_with_trade.clone();
-    listing_no_coordinates.location = Some(RadrootsListingLocation {
+    listing_no_coordinates.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: None,
-        lng: None,
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
     let no_coordinates_tags =
         listing_tags_with_options(&listing_no_coordinates, ListingTagOptions::default()).unwrap();
@@ -576,37 +568,31 @@ fn listing_and_message_builders_cover_optional_shapes() {
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
     );
 
-    let no_gps_tags = listing_tags_with_options(
+    let without_private_location_tags = listing_tags_with_options(
         &listing_with_trade,
         ListingTagOptions {
-            include_gps: false,
             ..ListingTagOptions::default()
         },
     )
     .unwrap();
     assert!(
-        !no_gps_tags
+        !without_private_location_tags
             .iter()
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
     );
 
     let mut listing_with_empty_primary_location = listing_with_trade.clone();
-    listing_with_empty_primary_location.location = Some(RadrootsListingLocation {
+    listing_with_empty_primary_location.location = Some(RadrootsListingPublicLocation {
         primary: " null ".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: Some(-6.03),
-        lng: Some(-76.97),
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
-    let no_primary_location_tags =
-        listing_tags_with_options(&listing_with_empty_primary_location, trade_options).unwrap();
-    assert!(
-        !no_primary_location_tags
-            .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("location") && tag.len() > 2)
-    );
+    assert!(matches!(
+        listing_tags_with_options(&listing_with_empty_primary_location, trade_options),
+        Err(EventEncodeError::EmptyRequiredField("location.primary"))
+    ));
 
     let mut listing_with_discount_payload = listing_with_trade.clone();
     listing_with_discount_payload.discounts = Some(vec![RadrootsCoreDiscount {

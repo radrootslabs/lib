@@ -32,6 +32,9 @@ pub enum RadrootsTradeValidationListingError {
     InvalidInventory,
     MissingAvailability,
     MissingLocation,
+    MissingLocationLocality,
+    MissingLocationGeohash,
+    InvalidLocationGeohash,
     MissingDeliveryMethod,
 }
 
@@ -62,6 +65,9 @@ impl core::fmt::Display for RadrootsTradeValidationListingError {
             Self::InvalidInventory => write!(f, "invalid listing inventory"),
             Self::MissingAvailability => write!(f, "missing listing availability"),
             Self::MissingLocation => write!(f, "missing listing location"),
+            Self::MissingLocationLocality => write!(f, "missing listing location locality"),
+            Self::MissingLocationGeohash => write!(f, "missing listing location geohash"),
+            Self::InvalidLocationGeohash => write!(f, "invalid listing location geohash"),
             Self::MissingDeliveryMethod => write!(f, "missing listing delivery method"),
         }
     }

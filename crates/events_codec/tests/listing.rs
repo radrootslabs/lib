@@ -15,7 +15,7 @@ use radroots_events::{
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
-        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
+        RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
     },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
@@ -177,14 +177,12 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
         inventory_available: None,
         availability: None,
         delivery_method: None,
-        location: Some(RadrootsListingLocation {
+        location: Some(RadrootsListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some("Moyobamba".to_string()),
             region: Some("San Martin".to_string()),
             country: Some("PE".to_string()),
-            lat: Some(-6.0346),
-            lng: Some(-76.9714),
-            geohash: None,
+            geohash: "9q8yy".to_string(),
         }),
         images: Some(vec![RadrootsListingImage {
             url: "http://example.com/widget.jpg".to_string(),
@@ -587,13 +585,8 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
     let mut tags = sample_listing_tags();
     tags.push(vec!["location".to_string(), "Farm shelf".to_string()]);
     let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
-    assert_eq!(
-        decoded
-            .location
-            .as_ref()
-            .map(|location| location.primary.as_str()),
-        Some("Farm shelf")
-    );
+    assert_eq!(decoded.product.location.as_deref(), Some("Farm shelf"));
+    assert!(decoded.location.is_none());
 
     let mut tags = sample_listing_tags();
     tags.push(vec!["location".to_string(), "Farm shelf".to_string()]);
@@ -604,7 +597,7 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
         "San Martin".to_string(),
         "PE".to_string(),
     ]);
-    tags.push(vec!["g".to_string(), "6gkzwgjzn".to_string()]);
+    tags.push(vec!["g".to_string(), "6gkzw".to_string()]);
     let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
     assert_eq!(decoded.product.location.as_deref(), Some("Farm shelf"));
     assert_eq!(
@@ -612,10 +605,10 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
             (
                 location.primary.as_str(),
                 location.city.as_deref(),
-                location.geohash.as_deref(),
+                location.geohash.as_str(),
             )
         }),
-        Some(("Peru", Some("Moyobamba"), Some("6gkzwgjzn")))
+        Some(("Peru", Some("Moyobamba"), "6gkzw"))
     );
 
     let mut tags = sample_listing_tags();
@@ -643,7 +636,6 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
     tags.push(vec!["expires_at".to_string(), "1740".to_string()]);
     tags.push(vec!["delivery".to_string(), "pickup".to_string()]);
     tags.push(vec!["image".to_string(), " ".to_string()]);
-    tags.push(vec!["g".to_string(), " ".to_string()]);
     tags.push(vec![
         "image".to_string(),
         "https://example.test/a.jpg".to_string(),
@@ -992,24 +984,18 @@ fn listing_build_tags_includes_listing_fields() {
         .iter()
         .filter(|t| t.get(0).map(|s| s.as_str()) == Some("g"))
         .collect();
-    assert!(!g_tags.is_empty());
-    let full_len = g_tags[0][1].len();
-    assert_eq!(g_tags.len(), full_len);
-    for (idx, tag) in g_tags.iter().enumerate() {
-        assert_eq!(tag[1].len(), full_len - idx);
-    }
-    assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("L") && t.get(1).map(|s| s.as_str()) == Some("dd.lat")
-    }));
-    assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("L") && t.get(1).map(|s| s.as_str()) == Some("dd.lon")
-    }));
-    assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("l") && t.get(2).map(|s| s.as_str()) == Some("dd.lat")
-    }));
-    assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("l") && t.get(2).map(|s| s.as_str()) == Some("dd.lon")
-    }));
+    assert_eq!(g_tags.len(), 1);
+    assert_eq!(g_tags[0][1].len(), 5);
+    assert!(
+        !tags
+            .iter()
+            .any(|t| t.get(0).map(|s| s.as_str()) == Some("L"))
+    );
+    assert!(
+        !tags
+            .iter()
+            .any(|t| t.get(0).map(|s| s.as_str()) == Some("l"))
+    );
 
     assert!(tags.iter().any(|t| {
         t.get(0).map(|s| s.as_str()) == Some("image")
@@ -1116,14 +1102,12 @@ fn listing_build_tags_ignores_null_strings() {
     listing.product.location = Some("null".to_string());
     listing.product.profile = Some("null".to_string());
     listing.product.year = Some("null".to_string());
-    listing.location = Some(RadrootsListingLocation {
+    listing.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
         city: Some("null".to_string()),
         region: Some("San Martin".to_string()),
         country: Some("null".to_string()),
-        lat: Some(-6.0346),
-        lng: Some(-76.9714),
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
     listing.images = Some(vec![RadrootsListingImage {
         url: "null".to_string(),
@@ -1141,34 +1125,31 @@ fn listing_build_tags_ignores_null_strings() {
 #[test]
 fn listing_tags_with_options_cover_location_fallback_paths() {
     let mut geohash_only = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
-    geohash_only.location = Some(RadrootsListingLocation {
+    geohash_only.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: None,
-        lng: None,
-        geohash: Some("6gkzwgjzn".to_string()),
+        geohash: "6gkzw".to_string(),
     });
     let tags = listing_tags_with_options(&geohash_only, ListingTagOptions::default()).unwrap();
     assert!(
         tags.iter()
             .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
     );
-    assert!(tags.iter().any(|tag| {
-        tag.get(0).map(|value| value.as_str()) == Some("l")
-            && tag.get(2).map(|value| value.as_str()) == Some("dd")
-    }));
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("l"))
+    );
 
     let mut no_coordinates = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
-    no_coordinates.location = Some(RadrootsListingLocation {
+    no_coordinates.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: None,
-        lng: None,
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
     let tags = listing_tags_with_options(&no_coordinates, ListingTagOptions::default()).unwrap();
     assert!(
@@ -1177,25 +1158,21 @@ fn listing_tags_with_options_cover_location_fallback_paths() {
             .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("L"))
     );
     assert!(
-        !tags
-            .iter()
+        tags.iter()
             .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
     );
 
-    let mut no_gps = sample_listing("AAAAAAAAAAAAAAAAAAAAAw");
-    no_gps.location = Some(RadrootsListingLocation {
+    let mut without_geohash = sample_listing("AAAAAAAAAAAAAAAAAAAAAw");
+    without_geohash.location = Some(RadrootsListingPublicLocation {
         primary: "Moyobamba".to_string(),
-        city: None,
+        city: Some("Moyobamba".to_string()),
         region: None,
         country: None,
-        lat: Some(-6.0346),
-        lng: Some(-76.9714),
-        geohash: None,
+        geohash: "9q8yy".to_string(),
     });
     let tags = listing_tags_with_options(
-        &no_gps,
+        &without_geohash,
         ListingTagOptions {
-            include_gps: false,
             ..ListingTagOptions::default()
         },
     )

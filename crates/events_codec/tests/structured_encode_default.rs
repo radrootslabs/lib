@@ -7,10 +7,8 @@ use radroots_core::{
 };
 use radroots_events::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
 use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_events::farm::{
-    RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
-    RadrootsGeoJsonPolygon,
-};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::kinds::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
@@ -162,12 +160,12 @@ fn sample_farm() -> RadrootsFarm {
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmLocation {
-            primary: Some("farm".to_string()),
-            city: None,
-            region: None,
+        location: Some(RadrootsFarmPublicLocation {
+            primary: "farm".to_string(),
+            city: Some("Town".to_string()),
+            region: Some("Region".to_string()),
             country: None,
-            gcs: Some(sample_gcs()),
+            geohash: "9q8yy".to_string(),
         }),
         tags: Some(vec!["organic".to_string(), " ".to_string()]),
     }
@@ -377,12 +375,12 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmLocation {
-            primary: Some("farm".to_string()),
-            city: None,
-            region: None,
+        location: Some(RadrootsFarmPublicLocation {
+            primary: "farm".to_string(),
+            city: Some("Town".to_string()),
+            region: Some("Region".to_string()),
             country: None,
-            gcs: Some(sample_gcs()),
+            geohash: "9q8yy".to_string(),
         }),
         tags: Some(vec!["organic".to_string(), " ".to_string()]),
     };
@@ -396,22 +394,15 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     assert!(farm_tags.iter().any(|tag| tag[0] == "g"));
 
     let mut invalid_farm = farm.clone();
-    invalid_farm
-        .location
-        .as_mut()
-        .unwrap()
-        .gcs
-        .as_mut()
-        .unwrap()
-        .geohash = " ".to_string();
+    invalid_farm.location.as_mut().unwrap().geohash = " ".to_string();
     let err = farm_build_tags(&invalid_farm).unwrap_err();
     assert!(matches!(
         err,
-        EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+        EventEncodeError::EmptyRequiredField("location.geohash")
     ));
 
     let mut string_only_farm = farm.clone();
-    string_only_farm.location.as_mut().unwrap().gcs = None;
+    string_only_farm.location = None;
     let string_only_tags = farm_build_tags(&string_only_farm).unwrap();
     assert!(
         !string_only_tags

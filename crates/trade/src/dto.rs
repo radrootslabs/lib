@@ -110,7 +110,7 @@ impl Dto for RadrootsTradeListing {
         .with_field(field(
             "location",
             "location",
-            ts_ref("RadrootsListingLocation"),
+            ts_ref("RadrootsListingPublicLocation"),
             "crates/trade/src/listing/validation.rs",
             38,
         ))

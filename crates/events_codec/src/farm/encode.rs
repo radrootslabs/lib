@@ -7,6 +7,7 @@ use alloc::{
 use radroots_events::{
     farm::{RadrootsFarm, RadrootsFarmRef},
     kinds::KIND_FARM,
+    location::{has_textual_locality, is_public_geohash5},
     tags::TAG_D,
 };
 
@@ -38,14 +39,21 @@ pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEnc
             push_tag(&mut tags, TAG_T, item);
         }
     }
-    if let Some(geohash) = farm
-        .location
-        .as_ref()
-        .and_then(|location| location.gcs.as_ref())
-        .map(|gcs| gcs.geohash.trim())
-    {
+    if let Some(location) = farm.location.as_ref() {
+        if !has_textual_locality(
+            &location.primary,
+            location.city.as_deref(),
+            location.region.as_deref(),
+            location.country.as_deref(),
+        ) {
+            return Err(EventEncodeError::EmptyRequiredField("location.locality"));
+        }
+        let geohash = location.geohash.trim();
         if geohash.is_empty() {
-            return Err(EventEncodeError::EmptyRequiredField("location.gcs.geohash"));
+            return Err(EventEncodeError::EmptyRequiredField("location.geohash"));
+        }
+        if !is_public_geohash5(geohash) {
+            return Err(EventEncodeError::InvalidField("location.geohash"));
         }
         push_tag(&mut tags, TAG_G, geohash);
     }

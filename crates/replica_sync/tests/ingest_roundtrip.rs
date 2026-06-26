@@ -1,8 +1,6 @@
 use radroots_events::RadrootsNostrEvent;
-use radroots_events::farm::{
-    RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
-    RadrootsGeoJsonPolygon,
-};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::kinds::{
     KIND_FARM, KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE,
 };
@@ -224,11 +222,11 @@ fn seed_source(
     };
     let farm_row = unwrap_sql(farm::create(exec, &farm_fields), "farm").result;
 
-    let point = radroots_events::farm::RadrootsGeoJsonPoint {
+    let point = radroots_events::gcs::RadrootsGeoJsonPoint {
         r#type: "Point".to_string(),
         coordinates: [-122.4, 37.7],
     };
-    let polygon = radroots_events::farm::RadrootsGeoJsonPolygon {
+    let polygon = radroots_events::gcs::RadrootsGeoJsonPolygon {
         r#type: "Polygon".to_string(),
         coordinates: vec![vec![
             [-122.4, 37.7],
@@ -818,20 +816,18 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         12,
         farm_d_tag,
         "farm-query",
-        Some(RadrootsFarmLocation {
-            primary: Some("farm".to_string()),
+        Some(RadrootsFarmPublicLocation {
+            primary: "farm".to_string(),
             city: None,
             region: None,
             country: None,
-            gcs: Some(sample_gcs(37.7, -122.4, "9q8yy")),
+            geohash: "9q8yy".to_string(),
         }),
         Some(vec!["coffee".to_string()]),
     );
     assert_query_fail("select * from farm where", &farm_create);
     assert_query_fail("insert into farm", &farm_create);
     assert_query_fail("insert into farm_tag", &farm_create);
-    assert_query_fail("insert into gcs_location", &farm_create);
-    assert_query_fail("insert into farm_gcs_location", &farm_create);
     assert_eq!(
         radroots_replica_ingest_event(&exec, &farm_create).expect("seed farm"),
         RadrootsReplicaIngestOutcome::Applied
@@ -1023,7 +1019,7 @@ fn farm_event(
     created_at: u32,
     d_tag: &str,
     name: &str,
-    location: Option<RadrootsFarmLocation>,
+    location: Option<RadrootsFarmPublicLocation>,
     tags: Option<Vec<String>>,
 ) -> RadrootsNostrEvent {
     let farm = RadrootsFarm {
@@ -1174,12 +1170,12 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
 
     let farm_pubkey = "e".repeat(64);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
-    let farm_location = RadrootsFarmLocation {
-        primary: Some("farm-primary".to_string()),
+    let farm_location = RadrootsFarmPublicLocation {
+        primary: "farm-primary".to_string(),
         city: Some("city".to_string()),
         region: Some("region".to_string()),
         country: Some("country".to_string()),
-        gcs: Some(sample_gcs(37.7, -122.4, "9q8yy")),
+        geohash: "9q8yy".to_string(),
     };
     let farm_create = farm_event(
         200,

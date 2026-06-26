@@ -6,10 +6,8 @@ mod test_fixtures;
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
 use radroots_events::coop::RadrootsCoop;
 use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_events::farm::{
-    RadrootsFarm, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
-    RadrootsGeoJsonPolygon,
-};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
+use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::kinds::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };

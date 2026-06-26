@@ -157,7 +157,7 @@ mod tests {
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-            RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+            RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
             RadrootsListingStatus,
         },
         resource_area::RadrootsResourceAreaRef,
@@ -231,14 +231,12 @@ mod tests {
                 status: RadrootsListingStatus::Active,
             }),
             delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-            location: Some(RadrootsListingLocation {
+            location: Some(RadrootsListingPublicLocation {
                 primary: "Farm".to_string(),
-                city: None,
-                region: None,
-                country: None,
-                lat: None,
-                lng: None,
-                geohash: None,
+                city: Some("Town".to_string()),
+                region: Some("Region".to_string()),
+                country: Some("US".to_string()),
+                geohash: "9q8yy".to_string(),
             }),
             images: None,
         }

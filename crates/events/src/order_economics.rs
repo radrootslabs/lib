@@ -82,10 +82,7 @@ pub struct RadrootsOrderEconomicItem {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsOrderEconomicLine"))
-)]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicLine")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicLine {
@@ -98,10 +95,7 @@ pub struct RadrootsOrderEconomicLine {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsOrderEconomicTotals"))
-)]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicTotals")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicTotals {

@@ -18,8 +18,9 @@ use radroots_events::{
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
-        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
+        RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
     },
+    location::is_public_geohash5,
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
     tags::{TAG_D, TAG_PUBLISHED_AT},
@@ -42,16 +43,59 @@ const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
+const TAG_LABEL: &str = "l";
+const TAG_LABEL_NS: &str = "L";
+const TAG_DD: &str = "dd";
+const TAG_DD_LAT: &str = "dd.lat";
+const TAG_DD_LON: &str = "dd.lon";
 const TAG_INVENTORY: &str = "inventory";
 const TAG_DELIVERY: &str = "delivery";
 const TAG_RADROOTS_AVAILABILITY_START: &str = "radroots:availability_start";
 const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
 
+struct ListingLocationDraft {
+    primary: String,
+    city: Option<String>,
+    region: Option<String>,
+    country: Option<String>,
+}
+
 fn parse_decimal(value: &str, field: &'static str) -> Result<RadrootsCoreDecimal, EventParseError> {
     value
         .parse::<RadrootsCoreDecimal>()
         .map_err(|_| EventParseError::InvalidTag(field))
+}
+
+fn reject_private_listing_location_content(content: &str) -> Result<(), EventParseError> {
+    let trimmed = content.trim();
+    if !trimmed.starts_with('{') {
+        return Ok(());
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return Ok(());
+    };
+    let Some(location) = value.get("location").and_then(|value| value.as_object()) else {
+        return Ok(());
+    };
+    for key in [
+        "lat",
+        "lng",
+        "lon",
+        "point",
+        "polygon",
+        "coordinates",
+        "accuracy",
+        "altitude",
+        "label",
+        "tag_0",
+        "gcs",
+    ] {
+        if location.contains_key(key) {
+            return Err(EventParseError::InvalidJson("content"));
+        }
+    }
+    Ok(())
 }
 
 fn parse_currency(
@@ -229,8 +273,9 @@ pub fn listing_from_event(
 
 pub fn listing_from_event_parts(
     tags: &[Vec<String>],
-    _content: &str,
+    content: &str,
 ) -> Result<RadrootsListing, EventParseError> {
+    reject_private_listing_location_content(content)?;
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
     let farm_pubkey = parse_farm_pubkey(tags)?;
@@ -252,7 +297,7 @@ pub fn listing_from_event_parts(
     let mut bin_drafts: Vec<BinDraft> = Vec::new();
     let mut bin_order = 0usize;
     let mut discounts: Vec<RadrootsCoreDiscount> = Vec::new();
-    let mut location: Option<RadrootsListingLocation> = None;
+    let mut location: Option<ListingLocationDraft> = None;
     let mut inventory_available: Option<RadrootsCoreDecimal> = None;
     let mut availability_status: Option<RadrootsListingStatus> = None;
     let mut availability_start: Option<u64> = None;
@@ -261,10 +306,6 @@ pub fn listing_from_event_parts(
     let mut images: Vec<RadrootsListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
     let mut published_at: Option<u64> = None;
-
-    let has_structured_location = tags
-        .iter()
-        .any(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3);
 
     for tag in tags {
         if tag.is_empty() {
@@ -283,7 +324,7 @@ pub fn listing_from_event_parts(
             "location" => {
                 let parse_structured_location = match tag.len() {
                     0 | 1 => false,
-                    2 => !has_structured_location && location.is_none(),
+                    2 => false,
                     _ => true,
                 };
                 if parse_structured_location {
@@ -291,14 +332,11 @@ pub fn listing_from_event_parts(
                         .get(1)
                         .and_then(|value| clean_value(value))
                         .ok_or(EventParseError::InvalidTag(TAG_LOCATION))?;
-                    let mut parsed = RadrootsListingLocation {
+                    let mut parsed = ListingLocationDraft {
                         primary,
                         city: None,
                         region: None,
                         country: None,
-                        lat: None,
-                        lng: None,
-                        geohash: None,
                     };
                     if let Some(city) = tag.get(2).and_then(|value| clean_value(value)) {
                         parsed.city = Some(city);
@@ -409,10 +447,24 @@ pub fn listing_from_event_parts(
                 discounts.push(parse_discount(payload)?);
             }
             TAG_GEOHASH => {
-                if let Some(value) = tag.get(1).and_then(|value| clean_value(value)) {
-                    geohash = Some(value);
+                let value = tag
+                    .get(1)
+                    .and_then(|value| clean_value(value))
+                    .ok_or(EventParseError::InvalidTag(TAG_GEOHASH))?;
+                if !is_public_geohash5(&value) {
+                    return Err(EventParseError::InvalidTag(TAG_GEOHASH));
                 }
+                let value = value.to_ascii_lowercase();
+                if geohash.as_ref().is_some_and(|existing| existing != &value) {
+                    return Err(EventParseError::InvalidTag(TAG_GEOHASH));
+                }
+                geohash = Some(value);
             }
+            TAG_DD => return Err(EventParseError::InvalidTag(TAG_DD)),
+            TAG_DD_LAT => return Err(EventParseError::InvalidTag(TAG_DD_LAT)),
+            TAG_DD_LON => return Err(EventParseError::InvalidTag(TAG_DD_LON)),
+            TAG_LABEL => return Err(EventParseError::InvalidTag(TAG_LABEL)),
+            TAG_LABEL_NS => return Err(EventParseError::InvalidTag(TAG_LABEL_NS)),
             TAG_INVENTORY => {
                 let value = tag
                     .get(1)
@@ -477,10 +529,18 @@ pub fn listing_from_event_parts(
         },
     };
 
-    let location = location.map(|mut location| {
-        location.geohash = location.geohash.or(geohash);
-        location
-    });
+    let location = location
+        .map(|location| {
+            let geohash = geohash.ok_or(EventParseError::InvalidTag(TAG_GEOHASH))?;
+            Ok(RadrootsListingPublicLocation {
+                primary: location.primary,
+                city: location.city,
+                region: location.region,
+                country: location.country,
+                geohash,
+            })
+        })
+        .transpose()?;
 
     if farm_pubkey != farm_ref.pubkey {
         return Err(EventParseError::InvalidTag(TAG_P));

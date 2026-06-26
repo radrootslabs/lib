@@ -12,8 +12,9 @@ use radroots_events::{
     kinds::is_listing_kind,
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-        RadrootsListingLocation,
+        RadrootsListingPublicLocation,
     },
+    location::{has_textual_locality, is_public_geohash5},
     order::RadrootsListingParseError,
     trade_validation::RadrootsTradeValidationListingError as TradeListingValidationError,
 };
@@ -35,7 +36,7 @@ pub struct RadrootsTradeListing {
     pub unit_price: RadrootsCoreMoney,
     pub inventory_available: RadrootsCoreDecimal,
     pub availability: RadrootsListingAvailability,
-    pub location: RadrootsListingLocation,
+    pub location: RadrootsListingPublicLocation,
     pub delivery_method: RadrootsListingDeliveryMethod,
     pub listing: RadrootsListing,
 }
@@ -135,6 +136,20 @@ pub fn validate_listing_event(
         .location
         .clone()
         .ok_or(TradeListingValidationError::MissingLocation)?;
+    if !has_textual_locality(
+        &location.primary,
+        location.city.as_deref(),
+        location.region.as_deref(),
+        location.country.as_deref(),
+    ) {
+        return Err(TradeListingValidationError::MissingLocationLocality);
+    }
+    if location.geohash.trim().is_empty() {
+        return Err(TradeListingValidationError::MissingLocationGeohash);
+    }
+    if !is_public_geohash5(&location.geohash) {
+        return Err(TradeListingValidationError::InvalidLocationGeohash);
+    }
     let delivery_method = listing
         .delivery_method
         .clone()
@@ -173,7 +188,7 @@ mod tests {
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-            RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+            RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
         },
     };
 
@@ -238,14 +253,12 @@ mod tests {
                 status: radroots_events::listing::RadrootsListingStatus::Active,
             }),
             delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-            location: Some(RadrootsListingLocation {
+            location: Some(RadrootsListingPublicLocation {
                 primary: "Farm".into(),
-                city: None,
-                region: None,
-                country: None,
-                lat: None,
-                lng: None,
-                geohash: None,
+                city: Some("Town".into()),
+                region: Some("Region".into()),
+                country: Some("US".into()),
+                geohash: "9q8yy".into(),
             }),
             images: None,
         }
@@ -491,6 +504,43 @@ mod tests {
     }
 
     #[test]
+    fn validate_listing_rejects_missing_location_locality() {
+        let mut listing = base_listing();
+        let location = listing.location.as_mut().expect("location");
+        location.city = None;
+        location.region = None;
+        location.country = None;
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::MissingLocationLocality,
+        );
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_location_geohash() {
+        let mut listing = base_listing();
+        listing.location.as_mut().expect("location").geohash = " ".into();
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::codec::ListingParseError::InvalidTag("g".to_string()),
+            },
+        );
+    }
+
+    #[test]
+    fn validate_listing_rejects_invalid_location_geohash() {
+        let mut listing = base_listing();
+        listing.location.as_mut().expect("location").geohash = "9q8yyz".into();
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::codec::ListingParseError::InvalidTag("g".to_string()),
+            },
+        );
+    }
+
+    #[test]
     fn validate_listing_rejects_missing_delivery_method() {
         let mut listing = base_listing();
         listing.delivery_method = None;
@@ -526,6 +576,9 @@ mod tests {
             TradeListingValidationError::InvalidInventory,
             TradeListingValidationError::MissingAvailability,
             TradeListingValidationError::MissingLocation,
+            TradeListingValidationError::MissingLocationLocality,
+            TradeListingValidationError::MissingLocationGeohash,
+            TradeListingValidationError::InvalidLocationGeohash,
             TradeListingValidationError::MissingDeliveryMethod,
         ];
         for error in errors {

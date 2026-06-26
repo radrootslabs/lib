@@ -9,11 +9,10 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-use radroots_events::farm::{
-    RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
-    RadrootsGeoJsonPolygon,
-};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
+use radroots_events::location::{has_textual_locality, is_public_geohash5};
 use radroots_events::plot::RadrootsPlot;
 use radroots_events::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
@@ -481,26 +480,48 @@ fn load_plots(
 fn load_farm_location(
     exec: &dyn SqlExecutor,
     farm: &Farm,
-) -> Result<Option<RadrootsFarmLocation>, RadrootsReplicaEventsError> {
-    let gcs = load_gcs_location_for_farm(exec, &farm.id)?;
-    let has_strings = [
-        farm.location_primary.as_deref(),
-        farm.location_city.as_deref(),
-        farm.location_region.as_deref(),
-        farm.location_country.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|value| !value.trim().is_empty());
-    if !has_strings && gcs.is_none() {
+) -> Result<Option<RadrootsFarmPublicLocation>, RadrootsReplicaEventsError> {
+    let Some(gcs) = load_gcs_location_for_farm(exec, &farm.id)? else {
+        return Ok(None);
+    };
+    let Some(geohash) = gcs.geohash.get(..5).map(|value| value.to_ascii_lowercase()) else {
+        return Ok(None);
+    };
+    if !is_public_geohash5(&geohash) {
         return Ok(None);
     }
-    Ok(Some(RadrootsFarmLocation {
-        primary: farm.location_primary.clone(),
-        city: farm.location_city.clone(),
-        region: farm.location_region.clone(),
-        country: farm.location_country.clone(),
-        gcs,
+    let primary = farm
+        .location_primary
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .or_else(|| gcs.gc_name.clone())
+        .or_else(|| gcs.label.clone())
+        .unwrap_or_else(|| geohash.clone());
+    let city = farm.location_city.clone().or_else(|| gcs.gc_name.clone());
+    let region = farm
+        .location_region
+        .clone()
+        .or_else(|| gcs.gc_admin1_name.clone());
+    let country = farm
+        .location_country
+        .clone()
+        .or_else(|| gcs.gc_country_name.clone())
+        .or_else(|| gcs.gc_country_id.clone());
+    if !has_textual_locality(
+        &primary,
+        city.as_deref(),
+        region.as_deref(),
+        country.as_deref(),
+    ) {
+        return Ok(None);
+    }
+    Ok(Some(RadrootsFarmPublicLocation {
+        primary,
+        city,
+        region,
+        country,
+        geohash,
     }))
 }
 
@@ -1886,7 +1907,7 @@ mod tests {
     }
 
     #[test]
-    fn load_farm_location_preserves_string_only_locations() {
+    fn load_farm_location_omits_string_only_public_locations() {
         let exec = SqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let farm_row = farm::create(
@@ -1908,14 +1929,8 @@ mod tests {
         .expect("farm")
         .result;
 
-        let location = load_farm_location(&exec, &farm_row)
-            .expect("location query")
-            .expect("string-only location");
-        assert_eq!(location.primary.as_deref(), Some("San Francisco, CA"));
-        assert_eq!(location.city.as_deref(), Some("San Francisco"));
-        assert_eq!(location.region.as_deref(), Some("CA"));
-        assert_eq!(location.country.as_deref(), Some("US"));
-        assert!(location.gcs.is_none());
+        let location = load_farm_location(&exec, &farm_row).expect("location query");
+        assert!(location.is_none());
     }
 
     #[test]

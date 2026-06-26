@@ -13,8 +13,9 @@ use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
-    RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
+    RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
 };
+use radroots_events::location::is_public_geohash5;
 pub(crate) use radroots_events::order::RadrootsListingParseError as ListingParseError;
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
@@ -33,6 +34,11 @@ const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
+const TAG_LABEL: &str = "l";
+const TAG_LABEL_NS: &str = "L";
+const TAG_DD: &str = "dd";
+const TAG_DD_LAT: &str = "dd.lat";
+const TAG_DD_LON: &str = "dd.lon";
 const TAG_INVENTORY: &str = "inventory";
 const TAG_DELIVERY: &str = "delivery";
 const TAG_RADROOTS_AVAILABILITY_START: &str = "radroots:availability_start";
@@ -40,6 +46,13 @@ const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
 const TAG_P: &str = "p";
 const TAG_A: &str = "a";
+
+struct ListingLocationDraft {
+    primary: String,
+    city: Option<String>,
+    region: Option<String>,
+    country: Option<String>,
+}
 
 fn parse_decimal(s: &str, field: &str) -> Result<RadrootsCoreDecimal, ListingParseError> {
     s.parse::<RadrootsCoreDecimal>()
@@ -61,6 +74,40 @@ fn parse_u64_tag_value(value: Option<&String>, field: &str) -> Result<u64, Listi
         .ok_or_else(|| ListingParseError::InvalidTag(field.to_string()))?
         .parse::<u64>()
         .map_err(|_| ListingParseError::InvalidNumber(field.to_string()))
+}
+
+fn reject_private_listing_location_content(content: &str) -> Result<(), ListingParseError> {
+    let trimmed = content.trim();
+    if !trimmed.starts_with('{') {
+        return Ok(());
+    }
+    #[cfg(feature = "serde_json")]
+    {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            return Ok(());
+        };
+        let Some(location) = value.get("location").and_then(|value| value.as_object()) else {
+            return Ok(());
+        };
+        for key in [
+            "lat",
+            "lng",
+            "lon",
+            "point",
+            "polygon",
+            "coordinates",
+            "accuracy",
+            "altitude",
+            "label",
+            "tag_0",
+            "gcs",
+        ] {
+            if location.contains_key(key) {
+                return Err(ListingParseError::InvalidJson("location".to_string()));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, ListingParseError> {
@@ -85,6 +132,7 @@ pub fn listing_from_event_parts(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<RadrootsListing, ListingParseError> {
+    reject_private_listing_location_content(content)?;
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
     let farm_pubkey = parse_farm_pubkey(tags)?;
@@ -95,6 +143,11 @@ pub fn listing_from_event_parts(
         #[cfg(feature = "serde_json")]
         {
             if let Ok(mut listing) = serde_json::from_str::<RadrootsListing>(content) {
+                if let Some(location) = listing.location.as_ref()
+                    && !is_public_geohash5(&location.geohash)
+                {
+                    return Err(ListingParseError::InvalidTag(TAG_GEOHASH.to_string()));
+                }
                 if listing.d_tag != d_tag {
                     return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
                 }
@@ -192,7 +245,7 @@ fn listing_from_tags(
     let mut bin_drafts: Vec<BinDraft> = Vec::new();
     let mut bin_order = 0usize;
     let mut discounts: Vec<RadrootsCoreDiscount> = Vec::new();
-    let mut location: Option<RadrootsListingLocation> = None;
+    let mut location: Option<ListingLocationDraft> = None;
     let mut inventory_available: Option<RadrootsCoreDecimal> = None;
     let mut availability_status: Option<RadrootsListingStatus> = None;
     let mut availability_start: Option<u64> = None;
@@ -201,10 +254,6 @@ fn listing_from_tags(
     let mut images: Vec<RadrootsListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
     let mut published_at: Option<u64> = None;
-
-    let has_structured_location = tags
-        .iter()
-        .any(|tag| tag.first().map(|k| k.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3);
 
     for tag in tags {
         if tag.is_empty() {
@@ -224,7 +273,7 @@ fn listing_from_tags(
             "location" => {
                 let parse_structured_location = match tag.len() {
                     0 | 1 => false,
-                    2 => !has_structured_location && location.is_none(),
+                    2 => false,
                     _ => true,
                 };
                 if parse_structured_location {
@@ -232,14 +281,11 @@ fn listing_from_tags(
                     if primary.trim().is_empty() {
                         return Err(ListingParseError::InvalidTag(TAG_LOCATION.to_string()));
                     }
-                    let mut loc = RadrootsListingLocation {
+                    let mut loc = ListingLocationDraft {
                         primary: primary.to_string(),
                         city: None,
                         region: None,
                         country: None,
-                        lat: None,
-                        lng: None,
-                        geohash: None,
                     };
                     if let Some(city) = tag.get(2).and_then(|v| clean_value(v)) {
                         loc.city = Some(city);
@@ -368,9 +414,21 @@ fn listing_from_tags(
                 discounts.push(discount);
             }
             TAG_GEOHASH => {
-                if let Some(value) = tag.get(1).and_then(|v| clean_value(v)) {
-                    geohash = Some(value);
+                let value = tag
+                    .get(1)
+                    .and_then(|v| clean_value(v))
+                    .ok_or_else(|| ListingParseError::InvalidTag(TAG_GEOHASH.to_string()))?;
+                if !is_public_geohash5(&value) {
+                    return Err(ListingParseError::InvalidTag(TAG_GEOHASH.to_string()));
                 }
+                let value = value.to_ascii_lowercase();
+                if geohash.as_ref().is_some_and(|existing| existing != &value) {
+                    return Err(ListingParseError::InvalidTag(TAG_GEOHASH.to_string()));
+                }
+                geohash = Some(value);
+            }
+            TAG_DD | TAG_DD_LAT | TAG_DD_LON | TAG_LABEL | TAG_LABEL_NS => {
+                return Err(ListingParseError::InvalidTag(key.to_string()));
             }
             TAG_INVENTORY => {
                 let value = tag
@@ -439,10 +497,19 @@ fn listing_from_tags(
         },
     };
 
-    let location = location.map(|mut loc| {
-        loc.geohash = loc.geohash.or(geohash);
-        loc
-    });
+    let location = location
+        .map(|loc| {
+            let geohash =
+                geohash.ok_or_else(|| ListingParseError::InvalidTag(TAG_GEOHASH.to_string()))?;
+            Ok(RadrootsListingPublicLocation {
+                primary: loc.primary,
+                city: loc.city,
+                region: loc.region,
+                country: loc.country,
+                geohash,
+            })
+        })
+        .transpose()?;
 
     if farm_pubkey != farm_ref.pubkey {
         return Err(ListingParseError::InvalidTag(TAG_P.to_string()));
@@ -1100,7 +1167,7 @@ mod tests {
             "Region".into(),
             "SE".into(),
         ]);
-        tags.push(vec![TAG_GEOHASH.into(), "u6se".into()]);
+        tags.push(vec![TAG_GEOHASH.into(), "u6sep".into()]);
         tags.push(vec![TAG_INVENTORY.into(), "8".into()]);
         tags.push(vec![TAG_RADROOTS_AVAILABILITY_START.into(), "10".into()]);
         tags.push(vec![TAG_EXPIRES_AT.into(), "20".into()]);
@@ -1145,8 +1212,8 @@ mod tests {
             "Some(Other { method: \"drone\" })"
         );
         assert_eq!(
-            listing.location.as_ref().unwrap().geohash.as_deref(),
-            Some("u6se")
+            listing.location.as_ref().unwrap().geohash,
+            "u6sep".to_string()
         );
         assert_eq!(listing.product.process.as_deref(), Some("washed"));
         assert_eq!(listing.product.lot.as_deref(), Some("lot-7"));
@@ -1173,7 +1240,7 @@ mod tests {
         )
         .expect("listing");
 
-        assert_eq!(listing.product.location.as_deref(), Some("fallback"));
+        assert_eq!(listing.product.location.as_deref(), Some("Farm"));
         assert_eq!(
             format!("{:?}", listing.delivery_method),
             "Some(Other { method: \"parcel\" })"
@@ -1242,6 +1309,7 @@ mod tests {
             "Town".into(),
             "Region".into(),
         ]);
+        tags.push(vec![TAG_GEOHASH.into(), "u6sep".into()]);
         tags.push(vec![TAG_LOCATION.into()]);
         tags.push(vec![TAG_LOCATION.into(), "fallback".into()]);
         let listing = listing_from_tags(
@@ -2361,7 +2429,6 @@ mod tests {
                 "1".into(),
                 "g".into(),
             ],
-            vec![TAG_GEOHASH.into()],
         ];
         let listing = listing_from_tags(
             &tags,

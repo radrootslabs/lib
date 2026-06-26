@@ -12,11 +12,9 @@ use crate::{
     comment::RadrootsComment,
     coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef},
     document::{RadrootsDocument, RadrootsDocumentSubject},
-    farm::{
-        RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
-        RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    },
+    farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef},
     follow::{RadrootsFollow, RadrootsFollowProfile},
+    gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
     geochat::RadrootsGeoChat,
     gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
     ids::{
@@ -32,7 +30,7 @@ use crate::{
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
-        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
+        RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
     },
     message::{RadrootsMessage, RadrootsMessageRecipient},
     message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions},
@@ -76,7 +74,7 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsDocument>(),
         RootDescriptor::new::<RadrootsDocumentSubject>(),
         RootDescriptor::new::<RadrootsFarm>(),
-        RootDescriptor::new::<RadrootsFarmLocation>(),
+        RootDescriptor::new::<RadrootsFarmPublicLocation>(),
         RootDescriptor::new::<RadrootsFarmRef>(),
         RootDescriptor::new::<RadrootsFollow>(),
         RootDescriptor::new::<RadrootsFollowProfile>(),
@@ -101,7 +99,7 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsNostrEvent>(),
         RootDescriptor::new::<RadrootsNostrEventRef>(),
         RootDescriptor::new::<RadrootsNostrEventPtr>(),
-        RootDescriptor::new::<RadrootsListingLocation>(),
+        RootDescriptor::new::<RadrootsListingPublicLocation>(),
         RootDescriptor::new::<RadrootsListingProduct>(),
         RootDescriptor::new::<RadrootsListingStatus>(),
         RootDescriptor::new::<RadrootsListingImage>(),
@@ -758,7 +756,7 @@ impl Dto for RadrootsListing {
         .with_field(optional_nullable_field(
             "location",
             "location",
-            <Option<RadrootsListingLocation> as Dto>::describe(ctx),
+            <Option<RadrootsListingPublicLocation> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             78,
         ))
@@ -1574,7 +1572,11 @@ impl Dto for RadrootsCommercialTransportLaneDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsCommercialTransportLaneDto", TypeDef::Enum(def))
+        register(
+            ctx,
+            "RadrootsCommercialTransportLaneDto",
+            TypeDef::Enum(def),
+        )
     }
 }
 
@@ -1695,7 +1697,11 @@ impl Dto for RadrootsListingDiscountRequestDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsListingDiscountRequestDto", TypeDef::Struct(def))
+        register(
+            ctx,
+            "RadrootsListingDiscountRequestDto",
+            TypeDef::Struct(def),
+        )
     }
 }
 
@@ -1759,7 +1765,11 @@ impl Dto for RadrootsListingDiscountDecisionDto {
             )]),
             span("crates/events/src/order.rs", 408),
         ));
-        register(ctx, "RadrootsListingDiscountDecisionDto", TypeDef::Enum(def))
+        register(
+            ctx,
+            "RadrootsListingDiscountDecisionDto",
+            TypeDef::Enum(def),
+        )
     }
 }
 
@@ -1783,11 +1793,7 @@ impl Dto for RadrootsListingCancelDto {
 
 impl Dto for RadrootsOrderResponseDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        accepted_reason_struct(
-            ctx,
-            "RadrootsOrderResponseDto",
-            "RadrootsOrderResponse",
-        )
+        accepted_reason_struct(ctx, "RadrootsOrderResponseDto", "RadrootsOrderResponse")
     }
 }
 
@@ -1967,7 +1973,11 @@ impl Dto for RadrootsCommercialMessagePayloadDto {
             "cancel",
             RadrootsListingCancelDto::describe(ctx),
         ));
-        register(ctx, "RadrootsCommercialMessagePayloadDto", TypeDef::Enum(def))
+        register(
+            ctx,
+            "RadrootsCommercialMessagePayloadDto",
+            TypeDef::Enum(def),
+        )
     }
 }
 

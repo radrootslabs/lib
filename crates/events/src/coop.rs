@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::farm::RadrootsGcsLocation;
+use crate::gcs::RadrootsGcsLocation;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

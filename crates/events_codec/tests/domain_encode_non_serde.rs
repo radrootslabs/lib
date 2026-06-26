@@ -10,14 +10,12 @@ use radroots_core::{
 use radroots_events::{
     coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef},
     document::{RadrootsDocument, RadrootsDocumentSubject},
-    farm::{
-        RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
-        RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    },
+    farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef},
+    gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+        RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
     },
     plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef},
     resource_area::{RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef},
@@ -126,12 +124,12 @@ fn sample_farm() -> RadrootsFarm {
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmLocation {
-            primary: None,
-            city: None,
-            region: None,
-            country: None,
-            gcs: Some(sample_gcs("9q8yy")),
+        location: Some(RadrootsFarmPublicLocation {
+            primary: "Test Farm".to_string(),
+            city: Some("Santa Cruz".to_string()),
+            region: Some("California".to_string()),
+            country: Some("US".to_string()),
+            geohash: "9q8yy".to_string(),
         }),
         tags: Some(vec!["orchard".to_string()]),
     }
@@ -472,27 +470,20 @@ fn farm_encode_and_list_set_paths() {
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
 
     let mut farm = sample_farm();
-    farm.location
-        .as_mut()
-        .expect("location")
-        .gcs
-        .as_mut()
-        .expect("gcs")
-        .geohash = " ".to_string();
+    farm.location.as_mut().expect("location").geohash = " ".to_string();
     let err = farm_build_tags(&farm).expect_err("empty geohash");
     assert!(matches!(
         err,
-        EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+        EventEncodeError::EmptyRequiredField("location.geohash")
     ));
 
     let mut farm = sample_farm();
-    farm.location.as_mut().expect("location").gcs = None;
-    let tags = farm_build_tags(&farm).expect("farm location without geo");
-    assert!(
-        !tags
-            .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
-    );
+    farm.location.as_mut().expect("location").geohash = "9q8yy6".to_string();
+    let err = farm_build_tags(&farm).expect_err("invalid public geohash");
+    assert!(matches!(
+        err,
+        EventEncodeError::InvalidField("location.geohash")
+    ));
 
     let tags = farm_ref_tags(&RadrootsFarmRef {
         pubkey: VALID_PUBKEY.to_string(),
@@ -691,55 +682,50 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_with_geohash = sample_listing();
-    listing_with_geohash.location = Some(RadrootsListingLocation {
+    listing_with_geohash.location = Some(RadrootsListingPublicLocation {
         primary: "Origin".to_string(),
-        city: None,
-        region: None,
-        country: None,
-        lat: None,
-        lng: None,
-        geohash: Some("6gkzwgjzn".to_string()),
+        city: Some("Town".to_string()),
+        region: Some("Region".to_string()),
+        country: Some("PE".to_string()),
+        geohash: "6gkzw".to_string(),
     });
     let decoded_tags = listing_tags_with_options(
         &listing_with_geohash,
         ListingTagOptions {
             include_geohash: false,
-            include_gps: true,
             ..ListingTagOptions::default()
         },
     )
-    .expect("listing tags with decoded geohash");
-    assert!(decoded_tags.iter().any(|tag| {
-        tag.first().map(|v| v.as_str()) == Some("l") && tag.get(2).map(|v| v.as_str()) == Some("dd")
-    }));
+    .expect("listing tags without geohash tag");
+    assert!(
+        !decoded_tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
+    );
 
     let mut listing_with_shared_geohash = sample_listing();
-    listing_with_shared_geohash.location = Some(RadrootsListingLocation {
+    listing_with_shared_geohash.location = Some(RadrootsListingPublicLocation {
         primary: "Origin".to_string(),
-        city: None,
-        region: None,
-        country: None,
-        lat: None,
-        lng: None,
-        geohash: Some("6gkzwgjzn".to_string()),
+        city: Some("Town".to_string()),
+        region: Some("Region".to_string()),
+        country: Some("PE".to_string()),
+        geohash: "6gkzw".to_string(),
     });
     let shared_geohash_tags =
         listing_tags_with_options(&listing_with_shared_geohash, ListingTagOptions::default())
             .expect("listing tags with shared geohash");
     assert!(shared_geohash_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("g")
-            && tag.get(1).map(|v| v.as_str()) == Some("6gkzwgjzn")
+            && tag.get(1).map(|v| v.as_str()) == Some("6gkzw")
     }));
 
     let mut listing_without_coordinates = sample_listing();
-    listing_without_coordinates.location = Some(RadrootsListingLocation {
+    listing_without_coordinates.location = Some(RadrootsListingPublicLocation {
         primary: "Origin".to_string(),
-        city: None,
-        region: None,
-        country: None,
-        lat: None,
-        lng: None,
-        geohash: None,
+        city: Some("Town".to_string()),
+        region: Some("Region".to_string()),
+        country: Some("PE".to_string()),
+        geohash: "6gkzw".to_string(),
     });
     let no_coordinates_tags =
         listing_tags_with_options(&listing_without_coordinates, ListingTagOptions::default())
@@ -749,11 +735,10 @@ fn listing_encode_paths() {
             .iter()
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
     );
-    assert!(
-        !no_coordinates_tags
-            .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
-    );
+    assert!(no_coordinates_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("g")
+            && tag.get(1).map(|v| v.as_str()) == Some("6gkzw")
+    }));
 
     let mut listing_with_blank_optionals = sample_listing();
     listing_with_blank_optionals.product.summary = Some(" ".to_string());
@@ -761,18 +746,31 @@ fn listing_encode_paths() {
     listing_with_blank_optionals.product.location = Some(" ".to_string());
     listing_with_blank_optionals.product.profile = Some("null".to_string());
     listing_with_blank_optionals.product.year = Some(" ".to_string());
-    listing_with_blank_optionals.location = Some(RadrootsListingLocation {
+    listing_with_blank_optionals.location = Some(RadrootsListingPublicLocation {
         primary: " ".to_string(),
         city: Some(" ".to_string()),
         region: Some("null".to_string()),
         country: Some(" ".to_string()),
-        lat: None,
-        lng: None,
-        geohash: None,
+        geohash: "6gkzw".to_string(),
     });
     let blank_optional_tags =
         listing_tags_with_options(&listing_with_blank_optionals, ListingTagOptions::default())
-            .expect("listing tags with blank optional values");
+            .expect_err("blank public location is invalid");
+    assert!(matches!(
+        blank_optional_tags,
+        EventEncodeError::EmptyRequiredField("location.primary")
+    ));
+    let mut listing_with_blank_product_optionals = sample_listing();
+    listing_with_blank_product_optionals.product.summary = Some(" ".to_string());
+    listing_with_blank_product_optionals.product.process = Some("null".to_string());
+    listing_with_blank_product_optionals.product.location = Some(" ".to_string());
+    listing_with_blank_product_optionals.product.profile = Some("null".to_string());
+    listing_with_blank_product_optionals.product.year = Some(" ".to_string());
+    let blank_optional_tags = listing_tags_with_options(
+        &listing_with_blank_product_optionals,
+        ListingTagOptions::default(),
+    )
+    .expect("listing tags with blank product optional values");
     assert!(
         !blank_optional_tags
             .iter()
@@ -784,26 +782,24 @@ fn listing_encode_paths() {
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("location"))
     );
 
-    let mut listing_no_gps = sample_listing();
-    listing_no_gps.location = Some(RadrootsListingLocation {
+    let mut listing_without_geohash = sample_listing();
+    listing_without_geohash.location = Some(RadrootsListingPublicLocation {
         primary: "Origin".to_string(),
-        city: None,
-        region: None,
-        country: None,
-        lat: Some(37.0),
-        lng: Some(-122.0),
-        geohash: None,
+        city: Some("Town".to_string()),
+        region: Some("Region".to_string()),
+        country: Some("PE".to_string()),
+        geohash: "6gkzw".to_string(),
     });
-    let no_gps_tags = listing_tags_with_options(
-        &listing_no_gps,
+    let without_geohash_tags = listing_tags_with_options(
+        &listing_without_geohash,
         ListingTagOptions {
-            include_gps: false,
+            include_geohash: false,
             ..ListingTagOptions::default()
         },
     )
-    .expect("listing tags without gps labels");
+    .expect("listing tags without geohash");
     assert!(
-        !no_gps_tags
+        !without_geohash_tags
             .iter()
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
     );

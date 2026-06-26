@@ -6,9 +6,8 @@ mod tests {
     use crate::error::EventEncodeError;
     use crate::plot::encode::{plot_address, plot_build_tags};
     use radroots_events::{
-        farm::{
-            RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-        },
+        farm::RadrootsFarmRef,
+        gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
         plot::{RadrootsPlot, RadrootsPlotLocation},
     };
 

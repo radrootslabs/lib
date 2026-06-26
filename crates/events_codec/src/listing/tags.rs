@@ -8,8 +8,6 @@ use alloc::{
     vec::Vec,
 };
 
-use core::cmp;
-
 #[cfg(any(feature = "serde_json", test))]
 use radroots_core::RadrootsCoreDiscount;
 use radroots_core::RadrootsCoreMoney;
@@ -17,9 +15,10 @@ use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingLocation,
+    RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingPublicLocation,
     RadrootsListingStatus,
 };
+use radroots_events::location::{has_textual_locality, is_public_geohash5};
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
@@ -38,11 +37,6 @@ const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
-const TAG_LABEL: &str = "l";
-const TAG_LABEL_NS: &str = "L";
-const TAG_DD: &str = "dd";
-const TAG_DD_LAT: &str = "dd.lat";
-const TAG_DD_LON: &str = "dd.lon";
 const TAG_INVENTORY: &str = "inventory";
 const TAG_DELIVERY: &str = "delivery";
 const TAG_RADROOTS_AVAILABILITY_START: &str = "radroots:availability_start";
@@ -51,17 +45,9 @@ const TAG_EXPIRES_AT: &str = "expires_at";
 const TAG_P: &str = "p";
 const TAG_A: &str = "a";
 
-const GEOHASH_PRECISION_DEFAULT: usize = 9;
-const DD_MAX_RESOLUTION_DEFAULT: u32 = 9;
-
-const BASE32_CODES: &[u8; 32] = b"0123456789bcdefghjkmnpqrstuvwxyz";
-
 #[derive(Clone, Copy, Debug)]
 pub struct ListingTagOptions {
-    pub geohash_precision: usize,
-    pub dd_max_resolution: u32,
     pub include_geohash: bool,
-    pub include_gps: bool,
     pub include_inventory: bool,
     pub include_availability: bool,
     pub include_delivery: bool,
@@ -70,10 +56,7 @@ pub struct ListingTagOptions {
 impl Default for ListingTagOptions {
     fn default() -> Self {
         Self {
-            geohash_precision: GEOHASH_PRECISION_DEFAULT,
-            dd_max_resolution: DD_MAX_RESOLUTION_DEFAULT,
             include_geohash: true,
-            include_gps: true,
             include_inventory: false,
             include_availability: false,
             include_delivery: false,
@@ -230,9 +213,17 @@ pub fn listing_tags_with_options(
         tags.push(tag);
     }
 
-    if let Some(location) = &listing.location
-        && let Some(primary) = clean_value(&location.primary)
-    {
+    if let Some(location) = &listing.location {
+        let primary = clean_value(&location.primary)
+            .ok_or(EventEncodeError::EmptyRequiredField("location.primary"))?;
+        if !has_textual_locality(
+            &location.primary,
+            location.city.as_deref(),
+            location.region.as_deref(),
+            location.country.as_deref(),
+        ) {
+            return Err(EventEncodeError::EmptyRequiredField("location.locality"));
+        }
         let mut tag = Vec::with_capacity(5);
         tag.push(TAG_LOCATION.to_string());
         tag.push(primary);
@@ -246,8 +237,8 @@ pub fn listing_tags_with_options(
             tag.push(country);
         }
         tags.push(tag);
-        if options.include_geohash || options.include_gps {
-            push_location_geotags(&mut tags, location, options);
+        if options.include_geohash {
+            push_location_geotag(&mut tags, location)?;
         }
     }
 
@@ -408,169 +399,17 @@ fn tag_listing_image(image: &RadrootsListingImage) -> Option<Vec<String>> {
     Some(tag)
 }
 
-fn push_location_geotags(
+fn push_location_geotag(
     tags: &mut Vec<Vec<String>>,
-    location: &RadrootsListingLocation,
-    options: ListingTagOptions,
-) {
-    let mut lat = location.lat.filter(|value| value.is_finite());
-    let mut lon = location.lng.filter(|value| value.is_finite());
-    let location_geohash = location.geohash.as_deref().and_then(clean_value);
-
-    let geohash = if options.include_geohash {
-        if let (Some(lat), Some(lon)) = (lat, lon) {
-            let precision = options.geohash_precision.max(1);
-            Some(geohash_encode(lat, lon, precision))
-        } else {
-            location_geohash.clone()
-        }
-    } else {
-        None
-    };
-
-    if let Some(geohash) = geohash.as_ref() {
-        for idx in (1..=geohash.len()).rev() {
-            tags.push(vec![TAG_GEOHASH.to_string(), geohash[..idx].to_string()]);
-        }
+    location: &RadrootsListingPublicLocation,
+) -> Result<(), EventEncodeError> {
+    let geohash = clean_value(&location.geohash)
+        .ok_or(EventEncodeError::EmptyRequiredField("location.geohash"))?;
+    if !is_public_geohash5(&geohash) {
+        return Err(EventEncodeError::InvalidField("location.geohash"));
     }
-
-    if options.include_gps {
-        if (lat.is_none() || lon.is_none())
-            && let Some(geohash) = geohash.as_deref().or(location_geohash.as_deref())
-            && let Some((decoded_lat, decoded_lon)) = geohash_decode(geohash)
-        {
-            lat = Some(decoded_lat);
-            lon = Some(decoded_lon);
-        }
-        if let (Some(lat), Some(lon)) = (lat, lon) {
-            tags.push(vec![
-                TAG_LABEL.to_string(),
-                format!("{lat}, {lon}"),
-                TAG_DD.to_string(),
-            ]);
-            let max_resolution = options.dd_max_resolution.max(1);
-            let lat_resolution = calculate_resolution(lat, max_resolution);
-            let lon_resolution = calculate_resolution(lon, max_resolution);
-            tags.push(vec![TAG_LABEL_NS.to_string(), TAG_DD_LAT.to_string()]);
-            for idx in (1..=lat_resolution).rev() {
-                let truncated = truncate_to_resolution(lat, idx);
-                tags.push(vec![
-                    TAG_LABEL.to_string(),
-                    truncated.to_string(),
-                    TAG_DD_LAT.to_string(),
-                ]);
-            }
-            tags.push(vec![TAG_LABEL_NS.to_string(), TAG_DD_LON.to_string()]);
-            for idx in (1..=lon_resolution).rev() {
-                let truncated = truncate_to_resolution(lon, idx);
-                tags.push(vec![
-                    TAG_LABEL.to_string(),
-                    truncated.to_string(),
-                    TAG_DD_LON.to_string(),
-                ]);
-            }
-        }
-    }
-}
-
-fn calculate_resolution(value: f64, max: u32) -> u32 {
-    let s = value.to_string();
-    let decimals = s.split('.').nth(1).map(|v| v.len() as u32).unwrap_or(0);
-    cmp::min(decimals, max.max(1)).max(1)
-}
-
-fn truncate_to_resolution(value: f64, resolution: u32) -> f64 {
-    let multiplier = 10_f64.powi(resolution as i32);
-    (value * multiplier).floor() / multiplier
-}
-
-fn geohash_encode(latitude: f64, longitude: f64, precision: usize) -> String {
-    let precision = precision.max(1);
-    let mut out = String::with_capacity(precision);
-    let mut bits: u8 = 0;
-    let mut bits_total: u8 = 0;
-    let mut hash_value: u8 = 0;
-    let mut max_lat = 90.0;
-    let mut min_lat = -90.0;
-    let mut max_lon = 180.0;
-    let mut min_lon = -180.0;
-
-    while out.len() < precision {
-        if bits_total.is_multiple_of(2) {
-            let mid = (max_lon + min_lon) / 2.0;
-            if longitude > mid {
-                hash_value = (hash_value << 1) + 1;
-                min_lon = mid;
-            } else {
-                hash_value <<= 1;
-                max_lon = mid;
-            }
-        } else {
-            let mid = (max_lat + min_lat) / 2.0;
-            if latitude > mid {
-                hash_value = (hash_value << 1) + 1;
-                min_lat = mid;
-            } else {
-                hash_value <<= 1;
-                max_lat = mid;
-            }
-        }
-        bits += 1;
-        bits_total += 1;
-        if bits == 5 {
-            out.push(BASE32_CODES[hash_value as usize] as char);
-            bits = 0;
-            hash_value = 0;
-        }
-    }
-    out
-}
-
-fn geohash_decode(hash: &str) -> Option<(f64, f64)> {
-    let (min_lat, min_lon, max_lat, max_lon) = geohash_decode_bbox(hash)?;
-    let lat = (min_lat + max_lat) / 2.0;
-    let lon = (min_lon + max_lon) / 2.0;
-    Some((lat, lon))
-}
-
-fn geohash_decode_bbox(hash: &str) -> Option<(f64, f64, f64, f64)> {
-    let mut is_lon = true;
-    let mut max_lat = 90.0;
-    let mut min_lat = -90.0;
-    let mut max_lon = 180.0;
-    let mut min_lon = -180.0;
-
-    for b in hash.bytes() {
-        let value = base32_value(b)?;
-        for bits in (0..5).rev() {
-            let bit = (value >> bits) & 1;
-            if is_lon {
-                let mid = (max_lon + min_lon) / 2.0;
-                if bit == 1 {
-                    min_lon = mid;
-                } else {
-                    max_lon = mid;
-                }
-            } else {
-                let mid = (max_lat + min_lat) / 2.0;
-                if bit == 1 {
-                    min_lat = mid;
-                } else {
-                    max_lat = mid;
-                }
-            }
-            is_lon = !is_lon;
-        }
-    }
-    Some((min_lat, min_lon, max_lat, max_lon))
-}
-
-fn base32_value(c: u8) -> Option<u8> {
-    let needle = c.to_ascii_lowercase();
-    BASE32_CODES
-        .iter()
-        .position(|&b| b == needle)
-        .map(|idx| idx as u8)
+    tags.push(vec![TAG_GEOHASH.to_string(), geohash.to_ascii_lowercase()]);
+    Ok(())
 }
 
 fn push_tag_value(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
@@ -702,14 +541,12 @@ mod tests {
                 end: Some(20),
             }),
             delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-            location: Some(RadrootsListingLocation {
+            location: Some(RadrootsListingPublicLocation {
                 primary: "Moyobamba".to_string(),
                 city: Some("Moyobamba".to_string()),
                 region: Some("San Martin".to_string()),
                 country: Some("PE".to_string()),
-                lat: Some(-6.0346),
-                lng: Some(-76.9714),
-                geohash: None,
+                geohash: "9q8yy".to_string(),
             }),
             images: Some(vec![
                 RadrootsListingImage {
@@ -733,14 +570,12 @@ mod tests {
     fn options_defaults_and_trade_fields() {
         let defaults = ListingTagOptions::default();
         assert!(defaults.include_geohash);
-        assert!(defaults.include_gps);
         assert!(!defaults.include_inventory);
         assert!(!defaults.include_availability);
         assert!(!defaults.include_delivery);
-        assert_eq!(defaults.geohash_precision, GEOHASH_PRECISION_DEFAULT);
-        assert_eq!(defaults.dd_max_resolution, DD_MAX_RESOLUTION_DEFAULT);
 
         let trade = ListingTagOptions::with_trade_fields();
+        assert!(trade.include_geohash);
         assert!(trade.include_inventory);
         assert!(trade.include_availability);
         assert!(trade.include_delivery);
@@ -761,187 +596,56 @@ mod tests {
     }
 
     #[test]
-    fn base32_and_geohash_helpers_cover_branches() {
-        assert_eq!(base32_value(b'0'), Some(0));
-        assert_eq!(base32_value(b'B'), Some(10));
-        assert_eq!(base32_value(b'?'), None);
-
-        assert_eq!(geohash_encode(1.0, 1.0, 0).len(), 1);
-        let geohash = geohash_encode(-6.0346, -76.9714, 9);
-        assert_eq!(geohash.len(), 9);
-        let decoded = geohash_decode(&geohash).expect("decode geohash");
-        assert!(decoded.0.is_finite());
-        assert!(decoded.1.is_finite());
-        assert!(geohash_decode_bbox(&geohash).is_some());
-        assert!(geohash_decode("invalid*").is_none());
-    }
-
-    #[test]
-    fn calculate_and_truncate_resolution_cover_integer_and_fractional() {
-        assert_eq!(calculate_resolution(10.0, 9), 1);
-        assert_eq!(calculate_resolution(1.23456, 3), 3);
-        assert_eq!(calculate_resolution(1.2, 0), 1);
-        assert_eq!(truncate_to_resolution(12.9876, 2), 12.98);
-    }
-
-    #[test]
-    fn location_geotags_cover_lat_lon_and_geohash_decode_paths() {
+    fn location_geotag_accepts_public_geohash5() {
         let mut tags = Vec::new();
-        let location = RadrootsListingLocation {
+        let location = RadrootsListingPublicLocation {
             primary: "Test".to_string(),
-            city: None,
+            city: Some("Town".to_string()),
             region: None,
             country: None,
-            lat: Some(-6.0346),
-            lng: Some(-76.9714),
-            geohash: None,
+            geohash: "9Q8YY".to_string(),
         };
-        push_location_geotags(&mut tags, &location, ListingTagOptions::default());
-        assert!(
-            tags.iter()
-                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
-        );
-        assert!(tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("L")
-                && tag.get(1).map(|v| v.as_str()) == Some("dd.lat")
-        }));
-        assert!(tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("L")
-                && tag.get(1).map(|v| v.as_str()) == Some("dd.lon")
-        }));
+        push_location_geotag(&mut tags, &location).expect("public geohash");
 
-        let mut decoded_tags = Vec::new();
-        let location_with_geohash = RadrootsListingLocation {
+        assert_eq!(tags, vec![vec!["g".to_string(), "9q8yy".to_string()]]);
+        assert!(find_tag(&tags, "l").is_none());
+        assert!(find_tag(&tags, "L").is_none());
+    }
+
+    #[test]
+    fn location_geotag_rejects_blank_geohash() {
+        let mut tags = Vec::new();
+        let location = RadrootsListingPublicLocation {
             primary: "Test".to_string(),
-            city: None,
+            city: Some("Town".to_string()),
             region: None,
             country: None,
-            lat: None,
-            lng: None,
-            geohash: Some("6gkzwgjzn".to_string()),
+            geohash: " ".to_string(),
         };
-        push_location_geotags(
-            &mut decoded_tags,
-            &location_with_geohash,
-            ListingTagOptions {
-                include_geohash: false,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        );
-        let decoded_l_scopes: Vec<&str> = decoded_tags
-            .iter()
-            .filter(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
-            .filter_map(|tag| tag.get(2).map(|v| v.as_str()))
-            .collect();
-        assert!(decoded_l_scopes.contains(&"dd"));
-        assert!(decoded_l_scopes.contains(&"dd.lat"));
 
-        let mut invalid_tags = Vec::new();
-        let invalid_geohash = RadrootsListingLocation {
+        assert!(matches!(
+            push_location_geotag(&mut tags, &location),
+            Err(EventEncodeError::EmptyRequiredField("location.geohash"))
+        ));
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn location_geotag_rejects_non_public_geohash() {
+        let mut tags = Vec::new();
+        let location = RadrootsListingPublicLocation {
             primary: "Test".to_string(),
-            city: None,
+            city: Some("Town".to_string()),
             region: None,
             country: None,
-            lat: None,
-            lng: None,
-            geohash: Some("???".to_string()),
+            geohash: "9q8yyz".to_string(),
         };
-        push_location_geotags(
-            &mut invalid_tags,
-            &invalid_geohash,
-            ListingTagOptions {
-                include_geohash: false,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        );
-        assert!(find_tag(&invalid_tags, "l").is_none());
 
-        let mut geohash_only_tags = Vec::new();
-        let geohash_only_location = RadrootsListingLocation {
-            primary: "Test".to_string(),
-            city: None,
-            region: None,
-            country: None,
-            lat: None,
-            lng: None,
-            geohash: Some("6gkzwgjzn".to_string()),
-        };
-        push_location_geotags(
-            &mut geohash_only_tags,
-            &geohash_only_location,
-            ListingTagOptions {
-                include_geohash: true,
-                include_gps: false,
-                ..ListingTagOptions::default()
-            },
-        );
-        assert!(find_tag(&geohash_only_tags, "g").is_some());
-
-        let mut invalid_with_geohash_enabled = Vec::new();
-        push_location_geotags(
-            &mut invalid_with_geohash_enabled,
-            &invalid_geohash,
-            ListingTagOptions {
-                include_geohash: true,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        );
-        assert!(find_tag(&invalid_with_geohash_enabled, "g").is_some());
-        assert!(
-            !invalid_with_geohash_enabled
-                .iter()
-                .any(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
-        );
-
-        let mut no_coordinate_tags = Vec::new();
-        let no_coordinate_location = RadrootsListingLocation {
-            primary: "Test".to_string(),
-            city: None,
-            region: None,
-            country: None,
-            lat: None,
-            lng: None,
-            geohash: None,
-        };
-        push_location_geotags(
-            &mut no_coordinate_tags,
-            &no_coordinate_location,
-            ListingTagOptions {
-                include_geohash: false,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        );
-        assert!(find_tag(&no_coordinate_tags, "l").is_none());
-
-        let mut partial_coordinate_tags = Vec::new();
-        let partial_coordinate_location = RadrootsListingLocation {
-            primary: "Test".to_string(),
-            city: None,
-            region: None,
-            country: None,
-            lat: Some(-6.03),
-            lng: None,
-            geohash: Some("6gkzwgjzn".to_string()),
-        };
-        push_location_geotags(
-            &mut partial_coordinate_tags,
-            &partial_coordinate_location,
-            ListingTagOptions {
-                include_geohash: false,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        );
-        let partial_l_scopes: Vec<&str> = partial_coordinate_tags
-            .iter()
-            .filter(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
-            .filter_map(|tag| tag.get(2).map(|v| v.as_str()))
-            .collect();
-        assert!(partial_l_scopes.contains(&"dd"));
+        assert!(matches!(
+            push_location_geotag(&mut tags, &location),
+            Err(EventEncodeError::InvalidField("location.geohash"))
+        ));
+        assert!(tags.is_empty());
     }
 
     #[test]
@@ -1365,7 +1069,6 @@ mod tests {
             &no_geo,
             ListingTagOptions {
                 include_geohash: false,
-                include_gps: false,
                 ..ListingTagOptions::default()
             },
         )
@@ -1378,24 +1081,12 @@ mod tests {
             &no_geo,
             ListingTagOptions {
                 include_geohash: true,
-                include_gps: false,
                 ..ListingTagOptions::default()
             },
         )
         .expect("location with geohash only");
         assert!(find_tag(&geohash_only_tags, "g").is_some());
         assert!(find_tag(&geohash_only_tags, "l").is_none());
-
-        let gps_only_tags = listing_tags_with_options(
-            &no_geo,
-            ListingTagOptions {
-                include_geohash: false,
-                include_gps: true,
-                ..ListingTagOptions::default()
-            },
-        )
-        .expect("location with gps only");
-        assert!(find_tag(&gps_only_tags, "l").is_some());
     }
 
     #[test]
@@ -1508,15 +1199,7 @@ mod tests {
         listing.discounts = None;
         listing.product.location = Some(" null ".to_string());
         listing.product.profile = Some(" ".to_string());
-        listing.location = Some(RadrootsListingLocation {
-            primary: "null".to_string(),
-            city: Some("city".to_string()),
-            region: Some("region".to_string()),
-            country: Some("country".to_string()),
-            lat: Some(-6.0),
-            lng: Some(-77.0),
-            geohash: None,
-        });
+        listing.location = None;
         listing.images = Some(vec![RadrootsListingImage {
             url: "null".to_string(),
             size: None,
@@ -1532,14 +1215,12 @@ mod tests {
         let mut listing = base_listing();
         listing.discounts = None;
         listing.images = None;
-        listing.location = Some(RadrootsListingLocation {
+        listing.location = Some(RadrootsListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some("Moyobamba".to_string()),
             region: Some("San Martin".to_string()),
             country: Some("PE".to_string()),
-            lat: None,
-            lng: None,
-            geohash: Some("6gkzwgjzn".to_string()),
+            geohash: "6gkzw".to_string(),
         });
         let tags = listing_tags_full(&listing).expect("location tags");
         let location = find_tag(&tags, "location").expect("location tag");
@@ -1597,14 +1278,12 @@ mod tests {
     fn listing_tags_location_handles_partial_optional_components() {
         let mut listing = base_listing();
         listing.discounts = None;
-        listing.location = Some(RadrootsListingLocation {
+        listing.location = Some(RadrootsListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some(" ".to_string()),
             region: Some("San Martin".to_string()),
             country: Some(" ".to_string()),
-            lat: Some(-6.03),
-            lng: Some(-76.97),
-            geohash: None,
+            geohash: "9q8yy".to_string(),
         });
 
         let tags = listing_tags(&listing).expect("listing tags");
@@ -1614,14 +1293,12 @@ mod tests {
         assert_eq!(location.get(2).map(|v| v.as_str()), Some("San Martin"));
         assert_eq!(location.len(), 3);
 
-        listing.location = Some(RadrootsListingLocation {
+        listing.location = Some(RadrootsListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some("Moyobamba".to_string()),
             region: Some(" ".to_string()),
             country: Some("PE".to_string()),
-            lat: Some(-6.03),
-            lng: Some(-76.97),
-            geohash: None,
+            geohash: "9q8yy".to_string(),
         });
         let tags = listing_tags(&listing).expect("listing tags");
         let location = find_tag(&tags, "location").expect("location tag");

@@ -15,9 +15,8 @@ mod tests {
     };
     use crate::error::EventEncodeError;
     use radroots_events::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
-    use radroots_events::farm::{
-        RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
+    use radroots_events::farm::RadrootsFarmRef;
+    use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     #[cfg(feature = "serde_json")]
     use radroots_events::kinds::KIND_COOP;
 

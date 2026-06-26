@@ -72,7 +72,7 @@ pub struct RadrootsListing {
     pub inventory_available: Option<RadrootsCoreDecimal>,
     pub availability: Option<RadrootsListingAvailability>,
     pub delivery_method: Option<RadrootsListingDeliveryMethod>,
-    pub location: Option<RadrootsListingLocation>,
+    pub location: Option<RadrootsListingPublicLocation>,
     pub images: Option<Vec<RadrootsListingImage>>,
 }
 
@@ -112,14 +112,12 @@ pub struct RadrootsListingBin {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-pub struct RadrootsListingLocation {
+pub struct RadrootsListingPublicLocation {
     pub primary: String,
     pub city: Option<String>,
     pub region: Option<String>,
     pub country: Option<String>,
-    pub lat: Option<f64>,
-    pub lng: Option<f64>,
-    pub geohash: Option<String>,
+    pub geohash: String,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
