@@ -35,10 +35,12 @@ use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "runtime")]
 use radroots_trade::order::{
     RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderProjection,
-    RadrootsOrderProjectionQueryResult, RadrootsOrderStatus, RadrootsOrderStoreQueryError,
+    RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError,
     canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
     order_projection_query_for_order_id,
 };
+#[cfg(feature = "runtime")]
+use radroots_trade::workflow::RadrootsTradeWorkflowState;
 #[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
 #[cfg(feature = "runtime")]
@@ -984,7 +986,9 @@ pub enum SdkOrderStatusSource {
 pub enum OrderStatusKind {
     Missing,
     Requested,
-    Accepted,
+    RevisionProposed,
+    AgreedPendingRhi,
+    Committed,
     Declined,
     Cancelled,
     Invalid,
@@ -1086,6 +1090,15 @@ pub enum SdkOrderStatusIssueKind {
     CancellationRootMismatch,
     CancellationPreviousMismatch,
     ForkedLifecycle,
+    ValidationReceiptWithoutPendingAgreement,
+    ValidationReceiptOrderIdMismatch,
+    ValidationReceiptTypeMismatch,
+    ValidationReceiptRootMismatch,
+    ValidationReceiptTargetMismatch,
+    ValidationReceiptListingMismatch,
+    ConflictingValidationReceipts,
+    DeterministicValidationFailure,
+    StaleListingEvent,
 }
 
 #[cfg(feature = "runtime")]
@@ -1933,7 +1946,7 @@ fn order_evidence_parse_error(
 impl OrderStatusReceipt {
     fn from_query_result(query_result: RadrootsOrderProjectionQueryResult) -> Self {
         let projection = query_result.projection;
-        let found = projection.status != RadrootsOrderStatus::Missing;
+        let found = projection.status != RadrootsTradeWorkflowState::Missing;
         let evidence = OrderStatusEvidenceSummary::from_projection(
             &projection,
             query_result.event_count,
@@ -1993,7 +2006,7 @@ impl OrderStatusEligibility {
     fn from_projection(projection: &RadrootsOrderProjection) -> Self {
         let clean = projection.issues.is_empty();
         let open = clean && !projection.lifecycle_terminal;
-        let requested = projection.status == RadrootsOrderStatus::Requested;
+        let requested = projection.status == RadrootsTradeWorkflowState::Requested;
         let has_pending_revision = projection.pending_revision_event_id.is_some();
 
         Self {
@@ -2014,10 +2027,11 @@ impl OrderStatusNextActionKind {
         projection: &RadrootsOrderProjection,
         eligibility: &OrderStatusEligibility,
     ) -> Self {
-        if projection.status == RadrootsOrderStatus::Missing {
+        if projection.status == RadrootsTradeWorkflowState::Missing {
             return Self::NoLocalOrder;
         }
-        if !projection.issues.is_empty() || projection.status == RadrootsOrderStatus::Invalid {
+        if !projection.issues.is_empty() || projection.status == RadrootsTradeWorkflowState::Invalid
+        {
             return Self::InspectEvidenceIssues;
         }
         if projection.lifecycle_terminal {
@@ -2608,7 +2622,7 @@ fn require_decision_request_evidence(
             ),
         });
     }
-    if !matches!(&projection.status, RadrootsOrderStatus::Requested) {
+    if !matches!(&projection.status, RadrootsTradeWorkflowState::Requested) {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
                 "order decision requires requested local state for order {}; current state is {:?}",
@@ -2684,7 +2698,7 @@ fn require_revision_proposal_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Requested)?;
+    require_lifecycle_status(&refs, projection, RadrootsTradeWorkflowState::Requested)?;
     require_no_lifecycle_terminal(&refs, projection)?;
     require_no_pending_revision(&refs, projection)?;
     require_lifecycle_previous_is_current(&refs, projection)
@@ -2705,7 +2719,7 @@ fn require_revision_decision_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Requested)?;
+    require_lifecycle_status(&refs, projection, RadrootsTradeWorkflowState::Requested)?;
     require_no_lifecycle_terminal(&refs, projection)?;
     require_pending_revision(&refs, projection)?;
     require_lifecycle_previous_is_current(&refs, projection)
@@ -2726,7 +2740,7 @@ fn require_cancellation_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    if projection.status != RadrootsOrderStatus::Requested {
+    if projection.status != RadrootsTradeWorkflowState::Requested {
         return Err(lifecycle_invalid(
             refs.operation,
             refs.order_id,
@@ -2800,7 +2814,7 @@ fn require_clean_lifecycle_projection(
 fn require_lifecycle_status(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
-    expected: RadrootsOrderStatus,
+    expected: RadrootsTradeWorkflowState,
 ) -> Result<(), RadrootsSdkError> {
     if projection.status == expected {
         Ok(())
@@ -3047,15 +3061,17 @@ fn order_decision_canonicalization_error(
 }
 
 #[cfg(feature = "runtime")]
-impl From<RadrootsOrderStatus> for OrderStatusKind {
-    fn from(status: RadrootsOrderStatus) -> Self {
+impl From<RadrootsTradeWorkflowState> for OrderStatusKind {
+    fn from(status: RadrootsTradeWorkflowState) -> Self {
         match status {
-            RadrootsOrderStatus::Missing => Self::Missing,
-            RadrootsOrderStatus::Requested => Self::Requested,
-            RadrootsOrderStatus::Accepted => Self::Accepted,
-            RadrootsOrderStatus::Declined => Self::Declined,
-            RadrootsOrderStatus::Cancelled => Self::Cancelled,
-            RadrootsOrderStatus::Invalid => Self::Invalid,
+            RadrootsTradeWorkflowState::Missing => Self::Missing,
+            RadrootsTradeWorkflowState::Requested => Self::Requested,
+            RadrootsTradeWorkflowState::RevisionProposed => Self::RevisionProposed,
+            RadrootsTradeWorkflowState::AgreedPendingRhi => Self::AgreedPendingRhi,
+            RadrootsTradeWorkflowState::Committed => Self::Committed,
+            RadrootsTradeWorkflowState::Declined => Self::Declined,
+            RadrootsTradeWorkflowState::Cancelled => Self::Cancelled,
+            RadrootsTradeWorkflowState::Invalid => Self::Invalid,
         }
     }
 }
@@ -3266,6 +3282,47 @@ impl From<RadrootsOrderIssue> for SdkOrderStatusIssue {
             RadrootsOrderIssue::ForkedLifecycle { event_ids } => {
                 Self::new(SdkOrderStatusIssueKind::ForkedLifecycle, event_ids)
             }
+            RadrootsOrderIssue::ValidationReceiptWithoutPendingAgreement { event_id } => {
+                Self::single(
+                    SdkOrderStatusIssueKind::ValidationReceiptWithoutPendingAgreement,
+                    event_id,
+                )
+            }
+            RadrootsOrderIssue::ValidationReceiptOrderIdMismatch { event_id } => Self::single(
+                SdkOrderStatusIssueKind::ValidationReceiptOrderIdMismatch,
+                event_id,
+            ),
+            RadrootsOrderIssue::ValidationReceiptTypeMismatch { event_id } => Self::single(
+                SdkOrderStatusIssueKind::ValidationReceiptTypeMismatch,
+                event_id,
+            ),
+            RadrootsOrderIssue::ValidationReceiptRootMismatch { event_id } => Self::single(
+                SdkOrderStatusIssueKind::ValidationReceiptRootMismatch,
+                event_id,
+            ),
+            RadrootsOrderIssue::ValidationReceiptTargetMismatch { event_id } => Self::single(
+                SdkOrderStatusIssueKind::ValidationReceiptTargetMismatch,
+                event_id,
+            ),
+            RadrootsOrderIssue::ValidationReceiptListingMismatch { event_id } => Self::single(
+                SdkOrderStatusIssueKind::ValidationReceiptListingMismatch,
+                event_id,
+            ),
+            RadrootsOrderIssue::ConflictingValidationReceipts { event_ids } => Self::new(
+                SdkOrderStatusIssueKind::ConflictingValidationReceipts,
+                event_ids,
+            ),
+            RadrootsOrderIssue::DeterministicValidationFailure { event_id, .. } => Self::single(
+                SdkOrderStatusIssueKind::DeterministicValidationFailure,
+                event_id,
+            ),
+            RadrootsOrderIssue::StaleListingEvent {
+                expected_event_id,
+                current_event_id,
+            } => Self::new(
+                SdkOrderStatusIssueKind::StaleListingEvent,
+                vec![expected_event_id, current_event_id],
+            ),
         }
     }
 }
