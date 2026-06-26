@@ -10,3 +10,4 @@ pub mod order;
 pub mod prelude;
 #[cfg(feature = "serde_json")]
 pub mod validation_receipt;
+pub mod workflow;

@@ -165,6 +165,8 @@ pub struct RadrootsValidationReceiptExpectedBinding<'a> {
     pub proof_system: Option<RadrootsValidationReceiptProofSystem>,
     pub public_values_hash: Option<&'a str>,
     pub reducer_output_root: Option<&'a str>,
+    pub root_event_id: Option<&'a str>,
+    pub target_event_id: Option<&'a str>,
     pub verifying_key_hash: Option<&'a str>,
 }
 
@@ -493,6 +495,20 @@ fn validate_expected_binding(
     {
         return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
             "listing_event_id",
+        ));
+    }
+    if let Some(root_event_id) = expected.root_event_id
+        && tags.root_event_id != root_event_id
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "root_event_id",
+        ));
+    }
+    if let Some(target_event_id) = expected.target_event_id
+        && tags.target_event_id != target_event_id
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "target_event_id",
         ));
     }
     if let Some(event_set_root) = expected.event_set_root
@@ -1260,6 +1276,8 @@ mod tests {
                     br#"{"schema_version":1}"#,
                 )),
                 reducer_output_root: Some(&hash32('4')),
+                root_event_id: Some(&event_id('1')),
+                target_event_id: Some(&event_id('2')),
                 ..RadrootsValidationReceiptExpectedBinding::default()
             },
         )
@@ -1275,6 +1293,30 @@ mod tests {
             ),
             Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
                 "listing_event_id"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    root_event_id: Some(&event_id('3')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "root_event_id"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    target_event_id: Some(&event_id('3')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "target_event_id"
             ))
         );
         assert_eq!(
