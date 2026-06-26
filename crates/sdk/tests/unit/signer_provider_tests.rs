@@ -535,7 +535,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
 #[tokio::test]
 async fn sdk_builder_installs_configured_signer_provider() {
     let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await

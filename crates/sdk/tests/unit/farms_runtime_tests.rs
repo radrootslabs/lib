@@ -141,7 +141,7 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
 
 #[tokio::test]
 async fn farm_client_prepare_resolves_default_and_explicit_created_at() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_400))
         .build()
         .await
@@ -176,7 +176,7 @@ async fn farm_client_prepare_resolves_default_and_explicit_created_at() {
 
 #[tokio::test]
 async fn farm_client_prepare_reports_clock_errors() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .clock(crate::RadrootsSdkClock::BeforeUnixEpoch)
         .build()
         .await
@@ -193,7 +193,7 @@ async fn farm_client_prepare_reports_clock_errors() {
 
 #[tokio::test]
 async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .build()
         .await
@@ -216,7 +216,7 @@ async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
 
 #[tokio::test]
 async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .build()
         .await
@@ -268,7 +268,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
 async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer() {
     let keys = RadrootsNostrKeys::generate();
     let farmer = keys.public_key().to_hex();
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
             RadrootsSdkLocalKeySigner::new(keys).expect("signer"),

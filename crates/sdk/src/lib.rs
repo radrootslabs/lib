@@ -99,15 +99,17 @@ pub use crate::orders_runtime::{
     SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 #[cfg(feature = "runtime")]
-pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};
+pub use crate::product_clients::{
+    DvmClient, FarmsClient, ListingsClient, MarketClient, SyncClient, TradesClient,
+};
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{
     SDK_RELAY_TARGET_MAX_COUNT, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 #[cfg(feature = "runtime")]
 pub use crate::runtime::{
-    BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsSdk,
-    RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
+    BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsClient,
+    RadrootsClientBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
     RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
     SdkOutboxStorageStatus, SdkPublishTransport, SdkRestoreState, SdkSqliteStoreStatus,

@@ -298,7 +298,7 @@ fn relay_outcome_kind_mapping_covers_all_transport_outcomes() {
 
 #[tokio::test]
 async fn sync_status_maps_closed_store_errors() {
-    let event_store_closed = crate::RadrootsSdk::builder().build().await.expect("sdk");
+    let event_store_closed = crate::RadrootsClient::builder().build().await.expect("sdk");
     event_store_closed._event_store.pool().close().await;
     assert!(matches!(
         event_store_closed
@@ -308,7 +308,7 @@ async fn sync_status_maps_closed_store_errors() {
         Err(RadrootsSdkError::EventStore { .. })
     ));
 
-    let outbox_closed = crate::RadrootsSdk::builder().build().await.expect("sdk");
+    let outbox_closed = crate::RadrootsClient::builder().build().await.expect("sdk");
     outbox_closed._outbox.pool().close().await;
     assert!(matches!(
         outbox_closed
@@ -321,7 +321,7 @@ async fn sync_status_maps_closed_store_errors() {
 
 #[tokio::test]
 async fn sync_runtime_reports_clock_errors_before_store_or_relay_work() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .clock(crate::RadrootsSdkClock::BeforeUnixEpoch)
         .build()
         .await

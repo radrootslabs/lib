@@ -3,7 +3,7 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
 };
 use radroots_sdk::{
-    RadrootsSdk, RadrootsSdkMycNip46Signer, RadrootsSdkNip46Transport,
+    RadrootsClient, RadrootsSdkMycNip46Signer, RadrootsSdkNip46Transport,
     RadrootsSdkNip46TransportFuture, RadrootsSdkSignerMode, RadrootsSdkSignerProvider,
     radroots_sdk_myc_nip46_product_permission_strings,
 };
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         user_keys.public_key().to_hex(),
         Arc::new(ExampleNip46Transport),
     )?;
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::MycNip46(signer))
         .build()
         .await?;

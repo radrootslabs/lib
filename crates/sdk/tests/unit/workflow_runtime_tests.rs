@@ -125,7 +125,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
 
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_partial_mutation_when_outbox_fails() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .relay_url("wss://relay.example.com")
         .build()
         .await
@@ -166,7 +166,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
     let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
         .expect("actor");
     let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
-    let closed_store_sdk = crate::RadrootsSdk::builder()
+    let closed_store_sdk = crate::RadrootsClient::builder()
         .relay_url("wss://relay.example.com")
         .build()
         .await
@@ -192,7 +192,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
 
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_clock_failures() {
-    let sdk = crate::RadrootsSdk::builder()
+    let sdk = crate::RadrootsClient::builder()
         .clock(crate::RadrootsSdkClock::BeforeUnixEpoch)
         .relay_url("wss://relay.example.com")
         .build()
@@ -216,7 +216,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 
 #[tokio::test]
 async fn enqueue_signed_workflow_rejects_publish_transport_targets_without_proxy_transport() {
-    let sdk = crate::RadrootsSdk::builder().build().await.expect("sdk");
+    let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
         .expect("actor");
     let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);

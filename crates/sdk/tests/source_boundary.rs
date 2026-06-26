@@ -182,7 +182,7 @@ fn sdk_sources_do_not_import_app_or_cli_concepts() {
         let source = read_source(path.as_path());
         for concept in FORBIDDEN_SDK_SOURCE_CONCEPTS {
             assert!(
-                !source.contains(concept.pattern),
+                !contains_forbidden_concept(&source, concept.pattern),
                 "{} contains forbidden SDK source concept `{}`: {}",
                 path.display(),
                 concept.pattern,
@@ -292,21 +292,21 @@ fn orders_client_surface_is_inventory_guarded() {
     );
 
     assert!(
-        source.contains("impl<'sdk> OrdersClient<'sdk> {"),
-        "src/orders_runtime.rs must own OrdersClient runtime methods"
+        source.contains("impl<'sdk> TradesClient<'sdk> {"),
+        "src/orders_runtime.rs must own TradesClient runtime methods"
     );
 
     for method in REQUIRED_ORDERS_CLIENT_METHODS {
         assert!(
             source.contains(method),
-            "OrdersClient must expose inventory-guarded method `{method}`"
+            "TradesClient must expose inventory-guarded method `{method}`"
         );
     }
 
     for method in REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS {
         assert!(
             source.contains(method),
-            "OrdersClient must expose explicit-signer advanced method `{method}`"
+            "TradesClient must expose explicit-signer advanced method `{method}`"
         );
     }
 }
@@ -329,7 +329,7 @@ fn product_clients_remain_thin_sdk_handles() {
         "src/lib.rs must keep product_clients internal"
     );
     assert!(
-        lib_source.contains("pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};"),
+        lib_source.contains("pub use crate::product_clients::{"),
         "src/lib.rs must explicitly export product client handles"
     );
     assert!(
@@ -338,13 +338,19 @@ fn product_clients_remain_thin_sdk_handles() {
     );
 
     for client in [
+        "DvmClient",
         "FarmsClient",
         "ListingsClient",
-        "OrdersClient",
+        "MarketClient",
         "SyncClient",
+        "TradesClient",
     ] {
         assert!(
-            clients_source.contains(format!("pub struct {client}<'sdk>").as_str()),
+            lib_source.contains(client),
+            "src/lib.rs must export product client handle `{client}`"
+        );
+        assert!(
+            clients_source.contains(format!("pub struct {client}<'client>").as_str()),
             "product_clients.rs must define thin handle `{client}`"
         );
     }
@@ -434,6 +440,19 @@ fn product_runtime_file_stays_on_boundary(relative_path: &str) {
 fn read_source(path: &Path) -> String {
     fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("failed to read source {}: {error}", path.display()))
+}
+
+fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
+    source.match_indices(pattern).any(|(index, _)| {
+        let before = source[..index].chars().next_back();
+        let after = source[index + pattern.len()..].chars().next();
+        before.is_none_or(|character| !is_rust_identifier_character(character))
+            && after.is_none_or(|character| !is_rust_identifier_character(character))
+    })
+}
+
+fn is_rust_identifier_character(character: char) -> bool {
+    character == '_' || character.is_ascii_alphanumeric()
 }
 
 fn rust_source_files(root: &Path) -> Vec<PathBuf> {

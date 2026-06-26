@@ -26,7 +26,7 @@ use radroots_sdk::{
     ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
+    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
     SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
     SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
 };
@@ -406,9 +406,9 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
     }
 }
 
-async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
+async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let mut builder = RadrootsSdk::builder()
+    let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
     for relay in relays {
@@ -418,9 +418,9 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
     (tempdir, sdk)
 }
 
-async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
+async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let mut builder = RadrootsSdk::builder().directory_storage(tempdir.path().join("sdk"));
+    let mut builder = RadrootsClient::builder().directory_storage(tempdir.path().join("sdk"));
     for relay in relays {
         builder = builder.relay_url(*relay);
     }
@@ -428,11 +428,11 @@ async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, Radr
     (tempdir, sdk)
 }
 
-async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
+async fn enqueue_listing(sdk: &RadrootsClient, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
     enqueue_listing_with_policy(sdk, d_tag, title, relays, SdkRelayUrlPolicy::Public).await
 }
 
-async fn backup_source(sdk: &RadrootsSdk, root: &Path, name: &str) -> PathBuf {
+async fn backup_source(sdk: &RadrootsClient, root: &Path, name: &str) -> PathBuf {
     let source = root.join(name);
     sdk.backup(BackupRequest::new(source.clone()))
         .await
@@ -454,7 +454,7 @@ fn rewrite_backup_manifest(source: &Path, mutate: impl FnOnce(&mut serde_json::V
 }
 
 async fn enqueue_listing_with_policy(
-    sdk: &RadrootsSdk,
+    sdk: &RadrootsClient,
     d_tag: &str,
     title: &str,
     relays: &[&str],
@@ -641,7 +641,7 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert!(backup.manifest.backup_verification.event_store_ok);
     assert!(backup.manifest.backup_verification.outbox_ok);
 
-    let restore_archive = RadrootsSdk::inspect_restore_archive(backup_destination.clone())
+    let restore_archive = RadrootsClient::inspect_restore_archive(backup_destination.clone())
         .await
         .expect("restore archive");
     assert_eq!(restore_archive.manifest, backup.manifest);
@@ -770,7 +770,7 @@ async fn sdk_restore_archive_rejects_missing_manifest() {
     let source = tempdir.path().join("backup");
     std::fs::create_dir(&source).expect("source");
 
-    let error = RadrootsSdk::inspect_restore_archive(source)
+    let error = RadrootsClient::inspect_restore_archive(source)
         .await
         .expect_err("missing manifest");
     assert!(matches!(error, RadrootsSdkError::Io { .. }));
@@ -783,7 +783,7 @@ async fn sdk_restore_archive_rejects_malformed_manifest() {
     std::fs::create_dir(&source).expect("source");
     std::fs::write(source.join("manifest.json"), b"{not json").expect("manifest");
 
-    let error = RadrootsSdk::inspect_restore_archive(source)
+    let error = RadrootsClient::inspect_restore_archive(source)
         .await
         .expect_err("malformed manifest");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
@@ -793,7 +793,7 @@ async fn sdk_restore_archive_rejects_malformed_manifest() {
 async fn runtime_restore_rejects_empty_missing_file_and_manifest_sources() {
     let tempdir = tempfile::tempdir().expect("tempdir");
 
-    let empty_source = RadrootsSdk::inspect_restore_archive(PathBuf::new())
+    let empty_source = RadrootsClient::inspect_restore_archive(PathBuf::new())
         .await
         .expect_err("empty source");
     assert!(matches!(
@@ -801,14 +801,14 @@ async fn runtime_restore_rejects_empty_missing_file_and_manifest_sources() {
         RadrootsSdkError::InvalidRequest { .. }
     ));
 
-    let missing_source = RadrootsSdk::inspect_restore_archive(tempdir.path().join("missing"))
+    let missing_source = RadrootsClient::inspect_restore_archive(tempdir.path().join("missing"))
         .await
         .expect_err("missing source");
     assert!(matches!(missing_source, RadrootsSdkError::Io { .. }));
 
     let file_source = tempdir.path().join("backup-file");
     std::fs::write(&file_source, b"not a directory").expect("source file");
-    let file_error = RadrootsSdk::inspect_restore_archive(file_source)
+    let file_error = RadrootsClient::inspect_restore_archive(file_source)
         .await
         .expect_err("file source");
     assert!(matches!(
@@ -819,7 +819,7 @@ async fn runtime_restore_rejects_empty_missing_file_and_manifest_sources() {
     let manifest_dir_source = tempdir.path().join("manifest-dir-source");
     std::fs::create_dir(&manifest_dir_source).expect("manifest source");
     std::fs::create_dir(manifest_dir_source.join("manifest.json")).expect("manifest dir");
-    let manifest_dir_error = RadrootsSdk::inspect_restore_archive(manifest_dir_source)
+    let manifest_dir_error = RadrootsClient::inspect_restore_archive(manifest_dir_source)
         .await
         .expect_err("manifest dir");
     assert!(matches!(
@@ -836,7 +836,7 @@ async fn runtime_restore_rejects_symlink_source_and_manifest() {
 
     let source_link = tempdir.path().join("backup-source-link");
     std::os::unix::fs::symlink(&source, &source_link).expect("source symlink");
-    let source_error = RadrootsSdk::inspect_restore_archive(source_link)
+    let source_error = RadrootsClient::inspect_restore_archive(source_link)
         .await
         .expect_err("source symlink");
     assert!(matches!(
@@ -850,7 +850,7 @@ async fn runtime_restore_rejects_symlink_source_and_manifest() {
     std::fs::copy(&manifest_path, &manifest_copy).expect("manifest copy");
     std::fs::remove_file(&manifest_path).expect("remove manifest");
     std::os::unix::fs::symlink(&manifest_copy, &manifest_path).expect("manifest symlink");
-    let manifest_error = RadrootsSdk::inspect_restore_archive(manifest_link_source)
+    let manifest_error = RadrootsClient::inspect_restore_archive(manifest_link_source)
         .await
         .expect_err("manifest symlink");
     assert!(matches!(
@@ -867,7 +867,7 @@ async fn runtime_restore_rejects_manifest_contract_edges() {
     rewrite_backup_manifest(&version_source, |manifest| {
         manifest["manifest_version"] = serde_json::json!(2);
     });
-    let version_error = RadrootsSdk::inspect_restore_archive(version_source)
+    let version_error = RadrootsClient::inspect_restore_archive(version_source)
         .await
         .expect_err("unsupported manifest version");
     assert!(matches!(
@@ -879,7 +879,7 @@ async fn runtime_restore_rejects_manifest_contract_edges() {
     rewrite_backup_manifest(&empty_path_source, |manifest| {
         manifest["backup_paths"]["event_store_path"] = serde_json::json!("");
     });
-    let empty_path_error = RadrootsSdk::inspect_restore_archive(empty_path_source)
+    let empty_path_error = RadrootsClient::inspect_restore_archive(empty_path_source)
         .await
         .expect_err("empty archive path");
     assert!(matches!(
@@ -891,7 +891,7 @@ async fn runtime_restore_rejects_manifest_contract_edges() {
     rewrite_backup_manifest(&mismatch_source, |manifest| {
         manifest["backup_verification"]["event_store_events"] = serde_json::json!(999);
     });
-    let mismatch_error = RadrootsSdk::inspect_restore_archive(mismatch_source)
+    let mismatch_error = RadrootsClient::inspect_restore_archive(mismatch_source)
         .await
         .expect_err("verification mismatch");
     assert!(matches!(
@@ -920,7 +920,7 @@ async fn sdk_restore_archive_rejects_traversal_backup_paths() {
     )
     .expect("write manifest");
 
-    let error = RadrootsSdk::inspect_restore_archive(source)
+    let error = RadrootsClient::inspect_restore_archive(source)
         .await
         .expect_err("traversal path");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
@@ -936,7 +936,7 @@ async fn sdk_restore_archive_rejects_corrupt_store() {
         .expect("backup");
     std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
 
-    let error = RadrootsSdk::inspect_restore_archive(source)
+    let error = RadrootsClient::inspect_restore_archive(source)
         .await
         .expect_err("corrupt store");
     assert!(matches!(
@@ -959,7 +959,7 @@ async fn sdk_restore_archive_rejects_symlink_store_member() {
     std::fs::remove_file(&event_store_path).expect("remove backup event store");
     std::os::unix::fs::symlink(target, &event_store_path).expect("symlink");
 
-    let error = RadrootsSdk::inspect_restore_archive(source)
+    let error = RadrootsClient::inspect_restore_archive(source)
         .await
         .expect_err("symlink member");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
@@ -970,7 +970,7 @@ async fn runtime_restore_rejects_missing_destination_and_empty_destination() {
     let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
     let source = backup_source(&sdk, tempdir.path(), "backup-destination-required").await;
 
-    let missing_destination = RadrootsSdk::restore(RestoreRequest::new(source.clone()))
+    let missing_destination = RadrootsClient::restore(RestoreRequest::new(source.clone()))
         .await
         .expect_err("missing destination");
     assert!(matches!(
@@ -978,7 +978,7 @@ async fn runtime_restore_rejects_missing_destination_and_empty_destination() {
         RadrootsSdkError::InvalidRequest { .. }
     ));
 
-    let empty_destination = RadrootsSdk::restore(
+    let empty_destination = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(PathBuf::new())
             .dry_run(),
@@ -1001,7 +1001,7 @@ async fn sdk_restore_dry_run_validates_destination_without_writing() {
         .await
         .expect("backup");
 
-    let receipt = RadrootsSdk::restore(
+    let receipt = RadrootsClient::restore(
         RestoreRequest::new(source.clone())
             .with_destination(destination.clone())
             .dry_run(),
@@ -1035,7 +1035,7 @@ async fn sdk_restore_dry_run_rejects_existing_destination_without_overwrite() {
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
 
-    let error = RadrootsSdk::restore(
+    let error = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .dry_run(),
@@ -1059,7 +1059,7 @@ async fn sdk_restore_dry_run_overwrite_keeps_existing_destination_untouched() {
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
 
-    let receipt = RadrootsSdk::restore(
+    let receipt = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .with_overwrite(true)
@@ -1084,7 +1084,7 @@ async fn sdk_restore_dry_run_rejects_destination_inside_source() {
         .await
         .expect("backup");
 
-    let error = RadrootsSdk::restore(
+    let error = RadrootsClient::restore(
         RestoreRequest::new(source.clone())
             .with_destination(source.join("restore"))
             .with_overwrite(true)
@@ -1107,7 +1107,7 @@ async fn sdk_restore_dry_run_rejects_corrupt_source_without_destination_writes()
         .expect("backup");
     std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
 
-    let error = RadrootsSdk::restore(
+    let error = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .dry_run(),
@@ -1136,7 +1136,7 @@ async fn sdk_restore_dry_run_rejects_symlink_destination() {
     std::fs::create_dir(&target).expect("target");
     std::os::unix::fs::symlink(&target, &destination).expect("symlink");
 
-    let error = RadrootsSdk::restore(
+    let error = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination)
             .with_overwrite(true)
@@ -1157,7 +1157,7 @@ async fn runtime_restore_handles_existing_file_destinations_by_overwrite_policy(
     std::fs::write(&destination, b"old restore file").expect("destination file");
 
     let without_overwrite =
-        RadrootsSdk::restore(RestoreRequest::new(source.clone()).with_destination(&destination))
+        RadrootsClient::restore(RestoreRequest::new(source.clone()).with_destination(&destination))
             .await
             .expect_err("file destination without overwrite");
     assert!(matches!(
@@ -1165,7 +1165,7 @@ async fn runtime_restore_handles_existing_file_destinations_by_overwrite_policy(
         RadrootsSdkError::InvalidRequest { .. }
     ));
 
-    let receipt = RadrootsSdk::restore(
+    let receipt = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .with_overwrite(true),
@@ -1195,7 +1195,7 @@ async fn sdk_restore_to_empty_destination_succeeds() {
         .await
         .expect("backup");
 
-    let receipt = RadrootsSdk::restore(
+    let receipt = RadrootsClient::restore(
         RestoreRequest::new(source.clone()).with_destination(destination.clone()),
     )
     .await
@@ -1209,7 +1209,7 @@ async fn sdk_restore_to_empty_destination_succeeds() {
     );
     assert!(destination.join("event_store.sqlite").exists());
     assert!(destination.join("outbox.sqlite").exists());
-    let restored_sdk = RadrootsSdk::builder()
+    let restored_sdk = RadrootsClient::builder()
         .directory_storage(destination)
         .build()
         .await
@@ -1242,7 +1242,7 @@ async fn sdk_restore_existing_destination_fails_without_overwrite() {
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("sentinel"), b"keep").expect("sentinel");
 
-    let error = RadrootsSdk::restore(RestoreRequest::new(source).with_destination(&destination))
+    let error = RadrootsClient::restore(RestoreRequest::new(source).with_destination(&destination))
         .await
         .expect_err("existing destination");
 
@@ -1265,7 +1265,7 @@ async fn sdk_restore_overwrite_replaces_existing_destination() {
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("sentinel"), b"replace").expect("sentinel");
 
-    let receipt = RadrootsSdk::restore(
+    let receipt = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .with_overwrite(true),
@@ -1275,7 +1275,7 @@ async fn sdk_restore_overwrite_replaces_existing_destination() {
 
     assert_eq!(receipt.state, SdkRestoreState::Completed);
     assert!(!destination.join("sentinel").exists());
-    let restored_sdk = RadrootsSdk::builder()
+    let restored_sdk = RadrootsClient::builder()
         .directory_storage(destination)
         .build()
         .await
@@ -1301,7 +1301,7 @@ async fn sdk_restore_corrupt_backup_leaves_destination_unchanged() {
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("sentinel"), b"keep").expect("sentinel");
 
-    let error = RadrootsSdk::restore(
+    let error = RadrootsClient::restore(
         RestoreRequest::new(source)
             .with_destination(destination.clone())
             .with_overwrite(true),
@@ -1360,7 +1360,7 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
 async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved_relays() {
     let (endpoint, handle) = spawn_publish_proxy_server();
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .publish_transport(SdkPublishTransport::RadrootsdProxy(
@@ -1438,7 +1438,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
     let transport = SdkPublishTransport::RadrootsdProxy(RadrootsdProxyConfig::new(endpoint));
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .directory_storage(storage.clone())
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .publish_transport(transport.clone())
@@ -1478,7 +1478,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     );
 
     drop(sdk);
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .directory_storage(storage)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
         .publish_transport(transport)

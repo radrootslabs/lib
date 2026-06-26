@@ -42,7 +42,7 @@ use radroots_sdk::{
     OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPrepareRequest, OrderStatusKind,
     OrderStatusNextActionKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
     OrderSubmitPrepareRequest, OrderWorkflowKind, PushOutboxEventState, PushOutboxRelayOutcomeKind,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
     SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy,
     SdkRelayTargetSet, SdkRelayUrlPolicy,
@@ -371,9 +371,9 @@ impl RadrootsEventSigner for FixtureSigner {
     }
 }
 
-async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsSdk, RadrootsEventStore) {
+async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, RadrootsEventStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .build()
@@ -513,7 +513,7 @@ async fn order_submit_prepare_is_side_effect_free() {
         order_request("order-submit-prepare"),
     );
 
-    let prepared = sdk.orders().prepare_submit(request).expect("prepared");
+    let prepared = sdk.trades().prepare_submit(request).expect("prepared");
 
     assert_eq!(prepared.order_id.as_str(), "order-submit-prepare");
     assert_eq!(prepared.listing_addr, listing_address());
@@ -566,7 +566,7 @@ async fn order_submit_prepare_rejects_missing_listing_evidence() {
     );
 
     let error = sdk
-        .orders()
+        .trades()
         .prepare_submit(request)
         .expect_err("missing listing evidence");
 
@@ -578,7 +578,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
 
     let non_buyer = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             non_buyer_actor(),
             listing_event_ptr(),
@@ -591,7 +591,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     ));
 
     let wrong_actor = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             other_buyer_actor(),
             listing_event_ptr(),
@@ -606,7 +606,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     let mut seller_mismatch = order_request("order-submit-seller-mismatch");
     seller_mismatch.seller_pubkey = OTHER_PUBLIC_KEY_HEX.parse().expect("seller pubkey");
     let seller_error = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
@@ -621,7 +621,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     let mut empty_items = order_request("order-submit-empty-items");
     empty_items.items.clear();
     let empty_items_error = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
@@ -636,7 +636,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     let mut empty_economics = order_request("order-submit-empty-economics");
     empty_economics.economics.items.clear();
     let empty_economics_error = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
@@ -654,7 +654,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let order = order_request("order-submit-enqueue");
     let prepared = sdk
-        .orders()
+        .trades()
         .prepare_submit(OrderSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
@@ -684,7 +684,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     .expect("idempotency key");
 
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect("enqueue");
@@ -770,7 +770,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     assert!(outbox_event.signed_event.is_some());
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-submit-enqueue"))
         .await
         .expect("status");
@@ -799,7 +799,7 @@ async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() 
     .expect("target relays");
 
     let error = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect_err("signer error");
@@ -855,12 +855,12 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
     );
 
     let first_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect("second enqueue");
@@ -927,7 +927,7 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
     let enqueue_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(
             enqueue_request,
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -989,7 +989,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
     .expect("first target relays")
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("first idempotency key");
-    sdk.orders()
+    sdk.trades()
         .enqueue_submit_with_explicit_signer(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect("first enqueue");
@@ -1005,7 +1005,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("second idempotency key");
     let error = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect_err("partial");
@@ -1131,7 +1131,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     );
 
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_submit_with_explicit_signer(
             enqueue_request,
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -1306,7 +1306,7 @@ fn order_event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
     }
 }
 
-async fn outbox_operation_kind(sdk: &RadrootsSdk, operation_id: i64) -> String {
+async fn outbox_operation_kind(sdk: &RadrootsClient, operation_id: i64) -> String {
     let paths = sdk.storage_paths().expect("paths");
     let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
         .await
@@ -1354,7 +1354,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
         .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
 
     let ingest_receipt = sdk
-        .orders()
+        .trades()
         .ingest_request_evidence(ingest_request)
         .await
         .expect("ingest request evidence");
@@ -1369,7 +1369,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
 
     let actor = seller_actor();
     let plan = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             actor.clone(),
             request_event_ptr(&request_event),
@@ -1377,7 +1377,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
         ))
         .expect("prepare decision");
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_prepared_decision_with_explicit_signer(
             &actor,
             plan,
@@ -1391,7 +1391,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
 
     assert_eq!(receipt.local_event_seq, 2);
     let duplicate_receipt = sdk
-        .orders()
+        .trades()
         .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(
             request_event.clone(),
         ))
@@ -1418,7 +1418,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
         signed_order_decision_event("order-evidence-ingest", &request_event_id, 40);
 
     let request_receipt = sdk
-        .orders()
+        .trades()
         .ingest_evidence(OrderEvidenceIngestRequest::new(request_event.clone()))
         .await
         .expect("request evidence");
@@ -1428,7 +1428,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
     assert!(request_receipt.inserted);
 
     let decision_receipt = sdk
-        .orders()
+        .trades()
         .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event.clone()))
         .await
         .expect("decision evidence");
@@ -1438,7 +1438,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
     assert!(decision_receipt.inserted);
 
     let duplicate_receipt = sdk
-        .orders()
+        .trades()
         .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event))
         .await
         .expect("duplicate decision evidence");
@@ -1454,11 +1454,11 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
     );
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-evidence-ingest"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 2);
     assert_eq!(
         status
@@ -1473,7 +1473,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 async fn order_evidence_ingest_rejects_non_order_events() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let error = sdk
-        .orders()
+        .trades()
         .ingest_evidence(OrderEvidenceIngestRequest::new(signed_non_order_event(41)))
         .await
         .expect_err("non order event");
@@ -1496,7 +1496,7 @@ async fn order_request_evidence_ingest_rejects_non_request_events() {
     let decision_event = signed_order_decision_event("non-request-root", &root_event_id, 40);
 
     let error = sdk
-        .orders()
+        .trades()
         .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(decision_event))
         .await
         .expect_err("non request event");
@@ -1527,7 +1527,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
     );
 
     let accepted = sdk
-        .orders()
+        .trades()
         .prepare_decision(accepted_request)
         .expect("accepted plan");
 
@@ -1548,7 +1548,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
         reason: " out of stock ".to_owned(),
     };
     let declined = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             seller_actor(),
             request_event,
@@ -1591,7 +1591,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     };
 
     let non_seller = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             non_seller_actor(),
             request_event.clone(),
@@ -1604,7 +1604,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     ));
 
     let wrong_actor = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             other_seller_actor(),
             request_event.clone(),
@@ -1617,7 +1617,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     ));
 
     let invalid_evidence = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             seller_actor(),
             RadrootsNostrEventPtr {
@@ -1637,7 +1637,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
         inventory_commitments: Vec::new(),
     };
     let commitment_error = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             seller_actor(),
             request_event.clone(),
@@ -1654,7 +1654,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
         reason: " ".to_owned(),
     };
     let reason_error = sdk
-        .orders()
+        .trades()
         .prepare_decision(OrderDecisionPrepareRequest::new(
             seller_actor(),
             request_event,
@@ -1763,7 +1763,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     );
 
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(
             enqueue_request,
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2096,7 +2096,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
     .expect("idempotency");
 
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect("enqueue");
@@ -2144,12 +2144,12 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
     assert!(outbox_event.signed_event.is_some());
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-decision-accept"))
         .await
         .expect("status");
     assert!(status.found);
-    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 2);
     assert_eq!(
         status
@@ -2198,14 +2198,14 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
     .expect("target relays");
 
     let receipt = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect("enqueue");
 
     assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-decision-decline"))
         .await
         .expect("status");
@@ -2239,7 +2239,7 @@ async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation
     .expect("target relays");
 
     let error = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect_err("missing request evidence");
@@ -2284,7 +2284,7 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
     .expect("target relays");
 
     let error = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
         .await
         .expect_err("signer error");
@@ -2336,7 +2336,7 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
     .expect("target relays");
 
     let error = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect_err("existing decision");
@@ -2351,11 +2351,11 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         2
     );
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-decision-conflict"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
     assert_eq!(
         status
             .decision_event_id
@@ -2366,7 +2366,7 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
 }
 
 #[tokio::test]
-async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
+async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-agreement", 50);
     let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
@@ -2382,7 +2382,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
     );
     let proposal_actor = seller_actor();
     let proposal_plan = sdk
-        .orders()
+        .trades()
         .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
             proposal_actor.clone(),
             request_event_ptr(&request_event),
@@ -2391,7 +2391,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
         ))
         .expect("prepare revision proposal");
     let proposal_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &proposal_actor,
             proposal_plan,
@@ -2431,7 +2431,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
     );
     let revision_decision_actor = buyer_actor();
     let revision_decision_plan = sdk
-        .orders()
+        .trades()
         .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
             revision_decision_actor.clone(),
             request_event_ptr(&request_event),
@@ -2440,7 +2440,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
         ))
         .expect("prepare revision decision");
     let revision_decision_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &revision_decision_actor,
             revision_decision_plan,
@@ -2466,11 +2466,11 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
     );
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-lifecycle-agreement"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 3);
     assert_eq!(
         status
@@ -2492,8 +2492,11 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
         Some(SELLER_PUBLIC_KEY_HEX.to_owned())
     );
     assert_eq!(status.economics, Some(revision_economics()));
-    assert!(status.lifecycle_terminal);
-    assert_eq!(status.next_action, OrderStatusNextActionKind::Terminal);
+    assert!(!status.lifecycle_terminal);
+    assert_eq!(
+        status.next_action,
+        OrderStatusNextActionKind::AwaitRhiValidation
+    );
     assert!(status.evidence.has_request);
     assert!(!status.evidence.has_decision);
     assert!(status.evidence.has_agreement);
@@ -2522,7 +2525,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
         &request_event_id,
     );
     let proposal_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_revision_proposal_with_explicit_signer(
             OrderRevisionProposalEnqueueRequest::new(
                 seller_actor(),
@@ -2539,11 +2542,11 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
         .expect("enqueue revision proposal");
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-lifecycle-pending-revision"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Requested);
+    assert_eq!(status.status, OrderStatusKind::RevisionProposed);
     assert_eq!(status.event_count, 2);
     assert!(status.agreement_event_id.is_none());
     assert_eq!(
@@ -2564,7 +2567,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
     assert!(!status.eligibility.can_cancel);
 
     let decision_error = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(
             OrderDecisionEnqueueRequest::new(
                 seller_actor(),
@@ -2589,7 +2592,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
         &proposal_receipt.signed_event_id,
     );
     let proposal_error = sdk
-        .orders()
+        .trades()
         .enqueue_revision_proposal_with_explicit_signer(
             OrderRevisionProposalEnqueueRequest::new(
                 seller_actor(),
@@ -2633,7 +2636,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         &request_event_id,
     );
     let proposal_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_revision_proposal_with_explicit_signer(
             OrderRevisionProposalEnqueueRequest::new(
                 seller_actor(),
@@ -2656,7 +2659,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         },
     );
     let declined_revision_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_revision_decision_with_explicit_signer(
             OrderRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
@@ -2673,7 +2676,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         .expect("enqueue declined revision");
 
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-lifecycle-declined-revision"))
         .await
         .expect("status");
@@ -2704,7 +2707,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         RadrootsOrderRevisionOutcome::Accepted,
     );
     let second_decision_error = sdk
-        .orders()
+        .trades()
         .enqueue_revision_decision_with_explicit_signer(
             OrderRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
@@ -2744,7 +2747,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         .expect("ingest request");
     let cancellation_actor = buyer_actor();
     let cancellation_plan = sdk
-        .orders()
+        .trades()
         .prepare_cancellation(OrderCancellationPrepareRequest::new(
             cancellation_actor.clone(),
             request_event_ptr(&request_event),
@@ -2753,7 +2756,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         ))
         .expect("prepare cancellation");
     let cancellation = sdk
-        .orders()
+        .trades()
         .enqueue_prepared_cancellation_with_explicit_signer(
             &cancellation_actor,
             cancellation_plan,
@@ -2783,7 +2786,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         KIND_ORDER_CANCELLATION
     );
     let replay = sdk
-        .orders()
+        .trades()
         .enqueue_cancellation_with_explicit_signer(
             OrderCancellationEnqueueRequest::new(
                 buyer_actor(),
@@ -2804,7 +2807,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
     assert_eq!(replay.signed_event_id, cancellation.signed_event_id);
     assert_eq!(replay.outbox_event_id, cancellation.outbox_event_id);
     let status = sdk
-        .orders()
+        .trades()
         .status(status_request("order-lifecycle-cancel"))
         .await
         .expect("status");
@@ -2832,7 +2835,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let request_event = signed_order_request_event("order-lifecycle-invalid", 70);
     let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
     let missing = sdk
-        .orders()
+        .trades()
         .enqueue_revision_proposal_with_explicit_signer(
             OrderRevisionProposalEnqueueRequest::new(
                 seller_actor(),
@@ -2866,7 +2869,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
         .await
         .expect("ingest request");
     let decision_receipt = sdk
-        .orders()
+        .trades()
         .enqueue_decision_with_explicit_signer(
             OrderDecisionEnqueueRequest::new(
                 seller_actor(),
@@ -2890,7 +2893,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
         RadrootsOrderRevisionOutcome::Accepted,
     );
     let revision_error = sdk
-        .orders()
+        .trades()
         .enqueue_revision_decision_with_explicit_signer(
             OrderRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
@@ -2911,7 +2914,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     ));
 
     let cancellation_error = sdk
-        .orders()
+        .trades()
         .enqueue_cancellation_with_explicit_signer(
             OrderCancellationEnqueueRequest::new(
                 buyer_actor(),
@@ -2947,7 +2950,7 @@ async fn order_status_returns_not_found_for_missing_local_order() {
 
     assert_eq!(request.limit, ORDER_STATUS_DEFAULT_LIMIT);
 
-    let receipt = sdk.orders().status(request).await.expect("status");
+    let receipt = sdk.trades().status(request).await.expect("status");
 
     assert!(!receipt.found);
     assert_eq!(receipt.order_id.as_str(), "order-1");
@@ -2977,12 +2980,12 @@ async fn order_status_rejects_invalid_limits_before_querying() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
 
     let zero = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1").with_limit(0))
         .await
         .expect_err("zero limit");
     let too_large = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1").with_limit(ORDER_STATUS_MAX_LIMIT + 1))
         .await
         .expect_err("too large");
@@ -3027,7 +3030,7 @@ async fn order_status_contract_dtos_serialize_deterministically() {
         })
     );
 
-    let receipt = sdk.orders().status(request).await.expect("status");
+    let receipt = sdk.trades().status(request).await.expect("status");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
 
     assert_eq!(receipt_json["source"], "local_event_store");
@@ -3392,7 +3395,7 @@ async fn order_status_projects_local_request_and_decision_events() {
     }
 
     let receipt = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1").with_limit(1_000))
         .await
         .expect("status");
@@ -3410,7 +3413,7 @@ async fn order_status_projects_local_request_and_decision_events() {
             .collect::<Vec<_>>(),
         vec![request_event.id.as_str(), decision_event.id.as_str()]
     );
-    assert_eq!(receipt.status, OrderStatusKind::Accepted);
+    assert_eq!(receipt.status, OrderStatusKind::AgreedPendingRhi);
     assert_eq!(
         receipt
             .request_event_id
@@ -3440,8 +3443,11 @@ async fn order_status_projects_local_request_and_decision_events() {
     );
     assert_eq!(receipt.economics, Some(economics()));
     assert!(receipt.issues.is_empty());
-    assert!(receipt.lifecycle_terminal);
-    assert_eq!(receipt.next_action, OrderStatusNextActionKind::Terminal);
+    assert!(!receipt.lifecycle_terminal);
+    assert_eq!(
+        receipt.next_action,
+        OrderStatusNextActionKind::AwaitRhiValidation
+    );
     assert_eq!(receipt.evidence.event_count, 2);
     assert!(receipt.evidence.has_request);
     assert!(receipt.evidence.has_decision);
@@ -3469,7 +3475,7 @@ async fn order_status_reports_limited_local_results() {
     }
 
     let receipt = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1").with_limit(1))
         .await
         .expect("status");
@@ -3518,7 +3524,7 @@ async fn order_status_reports_typed_reducer_issues() {
     }
 
     let receipt = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1"))
         .await
         .expect("status");
@@ -3571,7 +3577,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
         .expect("corrupt tags");
 
     let error = sdk
-        .orders()
+        .trades()
         .status(status_request("order-1"))
         .await
         .expect_err("projection error");

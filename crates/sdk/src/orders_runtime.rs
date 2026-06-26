@@ -2,8 +2,8 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    OrdersClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy, order,
+    RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradesClient, order,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -968,6 +968,7 @@ pub enum OrderStatusNextActionKind {
     InspectEvidenceIssues,
     AwaitSellerDecision,
     DecideRevision,
+    AwaitRhiValidation,
     Terminal,
 }
 
@@ -1109,7 +1110,7 @@ impl SdkOrderStatusIssueKind {
 }
 
 #[cfg(feature = "runtime")]
-impl<'sdk> OrdersClient<'sdk> {
+impl<'sdk> TradesClient<'sdk> {
     pub async fn ingest_evidence(
         &self,
         request: OrderEvidenceIngestRequest,
@@ -2007,6 +2008,7 @@ impl OrderStatusEligibility {
         let clean = projection.issues.is_empty();
         let open = clean && !projection.lifecycle_terminal;
         let requested = projection.status == RadrootsTradeWorkflowState::Requested;
+        let revision_proposed = projection.status == RadrootsTradeWorkflowState::RevisionProposed;
         let has_pending_revision = projection.pending_revision_event_id.is_some();
 
         Self {
@@ -2015,7 +2017,7 @@ impl OrderStatusEligibility {
                 && projection.decision_event_id.is_none()
                 && !has_pending_revision,
             can_propose_revision: open && requested && !has_pending_revision,
-            can_decide_revision: open && requested && has_pending_revision,
+            can_decide_revision: open && revision_proposed && has_pending_revision,
             can_cancel: open && requested && !has_pending_revision,
         }
     }
@@ -2033,6 +2035,9 @@ impl OrderStatusNextActionKind {
         if !projection.issues.is_empty() || projection.status == RadrootsTradeWorkflowState::Invalid
         {
             return Self::InspectEvidenceIssues;
+        }
+        if projection.status == RadrootsTradeWorkflowState::AgreedPendingRhi {
+            return Self::AwaitRhiValidation;
         }
         if projection.lifecycle_terminal {
             return Self::Terminal;
@@ -2719,7 +2724,11 @@ fn require_revision_decision_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsTradeWorkflowState::Requested)?;
+    require_lifecycle_status(
+        &refs,
+        projection,
+        RadrootsTradeWorkflowState::RevisionProposed,
+    )?;
     require_no_lifecycle_terminal(&refs, projection)?;
     require_pending_revision(&refs, projection)?;
     require_lifecycle_previous_is_current(&refs, projection)

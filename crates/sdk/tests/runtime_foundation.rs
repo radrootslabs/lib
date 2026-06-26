@@ -1,30 +1,32 @@
 #![cfg(feature = "runtime")]
 
 use radroots_sdk::{
-    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsSdk, RadrootsSdkClock,
-    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT,
-    SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey,
-    SdkOutboxStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
+    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsClient,
+    RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkRecoveryAction,
+    RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN,
+    SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
+    SdkIdempotencyKey, SdkOutboxStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
     StorageStatusRequest,
 };
 use std::path::PathBuf;
 
 #[tokio::test]
 async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
-    let sdk = RadrootsSdk::builder().build().await.expect("sdk");
+    let sdk = RadrootsClient::builder().build().await.expect("sdk");
 
     assert!(sdk.relay_urls().is_empty());
     assert!(sdk.storage_paths().is_none());
     let _listings = sdk.listings();
-    let _orders = sdk.orders();
+    let _market = sdk.market();
+    let _trades = sdk.trades();
     let _sync = sdk.sync();
+    let _dvm = sdk.dvm();
 }
 
 #[tokio::test]
 async fn sdk_builder_validates_configured_relay_targets() {
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .relay_url(" wss://relay-b.example.com/ ")
         .relay_url("wss://relay-a.example.com")
         .relay_url("wss://relay-a.example.com")
@@ -43,7 +45,7 @@ async fn sdk_builder_validates_configured_relay_targets() {
 
 #[tokio::test]
 async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
-    let result = RadrootsSdk::builder()
+    let result = RadrootsClient::builder()
         .relay_url("ws://127.0.0.1:8080")
         .build()
         .await;
@@ -88,7 +90,7 @@ fn invalid_relay_url_errors_redact_userinfo() {
 
 #[tokio::test]
 async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .relay_url("ws://localhost:8080")
         .relay_url("ws://127.0.0.1:8081")
@@ -99,7 +101,7 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
 
     assert_eq!(sdk.relay_urls().len(), 3);
 
-    let result = RadrootsSdk::builder()
+    let result = RadrootsClient::builder()
         .relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .relay_url("ws://relay.example.com")
         .build()
@@ -110,7 +112,7 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
 
-    let result = RadrootsSdk::builder()
+    let result = RadrootsClient::builder()
         .relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .relay_url("ws://192.168.1.10:8080")
         .build()
@@ -125,7 +127,7 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
 #[tokio::test]
 async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .storage(RadrootsSdkStorageConfig::Directory(
             tempdir.path().join("sdk-runtime"),
         ))
@@ -151,7 +153,7 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
 
 #[tokio::test]
 async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .build()
         .await
@@ -187,7 +189,7 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
 #[tokio::test]
 async fn sdk_fixed_clock_is_used_by_runtime() {
     let timestamp = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000);
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .clock(RadrootsSdkClock::Fixed(timestamp))
         .build()
         .await
@@ -211,7 +213,7 @@ async fn runtime_defaults_and_clock_overflow_paths_are_explicit() {
             > 0
     );
 
-    let overflow_sdk = RadrootsSdk::builder()
+    let overflow_sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX))
         .build()
         .await
@@ -225,7 +227,7 @@ async fn runtime_defaults_and_clock_overflow_paths_are_explicit() {
     ));
 
     let too_large_for_i64 = u64::try_from(i64::MAX).expect("i64 max") / 1_000 + 1;
-    let i64_overflow_sdk = RadrootsSdk::builder()
+    let i64_overflow_sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(too_large_for_i64))
         .build()
         .await
@@ -245,7 +247,7 @@ async fn runtime_directory_storage_rejects_file_path() {
     let file_path = tempdir.path().join("sdk-file");
     std::fs::write(&file_path, b"not a directory").expect("file");
 
-    let result = RadrootsSdk::builder()
+    let result = RadrootsClient::builder()
         .directory_storage(file_path.clone())
         .build()
         .await;
@@ -794,12 +796,12 @@ fn sdk_examples_stay_on_product_api_boundary() {
     }
 
     let listing_prepare = include_str!("../examples/sdk_v1_listing_prepare.rs");
-    assert!(listing_prepare.contains("RadrootsSdk::builder()"));
+    assert!(listing_prepare.contains("RadrootsClient::builder()"));
     assert!(listing_prepare.contains("ListingPreparePublishRequest"));
     assert!(listing_prepare.contains("prepare_publish"));
 
     let local_enqueue = include_str!("../examples/sdk_v1_local_enqueue_and_mock_sync.rs");
-    assert!(local_enqueue.contains("RadrootsSdk::builder()"));
+    assert!(local_enqueue.contains("RadrootsClient::builder()"));
     assert!(local_enqueue.contains("ListingPreparePublishRequest"));
     assert!(local_enqueue.contains("SdkRelayTargetPolicy"));
     assert!(local_enqueue.contains("SdkRelayTargetSet"));

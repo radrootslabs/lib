@@ -1,54 +1,80 @@
 #[cfg(feature = "runtime")]
-use crate::RadrootsSdk;
+use crate::RadrootsClient;
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
-pub struct FarmsClient<'sdk> {
-    pub(crate) sdk: &'sdk RadrootsSdk,
+pub struct FarmsClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
-impl<'sdk> FarmsClient<'sdk> {
-    pub(crate) fn new(sdk: &'sdk RadrootsSdk) -> Self {
+impl<'client> FarmsClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
         Self { sdk }
     }
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
-pub struct ListingsClient<'sdk> {
-    pub(crate) sdk: &'sdk RadrootsSdk,
+pub struct ListingsClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
-impl<'sdk> ListingsClient<'sdk> {
-    pub(crate) fn new(sdk: &'sdk RadrootsSdk) -> Self {
+impl<'client> ListingsClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
         Self { sdk }
     }
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
-pub struct OrdersClient<'sdk> {
-    pub(crate) sdk: &'sdk RadrootsSdk,
+pub struct MarketClient<'client> {
+    pub(crate) _sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
-impl<'sdk> OrdersClient<'sdk> {
-    pub(crate) fn new(sdk: &'sdk RadrootsSdk) -> Self {
+impl<'client> MarketClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
+        Self { _sdk: sdk }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy)]
+pub struct TradesClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
+}
+
+#[cfg(feature = "runtime")]
+impl<'client> TradesClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
         Self { sdk }
     }
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
-pub struct SyncClient<'sdk> {
-    pub(crate) sdk: &'sdk RadrootsSdk,
+pub struct DvmClient<'client> {
+    pub(crate) _sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
-impl<'sdk> SyncClient<'sdk> {
-    pub(crate) fn new(sdk: &'sdk RadrootsSdk) -> Self {
+impl<'client> DvmClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
+        Self { _sdk: sdk }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy)]
+pub struct SyncClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
+}
+
+#[cfg(feature = "runtime")]
+impl<'client> SyncClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
         Self { sdk }
     }
 }

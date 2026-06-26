@@ -124,7 +124,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         .await
         .expect("memory storage");
     assert!(memory.paths.is_none());
-    let memory_sdk = RadrootsSdk {
+    let memory_sdk = RadrootsClient {
         _event_store: memory.event_store,
         _outbox: memory.outbox,
         storage_paths: None,
@@ -144,7 +144,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
     let directory_paths = directory_storage.paths.expect("directory paths");
     assert!(directory_paths.event_store_path.exists());
     assert!(directory_paths.outbox_path.exists());
-    let directory_sdk = RadrootsSdk {
+    let directory_sdk = RadrootsClient {
         _event_store: directory_storage.event_store,
         _outbox: directory_storage.outbox,
         storage_paths: Some(directory_paths),
@@ -185,7 +185,7 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
             .is_err()
     );
 
-    let memory_sdk = RadrootsSdk::builder()
+    let memory_sdk = RadrootsClient::builder()
         .storage(RadrootsSdkStorageConfig::Memory)
         .clock(RadrootsSdkClock::Fixed(
             RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
@@ -203,7 +203,7 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
     assert!(memory_sdk.storage_paths().is_none());
     let _ = memory_sdk.farms();
     let _ = memory_sdk.listings();
-    let _ = memory_sdk.orders();
+    let _ = memory_sdk.trades();
     let _ = memory_sdk.sync();
     let memory_status = memory_sdk
         .storage_status(StorageStatusRequest::new())
@@ -219,7 +219,7 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
 
     let tempdir = tempfile::tempdir().expect("tempdir");
     let directory = tempdir.path().join("sdk");
-    let directory_sdk = RadrootsSdk::builder()
+    let directory_sdk = RadrootsClient::builder()
         .directory_storage(&directory)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
         .build()
@@ -240,13 +240,13 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
             .is_some_and(|path| path.exists())
     );
 
-    let archive = RadrootsSdk::inspect_restore_archive(&backup_destination)
+    let archive = RadrootsClient::inspect_restore_archive(&backup_destination)
         .await
         .expect("restore archive");
     assert_eq!(archive.manifest, backup.manifest);
 
     let restore_destination = tempdir.path().join("restore");
-    let dry_run = RadrootsSdk::restore(
+    let dry_run = RadrootsClient::restore(
         RestoreRequest::new(&backup_destination)
             .with_destination(&restore_destination)
             .with_overwrite(false)
@@ -257,7 +257,7 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
     assert_eq!(dry_run.state, SdkRestoreState::DryRun);
     assert!(dry_run.restored_paths.is_none());
 
-    let restore = RadrootsSdk::restore(
+    let restore = RadrootsClient::restore(
         RestoreRequest::new(&backup_destination)
             .with_destination(&restore_destination)
             .with_overwrite(true),
@@ -279,7 +279,7 @@ async fn runtime_clock_errors_cover_sdk_now_callers() {
         RadrootsSdkClock::BeforeUnixEpoch.now(),
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
     ));
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .clock(RadrootsSdkClock::BeforeUnixEpoch)
         .build()
         .await
@@ -324,7 +324,7 @@ fn system_time_converters_cover_epoch_success_and_failure_edges() {
 
 #[tokio::test]
 async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
-    let event_store_closed = RadrootsSdk::builder().build().await.expect("sdk");
+    let event_store_closed = RadrootsClient::builder().build().await.expect("sdk");
     event_store_closed._event_store.pool().close().await;
     assert!(matches!(
         event_store_closed
@@ -347,7 +347,7 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
         Err(RadrootsSdkError::EventStore { .. })
     ));
 
-    let outbox_closed = RadrootsSdk::builder().build().await.expect("sdk");
+    let outbox_closed = RadrootsClient::builder().build().await.expect("sdk");
     outbox_closed._outbox.pool().close().await;
     assert!(matches!(
         outbox_closed
@@ -551,7 +551,11 @@ fn restore_destination_preflight_covers_empty_existing_new_and_overlap_paths() {
 
     #[cfg(unix)]
     {
-        let socket_destination = parent.join("socket-destination");
+        let socket_parent = tempfile::Builder::new()
+            .prefix("rrsdk")
+            .tempdir_in("/tmp")
+            .expect("short socket tempdir");
+        let socket_destination = socket_parent.path().join("socket-destination");
         let _listener =
             std::os::unix::net::UnixListener::bind(&socket_destination).expect("socket");
         assert!(
@@ -990,7 +994,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     set_mode(&protected_parent, 0o700);
     assert!(!io_message(protected_result).is_empty());
 
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
         .build()
@@ -1007,7 +1011,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     fs::create_dir(&public_protected_parent).expect("public protected parent");
     let public_protected_destination = public_protected_parent.join("restore");
     set_mode(&public_protected_parent, 0o500);
-    let public_protected_result = RadrootsSdk::restore(
+    let public_protected_result = RadrootsClient::restore(
         RestoreRequest::new(&backup_destination).with_destination(&public_protected_destination),
     )
     .await;
@@ -1059,7 +1063,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .contains("does not match manifest")
     );
 
-    let populated_sdk = RadrootsSdk::builder()
+    let populated_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("populated-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_002))
         .build()

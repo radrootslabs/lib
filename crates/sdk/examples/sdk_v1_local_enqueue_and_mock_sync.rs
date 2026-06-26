@@ -12,7 +12,7 @@ use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
-    ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsSdk,
+    ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsClient,
     RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
     SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keys = RadrootsNostrKeys::generate();
     let seller = keys.public_key().to_hex();
     let signer = RadrootsSdkLocalKeySigner::new(keys)?;
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
         .await?;
     let order_status = sdk
-        .orders()
+        .trades()
         .status(OrderStatusRequest::parse("example-order-1")?)
         .await?;
 

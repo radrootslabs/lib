@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    FarmsClient, ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, SyncClient,
+    DvmClient, FarmsClient, ListingsClient, MarketClient, RadrootsSdkError, SdkRelayTargetSet,
+    SdkRelayUrlPolicy, SyncClient, TradesClient,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 use crate::{
@@ -390,7 +390,7 @@ pub struct RestoreReceipt {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone)]
-pub struct RadrootsSdkBuilder {
+pub struct RadrootsClientBuilder {
     storage: RadrootsSdkStorageConfig,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
@@ -401,7 +401,7 @@ pub struct RadrootsSdkBuilder {
 }
 
 #[cfg(feature = "runtime")]
-impl Default for RadrootsSdkBuilder {
+impl Default for RadrootsClientBuilder {
     fn default() -> Self {
         Self {
             storage: RadrootsSdkStorageConfig::Memory,
@@ -416,7 +416,7 @@ impl Default for RadrootsSdkBuilder {
 }
 
 #[cfg(feature = "runtime")]
-impl RadrootsSdkBuilder {
+impl RadrootsClientBuilder {
     pub fn storage(mut self, storage: RadrootsSdkStorageConfig) -> Self {
         self.storage = storage;
         self
@@ -458,11 +458,11 @@ impl RadrootsSdkBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<RadrootsSdk, RadrootsSdkError> {
+    pub async fn build(self) -> Result<RadrootsClient, RadrootsSdkError> {
         let storage = open_storage(&self.storage).await?;
         let relay_urls =
             SdkRelayTargetSet::from_configured_relays(&self.relay_urls, self.relay_url_policy)?;
-        Ok(RadrootsSdk {
+        Ok(RadrootsClient {
             _event_store: storage.event_store,
             _outbox: storage.outbox,
             storage_paths: storage.paths,
@@ -477,7 +477,7 @@ impl RadrootsSdkBuilder {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone)]
-pub struct RadrootsSdk {
+pub struct RadrootsClient {
     pub(crate) _event_store: RadrootsEventStore,
     pub(crate) _outbox: RadrootsOutbox,
     storage_paths: Option<RadrootsSdkStoragePaths>,
@@ -489,9 +489,9 @@ pub struct RadrootsSdk {
 }
 
 #[cfg(feature = "runtime")]
-impl RadrootsSdk {
-    pub fn builder() -> RadrootsSdkBuilder {
-        RadrootsSdkBuilder::default()
+impl RadrootsClient {
+    pub fn builder() -> RadrootsClientBuilder {
+        RadrootsClientBuilder::default()
     }
 
     pub fn farms(&self) -> FarmsClient<'_> {
@@ -502,12 +502,20 @@ impl RadrootsSdk {
         ListingsClient::new(self)
     }
 
-    pub fn orders(&self) -> OrdersClient<'_> {
-        OrdersClient::new(self)
+    pub fn market(&self) -> MarketClient<'_> {
+        MarketClient::new(self)
+    }
+
+    pub fn trades(&self) -> TradesClient<'_> {
+        TradesClient::new(self)
     }
 
     pub fn sync(&self) -> SyncClient<'_> {
         SyncClient::new(self)
+    }
+
+    pub fn dvm(&self) -> DvmClient<'_> {
+        DvmClient::new(self)
     }
 
     pub fn now(&self) -> Result<RadrootsSdkTimestamp, RadrootsSdkError> {
@@ -771,7 +779,7 @@ fn write_backup_receipt(
 }
 
 #[cfg(feature = "runtime")]
-pub(crate) fn sdk_now_ms(sdk: &RadrootsSdk) -> Result<i64, RadrootsSdkError> {
+pub(crate) fn sdk_now_ms(sdk: &RadrootsClient) -> Result<i64, RadrootsSdkError> {
     let seconds = sdk.now()?.unix_seconds();
     let millis = seconds
         .checked_mul(1_000)

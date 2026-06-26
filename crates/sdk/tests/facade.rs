@@ -105,9 +105,9 @@ fn sample_listing() -> RadrootsListing {
         delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
         location: Some(RadrootsListingPublicLocation {
             primary: "North Farm".into(),
-            city: None,
-            region: None,
-            country: None,
+            city: Some("San Francisco".into()),
+            region: Some("CA".into()),
+            country: Some("US".into()),
             geohash: "9q8yy".into(),
         }),
         images: None,

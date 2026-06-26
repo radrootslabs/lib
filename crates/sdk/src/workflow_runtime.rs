@@ -1,7 +1,7 @@
 #[cfg(feature = "signer-adapters")]
 use crate::RadrootsSdkSignRequest;
 use crate::{
-    RadrootsSdk, RadrootsSdkError, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    RadrootsClient, RadrootsSdkError, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
     runtime::sdk_now_ms,
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
@@ -32,7 +32,7 @@ pub(crate) struct SdkWorkflowEnqueueReceipt {
 }
 
 pub(crate) async fn enqueue_signed_workflow(
-    sdk: &RadrootsSdk,
+    sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
     signer: &dyn RadrootsEventSigner,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
@@ -43,7 +43,7 @@ pub(crate) async fn enqueue_signed_workflow(
 
 #[cfg(feature = "signer-adapters")]
 pub(crate) async fn enqueue_configured_signed_workflow(
-    sdk: &RadrootsSdk,
+    sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
@@ -59,7 +59,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
 }
 
 async fn enqueue_signed_workflow_event(
-    sdk: &RadrootsSdk,
+    sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
     signed_event: RadrootsSignedNostrEvent,
     target_relays: SdkResolvedRelayTargets,
@@ -137,7 +137,7 @@ struct SdkResolvedRelayTargets {
 }
 
 fn resolved_target_relays(
-    sdk: &RadrootsSdk,
+    sdk: &RadrootsClient,
     target_relays: &SdkRelayTargetPolicy,
 ) -> Result<SdkResolvedRelayTargets, RadrootsSdkError> {
     match target_relays {

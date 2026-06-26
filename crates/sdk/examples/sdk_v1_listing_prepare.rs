@@ -9,13 +9,13 @@ use radroots_sdk::protocol::farm::RadrootsFarmRef;
 use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
-use radroots_sdk::{ListingPreparePublishRequest, RadrootsSdk, RadrootsSdkTimestamp};
+use radroots_sdk::{ListingPreparePublishRequest, RadrootsClient, RadrootsSdkTimestamp};
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let sdk = RadrootsSdk::builder()
+    let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .build()
         .await?;

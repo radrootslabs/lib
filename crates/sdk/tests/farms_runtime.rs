@@ -14,7 +14,7 @@ use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
-    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk,
+    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsClient,
     RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy,
     SdkRelayTargetSet, SdkRelayUrlPolicy,
@@ -111,13 +111,13 @@ fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
     }
 }
 
-async fn directory_sdk() -> (tempfile::TempDir, RadrootsSdk) {
+async fn directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     directory_sdk_with_relays(&[RELAY]).await
 }
 
-async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
+async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let mut builder = RadrootsSdk::builder()
+    let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
     for relay in relays {

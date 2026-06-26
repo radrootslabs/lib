@@ -19,7 +19,7 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
-    RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
     SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
@@ -162,13 +162,13 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
     }
 }
 
-async fn directory_sdk() -> (tempfile::TempDir, RadrootsSdk) {
+async fn directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     directory_sdk_with_relays(&[RELAY]).await
 }
 
-async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
+async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let mut builder = RadrootsSdk::builder()
+    let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
     for relay in relays {
