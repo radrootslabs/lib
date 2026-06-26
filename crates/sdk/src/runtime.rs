@@ -1,4 +1,6 @@
 #[cfg(feature = "runtime")]
+use crate::private_store::{SDK_PRIVATE_STORE_SCHEMA_VERSION, SdkPrivateStore};
+#[cfg(feature = "runtime")]
 use crate::{
     DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, RadrootsGeoNamesConfig,
     RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy, SyncClient, TradesClient,
@@ -34,9 +36,13 @@ const SDK_EVENT_STORE_SCHEMA_VERSION: i64 = 1;
 #[cfg(feature = "runtime")]
 const SDK_OUTBOX_SCHEMA_VERSION: i64 = 1;
 #[cfg(feature = "runtime")]
+const SDK_PRIVATE_STORE_SCHEMA_VERSION_CURRENT: i64 = SDK_PRIVATE_STORE_SCHEMA_VERSION;
+#[cfg(feature = "runtime")]
 const EVENT_STORE_BACKUP_FILE: &str = "event_store.sqlite";
 #[cfg(feature = "runtime")]
 const OUTBOX_BACKUP_FILE: &str = "outbox.sqlite";
+#[cfg(feature = "runtime")]
+const PRIVATE_STORE_BACKUP_FILE: &str = "private.sqlite";
 #[cfg(feature = "runtime")]
 const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 
@@ -119,6 +125,7 @@ fn sdk_timestamp_from_system_time(
 pub struct RadrootsSdkStoragePaths {
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
+    pub private_store_path: PathBuf,
 }
 
 #[cfg(feature = "runtime")]
@@ -140,6 +147,7 @@ pub struct StorageStatusReceipt {
     pub paths: Option<RadrootsSdkStoragePaths>,
     pub event_store: SdkEventStoreStorageStatus,
     pub outbox: SdkOutboxStorageStatus,
+    pub private_store: SdkPrivateStoreStorageStatus,
 }
 
 #[cfg(feature = "runtime")]
@@ -190,6 +198,13 @@ pub struct SdkOutboxStorageStatus {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkPrivateStoreStorageStatus {
+    pub store: SdkSqliteStoreStatus,
+    pub farm_private_locations: i64,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct BackupRequest {
     pub destination: PathBuf,
@@ -218,6 +233,7 @@ pub struct BackupReceipt {
     pub state: SdkBackupState,
     pub event_store_path: Option<PathBuf>,
     pub outbox_path: Option<PathBuf>,
+    pub private_store_path: Option<PathBuf>,
     pub manifest_path: Option<PathBuf>,
     pub manifest: SdkBackupManifest,
 }
@@ -258,8 +274,10 @@ pub struct SdkBackupManifest {
 pub struct SdkBackupVerification {
     pub event_store_ok: bool,
     pub outbox_ok: bool,
+    pub private_store_ok: bool,
     pub event_store_events: i64,
     pub outbox_events: i64,
+    pub private_farm_locations: i64,
 }
 
 #[cfg(feature = "runtime")]
@@ -280,8 +298,10 @@ pub struct IntegrityReceipt {
     pub checked_paths: Vec<PathBuf>,
     pub event_store_ok: bool,
     pub outbox_ok: bool,
+    pub private_store_ok: bool,
     pub event_store_result: String,
     pub outbox_result: String,
+    pub private_store_result: String,
 }
 
 #[cfg(feature = "runtime")]
@@ -368,6 +388,7 @@ pub struct RestoreArchive {
     pub source: PathBuf,
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
+    pub private_store_path: PathBuf,
     pub manifest_path: PathBuf,
     pub manifest: SdkBackupManifest,
     pub verification: SdkBackupVerification,
@@ -382,6 +403,7 @@ pub struct RestoreReceipt {
     pub destination_paths: Option<RadrootsSdkStoragePaths>,
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
+    pub private_store_path: PathBuf,
     pub manifest_path: PathBuf,
     pub manifest: SdkBackupManifest,
     pub verification: SdkBackupVerification,
@@ -477,6 +499,7 @@ impl RadrootsClientBuilder {
         Ok(RadrootsClient {
             _event_store: storage.event_store,
             _outbox: storage.outbox,
+            _private_store: storage.private_store,
             storage_paths: storage.paths,
             geonames: self.geonames,
             clock: self.clock,
@@ -493,6 +516,7 @@ impl RadrootsClientBuilder {
 pub struct RadrootsClient {
     pub(crate) _event_store: RadrootsEventStore,
     pub(crate) _outbox: RadrootsOutbox,
+    pub(crate) _private_store: SdkPrivateStore,
     storage_paths: Option<RadrootsSdkStoragePaths>,
     geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
@@ -590,8 +614,10 @@ impl RadrootsClient {
         let now_ms = sdk_now_ms(self)?;
         let event_store_status = event_store_sqlite_status(&self._event_store).await?;
         let outbox_store_status = outbox_sqlite_status(&self._outbox).await?;
+        let private_store_status = private_store_sqlite_status(&self._private_store).await?;
         let event_summary = event_store_status_summary(&self._event_store).await?;
         let outbox_summary = outbox_status_summary(&self._outbox, now_ms).await?;
+        let private_summary = self._private_store.status_summary().await?;
         Ok(StorageStatusReceipt {
             storage: self.storage_kind(),
             paths: self.storage_paths.clone(),
@@ -615,6 +641,10 @@ impl RadrootsClient {
                 last_attempt_at_ms: outbox_summary.last_attempt_at_ms,
                 last_error: outbox_summary.last_error,
             },
+            private_store: SdkPrivateStoreStorageStatus {
+                store: private_store_status,
+                farm_private_locations: private_summary.farm_private_locations,
+            },
         })
     }
 
@@ -624,17 +654,27 @@ impl RadrootsClient {
     ) -> Result<IntegrityReceipt, RadrootsSdkError> {
         let event_store_integrity = sqlite_integrity_result(self._event_store.pool()).await?;
         let outbox_integrity = sqlite_integrity_result(self._outbox.pool()).await?;
+        let private_store_integrity =
+            private_store_sqlite_integrity_result(self._private_store.pool()).await?;
         let checked_paths = self
             .storage_paths
             .as_ref()
-            .map(|paths| vec![paths.event_store_path.clone(), paths.outbox_path.clone()])
+            .map(|paths| {
+                vec![
+                    paths.event_store_path.clone(),
+                    paths.outbox_path.clone(),
+                    paths.private_store_path.clone(),
+                ]
+            })
             .unwrap_or_default();
         Ok(IntegrityReceipt {
             checked_paths,
             event_store_ok: event_store_integrity.ok,
             outbox_ok: outbox_integrity.ok,
+            private_store_ok: private_store_integrity.ok,
             event_store_result: event_store_integrity.result,
             outbox_result: outbox_integrity.result,
+            private_store_result: private_store_integrity.result,
         })
     }
 
@@ -649,16 +689,22 @@ impl RadrootsClient {
         let backup_paths = RadrootsSdkStoragePaths {
             event_store_path: request.destination.join(EVENT_STORE_BACKUP_FILE),
             outbox_path: request.destination.join(OUTBOX_BACKUP_FILE),
+            private_store_path: request.destination.join(PRIVATE_STORE_BACKUP_FILE),
         };
         let manifest_backup_paths = RadrootsSdkStoragePaths {
             event_store_path: PathBuf::from(EVENT_STORE_BACKUP_FILE),
             outbox_path: PathBuf::from(OUTBOX_BACKUP_FILE),
+            private_store_path: PathBuf::from(PRIVATE_STORE_BACKUP_FILE),
         };
         let manifest_path = request.destination.join(BACKUP_MANIFEST_FILE);
         let source_status = self.storage_status(StorageStatusRequest::new()).await?;
-        let backup_verification =
-            backup_sqlite_stores(self._event_store.pool(), self._outbox.pool(), &backup_paths)
-                .await?;
+        let backup_verification = backup_sqlite_stores(
+            self._event_store.pool(),
+            self._outbox.pool(),
+            self._private_store.pool(),
+            &backup_paths,
+        )
+        .await?;
         let manifest = SdkBackupManifest {
             manifest_kind: SDK_STORAGE_MANIFEST_KIND,
             manifest_version: SDK_STORAGE_MANIFEST_VERSION,
@@ -715,6 +761,7 @@ impl RadrootsClient {
             destination_paths: Some(destination_paths),
             event_store_path: archive.event_store_path,
             outbox_path: archive.outbox_path,
+            private_store_path: archive.private_store_path,
             manifest_path: archive.manifest_path,
             manifest: archive.manifest,
             verification: archive.verification,
@@ -752,6 +799,20 @@ async fn outbox_sqlite_status(
 }
 
 #[cfg(feature = "runtime")]
+async fn private_store_sqlite_status(
+    private_store: &SdkPrivateStore,
+) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    private_sqlite_store_status(
+        private_store.pool(),
+        SDK_PRIVATE_STORE_SCHEMA_VERSION_CURRENT,
+        private_store.pragma_journal_mode().await?,
+        private_store.pragma_foreign_keys().await? != 0,
+        private_store.pragma_busy_timeout().await?,
+    )
+    .await
+}
+
+#[cfg(feature = "runtime")]
 async fn event_store_status_summary(
     event_store: &RadrootsEventStore,
 ) -> Result<radroots_event_store::RadrootsEventStoreStatusSummary, RadrootsSdkError> {
@@ -770,6 +831,7 @@ async fn outbox_status_summary(
 async fn backup_sqlite_stores(
     event_store_pool: &SqlitePool,
     outbox_pool: &SqlitePool,
+    private_store_pool: &SqlitePool,
     backup_paths: &RadrootsSdkStoragePaths,
 ) -> Result<SdkBackupVerification, RadrootsSdkError> {
     sqlite_vacuum_into(
@@ -779,6 +841,12 @@ async fn backup_sqlite_stores(
     )
     .await?;
     sqlite_vacuum_into(outbox_pool, &backup_paths.outbox_path, "outbox").await?;
+    sqlite_vacuum_into(
+        private_store_pool,
+        &backup_paths.private_store_path,
+        "private store",
+    )
+    .await?;
     verify_backup_paths(backup_paths).await
 }
 
@@ -795,6 +863,7 @@ fn write_backup_receipt(
         state: SdkBackupState::Completed,
         event_store_path: Some(backup_paths.event_store_path),
         outbox_path: Some(backup_paths.outbox_path),
+        private_store_path: Some(backup_paths.private_store_path),
         manifest_path: Some(manifest_path),
         manifest,
     })
@@ -848,9 +917,15 @@ async fn inspect_restore_archive(source: PathBuf) -> Result<RestoreArchive, Radr
     )?;
     let outbox_path =
         restore_archive_member_path(&source_root, &manifest.backup_paths.outbox_path, "outbox")?;
+    let private_store_path = restore_archive_member_path(
+        &source_root,
+        &manifest.backup_paths.private_store_path,
+        "private store",
+    )?;
     let verification = verify_backup_paths(&RadrootsSdkStoragePaths {
         event_store_path: event_store_path.clone(),
         outbox_path: outbox_path.clone(),
+        private_store_path: private_store_path.clone(),
     })
     .await?;
     validate_restore_verification(&verification, &manifest.backup_verification)?;
@@ -858,6 +933,7 @@ async fn inspect_restore_archive(source: PathBuf) -> Result<RestoreArchive, Radr
         source,
         event_store_path,
         outbox_path,
+        private_store_path,
         manifest_path,
         manifest,
         verification,
@@ -969,7 +1045,7 @@ fn validate_restore_verification(
     actual: &SdkBackupVerification,
     manifest: &SdkBackupVerification,
 ) -> Result<(), RadrootsSdkError> {
-    if !actual.event_store_ok || !actual.outbox_ok {
+    if !actual.event_store_ok || !actual.outbox_ok || !actual.private_store_ok {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "restore backup stores failed integrity checks".to_owned(),
         });
@@ -1054,6 +1130,7 @@ fn preflight_restore_destination(
     Ok(RadrootsSdkStoragePaths {
         event_store_path: destination.join(EVENT_STORE_BACKUP_FILE),
         outbox_path: destination.join(OUTBOX_BACKUP_FILE),
+        private_store_path: destination.join(PRIVATE_STORE_BACKUP_FILE),
     })
 }
 
@@ -1090,6 +1167,7 @@ async fn restore_archive_to_destination(
     let staging_paths = RadrootsSdkStoragePaths {
         event_store_path: staging.join(EVENT_STORE_BACKUP_FILE),
         outbox_path: staging.join(OUTBOX_BACKUP_FILE),
+        private_store_path: staging.join(PRIVATE_STORE_BACKUP_FILE),
     };
     if let Err(error) = copy_restore_archive_to_staging(archive, &staging_paths).await {
         let _ = remove_existing_restore_path(&staging);
@@ -1152,6 +1230,11 @@ async fn copy_restore_archive_to_staging(
         "event store",
     )?;
     copy_restore_file(&archive.outbox_path, &staging_paths.outbox_path, "outbox")?;
+    copy_restore_file(
+        &archive.private_store_path,
+        &staging_paths.private_store_path,
+        "private store",
+    )?;
     let staging_verification = verify_backup_paths(staging_paths).await?;
     validate_restore_verification(&staging_verification, &archive.verification)
 }
@@ -1265,6 +1348,7 @@ fn rollback_restore_destination(destination: &Path, previous: &Path, previous_in
 struct OpenedRuntimeStorage {
     event_store: RadrootsEventStore,
     outbox: RadrootsOutbox,
+    private_store: SdkPrivateStore,
     paths: Option<RadrootsSdkStoragePaths>,
 }
 
@@ -1276,6 +1360,7 @@ async fn open_storage(
         RadrootsSdkStorageConfig::Memory => Ok(OpenedRuntimeStorage {
             event_store: RadrootsEventStore::open_memory().await?,
             outbox: RadrootsOutbox::open_memory().await?,
+            private_store: SdkPrivateStore::open_memory().await?,
             paths: None,
         }),
         RadrootsSdkStorageConfig::Directory(path) => open_directory_storage(path).await,
@@ -1291,10 +1376,12 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
     let paths = RadrootsSdkStoragePaths {
         event_store_path: path.join("event_store.sqlite"),
         outbox_path: path.join("outbox.sqlite"),
+        private_store_path: path.join("private.sqlite"),
     };
     Ok(OpenedRuntimeStorage {
         event_store: RadrootsEventStore::open_file(&paths.event_store_path).await?,
         outbox: RadrootsOutbox::open_file(&paths.outbox_path).await?,
+        private_store: SdkPrivateStore::open_file(&paths.private_store_path).await?,
         paths: Some(paths),
     })
 }
@@ -1325,6 +1412,25 @@ async fn sqlite_store_status(
 }
 
 #[cfg(feature = "runtime")]
+async fn private_sqlite_store_status(
+    pool: &SqlitePool,
+    schema_version: i64,
+    journal_mode: String,
+    foreign_keys_enabled: bool,
+    busy_timeout_ms: i64,
+) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    let integrity = private_store_sqlite_integrity_result(pool).await?;
+    Ok(SdkSqliteStoreStatus {
+        schema_version,
+        journal_mode,
+        foreign_keys_enabled,
+        busy_timeout_ms,
+        integrity_ok: integrity.ok,
+        integrity_result: integrity.result,
+    })
+}
+
+#[cfg(feature = "runtime")]
 async fn sqlite_integrity_result(
     pool: &SqlitePool,
 ) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
@@ -1332,6 +1438,23 @@ async fn sqlite_integrity_result(
         .fetch_all(pool)
         .await
         .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let result = results.join("; ");
+    Ok(SqliteIntegrityResult {
+        ok: result == "ok",
+        result,
+    })
+}
+
+#[cfg(feature = "runtime")]
+async fn private_store_sqlite_integrity_result(
+    pool: &SqlitePool,
+) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
+    let results = sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
+        .fetch_all(pool)
+        .await
+        .map_err(|error| RadrootsSdkError::PrivateStore {
             message: error.to_string(),
         })?;
     let result = results.join("; ");
@@ -1407,15 +1530,21 @@ async fn verify_backup_paths(
 ) -> Result<SdkBackupVerification, RadrootsSdkError> {
     let event_store = RadrootsEventStore::open_file(&paths.event_store_path).await?;
     let outbox = RadrootsOutbox::open_file(&paths.outbox_path).await?;
+    let private_store = SdkPrivateStore::open_file(&paths.private_store_path).await?;
     let event_store_integrity = sqlite_integrity_result(event_store.pool()).await?;
     let outbox_integrity = sqlite_integrity_result(outbox.pool()).await?;
+    let private_store_integrity =
+        private_store_sqlite_integrity_result(private_store.pool()).await?;
     let event_summary = event_store.status_summary().await?;
     let outbox_summary = outbox.status_summary(i64::MAX).await?;
+    let private_summary = private_store.status_summary().await?;
     Ok(SdkBackupVerification {
         event_store_ok: event_store_integrity.ok,
         outbox_ok: outbox_integrity.ok,
+        private_store_ok: private_store_integrity.ok,
         event_store_events: event_summary.total_events,
         outbox_events: outbox_summary.total_events,
+        private_farm_locations: private_summary.farm_private_locations,
     })
 }
 

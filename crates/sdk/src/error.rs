@@ -172,6 +172,9 @@ pub enum RadrootsSdkError {
     Outbox {
         message: String,
     },
+    PrivateStore {
+        message: String,
+    },
     GeoNames {
         kind: RadrootsSdkGeoNamesErrorKind,
         message: String,
@@ -215,6 +218,7 @@ impl RadrootsSdkError {
             Self::ListingDraft { .. } => "listing_draft",
             Self::ListingMutation { .. } => "listing_mutation",
             Self::Outbox { .. } => "outbox",
+            Self::PrivateStore { .. } => "private_store",
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => "geonames_configuration",
                 RadrootsSdkGeoNamesErrorKind::Download => "geonames_download",
@@ -234,6 +238,7 @@ impl RadrootsSdkError {
             Self::Io { .. }
             | Self::EventStore { .. }
             | Self::Outbox { .. }
+            | Self::PrivateStore { .. }
             | Self::Projection { .. } => RadrootsSdkErrorClass::Storage,
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => RadrootsSdkErrorClass::Configuration,
@@ -279,6 +284,7 @@ impl RadrootsSdkError {
                 | Self::ProductSyncRelaySetupFailure { .. }
                 | Self::EventStore { .. }
                 | Self::Outbox { .. }
+                | Self::PrivateStore { .. }
                 | Self::GeoNames {
                     kind: RadrootsSdkGeoNamesErrorKind::Cache
                         | RadrootsSdkGeoNamesErrorKind::Download,
@@ -297,6 +303,7 @@ impl RadrootsSdkError {
             Self::Io { .. }
             | Self::EventStore { .. }
             | Self::Outbox { .. }
+            | Self::PrivateStore { .. }
             | Self::Projection { .. } => vec![RadrootsSdkRecoveryAction::InspectLocalStores],
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => {
@@ -415,6 +422,7 @@ impl RadrootsSdkError {
             | Self::ListingDraft { message }
             | Self::ListingMutation { message }
             | Self::Outbox { message }
+            | Self::PrivateStore { message }
             | Self::RelayTransport { message }
             | Self::Projection { message } => json!({ "message": message }),
             Self::GeoNames { kind, message } => json!({ "kind": kind, "message": message }),
@@ -600,6 +608,7 @@ impl fmt::Display for RadrootsSdkError {
                 write!(f, "sdk listing mutation error: {message}")
             }
             Self::Outbox { message } => write!(f, "sdk outbox error: {message}"),
+            Self::PrivateStore { message } => write!(f, "sdk private store error: {message}"),
             Self::GeoNames { kind, message } => {
                 write!(f, "sdk GeoNames {kind:?} error: {message}")
             }

@@ -14,11 +14,14 @@ use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
-    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsClient,
-    RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy,
+    FarmPrivateLocationUpsertRequest, Geocoder, PushOutboxEventState, PushOutboxRelayOutcomeKind,
+    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass,
+    RadrootsSdkGeoNamesErrorKind, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey,
+    SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    StorageStatusRequest,
 };
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 #[path = "support/serializer_failure.rs"]
 mod serializer_failure;
@@ -127,6 +130,70 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
     (tempdir, sdk)
 }
 
+async fn fixture_geocoder(tempdir: &tempfile::TempDir) -> Geocoder {
+    let path = tempdir.path().join("geonames-fixture.db");
+    let options = SqliteConnectOptions::new()
+        .filename(&path)
+        .create_if_missing(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("geonames fixture pool");
+    sqlx::raw_sql(
+        r#"
+        CREATE TABLE countries(
+          id TEXT,
+          name TEXT,
+          PRIMARY KEY (id)
+        );
+        CREATE TABLE admin1(
+          country_id TEXT,
+          id INTEGER,
+          name TEXT,
+          PRIMARY KEY (country_id, id)
+        );
+        CREATE TABLE features(
+          id INTEGER,
+          name TEXT,
+          country_id TEXT,
+          admin1_id INTEGER,
+          PRIMARY KEY (id)
+        );
+        CREATE TABLE coordinates(
+          feature_id INTEGER,
+          latitude REAL,
+          longitude REAL,
+          PRIMARY KEY (feature_id)
+        );
+        CREATE INDEX coordinates_lat_lng ON coordinates (latitude, longitude);
+        CREATE VIEW geonames AS
+          SELECT
+            features.id,
+            features.name,
+            admin1.id AS admin1_id,
+            admin1.name AS admin1_name,
+            countries.id AS country_id,
+            countries.name AS country_name,
+            coordinates.latitude AS latitude,
+            coordinates.longitude AS longitude
+          FROM features
+            LEFT JOIN countries ON features.country_id = countries.id
+            LEFT JOIN admin1 ON features.country_id = admin1.country_id AND features.admin1_id = admin1.id
+            JOIN coordinates ON features.id = coordinates.feature_id;
+        INSERT INTO countries (id, name) VALUES ('FX', 'Fixture Country');
+        INSERT INTO admin1 (country_id, id, name) VALUES ('FX', 1, 'Fixture Region');
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (1, 'Fixture Town', 'FX', 1);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (1, 12.25, -34.50);
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed geonames fixture");
+    pool.close().await;
+    Geocoder::open_path(path).expect("open geonames fixture")
+}
+
 #[tokio::test]
 async fn farm_prepare_publish_is_side_effect_free() {
     let (_tempdir, sdk) = directory_sdk().await;
@@ -187,6 +254,147 @@ async fn farm_prepare_publish_rejects_non_farmer_actor() {
         .expect_err("non farmer");
 
     assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
+}
+
+#[tokio::test]
+async fn farm_private_location_upsert_stores_exact_location_and_public_locality_without_events() {
+    let (tempdir, sdk) = directory_sdk().await;
+    let geocoder = fixture_geocoder(&tempdir).await;
+    let request = FarmPrivateLocationUpsertRequest::new(
+        farmer_actor(),
+        FARM_A_D_TAG,
+        SdkExactLocation::new(12.26, -34.51),
+    )
+    .with_updated_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123));
+
+    let receipt = sdk
+        .farms()
+        .upsert_private_location_with_geocoder(request, &geocoder)
+        .await
+        .expect("upsert private location");
+
+    assert_eq!(
+        receipt.farm_addr.as_str(),
+        format!("{KIND_FARM}:{FARMER}:{FARM_A_D_TAG}")
+    );
+    assert_eq!(receipt.farm_pubkey, FARMER);
+    assert_eq!(receipt.farm_d_tag, FARM_A_D_TAG);
+    assert_eq!(receipt.exact_location, SdkExactLocation::new(12.26, -34.51));
+    assert_eq!(receipt.public_locality.primary, "Fixture Town");
+    assert_eq!(
+        receipt.public_locality.city.as_deref(),
+        Some("Fixture Town")
+    );
+    assert_eq!(
+        receipt.public_locality.region.as_deref(),
+        Some("Fixture Region")
+    );
+    assert_eq!(
+        receipt.public_locality.country.as_deref(),
+        Some("Fixture Country")
+    );
+    assert_eq!(receipt.public_locality.geohash5, "e4pmw");
+    assert_eq!(receipt.geonames_feature_id, Some(1));
+    assert_eq!(receipt.geonames_country_id.as_deref(), Some("FX"));
+    assert_eq!(receipt.updated_at_ms, 1_700_000_123_000);
+    let farm_public = receipt.public_locality.to_farm_public_location();
+    assert_eq!(farm_public.primary, "Fixture Town");
+    assert_eq!(farm_public.geohash, "e4pmw");
+    let listing_public = receipt.public_locality.to_listing_public_location();
+    assert_eq!(listing_public.primary, "Fixture Town");
+    assert_eq!(listing_public.geohash, "e4pmw");
+
+    let stored = sdk
+        .farms()
+        .private_location(&receipt.farm_addr)
+        .await
+        .expect("private location read")
+        .expect("stored private location");
+    assert_eq!(stored, receipt);
+    let status = sdk
+        .storage_status(StorageStatusRequest::new())
+        .await
+        .expect("status");
+    assert_eq!(status.private_store.farm_private_locations, 1);
+    assert_eq!(status.event_store.total_events, 0);
+    assert_eq!(status.outbox.total_events, 0);
+
+    let clock_receipt = sdk
+        .farms()
+        .upsert_private_location_with_geocoder(
+            FarmPrivateLocationUpsertRequest::new(
+                farmer_actor(),
+                FARM_B_D_TAG,
+                SdkExactLocation::new(12.26, -34.51),
+            ),
+            &geocoder,
+        )
+        .await
+        .expect("upsert with sdk clock");
+    assert_eq!(clock_receipt.updated_at_ms, 1_700_000_000_000);
+}
+
+#[tokio::test]
+async fn farm_private_location_requires_farmer_role_and_valid_coordinates() {
+    let (tempdir, sdk) = directory_sdk().await;
+    let geocoder = fixture_geocoder(&tempdir).await;
+    let non_farmer = sdk
+        .farms()
+        .upsert_private_location_with_geocoder(
+            FarmPrivateLocationUpsertRequest::new(
+                non_farmer_actor(),
+                FARM_B_D_TAG,
+                SdkExactLocation::new(12.26, -34.51),
+            ),
+            &geocoder,
+        )
+        .await
+        .expect_err("non farmer");
+    assert!(matches!(
+        non_farmer,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+
+    let invalid = sdk
+        .farms()
+        .upsert_private_location_with_geocoder(
+            FarmPrivateLocationUpsertRequest::new(
+                farmer_actor(),
+                FARM_B_D_TAG,
+                SdkExactLocation::new(91.0, -34.51),
+            ),
+            &geocoder,
+        )
+        .await
+        .expect_err("invalid coordinates");
+    assert!(matches!(invalid, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn farm_private_location_requires_configured_geonames_for_default_upsert() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let error = sdk
+        .farms()
+        .upsert_private_location(FarmPrivateLocationUpsertRequest::new(
+            farmer_actor(),
+            FARM_C_D_TAG,
+            SdkExactLocation::new(12.26, -34.51),
+        ))
+        .await
+        .expect_err("missing geonames config");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Configuration,
+            ..
+        }
+    ));
+    assert_eq!(error.class(), RadrootsSdkErrorClass::Configuration);
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::ConfigureGeoNamesCache]
+    );
 }
 
 #[tokio::test]

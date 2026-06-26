@@ -603,11 +603,13 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
         integrity.checked_paths,
         vec![
             source_paths.event_store_path.clone(),
-            source_paths.outbox_path.clone()
+            source_paths.outbox_path.clone(),
+            source_paths.private_store_path.clone()
         ]
     );
     assert!(integrity.event_store_ok);
     assert!(integrity.outbox_ok);
+    assert!(integrity.private_store_ok);
 
     let backup_destination = tempdir.path().join("backup");
     let backup = sdk
@@ -619,9 +621,14 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
         .as_ref()
         .expect("event store backup");
     let outbox_path = backup.outbox_path.as_ref().expect("outbox backup");
+    let private_store_path = backup
+        .private_store_path
+        .as_ref()
+        .expect("private store backup");
     let manifest_path = backup.manifest_path.as_ref().expect("manifest");
     assert!(event_store_path.exists());
     assert!(outbox_path.exists());
+    assert!(private_store_path.exists());
     assert!(manifest_path.exists());
     assert_eq!(
         backup.manifest.manifest_kind,
@@ -635,11 +642,28 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
         backup.manifest.backup_paths.outbox_path,
         PathBuf::from("outbox.sqlite")
     );
+    assert_eq!(
+        backup.manifest.backup_paths.private_store_path,
+        PathBuf::from("private.sqlite")
+    );
     assert_eq!(backup.manifest.created_at_ms, 1_700_000_000_000);
     assert_eq!(backup.manifest.source_status.event_store.total_events, 1);
     assert_eq!(backup.manifest.source_status.outbox.total_events, 1);
+    assert_eq!(
+        backup
+            .manifest
+            .source_status
+            .private_store
+            .farm_private_locations,
+        0
+    );
     assert!(backup.manifest.backup_verification.event_store_ok);
     assert!(backup.manifest.backup_verification.outbox_ok);
+    assert!(backup.manifest.backup_verification.private_store_ok);
+    assert_eq!(
+        backup.manifest.backup_verification.private_farm_locations,
+        0
+    );
 
     let restore_archive = RadrootsClient::inspect_restore_archive(backup_destination.clone())
         .await
@@ -656,6 +680,12 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert_eq!(
         restore_archive.outbox_path,
         outbox_path.canonicalize().expect("outbox canonical")
+    );
+    assert_eq!(
+        restore_archive.private_store_path,
+        private_store_path
+            .canonicalize()
+            .expect("private store canonical")
     );
 
     let backup_event_store = RadrootsEventStore::open_file(event_store_path)
@@ -738,6 +768,13 @@ async fn runtime_backup_rejects_empty_destination_and_overwrites_file_destinatio
             .exists()
     );
     assert!(receipt.outbox_path.as_ref().expect("outbox").exists());
+    assert!(
+        receipt
+            .private_store_path
+            .as_ref()
+            .expect("private store")
+            .exists()
+    );
 }
 
 #[cfg(unix)]

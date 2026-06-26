@@ -5,9 +5,10 @@ use radroots_sdk::{
     RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
     RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RestoreRequest,
     SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
-    SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind,
-    StorageStatusReceipt, StorageStatusRequest,
+    SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
+    SdkPrivateStoreStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
+    StorageStatusRequest,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::{Path, PathBuf};
@@ -149,8 +150,13 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
         paths.outbox_path,
         tempdir.path().join("sdk-runtime").join("outbox.sqlite")
     );
+    assert_eq!(
+        paths.private_store_path,
+        tempdir.path().join("sdk-runtime").join("private.sqlite")
+    );
     assert!(paths.event_store_path.exists());
     assert!(paths.outbox_path.exists());
+    assert!(paths.private_store_path.exists());
     let event_tables = sqlite_table_names(&paths.event_store_path).await;
     assert!(event_tables.iter().any(|name| name == "nostr_events"));
     assert!(event_tables.iter().any(|name| name == "nostr_event_tags"));
@@ -162,6 +168,12 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     let outbox_tables = sqlite_table_names(&paths.outbox_path).await;
     assert!(outbox_tables.iter().any(|name| name == "outbox_operations"));
     assert!(!outbox_tables.iter().any(|name| name == "outbox_operation"));
+    let private_tables = sqlite_table_names(&paths.private_store_path).await;
+    assert!(
+        private_tables
+            .iter()
+            .any(|name| name == "sdk_private_farm_location")
+    );
 }
 
 #[tokio::test]
@@ -180,13 +192,17 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
     assert_eq!(status.paths, None);
     assert_eq!(status.event_store.store.schema_version, 1);
     assert_eq!(status.outbox.store.schema_version, 1);
+    assert_eq!(status.private_store.store.schema_version, 1);
     assert!(status.event_store.store.foreign_keys_enabled);
     assert!(status.outbox.store.foreign_keys_enabled);
+    assert!(status.private_store.store.foreign_keys_enabled);
     assert_eq!(status.event_store.total_events, 0);
     assert_eq!(status.outbox.total_events, 0);
+    assert_eq!(status.private_store.farm_private_locations, 0);
     assert_eq!(status.outbox.failed_terminal_events, 0);
     assert!(status.event_store.store.integrity_ok);
     assert!(status.outbox.store.integrity_ok);
+    assert!(status.private_store.store.integrity_ok);
 
     let integrity = sdk
         .integrity(IntegrityRequest::new())
@@ -195,8 +211,10 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
     assert!(integrity.checked_paths.is_empty());
     assert!(integrity.event_store_ok);
     assert!(integrity.outbox_ok);
+    assert!(integrity.private_store_ok);
     assert_eq!(integrity.event_store_result, "ok");
     assert_eq!(integrity.outbox_result, "ok");
+    assert_eq!(integrity.private_store_result, "ok");
 }
 
 #[tokio::test]
@@ -658,7 +676,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 last_event_updated_at_ms: Some(1_700_000_000_000),
             },
             outbox: SdkOutboxStorageStatus {
-                store,
+                store: store.clone(),
                 total_events: 3,
                 pending_events: 1,
                 retryable_events: 1,
@@ -668,6 +686,10 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 publishing_events: 0,
                 last_attempt_at_ms: Some(1_700_000_000_000),
                 last_error: Some("relay publish incomplete".to_owned()),
+            },
+            private_store: SdkPrivateStoreStorageStatus {
+                store,
+                farm_private_locations: 4,
             },
         })
         .expect("status receipt"),
@@ -707,6 +729,17 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 "publishing_events": 0,
                 "last_attempt_at_ms": 1700000000000i64,
                 "last_error": "relay publish incomplete"
+            },
+            "private_store": {
+                "store": {
+                    "schema_version": 1,
+                    "journal_mode": "wal",
+                    "foreign_keys_enabled": true,
+                    "busy_timeout_ms": 5000,
+                    "integrity_ok": true,
+                    "integrity_result": "ok"
+                },
+                "farm_private_locations": 4
             }
         })
     );
@@ -744,15 +777,19 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         serde_json::to_value(SdkBackupVerification {
             event_store_ok: true,
             outbox_ok: true,
+            private_store_ok: true,
             event_store_events: 2,
             outbox_events: 3,
+            private_farm_locations: 4,
         })
         .expect("backup verification"),
         serde_json::json!({
             "event_store_ok": true,
             "outbox_ok": true,
+            "private_store_ok": true,
             "event_store_events": 2,
-            "outbox_events": 3
+            "outbox_events": 3,
+            "private_farm_locations": 4
         })
     );
     assert_eq!(

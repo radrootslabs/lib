@@ -31,6 +31,14 @@ fn assert_outbox_error<T>(result: Result<T, RadrootsSdkError>) {
     }
 }
 
+fn assert_private_store_error<T>(result: Result<T, RadrootsSdkError>) {
+    match result {
+        Err(RadrootsSdkError::PrivateStore { .. }) => {}
+        Err(other) => panic!("expected private store error, got {other:?}"),
+        Ok(_) => panic!("expected private store error"),
+    }
+}
+
 fn sqlite_status() -> SdkSqliteStoreStatus {
     SdkSqliteStoreStatus {
         schema_version: 1,
@@ -66,6 +74,10 @@ fn storage_status() -> StorageStatusReceipt {
             last_attempt_at_ms: None,
             last_error: None,
         },
+        private_store: SdkPrivateStoreStorageStatus {
+            store: sqlite_status(),
+            farm_private_locations: 0,
+        },
     }
 }
 
@@ -73,8 +85,10 @@ fn verification(event_store_ok: bool, outbox_ok: bool) -> SdkBackupVerification 
     SdkBackupVerification {
         event_store_ok,
         outbox_ok,
+        private_store_ok: true,
         event_store_events: 0,
         outbox_events: 0,
+        private_farm_locations: 0,
     }
 }
 
@@ -112,10 +126,73 @@ fn manifest() -> SdkBackupManifest {
         backup_paths: RadrootsSdkStoragePaths {
             event_store_path: PathBuf::from(EVENT_STORE_BACKUP_FILE),
             outbox_path: PathBuf::from(OUTBOX_BACKUP_FILE),
+            private_store_path: PathBuf::from(PRIVATE_STORE_BACKUP_FILE),
         },
         source_status: storage_status(),
         backup_verification: verification(true, true),
     }
+}
+
+fn private_farm_location_record() -> crate::private_store::SdkPrivateFarmLocationRecord {
+    crate::private_store::SdkPrivateFarmLocationRecord {
+        farm_addr: radroots_events::ids::RadrootsAddressableCoordinate::parse(format!(
+            "{}:{}:{}",
+            radroots_events::kinds::KIND_FARM,
+            "a".repeat(64),
+            "AAAAAAAAAAAAAAAAAAAAAA"
+        ))
+        .expect("farm addr"),
+        farm_pubkey: "a".repeat(64),
+        farm_d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        latitude: 12.26,
+        longitude: -34.51,
+        locality_primary: "Fixture Town".to_owned(),
+        locality_city: Some("Fixture Town".to_owned()),
+        locality_region: Some("Fixture Region".to_owned()),
+        locality_country: Some("Fixture Country".to_owned()),
+        geohash5: "e4pmw".to_owned(),
+        geonames_feature_id: Some(1),
+        geonames_country_id: Some("FX".to_owned()),
+        updated_at_ms: 1_700_000_123_000,
+    }
+}
+
+#[tokio::test]
+async fn private_store_validates_location_rows_and_round_trips_valid_records() {
+    let store = SdkPrivateStore::open_memory().await.expect("private store");
+    let record = private_farm_location_record();
+    store
+        .upsert_farm_location(&record)
+        .await
+        .expect("valid private farm location");
+    assert_eq!(
+        store
+            .farm_location(&record.farm_addr)
+            .await
+            .expect("lookup"),
+        Some(record.clone())
+    );
+
+    let mut invalid_coordinates = record.clone();
+    invalid_coordinates.latitude = f64::NAN;
+    assert!(matches!(
+        store.upsert_farm_location(&invalid_coordinates).await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
+
+    let mut blank_locality = record.clone();
+    blank_locality.locality_primary = " ".to_owned();
+    assert!(matches!(
+        store.upsert_farm_location(&blank_locality).await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
+
+    let mut invalid_geohash = record;
+    invalid_geohash.geohash5 = "abcd".to_owned();
+    assert!(matches!(
+        store.upsert_farm_location(&invalid_geohash).await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
 }
 
 #[tokio::test]
@@ -127,6 +204,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
     let memory_sdk = RadrootsClient {
         _event_store: memory.event_store,
         _outbox: memory.outbox,
+        _private_store: memory.private_store,
         storage_paths: None,
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
@@ -145,9 +223,11 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
     let directory_paths = directory_storage.paths.expect("directory paths");
     assert!(directory_paths.event_store_path.exists());
     assert!(directory_paths.outbox_path.exists());
+    assert!(directory_paths.private_store_path.exists());
     let directory_sdk = RadrootsClient {
         _event_store: directory_storage.event_store,
         _outbox: directory_storage.outbox,
+        _private_store: directory_storage.private_store,
         storage_paths: Some(directory_paths),
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
@@ -172,6 +252,12 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
     fs::create_dir(&outbox_directory).expect("outbox dir");
     fs::create_dir(outbox_directory.join(OUTBOX_BACKUP_FILE)).expect("outbox file slot dir");
     assert_outbox_error(open_directory_storage(&outbox_directory).await);
+
+    let private_store_directory = tempdir.path().join("private-store-directory");
+    fs::create_dir(&private_store_directory).expect("private store dir");
+    fs::create_dir(private_store_directory.join(PRIVATE_STORE_BACKUP_FILE))
+        .expect("private store file slot dir");
+    assert_private_store_error(open_directory_storage(&private_store_directory).await);
 }
 
 #[tokio::test]
@@ -855,11 +941,13 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
     let backup_paths = RadrootsSdkStoragePaths {
         event_store_path: tempdir.path().join("closed-event-store-backup.sqlite"),
         outbox_path: tempdir.path().join("closed-event-store-outbox.sqlite"),
+        private_store_path: tempdir.path().join("closed-event-store-private.sqlite"),
     };
     assert_event_store_error(
         backup_sqlite_stores(
             storage.event_store.pool(),
             storage.outbox.pool(),
+            storage.private_store.pool(),
             &backup_paths,
         )
         .await,
@@ -872,11 +960,13 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
     let outbox_closed_paths = RadrootsSdkStoragePaths {
         event_store_path: tempdir.path().join("open-event-store-backup.sqlite"),
         outbox_path: tempdir.path().join("closed-outbox-backup.sqlite"),
+        private_store_path: tempdir.path().join("outbox-closed-private.sqlite"),
     };
     assert_event_store_error(
         backup_sqlite_stores(
             outbox_closed_storage.event_store.pool(),
             outbox_closed_storage.outbox.pool(),
+            outbox_closed_storage.private_store.pool(),
             &outbox_closed_paths,
         )
         .await,
@@ -887,6 +977,7 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
             RadrootsSdkStoragePaths {
                 event_store_path: tempdir.path().join(EVENT_STORE_BACKUP_FILE),
                 outbox_path: tempdir.path().join(OUTBOX_BACKUP_FILE),
+                private_store_path: tempdir.path().join(PRIVATE_STORE_BACKUP_FILE),
             },
             tempdir.path().to_path_buf(),
             manifest(),
@@ -925,6 +1016,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         source: tempdir.path().join("missing-archive"),
         event_store_path: tempdir.path().join("missing-event-store.sqlite"),
         outbox_path: tempdir.path().join("missing-outbox.sqlite"),
+        private_store_path: tempdir.path().join("missing-private.sqlite"),
         manifest_path: tempdir.path().join(BACKUP_MANIFEST_FILE),
         manifest: manifest(),
         verification: verification(true, true),
@@ -932,6 +1024,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let staging_paths = RadrootsSdkStoragePaths {
         event_store_path: tempdir.path().join("staging-event-store.sqlite"),
         outbox_path: tempdir.path().join("staging-outbox.sqlite"),
+        private_store_path: tempdir.path().join("staging-private.sqlite"),
     };
     assert!(
         io_message(copy_restore_archive_to_staging(&missing_archive, &staging_paths).await)
@@ -949,10 +1042,12 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let corrupt_archive = RestoreArchive {
         event_store_path: tempdir.path().join("corrupt-event-store.sqlite"),
         outbox_path: tempdir.path().join("corrupt-outbox.sqlite"),
+        private_store_path: tempdir.path().join("corrupt-private.sqlite"),
         ..missing_archive.clone()
     };
     fs::write(&corrupt_archive.event_store_path, b"not sqlite").expect("corrupt event store");
     fs::write(&corrupt_archive.outbox_path, b"not sqlite").expect("corrupt outbox");
+    fs::write(&corrupt_archive.private_store_path, b"not sqlite").expect("corrupt private store");
     assert_event_store_error(
         copy_restore_archive_to_staging(&corrupt_archive, &staging_paths).await,
     );
@@ -988,6 +1083,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let protected_paths = RadrootsSdkStoragePaths {
         event_store_path: protected_destination.join(EVENT_STORE_BACKUP_FILE),
         outbox_path: protected_destination.join(OUTBOX_BACKUP_FILE),
+        private_store_path: protected_destination.join(PRIVATE_STORE_BACKUP_FILE),
     };
     set_mode(&protected_parent, 0o500);
     let protected_result =
@@ -1022,6 +1118,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let missing_outbox_paths = RadrootsSdkStoragePaths {
         event_store_path: archive.event_store_path.clone(),
         outbox_path: tempdir.path().to_path_buf(),
+        private_store_path: archive.private_store_path.clone(),
     };
     assert!(verify_backup_paths(&missing_outbox_paths).await.is_err());
 
@@ -1029,6 +1126,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let invalid_paths = RadrootsSdkStoragePaths {
         event_store_path: invalid_destination.join(EVENT_STORE_BACKUP_FILE),
         outbox_path: invalid_destination.join(OUTBOX_BACKUP_FILE),
+        private_store_path: invalid_destination.join(PRIVATE_STORE_BACKUP_FILE),
     };
     let invalid_restore_message = io_message(
         restore_archive_to_destination(&archive, &invalid_destination, &invalid_paths).await,
@@ -1101,6 +1199,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let wrong_destination_paths = RadrootsSdkStoragePaths {
         event_store_path: populated_archive.event_store_path.clone(),
         outbox_path: populated_archive.outbox_path.clone(),
+        private_store_path: populated_archive.private_store_path.clone(),
     };
     assert!(
         invalid_request_message(

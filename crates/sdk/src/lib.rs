@@ -33,6 +33,8 @@ mod order;
 #[cfg(feature = "runtime")]
 mod orders_runtime;
 #[cfg(feature = "runtime")]
+mod private_store;
+#[cfg(feature = "runtime")]
 mod product_clients;
 mod profile;
 pub mod protocol;
@@ -56,7 +58,8 @@ pub use crate::error::{
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmEnqueueReceipt,
-    FarmPreparePublishRequest, FarmPublishPlan,
+    FarmPreparePublishRequest, FarmPrivateLocationReceipt, FarmPrivateLocationUpsertRequest,
+    FarmPublishPlan, SdkExactLocation, SdkPublicLocality,
 };
 #[cfg(feature = "runtime")]
 pub use crate::geonames::{
@@ -111,8 +114,8 @@ pub use crate::runtime::{
     RadrootsClientBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
     RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkOutboxStorageStatus, SdkPublishTransport, SdkRestoreState, SdkSqliteStoreStatus,
-    SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
+    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkPublishTransport, SdkRestoreState,
+    SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::signer_provider::{

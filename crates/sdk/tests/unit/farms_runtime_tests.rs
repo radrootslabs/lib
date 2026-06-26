@@ -139,6 +139,39 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
     ));
 }
 
+#[test]
+fn farm_public_locality_derivation_covers_country_fallback_and_empty_names() {
+    let reverse = GeocoderReverseResult {
+        id: 1,
+        name: " Fixture Town ".to_owned(),
+        admin1_id: None,
+        admin1_name: None,
+        country_id: "FX".to_owned(),
+        country_name: None,
+        latitude: 12.25,
+        longitude: -34.50,
+    };
+    let locality = public_locality_from_reverse(SdkExactLocation::new(12.26, -34.51), &reverse)
+        .expect("locality");
+    assert_eq!(locality.primary, "Fixture Town");
+    assert_eq!(locality.city.as_deref(), Some("Fixture Town"));
+    assert_eq!(locality.region, None);
+    assert_eq!(locality.country.as_deref(), Some("FX"));
+    assert_eq!(locality.geohash5, "e4pmw");
+
+    let blank_name = GeocoderReverseResult {
+        name: " ".to_owned(),
+        ..reverse
+    };
+    assert!(matches!(
+        public_locality_from_reverse(SdkExactLocation::new(12.26, -34.51), &blank_name),
+        Err(RadrootsSdkError::GeoNames {
+            kind: crate::RadrootsSdkGeoNamesErrorKind::Lookup,
+            ..
+        })
+    ));
+}
+
 #[tokio::test]
 async fn farm_client_prepare_resolves_default_and_explicit_created_at() {
     let sdk = crate::RadrootsClient::builder()
