@@ -162,7 +162,7 @@ impl RadrootsOrderEconomics {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeOrderRequested")))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderRequest")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRequest {
@@ -189,7 +189,7 @@ impl RadrootsOrderRequest {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(
     feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeOrderRevisionProposed"))
+    dto(ts(name = "RadrootsOrderRevisionProposal"))
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,7 +242,7 @@ impl RadrootsOrderRevisionOutcome {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(
     feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeOrderRevisionDecisionEvent"))
+    dto(ts(name = "RadrootsOrderRevisionDecision"))
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -273,7 +273,7 @@ impl RadrootsOrderRevisionDecision {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(
     feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeInventoryCommitment"))
+    dto(ts(name = "RadrootsOrderInventoryCommitment"))
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -283,7 +283,10 @@ pub struct RadrootsOrderInventoryCommitment {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeOrderDecision")))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsOrderDecisionOutcome"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -308,10 +311,7 @@ impl RadrootsOrderDecisionOutcome {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeOrderDecisionEvent"))
-)]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderDecision")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderDecision {
@@ -333,7 +333,7 @@ impl RadrootsOrderDecision {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeOrderCancelled")))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderCancellation")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderCancellation {
@@ -355,7 +355,7 @@ impl RadrootsOrderCancellation {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeDomain")))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsCommercialDomain")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -365,10 +365,7 @@ pub enum RadrootsCommercialDomain {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsActiveTradeMessageType"))
-)]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEventType")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEventType {

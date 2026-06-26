@@ -1051,7 +1051,7 @@ mod tests {
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
                 lat: 10.0,
                 lng: 20.0,
-                geohash: "s0".to_string(),
+                geohash: "9q8yy".to_string(),
                 point: "{\"type\":\"Point\",\"coordinates\":[20.0,10.0]}".to_string(),
                 polygon:
                     "{\"type\":\"Polygon\",\"coordinates\":[[[20.0,10.0],[20.1,10.1],[19.9,10.1],[20.0,10.0]]]}".to_string(),
@@ -1079,7 +1079,7 @@ mod tests {
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
                 lat: 11.0,
                 lng: 21.0,
-                geohash: "s1".to_string(),
+                geohash: "9q8yv".to_string(),
                 point: "{".to_string(),
                 polygon: "{\"type\":\"Polygon\",\"coordinates\":[[]]}".to_string(),
                 accuracy: None,

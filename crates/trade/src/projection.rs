@@ -88,6 +88,11 @@ pub enum RadrootsTradeProjectionError {
         event_id: String,
         source: RadrootsIdParseError,
     },
+    #[error("stored listing projection has invalid listing_addr {listing_addr}: {source}")]
+    ListingAddress {
+        listing_addr: String,
+        source: RadrootsIdParseError,
+    },
     #[error("projection serialization failed for {model}: {source}")]
     Serialize {
         model: &'static str,
@@ -142,7 +147,7 @@ pub struct RadrootsProjectionRefreshReceipt {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsListingProjectionRow {
-    pub listing_addr: String,
+    pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: String,
     pub seller_pubkey: String,
     pub title: String,
@@ -655,8 +660,15 @@ async fn relay_observation_count_for_event(
 fn listing_projection_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsListingProjectionRow, RadrootsTradeProjectionError> {
+    let listing_addr = row.try_get::<String, _>("listing_addr")?;
+    let listing_addr = RadrootsListingAddress::parse(&listing_addr).map_err(|source| {
+        RadrootsTradeProjectionError::ListingAddress {
+            listing_addr: listing_addr.clone(),
+            source,
+        }
+    })?;
     Ok(RadrootsListingProjectionRow {
-        listing_addr: row.try_get("listing_addr")?,
+        listing_addr,
         listing_event_id: row.try_get("listing_event_id")?,
         seller_pubkey: row.try_get("seller_pubkey")?,
         title: row.try_get("title")?,

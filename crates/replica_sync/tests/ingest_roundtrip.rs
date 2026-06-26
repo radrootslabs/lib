@@ -818,7 +818,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         "farm-query",
         Some(RadrootsFarmPublicLocation {
             primary: "farm".to_string(),
-            city: None,
+            city: Some("city".to_string()),
             region: None,
             country: None,
             geohash: "9q8yy".to_string(),

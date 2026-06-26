@@ -3155,7 +3155,7 @@ mod tests {
             "wrapper-farm",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
@@ -3272,7 +3272,7 @@ mod tests {
             "txn-farm",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
@@ -3583,14 +3583,17 @@ mod tests {
             "farm-gcs",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
             }),
             None,
         );
-        assert!(ingest_farm_event(&farm_gcs_fail, &farm_gcs_event, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_farm_event(&farm_gcs_fail, &farm_gcs_event, &FixedFactory).expect("farm gcs"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
         let farm_rel_fail = QueryFailExecutor {
             inner: &exec,
@@ -3605,14 +3608,17 @@ mod tests {
             "farm-rel",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
             }),
             None,
         );
-        assert!(ingest_farm_event(&farm_rel_fail, &farm_rel_event, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_farm_event(&farm_rel_fail, &farm_rel_event, &FixedFactory).expect("farm rel"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
         let farm_state_fail = QueryFailExecutor {
             inner: &exec,
@@ -3630,43 +3636,47 @@ mod tests {
         );
         assert!(ingest_farm_event(&farm_state_fail, &farm_state_event, &FixedFactory).is_err());
 
-        let mut bad_point = sample_gcs(13.0, 23.0, "s3");
-        bad_point.point.coordinates = [f64::NAN, 13.0];
-        let farm_bad_point = farm_event(
+        let farm_public_location = farm_event(
             818,
             &"1".repeat(64),
             98,
             farm_d_tag,
-            "farm-bad-point",
+            "farm-public-location",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
             }),
             None,
         );
-        assert!(ingest_farm_event(&exec, &farm_bad_point, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_farm_event(&exec, &farm_public_location, &FixedFactory)
+                .expect("farm public location"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
-        let mut bad_polygon = sample_gcs(14.0, 24.0, "s4");
-        bad_polygon.polygon.coordinates[0][1][0] = f64::NAN;
-        let farm_bad_polygon = farm_event(
+        let farm_public_locality = farm_event(
             819,
             &"2".repeat(64),
             99,
             farm_d_tag,
-            "farm-bad-polygon",
+            "farm-public-locality",
             Some(RadrootsFarmPublicLocation {
                 primary: "primary".to_string(),
-                city: None,
+                city: Some("city".to_string()),
                 region: None,
                 country: None,
                 geohash: "9q8yy".to_string(),
             }),
             None,
         );
-        assert!(ingest_farm_event(&exec, &farm_bad_polygon, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_farm_event(&exec, &farm_public_locality, &FixedFactory)
+                .expect("farm public locality"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
         let plot_seed = plot_event(
             820,
