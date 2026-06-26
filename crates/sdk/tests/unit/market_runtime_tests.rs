@@ -5,7 +5,10 @@ const SELLER_PUBLIC_KEY_HEX: &str =
 
 fn projection_row() -> RadrootsListingProjectionRow {
     RadrootsListingProjectionRow {
-        listing_addr: format!("30402:{SELLER_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAg"),
+        listing_addr: RadrootsListingAddress::parse(format!(
+            "30402:{SELLER_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("listing address"),
         listing_event_id: "a".repeat(64),
         seller_pubkey: SELLER_PUBLIC_KEY_HEX.to_owned(),
         title: "Blueberries".to_owned(),
@@ -47,19 +50,10 @@ fn listing_projection_row_conversion_validates_stored_identity_columns() {
     let row = projection_row();
     let search_row =
         MarketListingSearchRow::try_from_projection_row(row.clone()).expect("search row");
-    assert_eq!(search_row.listing_addr.as_str(), row.listing_addr);
+    assert_eq!(search_row.listing_addr, row.listing_addr);
     assert_eq!(search_row.listing_event_id.as_str(), row.listing_event_id);
     assert_eq!(search_row.seller_pubkey.as_str(), row.seller_pubkey);
     assert_eq!(search_row.title, "Blueberries");
-
-    let mut invalid_addr = row.clone();
-    invalid_addr.listing_addr = "not-an-address".to_owned();
-    assert!(
-        projection_error_message(
-            MarketListingSearchRow::try_from_projection_row(invalid_addr).unwrap_err()
-        )
-        .contains("projection address")
-    );
 
     let mut invalid_event_id = row.clone();
     invalid_event_id.listing_event_id = "not-an-event-id".to_owned();

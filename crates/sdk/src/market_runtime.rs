@@ -111,15 +111,7 @@ impl MarketListingSearchRow {
     fn try_from_projection_row(
         row: RadrootsListingProjectionRow,
     ) -> Result<Self, RadrootsSdkError> {
-        let listing_addr =
-            RadrootsListingAddress::parse(row.listing_addr.as_str()).map_err(|source| {
-                RadrootsSdkError::Projection {
-                    message: format!(
-                        "stored listing projection address `{}` is invalid: {source}",
-                        row.listing_addr
-                    ),
-                }
-            })?;
+        let listing_addr = row.listing_addr;
         let listing_event_id =
             RadrootsEventId::parse(row.listing_event_id.as_str()).map_err(|source| {
                 RadrootsSdkError::Projection {

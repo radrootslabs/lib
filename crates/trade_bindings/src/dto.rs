@@ -83,16 +83,16 @@ imported_ts_type!(RadrootsNostrEventPtrImport, "RadrootsNostrEventPtr");
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
 imported_ts_type!(RadrootsResourceAreaRefImport, "RadrootsResourceAreaRef");
 imported_ts_type!(
-    RadrootsTradeMessagePayloadImport,
-    "RadrootsTradeMessagePayload"
+    RadrootsCommercialMessagePayloadImport,
+    "RadrootsCommercialMessagePayload"
 );
-imported_ts_type!(RadrootsTradeMessageTypeImport, "RadrootsTradeMessageType");
 imported_ts_type!(
-    RadrootsTradeOrderEconomicLineImport,
-    "RadrootsTradeOrderEconomicLine"
+    RadrootsCommercialMessageTypeImport,
+    "RadrootsCommercialMessageType"
 );
-imported_ts_type!(RadrootsTradeOrderItemImport, "RadrootsTradeOrderItem");
-imported_ts_type!(RadrootsTradeOrderStatusImport, "RadrootsTradeOrderStatus");
+imported_ts_type!(RadrootsOrderEconomicLineImport, "RadrootsOrderEconomicLine");
+imported_ts_type!(RadrootsOrderItemImport, "RadrootsOrderItem");
+imported_ts_type!(RadrootsOrderStatusImport, "RadrootsOrderStatus");
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeFacetCount {
@@ -278,8 +278,8 @@ pub struct RadrootsTradeMarketplaceOrderSummary {
     pub listing_addr: String,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
-    pub status: RadrootsTradeOrderStatusImport,
-    pub last_message_type: RadrootsTradeMessageTypeImport,
+    pub status: RadrootsOrderStatusImport,
+    pub last_message_type: RadrootsCommercialMessageTypeImport,
     pub item_count: u32,
     pub total_bin_count: u32,
     pub has_requested_discounts: bool,
@@ -351,7 +351,7 @@ pub struct RadrootsTradeOrderQuery {
     pub listing_addr: Option<String>,
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
-    pub status: Option<RadrootsTradeOrderStatusImport>,
+    pub status: Option<RadrootsOrderStatusImport>,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -388,7 +388,7 @@ pub struct RadrootsTradeOrderWorkflowMessage {
     pub listing_event: Option<RadrootsNostrEventPtrImport>,
     pub root_event_id: Option<String>,
     pub prev_event_id: Option<String>,
-    pub payload: RadrootsTradeMessagePayloadImport,
+    pub payload: RadrootsCommercialMessagePayloadImport,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -397,9 +397,9 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub listing_addr: String,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
-    pub items: Vec<RadrootsTradeOrderItemImport>,
-    pub requested_discounts: Option<Vec<RadrootsTradeOrderEconomicLineImport>>,
-    pub status: RadrootsTradeOrderStatusImport,
+    pub items: Vec<RadrootsOrderItemImport>,
+    pub requested_discounts: Option<Vec<RadrootsOrderEconomicLineImport>>,
+    pub status: RadrootsOrderStatusImport,
     pub listing_snapshot: Option<RadrootsNostrEventPtrImport>,
     pub root_event_id: String,
     pub last_event_id: String,
@@ -416,7 +416,7 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub discount_accept_count: u32,
     pub discount_decline_count: u32,
     pub cancellation_count: u32,
-    pub last_message_type: RadrootsTradeMessageTypeImport,
+    pub last_message_type: RadrootsCommercialMessageTypeImport,
     pub last_actor_pubkey: String,
 }
 
