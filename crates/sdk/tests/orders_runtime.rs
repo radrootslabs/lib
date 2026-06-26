@@ -3038,6 +3038,10 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     assert_eq!(receipt_json["listing_addr"], serde_json::Value::Null);
     assert_eq!(receipt_json["buyer_pubkey"], serde_json::Value::Null);
     assert_eq!(receipt_json["seller_pubkey"], serde_json::Value::Null);
+    assert_eq!(
+        receipt_json["rhi_receipt_event_id"],
+        serde_json::Value::Null
+    );
     assert_eq!(receipt_json["economics"], serde_json::Value::Null);
     assert_eq!(receipt_json["next_action"], "no_local_order");
     assert_eq!(receipt_json["evidence"]["event_count"], 0);

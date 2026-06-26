@@ -87,6 +87,20 @@ const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
     "SdkOrderStatusSource",
 ];
 
+const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
+    "DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID",
+    "DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND",
+    "DvmProofMode",
+    "DvmTradeTransitionProofEnqueueRequest",
+    "DvmTradeTransitionProofPlan",
+    "DvmTradeTransitionProofPrepareRequest",
+    "DvmTradeTransitionProofReceipt",
+    "DvmTradeTransitionProofRequestPayload",
+    "DvmValidationReceiptIngestReceipt",
+    "DvmValidationReceiptIngestRequest",
+    "SdkDvmInventoryBinWitness",
+];
+
 const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
     "pub async fn ingest_evidence(",
     "pub async fn ingest_request_evidence(",
@@ -107,6 +121,15 @@ const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
     "pub async fn enqueue_prepared_cancellation(",
     "pub async fn status(",
 ];
+
+const REQUIRED_DVM_CLIENT_METHODS: &[&str] = &[
+    "pub fn prepare_trade_transition_proof_request(",
+    "pub async fn enqueue_trade_transition_proof_request_with_explicit_signer(",
+    "pub async fn ingest_validation_receipt(",
+];
+
+const REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS: &[&str] =
+    &["pub async fn enqueue_trade_transition_proof_request("];
 
 const REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
     "pub async fn enqueue_submit_with_explicit_signer(",
@@ -284,6 +307,39 @@ fn order_runtime_public_exports_are_explicit() {
 }
 
 #[test]
+fn dvm_runtime_public_exports_are_explicit() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+
+    assert!(
+        source.contains("mod dvm_runtime;"),
+        "src/lib.rs must keep dvm_runtime as an internal implementation module"
+    );
+    assert!(
+        source.contains("pub use crate::dvm_runtime::{"),
+        "src/lib.rs must explicitly re-export approved DVM runtime types"
+    );
+    assert!(
+        !source.contains("pub mod dvm_runtime;"),
+        "src/lib.rs must not expose the dvm_runtime module path"
+    );
+    assert!(
+        !source.contains("pub use crate::dvm_runtime::*;"),
+        "src/lib.rs must not wildcard-export the DVM runtime"
+    );
+
+    for export in REQUIRED_DVM_RUNTIME_EXPORTS {
+        assert!(
+            source.contains(export),
+            "src/lib.rs must explicitly expose DVM SDK runtime export `{export}`"
+        );
+    }
+}
+
+#[test]
 fn orders_client_surface_is_inventory_guarded() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -307,6 +363,34 @@ fn orders_client_surface_is_inventory_guarded() {
         assert!(
             source.contains(method),
             "TradesClient must expose explicit-signer advanced method `{method}`"
+        );
+    }
+}
+
+#[test]
+fn dvm_client_surface_is_inventory_guarded() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/dvm_runtime.rs")
+            .as_path(),
+    );
+
+    assert!(
+        source.contains("impl<'sdk> DvmClient<'sdk> {"),
+        "src/dvm_runtime.rs must own DvmClient runtime methods"
+    );
+
+    for method in REQUIRED_DVM_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "DvmClient must expose inventory-guarded method `{method}`"
+        );
+    }
+
+    for method in REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS {
+        assert!(
+            source.contains(method),
+            "DvmClient must expose configured-signer method `{method}`"
         );
     }
 }

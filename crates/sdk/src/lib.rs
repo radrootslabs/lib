@@ -14,6 +14,8 @@ mod actor_json;
 ))]
 pub mod adapters;
 #[cfg(feature = "runtime")]
+mod dvm_runtime;
+#[cfg(feature = "runtime")]
 mod error;
 mod farm;
 #[cfg(feature = "runtime")]
@@ -49,6 +51,15 @@ mod sync_runtime;
 #[cfg(feature = "runtime")]
 mod workflow_runtime;
 
+#[cfg(feature = "runtime")]
+pub use crate::dvm_runtime::{
+    DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID,
+    DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmProofMode,
+    DvmTradeTransitionProofEnqueueRequest, DvmTradeTransitionProofPlan,
+    DvmTradeTransitionProofPrepareRequest, DvmTradeTransitionProofReceipt,
+    DvmTradeTransitionProofRequestPayload, DvmValidationReceiptIngestReceipt,
+    DvmValidationReceiptIngestRequest, SdkDvmInventoryBinWitness,
+};
 #[cfg(feature = "runtime")]
 pub use crate::error::{
     RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
