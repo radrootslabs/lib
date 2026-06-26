@@ -8,6 +8,8 @@ pub mod dto;
 pub mod listing;
 pub mod order;
 pub mod prelude;
+#[cfg(feature = "event_store")]
+pub mod projection;
 #[cfg(feature = "serde_json")]
 pub mod validation_receipt;
 pub mod workflow;

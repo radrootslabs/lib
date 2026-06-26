@@ -1017,6 +1017,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn migration_installs_canonical_projection_tables() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let rows = sqlx::query(
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table') ORDER BY name",
+        )
+        .fetch_all(store.pool())
+        .await
+        .expect("tables");
+        let names = rows
+            .into_iter()
+            .map(|row| row.try_get::<String, _>("name").expect("name"))
+            .collect::<Vec<_>>();
+
+        assert!(names.iter().any(|name| name == "listing_projection"));
+        assert!(names.iter().any(|name| name == "trade_projection"));
+        assert!(names.iter().any(|name| name == "listing_search_fts"));
+    }
+
+    #[tokio::test]
     async fn migration_can_run_down() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store.migrate_down().await.expect("down");

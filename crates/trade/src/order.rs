@@ -247,6 +247,8 @@ pub fn order_event_record_from_event(
 pub enum RadrootsOrderStoreQueryError {
     #[error("{0}")]
     Store(#[from] RadrootsEventStoreError),
+    #[error("{0}")]
+    Projection(#[from] crate::projection::RadrootsTradeProjectionError),
     #[error("stored order event {event_id} contains invalid tags_json: {source}")]
     InvalidStoredTagsJson {
         event_id: String,
@@ -310,18 +312,9 @@ pub async fn order_projection_query_for_order_id(
     order_id: &RadrootsOrderId,
     limit: u32,
 ) -> Result<RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError> {
-    let records = order_events_for_order_id(store, order_id, limit).await?;
-    let event_ids = records
-        .iter()
-        .map(|record| record.event_id().clone())
-        .collect::<Vec<_>>();
-    let event_count = records.len();
-    Ok(RadrootsOrderProjectionQueryResult {
-        projection: reduce_order_event_records(order_id, records),
-        event_count,
-        limit_applied: limit,
-        event_ids,
-    })
+    crate::projection::trade_projection_query_for_order_id(store, order_id, limit)
+        .await
+        .map_err(Into::into)
 }
 
 #[cfg(feature = "event_store")]

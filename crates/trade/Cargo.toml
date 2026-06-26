@@ -31,8 +31,10 @@ event_store = [
   "std",
   "serde_json",
   "dep:radroots_event_store",
+  "dep:sqlx",
   "radroots_event_store/sqlite",
   "radroots_event_store/runtime-tokio",
+  "sqlx/sqlite",
 ]
 serde = [
   "dep:serde",
@@ -67,6 +69,9 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
+sqlx = { workspace = true, default-features = false, features = [
+  "derive",
+], optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
