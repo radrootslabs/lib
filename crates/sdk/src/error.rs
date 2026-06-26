@@ -737,6 +737,22 @@ impl From<radroots_trade::listing::RadrootsListingMutationError> for RadrootsSdk
 }
 
 #[cfg(feature = "runtime")]
+impl From<radroots_trade::projection::RadrootsTradeProjectionError> for RadrootsSdkError {
+    fn from(error: radroots_trade::projection::RadrootsTradeProjectionError) -> Self {
+        match error {
+            radroots_trade::projection::RadrootsTradeProjectionError::InvalidLimit { max } => {
+                Self::InvalidRequest {
+                    message: format!("projection query limit must be between 1 and {max}"),
+                }
+            }
+            error => Self::Projection {
+                message: error.to_string(),
+            },
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 impl From<radroots_outbox::RadrootsOutboxError> for RadrootsSdkError {
     fn from(error: radroots_outbox::RadrootsOutboxError) -> Self {
         match error {

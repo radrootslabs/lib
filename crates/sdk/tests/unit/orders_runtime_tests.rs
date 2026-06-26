@@ -19,6 +19,7 @@ use radroots_nostr::prelude::{
 };
 use radroots_trade::{
     order::{RadrootsOrderEventDecodeError, RadrootsOrderIssue},
+    projection::RadrootsTradeProjectionError,
     workflow::RadrootsTradeWorkflowState,
 };
 
@@ -1868,6 +1869,13 @@ fn projection_error_maps_store_tag_and_decode_errors() {
         })),
         "stored order event could not decode as order record"
     );
+    let invalid_limit = projection_error(RadrootsOrderStoreQueryError::Projection(
+        RadrootsTradeProjectionError::InvalidLimit { max: 1000 },
+    ));
+    assert!(matches!(
+        invalid_limit,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
 }
 
 #[test]

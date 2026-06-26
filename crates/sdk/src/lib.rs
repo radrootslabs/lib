@@ -27,6 +27,8 @@ mod identity;
 mod listing;
 #[cfg(feature = "runtime")]
 mod listings_runtime;
+#[cfg(feature = "runtime")]
+mod market_runtime;
 mod order;
 #[cfg(feature = "runtime")]
 mod orders_runtime;
@@ -70,6 +72,11 @@ pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
 pub use crate::listings_runtime::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingEnqueueReceipt,
     ListingPreparePublishRequest, ListingPublishPlan, SdkMutationState,
+};
+#[cfg(feature = "runtime")]
+pub use crate::market_runtime::{
+    MARKET_SEARCH_DEFAULT_LIMIT, MarketListingSearchRow, MarketSearchReceipt, MarketSearchRequest,
+    MarketSearchSource,
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
@@ -123,6 +130,8 @@ pub use crate::sync_runtime::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
-    SyncRelayTargetSummary, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
+    PushOutboxRequest, SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT, SYNC_PROJECTION_REFRESH_MAX_LIMIT,
+    SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus, SyncProjectionRefreshReceipt,
+    SyncProjectionRefreshRequest, SyncRelayTargetSummary, SyncStatusReceipt, SyncStatusRequest,
+    SyncStatusSource,
 };

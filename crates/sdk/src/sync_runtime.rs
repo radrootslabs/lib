@@ -3,9 +3,12 @@ use crate::adapters::radrootsd::{
     RadrootsdError, RadrootsdProxyPublishAdapter, RadrootsdProxyPublishRequest,
 };
 #[cfg(feature = "runtime")]
-use crate::{RadrootsSdkError, SdkRelayUrlPolicy, SyncClient, runtime::sdk_now_ms};
+use crate::{
+    RadrootsSdkError, SdkRelayUrlPolicy, SyncClient,
+    runtime::{RadrootsClient, sdk_now_ms},
+};
 #[cfg(feature = "runtime")]
-use radroots_event_store::RadrootsEventStoreStatusSummary;
+use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(feature = "runtime")]
 use radroots_events::ids::RadrootsEventId;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
@@ -23,6 +26,12 @@ use radroots_relay_transport::{
     RadrootsOutboxPublishPolicy, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, publish_claimed_outbox_event,
 };
+#[cfg(feature = "runtime")]
+use radroots_trade::projection::{
+    RADROOTS_PRODUCT_PROJECTION_ID, RADROOTS_PRODUCT_PROJECTION_VERSION,
+    RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
+    refresh_product_projections,
+};
 
 #[cfg(feature = "runtime")]
 pub const PUSH_OUTBOX_DEFAULT_LIMIT: usize = 20;
@@ -32,6 +41,10 @@ pub const PUSH_OUTBOX_MAX_LIMIT: usize = 100;
 pub const PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS: i64 = 30_000;
 #[cfg(feature = "runtime")]
 pub const PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS: i64 = 60_000;
+#[cfg(feature = "runtime")]
+pub const SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT: u32 = RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX;
+#[cfg(feature = "runtime")]
+pub const SYNC_PROJECTION_REFRESH_MAX_LIMIT: u32 = RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX;
 
 #[cfg(feature = "runtime")]
 const CLAIM_OWNER: &str = "radroots_sdk.sync.push_outbox";
@@ -125,6 +138,65 @@ impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
 pub struct SyncRelayTargetSummary {
     pub configured_count: usize,
     pub configured_relays: Vec<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct SyncProjectionRefreshRequest {
+    pub limit: u32,
+}
+
+#[cfg(feature = "runtime")]
+impl Default for SyncProjectionRefreshRequest {
+    fn default() -> Self {
+        Self {
+            limit: SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl SyncProjectionRefreshRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct SyncProjectionRefreshReceipt {
+    pub projection_id: &'static str,
+    pub projection_version: u32,
+    pub refreshed_at_ms: i64,
+    pub scanned_events: usize,
+    pub listing_upserts: usize,
+    pub trade_upserts: usize,
+    pub validation_receipts: usize,
+    pub relay_observations: i64,
+    pub last_event_seq: Option<i64>,
+}
+
+#[cfg(feature = "runtime")]
+impl SyncProjectionRefreshReceipt {
+    fn from_trade(receipt: RadrootsProjectionRefreshReceipt, refreshed_at_ms: i64) -> Self {
+        Self {
+            projection_id: RADROOTS_PRODUCT_PROJECTION_ID,
+            projection_version: RADROOTS_PRODUCT_PROJECTION_VERSION,
+            refreshed_at_ms,
+            scanned_events: receipt.scanned_events,
+            listing_upserts: receipt.listing_upserts,
+            trade_upserts: receipt.trade_upserts,
+            validation_receipts: receipt.validation_receipts,
+            relay_observations: receipt.relay_observations,
+            last_event_seq: receipt.last_event_seq,
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -356,6 +428,13 @@ impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
 
 #[cfg(feature = "runtime")]
 impl<'sdk> SyncClient<'sdk> {
+    pub async fn refresh_projections(
+        &self,
+        request: SyncProjectionRefreshRequest,
+    ) -> Result<SyncProjectionRefreshReceipt, RadrootsSdkError> {
+        refresh_product_projections_for_sdk(self.sdk, request).await
+    }
+
     pub async fn status(
         &self,
         _request: SyncStatusRequest,
@@ -497,6 +576,24 @@ impl<'sdk> SyncClient<'sdk> {
         }
         Ok(receipt)
     }
+}
+
+#[cfg(feature = "runtime")]
+pub(crate) async fn refresh_product_projections_for_sdk(
+    sdk: &RadrootsClient,
+    request: SyncProjectionRefreshRequest,
+) -> Result<SyncProjectionRefreshReceipt, RadrootsSdkError> {
+    let refreshed_at_ms = sdk_now_ms(sdk)?;
+    let receipt = refresh_product_projections(
+        &sdk._event_store,
+        RadrootsProjectionRefreshRequest::new().with_limit(request.limit),
+        refreshed_at_ms,
+    )
+    .await?;
+    Ok(SyncProjectionRefreshReceipt::from_trade(
+        receipt,
+        refreshed_at_ms,
+    ))
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]

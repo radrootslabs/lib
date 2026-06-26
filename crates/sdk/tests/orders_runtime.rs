@@ -3584,7 +3584,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     let message = error.to_string();
 
     assert!(matches!(error, RadrootsSdkError::Projection { .. }));
-    assert!(message.contains("stored order event tags could not be decoded"));
+    assert!(message.contains("contains invalid tags_json"));
     assert!(!message.contains(raw_event_json.as_str()));
     assert!(!message.contains(request_event.sig.as_str()));
     assert!(!message.contains("\"tags\""));

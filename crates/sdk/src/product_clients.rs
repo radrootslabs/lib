@@ -30,13 +30,13 @@ impl<'client> ListingsClient<'client> {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
 pub struct MarketClient<'client> {
-    pub(crate) _sdk: &'client RadrootsClient,
+    pub(crate) sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
 impl<'client> MarketClient<'client> {
     pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
-        Self { _sdk: sdk }
+        Self { sdk }
     }
 }
 

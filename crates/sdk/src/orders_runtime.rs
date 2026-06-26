@@ -3346,6 +3346,7 @@ fn projection_error(error: RadrootsOrderStoreQueryError) -> RadrootsSdkError {
         RadrootsOrderStoreQueryError::Decode { .. } => {
             "stored order event could not decode as order record"
         }
+        RadrootsOrderStoreQueryError::Projection(error) => return error.into(),
     };
     RadrootsSdkError::Projection {
         message: message.to_owned(),
