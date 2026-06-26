@@ -1,5 +1,6 @@
 use radroots_geocoder::{
-    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
+    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderLocalityLookup,
+    GeocoderLocalityQuery, GeocoderPoint, GeocoderReverseOptions,
 };
 use rusqlite::Connection;
 use std::fs;
@@ -72,6 +73,57 @@ fn reverse_orders_high_latitude_results_by_scaled_longitude_distance() {
     assert_eq!(results[0].name, "Polar East");
     assert_eq!(results[1].id, 2);
     assert_eq!(results[1].name, "Polar North");
+}
+
+#[test]
+fn locality_resolves_structured_query_freeform_query_id_and_ambiguity() {
+    let geocoder = open_forward_fixture_geocoder();
+
+    let structured = geocoder
+        .locality(
+            &GeocoderLocalityQuery::structured("Fixture Victoria")
+                .with_region("BC")
+                .with_country("CA"),
+        )
+        .expect("structured lookup");
+    assert_unique_locality(
+        structured,
+        3001,
+        "Fixture Victoria, British Columbia, Canada",
+    );
+
+    let freeform = geocoder
+        .locality(&GeocoderLocalityQuery::query("Fixture Victoria, BC, CA"))
+        .expect("freeform lookup");
+    assert_unique_locality(freeform, 3001, "Fixture Victoria, British Columbia, Canada");
+
+    let feature_id = geocoder
+        .locality(&GeocoderLocalityQuery::feature_id(3004))
+        .expect("feature-id lookup");
+    assert_unique_locality(
+        feature_id,
+        3004,
+        "Identifier Grove, British Columbia, Canada",
+    );
+
+    let ambiguous = geocoder
+        .locality(&GeocoderLocalityQuery::structured("Shared Market").with_country("CA"))
+        .expect("ambiguous lookup");
+    let GeocoderLocalityLookup::Ambiguous { candidates } = ambiguous else {
+        panic!("expected ambiguous lookup");
+    };
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|candidate| candidate.id)
+            .collect::<Vec<_>>(),
+        vec![3002, 3003]
+    );
+
+    let no_match = geocoder
+        .locality(&GeocoderLocalityQuery::structured("Missing Market").with_country("CA"))
+        .expect("no-match lookup");
+    assert!(matches!(no_match, GeocoderLocalityLookup::NoMatch));
 }
 
 #[test]
@@ -275,6 +327,11 @@ fn open_high_latitude_geocoder() -> Geocoder {
     Geocoder::open_path(&path).expect("open geocoder")
 }
 
+fn open_forward_fixture_geocoder() -> Geocoder {
+    let path = build_forward_fixture_database();
+    Geocoder::open_path(&path).expect("open geocoder")
+}
+
 fn open_empty_geocoder() -> Geocoder {
     let temp = NamedTempFile::new().expect("temp db");
     let path = temp.into_temp_path();
@@ -309,6 +366,13 @@ fn build_high_latitude_database() -> tempfile::TempPath {
     path
 }
 
+fn build_forward_fixture_database() -> tempfile::TempPath {
+    let temp = NamedTempFile::new().expect("temp db");
+    let path = temp.into_temp_path();
+    seed_forward_fixture_database(path.to_str().expect("utf-8 temp path"));
+    path
+}
+
 fn seed_fixture_database(path: &str) {
     let conn = Connection::open(path).expect("open fixture database");
     seed_schema(&conn);
@@ -335,6 +399,32 @@ fn seed_high_latitude_database(path: &str) {
 
     insert_feature(&conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
     insert_feature(&conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
+}
+
+fn seed_forward_fixture_database(path: &str) {
+    let conn = Connection::open(path).expect("open fixture database");
+    seed_schema(&conn);
+
+    insert_country(&conn, "CA", "Canada");
+    insert_country(&conn, "US", "United States");
+
+    insert_admin1(&conn, "CA", 2, "British Columbia");
+    insert_admin1(&conn, "CA", 3, "Prairie Region");
+    insert_admin1(&conn, "US", 4, "River Region");
+
+    insert_feature(
+        &conn,
+        3001,
+        "Fixture Victoria",
+        "CA",
+        2,
+        48.4359,
+        -123.35155,
+    );
+    insert_feature(&conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
+    insert_feature(&conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
+    insert_feature(&conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
+    insert_feature(&conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
 }
 
 fn seed_reverse_country_row_error_database(path: &str) {
@@ -496,4 +586,16 @@ fn assert_country_center_not_found(err: GeocoderError, country_id: &str) {
         }
         other => panic!("expected CountryCenterNotFound, got {other}"),
     }
+}
+
+fn assert_unique_locality(
+    lookup: GeocoderLocalityLookup,
+    expected_id: i64,
+    expected_display_name: &str,
+) {
+    let GeocoderLocalityLookup::Unique { candidate } = lookup else {
+        panic!("expected unique lookup");
+    };
+    assert_eq!(candidate.id, expected_id);
+    assert_eq!(candidate.display_name, expected_display_name);
 }

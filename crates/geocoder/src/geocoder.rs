@@ -1,7 +1,9 @@
 use crate::asset::{GeoNamesAssetSpec, validate_geonames_asset_file};
 use crate::error::GeocoderError;
 use crate::model::{
-    GeocoderCountryListResult, GeocoderPoint, GeocoderReverseOptions, GeocoderReverseResult,
+    GeocoderCountryListResult, GeocoderLocalityCandidate, GeocoderLocalityInput,
+    GeocoderLocalityLookup, GeocoderLocalityQuery, GeocoderPoint, GeocoderReverseOptions,
+    GeocoderReverseResult,
 };
 use rusqlite::{Connection, OpenFlags, named_params};
 use std::io::Write;
@@ -130,6 +132,117 @@ impl Geocoder {
     pub fn country_center(&self, country_id: &str) -> Result<GeocoderPoint, GeocoderError> {
         finalize_country_center(country_center_impl(&self.conn, country_id), country_id)
     }
+
+    pub fn locality(
+        &self,
+        query: &GeocoderLocalityQuery,
+    ) -> Result<GeocoderLocalityLookup, GeocoderError> {
+        match &query.input {
+            GeocoderLocalityInput::Structured(structured) => self.locality_by_parts(
+                &structured.locality,
+                structured.region.as_deref(),
+                structured.country.as_deref(),
+                query.limit,
+            ),
+            GeocoderLocalityInput::Query(query_text) => {
+                let parsed = parse_locality_query(query_text);
+                self.locality_by_parts(
+                    &parsed.locality,
+                    parsed.region.as_deref(),
+                    parsed.country.as_deref(),
+                    query.limit,
+                )
+            }
+            GeocoderLocalityInput::FeatureId(id) => self.locality_by_feature_id(*id),
+        }
+    }
+
+    fn locality_by_parts(
+        &self,
+        locality: &str,
+        region: Option<&str>,
+        country: Option<&str>,
+        limit: usize,
+    ) -> Result<GeocoderLocalityLookup, GeocoderError> {
+        let Some(locality) = normalize_optional_name(Some(locality)) else {
+            return Ok(GeocoderLocalityLookup::NoMatch);
+        };
+        let country = normalize_optional_name(country);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT
+              id,
+              name,
+              admin1_id,
+              admin1_name,
+              country_id,
+              country_name,
+              latitude,
+              longitude
+            FROM geonames
+            WHERE lower(name) = :locality
+              AND (
+                :country IS NULL
+                OR lower(country_id) = :country
+                OR lower(country_name) = :country
+              )
+            ORDER BY
+              lower(name) ASC,
+              lower(country_id) ASC,
+              lower(coalesce(country_name, '')) ASC,
+              lower(coalesce(admin1_name, '')) ASC,
+              coalesce(admin1_id, -1) ASC,
+              id ASC
+            "#,
+        )?;
+        let candidates = collect_mapped_rows(
+            &mut stmt,
+            named_params! {
+                ":locality": locality,
+                ":country": country,
+            },
+            map_locality_candidate_row,
+        )?;
+        let region = normalize_optional_name(region);
+        let candidates = candidates
+            .into_iter()
+            .filter(|candidate| locality_region_matches(candidate, region.as_deref()))
+            .collect::<Vec<_>>();
+        Ok(finalize_locality_lookup(candidates, limit))
+    }
+
+    fn locality_by_feature_id(&self, id: i64) -> Result<GeocoderLocalityLookup, GeocoderError> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT
+              id,
+              name,
+              admin1_id,
+              admin1_name,
+              country_id,
+              country_name,
+              latitude,
+              longitude
+            FROM geonames
+            WHERE id = :id
+            LIMIT 1
+            "#,
+        )?;
+        let candidates = collect_mapped_rows(
+            &mut stmt,
+            named_params! {
+                ":id": id,
+            },
+            map_locality_candidate_row,
+        )?;
+        Ok(finalize_locality_lookup(candidates, 1))
+    }
+}
+
+struct ParsedLocalityQuery {
+    locality: String,
+    region: Option<String>,
+    country: Option<String>,
 }
 
 fn query_country_center_row(
@@ -207,6 +320,211 @@ fn map_reverse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GeocoderReverseR
     })
 }
 
+fn map_locality_candidate_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<GeocoderLocalityCandidate> {
+    let name = row.get("name")?;
+    let admin1_name = row.get("admin1_name")?;
+    let country_name = row.get("country_name")?;
+    let candidate = GeocoderLocalityCandidate {
+        id: row.get("id")?,
+        name,
+        admin1_id: row.get("admin1_id")?,
+        admin1_name,
+        country_id: row.get("country_id")?,
+        country_name,
+        point: GeocoderPoint {
+            lat: row.get("latitude")?,
+            lng: row.get("longitude")?,
+        },
+        display_name: String::new(),
+    };
+    Ok(GeocoderLocalityCandidate {
+        display_name: locality_candidate_display_name(&candidate),
+        ..candidate
+    })
+}
+
+fn parse_locality_query(query: &str) -> ParsedLocalityQuery {
+    let parts = query
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    match parts.as_slice() {
+        [] => ParsedLocalityQuery {
+            locality: String::new(),
+            region: None,
+            country: None,
+        },
+        [locality] => ParsedLocalityQuery {
+            locality: locality.clone(),
+            region: None,
+            country: None,
+        },
+        [locality, region] => ParsedLocalityQuery {
+            locality: locality.clone(),
+            region: Some(region.clone()),
+            country: None,
+        },
+        parts => {
+            let country = parts.last().cloned();
+            let region = parts.get(parts.len().saturating_sub(2)).cloned();
+            let locality = parts[..parts.len().saturating_sub(2)].join(", ");
+            ParsedLocalityQuery {
+                locality,
+                region,
+                country,
+            }
+        }
+    }
+}
+
+fn finalize_locality_lookup(
+    mut candidates: Vec<GeocoderLocalityCandidate>,
+    limit: usize,
+) -> GeocoderLocalityLookup {
+    match candidates.len() {
+        0 => GeocoderLocalityLookup::NoMatch,
+        1 => GeocoderLocalityLookup::Unique {
+            candidate: candidates.remove(0),
+        },
+        _ => {
+            candidates.truncate(limit.max(1));
+            GeocoderLocalityLookup::Ambiguous { candidates }
+        }
+    }
+}
+
+fn locality_region_matches(candidate: &GeocoderLocalityCandidate, region: Option<&str>) -> bool {
+    let Some(region) = region else {
+        return true;
+    };
+    let Some(admin1_name) = candidate.admin1_name.as_deref() else {
+        return false;
+    };
+    if normalize_name(admin1_name) == region {
+        return true;
+    }
+    let region_code = normalize_region_code(region);
+    region_aliases(&candidate.country_id)
+        .iter()
+        .any(|(code, name)| {
+            normalize_region_code(code) == region_code
+                && normalize_name(name) == normalize_name(admin1_name)
+        })
+}
+
+fn locality_candidate_display_name(candidate: &GeocoderLocalityCandidate) -> String {
+    let mut parts = vec![candidate.name.clone()];
+    if let Some(admin1_name) = candidate.admin1_name.as_ref() {
+        parts.push(admin1_name.clone());
+    }
+    if let Some(country_name) = candidate.country_name.as_ref() {
+        parts.push(country_name.clone());
+    } else {
+        parts.push(candidate.country_id.clone());
+    }
+    parts.join(", ")
+}
+
+fn normalize_optional_name(input: Option<&str>) -> Option<String> {
+    input
+        .map(normalize_name)
+        .filter(|normalized| !normalized.is_empty())
+}
+
+fn normalize_name(input: &str) -> String {
+    input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn normalize_region_code(input: &str) -> String {
+    input
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_uppercase())
+        .collect()
+}
+
+fn region_aliases(country_id: &str) -> &'static [(&'static str, &'static str)] {
+    match country_id.to_ascii_uppercase().as_str() {
+        "CA" => &[
+            ("AB", "Alberta"),
+            ("BC", "British Columbia"),
+            ("MB", "Manitoba"),
+            ("NB", "New Brunswick"),
+            ("NL", "Newfoundland and Labrador"),
+            ("NS", "Nova Scotia"),
+            ("NT", "Northwest Territories"),
+            ("NU", "Nunavut"),
+            ("ON", "Ontario"),
+            ("PE", "Prince Edward Island"),
+            ("QC", "Quebec"),
+            ("SK", "Saskatchewan"),
+            ("YT", "Yukon"),
+        ],
+        "US" => &[
+            ("AL", "Alabama"),
+            ("AK", "Alaska"),
+            ("AZ", "Arizona"),
+            ("AR", "Arkansas"),
+            ("CA", "California"),
+            ("CO", "Colorado"),
+            ("CT", "Connecticut"),
+            ("DC", "District of Columbia"),
+            ("DE", "Delaware"),
+            ("FL", "Florida"),
+            ("GA", "Georgia"),
+            ("HI", "Hawaii"),
+            ("IA", "Iowa"),
+            ("ID", "Idaho"),
+            ("IL", "Illinois"),
+            ("IN", "Indiana"),
+            ("KS", "Kansas"),
+            ("KY", "Kentucky"),
+            ("LA", "Louisiana"),
+            ("MA", "Massachusetts"),
+            ("MD", "Maryland"),
+            ("ME", "Maine"),
+            ("MI", "Michigan"),
+            ("MN", "Minnesota"),
+            ("MO", "Missouri"),
+            ("MS", "Mississippi"),
+            ("MT", "Montana"),
+            ("NC", "North Carolina"),
+            ("ND", "North Dakota"),
+            ("NE", "Nebraska"),
+            ("NH", "New Hampshire"),
+            ("NJ", "New Jersey"),
+            ("NM", "New Mexico"),
+            ("NV", "Nevada"),
+            ("NY", "New York"),
+            ("OH", "Ohio"),
+            ("OK", "Oklahoma"),
+            ("OR", "Oregon"),
+            ("PA", "Pennsylvania"),
+            ("RI", "Rhode Island"),
+            ("SC", "South Carolina"),
+            ("SD", "South Dakota"),
+            ("TN", "Tennessee"),
+            ("TX", "Texas"),
+            ("UT", "Utah"),
+            ("VA", "Virginia"),
+            ("VT", "Vermont"),
+            ("WA", "Washington"),
+            ("WI", "Wisconsin"),
+            ("WV", "West Virginia"),
+            ("WY", "Wyoming"),
+        ],
+        _ => &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +588,88 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].name, "Polar East");
         assert_eq!(results[1].name, "Polar North");
+    }
+
+    #[test]
+    fn unit_harness_covers_forward_locality_lookup_modes() {
+        let geocoder = open_forward_fixture_geocoder();
+
+        let british_columbia = geocoder
+            .locality(
+                &GeocoderLocalityQuery::structured("Fixture Victoria")
+                    .with_region("BC")
+                    .with_country("CA"),
+            )
+            .expect("structured locality lookup");
+        assert_unique_locality(
+            british_columbia,
+            3001,
+            "Fixture Victoria, British Columbia, Canada",
+        );
+
+        let country_name = geocoder
+            .locality(
+                &GeocoderLocalityQuery::structured("Fixture Victoria")
+                    .with_region("British Columbia")
+                    .with_country("Canada"),
+            )
+            .expect("structured country-name locality lookup");
+        assert_unique_locality(
+            country_name,
+            3001,
+            "Fixture Victoria, British Columbia, Canada",
+        );
+
+        let freeform = geocoder
+            .locality(&GeocoderLocalityQuery::query("Fixture Victoria, BC, CA"))
+            .expect("freeform locality lookup");
+        assert_unique_locality(freeform, 3001, "Fixture Victoria, British Columbia, Canada");
+
+        let narrowed = geocoder
+            .locality(
+                &GeocoderLocalityQuery::structured("Shared Market")
+                    .with_region("Prairie Region")
+                    .with_country("CA"),
+            )
+            .expect("region-narrowed locality lookup");
+        assert_unique_locality(narrowed, 3003, "Shared Market, Prairie Region, Canada");
+
+        let selected = geocoder
+            .locality(&GeocoderLocalityQuery::feature_id(3004))
+            .expect("feature-id locality lookup");
+        assert_unique_locality(selected, 3004, "Identifier Grove, British Columbia, Canada");
+
+        let no_match = geocoder
+            .locality(
+                &GeocoderLocalityQuery::structured("Missing Market")
+                    .with_region("BC")
+                    .with_country("CA"),
+            )
+            .expect("no-match locality lookup");
+        assert!(matches!(no_match, GeocoderLocalityLookup::NoMatch));
+    }
+
+    #[test]
+    fn unit_harness_covers_forward_locality_ambiguity_and_limits() {
+        let geocoder = open_forward_fixture_geocoder();
+
+        let ambiguous = geocoder
+            .locality(
+                &GeocoderLocalityQuery::structured("Shared Market")
+                    .with_country("CA")
+                    .with_limit(1),
+            )
+            .expect("ambiguous locality lookup");
+
+        let GeocoderLocalityLookup::Ambiguous { candidates } = ambiguous else {
+            panic!("expected ambiguous locality lookup");
+        };
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, 3002);
+        assert_eq!(
+            candidates[0].display_name,
+            "Shared Market, British Columbia, Canada"
+        );
     }
 
     #[test]
@@ -552,6 +952,11 @@ mod tests {
         Geocoder::open_path(&path).expect("open empty geocoder")
     }
 
+    fn open_forward_fixture_geocoder() -> Geocoder {
+        let path = build_forward_fixture_database();
+        Geocoder::open_path(&path).expect("open forward geocoder")
+    }
+
     fn open_reverse_country_row_error_geocoder() -> Geocoder {
         let temp = NamedTempFile::new().expect("temp db");
         let path = temp.into_temp_path();
@@ -577,6 +982,13 @@ mod tests {
         let temp = NamedTempFile::new().expect("temp db");
         let path = temp.into_temp_path();
         seed_high_latitude_database(path.to_str().expect("utf-8 temp path"));
+        path
+    }
+
+    fn build_forward_fixture_database() -> tempfile::TempPath {
+        let temp = NamedTempFile::new().expect("temp db");
+        let path = temp.into_temp_path();
+        seed_forward_fixture_database(path.to_str().expect("utf-8 temp path"));
         path
     }
 
@@ -745,6 +1157,32 @@ mod tests {
         insert_feature(&conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
     }
 
+    fn seed_forward_fixture_database(path: &str) {
+        let conn = Connection::open(path).expect("open fixture database");
+        seed_schema(&conn);
+
+        insert_country(&conn, "CA", "Canada");
+        insert_country(&conn, "US", "United States");
+
+        insert_admin1(&conn, "CA", 2, "British Columbia");
+        insert_admin1(&conn, "CA", 3, "Prairie Region");
+        insert_admin1(&conn, "US", 4, "River Region");
+
+        insert_feature(
+            &conn,
+            3001,
+            "Fixture Victoria",
+            "CA",
+            2,
+            48.4359,
+            -123.35155,
+        );
+        insert_feature(&conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
+        insert_feature(&conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
+        insert_feature(&conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
+        insert_feature(&conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
+    }
+
     fn seed_reverse_country_row_error_database(path: &str) {
         let conn = Connection::open(path).expect("open invalid row fixture database");
         conn.execute_batch(
@@ -904,5 +1342,17 @@ mod tests {
             }
             other => panic!("expected CountryCenterNotFound, got {other}"),
         }
+    }
+
+    fn assert_unique_locality(
+        lookup: GeocoderLocalityLookup,
+        expected_id: i64,
+        expected_display_name: &str,
+    ) {
+        let GeocoderLocalityLookup::Unique { candidate } = lookup else {
+            panic!("expected unique locality lookup");
+        };
+        assert_eq!(candidate.id, expected_id);
+        assert_eq!(candidate.display_name, expected_display_name);
     }
 }
