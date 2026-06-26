@@ -106,6 +106,25 @@ fn response_event(
         .expect("response event")
 }
 
+fn myc_signer_with_responses(
+    responses: Vec<MockNip46Response>,
+) -> (RadrootsSdkMycNip46Signer, Arc<MockNip46Transport>) {
+    let remote_keys = remote_keys();
+    let transport = Arc::new(MockNip46Transport::new(remote_keys.clone(), responses));
+    let target = RadrootsNostrConnectClientTarget::new(
+        remote_keys.public_key(),
+        vec![nostr::RelayUrl::parse("wss://relay.example.com").expect("relay")],
+    );
+    let signer = RadrootsSdkMycNip46Signer::new(
+        client_keys(),
+        target,
+        USER_PUBLIC_KEY_HEX,
+        transport.clone(),
+    )
+    .expect("signer");
+    (signer, transport)
+}
+
 struct MockNip46Transport {
     remote_keys: RadrootsNostrKeys,
     responses: Mutex<VecDeque<MockNip46Response>>,
@@ -222,7 +241,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
     let receipt = provider
         .sign(
             RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
-                &mut |event| {
+                &mut |event: RadrootsSdkSignerProgress| {
                     progress.push(event);
                     Ok(())
                 },
@@ -248,6 +267,243 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
             }
         ]
     );
+}
+
+#[tokio::test]
+async fn local_key_provider_returns_progress_sink_errors_without_transport_state() {
+    let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
+    let draft = frozen_draft();
+    let actor = actor();
+    let wrong_actor = RadrootsActorContext::test("a".repeat(64), [RadrootsActorRole::Farmer])
+        .expect("wrong actor");
+
+    assert!(matches!(
+        signer
+            .sign(RadrootsSdkSignRequest::new(
+                "farm.publish",
+                &wrong_actor,
+                &draft,
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+
+    let started_error = signer
+        .sign(
+            RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
+                &mut |event: RadrootsSdkSignerProgress| {
+                    assert!(matches!(
+                        event,
+                        RadrootsSdkSignerProgress::RequestStarted {
+                            mode: RadrootsSdkSignerMode::LocalKey
+                        }
+                    ));
+                    Err(RadrootsSdkError::InvalidRequest {
+                        message: "local progress start refused".to_owned(),
+                    })
+                },
+            ),
+        )
+        .await
+        .expect_err("progress start error");
+    assert!(matches!(
+        started_error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "local progress start refused"
+    ));
+
+    let mut observed = Vec::new();
+    let completed_error = signer
+        .sign(
+            RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
+                &mut |event: RadrootsSdkSignerProgress| {
+                    observed.push(event.clone());
+                    if matches!(
+                        event,
+                        RadrootsSdkSignerProgress::RequestCompleted {
+                            mode: RadrootsSdkSignerMode::LocalKey
+                        }
+                    ) {
+                        return Err(RadrootsSdkError::InvalidRequest {
+                            message: "local progress completion refused".to_owned(),
+                        });
+                    }
+                    Ok(())
+                },
+            ),
+        )
+        .await
+        .expect_err("progress completion error");
+    assert!(matches!(
+        completed_error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "local progress completion refused"
+    ));
+    assert_eq!(
+        observed,
+        vec![
+            RadrootsSdkSignerProgress::RequestStarted {
+                mode: RadrootsSdkSignerMode::LocalKey
+            },
+            RadrootsSdkSignerProgress::RequestCompleted {
+                mode: RadrootsSdkSignerMode::LocalKey
+            }
+        ]
+    );
+}
+
+#[test]
+fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
+    assert_eq!(RadrootsSdkSignerMode::LocalKey.as_str(), "local_key");
+    assert_eq!(RadrootsSdkSignerMode::MycNip46.as_str(), "myc_nip46");
+
+    let remote_keys = remote_keys();
+    let relays = vec![
+        nostr::RelayUrl::parse("wss://relay-a.example.com").expect("relay a"),
+        nostr::RelayUrl::parse("wss://relay-b.example.com").expect("relay b"),
+    ];
+    let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), relays);
+    let transport = Arc::new(MockNip46Transport::new(remote_keys.clone(), Vec::new()));
+    let signer = RadrootsSdkMycNip46Signer::new(
+        client_keys(),
+        target,
+        USER_PUBLIC_KEY_HEX,
+        transport.clone(),
+    )
+    .expect("signer");
+    let provider = RadrootsSdkSignerProvider::MycNip46(signer);
+
+    assert_eq!(provider.mode(), RadrootsSdkSignerMode::MycNip46);
+    assert_eq!(
+        provider.status(),
+        RadrootsSdkSignerStatus {
+            mode: RadrootsSdkSignerMode::MycNip46,
+            state: RadrootsSdkSignerState::Ready,
+            signer_pubkey: USER_PUBLIC_KEY_HEX.to_owned(),
+            remote_signer_pubkey: Some(remote_keys.public_key().to_hex()),
+            relay_count: 2,
+        }
+    );
+    assert_eq!(
+        provider.capability(),
+        RadrootsSdkSignerCapability {
+            mode: RadrootsSdkSignerMode::MycNip46,
+            signer_pubkey: USER_PUBLIC_KEY_HEX.to_owned(),
+            remote_signer_pubkey: Some(remote_keys.public_key().to_hex()),
+            relays: vec![
+                "wss://relay-a.example.com".to_owned(),
+                "wss://relay-b.example.com".to_owned(),
+            ],
+            can_sign_events: true,
+            nip46_permissions: radroots_sdk_myc_nip46_product_permission_strings(),
+        }
+    );
+
+    let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
+    let error =
+        match RadrootsSdkMycNip46Signer::new(client_keys(), target, "not-a-pubkey", transport) {
+            Ok(_) => panic!("expected invalid pubkey"),
+            Err(error) => error,
+        };
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("myc_nip46 user pubkey is invalid")
+    ));
+}
+
+#[test]
+fn nip46_private_helpers_map_identity_adapter_and_response_edges() {
+    let pubkey = USER_PUBLIC_KEY_HEX.parse().expect("pubkey");
+    let identity = RadrootsSdkSignerIdentityOnly { pubkey };
+    assert_eq!(identity.pubkey().as_str(), USER_PUBLIC_KEY_HEX);
+    assert!(matches!(
+        identity.sign_frozen_draft(&frozen_draft()),
+        Err(RadrootsSignerError::Unavailable)
+    ));
+
+    assert!(matches!(
+        signed_event_from_nip46_response(
+            "farm.publish",
+            RadrootsNostrConnectResponse::Error {
+                result: None,
+                error: "operator rejected".to_owned(),
+            },
+        ),
+        Err(RadrootsSdkError::SignerRequestRejected { ref mode, ref reason })
+            if mode == "myc_nip46" && reason == "operator rejected"
+    ));
+    assert!(matches!(
+        signed_event_from_nip46_response("farm.publish", RadrootsNostrConnectResponse::PendingConnection),
+        Err(RadrootsSdkError::SignerAuthChallengePending { ref mode, auth_url: None })
+            if mode == "myc_nip46"
+    ));
+    assert!(matches!(
+        signed_event_from_nip46_response("farm.publish", RadrootsNostrConnectResponse::Pong),
+        Err(RadrootsSdkError::SignerProtocol { ref mode, ref reason })
+            if mode == "myc_nip46" && reason.contains("farm.publish")
+    ));
+    assert!(matches!(
+        sdk_error_from_nip46_error(RadrootsNostrConnectError::Transport {
+            reason: "relay offline".to_owned(),
+        }),
+        RadrootsSdkError::SignerTransport { ref mode, ref reason }
+            if mode == "myc_nip46" && reason == "relay offline"
+    ));
+    assert!(matches!(
+        sdk_error_from_nip46_error(RadrootsNostrConnectError::Json("bad json".to_owned())),
+        RadrootsSdkError::SignerProtocol { ref mode, ref reason }
+            if mode == "myc_nip46" && reason == "bad json"
+    ));
+    for error in [
+        RadrootsNostrConnectError::Encrypt {
+            reason: "encrypt failed".to_owned(),
+        },
+        RadrootsNostrConnectError::Decrypt {
+            reason: "decrypt failed".to_owned(),
+        },
+        RadrootsNostrConnectError::Sign {
+            reason: "sign failed".to_owned(),
+        },
+        RadrootsNostrConnectError::InvalidRequestPayload {
+            method: "sign_event".to_owned(),
+            reason: "request payload failed".to_owned(),
+        },
+        RadrootsNostrConnectError::InvalidResponsePayload {
+            method: "sign_event".to_owned(),
+            reason: "response payload failed".to_owned(),
+        },
+    ] {
+        assert!(matches!(
+            sdk_error_from_nip46_error(error),
+            RadrootsSdkError::SignerProtocol { ref mode, .. } if mode == "myc_nip46"
+        ));
+    }
+    assert!(matches!(
+        sdk_error_from_nip46_error(RadrootsNostrConnectError::InvalidMethod("ping".to_owned())),
+        RadrootsSdkError::SignerProtocol { ref mode, ref reason }
+            if mode == "myc_nip46" && reason.contains("invalid NIP-46 method")
+    ));
+}
+
+#[tokio::test]
+async fn nip46_transport_adapter_delegates_publish_and_response_poll() {
+    let transport = Arc::new(MockNip46Transport::new(remote_keys(), Vec::new()));
+    let event = sign_event(&user_keys(), &frozen_draft());
+    let mut adapter = RadrootsSdkNip46TransportAdapter {
+        transport: transport.as_ref(),
+    };
+
+    adapter
+        .publish_request_event(event)
+        .await
+        .expect("publish request");
+
+    assert_eq!(transport.published().len(), 1);
+    assert!(matches!(
+        adapter.next_response_event().await,
+        Err(RadrootsNostrConnectError::RequestTimedOut)
+    ));
 }
 
 #[test]
@@ -299,7 +555,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let receipt = provider
         .sign(
             RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
-                &mut |event| {
+                &mut |event: RadrootsSdkSignerProgress| {
                     progress.push(event);
                     Ok(())
                 },
@@ -336,6 +592,129 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
 }
 
 #[tokio::test]
+async fn myc_nip46_provider_reports_preflight_and_progress_sink_edges() {
+    let draft = frozen_draft();
+    let actor = actor();
+    let (signer, transport) = myc_signer_with_responses(Vec::new());
+
+    let started_error = signer
+        .sign(
+            RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
+                &mut |event: RadrootsSdkSignerProgress| {
+                    assert!(matches!(
+                        event,
+                        RadrootsSdkSignerProgress::RequestStarted {
+                            mode: RadrootsSdkSignerMode::MycNip46
+                        }
+                    ));
+                    Err(RadrootsSdkError::InvalidRequest {
+                        message: "myc progress start refused".to_owned(),
+                    })
+                },
+            ),
+        )
+        .await
+        .expect_err("progress start error");
+    assert!(matches!(
+        started_error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "myc progress start refused"
+    ));
+    assert!(transport.published().is_empty());
+
+    let wrong_actor = RadrootsActorContext::test("a".repeat(64), [RadrootsActorRole::Farmer])
+        .expect("wrong actor");
+    let actor_error = signer
+        .sign(RadrootsSdkSignRequest::new(
+            "farm.publish",
+            &wrong_actor,
+            &draft,
+        ))
+        .await
+        .expect_err("actor mismatch");
+    assert!(matches!(
+        actor_error,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+    assert!(transport.published().is_empty());
+
+    let remote_keys = remote_keys();
+    let mismatch_transport = Arc::new(MockNip46Transport::new(remote_keys.clone(), Vec::new()));
+    let mismatch_target =
+        RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
+    let mismatch_signer = RadrootsSdkMycNip46Signer::new(
+        client_keys(),
+        mismatch_target,
+        remote_keys.public_key().to_hex(),
+        mismatch_transport.clone(),
+    )
+    .expect("mismatch signer");
+    let signer_error = mismatch_signer
+        .sign(RadrootsSdkSignRequest::new("farm.publish", &actor, &draft))
+        .await
+        .expect_err("signer mismatch");
+    assert!(matches!(
+        signer_error,
+        RadrootsSdkError::SignerPubkeyMismatch { .. }
+    ));
+    assert!(mismatch_transport.published().is_empty());
+}
+
+#[tokio::test]
+async fn myc_nip46_provider_returns_completion_progress_errors_after_remote_sign() {
+    let user_keys = user_keys();
+    let draft = frozen_draft();
+    let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
+        .expect("signed");
+    let signed_event = RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event");
+    let (signer, transport) = myc_signer_with_responses(vec![MockNip46Response::Respond(
+        RadrootsNostrConnectResponse::SignedEvent(signed_event),
+    )]);
+    let actor = actor();
+    let mut observed = Vec::new();
+
+    let error = signer
+        .sign(
+            RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
+                &mut |event: RadrootsSdkSignerProgress| {
+                    observed.push(event.clone());
+                    if matches!(
+                        event,
+                        RadrootsSdkSignerProgress::RequestCompleted {
+                            mode: RadrootsSdkSignerMode::MycNip46
+                        }
+                    ) {
+                        return Err(RadrootsSdkError::InvalidRequest {
+                            message: "myc progress completion refused".to_owned(),
+                        });
+                    }
+                    Ok(())
+                },
+            ),
+        )
+        .await
+        .expect_err("completion progress error");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "myc progress completion refused"
+    ));
+    assert_eq!(transport.published().len(), 1);
+    assert_eq!(
+        observed,
+        vec![
+            RadrootsSdkSignerProgress::RequestStarted {
+                mode: RadrootsSdkSignerMode::MycNip46
+            },
+            RadrootsSdkSignerProgress::RequestCompleted {
+                mode: RadrootsSdkSignerMode::MycNip46
+            }
+        ]
+    );
+}
+
+#[tokio::test]
 async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
     let client_keys = client_keys();
     let remote_keys = remote_keys();
@@ -356,7 +735,7 @@ async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
     let error = signer
         .sign(
             RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
-                &mut |event| {
+                &mut |event: RadrootsSdkSignerProgress| {
                     progress.push(event);
                     Ok(())
                 },
@@ -384,11 +763,80 @@ async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
 }
 
 #[tokio::test]
+async fn myc_nip46_provider_returns_progress_sink_errors_from_auth_challenge() {
+    let client_keys = client_keys();
+    let remote_keys = remote_keys();
+    let transport = Arc::new(MockNip46Transport::new(
+        remote_keys.clone(),
+        vec![MockNip46Response::Respond(
+            RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned()),
+        )],
+    ));
+    let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
+    let signer =
+        RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
+            .expect("signer");
+    let draft = frozen_draft();
+    let actor = actor();
+    let mut observed = Vec::new();
+
+    let error = signer
+        .sign(
+            RadrootsSdkSignRequest::new("farm.publish", &actor, &draft).with_progress_sink(
+                &mut |event: RadrootsSdkSignerProgress| {
+                    observed.push(event.clone());
+                    if matches!(
+                        event,
+                        RadrootsSdkSignerProgress::AuthChallenge {
+                            mode: RadrootsSdkSignerMode::MycNip46,
+                            ..
+                        }
+                    ) {
+                        return Err(RadrootsSdkError::InvalidRequest {
+                            message: "progress sink refused auth challenge".to_owned(),
+                        });
+                    }
+                    Ok(())
+                },
+            ),
+        )
+        .await
+        .expect_err("progress sink error");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "progress sink refused auth challenge"
+    ));
+    assert_eq!(observed.len(), 2);
+}
+
+#[tokio::test]
 async fn myc_nip46_provider_rejects_zero_timeout_policy() {
     let error = RadrootsSdkMycNip46RequestPolicy::new(Duration::ZERO).expect_err("zero timeout");
 
     assert!(matches!(
         error,
+        RadrootsSdkError::SignerUnavailable { ref mode, ref reason }
+            if mode == "myc_nip46" && reason.contains("timeout")
+    ));
+
+    let target = RadrootsNostrConnectClientTarget::new(remote_keys().public_key(), Vec::new());
+    let transport = Arc::new(MockNip46Transport::new(remote_keys(), Vec::new()));
+    let constructor_error = match RadrootsSdkMycNip46Signer::new_with_request_policy(
+        client_keys(),
+        target,
+        USER_PUBLIC_KEY_HEX,
+        transport,
+        RadrootsSdkMycNip46RequestPolicy {
+            request_timeout: Duration::ZERO,
+        },
+    ) {
+        Ok(_) => panic!("expected zero timeout constructor error"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        constructor_error,
         RadrootsSdkError::SignerUnavailable { ref mode, ref reason }
             if mode == "myc_nip46" && reason.contains("timeout")
     ));
@@ -534,13 +982,32 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
 
 #[tokio::test]
 async fn sdk_builder_installs_configured_signer_provider() {
+    let empty_sdk = crate::RadrootsClient::builder()
+        .build()
+        .await
+        .expect("empty sdk");
+    let draft = frozen_draft();
+    let signer_actor = actor();
+    let error = empty_sdk
+        .sign_with_configured_signer(RadrootsSdkSignRequest::new(
+            "farm.publish",
+            &signer_actor,
+            &draft,
+        ))
+        .await
+        .expect_err("missing configured signer");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerUnavailable { ref mode, ref reason }
+            if mode == "configured" && reason.contains("no SDK signer provider")
+    ));
+
     let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
     let sdk = crate::RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await
         .expect("sdk");
-    let draft = frozen_draft();
 
     assert!(sdk.configured_signer().is_some());
     assert!(matches!(
@@ -550,9 +1017,12 @@ async fn sdk_builder_installs_configured_signer_provider() {
             ..
         })
     ));
-    let actor = actor();
     let receipt = sdk
-        .sign_with_configured_signer(RadrootsSdkSignRequest::new("farm.publish", &actor, &draft))
+        .sign_with_configured_signer(RadrootsSdkSignRequest::new(
+            "farm.publish",
+            &signer_actor,
+            &draft,
+        ))
         .await
         .expect("receipt");
     assert_eq!(receipt.signed_event_id, draft.expected_event_id);

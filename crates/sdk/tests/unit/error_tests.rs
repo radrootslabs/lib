@@ -1,9 +1,10 @@
 use super::{
-    RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, redacted_relay_url,
+    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkPartialLocalMutationError,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, redacted_relay_url,
 };
 use radroots_authority::RadrootsAuthorityError;
 use radroots_events::contract::RadrootsActorRole;
+use radroots_geocoder::GeocoderError;
 
 #[test]
 fn partial_local_mutation_constructor_preserves_supplied_error() {
@@ -137,6 +138,24 @@ fn outbox_error_conversion_handles_empty_targets_and_fallbacks() {
         RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::EventNotFound(42)),
         RadrootsSdkError::Outbox { ref message } if message.contains("42")
     ));
+    assert!(matches!(
+        RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::IdempotencyConflict {
+            operation_kind: "listing.publish.v1".to_owned(),
+            expected_pubkey: "a".repeat(64),
+            idempotency_key: "idem-1".to_owned(),
+            existing_digest: "b".repeat(64),
+            new_digest: "c".repeat(64),
+        }),
+        RadrootsSdkError::IdempotencyConflict {
+            ref operation_kind,
+            ref expected_pubkey_prefix,
+            ref existing_digest_prefix,
+            ref new_digest_prefix,
+        } if operation_kind == "listing.publish.v1"
+            && expected_pubkey_prefix == "aaaaaaaaaaaa"
+            && existing_digest_prefix == "bbbbbbbbbbbb"
+            && new_digest_prefix == "cccccccccccc"
+    ));
 }
 
 #[test]
@@ -171,6 +190,46 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
         ),
         RadrootsSdkError::InvalidRelayUrl { ref url, .. }
             if url == "wss://relay.example.com?<redacted>"
+    ));
+    assert!(matches!(
+        RadrootsSdkError::from(
+            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlUserinfo {
+                url: "wss://user:secret@relay.example.com".to_owned(),
+            },
+        ),
+        RadrootsSdkError::InvalidRelayUrl { ref url, ref reason }
+            if url == "wss://<redacted>@relay.example.com"
+                && reason == "relay URL must not include userinfo"
+    ));
+    assert!(matches!(
+        RadrootsSdkError::from(
+            radroots_relay_transport::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
+                url: "ws://relay.example.com".to_owned(),
+            },
+        ),
+        RadrootsSdkError::InvalidRelayUrl { ref reason, .. }
+            if reason == "ws relay URL requires localhost policy"
+    ));
+    assert!(matches!(
+        RadrootsSdkError::from(
+            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+                url: "ws://127.0.0.1:9000".to_owned(),
+                reason: "localhost disabled".to_owned(),
+            },
+        ),
+        RadrootsSdkError::InvalidRelayUrl { ref reason, .. }
+            if reason == "localhost disabled"
+    ));
+    assert!(matches!(
+        RadrootsSdkError::from(
+            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+                url: "ws://relay.example.com".to_owned(),
+                address: "127.0.0.1".to_owned(),
+                reason: "loopback disabled".to_owned(),
+            },
+        ),
+        RadrootsSdkError::InvalidRelayUrl { ref reason, .. }
+            if reason == "relay URL resolved to forbidden address `127.0.0.1`: loopback disabled"
     ));
     assert!(matches!(
         RadrootsSdkError::from(
@@ -250,6 +309,37 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             expected_pubkey_prefix: "aaaaaaaaaaaa".to_owned(),
             signer_pubkey_prefix: "bbbbbbbbbbbb".to_owned(),
         },
+        RadrootsSdkError::SignerUnavailable {
+            mode: "configured".to_owned(),
+            reason: "missing".to_owned(),
+        },
+        RadrootsSdkError::SignerRequestRejected {
+            mode: "myc_nip46".to_owned(),
+            reason: "denied".to_owned(),
+        },
+        RadrootsSdkError::SignerRequestTimedOut {
+            mode: "myc_nip46".to_owned(),
+        },
+        RadrootsSdkError::SignerAuthChallengePending {
+            mode: "myc_nip46".to_owned(),
+            auth_url: Some("https://auth.example.com/challenge".to_owned()),
+        },
+        RadrootsSdkError::SignerAuthChallengePending {
+            mode: "myc_nip46".to_owned(),
+            auth_url: None,
+        },
+        RadrootsSdkError::SignerTransport {
+            mode: "myc_nip46".to_owned(),
+            reason: "offline".to_owned(),
+        },
+        RadrootsSdkError::SignerProtocol {
+            mode: "myc_nip46".to_owned(),
+            reason: "bad envelope".to_owned(),
+        },
+        RadrootsSdkError::SignerReturnedEventDrift {
+            operation: "listing.publish".to_owned(),
+            reason: "id changed".to_owned(),
+        },
         RadrootsSdkError::EmptyTargetRelays {
             operation: "relay publish".to_owned(),
         },
@@ -291,6 +381,33 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         RadrootsSdkError::Outbox {
             message: "outbox".to_owned(),
         },
+        RadrootsSdkError::PrivateStore {
+            message: "private".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Configuration,
+            message: "missing cache root".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Download,
+            message: "download".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Cache,
+            message: "cache".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Integrity,
+            message: "integrity".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Schema,
+            message: "schema".to_owned(),
+        },
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Lookup,
+            message: "lookup".to_owned(),
+        },
         RadrootsSdkError::RelayTransport {
             message: "transport".to_owned(),
         },
@@ -317,5 +434,86 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             serde_json::to_value(error.recovery_actions()).expect("recovery json")
         );
         assert!(error.to_string().starts_with("sdk "));
+    }
+}
+
+#[test]
+fn geonames_error_conversion_maps_source_errors_to_sdk_kinds() {
+    let path = std::path::PathBuf::from("geonames-test.db");
+    let cases = vec![
+        (
+            GeocoderError::InvalidAssetUrl {
+                url: "http://assets.radroots.io/geonames.db".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Configuration,
+        ),
+        (
+            GeocoderError::InvalidAssetHost {
+                url: "https://example.com/geonames.db".to_owned(),
+                expected_host: "assets.radroots.io".to_owned(),
+                actual_host: "example.com".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Configuration,
+        ),
+        (
+            GeocoderError::InvalidAssetLength {
+                path: path.clone(),
+                expected: 4,
+                actual: 3,
+            },
+            RadrootsSdkGeoNamesErrorKind::Integrity,
+        ),
+        (
+            GeocoderError::InvalidAssetSha256 {
+                path: path.clone(),
+                expected: "a".repeat(64),
+                actual: "b".repeat(64),
+            },
+            RadrootsSdkGeoNamesErrorKind::Integrity,
+        ),
+        (
+            GeocoderError::InvalidAssetSqlite {
+                path: path.clone(),
+                detail: "file is not a database".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Integrity,
+        ),
+        (
+            GeocoderError::InvalidAssetIntegrity {
+                path: path.clone(),
+                result: "row mismatch".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Integrity,
+        ),
+        (
+            GeocoderError::InvalidAssetSchema {
+                path: path.clone(),
+                detail: "missing table".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Schema,
+        ),
+        (
+            GeocoderError::AssetLockUnavailable { path: path.clone() },
+            RadrootsSdkGeoNamesErrorKind::Cache,
+        ),
+        (
+            GeocoderError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "missing")),
+            RadrootsSdkGeoNamesErrorKind::Cache,
+        ),
+        (
+            GeocoderError::CountryCenterNotFound {
+                country_id: "XX".to_owned(),
+            },
+            RadrootsSdkGeoNamesErrorKind::Lookup,
+        ),
+    ];
+
+    for (source, expected_kind) in cases {
+        let error = RadrootsSdkError::from(source);
+
+        assert!(matches!(
+            error,
+            RadrootsSdkError::GeoNames { kind, .. } if kind == expected_kind
+        ));
     }
 }

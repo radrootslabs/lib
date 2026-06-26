@@ -3370,6 +3370,66 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
             "cancellation_previous_mismatch"
         ),
         multi_issue!(ForkedLifecycle, ForkedLifecycle, "forked_lifecycle"),
+        single_issue!(
+            ValidationReceiptWithoutPendingAgreement,
+            ValidationReceiptWithoutPendingAgreement,
+            "validation_receipt_without_pending_agreement"
+        ),
+        single_issue!(
+            ValidationReceiptOrderIdMismatch,
+            ValidationReceiptOrderIdMismatch,
+            "validation_receipt_order_id_mismatch"
+        ),
+        single_issue!(
+            ValidationReceiptTypeMismatch,
+            ValidationReceiptTypeMismatch,
+            "validation_receipt_type_mismatch"
+        ),
+        single_issue!(
+            ValidationReceiptRootMismatch,
+            ValidationReceiptRootMismatch,
+            "validation_receipt_root_mismatch"
+        ),
+        single_issue!(
+            ValidationReceiptTargetMismatch,
+            ValidationReceiptTargetMismatch,
+            "validation_receipt_target_mismatch"
+        ),
+        single_issue!(
+            ValidationReceiptListingMismatch,
+            ValidationReceiptListingMismatch,
+            "validation_receipt_listing_mismatch"
+        ),
+        multi_issue!(
+            ConflictingValidationReceipts,
+            ConflictingValidationReceipts,
+            "conflicting_validation_receipts"
+        ),
+        {
+            let event_id = deterministic_event_id("deterministic_validation_failure");
+            (
+                RadrootsOrderIssue::DeterministicValidationFailure {
+                    event_id: event_id.clone(),
+                    reason: "fixture validation failed".to_owned(),
+                },
+                SdkOrderStatusIssueKind::DeterministicValidationFailure,
+                "deterministic_validation_failure",
+                vec![event_id],
+            )
+        },
+        {
+            let expected_event_id = deterministic_event_id("stale_listing_event_expected");
+            let current_event_id = deterministic_event_id("stale_listing_event_current");
+            (
+                RadrootsOrderIssue::StaleListingEvent {
+                    expected_event_id: expected_event_id.clone(),
+                    current_event_id: current_event_id.clone(),
+                },
+                SdkOrderStatusIssueKind::StaleListingEvent,
+                "stale_listing_event",
+                vec![expected_event_id, current_event_id],
+            )
+        },
     ];
 
     for (issue, expected_kind, expected_code, expected_event_ids) in cases {

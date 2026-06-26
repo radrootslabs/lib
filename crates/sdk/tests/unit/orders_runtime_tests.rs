@@ -422,16 +422,20 @@ async fn prepared_order_sdk() -> RadrootsClient {
         .expect("sdk")
 }
 
-#[tokio::test]
-async fn order_configured_local_signer_enqueues_submit_without_explicit_signer() {
-    let sdk = RadrootsClient::builder()
+async fn configured_order_sdk(secret_key_hex: &str) -> RadrootsClient {
+    RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(keys_from_secret(BUYER_SECRET_KEY_HEX)).expect("signer"),
+            RadrootsSdkLocalKeySigner::new(keys_from_secret(secret_key_hex)).expect("signer"),
         ))
         .build()
         .await
-        .expect("sdk");
+        .expect("sdk")
+}
+
+#[tokio::test]
+async fn order_configured_local_signer_enqueues_submit_without_explicit_signer() {
+    let sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
 
     let receipt = sdk
         .trades()
@@ -446,6 +450,110 @@ async fn order_configured_local_signer_enqueues_submit_without_explicit_signer()
 
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
     assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
+}
+
+#[tokio::test]
+async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_explicit_signers() {
+    let seller_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
+    let decision_submit = enqueue_fixture_submit(&seller_sdk, "order-configured-decision").await;
+    let decision = seller_sdk
+        .trades()
+        .enqueue_decision(OrderDecisionEnqueueRequest::new(
+            fixture_seller_actor(),
+            fixture_order_event_ptr(&decision_submit.signed_event_id),
+            fixture_order_decision("order-configured-decision"),
+            fixture_target_relays(),
+        ))
+        .await
+        .expect("configured decision");
+    assert_eq!(decision.request_event_id, decision_submit.signed_event_id);
+    assert_eq!(decision.state, SdkMutationState::StoredAndQueued);
+
+    let proposal_submit = enqueue_fixture_submit(&seller_sdk, "order-configured-proposal").await;
+    let proposal_payload = fixture_revision_proposal(
+        "order-configured-proposal",
+        &proposal_submit.signed_event_id,
+        &proposal_submit.signed_event_id,
+    );
+    let proposal = seller_sdk
+        .trades()
+        .enqueue_revision_proposal(OrderRevisionProposalEnqueueRequest::new(
+            fixture_seller_actor(),
+            fixture_order_event_ptr(&proposal_submit.signed_event_id),
+            fixture_order_event_ptr(&proposal_submit.signed_event_id),
+            proposal_payload,
+            fixture_target_relays(),
+        ))
+        .await
+        .expect("configured revision proposal");
+    assert_eq!(proposal.root_event_id, proposal_submit.signed_event_id);
+    assert_eq!(proposal.state, SdkMutationState::StoredAndQueued);
+
+    let buyer_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
+    let revision_submit =
+        enqueue_fixture_submit(&buyer_sdk, "order-configured-revision-decision").await;
+    let revision_proposal_payload = fixture_revision_proposal(
+        "order-configured-revision-decision",
+        &revision_submit.signed_event_id,
+        &revision_submit.signed_event_id,
+    );
+    let revision_proposal = buyer_sdk
+        .trades()
+        .enqueue_revision_proposal_with_explicit_signer(
+            OrderRevisionProposalEnqueueRequest::new(
+                fixture_seller_actor(),
+                fixture_order_event_ptr(&revision_submit.signed_event_id),
+                fixture_order_event_ptr(&revision_submit.signed_event_id),
+                revision_proposal_payload.clone(),
+                fixture_target_relays(),
+            ),
+            &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("explicit revision proposal");
+    let revision_decision_payload = fixture_revision_decision(
+        &revision_proposal_payload,
+        &revision_proposal.signed_event_id,
+    );
+    let revision_decision = buyer_sdk
+        .trades()
+        .enqueue_revision_decision(OrderRevisionDecisionEnqueueRequest::new(
+            fixture_buyer_actor(),
+            fixture_order_event_ptr(&revision_submit.signed_event_id),
+            fixture_order_event_ptr(&revision_proposal.signed_event_id),
+            revision_decision_payload,
+            fixture_target_relays(),
+        ))
+        .await
+        .expect("configured revision decision");
+    assert_eq!(
+        revision_decision.root_event_id,
+        revision_submit.signed_event_id
+    );
+    assert_eq!(
+        revision_decision.previous_event_id,
+        revision_proposal.signed_event_id
+    );
+    assert_eq!(revision_decision.state, SdkMutationState::StoredAndQueued);
+
+    let cancel_submit = enqueue_fixture_submit(&buyer_sdk, "order-configured-cancel").await;
+    let cancellation = buyer_sdk
+        .trades()
+        .enqueue_cancellation(OrderCancellationEnqueueRequest::new(
+            fixture_buyer_actor(),
+            fixture_order_event_ptr(&cancel_submit.signed_event_id),
+            fixture_order_event_ptr(&cancel_submit.signed_event_id),
+            fixture_cancellation("order-configured-cancel"),
+            fixture_target_relays(),
+        ))
+        .await
+        .expect("configured cancellation");
+    assert_eq!(cancellation.root_event_id, cancel_submit.signed_event_id);
+    assert_eq!(
+        cancellation.previous_event_id,
+        cancel_submit.signed_event_id
+    );
+    assert_eq!(cancellation.state, SdkMutationState::StoredAndQueued);
 }
 
 async fn enqueue_fixture_submit(sdk: &RadrootsClient, raw_order_id: &str) -> OrderSubmitReceipt {
@@ -1466,8 +1574,51 @@ fn order_issue_mapping_covers_every_trade_issue_variant() {
         single!(CancellationRootMismatch, CancellationRootMismatch),
         single!(CancellationPreviousMismatch, CancellationPreviousMismatch),
         (
-            RadrootsOrderIssue::ForkedLifecycle { event_ids: many },
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: many.clone(),
+            },
             SdkOrderStatusIssueKind::ForkedLifecycle,
+            2,
+        ),
+        single!(
+            ValidationReceiptWithoutPendingAgreement,
+            ValidationReceiptWithoutPendingAgreement
+        ),
+        single!(
+            ValidationReceiptOrderIdMismatch,
+            ValidationReceiptOrderIdMismatch
+        ),
+        single!(ValidationReceiptTypeMismatch, ValidationReceiptTypeMismatch),
+        single!(ValidationReceiptRootMismatch, ValidationReceiptRootMismatch),
+        single!(
+            ValidationReceiptTargetMismatch,
+            ValidationReceiptTargetMismatch
+        ),
+        single!(
+            ValidationReceiptListingMismatch,
+            ValidationReceiptListingMismatch
+        ),
+        (
+            RadrootsOrderIssue::ConflictingValidationReceipts {
+                event_ids: many.clone(),
+            },
+            SdkOrderStatusIssueKind::ConflictingValidationReceipts,
+            2,
+        ),
+        (
+            RadrootsOrderIssue::DeterministicValidationFailure {
+                event_id: one.clone(),
+                reason: "fixture validation failed".to_owned(),
+            },
+            SdkOrderStatusIssueKind::DeterministicValidationFailure,
+            1,
+        ),
+        (
+            RadrootsOrderIssue::StaleListingEvent {
+                expected_event_id: one,
+                current_event_id: two,
+            },
+            SdkOrderStatusIssueKind::StaleListingEvent,
             2,
         ),
     ];
@@ -1690,6 +1841,15 @@ fn lifecycle_plan_state_wrappers_reject_invalid_status_terminal_and_pending_stat
             require_revision_proposal_state(&proposal_plan, &terminal).unwrap_err()
         )
         .contains("non-terminal")
+    );
+
+    let mut proposal_pending = base.clone();
+    proposal_pending.pending_revision_event_id = Some(proposal_plan.expected_event_id.clone());
+    assert!(
+        invalid_request_message(
+            require_revision_proposal_state(&proposal_plan, &proposal_pending).unwrap_err()
+        )
+        .contains("cannot follow pending revision")
     );
 
     let mut revision_ready = base.clone();
@@ -2119,7 +2279,7 @@ async fn prepared_submit_and_decision_enqueue_cover_source_attached_success_path
         .trades()
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
-            decision_plan,
+            decision_plan.clone(),
             fixture_target_relays(),
             Some(SdkIdempotencyKey::new("prepared-decision").expect("idempotency")),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2155,7 +2315,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
         .trades()
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
-            proposal_plan,
+            proposal_plan.clone(),
             fixture_target_relays(),
             Some(SdkIdempotencyKey::new("prepared-proposal").expect("idempotency")),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2365,7 +2525,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .trades()
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
-            decision_plan,
+            decision_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2390,7 +2550,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .trades()
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
-            proposal_plan,
+            proposal_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2558,6 +2718,401 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
 }
 
 #[tokio::test]
+async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
+    let buyer = fixture_buyer_actor();
+    let seller = fixture_seller_actor();
+    let root_event_id = event_id('e');
+    let previous_event_id = event_id('f');
+    let root = fixture_order_event_ptr(&root_event_id);
+    let previous = fixture_order_event_ptr(&previous_event_id);
+    let proposal = fixture_revision_proposal(
+        "order-configured-preflight",
+        &root_event_id,
+        &previous_event_id,
+    );
+
+    let seller_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
+    let decision_plan = seller_sdk
+        .trades()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller.clone(),
+            root.clone(),
+            fixture_order_decision("order-configured-preflight"),
+        ))
+        .expect("decision plan");
+    let decision_missing = seller_sdk
+        .trades()
+        .enqueue_prepared_decision(&seller, decision_plan, fixture_target_relays(), None)
+        .await
+        .expect_err("configured missing decision evidence");
+    assert!(matches!(
+        decision_missing,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let proposal_plan = seller_sdk
+        .trades()
+        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+            seller.clone(),
+            root.clone(),
+            previous.clone(),
+            proposal.clone(),
+        ))
+        .expect("proposal plan");
+    let proposal_missing = seller_sdk
+        .trades()
+        .enqueue_prepared_revision_proposal(&seller, proposal_plan, fixture_target_relays(), None)
+        .await
+        .expect_err("configured missing proposal evidence");
+    assert!(matches!(
+        proposal_missing,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let buyer_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
+    let revision_plan = buyer_sdk
+        .trades()
+        .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
+            buyer.clone(),
+            root.clone(),
+            previous.clone(),
+            fixture_revision_decision(&proposal, &previous_event_id),
+        ))
+        .expect("revision decision plan");
+    let revision_missing = buyer_sdk
+        .trades()
+        .enqueue_prepared_revision_decision(&buyer, revision_plan, fixture_target_relays(), None)
+        .await
+        .expect_err("configured missing revision decision evidence");
+    assert!(matches!(
+        revision_missing,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let cancellation_plan = buyer_sdk
+        .trades()
+        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+            buyer.clone(),
+            root,
+            previous,
+            fixture_cancellation("order-configured-preflight"),
+        ))
+        .expect("cancellation plan");
+    let cancellation_missing = buyer_sdk
+        .trades()
+        .enqueue_prepared_cancellation(&buyer, cancellation_plan, fixture_target_relays(), None)
+        .await
+        .expect_err("configured missing cancellation evidence");
+    assert!(matches!(
+        cancellation_missing,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[tokio::test]
+async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_errors() {
+    let buyer = fixture_buyer_actor();
+    let seller = fixture_seller_actor();
+    let root_event_id = event_id('e');
+    let previous_event_id = event_id('f');
+    let root = fixture_order_event_ptr(&root_event_id);
+    let previous = fixture_order_event_ptr(&previous_event_id);
+    let proposal = fixture_revision_proposal(
+        "order-configured-existing-lookup",
+        &root_event_id,
+        &previous_event_id,
+    );
+
+    let seller_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
+    let decision_plan = seller_sdk
+        .trades()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller.clone(),
+            root.clone(),
+            fixture_order_decision("order-configured-existing-lookup"),
+        ))
+        .expect("decision plan");
+    let proposal_plan = seller_sdk
+        .trades()
+        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+            seller.clone(),
+            root.clone(),
+            previous.clone(),
+            proposal.clone(),
+        ))
+        .expect("proposal plan");
+    seller_sdk._event_store.pool().close().await;
+    assert!(matches!(
+        seller_sdk
+            .trades()
+            .enqueue_prepared_decision(&seller, decision_plan, fixture_target_relays(), None)
+            .await,
+        Err(RadrootsSdkError::EventStore { .. })
+    ));
+    assert!(matches!(
+        seller_sdk
+            .trades()
+            .enqueue_prepared_revision_proposal(
+                &seller,
+                proposal_plan,
+                fixture_target_relays(),
+                None,
+            )
+            .await,
+        Err(RadrootsSdkError::EventStore { .. })
+    ));
+
+    let buyer_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
+    let revision_plan = buyer_sdk
+        .trades()
+        .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
+            buyer.clone(),
+            root.clone(),
+            previous.clone(),
+            fixture_revision_decision(&proposal, &previous_event_id),
+        ))
+        .expect("revision decision plan");
+    let cancellation_plan = buyer_sdk
+        .trades()
+        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+            buyer.clone(),
+            root,
+            previous,
+            fixture_cancellation("order-configured-existing-lookup"),
+        ))
+        .expect("cancellation plan");
+    buyer_sdk._event_store.pool().close().await;
+    assert!(matches!(
+        buyer_sdk
+            .trades()
+            .enqueue_prepared_revision_decision(
+                &buyer,
+                revision_plan,
+                fixture_target_relays(),
+                None
+            )
+            .await,
+        Err(RadrootsSdkError::EventStore { .. })
+    ));
+    assert!(matches!(
+        buyer_sdk
+            .trades()
+            .enqueue_prepared_cancellation(&buyer, cancellation_plan, fixture_target_relays(), None)
+            .await,
+        Err(RadrootsSdkError::EventStore { .. })
+    ));
+}
+
+#[tokio::test]
+async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
+    let seller_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
+    let buyer_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
+    let root_event_id = event_id('a');
+    let previous_event_id = event_id('b');
+    let proposal = fixture_revision_proposal(
+        "order-configured-prepare-errors",
+        &root_event_id,
+        &previous_event_id,
+    );
+
+    assert!(matches!(
+        buyer_sdk
+            .trades()
+            .enqueue_submit(OrderSubmitEnqueueRequest::new(
+                fixture_seller_actor(),
+                fixture_event_ptr('a'),
+                fixture_order_request("order-configured-prepare-submit"),
+                fixture_target_relays(),
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+    assert!(matches!(
+        seller_sdk
+            .trades()
+            .enqueue_decision(OrderDecisionEnqueueRequest::new(
+                fixture_buyer_actor(),
+                fixture_event_ptr('a'),
+                fixture_order_decision("order-configured-prepare-decision"),
+                fixture_target_relays(),
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+    assert!(matches!(
+        seller_sdk
+            .trades()
+            .enqueue_revision_proposal(OrderRevisionProposalEnqueueRequest::new(
+                fixture_buyer_actor(),
+                fixture_order_event_ptr(&root_event_id),
+                fixture_order_event_ptr(&previous_event_id),
+                proposal.clone(),
+                fixture_target_relays(),
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+    assert!(matches!(
+        buyer_sdk
+            .trades()
+            .enqueue_revision_decision(OrderRevisionDecisionEnqueueRequest::new(
+                fixture_seller_actor(),
+                fixture_order_event_ptr(&root_event_id),
+                fixture_order_event_ptr(&previous_event_id),
+                fixture_revision_decision(&proposal, &previous_event_id),
+                fixture_target_relays(),
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+    assert!(matches!(
+        buyer_sdk
+            .trades()
+            .enqueue_cancellation(OrderCancellationEnqueueRequest::new(
+                fixture_seller_actor(),
+                fixture_order_event_ptr(&root_event_id),
+                fixture_order_event_ptr(&previous_event_id),
+                fixture_cancellation("order-configured-prepare-cancel"),
+                fixture_target_relays(),
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+}
+
+#[tokio::test]
+async fn configured_prepared_methods_report_missing_configured_signer_after_preflight() {
+    let sdk = prepared_order_sdk().await;
+    let buyer = fixture_buyer_actor();
+    let seller = fixture_seller_actor();
+
+    let submit_plan = sdk
+        .trades()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            buyer.clone(),
+            fixture_event_ptr('a'),
+            fixture_order_request("order-missing-configured-submit"),
+        ))
+        .expect("submit plan");
+    assert!(matches!(
+        sdk.trades()
+            .enqueue_prepared_submit(&buyer, submit_plan, fixture_target_relays(), None)
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+
+    let decision_submit = enqueue_fixture_submit(&sdk, "order-missing-configured-decision").await;
+    let decision_plan = sdk
+        .trades()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller.clone(),
+            fixture_order_event_ptr(&decision_submit.signed_event_id),
+            fixture_order_decision("order-missing-configured-decision"),
+        ))
+        .expect("decision plan");
+    assert!(matches!(
+        sdk.trades()
+            .enqueue_prepared_decision(&seller, decision_plan, fixture_target_relays(), None)
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+
+    let proposal_submit = enqueue_fixture_submit(&sdk, "order-missing-configured-proposal").await;
+    let proposal_payload = fixture_revision_proposal(
+        "order-missing-configured-proposal",
+        &proposal_submit.signed_event_id,
+        &proposal_submit.signed_event_id,
+    );
+    let proposal_plan = sdk
+        .trades()
+        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+            seller.clone(),
+            fixture_order_event_ptr(&proposal_submit.signed_event_id),
+            fixture_order_event_ptr(&proposal_submit.signed_event_id),
+            proposal_payload.clone(),
+        ))
+        .expect("proposal plan");
+    assert!(matches!(
+        sdk.trades()
+            .enqueue_prepared_revision_proposal(
+                &seller,
+                proposal_plan,
+                fixture_target_relays(),
+                None
+            )
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+
+    let revision_submit = enqueue_fixture_submit(&sdk, "order-missing-configured-revision").await;
+    let revision_proposal_payload = fixture_revision_proposal(
+        "order-missing-configured-revision",
+        &revision_submit.signed_event_id,
+        &revision_submit.signed_event_id,
+    );
+    let revision_proposal_plan = sdk
+        .trades()
+        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+            seller.clone(),
+            fixture_order_event_ptr(&revision_submit.signed_event_id),
+            fixture_order_event_ptr(&revision_submit.signed_event_id),
+            revision_proposal_payload.clone(),
+        ))
+        .expect("revision proposal plan");
+    let revision_proposal = sdk
+        .trades()
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
+            &seller,
+            revision_proposal_plan,
+            fixture_target_relays(),
+            None,
+            &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("revision proposal evidence");
+    let revision_plan = sdk
+        .trades()
+        .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
+            buyer.clone(),
+            fixture_order_event_ptr(&revision_submit.signed_event_id),
+            fixture_order_event_ptr(&revision_proposal.signed_event_id),
+            fixture_revision_decision(
+                &revision_proposal_payload,
+                &revision_proposal.signed_event_id,
+            ),
+        ))
+        .expect("revision plan");
+    assert!(matches!(
+        sdk.trades()
+            .enqueue_prepared_revision_decision(
+                &buyer,
+                revision_plan,
+                fixture_target_relays(),
+                None
+            )
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+
+    let cancellation_submit = enqueue_fixture_submit(&sdk, "order-missing-configured-cancel").await;
+    let cancellation_plan = sdk
+        .trades()
+        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+            buyer.clone(),
+            fixture_order_event_ptr(&cancellation_submit.signed_event_id),
+            fixture_order_event_ptr(&cancellation_submit.signed_event_id),
+            fixture_cancellation("order-missing-configured-cancel"),
+        ))
+        .expect("cancellation plan");
+    assert!(matches!(
+        sdk.trades()
+            .enqueue_prepared_cancellation(&buyer, cancellation_plan, fixture_target_relays(), None)
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+}
+
+#[tokio::test]
 async fn lifecycle_preflight_helpers_map_projection_query_failures() {
     let sdk = prepared_order_sdk().await;
     let client = sdk.trades();
@@ -2707,7 +3262,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .trades()
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
-            revision_plan,
+            revision_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -2745,7 +3300,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
 
 #[tokio::test]
 async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
-    let decision_sdk = prepared_order_sdk().await;
+    let decision_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
     let decision_submit = enqueue_fixture_submit(&decision_sdk, "order-existing-decision").await;
     let seller = fixture_seller_actor();
     let decision_plan = decision_sdk
@@ -2771,7 +3326,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .trades()
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
-            decision_plan,
+            decision_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2788,8 +3343,28 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             .idempotency
             .replayed_existing_operation
     );
+    let configured_decision_repeat = decision_sdk
+        .trades()
+        .enqueue_prepared_decision(
+            &seller,
+            decision_plan.clone(),
+            fixture_target_relays(),
+            None,
+        )
+        .await
+        .expect("configured decision replay");
+    assert_eq!(
+        configured_decision_repeat.workflow.state,
+        SdkMutationState::AlreadyQueued
+    );
+    assert!(
+        configured_decision_repeat
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
 
-    let proposal_sdk = prepared_order_sdk().await;
+    let proposal_sdk = configured_order_sdk(SELLER_SECRET_KEY_HEX).await;
     let proposal_submit = enqueue_fixture_submit(&proposal_sdk, "order-existing-proposal").await;
     let proposal_payload = fixture_revision_proposal(
         "order-existing-proposal",
@@ -2820,7 +3395,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .trades()
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
-            proposal_plan,
+            proposal_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -2837,8 +3412,28 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             .idempotency
             .replayed_existing_operation
     );
+    let configured_proposal_repeat = proposal_sdk
+        .trades()
+        .enqueue_prepared_revision_proposal(
+            &seller,
+            proposal_plan.clone(),
+            fixture_target_relays(),
+            None,
+        )
+        .await
+        .expect("configured proposal replay");
+    assert_eq!(
+        configured_proposal_repeat.workflow.state,
+        SdkMutationState::AlreadyQueued
+    );
+    assert!(
+        configured_proposal_repeat
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
 
-    let revision_sdk = prepared_order_sdk().await;
+    let revision_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
     let revision_submit = enqueue_fixture_submit(&revision_sdk, "order-existing-revision").await;
     let proposal_payload = fixture_revision_proposal(
         "order-existing-revision",
@@ -2890,7 +3485,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .trades()
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
-            revision_plan,
+            revision_plan.clone(),
             fixture_target_relays(),
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -2903,6 +3498,65 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
     );
     assert!(
         revision_repeat
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
+    let configured_revision_repeat = revision_sdk
+        .trades()
+        .enqueue_prepared_revision_decision(
+            &buyer,
+            revision_plan.clone(),
+            fixture_target_relays(),
+            None,
+        )
+        .await
+        .expect("configured revision replay");
+    assert_eq!(
+        configured_revision_repeat.workflow.state,
+        SdkMutationState::AlreadyQueued
+    );
+    assert!(
+        configured_revision_repeat
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
+
+    let cancellation_sdk = configured_order_sdk(BUYER_SECRET_KEY_HEX).await;
+    let cancellation_submit =
+        enqueue_fixture_submit(&cancellation_sdk, "order-existing-cancellation").await;
+    let cancellation_plan = cancellation_sdk
+        .trades()
+        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+            buyer.clone(),
+            fixture_order_event_ptr(&cancellation_submit.signed_event_id),
+            fixture_order_event_ptr(&cancellation_submit.signed_event_id),
+            fixture_cancellation("order-existing-cancellation"),
+        ))
+        .expect("cancellation plan");
+    cancellation_sdk
+        .trades()
+        .enqueue_prepared_cancellation_with_explicit_signer(
+            &buyer,
+            cancellation_plan.clone(),
+            fixture_target_relays(),
+            None,
+            &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue cancellation");
+    let cancellation_repeat = cancellation_sdk
+        .trades()
+        .enqueue_prepared_cancellation(&buyer, cancellation_plan, fixture_target_relays(), None)
+        .await
+        .expect("configured cancellation replay");
+    assert_eq!(
+        cancellation_repeat.workflow.state,
+        SdkMutationState::AlreadyQueued
+    );
+    assert!(
+        cancellation_repeat
             .workflow
             .idempotency
             .replayed_existing_operation

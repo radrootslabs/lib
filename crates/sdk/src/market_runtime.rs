@@ -158,3 +158,7 @@ impl MarketListingSearchRow {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/market_runtime_tests.rs"]
+mod tests;

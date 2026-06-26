@@ -3,6 +3,9 @@ use radroots_publish_proxy_protocol::{
     PublishJobStatus, PublishJobView, PublishRelayOutcome, PublishRelayOutcomeKind,
     PublishRelaySource,
 };
+use radroots_relay_transport::{
+    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayUrlPolicy,
+};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread::JoinHandle;
@@ -168,6 +171,7 @@ fn assert_message(error: RadrootsdError, fragment: &str) {
 fn auth_headers_omit_or_redact_bearer_authorization() {
     let none = auth_headers(&RadrootsdAuth::None).expect("none auth");
     assert!(!none.contains_key(AUTHORIZATION));
+    assert_eq!(format!("{:?}", RadrootsdAuth::None), "None");
 
     let bearer = auth_headers(&RadrootsdAuth::BearerToken("sdk-token".into())).expect("bearer");
     assert_eq!(
@@ -185,6 +189,46 @@ fn auth_headers_omit_or_redact_bearer_authorization() {
         format!("{:?}", RadrootsdAuth::BearerToken("token-secret".into())),
         "BearerToken(<redacted>)"
     );
+    assert!(
+        RadrootsdError::InvalidAuthHeader("bad header".to_owned())
+            .to_string()
+            .contains("invalid radrootsd bearer token header")
+    );
+    assert_eq!(
+        RadrootsdError::InvalidRequest("invalid request".to_owned()).to_string(),
+        "invalid request"
+    );
+    assert_eq!(
+        RadrootsdError::Http("http failed".to_owned()).to_string(),
+        "http failed"
+    );
+    assert_eq!(
+        RadrootsdError::MalformedResponse("bad envelope".to_owned()).to_string(),
+        "bad envelope"
+    );
+}
+
+#[test]
+fn proxy_config_builders_preserve_typed_runtime_options() {
+    let config = RadrootsdProxyConfig::new("http://127.0.0.1:8080/rpc")
+        .with_auth(RadrootsdAuth::BearerToken("sdk-token".to_owned()))
+        .with_relay_policy(PublishRelayPolicy::ExplicitOnly)
+        .with_timeout(Duration::from_millis(250))
+        .with_request_timeout_ms(1_500);
+    let adapter = RadrootsdProxyPublishAdapter::new(config.clone());
+
+    assert_eq!(adapter.config(), &config);
+    assert_eq!(adapter.config().endpoint, "http://127.0.0.1:8080/rpc");
+    assert_eq!(
+        adapter.config().auth,
+        RadrootsdAuth::BearerToken("sdk-token".to_owned())
+    );
+    assert_eq!(
+        adapter.config().relay_policy,
+        PublishRelayPolicy::ExplicitOnly
+    );
+    assert_eq!(adapter.config().timeout, Duration::from_millis(250));
+    assert_eq!(adapter.config().request_timeout_ms, Some(1_500));
 }
 
 #[test]
@@ -229,7 +273,11 @@ fn decode_jsonrpc_response_validates_envelope_and_errors() {
     assert_message(error, "principal unauthorized");
 
     assert!(matches!(
-        decode_jsonrpc_response::<PublishEventResponse>(
+        decode_jsonrpc_response::<serde_json::Value>(METHOD_EVENT, "expected", "not json"),
+        Err(RadrootsdError::MalformedResponse(_))
+    ));
+    assert!(matches!(
+        decode_jsonrpc_response::<serde_json::Value>(
             METHOD_EVENT,
             "expected",
             r#"{"jsonrpc":"2.0","id":"other","result":{}}"#
@@ -237,10 +285,26 @@ fn decode_jsonrpc_response_validates_envelope_and_errors() {
         Err(RadrootsdError::MalformedResponse(_))
     ));
     assert!(matches!(
-        decode_jsonrpc_response::<PublishEventResponse>(
+        decode_jsonrpc_response::<serde_json::Value>(
             METHOD_EVENT,
             "expected",
             r#"{"jsonrpc":"2.0","id":"expected"}"#
+        ),
+        Err(RadrootsdError::MalformedResponse(_))
+    ));
+    assert!(matches!(
+        decode_jsonrpc_response::<serde_json::Value>(
+            METHOD_EVENT,
+            "expected",
+            r#"{"jsonrpc":"1.0","id":"expected","result":{}}"#
+        ),
+        Err(RadrootsdError::MalformedResponse(_))
+    ));
+    assert!(matches!(
+        decode_jsonrpc_response::<serde_json::Value>(
+            METHOD_EVENT,
+            "expected",
+            r#"{"jsonrpc":"2.0","id":"expected","result":{},"error":{"code":-32002,"message":"both"}}"#
         ),
         Err(RadrootsdError::MalformedResponse(_))
     ));
@@ -269,6 +333,77 @@ fn daemon_outcomes_map_to_relay_transport_receipts() {
         RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
     );
     assert!(skipped.quorum_met);
+
+    let cases = [
+        (
+            PublishRelayOutcomeKind::Accepted,
+            RadrootsRelayOutcomeKind::Accepted,
+        ),
+        (
+            PublishRelayOutcomeKind::DuplicateAccepted,
+            RadrootsRelayOutcomeKind::DuplicateAccepted,
+        ),
+        (
+            PublishRelayOutcomeKind::Blocked,
+            RadrootsRelayOutcomeKind::Blocked,
+        ),
+        (
+            PublishRelayOutcomeKind::RateLimited,
+            RadrootsRelayOutcomeKind::RateLimited,
+        ),
+        (
+            PublishRelayOutcomeKind::Invalid,
+            RadrootsRelayOutcomeKind::Invalid,
+        ),
+        (
+            PublishRelayOutcomeKind::PowRequired,
+            RadrootsRelayOutcomeKind::PowRequired,
+        ),
+        (
+            PublishRelayOutcomeKind::Restricted,
+            RadrootsRelayOutcomeKind::Restricted,
+        ),
+        (
+            PublishRelayOutcomeKind::AuthRequired,
+            RadrootsRelayOutcomeKind::AuthRequired,
+        ),
+        (
+            PublishRelayOutcomeKind::Muted,
+            RadrootsRelayOutcomeKind::Muted,
+        ),
+        (
+            PublishRelayOutcomeKind::Unsupported,
+            RadrootsRelayOutcomeKind::Unsupported,
+        ),
+        (
+            PublishRelayOutcomeKind::Error,
+            RadrootsRelayOutcomeKind::Error,
+        ),
+        (
+            PublishRelayOutcomeKind::Timeout,
+            RadrootsRelayOutcomeKind::Timeout,
+        ),
+        (
+            PublishRelayOutcomeKind::ConnectionFailed,
+            RadrootsRelayOutcomeKind::ConnectionFailed,
+        ),
+        (
+            PublishRelayOutcomeKind::RelayUrlRejected,
+            RadrootsRelayOutcomeKind::RelayUrlRejected,
+        ),
+        (
+            PublishRelayOutcomeKind::Unknown,
+            RadrootsRelayOutcomeKind::Unknown,
+        ),
+    ];
+    for (proxy_kind, relay_kind) in cases {
+        let receipt = proxy_receipt_from_response(PublishEventResponse {
+            deduplicated: false,
+            job: job(proxy_kind),
+        })
+        .expect("receipt");
+        assert_eq!(receipt.relays[0].outcome.kind, relay_kind);
+    }
 }
 
 #[tokio::test]
@@ -319,6 +454,162 @@ async fn publish_event_http_errors_omit_body_and_token_material() {
     assert!(message.contains("response body omitted"));
     assert!(!message.contains("token-secret"));
     assert!(!message.contains("carrots"));
+}
+
+#[tokio::test]
+async fn publish_event_empty_http_error_reports_empty_body() {
+    let (endpoint, _handle) = spawn_http_server("500 Internal Server Error", "");
+
+    let error = publish_event(
+        endpoint.as_str(),
+        &RadrootsdAuth::None,
+        &publish_request(),
+        Duration::from_secs(2),
+    )
+    .await
+    .expect_err("http error");
+
+    assert!(error.to_string().contains("response body empty"));
+}
+
+#[tokio::test]
+async fn relay_publish_adapter_derives_delivery_policy_and_timeout() {
+    for (target_count, quorum, expected_policy) in [
+        (2, 2, PublishDeliveryPolicy::All),
+        (2, 1, PublishDeliveryPolicy::Any),
+        (3, 2, PublishDeliveryPolicy::Quorum { quorum: 2 }),
+    ] {
+        let response_body = publish_response_json();
+        let (endpoint, handle) = spawn_http_server("200 OK", response_body.as_str());
+        let adapter = RadrootsdProxyPublishAdapter::new(
+            RadrootsdProxyConfig::new(endpoint).with_request_timeout_ms(4_000),
+        );
+        let relays = (0..target_count)
+            .map(|index| format!("wss://relay-{index}.example.com"))
+            .collect::<Vec<_>>();
+        let targets =
+            RadrootsRelayTargetSet::new(&relays, RadrootsRelayUrlPolicy::Public).expect("targets");
+
+        let receipts = adapter
+            .publish(
+                RadrootsRelayPublishRequest::new(signed_event(), targets, 10)
+                    .with_accepted_quorum(quorum),
+            )
+            .await
+            .expect("adapter publish");
+
+        assert_eq!(receipts[0].outcome.kind, RadrootsRelayOutcomeKind::Accepted);
+        let recorded = handle.join().expect("server thread");
+        let body: serde_json::Value =
+            serde_json::from_str(recorded.body.as_str()).expect("request body");
+        assert_eq!(body["params"]["timeout_ms"], 4_000);
+        assert_eq!(
+            serde_json::from_value::<PublishDeliveryPolicy>(
+                body["params"]["delivery_policy"].clone()
+            )
+            .expect("delivery policy"),
+            expected_policy
+        );
+    }
+}
+
+#[tokio::test]
+async fn relay_publish_adapter_maps_proxy_errors_to_transport_errors() {
+    let adapter = RadrootsdProxyPublishAdapter::new(
+        RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc").with_timeout(Duration::from_millis(50)),
+    );
+    let targets = RadrootsRelayTargetSet::new(
+        &["wss://relay.example.com".to_owned()],
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("targets");
+
+    let error = adapter
+        .publish(RadrootsRelayPublishRequest::new(
+            signed_event(),
+            targets,
+            1_700_000_000_000,
+        ))
+        .await
+        .expect_err("transport error");
+
+    assert!(matches!(
+        error,
+        radroots_relay_transport::RadrootsRelayTransportError::Transport(message)
+            if message.contains("radrootsd")
+    ));
+}
+
+#[tokio::test]
+async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
+    let adapter =
+        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+    let base = RadrootsdProxyPublishRequest {
+        signed_event: signed_event(),
+        relays: vec!["wss://relay.example.com".to_owned()],
+        delivery_policy: PublishDeliveryPolicy::Any,
+        idempotency_key: Some("idem-1".to_owned()),
+        timeout_ms: Some(1_000),
+    };
+
+    let mut invalid_event_kind = base.clone();
+    invalid_event_kind.signed_event.kind = 70_000;
+    let mut empty_event_tag = base.clone();
+    empty_event_tag.signed_event.tags = vec![Vec::new()];
+    let mut invalid_quorum = base.clone();
+    invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
+    let mut too_many_relays = base.clone();
+    too_many_relays.relays = (0..=SDK_RADROOTSD_PROXY_MAX_RELAYS)
+        .map(|index| format!("wss://relay-{index}.example.com"))
+        .collect();
+    let mut empty_relay = base.clone();
+    empty_relay.relays = vec![" ".to_owned()];
+    let mut empty_idempotency = base;
+    empty_idempotency.idempotency_key = Some(" ".to_owned());
+
+    for request in [
+        invalid_event_kind,
+        empty_event_tag,
+        invalid_quorum,
+        too_many_relays,
+        empty_relay,
+        empty_idempotency,
+    ] {
+        assert!(matches!(
+            adapter.publish_signed_event(request).await,
+            Err(RadrootsdError::InvalidRequest(_))
+        ));
+    }
+}
+
+#[test]
+fn proxy_receipt_from_response_rejects_invalid_daemon_job_contracts() {
+    let mut empty_job_id = job(PublishRelayOutcomeKind::Accepted);
+    empty_job_id.job_id = " ".to_owned();
+    let mut invalid_event_id = job(PublishRelayOutcomeKind::Accepted);
+    invalid_event_id.event_id = "not-an-event-id".to_owned();
+    let mut invalid_pubkey = job(PublishRelayOutcomeKind::Accepted);
+    invalid_pubkey.pubkey = "not-a-pubkey".to_owned();
+    let mut invalid_kind = job(PublishRelayOutcomeKind::Accepted);
+    invalid_kind.event_kind = 70_000;
+    let mut invalid_quorum = job(PublishRelayOutcomeKind::Accepted);
+    invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
+
+    for job in [
+        empty_job_id,
+        invalid_event_id,
+        invalid_pubkey,
+        invalid_kind,
+        invalid_quorum,
+    ] {
+        assert!(matches!(
+            proxy_receipt_from_response(PublishEventResponse {
+                deduplicated: false,
+                job,
+            }),
+            Err(RadrootsdError::InvalidRequest(_))
+        ));
+    }
 }
 
 #[tokio::test]

@@ -179,6 +179,31 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
         store.upsert_farm_location(&invalid_coordinates).await,
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
+    for (latitude, longitude) in [
+        (f64::INFINITY, record.longitude),
+        (record.latitude, f64::NEG_INFINITY),
+        (-90.1, record.longitude),
+        (90.1, record.longitude),
+        (record.latitude, -180.1),
+        (record.latitude, 180.1),
+    ] {
+        let mut invalid = record.clone();
+        invalid.latitude = latitude;
+        invalid.longitude = longitude;
+        assert!(matches!(
+            store.upsert_farm_location(&invalid).await,
+            Err(RadrootsSdkError::InvalidRequest { .. })
+        ));
+    }
+    for (latitude, longitude) in [(-90.0, -180.0), (90.0, 180.0)] {
+        let mut boundary = record.clone();
+        boundary.latitude = latitude;
+        boundary.longitude = longitude;
+        store
+            .upsert_farm_location(&boundary)
+            .await
+            .expect("boundary coordinates");
+    }
 
     let mut blank_locality = record.clone();
     blank_locality.locality_primary = " ".to_owned();
@@ -187,12 +212,41 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
 
-    let mut invalid_geohash = record;
+    let mut invalid_geohash = record.clone();
     invalid_geohash.geohash5 = "abcd".to_owned();
     assert!(matches!(
         store.upsert_farm_location(&invalid_geohash).await,
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
+    let mut long_geohash = private_farm_location_record();
+    long_geohash.geohash5 = "abcdef".to_owned();
+    assert!(matches!(
+        store.upsert_farm_location(&long_geohash).await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
+
+    sqlx::query("DROP TABLE sdk_private_farm_location")
+        .execute(store.pool())
+        .await
+        .expect("drop private location table");
+    assert_private_store_error(store.status_summary().await);
+    assert_private_store_error(store.farm_location(&record.farm_addr).await);
+    assert_private_store_error(store.upsert_farm_location(&record).await);
+}
+
+#[test]
+fn publish_transport_defaults_and_delegated_resolution_are_explicit() {
+    let direct = SdkPublishTransport::default();
+    assert_eq!(direct, SdkPublishTransport::DirectNostrRelay);
+    assert!(!direct.supports_delegated_relay_resolution());
+
+    #[cfg(feature = "radrootsd-proxy")]
+    {
+        let proxy = SdkPublishTransport::RadrootsdProxy(RadrootsdProxyConfig::new(
+            "http://127.0.0.1:9/rpc",
+        ));
+        assert!(proxy.supports_delegated_relay_resolution());
+    }
 }
 
 #[tokio::test]
@@ -449,6 +503,165 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
         outbox_closed.integrity(IntegrityRequest::new()).await,
         Err(RadrootsSdkError::EventStore { .. })
     ));
+
+    let private_store_closed = RadrootsClient::builder().build().await.expect("sdk");
+    private_store_closed._private_store.pool().close().await;
+    assert!(matches!(
+        private_store_closed
+            .storage_status(StorageStatusRequest::new())
+            .await,
+        Err(RadrootsSdkError::PrivateStore { .. })
+    ));
+    assert!(matches!(
+        private_store_closed
+            .integrity(IntegrityRequest::new())
+            .await,
+        Err(RadrootsSdkError::PrivateStore { .. })
+    ));
+    assert_private_store_error(
+        private_store_closed
+            ._private_store
+            .pragma_foreign_keys()
+            .await,
+    );
+    assert_private_store_error(
+        private_store_closed
+            ._private_store
+            .pragma_busy_timeout()
+            .await,
+    );
+    assert_private_store_error(
+        private_store_closed
+            ._private_store
+            .pragma_journal_mode()
+            .await,
+    );
+    assert_private_store_error(
+        private_store_sqlite_status(&private_store_closed._private_store).await,
+    );
+    assert_private_store_error(
+        private_sqlite_store_status(
+            private_store_closed._private_store.pool(),
+            SDK_PRIVATE_STORE_SCHEMA_VERSION_CURRENT,
+            "memory".to_owned(),
+            true,
+            5_000,
+        )
+        .await,
+    );
+    assert_private_store_error(private_store_closed._private_store.status_summary().await);
+    let record = private_farm_location_record();
+    assert_private_store_error(
+        private_store_closed
+            ._private_store
+            .upsert_farm_location(&record)
+            .await,
+    );
+    assert_private_store_error(
+        private_store_closed
+            ._private_store
+            .farm_location(&record.farm_addr)
+            .await,
+    );
+
+    let event_store_summary_error = RadrootsClient::builder().build().await.expect("sdk");
+    sqlx::query("DROP TABLE nostr_events")
+        .execute(event_store_summary_error._event_store.pool())
+        .await
+        .expect("drop nostr events");
+    assert!(matches!(
+        event_store_summary_error
+            .storage_status(StorageStatusRequest::new())
+            .await,
+        Err(RadrootsSdkError::EventStore { .. })
+    ));
+    assert_event_store_error(
+        event_store_status_summary(&event_store_summary_error._event_store).await,
+    );
+
+    let outbox_summary_error = RadrootsClient::builder().build().await.expect("sdk");
+    sqlx::query("DROP TABLE outbox_event")
+        .execute(outbox_summary_error._outbox.pool())
+        .await
+        .expect("drop outbox event");
+    assert!(matches!(
+        outbox_summary_error
+            .storage_status(StorageStatusRequest::new())
+            .await,
+        Err(RadrootsSdkError::Outbox { .. })
+    ));
+    assert_outbox_error(outbox_status_summary(&outbox_summary_error._outbox, 1).await);
+
+    let private_summary_error = RadrootsClient::builder().build().await.expect("sdk");
+    sqlx::query("DROP TABLE sdk_private_farm_location")
+        .execute(private_summary_error._private_store.pool())
+        .await
+        .expect("drop private location");
+    assert!(matches!(
+        private_summary_error
+            .storage_status(StorageStatusRequest::new())
+            .await,
+        Err(RadrootsSdkError::PrivateStore { .. })
+    ));
+    assert_private_store_error(private_summary_error._private_store.status_summary().await);
+
+    let event_store = RadrootsEventStore::open_memory()
+        .await
+        .expect("event store");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let private_store = SdkPrivateStore::open_memory().await.expect("private store");
+    private_store.pool().close().await;
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    assert_event_store_error(
+        backup_sqlite_stores(
+            event_store.pool(),
+            outbox.pool(),
+            private_store.pool(),
+            &RadrootsSdkStoragePaths {
+                event_store_path: tempdir.path().join(EVENT_STORE_BACKUP_FILE),
+                outbox_path: tempdir.path().join(OUTBOX_BACKUP_FILE),
+                private_store_path: tempdir.path().join(PRIVATE_STORE_BACKUP_FILE),
+            },
+        )
+        .await,
+    );
+}
+
+#[tokio::test]
+async fn verify_backup_paths_reports_each_store_member_failure() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let source_sdk = RadrootsClient::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .build()
+        .await
+        .expect("sdk");
+    let backup_destination = tempdir.path().join("backup");
+    source_sdk
+        .backup(BackupRequest::new(&backup_destination))
+        .await
+        .expect("backup");
+
+    let bad_event_store_path = backup_destination.join("bad-event-store.sqlite");
+    fs::create_dir(&bad_event_store_path).expect("bad event store dir");
+    let bad_outbox_path = backup_destination.join("bad-outbox.sqlite");
+    fs::create_dir(&bad_outbox_path).expect("bad outbox dir");
+    let bad_private_store_path = backup_destination.join("bad-private.sqlite");
+    fs::create_dir(&bad_private_store_path).expect("bad private store dir");
+
+    let mut invalid_member = RadrootsSdkStoragePaths {
+        event_store_path: bad_event_store_path,
+        outbox_path: backup_destination.join(OUTBOX_BACKUP_FILE),
+        private_store_path: backup_destination.join(PRIVATE_STORE_BACKUP_FILE),
+    };
+    assert_event_store_error(verify_backup_paths(&invalid_member).await);
+
+    invalid_member.event_store_path = backup_destination.join(EVENT_STORE_BACKUP_FILE);
+    invalid_member.outbox_path = bad_outbox_path;
+    assert_outbox_error(verify_backup_paths(&invalid_member).await);
+
+    invalid_member.outbox_path = backup_destination.join(OUTBOX_BACKUP_FILE);
+    invalid_member.private_store_path = bad_private_store_path;
+    assert_private_store_error(verify_backup_paths(&invalid_member).await);
 }
 
 #[test]
@@ -1039,6 +1252,26 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         io_message(copy_restore_archive_to_staging(&partial_archive, &staging_paths).await)
             .contains("restore outbox copy failed")
     );
+    let private_partial_archive = RestoreArchive {
+        event_store_path: tempdir.path().join("private-partial-event-store.sqlite"),
+        outbox_path: tempdir.path().join("private-partial-outbox.sqlite"),
+        ..missing_archive.clone()
+    };
+    fs::write(&private_partial_archive.event_store_path, b"event store")
+        .expect("private partial event store");
+    fs::write(&private_partial_archive.outbox_path, b"outbox").expect("private partial outbox");
+    let private_staging_paths = RadrootsSdkStoragePaths {
+        event_store_path: tempdir.path().join("private-staging-event-store.sqlite"),
+        outbox_path: tempdir.path().join("private-staging-outbox.sqlite"),
+        private_store_path: tempdir.path().join("private-staging-missing.sqlite"),
+    };
+    assert!(
+        io_message(
+            copy_restore_archive_to_staging(&private_partial_archive, &private_staging_paths,)
+                .await
+        )
+        .contains("restore private store copy failed")
+    );
     let corrupt_archive = RestoreArchive {
         event_store_path: tempdir.path().join("corrupt-event-store.sqlite"),
         outbox_path: tempdir.path().join("corrupt-outbox.sqlite"),
@@ -1075,6 +1308,29 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     assert!(
         invalid_request_message(inspect_restore_archive(invalid_outbox_member_source).await)
             .contains("outbox archive path")
+    );
+    let invalid_private_member_source = tempdir.path().join("invalid-private-member");
+    fs::create_dir(&invalid_private_member_source).expect("invalid private source");
+    fs::write(
+        invalid_private_member_source.join(EVENT_STORE_BACKUP_FILE),
+        b"not sqlite",
+    )
+    .expect("invalid private event store member");
+    fs::write(
+        invalid_private_member_source.join(OUTBOX_BACKUP_FILE),
+        b"not sqlite",
+    )
+    .expect("invalid private outbox member");
+    let mut invalid_private_manifest = manifest();
+    invalid_private_manifest.backup_paths.private_store_path = PathBuf::from("../outside.sqlite");
+    write_backup_manifest(
+        &invalid_private_member_source.join(BACKUP_MANIFEST_FILE),
+        &invalid_private_manifest,
+    )
+    .expect("invalid private manifest");
+    assert!(
+        invalid_request_message(inspect_restore_archive(invalid_private_member_source).await)
+            .contains("private store archive path")
     );
 
     let protected_parent = tempdir.path().join("protected-parent");
@@ -1144,6 +1400,11 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .expect("overwrite existing restore");
     assert!(existing_destination.join(EVENT_STORE_BACKUP_FILE).exists());
     assert!(existing_destination.join(OUTBOX_BACKUP_FILE).exists());
+    assert!(
+        existing_destination
+            .join(PRIVATE_STORE_BACKUP_FILE)
+            .exists()
+    );
 
     let mut mismatch_archive = archive.clone();
     mismatch_archive.verification.event_store_events += 1;

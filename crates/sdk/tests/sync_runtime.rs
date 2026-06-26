@@ -73,6 +73,7 @@ struct RecordedProxyRequest {
 enum ProxyResponseMode {
     Accepted,
     Retryable,
+    Terminal,
 }
 
 #[derive(Clone)]
@@ -165,37 +166,61 @@ fn write_proxy_response(
 ) {
     let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
     let event = &body_json["params"]["event"];
-    let (status, terminal, delivery_satisfied, acknowledged_count, retryable_count, relay) =
-        match mode {
-            ProxyResponseMode::Accepted => (
-                "delivery_satisfied",
-                true,
-                true,
-                1,
-                0,
-                serde_json::json!({
-                    "relay_url": "wss://daemon-resolved.example.com",
-                    "source": "daemon_default",
-                    "attempted": true,
-                    "outcome_kind": "accepted",
-                    "message": "accepted"
-                }),
-            ),
-            ProxyResponseMode::Retryable => (
-                "delivery_unsatisfied_retryable",
-                false,
-                false,
-                0,
-                1,
-                serde_json::json!({
-                    "relay_url": "wss://daemon-resolved.example.com",
-                    "source": "daemon_default",
-                    "attempted": false,
-                    "outcome_kind": "connection_failed",
-                    "message": "dns lookup failed"
-                }),
-            ),
-        };
+    let (
+        status,
+        terminal,
+        delivery_satisfied,
+        acknowledged_count,
+        retryable_count,
+        terminal_count,
+        relay,
+    ) = match mode {
+        ProxyResponseMode::Accepted => (
+            "delivery_satisfied",
+            true,
+            true,
+            1,
+            0,
+            0,
+            serde_json::json!({
+                "relay_url": "wss://daemon-resolved.example.com",
+                "source": "daemon_default",
+                "attempted": true,
+                "outcome_kind": "accepted",
+                "message": "accepted"
+            }),
+        ),
+        ProxyResponseMode::Retryable => (
+            "delivery_unsatisfied_retryable",
+            false,
+            false,
+            0,
+            1,
+            0,
+            serde_json::json!({
+                "relay_url": "wss://daemon-resolved.example.com",
+                "source": "daemon_default",
+                "attempted": false,
+                "outcome_kind": "connection_failed",
+                "message": "dns lookup failed"
+            }),
+        ),
+        ProxyResponseMode::Terminal => (
+            "delivery_unsatisfied_terminal",
+            true,
+            false,
+            0,
+            0,
+            1,
+            serde_json::json!({
+                "relay_url": "wss://daemon-resolved.example.com",
+                "source": "daemon_default",
+                "attempted": true,
+                "outcome_kind": "invalid",
+                "message": "event rejected"
+            }),
+        ),
+    };
     let response_body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": body_json["id"],
@@ -214,7 +239,7 @@ fn write_proxy_response(
                 "relay_count": 1,
                 "acknowledged_count": acknowledged_count,
                 "retryable_count": retryable_count,
-                "terminal_count": 0,
+                "terminal_count": terminal_count,
                 "requested_at_ms": 1700000000000i64,
                 "completed_at_ms": 1700000000100i64,
                 "relays": [relay]
@@ -1561,6 +1586,113 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
         second_key
             .starts_with(format!("radroots-sdk-outbox-{}-2-", enqueue.outbox_event_id).as_str())
     );
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
+async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_outbox() {
+    let closed_listener = TcpListener::bind("127.0.0.1:0").expect("bind closed proxy");
+    let closed_endpoint = format!("http://{}/rpc", closed_listener.local_addr().expect("addr"));
+    drop(closed_listener);
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let retryable_sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("retryable-sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .publish_transport(SdkPublishTransport::RadrootsdProxy(
+            RadrootsdProxyConfig::new(closed_endpoint).with_timeout(Duration::from_millis(50)),
+        ))
+        .build()
+        .await
+        .expect("retryable sdk");
+    retryable_sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(LISTING_A_D_TAG, "Proxy Error Coffee"),
+                SdkRelayTargetPolicy::use_publish_transport(),
+            ),
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("enqueue retryable");
+
+    let retryable = retryable_sdk
+        .sync()
+        .push_outbox(
+            PushOutboxRequest::new()
+                .with_limit(1)
+                .with_next_attempt_delay_ms(1),
+        )
+        .await
+        .expect("retryable proxy push");
+    assert_eq!(retryable.retryable_events, 1);
+    assert_eq!(
+        retryable.events[0].final_state,
+        PushOutboxEventState::PublishRetryable
+    );
+    assert!(retryable.events[0].relays.is_empty());
+    let retryable_status = retryable_sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("retryable status");
+    assert_eq!(retryable_status.outbox.retryable_events, 1);
+    assert!(
+        retryable_status
+            .outbox
+            .last_error
+            .as_deref()
+            .is_some_and(|error| error.contains("radrootsd proxy publish failed"))
+    );
+
+    let (terminal_endpoint, terminal_handle) =
+        spawn_publish_proxy_sequence_server(vec![ProxyResponseMode::Terminal]);
+    let terminal_sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("terminal-sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .publish_transport(SdkPublishTransport::RadrootsdProxy(
+            RadrootsdProxyConfig::new(terminal_endpoint),
+        ))
+        .build()
+        .await
+        .expect("terminal sdk");
+    let enqueue = terminal_sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(LISTING_B_D_TAG, "Terminal Coffee"),
+                SdkRelayTargetPolicy::use_publish_transport(),
+            ),
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("enqueue terminal");
+
+    let terminal = terminal_sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("terminal proxy push");
+    assert_eq!(terminal.terminal_events, 1);
+    assert_eq!(terminal.events[0].outbox_event_id, enqueue.outbox_event_id);
+    assert_eq!(
+        terminal.events[0].final_state,
+        PushOutboxEventState::FailedTerminal
+    );
+    assert_eq!(
+        terminal.events[0].relays[0].outcome_kind,
+        PushOutboxRelayOutcomeKind::Invalid
+    );
+    let terminal_status = terminal_sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("terminal status");
+    assert_eq!(terminal_status.outbox.failed_terminal_events, 1);
+    assert_eq!(terminal_status.outbox.ready_signed_events, 0);
+    assert_eq!(terminal_handle.join().expect("terminal requests").len(), 1);
 }
 
 #[test]

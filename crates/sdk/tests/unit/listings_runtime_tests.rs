@@ -332,3 +332,47 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
     assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
 }
+
+#[tokio::test]
+async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = actor();
+    assert!(matches!(
+        sdk.listings()
+            .enqueue_publish(
+                ListingEnqueuePublishRequest::new(
+                    actor.clone(),
+                    listing(LISTING_A_D_TAG, "Configured Prepare Error Greens"),
+                    SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                        .expect("target relays"),
+                )
+                .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
+            )
+            .await,
+        Err(RadrootsSdkError::TimestampOutOfRange { .. })
+    ));
+    let plan = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor.clone(),
+            listing(LISTING_A_D_TAG, "Missing Signer Greens"),
+        ))
+        .expect("plan");
+
+    assert!(matches!(
+        sdk.listings()
+            .enqueue_prepared_publish(
+                &actor,
+                plan,
+                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                    .expect("target relays"),
+                None,
+            )
+            .await,
+        Err(RadrootsSdkError::SignerUnavailable { .. })
+    ));
+}

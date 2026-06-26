@@ -306,3 +306,7 @@ fn private_store_error(error: impl ToString) -> RadrootsSdkError {
         message: error.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/private_store_tests.rs"]
+mod tests;
