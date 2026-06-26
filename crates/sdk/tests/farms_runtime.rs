@@ -8,18 +8,20 @@ use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts},
     farm::RadrootsFarm,
+    ids::RadrootsAddressableCoordinate,
     kinds::{KIND_FARM, KIND_PROFILE},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
-    FarmPrivateLocationUpsertRequest, Geocoder, PushOutboxEventState, PushOutboxRelayOutcomeKind,
-    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass,
-    RadrootsSdkGeoNamesErrorKind, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey,
-    SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    StorageStatusRequest,
+    FarmPrivateLocationInput, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
+    FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
+    GeocoderLocalityQuery, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy, StorageStatusRequest,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
@@ -114,6 +116,18 @@ fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
     }
 }
 
+fn farm_addr(actor: &RadrootsActorContext, d_tag: &str) -> RadrootsAddressableCoordinate {
+    RadrootsAddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey()))
+        .expect("farm addr")
+}
+
+fn stored_location(result: FarmPrivateLocationSetResult) -> FarmPrivateLocationReceipt {
+    let FarmPrivateLocationSetResult::Stored(receipt) = result else {
+        panic!("expected stored location");
+    };
+    receipt
+}
+
 async fn directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     directory_sdk_with_relays(&[RELAY]).await
 }
@@ -182,9 +196,24 @@ async fn fixture_geocoder(tempdir: &tempfile::TempDir) -> Geocoder {
             LEFT JOIN admin1 ON features.country_id = admin1.country_id AND features.admin1_id = admin1.id
             JOIN coordinates ON features.id = coordinates.feature_id;
         INSERT INTO countries (id, name) VALUES ('FX', 'Fixture Country');
+        INSERT INTO countries (id, name) VALUES ('CA', 'Canada');
+        INSERT INTO countries (id, name) VALUES ('US', 'United States');
         INSERT INTO admin1 (country_id, id, name) VALUES ('FX', 1, 'Fixture Region');
+        INSERT INTO admin1 (country_id, id, name) VALUES ('CA', 2, 'British Columbia');
+        INSERT INTO admin1 (country_id, id, name) VALUES ('CA', 3, 'Prairie Region');
+        INSERT INTO admin1 (country_id, id, name) VALUES ('US', 4, 'River Region');
         INSERT INTO features (id, name, country_id, admin1_id) VALUES (1, 'Fixture Town', 'FX', 1);
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (3001, 'Fixture Victoria', 'CA', 2);
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (3002, 'Shared Market', 'CA', 2);
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (3003, 'Shared Market', 'CA', 3);
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (3004, 'Identifier Grove', 'CA', 2);
+        INSERT INTO features (id, name, country_id, admin1_id) VALUES (3005, 'Query Hamlet', 'US', 4);
         INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (1, 12.25, -34.50);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (3001, 48.4359, -123.35155);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (3002, 48.7, -123.2);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (3003, 50.2, -110.4);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (3004, 48.9, -123.4);
+        INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (3005, 39.25, -77.5);
         "#,
     )
     .execute(&pool)
@@ -279,6 +308,7 @@ async fn farm_private_location_upsert_stores_exact_location_and_public_locality_
     );
     assert_eq!(receipt.farm_pubkey, FARMER);
     assert_eq!(receipt.farm_d_tag, FARM_A_D_TAG);
+    assert_eq!(receipt.label, None);
     assert_eq!(receipt.exact_location, SdkExactLocation::new(12.26, -34.51));
     assert_eq!(receipt.public_locality.primary, "Fixture Town");
     assert_eq!(
@@ -332,6 +362,178 @@ async fn farm_private_location_upsert_stores_exact_location_and_public_locality_
         .await
         .expect("upsert with sdk clock");
     assert_eq!(clock_receipt.updated_at_ms, 1_700_000_000_000);
+}
+
+#[tokio::test]
+async fn farm_private_location_set_resolves_forward_inputs_and_preserves_no_mutation_failures() {
+    let (tempdir, sdk) = directory_sdk().await;
+    let geocoder = fixture_geocoder(&tempdir).await;
+    let actor = farmer_actor();
+
+    let exact = stored_location(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::exact(
+                    actor.clone(),
+                    FARM_A_D_TAG,
+                    SdkExactLocation::new(12.26, -34.51),
+                )
+                .with_label("  main pickup point  ")
+                .with_updated_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_200)),
+                &geocoder,
+            )
+            .await
+            .expect("exact set"),
+    );
+    assert_eq!(exact.label.as_deref(), Some("main pickup point"));
+    assert_eq!(exact.geonames_feature_id, Some(1));
+    assert_eq!(exact.updated_at_ms, 1_700_000_200_000);
+
+    let city = stored_location(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::city(
+                    actor.clone(),
+                    FARM_B_D_TAG,
+                    "Fixture Victoria",
+                )
+                .with_updated_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_201)),
+                &geocoder,
+            )
+            .await
+            .expect("city set"),
+    );
+    assert_eq!(city.geonames_feature_id, Some(3001));
+    assert_eq!(city.public_locality.primary, "Fixture Victoria");
+    assert_eq!(
+        city.public_locality.region.as_deref(),
+        Some("British Columbia")
+    );
+    assert_eq!(city.public_locality.country.as_deref(), Some("Canada"));
+    assert_eq!(
+        city.exact_location,
+        SdkExactLocation::new(48.4359, -123.35155)
+    );
+
+    let query = stored_location(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::query(
+                    actor.clone(),
+                    FARM_C_D_TAG,
+                    "Fixture Victoria, BC, CA",
+                ),
+                &geocoder,
+            )
+            .await
+            .expect("query set"),
+    );
+    assert_eq!(query.geonames_feature_id, Some(3001));
+
+    let selected = stored_location(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::geonames_id(actor.clone(), FARM_D_D_TAG, 3004),
+                &geocoder,
+            )
+            .await
+            .expect("id set"),
+    );
+    assert_eq!(selected.geonames_feature_id, Some(3004));
+    assert_eq!(selected.public_locality.primary, "Identifier Grove");
+
+    let narrowed = stored_location(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::new(
+                    actor.clone(),
+                    FARM_E_D_TAG,
+                    FarmPrivateLocationInput::Locality(
+                        GeocoderLocalityQuery::structured("Shared Market")
+                            .with_region("Prairie Region")
+                            .with_country("CA"),
+                    ),
+                ),
+                &geocoder,
+            )
+            .await
+            .expect("structured narrowed set"),
+    );
+    assert_eq!(narrowed.geonames_feature_id, Some(3003));
+    assert_eq!(
+        narrowed.public_locality.region.as_deref(),
+        Some("Prairie Region")
+    );
+
+    let before_failure_status = sdk
+        .storage_status(StorageStatusRequest::new())
+        .await
+        .expect("pre-failure status")
+        .private_store
+        .farm_private_locations;
+
+    let ambiguous = sdk
+        .farms()
+        .set_private_location_with_geocoder(
+            FarmPrivateLocationSetRequest::new(
+                actor.clone(),
+                FARM_F_D_TAG,
+                FarmPrivateLocationInput::Locality(
+                    GeocoderLocalityQuery::structured("Shared Market").with_country("CA"),
+                ),
+            ),
+            &geocoder,
+        )
+        .await
+        .expect("ambiguous set");
+    let FarmPrivateLocationSetResult::Ambiguous(ambiguous) = ambiguous else {
+        panic!("expected ambiguous result");
+    };
+    assert_eq!(
+        ambiguous
+            .candidates
+            .iter()
+            .map(|candidate| candidate.geonames_feature_id)
+            .collect::<Vec<_>>(),
+        vec![3002, 3003]
+    );
+
+    let missing = sdk
+        .farms()
+        .set_private_location_with_geocoder(
+            FarmPrivateLocationSetRequest::query(actor.clone(), FARM_F_D_TAG, "Missing Market, CA"),
+            &geocoder,
+        )
+        .await
+        .expect("missing set");
+    assert!(matches!(missing, FarmPrivateLocationSetResult::NoMatch(_)));
+
+    assert_eq!(
+        sdk.storage_status(StorageStatusRequest::new())
+            .await
+            .expect("post-failure status")
+            .private_store
+            .farm_private_locations,
+        before_failure_status
+    );
+    assert_eq!(
+        sdk.farms()
+            .private_location(&farm_addr(&actor, FARM_F_D_TAG))
+            .await
+            .expect("failure location lookup"),
+        None
+    );
+
+    assert!(matches!(
+        sdk.farms()
+            .set_private_location_with_geocoder(
+                FarmPrivateLocationSetRequest::city(actor, FARM_F_D_TAG, "Fixture Victoria")
+                    .with_label(" "),
+                &geocoder,
+            )
+            .await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
 }
 
 #[tokio::test]

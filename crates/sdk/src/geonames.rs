@@ -7,8 +7,9 @@ pub use radroots_geocoder::{
     GEONAMES_1_0_ASSET, GEONAMES_ASSET_BYTE_SIZE, GEONAMES_ASSET_FILE_NAME, GEONAMES_ASSET_HOST,
     GEONAMES_ASSET_SHA256, GEONAMES_ASSET_URL, GEONAMES_ASSET_VERSION, GeoNamesAssetFetcher,
     GeoNamesAssetSpec, GeoNamesAssetState, GeoNamesAssetStatus, GeoNamesBlockingHttpFetcher,
-    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
-    GeocoderReverseResult,
+    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderLocalityCandidate,
+    GeocoderLocalityInput, GeocoderLocalityLookup, GeocoderLocalityQuery, GeocoderPoint,
+    GeocoderReverseOptions, GeocoderReverseResult, GeocoderStructuredLocalityQuery,
 };
 use radroots_geocoder::{
     ensure_default_geonames_asset_in_cache_root, ensure_geonames_asset_in_cache_root_with_fetcher,

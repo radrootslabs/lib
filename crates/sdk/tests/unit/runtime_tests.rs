@@ -50,6 +50,13 @@ fn sqlite_status() -> SdkSqliteStoreStatus {
     }
 }
 
+fn private_sqlite_status() -> SdkSqliteStoreStatus {
+    SdkSqliteStoreStatus {
+        schema_version: 2,
+        ..sqlite_status()
+    }
+}
+
 fn storage_status() -> StorageStatusReceipt {
     StorageStatusReceipt {
         storage: SdkStorageKind::Memory,
@@ -75,7 +82,7 @@ fn storage_status() -> StorageStatusReceipt {
             last_error: None,
         },
         private_store: SdkPrivateStoreStorageStatus {
-            store: sqlite_status(),
+            store: private_sqlite_status(),
             farm_private_locations: 0,
         },
     }
@@ -144,6 +151,7 @@ fn private_farm_location_record() -> crate::private_store::SdkPrivateFarmLocatio
         .expect("farm addr"),
         farm_pubkey: "a".repeat(64),
         farm_d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        label: None,
         latitude: 12.26,
         longitude: -34.51,
         locality_primary: "Fixture Town".to_owned(),

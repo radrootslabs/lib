@@ -192,7 +192,7 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
     assert_eq!(status.paths, None);
     assert_eq!(status.event_store.store.schema_version, 1);
     assert_eq!(status.outbox.store.schema_version, 1);
-    assert_eq!(status.private_store.store.schema_version, 1);
+    assert_eq!(status.private_store.store.schema_version, 2);
     assert!(status.event_store.store.foreign_keys_enabled);
     assert!(status.outbox.store.foreign_keys_enabled);
     assert!(status.private_store.store.foreign_keys_enabled);
@@ -659,6 +659,10 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         integrity_ok: true,
         integrity_result: "ok".to_owned(),
     };
+    let private_store = SdkSqliteStoreStatus {
+        schema_version: 2,
+        ..store.clone()
+    };
     assert_eq!(
         serde_json::to_value(StorageStatusRequest::new()).expect("status request"),
         serde_json::json!({})
@@ -688,7 +692,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 last_error: Some("relay publish incomplete".to_owned()),
             },
             private_store: SdkPrivateStoreStorageStatus {
-                store,
+                store: private_store,
                 farm_private_locations: 4,
             },
         })
@@ -732,7 +736,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
             },
             "private_store": {
                 "store": {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,

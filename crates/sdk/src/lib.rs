@@ -70,16 +70,19 @@ pub use crate::error::{
 pub use crate::farms_runtime::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmEnqueueReceipt,
     FarmPreparePublishRequest, FarmPrivateLocationClearReceipt, FarmPrivateLocationClearRequest,
-    FarmPrivateLocationReceipt, FarmPrivateLocationUpsertRequest, FarmPublishPlan,
-    SdkExactLocation, SdkPublicLocality,
+    FarmPrivateLocationInput, FarmPrivateLocationLookupCandidate, FarmPrivateLocationLookupReceipt,
+    FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest, FarmPrivateLocationSetResult,
+    FarmPrivateLocationUpsertRequest, FarmPublishPlan, SdkExactLocation, SdkPublicLocality,
 };
 #[cfg(feature = "runtime")]
 pub use crate::geonames::{
     GEONAMES_1_0_ASSET, GEONAMES_ASSET_BYTE_SIZE, GEONAMES_ASSET_FILE_NAME, GEONAMES_ASSET_HOST,
     GEONAMES_ASSET_SHA256, GEONAMES_ASSET_URL, GEONAMES_ASSET_VERSION, GeoNamesAssetFetcher,
     GeoNamesAssetSpec, GeoNamesAssetState, GeoNamesAssetStatus, GeoNamesBlockingHttpFetcher,
-    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
-    GeocoderReverseResult, RadrootsGeoNamesConfig,
+    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderLocalityCandidate,
+    GeocoderLocalityInput, GeocoderLocalityLookup, GeocoderLocalityQuery, GeocoderPoint,
+    GeocoderReverseOptions, GeocoderReverseResult, GeocoderStructuredLocalityQuery,
+    RadrootsGeoNamesConfig,
 };
 #[cfg(feature = "runtime")]
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};

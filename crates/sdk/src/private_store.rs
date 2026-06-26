@@ -7,13 +7,14 @@ use sqlx::{Row, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
-pub(crate) const SDK_PRIVATE_STORE_SCHEMA_VERSION: i64 = 1;
+pub(crate) const SDK_PRIVATE_STORE_SCHEMA_VERSION: i64 = 2;
 
 const PRIVATE_STORE_MIGRATION_UP: &str = r#"
 CREATE TABLE IF NOT EXISTS sdk_private_farm_location (
   farm_addr TEXT PRIMARY KEY NOT NULL,
   farm_pubkey TEXT NOT NULL,
   farm_d_tag TEXT NOT NULL,
+  label TEXT,
   latitude REAL NOT NULL CHECK(latitude >= -90.0 AND latitude <= 90.0),
   longitude REAL NOT NULL CHECK(longitude >= -180.0 AND longitude <= 180.0),
   locality_primary TEXT NOT NULL,
@@ -39,6 +40,7 @@ pub(crate) struct SdkPrivateFarmLocationRecord {
     pub farm_addr: RadrootsAddressableCoordinate,
     pub farm_pubkey: String,
     pub farm_d_tag: String,
+    pub label: Option<String>,
     pub latitude: f64,
     pub longitude: f64,
     pub locality_primary: String,
@@ -121,6 +123,7 @@ impl SdkPrivateStore {
               farm_addr,
               farm_pubkey,
               farm_d_tag,
+              label,
               latitude,
               longitude,
               locality_primary,
@@ -131,10 +134,11 @@ impl SdkPrivateStore {
               geonames_feature_id,
               geonames_country_id,
               updated_at_ms
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(farm_addr) DO UPDATE SET
               farm_pubkey = excluded.farm_pubkey,
               farm_d_tag = excluded.farm_d_tag,
+              label = excluded.label,
               latitude = excluded.latitude,
               longitude = excluded.longitude,
               locality_primary = excluded.locality_primary,
@@ -150,6 +154,7 @@ impl SdkPrivateStore {
         .bind(record.farm_addr.as_str())
         .bind(record.farm_pubkey.as_str())
         .bind(record.farm_d_tag.as_str())
+        .bind(record.label.as_deref())
         .bind(record.latitude)
         .bind(record.longitude)
         .bind(record.locality_primary.as_str())
@@ -176,6 +181,7 @@ impl SdkPrivateStore {
               farm_addr,
               farm_pubkey,
               farm_d_tag,
+              label,
               latitude,
               longitude,
               locality_primary,
@@ -241,8 +247,29 @@ async fn apply_up(pool: &SqlitePool) -> Result<(), RadrootsSdkError> {
     sqlx::raw_sql(PRIVATE_STORE_MIGRATION_UP)
         .execute(pool)
         .await
-        .map(|_| ())
-        .map_err(private_store_error)
+        .map_err(private_store_error)?;
+    ensure_farm_location_label_column(pool).await
+}
+
+async fn ensure_farm_location_label_column(pool: &SqlitePool) -> Result<(), RadrootsSdkError> {
+    let rows = sqlx::query("PRAGMA table_info(sdk_private_farm_location)")
+        .fetch_all(pool)
+        .await
+        .map_err(private_store_error)?;
+    let has_label = rows
+        .iter()
+        .map(|row| row.try_get::<String, _>("name"))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(private_store_error)?
+        .iter()
+        .any(|name| name == "label");
+    if !has_label {
+        sqlx::query("ALTER TABLE sdk_private_farm_location ADD COLUMN label TEXT")
+            .execute(pool)
+            .await
+            .map_err(private_store_error)?;
+    }
+    Ok(())
 }
 
 async fn query_i64(pool: &SqlitePool, sql: &str) -> Result<i64, RadrootsSdkError> {
@@ -269,6 +296,7 @@ fn private_farm_location_from_row(
         farm_addr,
         farm_pubkey: row.try_get("farm_pubkey").map_err(private_store_error)?,
         farm_d_tag: row.try_get("farm_d_tag").map_err(private_store_error)?,
+        label: row.try_get("label").map_err(private_store_error)?,
         latitude: row.try_get("latitude").map_err(private_store_error)?,
         longitude: row.try_get("longitude").map_err(private_store_error)?,
         locality_primary: row
@@ -313,6 +341,15 @@ fn validate_location_record(record: &SdkPrivateFarmLocationRecord) -> Result<(),
     if record.geohash5.len() != 5 {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "farm public locality geohash must be precision 5".to_owned(),
+        });
+    }
+    if record
+        .label
+        .as_deref()
+        .is_some_and(|label| label.trim().is_empty())
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "farm private location label must not be empty".to_owned(),
         });
     }
     Ok(())

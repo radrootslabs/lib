@@ -1,5 +1,6 @@
 use super::*;
 use radroots_events::ids::RadrootsAddressableCoordinate;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 fn farm_addr() -> RadrootsAddressableCoordinate {
     RadrootsAddressableCoordinate::parse(format!(
@@ -27,6 +28,7 @@ async fn private_farm_location_row_decode_reports_each_missing_column() {
             "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
         ),
         ("farm_d_tag", "'AAAAAAAAAAAAAAAAAAAAAA'"),
+        ("label", "'Main pickup point'"),
         ("latitude", "12.26"),
         ("longitude", "-34.51"),
         ("locality_primary", "'Fixture Town'"),
@@ -66,4 +68,73 @@ async fn private_store_file_open_rejects_directory_paths() {
         SdkPrivateStore::open_file(tempdir.path()).await,
         Err(RadrootsSdkError::PrivateStore { .. })
     ));
+}
+
+#[tokio::test]
+async fn private_store_file_open_materializes_label_column_for_existing_stores() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let path = tempdir.path().join("private.sqlite");
+    let options = SqliteConnectOptions::new()
+        .filename(&path)
+        .create_if_missing(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("old private store pool");
+    sqlx::raw_sql(
+        r#"
+        CREATE TABLE sdk_private_farm_location (
+          farm_addr TEXT PRIMARY KEY NOT NULL,
+          farm_pubkey TEXT NOT NULL,
+          farm_d_tag TEXT NOT NULL,
+          latitude REAL NOT NULL CHECK(latitude >= -90.0 AND latitude <= 90.0),
+          longitude REAL NOT NULL CHECK(longitude >= -180.0 AND longitude <= 180.0),
+          locality_primary TEXT NOT NULL,
+          locality_city TEXT,
+          locality_region TEXT,
+          locality_country TEXT,
+          geohash5 TEXT NOT NULL CHECK(length(geohash5) = 5),
+          geonames_feature_id INTEGER,
+          geonames_country_id TEXT,
+          updated_at_ms INTEGER NOT NULL
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("old private store schema");
+    pool.close().await;
+
+    let store = SdkPrivateStore::open_file(&path).await.expect("open store");
+    let record = SdkPrivateFarmLocationRecord {
+        farm_addr: farm_addr(),
+        farm_pubkey: "a".repeat(64),
+        farm_d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        label: Some("Main pickup point".to_owned()),
+        latitude: 12.26,
+        longitude: -34.51,
+        locality_primary: "Fixture Town".to_owned(),
+        locality_city: Some("Fixture Town".to_owned()),
+        locality_region: Some("Fixture Region".to_owned()),
+        locality_country: Some("Fixture Country".to_owned()),
+        geohash5: "e4pmw".to_owned(),
+        geonames_feature_id: Some(1),
+        geonames_country_id: Some("FX".to_owned()),
+        updated_at_ms: 1_700_000_123_000,
+    };
+    store
+        .upsert_farm_location(&record)
+        .await
+        .expect("upsert labeled location");
+    assert_eq!(
+        store
+            .farm_location(&record.farm_addr)
+            .await
+            .expect("read labeled location")
+            .expect("stored location")
+            .label
+            .as_deref(),
+        Some("Main pickup point")
+    );
 }
