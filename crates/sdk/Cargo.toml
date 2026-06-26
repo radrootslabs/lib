@@ -58,8 +58,10 @@ runtime = [
   "dep:hex",
   "dep:radroots_authority",
   "dep:radroots_event_store",
+  "dep:radroots_geocoder",
   "dep:radroots_outbox",
   "dep:radroots_relay_transport",
+  "dep:radroots_runtime_paths",
   "dep:sha2",
   "dep:sqlx",
   "dep:uuid",
@@ -104,9 +106,11 @@ radroots_authority = { workspace = true, optional = true, default-features = fal
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
+radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
 radroots_publish_proxy_protocol = { workspace = true, optional = true, default-features = false }
 radroots_relay_transport = { workspace = true, optional = true, default-features = false }
+radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }

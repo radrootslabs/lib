@@ -74,7 +74,10 @@ imported_ts_type!(
     "RadrootsListingDeliveryMethod"
 );
 imported_ts_type!(RadrootsListingImageImport, "RadrootsListingImage");
-imported_ts_type!(RadrootsListingLocationImport, "RadrootsListingLocation");
+imported_ts_type!(
+    RadrootsListingPublicLocationImport,
+    "RadrootsListingPublicLocation"
+);
 imported_ts_type!(RadrootsListingProductImport, "RadrootsListingProduct");
 imported_ts_type!(RadrootsNostrEventPtrImport, "RadrootsNostrEventPtr");
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
@@ -207,7 +210,7 @@ pub struct RadrootsTradeListingProjection {
     pub inventory_available: Option<RadrootsCoreDecimalImport>,
     pub availability: Option<RadrootsListingAvailabilityImport>,
     pub delivery_method: Option<RadrootsListingDeliveryMethodImport>,
-    pub location: Option<RadrootsListingLocationImport>,
+    pub location: Option<RadrootsListingPublicLocationImport>,
     pub images: Option<Vec<RadrootsListingImageImport>>,
     pub order_count: u32,
     pub open_order_count: u32,

@@ -19,6 +19,8 @@ mod farm;
 #[cfg(feature = "runtime")]
 mod farms_runtime;
 #[cfg(feature = "runtime")]
+mod geonames;
+#[cfg(feature = "runtime")]
 mod idempotency;
 #[cfg(feature = "identity-models")]
 mod identity;
@@ -52,6 +54,23 @@ pub use crate::error::{
 pub use crate::farms_runtime::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmEnqueueReceipt,
     FarmPreparePublishRequest, FarmPublishPlan,
+};
+#[cfg(feature = "runtime")]
+pub use crate::geonames::{
+    GEONAMES_1_0_ASSET, GEONAMES_ASSET_BYTE_SIZE, GEONAMES_ASSET_FILE_NAME, GEONAMES_ASSET_HOST,
+    GEONAMES_ASSET_SHA256, GEONAMES_ASSET_URL, GEONAMES_ASSET_VERSION, GeoNamesAssetFetcher,
+    GeoNamesAssetSpec, GeoNamesAssetState, GeoNamesAssetStatus, GeoNamesBlockingHttpFetcher,
+    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
+    GeocoderReverseResult, radroots_sdk_ensure_geonames_database_in_cache_root,
+    radroots_sdk_ensure_geonames_database_in_cache_root_with_fetcher,
+    radroots_sdk_ensure_geonames_database_in_cache_root_with_spec_and_fetcher,
+    radroots_sdk_geonames_database_path_from_cache_root,
+    radroots_sdk_geonames_database_path_from_cache_root_for_version,
+    radroots_sdk_geonames_root_from_cache_root,
+    radroots_sdk_inspect_geonames_database_in_cache_root,
+    radroots_sdk_inspect_geonames_database_path_with_spec,
+    radroots_sdk_open_verified_geonames_database,
+    radroots_sdk_open_verified_geonames_database_with_spec,
 };
 #[cfg(feature = "runtime")]
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};

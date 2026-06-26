@@ -10,7 +10,7 @@ use radroots_events::kinds::{
 };
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
     RadrootsListingStatus,
 };
 use radroots_events::order::{
@@ -103,14 +103,12 @@ fn sample_listing() -> RadrootsListing {
             status: RadrootsListingStatus::Active,
         }),
         delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-        location: Some(RadrootsListingLocation {
+        location: Some(RadrootsListingPublicLocation {
             primary: "North Farm".into(),
             city: None,
             region: None,
             country: None,
-            lat: None,
-            lng: None,
-            geohash: None,
+            geohash: "9q8yy".into(),
         }),
         images: None,
     }
