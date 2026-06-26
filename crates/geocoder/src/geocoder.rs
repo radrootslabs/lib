@@ -1,8 +1,9 @@
+use crate::asset::{GeoNamesAssetSpec, validate_geonames_asset_file};
 use crate::error::GeocoderError;
 use crate::model::{
     GeocoderCountryListResult, GeocoderPoint, GeocoderReverseOptions, GeocoderReverseResult,
 };
-use rusqlite::{Connection, named_params};
+use rusqlite::{Connection, OpenFlags, named_params};
 use std::io::Write;
 use std::path::Path;
 
@@ -13,7 +14,7 @@ pub struct Geocoder {
 
 impl Geocoder {
     pub fn open_path<P: AsRef<Path>>(path: P) -> Result<Self, GeocoderError> {
-        let conn = Connection::open(path)?;
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(Self {
             conn,
             _temp_path: None,
@@ -25,11 +26,19 @@ impl Geocoder {
         temp.as_file_mut().write_all(bytes)?;
         let temp_path = temp.into_temp_path();
         let path: &Path = temp_path.as_ref();
-        let conn = Connection::open(path)?;
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(Self {
             conn,
             _temp_path: Some(temp_path),
         })
+    }
+
+    pub fn open_verified_geonames_asset<P: AsRef<Path>>(
+        path: P,
+        spec: &GeoNamesAssetSpec,
+    ) -> Result<Self, GeocoderError> {
+        validate_geonames_asset_file(path.as_ref(), spec)?;
+        Self::open_path(path)
     }
 
     pub fn reverse(

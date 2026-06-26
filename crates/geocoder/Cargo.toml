@@ -12,10 +12,15 @@ homepage.workspace = true
 readme = "README"
 
 [dependencies]
+hex = { workspace = true }
+radroots_runtime_paths = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "rustls-tls"] }
 rusqlite = { workspace = true, features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+url = { workspace = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

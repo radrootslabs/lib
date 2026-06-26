@@ -8,6 +8,9 @@ use crate::{
 pub const DEFAULT_CONFIG_FILE_NAME: &str = "config.toml";
 pub const DEFAULT_SERVICE_IDENTITY_FILE_NAME: &str = "identity.secret.json";
 pub const DEFAULT_SHARED_IDENTITY_FILE_NAME: &str = "default.json";
+pub const DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND: &str = "shared";
+pub const DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE: &str = "geonames";
+pub const DEFAULT_SHARED_GEONAMES_NAMESPACE: &str = "shared/geonames";
 pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND: &str = "shared";
 pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE: &str = "local_events";
 pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE: &str = "shared/local_events";
@@ -71,6 +74,28 @@ pub fn default_shared_local_events_database_path_from_data_root(
         .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
 }
 
+#[must_use]
+pub fn default_shared_geonames_root_from_cache_root(cache_root: impl AsRef<Path>) -> PathBuf {
+    cache_root
+        .as_ref()
+        .join(DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND)
+        .join(DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE)
+}
+
+#[must_use]
+pub fn default_shared_geonames_database_file_name(version: &str) -> String {
+    format!("geonames-{version}.db")
+}
+
+#[must_use]
+pub fn default_shared_geonames_database_path_from_cache_root(
+    cache_root: impl AsRef<Path>,
+    version: &str,
+) -> PathBuf {
+    default_shared_geonames_root_from_cache_root(cache_root)
+        .join(default_shared_geonames_database_file_name(version))
+}
+
 pub fn default_shared_local_events_root_from_shared_accounts_data_root(
     shared_accounts_data_root: impl AsRef<Path>,
 ) -> Result<PathBuf, RadrootsRuntimePathsError> {
@@ -100,9 +125,12 @@ mod tests {
     };
 
     use super::{
-        DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_IDENTITY_FILE_NAME,
-        DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE,
-        default_namespaced_bootstrap_paths, default_shared_identity_path,
+        DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_GEONAMES_NAMESPACE,
+        DEFAULT_SHARED_IDENTITY_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME,
+        DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE, default_namespaced_bootstrap_paths,
+        default_shared_geonames_database_file_name,
+        default_shared_geonames_database_path_from_cache_root,
+        default_shared_geonames_root_from_cache_root, default_shared_identity_path,
         default_shared_local_events_database_path_from_data_root,
         default_shared_local_events_database_path_from_shared_accounts_data_root,
         default_shared_local_events_root_from_data_root,
@@ -194,6 +222,26 @@ mod tests {
             data_root
                 .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE)
                 .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn shared_geonames_paths_use_canonical_shared_cache_namespace() {
+        let cache_root = PathBuf::from("/repo/infra/local/runtime/radroots/cache");
+
+        assert_eq!(
+            default_shared_geonames_root_from_cache_root(&cache_root),
+            cache_root.join(DEFAULT_SHARED_GEONAMES_NAMESPACE)
+        );
+        assert_eq!(
+            default_shared_geonames_database_file_name("1.0"),
+            "geonames-1.0.db"
+        );
+        assert_eq!(
+            default_shared_geonames_database_path_from_cache_root(&cache_root, "1.0"),
+            cache_root
+                .join(DEFAULT_SHARED_GEONAMES_NAMESPACE)
+                .join("geonames-1.0.db")
         );
     }
 

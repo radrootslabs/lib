@@ -10,10 +10,14 @@ pub mod service;
 
 pub use conventions::{
     DEFAULT_CONFIG_FILE_NAME, DEFAULT_SERVICE_IDENTITY_FILE_NAME,
-    DEFAULT_SHARED_IDENTITY_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME,
-    DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE, DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND,
-    DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE, RadrootsBootstrapPaths,
-    default_namespaced_bootstrap_paths, default_shared_identity_path,
+    DEFAULT_SHARED_GEONAMES_NAMESPACE, DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND,
+    DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE, DEFAULT_SHARED_IDENTITY_FILE_NAME,
+    DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE,
+    DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND, DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE,
+    RadrootsBootstrapPaths, default_namespaced_bootstrap_paths,
+    default_shared_geonames_database_file_name,
+    default_shared_geonames_database_path_from_cache_root,
+    default_shared_geonames_root_from_cache_root, default_shared_identity_path,
     default_shared_local_events_database_path_from_data_root,
     default_shared_local_events_database_path_from_shared_accounts_data_root,
     default_shared_local_events_root_from_data_root,
