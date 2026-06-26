@@ -80,7 +80,7 @@ impl RadrootsEventStore {
         &self,
     ) -> Result<RadrootsEventStoreStatusSummary, RadrootsEventStoreError> {
         let row = sqlx::query(
-            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM nostr_event",
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM nostr_events",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -132,7 +132,7 @@ impl RadrootsEventStore {
                     projection_eligible = head.projection_eligible;
                     head_decision = head.decision;
                     sqlx::query(
-                        "UPDATE nostr_event SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
+                        "UPDATE nostr_events SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
                     )
                     .bind(bool_i64(projection_eligible))
                     .bind(ingest.observed_at_ms)
@@ -173,7 +173,7 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Option<RadrootsStoredEvent>, RadrootsEventStoreError> {
         let row = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event WHERE event_id = ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events WHERE event_id = ?",
         )
         .bind(event_id)
         .fetch_optional(&self.pool)
@@ -186,7 +186,7 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Vec<RadrootsStoredEventTag>, RadrootsEventStoreError> {
         let rows = sqlx::query(
-            "SELECT event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed FROM nostr_event_tag WHERE event_id = ? ORDER BY tag_index",
+            "SELECT event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed FROM nostr_event_tags WHERE event_id = ? ORDER BY tag_index",
         )
         .bind(event_id)
         .fetch_all(&self.pool)
@@ -279,7 +279,7 @@ impl RadrootsEventStore {
             .map(|cursor| cursor.last_event_seq)
             .unwrap_or(0);
         let rows = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event WHERE projection_eligible = 1 AND seq > ? ORDER BY seq ASC LIMIT ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events WHERE projection_eligible = 1 AND seq > ? ORDER BY seq ASC LIMIT ?",
         )
         .bind(last_event_seq)
         .bind(i64::from(limit))
@@ -296,7 +296,7 @@ impl RadrootsEventStore {
     ) -> Result<Vec<RadrootsStoredEvent>, RadrootsEventStoreError> {
         validate_tag_query(tag_name, limit)?;
         let rows = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event AS event WHERE projection_eligible = 1 AND EXISTS (SELECT 1 FROM nostr_event_tag AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events AS event WHERE projection_eligible = 1 AND EXISTS (SELECT 1 FROM nostr_event_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?",
         )
         .bind(tag_name)
         .bind(tag_value)
@@ -321,7 +321,7 @@ impl RadrootsEventStore {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM nostr_event_tag AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM nostr_event_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
         );
         let mut query = sqlx::query(sql.as_str());
         for contract_id in contract_ids {
@@ -474,7 +474,7 @@ async fn insert_raw_event(
         .map(|contract| StoredEventClass::from_event_class(contract.class).as_str());
     let projection_eligible = classification.base_projection_eligible(verification_status);
     let result = sqlx::query(
-        "INSERT OR IGNORE INTO nostr_event(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(event.id.as_str())
     .bind(event.author.as_str())
@@ -503,7 +503,7 @@ async fn event_seq(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
 ) -> Result<i64, RadrootsEventStoreError> {
-    let row = sqlx::query("SELECT seq FROM nostr_event WHERE event_id = ?")
+    let row = sqlx::query("SELECT seq FROM nostr_events WHERE event_id = ?")
         .bind(event_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -530,7 +530,7 @@ async fn insert_tags(
         let contract_value_type = tag_contract.map(|tag| tag_value_type_name(tag.value_type));
         let relay_indexed = tag_contract.map(|tag| tag.relay_indexed).unwrap_or(false);
         sqlx::query(
-            "INSERT INTO nostr_event_tag(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO nostr_event_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(event.id.as_str())
         .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
@@ -1021,12 +1021,12 @@ mod tests {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store.migrate_down().await.expect("down");
 
-        let missing = sqlx::query("SELECT COUNT(*) FROM nostr_event")
+        let missing = sqlx::query("SELECT COUNT(*) FROM nostr_events")
             .fetch_one(store.pool())
             .await
             .err()
             .expect("table should be removed");
-        assert!(missing.to_string().contains("nostr_event"));
+        assert!(missing.to_string().contains("nostr_events"));
     }
 
     #[tokio::test]

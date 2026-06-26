@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS nostr_event (
+CREATE TABLE IF NOT EXISTS nostr_events (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT NOT NULL UNIQUE,
   pubkey TEXT NOT NULL,
@@ -17,14 +17,14 @@ CREATE TABLE IF NOT EXISTS nostr_event (
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS nostr_event_kind_created_idx ON nostr_event(kind, created_at, event_id);
-CREATE INDEX IF NOT EXISTS nostr_event_contract_idx ON nostr_event(contract_id, seq);
-CREATE INDEX IF NOT EXISTS nostr_event_projection_idx ON nostr_event(projection_eligible, seq);
+CREATE INDEX IF NOT EXISTS nostr_event_kind_created_idx ON nostr_events(kind, created_at, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_contract_idx ON nostr_events(contract_id, seq);
+CREATE INDEX IF NOT EXISTS nostr_event_projection_idx ON nostr_events(projection_eligible, seq);
 CREATE INDEX IF NOT EXISTS nostr_event_verification_contract_idx
-ON nostr_event(verification_status, contract_status, seq);
+ON nostr_events(verification_status, contract_status, seq);
 
-CREATE TABLE IF NOT EXISTS nostr_event_tag (
-  event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS nostr_event_tags (
+  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
   tag_index INTEGER NOT NULL,
   tag_name TEXT NOT NULL,
   tag_value TEXT,
@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS nostr_event_tag (
   PRIMARY KEY (event_id, tag_index)
 );
 
-CREATE INDEX IF NOT EXISTS nostr_event_tag_lookup_idx ON nostr_event_tag(tag_name, tag_value, event_id);
-CREATE INDEX IF NOT EXISTS nostr_event_tag_relay_idx ON nostr_event_tag(relay_indexed, tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_tag_lookup_idx ON nostr_event_tags(tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_tag_relay_idx ON nostr_event_tags(relay_indexed, tag_name, tag_value, event_id);
 
 CREATE TABLE IF NOT EXISTS relay_event_seen (
-  event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
   relay_url TEXT NOT NULL,
   observation_type TEXT NOT NULL,
   first_seen_at_ms INTEGER NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS nostr_event_head (
   kind INTEGER NOT NULL,
   pubkey TEXT NOT NULL,
   d_tag TEXT,
-  event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
   CHECK (

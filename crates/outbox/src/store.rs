@@ -160,7 +160,7 @@ impl RadrootsOutbox {
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operation(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey.as_str())
@@ -258,7 +258,7 @@ impl RadrootsOutbox {
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operation(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey.as_str())
@@ -318,7 +318,7 @@ impl RadrootsOutbox {
         operation_id: i64,
     ) -> Result<Option<RadrootsOutboxOperationRecord>, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT operation_id, operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operation WHERE operation_id = ?",
+            "SELECT operation_id, operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operations WHERE operation_id = ?",
         )
         .bind(operation_id)
         .fetch_optional(&self.pool)
@@ -755,7 +755,7 @@ impl RadrootsOutbox {
 
         if let Some(operation_status) = operation_status {
             sqlx::query(
-                "UPDATE outbox_operation SET status = ?, updated_at_ms = ? WHERE operation_id = ?",
+                "UPDATE outbox_operations SET status = ?, updated_at_ms = ? WHERE operation_id = ?",
             )
             .bind(operation_status.as_str())
             .bind(now_ms)
@@ -875,7 +875,7 @@ impl RadrootsOutbox {
         }
 
         sqlx::query(
-            "UPDATE outbox_operation SET status = ?, updated_at_ms = ? WHERE operation_id = ?",
+            "UPDATE outbox_operations SET status = ?, updated_at_ms = ? WHERE operation_id = ?",
         )
         .bind(operation_status.as_str())
         .bind(now_ms)
@@ -976,7 +976,7 @@ async fn existing_idempotent_operation(
     idempotency_key: &str,
 ) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT o.operation_id, o.idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operation o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
+        "SELECT o.operation_id, o.idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
     )
     .bind(operation_kind)
     .bind(expected_pubkey)
@@ -1608,7 +1608,7 @@ mod tests {
             .expect_err("empty relays");
 
         assert!(matches!(err, RadrootsOutboxError::EmptyTargetRelays));
-        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
     }
@@ -1634,7 +1634,7 @@ mod tests {
             .expect_err("empty relays");
 
         assert!(matches!(err, RadrootsOutboxError::EmptyTargetRelays));
-        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
     }
@@ -1936,7 +1936,7 @@ mod tests {
         assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Existing);
         assert_eq!(first.operation_id, second.operation_id);
         assert_eq!(first.outbox_event_id, second.outbox_event_id);
-        assert_eq!(table_count(&outbox, "outbox_operation").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
         assert_eq!(table_count(&outbox, "outbox_event").await, 1);
 
         let changed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "changed");
@@ -1972,7 +1972,7 @@ mod tests {
             error,
             RadrootsOutboxError::SignedEventDraftMismatch(_)
         ));
-        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
     }
 
@@ -1993,7 +1993,7 @@ mod tests {
             error,
             RadrootsOutboxError::SignedEventDraftMismatch(_)
         ));
-        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
     }
 

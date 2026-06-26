@@ -28,7 +28,7 @@ impl RadrootsOutboxOperationStatus {
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
-                field: "outbox_operation.status",
+                field: "outbox_operations.status",
                 value: value.to_owned(),
             }),
         }

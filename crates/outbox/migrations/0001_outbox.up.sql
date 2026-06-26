@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS outbox_operation (
+CREATE TABLE IF NOT EXISTS outbox_operations (
   operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
   operation_kind TEXT NOT NULL,
   expected_pubkey TEXT NOT NULL,
@@ -10,15 +10,15 @@ CREATE TABLE IF NOT EXISTS outbox_operation (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS outbox_operation_idempotency_idx
-ON outbox_operation(operation_kind, expected_pubkey, idempotency_key)
+ON outbox_operations(operation_kind, expected_pubkey, idempotency_key)
 WHERE idempotency_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS outbox_operation_status_idx
-ON outbox_operation(status, created_at_ms, operation_id);
+ON outbox_operations(status, created_at_ms, operation_id);
 
 CREATE TABLE IF NOT EXISTS outbox_event (
   outbox_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  operation_id INTEGER NOT NULL REFERENCES outbox_operation(operation_id) ON DELETE CASCADE,
+  operation_id INTEGER NOT NULL REFERENCES outbox_operations(operation_id) ON DELETE CASCADE,
   event_id TEXT NOT NULL,
   expected_pubkey TEXT NOT NULL,
   draft_json TEXT NOT NULL,
