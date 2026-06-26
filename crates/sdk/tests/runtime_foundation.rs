@@ -9,7 +9,8 @@ use radroots_sdk::{
     SdkRelayTargetSet, SdkRelayUrlPolicy, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind,
     StorageStatusReceipt, StorageStatusRequest,
 };
-use std::path::PathBuf;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::path::{Path, PathBuf};
 
 #[tokio::test]
 async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
@@ -150,6 +151,14 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     );
     assert!(paths.event_store_path.exists());
     assert!(paths.outbox_path.exists());
+    let event_tables = sqlite_table_names(&paths.event_store_path).await;
+    assert!(event_tables.iter().any(|name| name == "nostr_events"));
+    assert!(event_tables.iter().any(|name| name == "nostr_event_tags"));
+    assert!(!event_tables.iter().any(|name| name == "nostr_event"));
+    assert!(!event_tables.iter().any(|name| name == "nostr_event_tag"));
+    let outbox_tables = sqlite_table_names(&paths.outbox_path).await;
+    assert!(outbox_tables.iter().any(|name| name == "outbox_operations"));
+    assert!(!outbox_tables.iter().any(|name| name == "outbox_operation"));
 }
 
 #[tokio::test]
@@ -775,6 +784,23 @@ fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
     assert!(!message.contains("secret-idempotency-key"));
     assert!(!message.contains(&"b".repeat(64)));
     assert!(!message.contains(&"c".repeat(64)));
+}
+
+async fn sqlite_table_names(path: &Path) -> Vec<String> {
+    let options = SqliteConnectOptions::new().filename(path).read_only(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("open sqlite for table inspection");
+    let names = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("table names");
+    pool.close().await;
+    names
 }
 
 #[test]

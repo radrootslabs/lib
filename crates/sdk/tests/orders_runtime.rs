@@ -3570,7 +3570,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 3_000))
         .await
         .expect("ingest");
-    sqlx::query("UPDATE nostr_event SET tags_json = '[' WHERE event_id = ?")
+    sqlx::query("UPDATE nostr_events SET tags_json = '[' WHERE event_id = ?")
         .bind(request_event.id.as_str())
         .execute(store.pool())
         .await
