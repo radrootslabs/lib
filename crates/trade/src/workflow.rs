@@ -19,6 +19,7 @@ use crate::validation_receipt::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RadrootsTradeWorkflowState {
     Missing,
     Requested,
