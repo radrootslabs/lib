@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    DvmClient, FarmsClient, ListingsClient, MarketClient, RadrootsSdkError, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, SyncClient, TradesClient,
+    DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, RadrootsGeoNamesConfig,
+    RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy, SyncClient, TradesClient,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 use crate::{
@@ -392,6 +392,7 @@ pub struct RestoreReceipt {
 #[derive(Clone)]
 pub struct RadrootsClientBuilder {
     storage: RadrootsSdkStorageConfig,
+    geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
     relay_url_policy: SdkRelayUrlPolicy,
@@ -405,6 +406,7 @@ impl Default for RadrootsClientBuilder {
     fn default() -> Self {
         Self {
             storage: RadrootsSdkStorageConfig::Memory,
+            geonames: None,
             clock: RadrootsSdkClock::System,
             relay_urls: Vec::new(),
             relay_url_policy: SdkRelayUrlPolicy::Public,
@@ -424,6 +426,16 @@ impl RadrootsClientBuilder {
 
     pub fn directory_storage(mut self, path: impl Into<PathBuf>) -> Self {
         self.storage = RadrootsSdkStorageConfig::Directory(path.into());
+        self
+    }
+
+    pub fn geonames_config(mut self, geonames: RadrootsGeoNamesConfig) -> Self {
+        self.geonames = Some(geonames);
+        self
+    }
+
+    pub fn geonames_cache_root(mut self, cache_root: impl Into<PathBuf>) -> Self {
+        self.geonames = Some(RadrootsGeoNamesConfig::new(cache_root));
         self
     }
 
@@ -466,6 +478,7 @@ impl RadrootsClientBuilder {
             _event_store: storage.event_store,
             _outbox: storage.outbox,
             storage_paths: storage.paths,
+            geonames: self.geonames,
             clock: self.clock,
             relay_urls,
             publish_transport: self.publish_transport,
@@ -481,6 +494,7 @@ pub struct RadrootsClient {
     pub(crate) _event_store: RadrootsEventStore,
     pub(crate) _outbox: RadrootsOutbox,
     storage_paths: Option<RadrootsSdkStoragePaths>,
+    geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
     publish_transport: SdkPublishTransport,
@@ -504,6 +518,10 @@ impl RadrootsClient {
 
     pub fn market(&self) -> MarketClient<'_> {
         MarketClient::new(self)
+    }
+
+    pub fn geonames(&self) -> GeoNamesClient<'_> {
+        GeoNamesClient::new(self)
     }
 
     pub fn trades(&self) -> TradesClient<'_> {
@@ -559,6 +577,10 @@ impl RadrootsClient {
 
     pub fn storage_paths(&self) -> Option<&RadrootsSdkStoragePaths> {
         self.storage_paths.as_ref()
+    }
+
+    pub fn geonames_config(&self) -> Option<&RadrootsGeoNamesConfig> {
+        self.geonames.as_ref()
     }
 
     pub async fn storage_status(

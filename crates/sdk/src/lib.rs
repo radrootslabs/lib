@@ -47,8 +47,9 @@ mod workflow_runtime;
 
 #[cfg(feature = "runtime")]
 pub use crate::error::{
-    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkPartialLocalMutationError,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
+    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
+    RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{
@@ -61,16 +62,7 @@ pub use crate::geonames::{
     GEONAMES_ASSET_SHA256, GEONAMES_ASSET_URL, GEONAMES_ASSET_VERSION, GeoNamesAssetFetcher,
     GeoNamesAssetSpec, GeoNamesAssetState, GeoNamesAssetStatus, GeoNamesBlockingHttpFetcher,
     Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
-    GeocoderReverseResult, radroots_sdk_ensure_geonames_database_in_cache_root,
-    radroots_sdk_ensure_geonames_database_in_cache_root_with_fetcher,
-    radroots_sdk_ensure_geonames_database_in_cache_root_with_spec_and_fetcher,
-    radroots_sdk_geonames_database_path_from_cache_root,
-    radroots_sdk_geonames_database_path_from_cache_root_for_version,
-    radroots_sdk_geonames_root_from_cache_root,
-    radroots_sdk_inspect_geonames_database_in_cache_root,
-    radroots_sdk_inspect_geonames_database_path_with_spec,
-    radroots_sdk_open_verified_geonames_database,
-    radroots_sdk_open_verified_geonames_database_with_spec,
+    GeocoderReverseResult, RadrootsGeoNamesConfig,
 };
 #[cfg(feature = "runtime")]
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
@@ -100,7 +92,7 @@ pub use crate::orders_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
-    DvmClient, FarmsClient, ListingsClient, MarketClient, SyncClient, TradesClient,
+    DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{

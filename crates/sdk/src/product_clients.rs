@@ -42,6 +42,19 @@ impl<'client> MarketClient<'client> {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
+pub struct GeoNamesClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
+}
+
+#[cfg(feature = "runtime")]
+impl<'client> GeoNamesClient<'client> {
+    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
+        Self { sdk }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy)]
 pub struct TradesClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,
 }

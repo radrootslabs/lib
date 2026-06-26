@@ -2,12 +2,12 @@
 
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsClient,
-    RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkRecoveryAction,
-    RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN,
-    SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkIdempotencyKey, SdkOutboxStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
-    StorageStatusRequest,
+    RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
+    RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RestoreRequest,
+    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
+    SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind,
+    StorageStatusReceipt, StorageStatusRequest,
 };
 use std::path::PathBuf;
 
@@ -19,6 +19,7 @@ async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
     assert!(sdk.storage_paths().is_none());
     let _listings = sdk.listings();
     let _market = sdk.market();
+    let _geonames = sdk.geonames();
     let _trades = sdk.trades();
     let _sync = sdk.sync();
     let _dvm = sdk.dvm();
@@ -469,6 +470,16 @@ fn sdk_error_contract_methods_cover_all_variants() {
             RadrootsSdkErrorClass::Storage,
             true,
             vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+        ),
+        (
+            RadrootsSdkError::GeoNames {
+                kind: RadrootsSdkGeoNamesErrorKind::Download,
+                message: "download".to_owned(),
+            },
+            "geonames_download",
+            RadrootsSdkErrorClass::Transport,
+            true,
+            vec![RadrootsSdkRecoveryAction::RetryGeoNamesDownload],
         ),
         (
             RadrootsSdkError::RelayTransport {

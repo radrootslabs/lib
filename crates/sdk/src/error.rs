@@ -26,14 +26,30 @@ pub enum RadrootsSdkErrorClass {
 pub enum RadrootsSdkRecoveryAction {
     RetryOutboxEnqueue,
     InspectLocalStores,
+    InspectGeoNamesAsset,
     RetryOperationWithSameIdempotencyKey,
     ConfigureRelayTargets,
+    ConfigureGeoNamesCache,
     ConfigureSigner,
     FixRequest,
     SelectAuthorizedActor,
     CompleteSignerAuthentication,
     RetryAfterTransportFailure,
+    RetryGeoNamesDownload,
     EnableRequiredFeature,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RadrootsSdkGeoNamesErrorKind {
+    Configuration,
+    Download,
+    Cache,
+    Integrity,
+    Schema,
+    Lookup,
 }
 
 #[cfg(feature = "runtime")]
@@ -156,6 +172,10 @@ pub enum RadrootsSdkError {
     Outbox {
         message: String,
     },
+    GeoNames {
+        kind: RadrootsSdkGeoNamesErrorKind,
+        message: String,
+    },
     RelayTransport {
         message: String,
     },
@@ -195,6 +215,14 @@ impl RadrootsSdkError {
             Self::ListingDraft { .. } => "listing_draft",
             Self::ListingMutation { .. } => "listing_mutation",
             Self::Outbox { .. } => "outbox",
+            Self::GeoNames { kind, .. } => match kind {
+                RadrootsSdkGeoNamesErrorKind::Configuration => "geonames_configuration",
+                RadrootsSdkGeoNamesErrorKind::Download => "geonames_download",
+                RadrootsSdkGeoNamesErrorKind::Cache => "geonames_cache",
+                RadrootsSdkGeoNamesErrorKind::Integrity => "geonames_integrity",
+                RadrootsSdkGeoNamesErrorKind::Schema => "geonames_schema",
+                RadrootsSdkGeoNamesErrorKind::Lookup => "geonames_lookup",
+            },
             Self::RelayTransport { .. } => "relay_transport",
             Self::Projection { .. } => "projection",
             Self::PartialLocalMutation(_) => "partial_local_mutation",
@@ -207,6 +235,14 @@ impl RadrootsSdkError {
             | Self::EventStore { .. }
             | Self::Outbox { .. }
             | Self::Projection { .. } => RadrootsSdkErrorClass::Storage,
+            Self::GeoNames { kind, .. } => match kind {
+                RadrootsSdkGeoNamesErrorKind::Configuration => RadrootsSdkErrorClass::Configuration,
+                RadrootsSdkGeoNamesErrorKind::Download => RadrootsSdkErrorClass::Transport,
+                RadrootsSdkGeoNamesErrorKind::Cache
+                | RadrootsSdkGeoNamesErrorKind::Integrity
+                | RadrootsSdkGeoNamesErrorKind::Schema => RadrootsSdkErrorClass::Storage,
+                RadrootsSdkGeoNamesErrorKind::Lookup => RadrootsSdkErrorClass::Request,
+            },
             Self::ClockBeforeUnixEpoch | Self::TimestampOutOfRange { .. } => {
                 RadrootsSdkErrorClass::Clock
             }
@@ -243,6 +279,11 @@ impl RadrootsSdkError {
                 | Self::ProductSyncRelaySetupFailure { .. }
                 | Self::EventStore { .. }
                 | Self::Outbox { .. }
+                | Self::GeoNames {
+                    kind: RadrootsSdkGeoNamesErrorKind::Cache
+                        | RadrootsSdkGeoNamesErrorKind::Download,
+                    ..
+                }
                 | Self::RelayTransport { .. }
                 | Self::SignerRequestTimedOut { .. }
                 | Self::SignerTransport { .. }
@@ -257,6 +298,20 @@ impl RadrootsSdkError {
             | Self::EventStore { .. }
             | Self::Outbox { .. }
             | Self::Projection { .. } => vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+            Self::GeoNames { kind, .. } => match kind {
+                RadrootsSdkGeoNamesErrorKind::Configuration => {
+                    vec![RadrootsSdkRecoveryAction::ConfigureGeoNamesCache]
+                }
+                RadrootsSdkGeoNamesErrorKind::Download => {
+                    vec![RadrootsSdkRecoveryAction::RetryGeoNamesDownload]
+                }
+                RadrootsSdkGeoNamesErrorKind::Cache
+                | RadrootsSdkGeoNamesErrorKind::Integrity
+                | RadrootsSdkGeoNamesErrorKind::Schema => {
+                    vec![RadrootsSdkRecoveryAction::InspectGeoNamesAsset]
+                }
+                RadrootsSdkGeoNamesErrorKind::Lookup => vec![RadrootsSdkRecoveryAction::FixRequest],
+            },
             Self::UnauthorizedActor { .. }
             | Self::SignerPubkeyMismatch { .. }
             | Self::SignerRequestRejected { .. }
@@ -362,6 +417,7 @@ impl RadrootsSdkError {
             | Self::Outbox { message }
             | Self::RelayTransport { message }
             | Self::Projection { message } => json!({ "message": message }),
+            Self::GeoNames { kind, message } => json!({ "kind": kind, "message": message }),
             Self::PartialLocalMutation(error) => json!(error),
         };
         json!({
@@ -435,6 +491,13 @@ impl RadrootsSdkError {
         Self::InvalidOrderId {
             value: value.into(),
             message: message.into(),
+        }
+    }
+
+    pub(crate) fn missing_geonames_config() -> Self {
+        Self::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Configuration,
+            message: "GeoNames cache root is not configured".to_owned(),
         }
     }
 }
@@ -537,6 +600,9 @@ impl fmt::Display for RadrootsSdkError {
                 write!(f, "sdk listing mutation error: {message}")
             }
             Self::Outbox { message } => write!(f, "sdk outbox error: {message}"),
+            Self::GeoNames { kind, message } => {
+                write!(f, "sdk GeoNames {kind:?} error: {message}")
+            }
             Self::RelayTransport { message } => {
                 write!(f, "sdk relay transport error: {message}")
             }
@@ -603,6 +669,42 @@ impl From<radroots_authority::RadrootsAuthorityError> for RadrootsSdkError {
 impl From<radroots_event_store::RadrootsEventStoreError> for RadrootsSdkError {
     fn from(error: radroots_event_store::RadrootsEventStoreError) -> Self {
         Self::EventStore {
+            message: error.to_string(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<radroots_geocoder::GeocoderError> for RadrootsSdkError {
+    fn from(error: radroots_geocoder::GeocoderError) -> Self {
+        let kind = match &error {
+            radroots_geocoder::GeocoderError::InvalidAssetUrl { .. }
+            | radroots_geocoder::GeocoderError::InvalidAssetHost { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Configuration
+            }
+            radroots_geocoder::GeocoderError::AssetDownload { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Download
+            }
+            radroots_geocoder::GeocoderError::Io(_)
+            | radroots_geocoder::GeocoderError::Sqlite(_)
+            | radroots_geocoder::GeocoderError::AssetLockUnavailable { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Cache
+            }
+            radroots_geocoder::GeocoderError::InvalidAssetSchema { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Schema
+            }
+            radroots_geocoder::GeocoderError::InvalidAssetLength { .. }
+            | radroots_geocoder::GeocoderError::InvalidAssetSha256 { .. }
+            | radroots_geocoder::GeocoderError::InvalidAssetSqlite { .. }
+            | radroots_geocoder::GeocoderError::InvalidAssetIntegrity { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Integrity
+            }
+            radroots_geocoder::GeocoderError::CountryCenterNotFound { .. } => {
+                RadrootsSdkGeoNamesErrorKind::Lookup
+            }
+        };
+        Self::GeoNames {
+            kind,
             message: error.to_string(),
         }
     }
