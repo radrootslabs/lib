@@ -11,6 +11,9 @@ repository.workspace = true
 homepage.workspace = true
 readme = "README"
 
+[features]
+test-fixture-geonames-asset = []
+
 [dependencies]
 hex = { workspace = true }
 radroots_runtime_paths = { workspace = true }

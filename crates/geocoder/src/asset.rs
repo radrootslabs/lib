@@ -13,9 +13,16 @@ pub const GEONAMES_ASSET_VERSION: &str = "1.0";
 pub const GEONAMES_ASSET_FILE_NAME: &str = "geonames-1.0.db";
 pub const GEONAMES_ASSET_URL: &str = "https://assets.radroots.io/data/geonames/geonames-1.0.db";
 pub const GEONAMES_ASSET_HOST: &str = "assets.radroots.io";
+#[cfg(not(feature = "test-fixture-geonames-asset"))]
 pub const GEONAMES_ASSET_BYTE_SIZE: u64 = 12_951_552;
+#[cfg(feature = "test-fixture-geonames-asset")]
+pub const GEONAMES_ASSET_BYTE_SIZE: u64 = 20_480;
+#[cfg(not(feature = "test-fixture-geonames-asset"))]
 pub const GEONAMES_ASSET_SHA256: &str =
     "6ca5f1a324de02922d40b1ff33eedf3a5a133c978de921eee5130a0c7876079c";
+#[cfg(feature = "test-fixture-geonames-asset")]
+pub const GEONAMES_ASSET_SHA256: &str =
+    "3f81face93a88cda0a0e0a1c3611c2280177061b1a2bbe9ced42526c762885b6";
 
 pub const GEONAMES_1_0_ASSET: GeoNamesAssetSpec = GeoNamesAssetSpec {
     version: GEONAMES_ASSET_VERSION,
