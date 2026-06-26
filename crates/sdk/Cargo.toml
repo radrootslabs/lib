@@ -100,6 +100,10 @@ local-runtime-radrootsd-proxy = [
   "signer-adapters",
   "radrootsd-proxy",
 ]
+test-fixture-geonames-asset = [
+  "runtime",
+  "radroots_geocoder/test-fixture-geonames-asset",
+]
 
 [dependencies]
 futures = { workspace = true, optional = true }
