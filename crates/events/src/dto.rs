@@ -261,66 +261,6 @@ impl Dto for RadrootsResourceHarvestCap {
     }
 }
 
-impl Dto for RadrootsListingParseError {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = EnumDef::new(
-            "RadrootsListingParseError",
-            "RadrootsListingParseError",
-            EnumRepr::External,
-            span("crates/events/src/order.rs", 26),
-        )
-        .with_variant(VariantDef::new(
-            "InvalidKind",
-            "InvalidKind",
-            VariantShape::Newtype(u32::describe(ctx)),
-            span("crates/events/src/order.rs", 27),
-        ))
-        .with_variant(VariantDef::new(
-            "MissingTag",
-            "MissingTag",
-            VariantShape::Newtype(String::describe(ctx)),
-            span("crates/events/src/order.rs", 28),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidTag",
-            "InvalidTag",
-            VariantShape::Newtype(String::describe(ctx)),
-            span("crates/events/src/order.rs", 29),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidNumber",
-            "InvalidNumber",
-            VariantShape::Newtype(String::describe(ctx)),
-            span("crates/events/src/order.rs", 30),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidUnit",
-            "InvalidUnit",
-            VariantShape::Unit,
-            span("crates/events/src/order.rs", 31),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidCurrency",
-            "InvalidCurrency",
-            VariantShape::Unit,
-            span("crates/events/src/order.rs", 32),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidJson",
-            "InvalidJson",
-            VariantShape::Newtype(String::describe(ctx)),
-            span("crates/events/src/order.rs", 33),
-        ))
-        .with_variant(VariantDef::new(
-            "InvalidDiscount",
-            "InvalidDiscount",
-            VariantShape::Newtype(String::describe(ctx)),
-            span("crates/events/src/order.rs", 34),
-        ));
-        register(ctx, "RadrootsListingParseError", TypeDef::Enum(def))
-    }
-}
-
 impl Dto for RadrootsTradeValidationListingError {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let parse_error = RadrootsListingParseError::describe(ctx);
@@ -488,38 +428,6 @@ impl Dto for RadrootsTradeValidationListingError {
             "RadrootsTradeValidationListingError",
             TypeDef::Enum(def),
         )
-    }
-}
-
-impl Dto for RadrootsOrderRevisionOutcome {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = EnumDef::new(
-            "RadrootsOrderRevisionOutcome",
-            "RadrootsOrderRevisionOutcome",
-            EnumRepr::Internal {
-                tag: "decision".to_owned(),
-            },
-            span("crates/events/src/order.rs", 221),
-        )
-        .with_variant(VariantDef::new(
-            "Accepted",
-            "accepted",
-            VariantShape::Unit,
-            span("crates/events/src/order.rs", 222),
-        ))
-        .with_variant(VariantDef::new(
-            "Declined",
-            "declined",
-            VariantShape::Struct(vec![field(
-                "reason",
-                "reason",
-                String::describe(ctx),
-                "crates/events/src/order.rs",
-                223,
-            )]),
-            span("crates/events/src/order.rs", 223),
-        ));
-        register(ctx, "RadrootsOrderRevisionOutcome", TypeDef::Enum(def))
     }
 }
 
