@@ -4,6 +4,7 @@ use crate::farm::RadrootsFarmRef;
 use alloc::{string::String, vec::Vec};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsSocialTarget {
@@ -27,6 +28,7 @@ pub enum RadrootsSocialTarget {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default)]
 pub struct RadrootsSocialFarmAnchor {
     pub farm: RadrootsFarmRef,
@@ -34,6 +36,7 @@ pub struct RadrootsSocialFarmAnchor {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialLocation {
     pub name: Option<String>,
@@ -41,6 +44,7 @@ pub struct RadrootsSocialLocation {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaDimensions {
     pub width: u32,
@@ -48,6 +52,7 @@ pub struct RadrootsSocialMediaDimensions {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaThumbnail {
     pub url: String,
@@ -55,12 +60,14 @@ pub struct RadrootsSocialMediaThumbnail {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaMetadata {
     pub url: Option<String>,
     pub mime_type: Option<String>,
     pub sha256: Option<String>,
     pub original_sha256: Option<String>,
+    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
     pub size: Option<u64>,
     pub dimensions: Option<RadrootsSocialMediaDimensions>,
     pub blurhash: Option<String>,

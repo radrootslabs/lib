@@ -701,39 +701,6 @@ impl Dto for RadrootsResourceHarvestCap {
     }
 }
 
-impl Dto for RadrootsComment {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let event_ref = RadrootsNostrEventRef::describe(ctx);
-        let def = StructDef::new(
-            "RadrootsComment",
-            "RadrootsComment",
-            span("crates/events/src/comment.rs", 8),
-        )
-        .with_field(field(
-            "root",
-            "root",
-            event_ref,
-            "crates/events/src/comment.rs",
-            9,
-        ))
-        .with_field(field(
-            "parent",
-            "parent",
-            RadrootsNostrEventRef::describe(ctx),
-            "crates/events/src/comment.rs",
-            10,
-        ))
-        .with_field(field(
-            "content",
-            "content",
-            String::describe(ctx),
-            "crates/events/src/comment.rs",
-            11,
-        ));
-        register(ctx, "RadrootsComment", TypeDef::Struct(def))
-    }
-}
-
 impl Dto for RadrootsReaction {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
@@ -756,24 +723,6 @@ impl Dto for RadrootsReaction {
             10,
         ));
         register(ctx, "RadrootsReaction", TypeDef::Struct(def))
-    }
-}
-
-impl Dto for RadrootsPost {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsPost",
-            "RadrootsPost",
-            span("crates/events/src/post.rs", 11),
-        )
-        .with_field(field(
-            "content",
-            "content",
-            String::describe(ctx),
-            "crates/events/src/post.rs",
-            12,
-        ));
-        register(ctx, "RadrootsPost", TypeDef::Struct(def))
     }
 }
 
