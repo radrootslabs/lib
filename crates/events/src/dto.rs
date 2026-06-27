@@ -17,7 +17,6 @@ use crate::{
     gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
     geochat::RadrootsGeoChat,
     gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
-    ids::{RadrootsInventoryBinId, RadrootsOrderQuoteId},
     job::{JobFeedbackStatus, JobInputType, JobPaymentRequest},
     job_feedback::RadrootsJobFeedback,
     job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
@@ -489,154 +488,6 @@ impl Dto for RadrootsTradeValidationListingError {
             "RadrootsTradeValidationListingError",
             TypeDef::Enum(def),
         )
-    }
-}
-
-impl Dto for RadrootsOrderEconomicItem {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsOrderEconomicItem",
-            "RadrootsOrderEconomicItem",
-            span("crates/events/src/order_economics.rs", 70),
-        )
-        .with_field(field(
-            "bin_id",
-            "bin_id",
-            RadrootsInventoryBinId::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            71,
-        ))
-        .with_field(field(
-            "bin_count",
-            "bin_count",
-            u32::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            72,
-        ))
-        .with_field(field(
-            "quantity_amount",
-            "quantity_amount",
-            core_decimal(ctx),
-            "crates/events/src/order_economics.rs",
-            73,
-        ))
-        .with_field(field(
-            "quantity_unit",
-            "quantity_unit",
-            radroots_core::RadrootsCoreUnit::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            74,
-        ))
-        .with_field(field(
-            "unit_price_amount",
-            "unit_price_amount",
-            core_decimal(ctx),
-            "crates/events/src/order_economics.rs",
-            75,
-        ))
-        .with_field(field(
-            "unit_price_currency",
-            "unit_price_currency",
-            core_currency(ctx),
-            "crates/events/src/order_economics.rs",
-            76,
-        ))
-        .with_field(field(
-            "line_subtotal",
-            "line_subtotal",
-            radroots_core::RadrootsCoreMoney::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            77,
-        ));
-        register(ctx, "RadrootsOrderEconomicItem", TypeDef::Struct(def))
-    }
-}
-
-impl Dto for RadrootsOrderEconomics {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsOrderEconomics",
-            "RadrootsOrderEconomics",
-            span("crates/events/src/order_economics.rs", 119),
-        )
-        .with_field(field(
-            "quote_id",
-            "quote_id",
-            RadrootsOrderQuoteId::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            120,
-        ))
-        .with_field(field(
-            "quote_version",
-            "quote_version",
-            u32::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            121,
-        ))
-        .with_field(field(
-            "pricing_basis",
-            "pricing_basis",
-            RadrootsOrderPricingBasis::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            122,
-        ))
-        .with_field(field(
-            "currency",
-            "currency",
-            core_currency(ctx),
-            "crates/events/src/order_economics.rs",
-            123,
-        ))
-        .with_field(field(
-            "items",
-            "items",
-            <Vec<RadrootsOrderEconomicItem> as Dto>::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            124,
-        ))
-        .with_field(field(
-            "discounts",
-            "discounts",
-            <Vec<RadrootsOrderEconomicLine> as Dto>::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            125,
-        ))
-        .with_field(field(
-            "adjustments",
-            "adjustments",
-            <Vec<RadrootsOrderEconomicLine> as Dto>::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            126,
-        ))
-        .with_field(field(
-            "subtotal",
-            "subtotal",
-            radroots_core::RadrootsCoreMoney::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            127,
-        ))
-        .with_field(field(
-            "discount_total",
-            "discount_total",
-            radroots_core::RadrootsCoreMoney::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            128,
-        ))
-        .with_field(field(
-            "adjustment_total",
-            "adjustment_total",
-            radroots_core::RadrootsCoreMoney::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            129,
-        ))
-        .with_field(field(
-            "total",
-            "total",
-            radroots_core::RadrootsCoreMoney::describe(ctx),
-            "crates/events/src/order_economics.rs",
-            130,
-        ));
-        register(ctx, "RadrootsOrderEconomics", TypeDef::Struct(def))
     }
 }
 
@@ -1310,10 +1161,6 @@ fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeR
 
 fn core_decimal(ctx: &mut DescribeCtx) -> TypeRef {
     external_core_alias(ctx, "RadrootsCoreDecimal")
-}
-
-fn core_currency(ctx: &mut DescribeCtx) -> TypeRef {
-    external_core_alias(ctx, "RadrootsCoreCurrency")
 }
 
 fn external_core_alias(ctx: &mut DescribeCtx, rust_ident: &str) -> TypeRef {
