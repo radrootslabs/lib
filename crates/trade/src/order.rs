@@ -358,6 +358,9 @@ fn require_context_prev_event_id(
         .ok_or(RadrootsOrderEventDecodeError::MissingPreviousEventId)
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderIssue {
     MissingRequest,
@@ -581,6 +584,60 @@ impl RadrootsOrderProjection {
         if self.last_event_id.is_none() {
             self.last_event_id = projection_issue_event_ids(&self.issues).into_iter().last();
         }
+    }
+}
+
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderWorkflowProjection {
+    pub order_id: RadrootsOrderId,
+    pub status: RadrootsTradeWorkflowState,
+    pub request_event_id: Option<RadrootsEventId>,
+    pub decision_event_id: Option<RadrootsEventId>,
+    pub cancellation_event_id: Option<RadrootsEventId>,
+    pub validation_receipt_event_id: Option<RadrootsEventId>,
+    pub lifecycle_terminal: bool,
+    pub economics: Option<RadrootsOrderEconomics>,
+    pub agreement_event_id: Option<RadrootsEventId>,
+    pub pending_revision_event_id: Option<RadrootsEventId>,
+    pub pending_inventory_reservations: Vec<RadrootsOrderInventoryCommitment>,
+    pub committed_inventory_reservations: Vec<RadrootsOrderInventoryCommitment>,
+    pub listing_addr: Option<RadrootsListingAddress>,
+    pub buyer_pubkey: Option<RadrootsPublicKey>,
+    pub seller_pubkey: Option<RadrootsPublicKey>,
+    pub last_event_id: Option<RadrootsEventId>,
+    pub issues: Vec<RadrootsOrderIssue>,
+}
+
+impl From<RadrootsOrderProjection> for RadrootsTradeOrderWorkflowProjection {
+    fn from(projection: RadrootsOrderProjection) -> Self {
+        Self {
+            order_id: projection.order_id,
+            status: projection.status,
+            request_event_id: projection.request_event_id,
+            decision_event_id: projection.decision_event_id,
+            cancellation_event_id: projection.cancellation_event_id,
+            validation_receipt_event_id: projection.validation_receipt_event_id,
+            lifecycle_terminal: projection.lifecycle_terminal,
+            economics: projection.economics,
+            agreement_event_id: projection.agreement_event_id,
+            pending_revision_event_id: projection.pending_revision_event_id,
+            pending_inventory_reservations: projection.pending_inventory_reservations,
+            committed_inventory_reservations: projection.committed_inventory_reservations,
+            listing_addr: projection.listing_addr,
+            buyer_pubkey: projection.buyer_pubkey,
+            seller_pubkey: projection.seller_pubkey,
+            last_event_id: projection.last_event_id,
+            issues: projection.issues,
+        }
+    }
+}
+
+impl From<&RadrootsOrderProjection> for RadrootsTradeOrderWorkflowProjection {
+    fn from(projection: &RadrootsOrderProjection) -> Self {
+        projection.clone().into()
     }
 }
 
@@ -2380,8 +2437,8 @@ mod tests {
         RadrootsOrderDecisionRecord, RadrootsOrderEventRecord, RadrootsOrderIssue,
         RadrootsOrderReductionInputs, RadrootsOrderRequestRecord,
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
-        RadrootsTradeWorkflowState, reduce_listing_inventory_accounting,
-        reduce_order_event_records, reduce_order_events,
+        RadrootsTradeOrderWorkflowProjection, RadrootsTradeWorkflowState,
+        reduce_listing_inventory_accounting, reduce_order_event_records, reduce_order_events,
     };
     use core::mem::discriminant;
     use radroots_core::{
@@ -4569,6 +4626,53 @@ mod tests {
         assert_eq!(projection.request_event_id, Some(event_id(1)));
         assert!(!projection.lifecycle_terminal);
         assert!(projection.agreement_event_id.is_none());
+    }
+
+    #[test]
+    fn workflow_projection_dto_preserves_missing_and_requested_state() {
+        let missing = reduce_order_events(
+            &order_id("missing-order"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        let missing_dto = RadrootsTradeOrderWorkflowProjection::from(&missing);
+
+        assert_eq!(missing_dto.status, RadrootsTradeWorkflowState::Missing);
+        assert!(missing_dto.request_event_id.is_none());
+        assert!(missing_dto.last_event_id.is_none());
+        assert!(missing_dto.listing_addr.is_none());
+        assert!(missing_dto.buyer_pubkey.is_none());
+        assert!(missing_dto.seller_pubkey.is_none());
+        assert!(missing_dto.economics.is_none());
+        assert!(missing_dto.issues.is_empty());
+
+        #[cfg(feature = "serde_json")]
+        {
+            let json = serde_json::to_value(&missing_dto).expect("missing projection json");
+            assert_eq!(json["status"], "missing");
+            assert!(json["request_event_id"].is_null());
+            assert!(json["last_event_id"].is_null());
+            assert!(json.get("root_event_id").is_none());
+            assert!(json.get("last_message_type").is_none());
+            assert!(json.get("last_discount_request").is_none());
+        }
+
+        let requested = reduce(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let requested_dto = RadrootsTradeOrderWorkflowProjection::from(&requested);
+
+        assert_eq!(requested_dto.status, RadrootsTradeWorkflowState::Requested);
+        assert_eq!(requested_dto.request_event_id, Some(event_id(1)));
+        assert_eq!(requested_dto.last_event_id, Some(event_id(1)));
+        assert_eq!(requested_dto.listing_addr, Some(listing_addr()));
+        assert_eq!(requested_dto.buyer_pubkey, Some(public_key(BUYER)));
+        assert_eq!(requested_dto.seller_pubkey, Some(public_key(SELLER)));
+        assert!(requested_dto.economics.is_some());
+        assert!(requested_dto.issues.is_empty());
     }
 
     #[test]

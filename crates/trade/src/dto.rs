@@ -7,14 +7,16 @@ use crate::listing::{
     model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal},
     validation::RadrootsTradeListing,
 };
+use crate::order::RadrootsTradeOrderWorkflowProjection;
 use crate::workflow::RadrootsTradeWorkflowState;
 
-pub fn dto_roots() -> [RootDescriptor; 4] {
+pub fn dto_roots() -> [RootDescriptor; 5] {
     [
         RootDescriptor::new::<RadrootsTradeListing>(),
         RootDescriptor::new::<RadrootsTradeListingSubtotal>(),
         RootDescriptor::new::<RadrootsTradeListingTotal>(),
         RootDescriptor::new::<RadrootsTradeWorkflowState>(),
+        RootDescriptor::new::<RadrootsTradeOrderWorkflowProjection>(),
     ]
 }
 
@@ -232,6 +234,7 @@ mod tests {
         "RadrootsTradeListingSubtotal",
         "RadrootsTradeListingTotal",
         "RadrootsTradeWorkflowState",
+        "RadrootsTradeOrderWorkflowProjection",
     ];
 
     #[test]
@@ -291,6 +294,61 @@ mod tests {
                 "invalid",
             ]
         );
+    }
+
+    #[test]
+    fn trade_order_workflow_projection_models_missing_state_with_optional_evidence() {
+        let registry = build_registry(dto_roots());
+        let projection = find_struct(&registry, "RadrootsTradeOrderWorkflowProjection");
+
+        assert!(field_names(projection).contains(&"status"));
+        for optional_field in [
+            "request_event_id",
+            "decision_event_id",
+            "cancellation_event_id",
+            "validation_receipt_event_id",
+            "economics",
+            "agreement_event_id",
+            "pending_revision_event_id",
+            "listing_addr",
+            "buyer_pubkey",
+            "seller_pubkey",
+            "last_event_id",
+        ] {
+            let presence = registry
+                .struct_field_presence("RadrootsTradeOrderWorkflowProjection", optional_field)
+                .expect("projection field presence");
+            assert!(
+                !presence.required_on_deserialize,
+                "{optional_field} must not be required for missing projections"
+            );
+            assert!(
+                presence.nullable,
+                "{optional_field} must be nullable for missing projections"
+            );
+        }
+    }
+
+    #[test]
+    fn trade_order_workflow_projection_omits_binding_only_discount_fields() {
+        let registry = build_registry(dto_roots());
+        let projection = find_struct(&registry, "RadrootsTradeOrderWorkflowProjection");
+        let fields = field_names(projection);
+
+        for stale_field in [
+            "root_event_id",
+            "last_message_type",
+            "last_discount_request",
+            "last_discount_offer",
+            "accepted_discount",
+            "last_discount_decline_reason",
+            "has_requested_discounts",
+        ] {
+            assert!(
+                !fields.contains(&stale_field),
+                "{stale_field} must not remain on the source projection contract"
+            );
+        }
     }
 
     fn root_export_names(registry: &Registry) -> Vec<&str> {
@@ -357,5 +415,12 @@ mod tests {
             }
             _ => None,
         }
+    }
+
+    fn field_names(def: &StructDef) -> Vec<&str> {
+        def.fields
+            .iter()
+            .map(|field| field.target.typescript.as_str())
+            .collect()
     }
 }
