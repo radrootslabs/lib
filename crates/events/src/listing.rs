@@ -12,6 +12,8 @@ use crate::resource_area::RadrootsResourceAreaRef;
 use alloc::{string::String, vec::Vec};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -19,7 +21,9 @@ use alloc::{string::String, vec::Vec};
 #[derive(Clone, Debug)]
 pub enum RadrootsListingAvailability {
     Window {
+        #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
         start: Option<u64>,
+        #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
         end: Option<u64>,
     },
     Status {
@@ -28,6 +32,8 @@ pub enum RadrootsListingAvailability {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -40,6 +46,8 @@ pub enum RadrootsListingStatus {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -53,15 +61,18 @@ pub enum RadrootsListingDeliveryMethod {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
     pub d_tag: RadrootsDTag,
+    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub published_at: Option<u64>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(all(feature = "serde", not(feature = "dto-bindgen")), serde(default))]
     pub farm: RadrootsFarmRef,
     pub product: RadrootsListingProduct,
     pub primary_bin_id: RadrootsInventoryBinId,
