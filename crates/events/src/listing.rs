@@ -72,7 +72,7 @@ pub struct RadrootsListing {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub published_at: Option<u64>,
-    #[cfg_attr(all(feature = "serde", not(feature = "dto-bindgen")), serde(default))]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub farm: RadrootsFarmRef,
     pub product: RadrootsListingProduct,
     pub primary_bin_id: RadrootsInventoryBinId,
@@ -197,5 +197,46 @@ mod tests {
 
         assert_eq!(listing.published_at, Some(1_700_000_000));
         assert!(is_listing_kind(KIND_LISTING_DRAFT));
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn listing_deserializes_missing_farm_to_default_ref() {
+        let listing = super::RadrootsListing {
+            d_tag: "listing-draft".parse().unwrap(),
+            published_at: Some(1_700_000_000),
+            farm: RadrootsFarmRef {
+                pubkey: "farm-pubkey".to_string(),
+                d_tag: "farm-d-tag".to_string(),
+            },
+            product: super::RadrootsListingProduct {
+                key: "lettuce".to_string(),
+                title: "lettuce".to_string(),
+                category: "produce".to_string(),
+                summary: None,
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            primary_bin_id: "bin-1".parse().unwrap(),
+            bins: vec![],
+            resource_area: None,
+            plot: None,
+            discounts: None,
+            inventory_available: None,
+            availability: None,
+            delivery_method: None,
+            location: None,
+            images: None,
+        };
+        let mut json = serde_json::to_value(&listing).unwrap();
+        json.as_object_mut().unwrap().remove("farm");
+
+        let parsed: super::RadrootsListing = serde_json::from_value(json).unwrap();
+
+        assert!(parsed.farm.pubkey.is_empty());
+        assert!(parsed.farm.d_tag.is_empty());
     }
 }

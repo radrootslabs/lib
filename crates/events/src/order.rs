@@ -24,7 +24,6 @@ pub const RADROOTS_ORDER_ENVELOPE_VERSION: u16 = 1;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", serde(tag = "kind", content = "amount"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsListingParseError {
     InvalidKind(u32),
@@ -230,10 +229,7 @@ impl RadrootsOrderRevisionProposal {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    feature = "serde",
-    serde(rename_all = "snake_case", tag = "decision", content = "amount")
-)]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderRevisionOutcome {
     Accepted,
@@ -1228,6 +1224,61 @@ mod tests {
         let mut revision = serde_json::to_value(sample_order_revision_proposal()).unwrap();
         revision["root_event_id"] = serde_json::json!("not-an-event-id");
         assert!(serde_json::from_value::<RadrootsOrderRevisionProposal>(revision).is_err());
+    }
+
+    #[test]
+    fn listing_parse_error_json_preserves_external_tagged_shape() {
+        assert_eq!(
+            serde_json::to_value(RadrootsListingParseError::InvalidKind(KIND_PROFILE)).unwrap(),
+            serde_json::json!({ "InvalidKind": KIND_PROFILE })
+        );
+        assert_eq!(
+            serde_json::to_value(RadrootsListingParseError::MissingTag("price".into())).unwrap(),
+            serde_json::json!({ "MissingTag": "price" })
+        );
+        assert_eq!(
+            serde_json::to_value(RadrootsListingParseError::InvalidUnit).unwrap(),
+            serde_json::json!("InvalidUnit")
+        );
+        assert_eq!(
+            serde_json::from_value::<RadrootsListingParseError>(serde_json::json!({
+                "InvalidJson": "bins"
+            }))
+            .unwrap(),
+            RadrootsListingParseError::InvalidJson("bins".into())
+        );
+    }
+
+    #[test]
+    fn order_revision_outcome_json_preserves_internal_tagged_shape() {
+        assert_eq!(
+            serde_json::to_value(RadrootsOrderRevisionOutcome::Accepted).unwrap(),
+            serde_json::json!({ "decision": "accepted" })
+        );
+        assert_eq!(
+            serde_json::to_value(RadrootsOrderRevisionOutcome::Declined {
+                reason: "out of stock".into(),
+            })
+            .unwrap(),
+            serde_json::json!({ "decision": "declined", "reason": "out of stock" })
+        );
+        assert_eq!(
+            serde_json::from_value::<RadrootsOrderRevisionOutcome>(serde_json::json!({
+                "decision": "accepted"
+            }))
+            .unwrap(),
+            RadrootsOrderRevisionOutcome::Accepted
+        );
+        assert_eq!(
+            serde_json::from_value::<RadrootsOrderRevisionOutcome>(serde_json::json!({
+                "decision": "declined",
+                "reason": "out of stock"
+            }))
+            .unwrap(),
+            RadrootsOrderRevisionOutcome::Declined {
+                reason: "out of stock".into()
+            }
+        );
     }
 
     #[test]
