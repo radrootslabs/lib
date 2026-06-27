@@ -155,17 +155,11 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
     events_override("RadrootsListingPublicLocation"),
     events_override("RadrootsListingStatus"),
     events_override("RadrootsNostrEventPtr"),
-    events_override("RadrootsOrderCancellation"),
-    events_override("RadrootsOrderDecision"),
     events_override("RadrootsPlotRef"),
     events_override("RadrootsResourceAreaRef"),
     events_override("RadrootsOrderEconomicLine"),
+    events_override("RadrootsOrderEventType"),
     events_override("RadrootsOrderItem"),
-    events_override("RadrootsOrderRequest"),
-    events_override("RadrootsOrderRevisionDecision"),
-    events_override("RadrootsOrderRevisionProposal"),
-    events_override("RadrootsTradeListingValidateRequest"),
-    events_override("RadrootsTradeListingValidateResult"),
 ];
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
@@ -630,9 +624,6 @@ mod tests {
         "RadrootsEventsIndexedIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
-        "RadrootsCommercialMessagePayload",
-        "RadrootsCommercialMessageType",
-        "RadrootsOrderStatus",
         "RadrootsTradeFacetCount",
         "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
@@ -659,7 +650,6 @@ mod tests {
         "RadrootsTradeOrderQuery",
         "RadrootsTradeOrderSort",
         "RadrootsTradeOrderSortField",
-        "RadrootsTradeOrderWorkflowMessage",
         "RadrootsTradeOrderWorkflowProjection",
         "RadrootsTradeReviewPriority",
         "RadrootsTradeReviewQueueEntry",
@@ -922,11 +912,49 @@ mod tests {
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/core-bindings\""));
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/events-bindings\""));
 
+        let imports = imported_type_inventory(TRADE_BINDINGS_TYPES_TS);
+        assert!(
+            imports
+                .get("@radroots/events-bindings")
+                .is_some_and(|names| names.contains("RadrootsOrderEventType"))
+        );
+
         for duplicate in [
             "export type RadrootsListing = ",
             "export type RadrootsFarmRef = ",
+            "export type RadrootsCommercialMessagePayload = ",
+            "export type RadrootsCommercialMessageType = ",
+            "export type RadrootsOrderStatus = ",
+            "export type RadrootsTradeOrderWorkflowMessage = ",
         ] {
             assert!(!TRADE_BINDINGS_TYPES_TS.contains(duplicate));
+        }
+
+        let marketplace_order_summary = type_declaration(
+            TRADE_BINDINGS_TYPES_TS,
+            "RadrootsTradeMarketplaceOrderSummary",
+        );
+        assert!(marketplace_order_summary.contains("status: RadrootsTradeWorkflowState"));
+        assert!(marketplace_order_summary.contains("last_message_type: RadrootsOrderEventType"));
+
+        let order_query = type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsTradeOrderQuery");
+        assert!(order_query.contains("status?: RadrootsTradeWorkflowState | null"));
+
+        let workflow_projection = type_declaration(
+            TRADE_BINDINGS_TYPES_TS,
+            "RadrootsTradeOrderWorkflowProjection",
+        );
+        assert!(workflow_projection.contains("status: RadrootsTradeWorkflowState"));
+        assert!(workflow_projection.contains("last_message_type: RadrootsOrderEventType"));
+        for stale_counter in [
+            "question_count",
+            "answer_count",
+            "discount_request_count",
+            "discount_offer_count",
+            "discount_accept_count",
+            "discount_decline_count",
+        ] {
+            assert!(!workflow_projection.contains(stale_counter));
         }
     }
 

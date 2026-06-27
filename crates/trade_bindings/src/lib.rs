@@ -38,6 +38,7 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     event_import("RadrootsListingProduct"),
     event_import("RadrootsListingPublicLocation"),
     event_import("RadrootsListingStatus"),
+    event_import("RadrootsOrderEventType"),
     local_shape("RadrootsTradeFacetCount"),
     source_root("RadrootsTradeListing"),
     local_shape("RadrootsTradeListingBackofficeOverlay"),
@@ -54,8 +55,6 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     source_root("RadrootsTradeListingTotal"),
     local_shape("RadrootsTradeMarketplaceListingSummary"),
     local_shape("RadrootsTradeMarketplaceOrderSummary"),
-    local_shape("RadrootsCommercialMessagePayload"),
-    local_shape("RadrootsCommercialMessageType"),
     local_shape("RadrootsTradeModerationFlag"),
     local_shape("RadrootsTradeModerationSeverity"),
     local_shape("RadrootsTradeModerationStatus"),
@@ -66,8 +65,6 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     local_shape("RadrootsTradeOrderQuery"),
     local_shape("RadrootsTradeOrderSort"),
     local_shape("RadrootsTradeOrderSortField"),
-    local_shape("RadrootsOrderStatus"),
-    local_shape("RadrootsTradeOrderWorkflowMessage"),
     local_shape("RadrootsTradeOrderWorkflowProjection"),
     local_shape("RadrootsTradeReviewPriority"),
     local_shape("RadrootsTradeReviewQueueEntry"),
@@ -97,25 +94,7 @@ pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
         "RadrootsTradeOrderBackofficeView",
         "open_moderation_flag_count",
     ),
-    json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "question_count"),
-    json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "answer_count"),
     json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "revision_count"),
-    json_number_safe_count(
-        "RadrootsTradeOrderWorkflowProjection",
-        "discount_request_count",
-    ),
-    json_number_safe_count(
-        "RadrootsTradeOrderWorkflowProjection",
-        "discount_offer_count",
-    ),
-    json_number_safe_count(
-        "RadrootsTradeOrderWorkflowProjection",
-        "discount_accept_count",
-    ),
-    json_number_safe_count(
-        "RadrootsTradeOrderWorkflowProjection",
-        "discount_decline_count",
-    ),
     json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "cancellation_count"),
 ];
 
@@ -186,6 +165,7 @@ mod tests {
                 "RadrootsListingProduct",
                 "RadrootsListingPublicLocation",
                 "RadrootsListingStatus",
+                "RadrootsOrderEventType",
                 "RadrootsTradeFacetCount",
                 "RadrootsTradeListing",
                 "RadrootsTradeListingBackofficeOverlay",
@@ -202,8 +182,6 @@ mod tests {
                 "RadrootsTradeListingTotal",
                 "RadrootsTradeMarketplaceListingSummary",
                 "RadrootsTradeMarketplaceOrderSummary",
-                "RadrootsCommercialMessagePayload",
-                "RadrootsCommercialMessageType",
                 "RadrootsTradeModerationFlag",
                 "RadrootsTradeModerationSeverity",
                 "RadrootsTradeModerationStatus",
@@ -214,8 +192,6 @@ mod tests {
                 "RadrootsTradeOrderQuery",
                 "RadrootsTradeOrderSort",
                 "RadrootsTradeOrderSortField",
-                "RadrootsOrderStatus",
-                "RadrootsTradeOrderWorkflowMessage",
                 "RadrootsTradeOrderWorkflowProjection",
                 "RadrootsTradeReviewPriority",
                 "RadrootsTradeReviewQueueEntry",
@@ -237,6 +213,7 @@ mod tests {
             "RadrootsListingProduct",
             "RadrootsListingPublicLocation",
             "RadrootsListingStatus",
+            "RadrootsOrderEventType",
         ] {
             assert_eq!(
                 disposition(export_name),
@@ -331,37 +308,7 @@ mod tests {
                 ),
                 (
                     "RadrootsTradeOrderWorkflowProjection",
-                    "question_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "answer_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
                     "revision_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "discount_request_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "discount_offer_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "discount_accept_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "discount_decline_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (

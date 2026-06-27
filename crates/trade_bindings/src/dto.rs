@@ -3,16 +3,15 @@ use dto_bindgen_core::{
     RustTypeId, SourceSpan, TargetFieldNames, TargetOverride, TypeDef, TypeRef, VariantDef,
     VariantShape, WireFieldNames,
 };
-use radroots_trade::listing::model::RadrootsTradeListingTotal;
+use radroots_trade::{
+    listing::model::RadrootsTradeListingTotal, workflow::RadrootsTradeWorkflowState,
+};
 
 pub fn dto_roots() -> Vec<RootDescriptor> {
     let mut roots = radroots_trade::dto::dto_roots()
         .into_iter()
         .collect::<Vec<_>>();
     roots.extend([
-        RootDescriptor::new::<RadrootsCommercialMessagePayload>(),
-        RootDescriptor::new::<RadrootsCommercialMessageType>(),
-        RootDescriptor::new::<RadrootsOrderStatus>(),
         RootDescriptor::new::<RadrootsTradeFacetCount>(),
         RootDescriptor::new::<RadrootsTradeListingBackofficeOverlay>(),
         RootDescriptor::new::<RadrootsTradeListingBackofficeQuery>(),
@@ -36,7 +35,6 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsTradeOrderQuery>(),
         RootDescriptor::new::<RadrootsTradeOrderSort>(),
         RootDescriptor::new::<RadrootsTradeOrderSortField>(),
-        RootDescriptor::new::<RadrootsTradeOrderWorkflowMessage>(),
         RootDescriptor::new::<RadrootsTradeOrderWorkflowProjection>(),
         RootDescriptor::new::<RadrootsTradeReviewPriority>(),
         RootDescriptor::new::<RadrootsTradeReviewQueueEntry>(),
@@ -85,158 +83,9 @@ imported_ts_type!(RadrootsListingProductImport, "RadrootsListingProduct");
 imported_ts_type!(RadrootsNostrEventPtrImport, "RadrootsNostrEventPtr");
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
 imported_ts_type!(RadrootsResourceAreaRefImport, "RadrootsResourceAreaRef");
-imported_ts_type!(RadrootsOrderCancellationImport, "RadrootsOrderCancellation");
-imported_ts_type!(RadrootsOrderDecisionImport, "RadrootsOrderDecision");
 imported_ts_type!(RadrootsOrderEconomicLineImport, "RadrootsOrderEconomicLine");
+imported_ts_type!(RadrootsOrderEventTypeImport, "RadrootsOrderEventType");
 imported_ts_type!(RadrootsOrderItemImport, "RadrootsOrderItem");
-imported_ts_type!(RadrootsOrderRequestImport, "RadrootsOrderRequest");
-imported_ts_type!(
-    RadrootsOrderRevisionDecisionImport,
-    "RadrootsOrderRevisionDecision"
-);
-imported_ts_type!(
-    RadrootsOrderRevisionProposalImport,
-    "RadrootsOrderRevisionProposal"
-);
-imported_ts_type!(
-    RadrootsTradeListingValidateRequestImport,
-    "RadrootsTradeListingValidateRequest"
-);
-imported_ts_type!(
-    RadrootsTradeListingValidateResultImport,
-    "RadrootsTradeListingValidateResult"
-);
-
-pub enum RadrootsCommercialMessagePayload {
-    ListingValidateRequest,
-    ListingValidateResult,
-    TradeOrderRequested,
-    OrderDecision,
-    OrderRevisionProposal,
-    OrderRevisionDecisionAccepted,
-    OrderRevisionDecisionDeclined,
-    Cancel,
-}
-
-impl Dto for RadrootsCommercialMessagePayload {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = EnumDef::new(
-            "RadrootsCommercialMessagePayload",
-            "RadrootsCommercialMessagePayload",
-            EnumRepr::External,
-            span("crates/trade_bindings/src/dto.rs", 97),
-        )
-        .with_variant(payload_variant(
-            "ListingValidateRequest",
-            "listing_validate_request",
-            RadrootsTradeListingValidateRequestImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            99,
-        ))
-        .with_variant(payload_variant(
-            "ListingValidateResult",
-            "listing_validate_result",
-            RadrootsTradeListingValidateResultImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            100,
-        ))
-        .with_variant(payload_variant(
-            "TradeOrderRequested",
-            "trade_order_requested",
-            RadrootsOrderRequestImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            101,
-        ))
-        .with_variant(payload_variant(
-            "OrderDecision",
-            "order_response",
-            RadrootsOrderDecisionImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            102,
-        ))
-        .with_variant(payload_variant(
-            "OrderRevisionProposal",
-            "order_revision",
-            RadrootsOrderRevisionProposalImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            103,
-        ))
-        .with_variant(payload_variant(
-            "OrderRevisionDecisionAccepted",
-            "order_revision_accept",
-            RadrootsOrderRevisionDecisionImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            104,
-        ))
-        .with_variant(payload_variant(
-            "OrderRevisionDecisionDeclined",
-            "order_revision_decline",
-            RadrootsOrderRevisionDecisionImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            105,
-        ))
-        .with_variant(payload_variant(
-            "Cancel",
-            "cancel",
-            RadrootsOrderCancellationImport::describe(ctx),
-            "crates/trade_bindings/src/dto.rs",
-            106,
-        ));
-        register(ctx, "RadrootsCommercialMessagePayload", TypeDef::Enum(def))
-    }
-}
-
-#[derive(dto_bindgen::Dto)]
-pub enum RadrootsCommercialMessageType {
-    #[serde(rename = "listing_validate_request")]
-    ListingValidateRequest,
-    #[serde(rename = "listing_validate_result")]
-    ListingValidateResult,
-    #[serde(rename = "order_request")]
-    OrderRequest,
-    #[serde(rename = "order_response")]
-    OrderResponse,
-    #[serde(rename = "order_revision")]
-    OrderRevision,
-    #[serde(rename = "order_revision_accept")]
-    OrderRevisionAccept,
-    #[serde(rename = "order_revision_decline")]
-    OrderRevisionDecline,
-    #[serde(rename = "question")]
-    Question,
-    #[serde(rename = "answer")]
-    Answer,
-    #[serde(rename = "discount_request")]
-    DiscountRequest,
-    #[serde(rename = "discount_offer")]
-    DiscountOffer,
-    #[serde(rename = "discount_accept")]
-    DiscountAccept,
-    #[serde(rename = "discount_decline")]
-    DiscountDecline,
-    #[serde(rename = "cancel")]
-    Cancel,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub enum RadrootsOrderStatus {
-    #[serde(rename = "draft")]
-    Draft,
-    #[serde(rename = "validated")]
-    Validated,
-    #[serde(rename = "requested")]
-    Requested,
-    #[serde(rename = "questioned")]
-    Questioned,
-    #[serde(rename = "revised")]
-    Revised,
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "declined")]
-    Declined,
-    #[serde(rename = "cancelled")]
-    Cancelled,
-}
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeFacetCount {
@@ -422,8 +271,8 @@ pub struct RadrootsTradeMarketplaceOrderSummary {
     pub listing_addr: String,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
-    pub status: RadrootsOrderStatus,
-    pub last_message_type: RadrootsCommercialMessageType,
+    pub status: RadrootsTradeWorkflowState,
+    pub last_message_type: RadrootsOrderEventTypeImport,
     pub item_count: u32,
     pub total_bin_count: u32,
     pub has_requested_discounts: bool,
@@ -495,7 +344,7 @@ pub struct RadrootsTradeOrderQuery {
     pub listing_addr: Option<String>,
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
-    pub status: Option<RadrootsOrderStatus>,
+    pub status: Option<RadrootsTradeWorkflowState>,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -523,19 +372,6 @@ pub enum RadrootsTradeOrderSortField {
 }
 
 #[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderWorkflowMessage {
-    pub event_id: String,
-    pub actor_pubkey: String,
-    pub counterparty_pubkey: String,
-    pub listing_addr: String,
-    pub order_id: Option<String>,
-    pub listing_event: Option<RadrootsNostrEventPtrImport>,
-    pub root_event_id: Option<String>,
-    pub prev_event_id: Option<String>,
-    pub payload: RadrootsCommercialMessagePayload,
-}
-
-#[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeOrderWorkflowProjection {
     pub order_id: String,
     pub listing_addr: String,
@@ -543,7 +379,7 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub seller_pubkey: String,
     pub items: Vec<RadrootsOrderItemImport>,
     pub requested_discounts: Option<Vec<RadrootsOrderEconomicLineImport>>,
-    pub status: RadrootsOrderStatus,
+    pub status: RadrootsTradeWorkflowState,
     pub listing_snapshot: Option<RadrootsNostrEventPtrImport>,
     pub root_event_id: String,
     pub last_event_id: String,
@@ -552,15 +388,9 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub accepted_discount: Option<RadrootsCoreDiscountValueImport>,
     pub last_reason: Option<String>,
     pub last_discount_decline_reason: Option<String>,
-    pub question_count: u32,
-    pub answer_count: u32,
     pub revision_count: u32,
-    pub discount_request_count: u32,
-    pub discount_offer_count: u32,
-    pub discount_accept_count: u32,
-    pub discount_decline_count: u32,
     pub cancellation_count: u32,
-    pub last_message_type: RadrootsCommercialMessageType,
+    pub last_message_type: RadrootsOrderEventTypeImport,
     pub last_actor_pubkey: String,
 }
 
@@ -618,21 +448,6 @@ fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeR
 
 fn unit_variant(rust_name: &str, wire_name: &str, file: &str, line: u32) -> VariantDef {
     VariantDef::new(rust_name, wire_name, VariantShape::Unit, span(file, line))
-}
-
-fn payload_variant(
-    rust_name: &str,
-    wire_name: &str,
-    ty: TypeRef,
-    file: &str,
-    line: u32,
-) -> VariantDef {
-    VariantDef::new(
-        rust_name,
-        wire_name,
-        VariantShape::Newtype(ty),
-        span(file, line),
-    )
 }
 
 fn field(rust_name: &str, wire_name: &str, ty: TypeRef, file: &str, line: u32) -> FieldDef {
