@@ -6,6 +6,8 @@ use alloc::{string::String, vec::Vec};
 use crate::{RadrootsNostrEventPtr, order::RadrootsListingParseError};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -77,6 +79,7 @@ impl core::fmt::Display for RadrootsTradeValidationListingError {
 impl std::error::Error for RadrootsTradeValidationListingError {}
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "dto-bindgen",
     dto(ts(name = "RadrootsTradeListingValidateRequest"))
@@ -88,6 +91,7 @@ pub struct RadrootsTradeValidationListingRequest {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "dto-bindgen",
     dto(ts(name = "RadrootsTradeListingValidateResult"))
