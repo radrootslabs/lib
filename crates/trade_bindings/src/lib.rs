@@ -7,6 +7,7 @@ pub use dto::dto_roots;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeTypeDisposition {
     SourceTradeRoot,
+    SourceTradeSupport,
     EventsBindingImport,
     SdkLocalPackageShape,
 }
@@ -38,7 +39,10 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     event_import("RadrootsListingProduct"),
     event_import("RadrootsListingPublicLocation"),
     event_import("RadrootsListingStatus"),
+    event_import("RadrootsOrderEconomics"),
     event_import("RadrootsOrderEventType"),
+    event_import("RadrootsOrderInventoryCommitment"),
+    source_support("RadrootsOrderIssue"),
     local_shape("RadrootsTradeFacetCount"),
     source_root("RadrootsTradeListing"),
     local_shape("RadrootsTradeListingBackofficeOverlay"),
@@ -65,7 +69,7 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     local_shape("RadrootsTradeOrderQuery"),
     local_shape("RadrootsTradeOrderSort"),
     local_shape("RadrootsTradeOrderSortField"),
-    local_shape("RadrootsTradeOrderWorkflowProjection"),
+    source_root("RadrootsTradeOrderWorkflowProjection"),
     local_shape("RadrootsTradeReviewPriority"),
     local_shape("RadrootsTradeReviewQueueEntry"),
     local_shape("RadrootsTradeReviewStatus"),
@@ -94,14 +98,19 @@ pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
         "RadrootsTradeOrderBackofficeView",
         "open_moderation_flag_count",
     ),
-    json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "revision_count"),
-    json_number_safe_count("RadrootsTradeOrderWorkflowProjection", "cancellation_count"),
 ];
 
 const fn source_root(export_name: &'static str) -> TradeTypeInventoryEntry {
     TradeTypeInventoryEntry {
         export_name,
         disposition: TradeTypeDisposition::SourceTradeRoot,
+    }
+}
+
+const fn source_support(export_name: &'static str) -> TradeTypeInventoryEntry {
+    TradeTypeInventoryEntry {
+        export_name,
+        disposition: TradeTypeDisposition::SourceTradeSupport,
     }
 }
 
@@ -165,7 +174,10 @@ mod tests {
                 "RadrootsListingProduct",
                 "RadrootsListingPublicLocation",
                 "RadrootsListingStatus",
+                "RadrootsOrderEconomics",
                 "RadrootsOrderEventType",
+                "RadrootsOrderInventoryCommitment",
+                "RadrootsOrderIssue",
                 "RadrootsTradeFacetCount",
                 "RadrootsTradeListing",
                 "RadrootsTradeListingBackofficeOverlay",
@@ -213,7 +225,9 @@ mod tests {
             "RadrootsListingProduct",
             "RadrootsListingPublicLocation",
             "RadrootsListingStatus",
+            "RadrootsOrderEconomics",
             "RadrootsOrderEventType",
+            "RadrootsOrderInventoryCommitment",
         ] {
             assert_eq!(
                 disposition(export_name),
@@ -236,8 +250,17 @@ mod tests {
                 "RadrootsTradeListing",
                 "RadrootsTradeListingSubtotal",
                 "RadrootsTradeListingTotal",
+                "RadrootsTradeOrderWorkflowProjection",
                 "RadrootsTradeWorkflowState"
             ]
+        );
+    }
+
+    #[test]
+    fn trade_source_support_types_are_marked_for_source_registry() {
+        assert_eq!(
+            disposition("RadrootsOrderIssue"),
+            TradeTypeDisposition::SourceTradeSupport
         );
     }
 
@@ -304,16 +327,6 @@ mod tests {
                 (
                     "RadrootsTradeOrderBackofficeView",
                     "open_moderation_flag_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "revision_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderWorkflowProjection",
-                    "cancellation_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
             ]

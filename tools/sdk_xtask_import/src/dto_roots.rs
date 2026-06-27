@@ -157,9 +157,16 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
     events_override("RadrootsNostrEventPtr"),
     events_override("RadrootsPlotRef"),
     events_override("RadrootsResourceAreaRef"),
+    events_override("RadrootsOrderEconomicActor"),
+    events_override("RadrootsOrderEconomicEffect"),
+    events_override("RadrootsOrderEconomicItem"),
     events_override("RadrootsOrderEconomicLine"),
+    events_override("RadrootsOrderEconomicLineKind"),
+    events_override("RadrootsOrderEconomics"),
     events_override("RadrootsOrderEventType"),
+    events_override("RadrootsOrderInventoryCommitment"),
     events_override("RadrootsOrderItem"),
+    events_override("RadrootsOrderPricingBasis"),
 ];
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
@@ -217,7 +224,7 @@ pub fn replica_db_schema_types_module() -> Result<DtoTypesModule, String> {
 pub fn trade_types_module() -> Result<DtoTypesModule, String> {
     let root_set = package_root_set("trade").ok_or_else(|| "missing trade DTO roots".to_owned())?;
     let registry = root_set.registry();
-    let options = trade_import_options(DtoRegistryRenderOptions::default())?;
+    let options = trade_import_options(&registry, DtoRegistryRenderOptions::default())?;
     let rendered = render_registry_types(&registry, &options)?;
     validate_external_override_usage(&rendered, TRADE_EXTERNAL_OVERRIDES)?;
     Ok(rendered)
@@ -286,11 +293,19 @@ fn with_checked_external_type(
 }
 
 fn trade_import_options(
+    registry: &Registry,
     mut options: DtoRegistryRenderOptions,
 ) -> Result<DtoRegistryRenderOptions, String> {
     let package_exports = generated_external_package_exports()?;
     for override_target in TRADE_EXTERNAL_OVERRIDES {
         validate_external_override_target(*override_target, &package_exports)?;
+        if let Ok(type_id) = registry.type_id_by_export_name(override_target.target_type) {
+            options = options.with_external_type(
+                type_id,
+                override_target.import_name,
+                override_target.from,
+            );
+        }
         options = options.with_external_override(
             override_target.target_type,
             override_target.import_name,
@@ -624,6 +639,7 @@ mod tests {
         "RadrootsEventsIndexedIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
+        "RadrootsOrderIssue",
         "RadrootsTradeFacetCount",
         "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
@@ -760,7 +776,9 @@ mod tests {
 
     #[test]
     fn trade_external_override_targets_resolve_to_generated_exports() {
-        trade_import_options(DtoRegistryRenderOptions::default())
+        let registry = package_root_set("trade").expect("trade roots").registry();
+
+        trade_import_options(&registry, DtoRegistryRenderOptions::default())
             .expect("trade external overrides validate");
     }
 
@@ -918,10 +936,22 @@ mod tests {
                 .get("@radroots/events-bindings")
                 .is_some_and(|names| names.contains("RadrootsOrderEventType"))
         );
+        assert!(
+            imports
+                .get("@radroots/events-bindings")
+                .is_some_and(|names| names.contains("RadrootsOrderEconomics"))
+        );
+        assert!(
+            imports
+                .get("@radroots/events-bindings")
+                .is_some_and(|names| names.contains("RadrootsOrderInventoryCommitment"))
+        );
 
         for duplicate in [
             "export type RadrootsListing = ",
             "export type RadrootsFarmRef = ",
+            "export type RadrootsOrderEconomics = ",
+            "export type RadrootsOrderInventoryCommitment = ",
             "export type RadrootsCommercialMessagePayload = ",
             "export type RadrootsCommercialMessageType = ",
             "export type RadrootsOrderStatus = ",
@@ -936,6 +966,7 @@ mod tests {
         );
         assert!(marketplace_order_summary.contains("status: RadrootsTradeWorkflowState"));
         assert!(marketplace_order_summary.contains("last_message_type: RadrootsOrderEventType"));
+        assert!(!marketplace_order_summary.contains("has_requested_discounts"));
 
         let order_query = type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsTradeOrderQuery");
         assert!(order_query.contains("status?: RadrootsTradeWorkflowState | null"));
@@ -945,8 +976,17 @@ mod tests {
             "RadrootsTradeOrderWorkflowProjection",
         );
         assert!(workflow_projection.contains("status: RadrootsTradeWorkflowState"));
-        assert!(workflow_projection.contains("last_message_type: RadrootsOrderEventType"));
+        assert!(workflow_projection.contains("request_event_id?: string | null"));
+        assert!(workflow_projection.contains("last_event_id?: string | null"));
+        assert!(workflow_projection.contains("listing_addr?: string | null"));
         for stale_counter in [
+            "root_event_id",
+            "last_message_type",
+            "last_discount_request",
+            "last_discount_offer",
+            "accepted_discount",
+            "last_discount_decline_reason",
+            "has_requested_discounts",
             "question_count",
             "answer_count",
             "discount_request_count",

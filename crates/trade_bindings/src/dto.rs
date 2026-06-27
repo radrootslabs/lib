@@ -4,7 +4,8 @@ use dto_bindgen_core::{
     VariantShape, WireFieldNames,
 };
 use radroots_trade::{
-    listing::model::RadrootsTradeListingTotal, workflow::RadrootsTradeWorkflowState,
+    listing::model::RadrootsTradeListingTotal, order::RadrootsTradeOrderWorkflowProjection,
+    workflow::RadrootsTradeWorkflowState,
 };
 
 pub fn dto_roots() -> Vec<RootDescriptor> {
@@ -35,7 +36,6 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsTradeOrderQuery>(),
         RootDescriptor::new::<RadrootsTradeOrderSort>(),
         RootDescriptor::new::<RadrootsTradeOrderSortField>(),
-        RootDescriptor::new::<RadrootsTradeOrderWorkflowProjection>(),
         RootDescriptor::new::<RadrootsTradeReviewPriority>(),
         RootDescriptor::new::<RadrootsTradeReviewQueueEntry>(),
         RootDescriptor::new::<RadrootsTradeReviewStatus>(),
@@ -58,7 +58,6 @@ macro_rules! imported_ts_type {
 
 imported_ts_type!(RadrootsCoreDecimalImport, "RadrootsCoreDecimal");
 imported_ts_type!(RadrootsCoreDiscountImport, "RadrootsCoreDiscount");
-imported_ts_type!(RadrootsCoreDiscountValueImport, "RadrootsCoreDiscountValue");
 imported_ts_type!(RadrootsCoreMoneyImport, "RadrootsCoreMoney");
 imported_ts_type!(RadrootsCoreQuantityImport, "RadrootsCoreQuantity");
 imported_ts_type!(RadrootsCoreQuantityPriceImport, "RadrootsCoreQuantityPrice");
@@ -80,12 +79,9 @@ imported_ts_type!(
     "RadrootsListingPublicLocation"
 );
 imported_ts_type!(RadrootsListingProductImport, "RadrootsListingProduct");
-imported_ts_type!(RadrootsNostrEventPtrImport, "RadrootsNostrEventPtr");
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
 imported_ts_type!(RadrootsResourceAreaRefImport, "RadrootsResourceAreaRef");
-imported_ts_type!(RadrootsOrderEconomicLineImport, "RadrootsOrderEconomicLine");
 imported_ts_type!(RadrootsOrderEventTypeImport, "RadrootsOrderEventType");
-imported_ts_type!(RadrootsOrderItemImport, "RadrootsOrderItem");
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeFacetCount {
@@ -275,7 +271,6 @@ pub struct RadrootsTradeMarketplaceOrderSummary {
     pub last_message_type: RadrootsOrderEventTypeImport,
     pub item_count: u32,
     pub total_bin_count: u32,
-    pub has_requested_discounts: bool,
     pub last_reason: Option<String>,
 }
 
@@ -369,29 +364,6 @@ pub enum RadrootsTradeOrderSortField {
     LastMessageType,
     #[serde(rename = "total_bin_count")]
     TotalBinCount,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderWorkflowProjection {
-    pub order_id: String,
-    pub listing_addr: String,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub items: Vec<RadrootsOrderItemImport>,
-    pub requested_discounts: Option<Vec<RadrootsOrderEconomicLineImport>>,
-    pub status: RadrootsTradeWorkflowState,
-    pub listing_snapshot: Option<RadrootsNostrEventPtrImport>,
-    pub root_event_id: String,
-    pub last_event_id: String,
-    pub last_discount_request: Option<RadrootsCoreDiscountValueImport>,
-    pub last_discount_offer: Option<RadrootsCoreDiscountValueImport>,
-    pub accepted_discount: Option<RadrootsCoreDiscountValueImport>,
-    pub last_reason: Option<String>,
-    pub last_discount_decline_reason: Option<String>,
-    pub revision_count: u32,
-    pub cancellation_count: u32,
-    pub last_message_type: RadrootsOrderEventTypeImport,
-    pub last_actor_pubkey: String,
 }
 
 #[derive(dto_bindgen::Dto)]
