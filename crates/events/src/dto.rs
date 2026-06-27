@@ -701,31 +701,6 @@ impl Dto for RadrootsResourceHarvestCap {
     }
 }
 
-impl Dto for RadrootsReaction {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsReaction",
-            "RadrootsReaction",
-            span("crates/events/src/reaction.rs", 8),
-        )
-        .with_field(field(
-            "root",
-            "root",
-            RadrootsNostrEventRef::describe(ctx),
-            "crates/events/src/reaction.rs",
-            9,
-        ))
-        .with_field(field(
-            "content",
-            "content",
-            String::describe(ctx),
-            "crates/events/src/reaction.rs",
-            10,
-        ));
-        register(ctx, "RadrootsReaction", TypeDef::Struct(def))
-    }
-}
-
 impl Dto for RadrootsListingParseError {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(

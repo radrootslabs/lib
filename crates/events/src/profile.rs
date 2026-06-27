@@ -9,6 +9,7 @@ pub const RADROOTS_PROFILE_TYPE_TAG_ANY: &str = "radroots:type:any";
 pub const RADROOTS_PROFILE_TYPE_TAG_RADROOTSD: &str = "radroots:type:radrootsd";
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
@@ -47,6 +48,7 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsProfile {
