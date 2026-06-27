@@ -77,6 +77,8 @@ pub struct RadrootsListing {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingProduct {
     pub key: String,
@@ -97,6 +99,8 @@ pub const RADROOTS_LISTING_PRODUCT_TAG_KEYS: [&str; 9] = [
 pub struct RadrootsListingProductTagKeys;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingBin {
     pub bin_id: RadrootsInventoryBinId,
@@ -110,6 +114,7 @@ pub struct RadrootsListingBin {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingPublicLocation {
@@ -121,6 +126,8 @@ pub struct RadrootsListingPublicLocation {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingImage {
     pub url: String,
@@ -128,6 +135,7 @@ pub struct RadrootsListingImage {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingImageSize {
     pub w: u32,
