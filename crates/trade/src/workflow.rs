@@ -18,8 +18,11 @@ use crate::validation_receipt::{
     RadrootsValidationReceiptType,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeWorkflowState {
     Missing,
     Requested,
@@ -295,6 +298,33 @@ mod tests {
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn workflow_state_serializes_as_approved_wire_vocabulary() {
+        for (state, wire_name) in [
+            (RadrootsTradeWorkflowState::Missing, "missing"),
+            (RadrootsTradeWorkflowState::Requested, "requested"),
+            (
+                RadrootsTradeWorkflowState::RevisionProposed,
+                "revision_proposed",
+            ),
+            (
+                RadrootsTradeWorkflowState::AgreedPendingRhi,
+                "agreed_pending_rhi",
+            ),
+            (RadrootsTradeWorkflowState::Committed, "committed"),
+            (RadrootsTradeWorkflowState::Declined, "declined"),
+            (RadrootsTradeWorkflowState::Cancelled, "cancelled"),
+            (RadrootsTradeWorkflowState::Invalid, "invalid"),
+        ] {
+            assert_eq!(serde_json::to_value(&state).unwrap(), wire_name);
+            assert_eq!(
+                serde_json::from_value::<RadrootsTradeWorkflowState>(wire_name.into()).unwrap(),
+                state
+            );
+        }
+    }
 
     fn event_id(raw: u8) -> RadrootsEventId {
         RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")

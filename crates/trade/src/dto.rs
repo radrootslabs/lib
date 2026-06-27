@@ -7,12 +7,14 @@ use crate::listing::{
     model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal},
     validation::RadrootsTradeListing,
 };
+use crate::workflow::RadrootsTradeWorkflowState;
 
-pub fn dto_roots() -> [RootDescriptor; 3] {
+pub fn dto_roots() -> [RootDescriptor; 4] {
     [
         RootDescriptor::new::<RadrootsTradeListing>(),
         RootDescriptor::new::<RadrootsTradeListingSubtotal>(),
         RootDescriptor::new::<RadrootsTradeListingTotal>(),
+        RootDescriptor::new::<RadrootsTradeWorkflowState>(),
     ]
 }
 
@@ -219,7 +221,9 @@ fn span(file: &str, line: u32) -> SourceSpan {
 
 #[cfg(test)]
 mod tests {
-    use dto_bindgen_core::{BackendId, Registry, StructDef, TypeDef, TypeRef, build_registry};
+    use dto_bindgen_core::{
+        BackendId, EnumDef, Registry, StructDef, TypeDef, TypeRef, build_registry,
+    };
 
     use super::dto_roots;
 
@@ -227,6 +231,7 @@ mod tests {
         "RadrootsTradeListing",
         "RadrootsTradeListingSubtotal",
         "RadrootsTradeListingTotal",
+        "RadrootsTradeWorkflowState",
     ];
 
     #[test]
@@ -268,6 +273,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn trade_workflow_state_uses_approved_wire_vocabulary() {
+        let registry = build_registry(dto_roots());
+        let workflow_state = find_enum(&registry, "RadrootsTradeWorkflowState");
+
+        assert_eq!(
+            enum_wire_names(workflow_state),
+            [
+                "missing",
+                "requested",
+                "revision_proposed",
+                "agreed_pending_rhi",
+                "committed",
+                "declined",
+                "cancelled",
+                "invalid",
+            ]
+        );
+    }
+
     fn root_export_names(registry: &Registry) -> Vec<&str> {
         registry
             .roots
@@ -297,6 +322,24 @@ mod tests {
                 _ => None,
             })
             .expect("descriptor struct")
+    }
+
+    fn find_enum<'a>(registry: &'a Registry, export_name: &str) -> &'a EnumDef {
+        registry
+            .types_by_id
+            .values()
+            .find_map(|def| match def {
+                TypeDef::Enum(def) if def.export_name == export_name => Some(def),
+                _ => None,
+            })
+            .expect("descriptor enum")
+    }
+
+    fn enum_wire_names(def: &EnumDef) -> Vec<&str> {
+        def.variants
+            .iter()
+            .map(|variant| variant.wire_name.as_str())
+            .collect()
     }
 
     fn field_ty<'a>(def: &'a StructDef, field_name: &str) -> &'a TypeRef {
