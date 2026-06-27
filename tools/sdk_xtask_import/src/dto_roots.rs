@@ -1,4 +1,4 @@
-use dto_bindgen_core::{Registry, RootDescriptor, RustTypeId, TypeId, build_registry};
+use dto_bindgen_core::{Registry, RootDescriptor, TypeDef, TypeId, build_registry};
 
 use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule, render_registry_types};
 
@@ -235,9 +235,13 @@ fn core_import_options(
 
 fn core_type_id(registry: &Registry, rust_ident: &str) -> Option<TypeId> {
     registry
-        .rust_id_to_type_id
-        .get(&RustTypeId::new("radroots_core", rust_ident))
-        .copied()
+        .types_by_id
+        .iter()
+        .find_map(|(type_id, type_def)| match type_def {
+            TypeDef::Struct(def) if def.export_name == rust_ident => Some(*type_id),
+            TypeDef::Enum(def) if def.export_name == rust_ident => Some(*type_id),
+            _ => None,
+        })
 }
 
 fn trade_import_options(mut options: DtoRegistryRenderOptions) -> DtoRegistryRenderOptions {
@@ -266,13 +270,17 @@ fn trade_import_options(mut options: DtoRegistryRenderOptions) -> DtoRegistryRen
         "RadrootsListingPublicLocation",
         "RadrootsListingStatus",
         "RadrootsNostrEventPtr",
+        "RadrootsOrderCancellation",
+        "RadrootsOrderDecision",
         "RadrootsPlotRef",
         "RadrootsResourceAreaRef",
-        "RadrootsCommercialMessagePayload",
-        "RadrootsCommercialMessageType",
         "RadrootsOrderEconomicLine",
         "RadrootsOrderItem",
-        "RadrootsOrderStatus",
+        "RadrootsOrderRequest",
+        "RadrootsOrderRevisionDecision",
+        "RadrootsOrderRevisionProposal",
+        "RadrootsTradeListingValidateRequest",
+        "RadrootsTradeListingValidateResult",
     ] {
         options =
             options.with_external_override(export_name, export_name, "@radroots/events-bindings");
@@ -373,10 +381,6 @@ mod tests {
         "RadrootsAppData",
         "RadrootsComment",
         "RadrootsCommercialDomain",
-        "RadrootsCommercialEnvelope",
-        "RadrootsCommercialMessagePayload",
-        "RadrootsCommercialMessageType",
-        "RadrootsCommercialTransportLane",
         "RadrootsCoop",
         "RadrootsCoopLocation",
         "RadrootsCoopRef",
@@ -404,7 +408,6 @@ mod tests {
         "RadrootsListing",
         "RadrootsListingAvailability",
         "RadrootsListingBin",
-        "RadrootsListingCancel",
         "RadrootsListingDeliveryMethod",
         "RadrootsListingImage",
         "RadrootsListingImageSize",
@@ -420,14 +423,9 @@ mod tests {
         "RadrootsNostrEvent",
         "RadrootsNostrEventPtr",
         "RadrootsNostrEventRef",
-        "RadrootsOrderAnswer",
         "RadrootsOrderCancellation",
-        "RadrootsOrderChange",
         "RadrootsOrderDecision",
         "RadrootsOrderDecisionOutcome",
-        "RadrootsOrderDiscountDecision",
-        "RadrootsOrderDiscountOffer",
-        "RadrootsOrderDiscountRequest",
         "RadrootsOrderEconomicActor",
         "RadrootsOrderEconomicEffect",
         "RadrootsOrderEconomicItem",
@@ -435,20 +433,14 @@ mod tests {
         "RadrootsOrderEconomicLineKind",
         "RadrootsOrderEconomicTotals",
         "RadrootsOrderEconomics",
-        "RadrootsOrderEnvelope",
         "RadrootsOrderEventType",
         "RadrootsOrderInventoryCommitment",
         "RadrootsOrderItem",
         "RadrootsOrderPricingBasis",
-        "RadrootsOrderQuestion",
         "RadrootsOrderRequest",
-        "RadrootsOrderResponse",
-        "RadrootsOrderRevision",
         "RadrootsOrderRevisionDecision",
         "RadrootsOrderRevisionOutcome",
         "RadrootsOrderRevisionProposal",
-        "RadrootsOrderRevisionResponse",
-        "RadrootsOrderStatus",
         "RadrootsPlot",
         "RadrootsPlotLocation",
         "RadrootsPlotRef",
@@ -463,9 +455,15 @@ mod tests {
         "RadrootsResourceHarvestCap",
         "RadrootsResourceHarvestProduct",
         "RadrootsSeal",
+        "RadrootsSocialFarmAnchor",
+        "RadrootsSocialLocation",
+        "RadrootsSocialMediaDimensions",
+        "RadrootsSocialMediaMetadata",
+        "RadrootsSocialMediaThumbnail",
+        "RadrootsSocialTarget",
         "RadrootsTradeListingValidateRequest",
         "RadrootsTradeListingValidateResult",
-        "RadrootsTradeListingValidationError",
+        "RadrootsTradeValidationListingError",
     ];
     const EVENTS_INDEXED_TYPE_INVENTORY: &[&str] = &[
         "RadrootsEventsIndexedShardId",
@@ -476,6 +474,9 @@ mod tests {
         "RadrootsEventsIndexedIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
+        "RadrootsCommercialMessagePayload",
+        "RadrootsCommercialMessageType",
+        "RadrootsOrderStatus",
         "RadrootsTradeFacetCount",
         "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
@@ -643,8 +644,6 @@ mod tests {
         for duplicate in [
             "export type RadrootsListing = ",
             "export type RadrootsFarmRef = ",
-            "export type RadrootsCommercialMessageType = ",
-            "export type RadrootsOrderStatus = ",
         ] {
             assert!(!TRADE_BINDINGS_TYPES_TS.contains(duplicate));
         }

@@ -487,15 +487,13 @@ fn render_primitive(
     if primitive.requires_explicit_integer_policy() {
         return match int_repr {
             Some(IntRepr::JsonString) => Ok("string".to_owned()),
-            Some(IntRepr::JsonNumberUnsafe) => Ok("number".to_owned()),
-            Some(IntRepr::NonJsonBigint) => Ok("bigint".to_owned()),
+            Some(IntRepr::JsonNumber) => Ok("number".to_owned()),
             None => match options.config.numeric.large_int_policy {
                 LargeIntPolicy::RequireExplicit => {
                     Err("large integer field requires explicit numeric policy".to_owned())
                 }
                 LargeIntPolicy::JsonString => Ok("string".to_owned()),
-                LargeIntPolicy::JsonNumberUnsafe => Ok("number".to_owned()),
-                LargeIntPolicy::NonJsonBigint => Ok("bigint".to_owned()),
+                LargeIntPolicy::JsonNumber => Ok("number".to_owned()),
             },
         };
     }
@@ -642,7 +640,7 @@ mod tests {
     fn renders_synthetic_registry_as_package_level_types() {
         let mut registry = Registry::new();
         let external_id = registry.register_type(
-            RustTypeId::new("external", "ExternalThing"),
+            RustTypeId::new("external", "external", "ExternalThing"),
             TypeDef::Struct(StructDef::new("ExternalThing", "ExternalThing", span())),
         );
         let envelope = TypeDef::Struct(StructDef {
@@ -653,7 +651,7 @@ mod tests {
                 TypeRef::GenericParam("T".to_owned()),
             ))
         });
-        registry.register_type(RustTypeId::new("sdk", "Envelope"), envelope);
+        registry.register_type(RustTypeId::new("sdk", "sdk", "Envelope"), envelope);
         let thing = TypeDef::Struct(
             StructDef::new("SyntheticThing", "SyntheticThing", span())
                 .with_field(field("external", "external", TypeRef::Named(external_id)))
@@ -680,7 +678,7 @@ mod tests {
                     )),
                 )),
         );
-        registry.register_type(RustTypeId::new("sdk", "SyntheticThing"), thing);
+        registry.register_type(RustTypeId::new("sdk", "sdk", "SyntheticThing"), thing);
         let mode = TypeDef::Enum(
             EnumDef::new("SyntheticMode", "SyntheticMode", EnumRepr::External, span())
                 .with_variant(VariantDef::new(
@@ -691,7 +689,7 @@ mod tests {
                 ))
                 .with_variant(VariantDef::new("Done", "done", VariantShape::Unit, span())),
         );
-        registry.register_type(RustTypeId::new("sdk", "SyntheticMode"), mode);
+        registry.register_type(RustTypeId::new("sdk", "sdk", "SyntheticMode"), mode);
         let event = TypeDef::Enum(
             EnumDef::new(
                 "SyntheticEvent",
@@ -718,7 +716,7 @@ mod tests {
                 span(),
             )),
         );
-        registry.register_type(RustTypeId::new("sdk", "SyntheticEvent"), event);
+        registry.register_type(RustTypeId::new("sdk", "sdk", "SyntheticEvent"), event);
 
         let rendered = render_registry_types(
             &registry,
@@ -744,7 +742,7 @@ mod tests {
     fn imports_typescript_overrides_when_configured() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "SyntheticThing"),
+            RustTypeId::new("sdk", "sdk", "SyntheticThing"),
             TypeDef::Struct(
                 StructDef::new("SyntheticThing", "SyntheticThing", span()).with_field(field(
                     "external",
@@ -778,7 +776,7 @@ mod tests {
     fn renders_untagged_object_unions() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "Query"),
+            RustTypeId::new("sdk", "sdk", "Query"),
             TypeDef::Enum(
                 EnumDef::new("Query", "Query", EnumRepr::Untagged, span())
                     .with_variant(VariantDef::new(
@@ -809,7 +807,7 @@ mod tests {
     fn renders_untagged_newtype_aliases() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "FindOneResolve"),
+            RustTypeId::new("sdk", "sdk", "FindOneResolve"),
             TypeDef::Enum(
                 EnumDef::new(
                     "FindOneResolve",
@@ -842,7 +840,7 @@ mod tests {
     fn rejects_untagged_unit_variants() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "MaybeReady"),
+            RustTypeId::new("sdk", "sdk", "MaybeReady"),
             TypeDef::Enum(
                 EnumDef::new("MaybeReady", "MaybeReady", EnumRepr::Untagged, span()).with_variant(
                     VariantDef::new("Ready", "ready", VariantShape::Unit, span()),
@@ -863,7 +861,7 @@ mod tests {
     fn requires_explicit_large_integer_policy() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "Counter"),
+            RustTypeId::new("sdk", "sdk", "Counter"),
             TypeDef::Struct(
                 StructDef::new("Counter", "Counter", span()).with_field(field(
                     "value",
@@ -886,16 +884,16 @@ mod tests {
     fn propagates_integer_policy_through_transparent_containers_only() {
         let mut registry = Registry::new();
         let counter_id = registry.register_type(
-            RustTypeId::new("sdk", "Counter"),
+            RustTypeId::new("sdk", "sdk", "Counter"),
             TypeDef::Struct(
                 StructDef::new("Counter", "Counter", span()).with_field(
                     field("value", "value", TypeRef::Primitive(Primitive::U64))
-                        .with_int_repr(IntRepr::JsonNumberUnsafe),
+                        .with_int_repr(IntRepr::JsonNumber),
                 ),
             ),
         );
         registry.register_type(
-            RustTypeId::new("sdk", "TransparentCounters"),
+            RustTypeId::new("sdk", "sdk", "TransparentCounters"),
             TypeDef::Struct(
                 StructDef::new("TransparentCounters", "TransparentCounters", span())
                     .with_field(
@@ -954,7 +952,7 @@ mod tests {
     fn renders_external_data_enums() {
         let mut registry = Registry::new();
         registry.register_type(
-            RustTypeId::new("sdk", "ParseError"),
+            RustTypeId::new("sdk", "sdk", "ParseError"),
             TypeDef::Enum(
                 EnumDef::new("ParseError", "ParseError", EnumRepr::External, span())
                     .with_variant(VariantDef::new(
