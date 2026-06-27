@@ -17,10 +17,7 @@ use crate::{
     gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
     geochat::RadrootsGeoChat,
     gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
-    ids::{
-        RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
-        RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
-    },
+    ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsOrderQuoteId},
     job::{JobFeedbackStatus, JobInputType, JobPaymentRequest},
     job_feedback::RadrootsJobFeedback,
     job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
@@ -177,160 +174,6 @@ pub struct RadrootsOrderRevisionResponseDto;
 pub struct RadrootsOrderStatusDto;
 pub struct RadrootsOrderQuestionDto;
 pub struct RadrootsCommercialTransportLaneDto;
-
-macro_rules! string_dto {
-    ($($ty:ty),+ $(,)?) => {
-        $(
-            impl Dto for $ty {
-                fn describe(_ctx: &mut DescribeCtx) -> TypeRef {
-                    TypeRef::String
-                }
-            }
-        )+
-    };
-}
-
-string_dto!(
-    RadrootsDTag,
-    RadrootsEventId,
-    RadrootsInventoryBinId,
-    RadrootsListingAddress,
-    RadrootsOrderId,
-    RadrootsOrderQuoteId,
-    RadrootsOrderRevisionId,
-    RadrootsPublicKey,
-);
-
-impl Dto for RadrootsNostrEvent {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsNostrEvent",
-            "RadrootsNostrEvent",
-            span("crates/events/src/lib.rs", 52),
-        )
-        .with_field(field(
-            "id",
-            "id",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            53,
-        ))
-        .with_field(field(
-            "author",
-            "author",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            54,
-        ))
-        .with_field(field(
-            "created_at",
-            "created_at",
-            u32::describe(ctx),
-            "crates/events/src/lib.rs",
-            55,
-        ))
-        .with_field(field(
-            "kind",
-            "kind",
-            u32::describe(ctx),
-            "crates/events/src/lib.rs",
-            56,
-        ))
-        .with_field(field(
-            "tags",
-            "tags",
-            <Vec<Vec<String>> as Dto>::describe(ctx),
-            "crates/events/src/lib.rs",
-            57,
-        ))
-        .with_field(field(
-            "content",
-            "content",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            58,
-        ))
-        .with_field(field(
-            "sig",
-            "sig",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            59,
-        ));
-        register(ctx, "RadrootsNostrEvent", TypeDef::Struct(def))
-    }
-}
-
-impl Dto for RadrootsNostrEventRef {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsNostrEventRef",
-            "RadrootsNostrEventRef",
-            span("crates/events/src/lib.rs", 64),
-        )
-        .with_field(field(
-            "id",
-            "id",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            65,
-        ))
-        .with_field(field(
-            "author",
-            "author",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            66,
-        ))
-        .with_field(field(
-            "kind",
-            "kind",
-            u32::describe(ctx),
-            "crates/events/src/lib.rs",
-            67,
-        ))
-        .with_field(optional_nullable_field(
-            "d_tag",
-            "d_tag",
-            <Option<String> as Dto>::describe(ctx),
-            "crates/events/src/lib.rs",
-            68,
-        ))
-        .with_field(optional_nullable_field(
-            "relays",
-            "relays",
-            <Option<Vec<String>> as Dto>::describe(ctx),
-            "crates/events/src/lib.rs",
-            69,
-        ));
-        register(ctx, "RadrootsNostrEventRef", TypeDef::Struct(def))
-    }
-}
-
-impl Dto for RadrootsNostrEventPtr {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsNostrEventPtr",
-            "RadrootsNostrEventPtr",
-            span("crates/events/src/lib.rs", 74),
-        )
-        .with_field(field(
-            "id",
-            "id",
-            String::describe(ctx),
-            "crates/events/src/lib.rs",
-            75,
-        ))
-        .with_field(optional_nullable_field(
-            "relays",
-            "relays",
-            <Option<String> as Dto>::describe(ctx),
-            "crates/events/src/lib.rs",
-            76,
-        ));
-        register(ctx, "RadrootsNostrEventPtr", TypeDef::Struct(def))
-    }
-}
 
 impl Dto for RadrootsListingProduct {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
@@ -546,7 +389,7 @@ impl Dto for RadrootsListingAvailability {
                     "crates/events/src/listing.rs",
                     21,
                 )
-                .with_int_repr(IntRepr::JsonNumberUnsafe),
+                .with_int_repr(IntRepr::JsonString),
                 optional_nullable_field(
                     "end",
                     "end",
@@ -554,7 +397,7 @@ impl Dto for RadrootsListingAvailability {
                     "crates/events/src/listing.rs",
                     22,
                 )
-                .with_int_repr(IntRepr::JsonNumberUnsafe),
+                .with_int_repr(IntRepr::JsonString),
             ]),
             span("crates/events/src/listing.rs", 21),
         ))
@@ -681,7 +524,7 @@ impl Dto for RadrootsListing {
                 63,
             )
             .with_presence(FieldPresence::optional_nullable_skip_if_none())
-            .with_int_repr(IntRepr::JsonNumberUnsafe),
+            .with_int_repr(IntRepr::JsonString),
         )
         .with_field(field(
             "farm",
@@ -807,7 +650,7 @@ impl Dto for RadrootsResourceHarvestCap {
                 "crates/events/src/resource_cap.rs",
                 24,
             )
-            .with_int_repr(IntRepr::NonJsonBigint),
+            .with_int_repr(IntRepr::JsonString),
         )
         .with_field(
             field(
@@ -817,7 +660,7 @@ impl Dto for RadrootsResourceHarvestCap {
                 "crates/events/src/resource_cap.rs",
                 25,
             )
-            .with_int_repr(IntRepr::NonJsonBigint),
+            .with_int_repr(IntRepr::JsonString),
         )
         .with_field(field(
             "cap_quantity",
@@ -1974,7 +1817,10 @@ impl Dto for RadrootsCommercialMessagePayloadDto {
 }
 
 fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeRef {
-    ctx.register_type(RustTypeId::new("radroots_events", rust_ident), type_def)
+    ctx.register_type(
+        RustTypeId::new("radroots_events", "radroots_events", rust_ident),
+        type_def,
+    )
 }
 
 fn core_decimal(ctx: &mut DescribeCtx) -> TypeRef {
@@ -1987,7 +1833,7 @@ fn core_currency(ctx: &mut DescribeCtx) -> TypeRef {
 
 fn external_core_alias(ctx: &mut DescribeCtx, rust_ident: &str) -> TypeRef {
     ctx.register_type(
-        RustTypeId::new("radroots_core", rust_ident),
+        RustTypeId::new("radroots_core", "radroots_core", rust_ident),
         TypeDef::Struct(StructDef::new(
             rust_ident,
             rust_ident,

@@ -20,7 +20,7 @@ pub struct RadrootsMessageFile {
     pub decryption_nonce: String,
     pub encrypted_hash: String,
     pub original_hash: Option<String>,
-    #[cfg_attr(feature = "dto-bindgen", dto(int_repr = "json_number_unsafe"))]
+    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
     pub size: Option<u64>,
     pub dimensions: Option<RadrootsMessageFileDimensions>,
     pub blurhash: Option<String>,
