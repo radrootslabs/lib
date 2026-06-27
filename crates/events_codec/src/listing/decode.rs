@@ -322,11 +322,7 @@ pub fn listing_from_event_parts(
             "process" => set_optional(&mut product.process, tag.get(1)),
             "lot" => set_optional(&mut product.lot, tag.get(1)),
             "location" => {
-                let parse_structured_location = match tag.len() {
-                    0 | 1 => false,
-                    2 => false,
-                    _ => true,
-                };
+                let parse_structured_location = !matches!(tag.len(), 0..=2);
                 if parse_structured_location {
                     let primary = tag
                         .get(1)

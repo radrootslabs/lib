@@ -51,9 +51,9 @@ mod tests {
         };
 
         let tags = farm_build_tags(&farm).expect("tags");
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"d".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"t".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"g".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"d".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"t".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"g".to_string())));
     }
 
     #[test]
@@ -72,17 +72,17 @@ mod tests {
         let tags = farm_build_tags(&farm).expect("tags without optional fields");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
         );
         assert!(
             !tags
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("t"))
         );
         assert!(
             !tags
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
         );
     }
 
@@ -151,10 +151,10 @@ mod tests {
         let tags = farm_ref_tags(&farm).expect("farm ref tags");
         let has_a = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"));
         let has_p = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
 

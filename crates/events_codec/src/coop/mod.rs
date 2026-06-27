@@ -71,9 +71,9 @@ mod tests {
         };
 
         let tags = coop_build_tags(&coop).expect("tags");
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"d".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"t".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"g".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"d".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"t".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"g".to_string())));
     }
 
     #[test]
@@ -86,10 +86,10 @@ mod tests {
         let tags = coop_ref_tags(&coop).expect("coop ref tags");
         let has_a = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"));
         let has_p = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
 

@@ -40,23 +40,23 @@ mod tests {
         let tags = resource_harvest_cap_build_tags(&cap).expect("tags");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("key"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("key"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("start"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("start"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("end"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("end"))
         );
     }
 

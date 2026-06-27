@@ -65,10 +65,10 @@ mod tests {
         let tags = plot_build_tags(&plot).expect("tags");
         let has_a = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"));
         let has_p = tags
             .iter()
-            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
     }
@@ -90,25 +90,25 @@ mod tests {
         let tags = plot_build_tags(&plot).expect("tags without optional fields");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"))
         );
         assert!(
             !tags
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("t"))
         );
         assert!(
             !tags
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
         );
     }
 

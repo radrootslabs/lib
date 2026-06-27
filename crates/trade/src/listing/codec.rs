@@ -271,11 +271,7 @@ fn listing_from_tags(
             "process" => set_optional(&mut product.process, tag.get(1)),
             "lot" => set_optional(&mut product.lot, tag.get(1)),
             "location" => {
-                let parse_structured_location = match tag.len() {
-                    0 | 1 => false,
-                    2 => false,
-                    _ => true,
-                };
+                let parse_structured_location = !matches!(tag.len(), 0..=2);
                 if parse_structured_location {
                     let primary = &tag[1];
                     if primary.trim().is_empty() {
@@ -1137,7 +1133,7 @@ mod tests {
         assert!(
             built
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some(TAG_RADROOTS_PRIMARY_BIN))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some(TAG_RADROOTS_PRIMARY_BIN))
         );
 
         let mapped = map_listing_tags_error(EventEncodeError::EmptyRequiredField("d"));

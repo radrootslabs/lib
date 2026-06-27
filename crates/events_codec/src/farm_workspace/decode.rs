@@ -1,5 +1,3 @@
-#![cfg(feature = "serde_json")]
-
 #[cfg(not(feature = "std"))]
 use alloc::{
     string::{String, ToString},

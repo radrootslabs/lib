@@ -70,7 +70,7 @@ fn profile_to_wire_parts_with_profile_type_sets_tag() {
     };
 
     let parts = to_wire_parts_with_profile_type(&profile, Some(RadrootsProfileType::Farm)).unwrap();
-    assert!(parts.tags.iter().any(|tag| tag.get(0).map(|v| v.as_str())
+    assert!(parts.tags.iter().any(|tag| tag.first().map(|v| v.as_str())
         == Some(RADROOTS_PROFILE_TYPE_TAG_KEY)
         && tag.get(1).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_FARM)));
 }

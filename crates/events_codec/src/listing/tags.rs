@@ -1288,7 +1288,7 @@ mod tests {
 
         let tags = listing_tags(&listing).expect("listing tags");
         let location = find_tag(&tags, "location").expect("location tag");
-        assert_eq!(location.get(0).map(|v| v.as_str()), Some("location"));
+        assert_eq!(location.first().map(|v| v.as_str()), Some("location"));
         assert_eq!(location.get(1).map(|v| v.as_str()), Some("Moyobamba"));
         assert_eq!(location.get(2).map(|v| v.as_str()), Some("San Martin"));
         assert_eq!(location.len(), 3);

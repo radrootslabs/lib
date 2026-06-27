@@ -73,15 +73,15 @@ mod tests {
         let tags = resource_area_build_tags(&area).expect("tags");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("t"))
         );
     }
 
@@ -98,16 +98,16 @@ mod tests {
         let tags = resource_area_build_tags(&area).expect("tags without optional fields");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
         );
         assert!(
             !tags
                 .iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("t"))
         );
     }
 
@@ -121,11 +121,11 @@ mod tests {
         let tags = resource_area_ref_tags(&area_ref).expect("ref tags");
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"))
         );
         assert!(
             tags.iter()
-                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
         );
 
         let err = resource_area_ref_tags(&RadrootsResourceAreaRef {

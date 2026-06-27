@@ -2755,7 +2755,7 @@ mod tests {
 
     #[test]
     fn order_event_record_accessors_cover_all_variants() {
-        let records = vec![
+        let records = [
             RadrootsOrderEventRecord::Request(request_record()),
             RadrootsOrderEventRecord::Decision(accepted_decision()),
             RadrootsOrderEventRecord::RevisionProposal(revision_proposal()),
@@ -3219,7 +3219,7 @@ mod tests {
             RadrootsOrderIssue::ForkedLifecycle { .. }
         ));
 
-        let mut tied_order_issues = vec![
+        let mut tied_order_issues = [
             RadrootsOrderIssue::DecisionPayloadInvalid {
                 event_id: event_id(8),
             },
@@ -3236,7 +3236,7 @@ mod tests {
         };
         assert_eq!(issue_event_id, &event_id(7));
 
-        let mut inventory_issues = vec![
+        let mut inventory_issues = [
             RadrootsListingInventoryAccountingIssue::OverReserved {
                 bin_id: bin_id("bin-2"),
                 available_count: 1,
@@ -3274,7 +3274,7 @@ mod tests {
             RadrootsListingInventoryAccountingIssue::OverReserved { .. }
         ));
 
-        let mut tied_inventory_issues = vec![
+        let mut tied_inventory_issues = [
             RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
                 bin_id: bin_id("bin-2"),
                 event_ids: vec![event_id(9)],
@@ -3513,7 +3513,10 @@ mod tests {
         assert_eq!(super::inventory_issue_id(&issues[2]), "bin-2");
         assert_eq!(super::inventory_issue_id(&issues[3]), "bin-3");
         for issue in &issues {
-            assert_eq!(super::inventory_issue_event_ids(issue), &[id.clone()]);
+            assert_eq!(
+                super::inventory_issue_event_ids(issue),
+                std::slice::from_ref(&id)
+            );
         }
     }
 

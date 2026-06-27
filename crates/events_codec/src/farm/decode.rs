@@ -62,17 +62,16 @@ pub fn farm_from_event(
     } else if farm.d_tag != d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
-    if let Some(location) = farm.location.as_ref() {
-        if !is_public_geohash5(&location.geohash)
+    if let Some(location) = farm.location.as_ref()
+        && (!is_public_geohash5(&location.geohash)
             || !has_textual_locality(
                 &location.primary,
                 location.city.as_deref(),
                 location.region.as_deref(),
                 location.country.as_deref(),
-            )
-        {
-            return Err(EventParseError::InvalidTag(TAG_G));
-        }
+            ))
+    {
+        return Err(EventParseError::InvalidTag(TAG_G));
     }
 
     Ok(farm)

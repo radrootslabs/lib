@@ -26,9 +26,9 @@ mod tests {
         };
 
         let tags = document_build_tags(&document).expect("tags");
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"d".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"p".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"a".to_string())));
-        assert!(tags.iter().any(|tag| tag.get(0) == Some(&"t".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"d".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"p".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"a".to_string())));
+        assert!(tags.iter().any(|tag| tag.first() == Some(&"t".to_string())));
     }
 }

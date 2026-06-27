@@ -907,34 +907,34 @@ fn listing_build_tags_includes_listing_fields() {
     let tags = listing_build_tags(&listing).unwrap();
 
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some(TAG_D)
+        t.first().map(|s| s.as_str()) == Some(TAG_D)
             && t.get(1).map(|s| s.as_str()) == Some("AAAAAAAAAAAAAAAAAAAAAg")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("p")
+        t.first().map(|s| s.as_str()) == Some("p")
             && t.get(1).map(|s| s.as_str()) == Some("farm_pubkey")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("a")
+        t.first().map(|s| s.as_str()) == Some("a")
             && t.get(1).map(|s| s.as_str()) == Some("30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("key") && t.get(1).map(|s| s.as_str()) == Some("sku")
+        t.first().map(|s| s.as_str()) == Some("key") && t.get(1).map(|s| s.as_str()) == Some("sku")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("title")
+        t.first().map(|s| s.as_str()) == Some("title")
             && t.get(1).map(|s| s.as_str()) == Some("Widget")
     }));
 
     let primary_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:primary_bin"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("radroots:primary_bin"))
         .expect("primary bin tag");
     assert_eq!(primary_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
 
     let bin_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:bin"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("radroots:bin"))
         .expect("bin tag");
     assert_eq!(bin_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
     assert_eq!(bin_tag.get(2).map(|s| s.as_str()), Some("1000"));
@@ -945,7 +945,7 @@ fn listing_build_tags_includes_listing_fields() {
 
     let price_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:price"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("radroots:price"))
         .expect("radroots price tag");
     assert_eq!(price_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
     assert_eq!(price_tag.get(2).map(|s| s.as_str()), Some("0.01"));
@@ -958,7 +958,7 @@ fn listing_build_tags_includes_listing_fields() {
     let generic_price_tag = tags
         .iter()
         .find(|t| {
-            t.get(0).map(|s| s.as_str()) == Some("price")
+            t.first().map(|s| s.as_str()) == Some("price")
                 && t.get(1).map(|s| s.as_str()) == Some("10")
         })
         .expect("generic price tag");
@@ -966,7 +966,7 @@ fn listing_build_tags_includes_listing_fields() {
 
     let discount_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:discount"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("radroots:discount"))
         .expect("discount tag");
     assert!(
         discount_tag
@@ -976,29 +976,29 @@ fn listing_build_tags_includes_listing_fields() {
     );
 
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("location")
+        t.first().map(|s| s.as_str()) == Some("location")
             && t.get(1).map(|s| s.as_str()) == Some("Moyobamba")
     }));
 
     let g_tags: Vec<&Vec<String>> = tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("g"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("g"))
         .collect();
     assert_eq!(g_tags.len(), 1);
     assert_eq!(g_tags[0][1].len(), 5);
     assert!(
         !tags
             .iter()
-            .any(|t| t.get(0).map(|s| s.as_str()) == Some("L"))
+            .any(|t| t.first().map(|s| s.as_str()) == Some("L"))
     );
     assert!(
         !tags
             .iter()
-            .any(|t| t.get(0).map(|s| s.as_str()) == Some("l"))
+            .any(|t| t.first().map(|s| s.as_str()) == Some("l"))
     );
 
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("image")
+        t.first().map(|s| s.as_str()) == Some("image")
             && t.get(1).map(|s| s.as_str()) == Some("http://example.com/widget.jpg")
             && t.get(2).map(|s| s.as_str()) == Some("1200x800")
     }));
@@ -1061,19 +1061,19 @@ fn listing_tags_full_includes_trade_fields() {
     let tags = listing_tags_full(&listing).unwrap();
 
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("inventory")
+        t.first().map(|s| s.as_str()) == Some("inventory")
             && t.get(1).map(|s| s.as_str()) == Some(inventory_value.as_str())
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("radroots:availability_start")
+        t.first().map(|s| s.as_str()) == Some("radroots:availability_start")
             && t.get(1).map(|s| s.as_str()) == Some("1730000000")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("expires_at")
+        t.first().map(|s| s.as_str()) == Some("expires_at")
             && t.get(1).map(|s| s.as_str()) == Some("1731000000")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("delivery")
+        t.first().map(|s| s.as_str()) == Some("delivery")
             && t.get(1).map(|s| s.as_str()) == Some("shipping")
     }));
 }
@@ -1088,7 +1088,7 @@ fn listing_tags_full_includes_status_tag() {
     let tags = listing_tags_full(&listing).unwrap();
 
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("status")
+        t.first().map(|s| s.as_str()) == Some("status")
             && t.get(1).map(|s| s.as_str()) == Some("active")
     }));
 }
@@ -1135,12 +1135,12 @@ fn listing_tags_with_options_cover_location_fallback_paths() {
     let tags = listing_tags_with_options(&geohash_only, ListingTagOptions::default()).unwrap();
     assert!(
         tags.iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("g"))
     );
     assert!(
         !tags
             .iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("l"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("l"))
     );
 
     let mut no_coordinates = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
@@ -1155,11 +1155,11 @@ fn listing_tags_with_options_cover_location_fallback_paths() {
     assert!(
         !tags
             .iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("L"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("L"))
     );
     assert!(
         tags.iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("g"))
     );
 
     let mut without_geohash = sample_listing("AAAAAAAAAAAAAAAAAAAAAw");
@@ -1179,11 +1179,11 @@ fn listing_tags_with_options_cover_location_fallback_paths() {
     .unwrap();
     assert!(
         tags.iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("g"))
     );
     assert!(
         !tags
             .iter()
-            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("L"))
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("L"))
     );
 }
