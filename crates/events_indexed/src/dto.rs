@@ -93,7 +93,11 @@ impl Dto for RadrootsEventsIndexedIndexCheckpoint {
 
 fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeRef {
     ctx.register_type(
-        RustTypeId::new("radroots_events_indexed", rust_ident),
+        RustTypeId::new(
+            "radroots_events_indexed",
+            "radroots_events_indexed",
+            rust_ident,
+        ),
         type_def,
     )
 }

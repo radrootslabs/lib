@@ -77,7 +77,7 @@ pub fn dto_registry() -> Registry {
     for spec in TYPE_SPECS {
         let name = spec.name();
         let type_id = registry.register_type(
-            RustTypeId::new(env!("CARGO_PKG_NAME"), name),
+            RustTypeId::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_NAME"), name),
             spec.type_def(),
         );
         registry.mark_root(type_id);

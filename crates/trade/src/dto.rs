@@ -193,7 +193,10 @@ fn trade_listing_total_like(
 }
 
 fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeRef {
-    ctx.register_type(RustTypeId::new("radroots_trade", rust_ident), type_def)
+    ctx.register_type(
+        RustTypeId::new("radroots_trade", "radroots_trade", rust_ident),
+        type_def,
+    )
 }
 
 fn ts_ref(target_type: &str) -> TypeRef {
