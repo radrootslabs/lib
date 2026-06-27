@@ -44,3 +44,47 @@ source_files = [
   "crates/core/src/unit.rs",
 ]
 root_module_file = "crates/core/src/generated/dto_roots.rs"
+
+[[package]]
+key = "events"
+rust_package = "radroots_events"
+rust_crate = "radroots_events"
+npm = "@radroots/events-bindings"
+out_dir = "target/dto-bindgen/events-bindings"
+
+[package.root_discovery]
+mode = "source_manifest"
+source_files = [
+  "crates/events/src/account.rs",
+  "crates/events/src/app_data.rs",
+  "crates/events/src/comment.rs",
+  "crates/events/src/coop.rs",
+  "crates/events/src/document.rs",
+  "crates/events/src/farm.rs",
+  "crates/events/src/follow.rs",
+  "crates/events/src/gcs.rs",
+  "crates/events/src/geochat.rs",
+  "crates/events/src/gift_wrap.rs",
+  "crates/events/src/job.rs",
+  "crates/events/src/job_feedback.rs",
+  "crates/events/src/job_request.rs",
+  "crates/events/src/job_result.rs",
+  "crates/events/src/lib.rs",
+  "crates/events/src/list.rs",
+  "crates/events/src/list_set.rs",
+  "crates/events/src/listing.rs",
+  "crates/events/src/message.rs",
+  "crates/events/src/message_file.rs",
+  "crates/events/src/order.rs",
+  "crates/events/src/order_economics.rs",
+  "crates/events/src/plot.rs",
+  "crates/events/src/post.rs",
+  "crates/events/src/profile.rs",
+  "crates/events/src/reaction.rs",
+  "crates/events/src/relay_document.rs",
+  "crates/events/src/resource_area.rs",
+  "crates/events/src/resource_cap.rs",
+  "crates/events/src/seal.rs",
+  "crates/events/src/trade_validation.rs",
+]
+root_module_file = "crates/events/src/generated/dto_roots.rs"

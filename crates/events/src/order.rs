@@ -377,6 +377,7 @@ pub enum RadrootsCommercialDomain {
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEventType")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

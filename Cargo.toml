@@ -58,8 +58,8 @@ homepage = "https://radroots.org"
 readme = "README"
 
 [workspace.dependencies]
-dto_bindgen = { git = "https://github.com/triesap/dto_bindgen", rev = "0876852b478ef8acc94143d632030096de600ae9", package = "dto_bindgen" }
-dto_bindgen_core = { git = "https://github.com/triesap/dto_bindgen", rev = "0876852b478ef8acc94143d632030096de600ae9", package = "dto_bindgen_core" }
+dto_bindgen = { git = "https://github.com/triesap/dto_bindgen", rev = "b338642d7921e9989c96b63777a7e66b18ee22c5", package = "dto_bindgen" }
+dto_bindgen_core = { git = "https://github.com/triesap/dto_bindgen", rev = "b338642d7921e9989c96b63777a7e66b18ee22c5", package = "dto_bindgen_core" }
 radroots_core = { path = "crates/core", version = "0.1.0-alpha.2", default-features = false }
 radroots_events = { path = "crates/events", version = "0.1.0-alpha.2", default-features = false }
 radroots_event_store = { path = "crates/event_store", version = "0.1.0-alpha.2", default-features = false }
