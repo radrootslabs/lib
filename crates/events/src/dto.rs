@@ -7,7 +7,7 @@ pub use generated_roots::dto_bindgen_roots as dto_roots;
 mod tests {
     use std::collections::BTreeSet;
 
-    use dto_bindgen_core::{TypeDef, build_registry};
+    use dto_bindgen::export::{Registry, build_registry};
 
     use super::dto_roots;
 
@@ -17,52 +17,27 @@ mod tests {
 
         assert!(!registry.has_errors());
         assert_eq!(registry.roots.len(), dto_roots().len());
-        assert!(registry.types_by_id.values().any(
-            |def| matches!(def, TypeDef::Struct(def) if def.export_name == "RadrootsNostrEvent")
-        ));
-        assert!(
-            registry
-                .types_by_id
-                .values()
-                .any(|def| matches!(def, TypeDef::Struct(def) if def.export_name == "RadrootsListingImageSize"))
-        );
+        let export_names = registry_export_names(&registry);
+
+        assert!(export_names.contains("RadrootsNostrEvent"));
+        assert!(export_names.contains("RadrootsListingImageSize"));
     }
 
     #[test]
     fn option_fields_are_optional_nullable() {
         let registry = build_registry(dto_roots());
 
-        let product = registry
-            .types_by_id
-            .values()
-            .find_map(|def| match def {
-                TypeDef::Struct(def) if def.export_name == "RadrootsListingProduct" => Some(def),
-                _ => None,
-            })
-            .expect("listing product descriptor exists");
-        let summary = product
-            .fields
-            .iter()
-            .find(|field| field.rust_name.as_str() == "summary")
+        let summary = registry
+            .struct_field_presence("RadrootsListingProduct", "summary")
             .expect("summary field exists");
-        assert!(!summary.presence.required_on_deserialize);
-        assert!(summary.presence.nullable);
+        assert!(!summary.required_on_deserialize);
+        assert!(summary.nullable);
 
-        let event_ref = registry
-            .types_by_id
-            .values()
-            .find_map(|def| match def {
-                TypeDef::Struct(def) if def.export_name == "RadrootsNostrEventRef" => Some(def),
-                _ => None,
-            })
-            .expect("event ref descriptor exists");
-        let d_tag = event_ref
-            .fields
-            .iter()
-            .find(|field| field.rust_name.as_str() == "d_tag")
+        let d_tag = registry
+            .struct_field_presence("RadrootsNostrEventRef", "d_tag")
             .expect("d_tag field exists");
-        assert!(!d_tag.presence.required_on_deserialize);
-        assert!(d_tag.presence.nullable);
+        assert!(!d_tag.required_on_deserialize);
+        assert!(d_tag.nullable);
     }
 
     #[test]
@@ -114,25 +89,11 @@ mod tests {
         }
     }
 
-    fn registry_export_names(registry: &dto_bindgen_core::Registry) -> BTreeSet<&str> {
-        registry
-            .types_by_id
-            .values()
-            .map(|def| match def {
-                TypeDef::Struct(def) => def.export_name.as_str(),
-                TypeDef::Enum(def) => def.export_name.as_str(),
-            })
-            .collect()
+    fn registry_export_names(registry: &Registry) -> BTreeSet<&str> {
+        registry.type_export_names().collect()
     }
 
-    fn registry_rust_names(registry: &dto_bindgen_core::Registry) -> BTreeSet<&str> {
-        registry
-            .types_by_id
-            .values()
-            .map(|def| match def {
-                TypeDef::Struct(def) => def.rust_name.as_str(),
-                TypeDef::Enum(def) => def.rust_name.as_str(),
-            })
-            .collect()
+    fn registry_rust_names(registry: &Registry) -> BTreeSet<&str> {
+        registry.type_rust_names().collect()
     }
 }
