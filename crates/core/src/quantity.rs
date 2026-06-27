@@ -9,9 +9,12 @@ use alloc::string::String;
 use std::string::String;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreQuantity {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub amount: RadrootsCoreDecimal,
     pub unit: RadrootsCoreUnit,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]

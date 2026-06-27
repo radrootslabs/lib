@@ -1,0 +1,46 @@
+schema_version = 1
+
+[export]
+out_dir = "target/dto-bindgen"
+emit_docs = false
+wire_format = "json"
+
+[numeric]
+large_int_policy = "require_explicit"
+
+[typescript]
+enabled = true
+out_dir = "target/dto-bindgen/core-bindings"
+wire_contract = "json_exchange"
+layout = "bundle"
+bundle_file = "types.ts"
+emit = "ts"
+module_resolution = "bundler"
+import_extension = "none"
+type_only_imports = true
+strict_null_checks_required = true
+style = "dto_bindgen"
+
+[python]
+enabled = false
+
+[[package]]
+key = "core"
+rust_package = "radroots_core"
+rust_crate = "radroots_core"
+npm = "@radroots/core-bindings"
+out_dir = "target/dto-bindgen/core-bindings"
+
+[package.root_discovery]
+mode = "source_manifest"
+source_files = [
+  "crates/core/src/currency.rs",
+  "crates/core/src/decimal.rs",
+  "crates/core/src/discount.rs",
+  "crates/core/src/money.rs",
+  "crates/core/src/percent.rs",
+  "crates/core/src/quantity.rs",
+  "crates/core/src/quantity_price.rs",
+  "crates/core/src/unit.rs",
+]
+root_module_file = "crates/core/src/generated/dto_roots.rs"

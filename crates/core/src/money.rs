@@ -4,6 +4,8 @@ use rust_decimal::RoundingStrategy;
 use rust_decimal::prelude::ToPrimitive;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreMoney {
     pub amount: crate::RadrootsCoreDecimal,

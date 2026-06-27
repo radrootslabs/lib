@@ -1502,7 +1502,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "dto_bindgen"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+source = "git+https://github.com/triesap/dto_bindgen?rev=a9e6433b88e95f4424dadd6b5cd7a610aa150dec#a9e6433b88e95f4424dadd6b5cd7a610aa150dec"
 dependencies = [
  "dto_bindgen_backend_python",
  "dto_bindgen_backend_ts",
@@ -1514,7 +1514,7 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_backend_python"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+source = "git+https://github.com/triesap/dto_bindgen?rev=a9e6433b88e95f4424dadd6b5cd7a610aa150dec#a9e6433b88e95f4424dadd6b5cd7a610aa150dec"
 dependencies = [
  "dto_bindgen_core",
 ]
@@ -1522,7 +1522,7 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_backend_ts"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+source = "git+https://github.com/triesap/dto_bindgen?rev=a9e6433b88e95f4424dadd6b5cd7a610aa150dec#a9e6433b88e95f4424dadd6b5cd7a610aa150dec"
 dependencies = [
  "dto_bindgen_core",
 ]
@@ -1530,7 +1530,7 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_core"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+source = "git+https://github.com/triesap/dto_bindgen?rev=a9e6433b88e95f4424dadd6b5cd7a610aa150dec#a9e6433b88e95f4424dadd6b5cd7a610aa150dec"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1544,7 +1544,7 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_macros"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+source = "git+https://github.com/triesap/dto_bindgen?rev=a9e6433b88e95f4424dadd6b5cd7a610aa150dec#a9e6433b88e95f4424dadd6b5cd7a610aa150dec"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4274,7 +4274,7 @@ dependencies = [
 name = "radroots_core"
 version = "0.1.0-alpha.2"
 dependencies = [
- "dto_bindgen_core",
+ "dto_bindgen",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",

@@ -5,9 +5,12 @@ use crate::RadrootsCoreDecimal;
 use crate::money::RadrootsCoreMoney;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCorePercent {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub value: RadrootsCoreDecimal,
 }
 

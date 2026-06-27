@@ -1,11 +1,11 @@
 use crate::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreQuantityPrice {
-    #[cfg_attr(feature = "serde", serde(alias = "money", alias = "price"))]
     pub amount: RadrootsCoreMoney,
-    #[cfg_attr(feature = "serde", serde(alias = "per", alias = "quantity"))]
     pub quantity: RadrootsCoreQuantity,
 }
 

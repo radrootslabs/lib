@@ -13,21 +13,37 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 
 use crate::RadrootsCoreDecimal;
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnitDimension {
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "count"))]
     Count,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "mass"))]
     Mass,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "volume"))]
     Volume,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnit {
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "each"))]
     Each,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "kg"))]
     MassKg,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "g"))]
     MassG,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "oz"))]
     MassOz,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "lb"))]
     MassLb,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "l"))]
     VolumeL,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "ml"))]
     VolumeMl,
 }
 
