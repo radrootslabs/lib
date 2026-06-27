@@ -13,6 +13,21 @@ fn empty_key_is_rejected_before_redacted_storage() {
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "idempotency key must not be empty"
     ));
+    assert!(matches!(
+        SdkIdempotencyKey::new(" key"),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message == "idempotency key must not include boundary whitespace"
+    ));
+    assert!(matches!(
+        SdkIdempotencyKey::new("key\nvalue"),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message == "idempotency key must not contain control characters"
+    ));
+    assert!(matches!(
+        SdkIdempotencyKey::new("k".repeat(super::SDK_IDEMPOTENCY_KEY_MAX_LEN + 1)),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("idempotency key must be at most")
+    ));
 }
 
 #[test]

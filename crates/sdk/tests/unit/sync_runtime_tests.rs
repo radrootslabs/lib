@@ -1,12 +1,12 @@
-use super::{
-    CLAIM_OWNER, PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt,
-    PushOutboxRelayOutcomeKind, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
-    push_event_final_state, push_event_receipt, push_outbox_claim_token,
-};
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
-    complete_proxy_publish_attempt, proxy_delivery_policy, proxy_error_message,
+    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy, proxy_error_message,
     proxy_outbox_idempotency_key, proxy_transport_error_receipt, push_proxy_claimed_outbox_event,
+};
+use super::{
+    PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind,
+    SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus, push_event_final_state,
+    push_event_receipt, push_outbox_claim_token,
 };
 use crate::RadrootsSdkError;
 #[cfg(feature = "radrootsd-proxy")]
@@ -24,10 +24,10 @@ use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_events::contract::RadrootsActorRole;
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_events::kinds::KIND_FARM;
-use radroots_events::{draft::RadrootsFrozenEventDraft, ids::RadrootsEventId};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "radrootsd-proxy")]

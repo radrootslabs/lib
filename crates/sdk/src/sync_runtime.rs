@@ -277,7 +277,12 @@ impl PushOutboxRequest {
     }
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
-        if self.limit == 0 || self.limit > PUSH_OUTBOX_MAX_LIMIT {
+        if self.limit == 0 {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!("push_outbox limit must be between 1 and {PUSH_OUTBOX_MAX_LIMIT}"),
+            });
+        }
+        if self.limit > PUSH_OUTBOX_MAX_LIMIT {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!("push_outbox limit must be between 1 and {PUSH_OUTBOX_MAX_LIMIT}"),
             });

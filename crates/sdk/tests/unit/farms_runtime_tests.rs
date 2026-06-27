@@ -190,6 +190,166 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
         serde_json::to_value(&try_key).expect("try key json")["idempotency_key"]["len"],
         "farm-unit-try-key".len()
     );
+
+    let private_upsert = FarmPrivateLocationUpsertRequest::new(
+        farmer_actor(),
+        FARM_A_D_TAG,
+        SdkExactLocation::new(12.25, -34.5),
+    )
+    .with_label("unit gate")
+    .with_updated_at(created_at);
+    assert_struct_serialize_error_paths(&private_upsert, 5);
+    let private_upsert_json = serde_json::to_value(&private_upsert).expect("private upsert json");
+    assert_eq!(private_upsert_json["label"], "unit gate");
+    assert_eq!(private_upsert_json["updated_at"], 1_700_000_321);
+
+    for input in [
+        FarmPrivateLocationInput::exact(SdkExactLocation::new(12.25, -34.5)),
+        FarmPrivateLocationInput::city("Fixture City"),
+        FarmPrivateLocationInput::query("Fixture City, FX"),
+        FarmPrivateLocationInput::geonames_id(42),
+    ] {
+        let input_json = serde_json::to_value(&input).expect("private input json");
+        assert_eq!(
+            serde_json::from_value::<FarmPrivateLocationInput>(input_json)
+                .expect("private input round trip"),
+            input
+        );
+    }
+
+    let private_set =
+        FarmPrivateLocationSetRequest::query(farmer_actor(), FARM_B_D_TAG, "Fixture City, FX")
+            .with_label("query gate")
+            .with_updated_at(created_at);
+    assert_struct_serialize_error_paths(&private_set, 5);
+    let private_set_json = serde_json::to_value(&private_set).expect("private set json");
+    assert_eq!(private_set_json["label"], "query gate");
+    assert_eq!(private_set_json["input"]["kind"], "locality");
+
+    let private_exact = FarmPrivateLocationSetRequest::exact(
+        farmer_actor(),
+        FARM_B_D_TAG,
+        SdkExactLocation::new(12.25, -34.5),
+    );
+    assert_eq!(
+        serde_json::to_value(&private_exact).expect("private exact set json")["input"]["kind"],
+        "exact"
+    );
+
+    let private_city =
+        FarmPrivateLocationSetRequest::city(farmer_actor(), FARM_B_D_TAG, "Fixture City");
+    let private_city_json = serde_json::to_value(&private_city).expect("private city set json");
+    assert_eq!(private_city_json["input"]["kind"], "locality");
+    assert_eq!(
+        private_city_json["input"]["value"]["input"]["Structured"]["locality"],
+        "Fixture City"
+    );
+
+    let private_geonames =
+        FarmPrivateLocationSetRequest::geonames_id(farmer_actor(), FARM_B_D_TAG, 42);
+    assert_eq!(
+        serde_json::to_value(&private_geonames).expect("private geonames set json")["input"]["value"]
+            ["input"]["FeatureId"],
+        42
+    );
+
+    let private_clear = FarmPrivateLocationClearRequest::new(farmer_actor(), FARM_C_D_TAG);
+    assert_struct_serialize_error_paths(&private_clear, 2);
+    assert_eq!(
+        serde_json::to_value(&private_clear).expect("private clear json")["farm_d_tag"],
+        FARM_C_D_TAG
+    );
+
+    let public_locality = SdkPublicLocality {
+        primary: "Fixture City, Fixture Region, Fixture Country".to_owned(),
+        city: Some("Fixture City".to_owned()),
+        region: Some("Fixture Region".to_owned()),
+        country: Some("Fixture Country".to_owned()),
+        geohash5: "e4pmw".to_owned(),
+    };
+    assert_struct_serialize_error_paths(&public_locality, 5);
+    assert_eq!(
+        public_locality.to_listing_public_location().geohash,
+        "e4pmw"
+    );
+    assert_eq!(public_locality.to_farm_public_location().geohash, "e4pmw");
+
+    let private_receipt = FarmPrivateLocationReceipt {
+        farm_addr: farm_addr(&farmer_actor(), FARM_B_D_TAG).expect("farm addr"),
+        farm_pubkey: FARMER.to_owned(),
+        farm_d_tag: FARM_B_D_TAG.to_owned(),
+        label: Some("query gate".to_owned()),
+        exact_location: SdkExactLocation::new(12.25, -34.5),
+        public_locality,
+        geonames_feature_id: Some(42),
+        geonames_country_id: Some("FX".to_owned()),
+        updated_at_ms: 1_700_000_321_000,
+    };
+    assert_struct_serialize_error_paths(&private_receipt, 9);
+    assert_struct_serialize_error_paths(&private_receipt.exact_location, 2);
+    let private_receipt_json =
+        serde_json::to_value(&private_receipt).expect("private receipt json");
+    assert_eq!(private_receipt_json["updated_at_ms"], 1_700_000_321_000_i64);
+    assert_eq!(
+        serde_json::from_value::<FarmPrivateLocationReceipt>(private_receipt_json)
+            .expect("private receipt round trip"),
+        private_receipt
+    );
+
+    let clear_receipt = FarmPrivateLocationClearReceipt {
+        farm_addr: farm_addr(&farmer_actor(), FARM_C_D_TAG).expect("farm addr"),
+        cleared: true,
+    };
+    assert_struct_serialize_error_paths(&clear_receipt, 2);
+    assert_eq!(
+        serde_json::from_value::<FarmPrivateLocationClearReceipt>(
+            serde_json::to_value(&clear_receipt).expect("clear receipt json")
+        )
+        .expect("clear receipt round trip"),
+        clear_receipt
+    );
+
+    let candidate = FarmPrivateLocationLookupCandidate {
+        geonames_feature_id: 42,
+        geonames_country_id: "FX".to_owned(),
+        name: "Fixture City".to_owned(),
+        display_name: "Fixture City, Fixture Region, Fixture Country".to_owned(),
+        exact_location: SdkExactLocation::new(12.25, -34.5),
+        region: Some("Fixture Region".to_owned()),
+        country: Some("Fixture Country".to_owned()),
+    };
+    assert_struct_serialize_error_paths(&candidate, 7);
+    let lookup = FarmPrivateLocationLookupReceipt {
+        farm_addr: farm_addr(&farmer_actor(), FARM_B_D_TAG).expect("farm addr"),
+        farm_pubkey: FARMER.to_owned(),
+        farm_d_tag: FARM_B_D_TAG.to_owned(),
+        input: FarmPrivateLocationInput::query("Fixture City, FX"),
+        candidates: vec![candidate],
+    };
+    assert_struct_serialize_error_paths(&lookup, 5);
+    assert_eq!(
+        serde_json::from_value::<FarmPrivateLocationLookupReceipt>(
+            serde_json::to_value(&lookup).expect("lookup json")
+        )
+        .expect("lookup round trip"),
+        lookup
+    );
+
+    for result in [
+        FarmPrivateLocationSetResult::Stored(private_receipt),
+        FarmPrivateLocationSetResult::Ambiguous(lookup.clone()),
+        FarmPrivateLocationSetResult::NoMatch(FarmPrivateLocationLookupReceipt {
+            candidates: Vec::new(),
+            ..lookup
+        }),
+    ] {
+        let result_json = serde_json::to_value(&result).expect("location result json");
+        assert_eq!(
+            serde_json::from_value::<FarmPrivateLocationSetResult>(result_json)
+                .expect("location result round trip"),
+            result
+        );
+    }
 }
 
 #[test]
@@ -540,6 +700,19 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
 
     assert!(matches!(
         sdk.farms().upsert_private_location(request).await,
+        Err(RadrootsSdkError::GeoNames {
+            kind: crate::RadrootsSdkGeoNamesErrorKind::Configuration,
+            ..
+        })
+    ));
+    assert!(matches!(
+        sdk.farms()
+            .set_private_location(FarmPrivateLocationSetRequest::city(
+                actor.clone(),
+                FARM_A_D_TAG,
+                "Fixture Town",
+            ))
+            .await,
         Err(RadrootsSdkError::GeoNames {
             kind: crate::RadrootsSdkGeoNamesErrorKind::Configuration,
             ..

@@ -4,7 +4,7 @@ use super::{
 };
 use radroots_authority::RadrootsAuthorityError;
 use radroots_events::contract::RadrootsActorRole;
-use radroots_geocoder::GeocoderError;
+use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
 
 #[test]
 fn partial_local_mutation_constructor_preserves_supplied_error() {
@@ -440,16 +440,27 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
 #[test]
 fn geonames_error_conversion_maps_source_errors_to_sdk_kinds() {
     let path = std::path::PathBuf::from("geonames-test.db");
+    let download_error = GeoNamesBlockingHttpFetcher
+        .fetch("not-a-url")
+        .expect_err("invalid URL download error");
+    assert!(matches!(
+        RadrootsSdkError::from(download_error),
+        RadrootsSdkError::GeoNames {
+            kind: RadrootsSdkGeoNamesErrorKind::Download,
+            ..
+        }
+    ));
+
     let cases = vec![
         (
             GeocoderError::InvalidAssetUrl {
-                url: "http://assets.radroots.io/geonames.db".to_owned(),
+                url: "http://assets.radroots.io/geonames-1.0.db".to_owned(),
             },
             RadrootsSdkGeoNamesErrorKind::Configuration,
         ),
         (
             GeocoderError::InvalidAssetHost {
-                url: "https://example.com/geonames.db".to_owned(),
+                url: "https://example.com/geonames-1.0.db".to_owned(),
                 expected_host: "assets.radroots.io".to_owned(),
                 actual_host: "example.com".to_owned(),
             },

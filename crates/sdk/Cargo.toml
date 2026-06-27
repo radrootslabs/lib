@@ -29,7 +29,7 @@ identity-models = [
   "radroots_identity/std",
 ]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
-signing = ["dep:radroots_nostr", "nostr"]
+signing = ["dep:nostr", "dep:radroots_nostr", "nostr"]
 relay-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
 radrootsd-proxy = [
   "std",
@@ -127,6 +127,7 @@ reqwest = { workspace = true, optional = true, default-features = false, feature
   "rustls-tls",
 ] }
 hex = { workspace = true, optional = true }
+nostr = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, default-features = false, features = [
   "derive",
   "alloc",

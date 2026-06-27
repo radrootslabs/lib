@@ -436,6 +436,40 @@ async fn publish_event_posts_publish_proxy_jsonrpc() {
 }
 
 #[tokio::test]
+async fn publish_signed_event_posts_typed_proxy_request() {
+    let (endpoint, handle) = spawn_http_server("200 OK", publish_response_json().as_str());
+    let adapter = RadrootsdProxyPublishAdapter::new(
+        RadrootsdProxyConfig::new(endpoint)
+            .with_auth(RadrootsdAuth::BearerToken("sdk-token".into()))
+            .with_request_timeout_ms(7_000),
+    );
+
+    let receipt = adapter
+        .publish_signed_event(RadrootsdProxyPublishRequest {
+            signed_event: signed_event(),
+            relays: vec!["wss://relay.example.com".to_owned()],
+            delivery_policy: PublishDeliveryPolicy::All,
+            idempotency_key: Some("idem-typed".to_owned()),
+            timeout_ms: adapter.config().request_timeout_ms,
+        })
+        .await
+        .expect("typed publish");
+
+    assert!(receipt.quorum_met);
+    let recorded = handle.join().expect("server thread");
+    assert!(
+        recorded
+            .headers
+            .iter()
+            .any(|(name, value)| name == "authorization" && value == "Bearer sdk-token")
+    );
+    let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
+    assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
+    assert_eq!(body["params"]["idempotency_key"], "idem-typed");
+    assert_eq!(body["params"]["timeout_ms"], 7_000);
+}
+
+#[tokio::test]
 async fn publish_event_http_errors_omit_body_and_token_material() {
     let body = "{\"error\":\"token-secret content carrots\"}";
     let (endpoint, _handle) = spawn_http_server("503 Service Unavailable", body);

@@ -3,11 +3,15 @@ use radroots_events::ids::RadrootsAddressableCoordinate;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 fn farm_addr() -> RadrootsAddressableCoordinate {
+    farm_addr_for("AAAAAAAAAAAAAAAAAAAAAA")
+}
+
+fn farm_addr_for(d_tag: &str) -> RadrootsAddressableCoordinate {
     RadrootsAddressableCoordinate::parse(format!(
         "{}:{}:{}",
         radroots_events::kinds::KIND_FARM,
         "a".repeat(64),
-        "AAAAAAAAAAAAAAAAAAAAAA"
+        d_tag
     ))
     .expect("farm addr")
 }
@@ -16,6 +20,25 @@ fn private_store_error_message<T>(result: Result<T, RadrootsSdkError>) -> String
     match result.err().expect("private store error") {
         RadrootsSdkError::PrivateStore { message } => message,
         other => panic!("expected private store error, got {other:?}"),
+    }
+}
+
+fn private_location_record() -> SdkPrivateFarmLocationRecord {
+    SdkPrivateFarmLocationRecord {
+        farm_addr: farm_addr(),
+        farm_pubkey: "a".repeat(64),
+        farm_d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        label: Some("Main pickup point".to_owned()),
+        latitude: 12.26,
+        longitude: -34.51,
+        locality_primary: "Fixture Town".to_owned(),
+        locality_city: Some("Fixture Town".to_owned()),
+        locality_region: Some("Fixture Region".to_owned()),
+        locality_country: Some("Fixture Country".to_owned()),
+        geohash5: "e4pmw".to_owned(),
+        geonames_feature_id: Some(1),
+        geonames_country_id: Some("FX".to_owned()),
+        updated_at_ms: 1_700_000_123_000,
     }
 }
 
@@ -71,6 +94,106 @@ async fn private_store_file_open_rejects_directory_paths() {
 }
 
 #[tokio::test]
+async fn private_store_status_update_delete_and_pragmas_round_trip() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let path = tempdir.path().join("private.sqlite");
+    let store = SdkPrivateStore::open_file(&path).await.expect("open store");
+    assert_eq!(store.pragma_foreign_keys().await.expect("foreign keys"), 1);
+    assert_eq!(
+        store.pragma_busy_timeout().await.expect("busy timeout"),
+        5_000
+    );
+    assert_eq!(
+        store.pragma_journal_mode().await.expect("journal mode"),
+        "wal"
+    );
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("empty status")
+            .farm_private_locations,
+        0
+    );
+
+    let record = private_location_record();
+    assert_eq!(
+        store
+            .farm_location(&record.farm_addr)
+            .await
+            .expect("missing lookup"),
+        None
+    );
+    store
+        .upsert_farm_location(&record)
+        .await
+        .expect("insert private location");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("inserted status")
+            .farm_private_locations,
+        1
+    );
+    assert_eq!(
+        store
+            .farm_location(&record.farm_addr)
+            .await
+            .expect("stored lookup"),
+        Some(record.clone())
+    );
+
+    let mut updated = record.clone();
+    updated.label = None;
+    updated.latitude = 12.5;
+    updated.longitude = -34.75;
+    updated.locality_primary = "Updated Town".to_owned();
+    updated.locality_city = Some("Updated Town".to_owned());
+    updated.geonames_feature_id = Some(2);
+    updated.updated_at_ms = 1_700_000_124_000;
+    store
+        .upsert_farm_location(&updated)
+        .await
+        .expect("update private location");
+    assert_eq!(
+        store
+            .farm_location(&record.farm_addr)
+            .await
+            .expect("updated lookup"),
+        Some(updated.clone())
+    );
+
+    let missing_addr = farm_addr_for("AAAAAAAAAAAAAAAAAAAAAQ");
+    assert!(
+        !store
+            .delete_farm_location(&missing_addr)
+            .await
+            .expect("delete missing")
+    );
+    assert!(
+        store
+            .delete_farm_location(&updated.farm_addr)
+            .await
+            .expect("delete stored")
+    );
+    assert!(
+        !store
+            .delete_farm_location(&updated.farm_addr)
+            .await
+            .expect("delete already cleared")
+    );
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("cleared status")
+            .farm_private_locations,
+        0
+    );
+}
+
+#[tokio::test]
 async fn private_store_file_open_materializes_label_column_for_existing_stores() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let path = tempdir.path().join("private.sqlite");
@@ -107,22 +230,7 @@ async fn private_store_file_open_materializes_label_column_for_existing_stores()
     pool.close().await;
 
     let store = SdkPrivateStore::open_file(&path).await.expect("open store");
-    let record = SdkPrivateFarmLocationRecord {
-        farm_addr: farm_addr(),
-        farm_pubkey: "a".repeat(64),
-        farm_d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
-        label: Some("Main pickup point".to_owned()),
-        latitude: 12.26,
-        longitude: -34.51,
-        locality_primary: "Fixture Town".to_owned(),
-        locality_city: Some("Fixture Town".to_owned()),
-        locality_region: Some("Fixture Region".to_owned()),
-        locality_country: Some("Fixture Country".to_owned()),
-        geohash5: "e4pmw".to_owned(),
-        geonames_feature_id: Some(1),
-        geonames_country_id: Some("FX".to_owned()),
-        updated_at_ms: 1_700_000_123_000,
-    };
+    let record = private_location_record();
     store
         .upsert_farm_location(&record)
         .await

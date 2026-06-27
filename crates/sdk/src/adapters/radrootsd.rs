@@ -182,9 +182,9 @@ impl fmt::Display for RadrootsdError {
             Self::InvalidAuthHeader(value) => {
                 write!(f, "invalid radrootsd bearer token header: {value}")
             }
-            Self::InvalidRequest(value) | Self::Http(value) | Self::MalformedResponse(value) => {
-                f.write_str(value)
-            }
+            Self::InvalidRequest(value) => f.write_str(value),
+            Self::Http(value) => f.write_str(value),
+            Self::MalformedResponse(value) => f.write_str(value),
             Self::JsonRpc { code, message } => {
                 write!(f, "radrootsd jsonrpc failed {code}: {message}")
             }
@@ -230,7 +230,8 @@ fn auth_headers(auth: &RadrootsdAuth) -> Result<HeaderMap, RadrootsdError> {
     match auth {
         RadrootsdAuth::None => Ok(headers),
         RadrootsdAuth::BearerToken(token) => {
-            let value = HeaderValue::from_str(format!("Bearer {token}").as_str())
+            let header = format!("Bearer {token}");
+            let value = HeaderValue::from_str(header.as_str())
                 .map_err(|err| RadrootsdError::InvalidAuthHeader(err.to_string()))?;
             headers.insert(AUTHORIZATION, value);
             Ok(headers)

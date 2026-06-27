@@ -796,6 +796,14 @@ fn restore_destination_preflight_covers_empty_existing_new_and_overlap_paths() {
         paths.event_store_path,
         new_destination.join(EVENT_STORE_BACKUP_FILE)
     );
+    let nested_new_destination = parent.join("nested").join("new-destination");
+    fs::create_dir(nested_new_destination.parent().expect("nested parent")).expect("nested parent");
+    let nested_paths = preflight_restore_destination(&source, &nested_new_destination, false)
+        .expect("nested new preflight");
+    assert_eq!(
+        nested_paths.private_store_path,
+        nested_new_destination.join(PRIVATE_STORE_BACKUP_FILE)
+    );
     let relative_destination = PathBuf::from(format!(
         "relative-restore-{}",
         system_time_nanos_since_unix_epoch(SystemTime::now()).expect("time")
@@ -860,6 +868,17 @@ fn restore_destination_preflight_covers_empty_existing_new_and_overlap_paths() {
 
     #[cfg(unix)]
     {
+        let symlink_destination = parent.join("symlink-destination");
+        std::os::unix::fs::symlink(&empty_directory, &symlink_destination).expect("symlink");
+        assert!(
+            invalid_request_message(preflight_restore_destination(
+                &source,
+                &symlink_destination,
+                true,
+            ))
+            .contains("symbolic link")
+        );
+
         let socket_parent = tempfile::Builder::new()
             .prefix("rrsdk")
             .tempdir_in("/tmp")
@@ -1128,6 +1147,46 @@ fn permission_denied_paths_cover_backup_restore_io_edges() {
     let metadata_result = preflight_restore_destination(&source, &hidden_destination, false);
     set_mode(&hidden_parent, 0o700);
     assert!(!io_message(metadata_result).is_empty());
+}
+
+#[test]
+fn restore_staging_helpers_cover_new_and_existing_destination_installs() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let new_staging = tempdir.path().join("new-staging");
+    let new_destination = tempdir.path().join("new-destination");
+    let new_previous = tempdir.path().join("new-previous");
+    fs::create_dir(&new_staging).expect("new staging");
+
+    let sidecar =
+        unique_restore_sidecar_path(tempdir.path(), &new_destination, "staging").expect("sidecar");
+    assert_eq!(sidecar.parent(), Some(tempdir.path()));
+    assert!(
+        sidecar
+            .file_name()
+            .expect("sidecar name")
+            .to_string_lossy()
+            .contains("new-destination")
+    );
+    assert!(
+        !install_restore_staging(&new_staging, &new_destination, &new_previous)
+            .expect("install new staging")
+    );
+    assert!(new_destination.is_dir());
+    assert!(!new_previous.exists());
+
+    let existing_staging = tempdir.path().join("existing-staging");
+    let existing_destination = tempdir.path().join("existing-destination");
+    let existing_previous = tempdir.path().join("existing-previous");
+    fs::create_dir(&existing_staging).expect("existing staging");
+    fs::create_dir(&existing_destination).expect("existing destination");
+    fs::write(existing_destination.join("old"), b"old").expect("old destination member");
+
+    assert!(
+        install_restore_staging(&existing_staging, &existing_destination, &existing_previous,)
+            .expect("replace existing staging")
+    );
+    assert!(existing_destination.is_dir());
+    assert!(existing_previous.join("old").exists());
 }
 
 #[cfg(unix)]

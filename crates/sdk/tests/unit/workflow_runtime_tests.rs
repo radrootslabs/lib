@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(feature = "signer-adapters")]
+use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_events::contract::RadrootsActorRole;
 use radroots_events::draft::RadrootsSignedNostrEvent;
@@ -48,11 +50,15 @@ impl RadrootsEventSigner for WorkflowSigner {
 }
 
 fn frozen_draft_for(pubkey: &str) -> RadrootsFrozenEventDraft {
+    frozen_draft_for_d_tag(pubkey, "test")
+}
+
+fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsFrozenEventDraft {
     to_frozen_draft(
         WireEventParts {
             kind: KIND_FARM,
             content: "{}".to_owned(),
-            tags: vec![vec!["d".to_owned(), "test".to_owned()]],
+            tags: vec![vec!["d".to_owned(), d_tag.to_owned()]],
         },
         "radroots.farm.profile.v1",
         pubkey,
@@ -121,6 +127,116 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         vec!["wss://relay.example.com".to_owned()]
     );
     assert!(input.event_store_inserted);
+}
+
+#[tokio::test]
+async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_conflicts() {
+    let sdk = crate::RadrootsClient::builder()
+        .relay_url("wss://relay.example.com")
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_010,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let signer = WorkflowSigner::new();
+    let first_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-success");
+    let idempotency_key = SdkIdempotencyKey::new("workflow-idempotency").expect("idempotency");
+    let receipt = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &first_draft,
+            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            idempotency_key: Some(idempotency_key.clone()),
+        },
+        &signer,
+    )
+    .await
+    .expect("enqueue signed workflow");
+
+    assert_eq!(
+        receipt.signed_event_id.as_str(),
+        first_draft.expected_event_id
+    );
+    assert!(receipt.local_event_seq > 0);
+    assert!(receipt.outbox_operation_id > 0);
+    assert!(receipt.outbox_event_id > 0);
+    assert_eq!(receipt.idempotency_digest_prefix.len(), 12);
+
+    let second_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-conflict");
+    let error = match enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &second_draft,
+            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            idempotency_key: Some(idempotency_key),
+        },
+        &signer,
+    )
+    .await
+    {
+        Err(error) => error,
+        Ok(_) => panic!("expected idempotency conflict"),
+    };
+
+    match error {
+        RadrootsSdkError::PartialLocalMutation(partial) => {
+            assert!(partial.stored);
+            assert!(!partial.queued);
+            assert_eq!(
+                partial.failure,
+                crate::RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
+            );
+            assert_eq!(
+                partial.idempotency_digest_prefix.as_deref().map(str::len),
+                Some(12)
+            );
+        }
+        other => panic!("unexpected workflow error: {other:?}"),
+    }
+}
+
+#[cfg(feature = "signer-adapters")]
+#[tokio::test]
+async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
+    let secret_key = RadrootsNostrSecretKey::from_hex(FARMER_SECRET_KEY_HEX).expect("secret key");
+    let keys = RadrootsNostrKeys::new(secret_key);
+    let sdk = crate::RadrootsClient::builder()
+        .relay_url("wss://relay.example.com")
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_011,
+        ))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(
+            RadrootsSdkLocalKeySigner::new(keys).expect("local signer"),
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-configured");
+
+    let receipt = enqueue_configured_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            idempotency_key: None,
+        },
+    )
+    .await
+    .expect("configured enqueue");
+
+    assert_eq!(receipt.signed_event_id.as_str(), draft.expected_event_id);
+    assert_eq!(receipt.idempotency_digest_prefix.len(), 12);
 }
 
 #[tokio::test]

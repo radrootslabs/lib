@@ -15,13 +15,14 @@ use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
-    FarmPrivateLocationInput, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
+    FarmPrivateLocationClearRequest, FarmPrivateLocationInput, FarmPrivateLocationLookupCandidate,
+    FarmPrivateLocationLookupReceipt, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
     GeocoderLocalityQuery, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
     RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
     RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, StorageStatusRequest,
+    SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkPublicLocality, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy, StorageStatusRequest,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
@@ -956,6 +957,199 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         serde_json::to_value(&try_key_request).expect("try key request json")["idempotency_key"],
         serde_json::json!({ "value": "<redacted>", "len": 23 })
     );
+
+    let private_upsert = FarmPrivateLocationUpsertRequest::new(
+        farmer_actor(),
+        FARM_C_D_TAG,
+        SdkExactLocation::new(48.4359, -123.35155),
+    )
+    .with_label("north gate")
+    .with_updated_at(created_at);
+    assert_eq!(
+        serde_json::to_value(&private_upsert).expect("private upsert json"),
+        serde_json::json!({
+            "actor": {
+                "pubkey": FARMER,
+                "roles": ["farmer"],
+                "account_id": null,
+                "source": "test"
+            },
+            "farm_d_tag": FARM_C_D_TAG,
+            "exact_location": {
+                "latitude": 48.4359,
+                "longitude": -123.35155
+            },
+            "label": "north gate",
+            "updated_at": 1_700_000_123
+        })
+    );
+    assert_struct_serialize_error_paths(&private_upsert, 5);
+
+    let private_set = FarmPrivateLocationSetRequest::exact(
+        farmer_actor(),
+        FARM_D_D_TAG,
+        SdkExactLocation::new(48.9, -123.4),
+    )
+    .with_label("identifier gate")
+    .with_updated_at(created_at);
+    assert_eq!(
+        serde_json::to_value(&private_set).expect("private set json"),
+        serde_json::json!({
+            "actor": {
+                "pubkey": FARMER,
+                "roles": ["farmer"],
+                "account_id": null,
+                "source": "test"
+            },
+            "farm_d_tag": FARM_D_D_TAG,
+            "input": {
+                "kind": "exact",
+                "value": {
+                    "latitude": 48.9,
+                    "longitude": -123.4
+                }
+            },
+            "label": "identifier gate",
+            "updated_at": 1_700_000_123
+        })
+    );
+    assert_struct_serialize_error_paths(&private_set, 5);
+
+    assert_eq!(
+        serde_json::to_value(FarmPrivateLocationSetRequest::query(
+            farmer_actor(),
+            FARM_D_D_TAG,
+            "Shared Market, BC, CA"
+        ))
+        .expect("private query set json")["input"],
+        serde_json::json!({
+            "kind": "locality",
+            "value": {
+                "input": {
+                    "Query": "Shared Market, BC, CA"
+                },
+                "limit": 10
+            }
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(FarmPrivateLocationSetRequest::geonames_id(
+            farmer_actor(),
+            FARM_D_D_TAG,
+            3004
+        ))
+        .expect("private geonames id set json")["input"],
+        serde_json::json!({
+            "kind": "locality",
+            "value": {
+                "input": {
+                    "FeatureId": 3004
+                },
+                "limit": 10
+            }
+        })
+    );
+
+    let private_clear = FarmPrivateLocationClearRequest::new(farmer_actor(), FARM_E_D_TAG);
+    assert_eq!(
+        serde_json::to_value(&private_clear).expect("private clear json"),
+        serde_json::json!({
+            "actor": {
+                "pubkey": FARMER,
+                "roles": ["farmer"],
+                "account_id": null,
+                "source": "test"
+            },
+            "farm_d_tag": FARM_E_D_TAG
+        })
+    );
+    assert_struct_serialize_error_paths(&private_clear, 2);
+
+    let private_receipt = FarmPrivateLocationReceipt {
+        farm_addr: farm_addr(&farmer_actor(), FARM_D_D_TAG),
+        farm_pubkey: FARMER.to_owned(),
+        farm_d_tag: FARM_D_D_TAG.to_owned(),
+        label: Some("identifier gate".to_owned()),
+        exact_location: SdkExactLocation::new(48.9, -123.4),
+        public_locality: SdkPublicLocality {
+            primary: "Identifier Grove, British Columbia, Canada".to_owned(),
+            city: Some("Identifier Grove".to_owned()),
+            region: Some("British Columbia".to_owned()),
+            country: Some("Canada".to_owned()),
+            geohash5: "c28rn".to_owned(),
+        },
+        geonames_feature_id: Some(3004),
+        geonames_country_id: Some("CA".to_owned()),
+        updated_at_ms: 1_700_000_123_000,
+    };
+    let private_receipt_json =
+        serde_json::to_value(&private_receipt).expect("private receipt json");
+    assert_struct_serialize_error_paths(&private_receipt, 9);
+    assert_struct_serialize_error_paths(&private_receipt.exact_location, 2);
+    assert_struct_serialize_error_paths(&private_receipt.public_locality, 5);
+    assert_eq!(private_receipt_json["updated_at_ms"], 1_700_000_123_000_i64);
+    let listing_location = private_receipt.public_locality.to_listing_public_location();
+    assert_eq!(
+        listing_location.primary,
+        "Identifier Grove, British Columbia, Canada"
+    );
+    assert_eq!(listing_location.city.as_deref(), Some("Identifier Grove"));
+    assert_eq!(listing_location.region.as_deref(), Some("British Columbia"));
+    assert_eq!(listing_location.country.as_deref(), Some("Canada"));
+    assert_eq!(listing_location.geohash, "c28rn");
+    let farm_location = private_receipt.public_locality.to_farm_public_location();
+    assert_eq!(
+        farm_location.primary,
+        "Identifier Grove, British Columbia, Canada"
+    );
+    assert_eq!(farm_location.city.as_deref(), Some("Identifier Grove"));
+    assert_eq!(farm_location.region.as_deref(), Some("British Columbia"));
+    assert_eq!(farm_location.country.as_deref(), Some("Canada"));
+    assert_eq!(farm_location.geohash, "c28rn");
+    assert_eq!(
+        serde_json::from_value::<FarmPrivateLocationReceipt>(private_receipt_json)
+            .expect("private receipt round trip"),
+        private_receipt
+    );
+
+    let candidate = FarmPrivateLocationLookupCandidate {
+        geonames_feature_id: 3002,
+        geonames_country_id: "CA".to_owned(),
+        name: "Shared Market".to_owned(),
+        display_name: "Shared Market, British Columbia, Canada".to_owned(),
+        exact_location: SdkExactLocation::new(48.7, -123.2),
+        region: Some("British Columbia".to_owned()),
+        country: Some("Canada".to_owned()),
+    };
+    assert_struct_serialize_error_paths(&candidate, 7);
+    let lookup = FarmPrivateLocationLookupReceipt {
+        farm_addr: farm_addr(&farmer_actor(), FARM_F_D_TAG),
+        farm_pubkey: FARMER.to_owned(),
+        farm_d_tag: FARM_F_D_TAG.to_owned(),
+        input: FarmPrivateLocationInput::query("Shared Market"),
+        candidates: vec![candidate],
+    };
+    let lookup_json = serde_json::to_value(&lookup).expect("lookup receipt json");
+    assert_struct_serialize_error_paths(&lookup, 5);
+    assert_eq!(lookup_json["candidates"][0]["geonames_feature_id"], 3002);
+    assert_eq!(
+        serde_json::from_value::<FarmPrivateLocationLookupReceipt>(lookup_json)
+            .expect("lookup receipt round trip"),
+        lookup
+    );
+    for result in [
+        FarmPrivateLocationSetResult::Stored(private_receipt),
+        FarmPrivateLocationSetResult::Ambiguous(lookup.clone()),
+        FarmPrivateLocationSetResult::NoMatch(FarmPrivateLocationLookupReceipt {
+            candidates: Vec::new(),
+            ..lookup
+        }),
+    ] {
+        let value = serde_json::to_value(&result).expect("location set result json");
+        let round_trip = serde_json::from_value::<FarmPrivateLocationSetResult>(value)
+            .expect("location set result round trip");
+        assert_eq!(round_trip, result);
+    }
 
     let receipt = sdk
         .farms()

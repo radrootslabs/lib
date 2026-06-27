@@ -74,6 +74,27 @@ fn listing_projection_row_conversion_validates_stored_identity_columns() {
     );
 }
 
+#[test]
+fn market_search_receipt_serializes_absent_optional_locality_fields() {
+    let mut row = projection_row();
+    row.locality_city = None;
+    row.locality_region = None;
+    row.locality_country = None;
+    let search_row = MarketListingSearchRow::try_from_projection_row(row).expect("search row");
+    let receipt = MarketSearchReceipt {
+        source: MarketSearchSource::LocalProjectionFts,
+        refresh: SyncProjectionRefreshReceipt::default(),
+        listings: vec![search_row],
+    };
+
+    let value = serde_json::to_value(receipt).expect("receipt json");
+
+    assert_eq!(value["source"], "local_projection_fts");
+    assert!(value["listings"][0]["locality_city"].is_null());
+    assert!(value["listings"][0]["locality_region"].is_null());
+    assert!(value["listings"][0]["locality_country"].is_null());
+}
+
 #[tokio::test]
 async fn market_search_reports_projection_refresh_errors_before_querying_rows() {
     let sdk = crate::RadrootsClient::builder()

@@ -1,4 +1,5 @@
 use crate::RadrootsSdkError;
+use nostr::{JsonUtil, Kind, PublicKey, Tag, Tags, Timestamp, UnsignedEvent};
 #[cfg(feature = "local-signer")]
 use radroots_authority::RadrootsLocalEventSigner;
 use radroots_authority::{
@@ -19,7 +20,6 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
     execute_request_with_transport,
 };
-use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -546,18 +546,59 @@ impl RadrootsNostrConnectClientTransport for RadrootsSdkNip46TransportAdapter<'_
 fn sign_event_request_from_frozen_draft(
     draft: &RadrootsFrozenEventDraft,
 ) -> Result<RadrootsNostrConnectRequest, RadrootsSdkError> {
-    let unsigned_event = serde_json::from_value(json!({
-        "pubkey": draft.expected_pubkey,
-        "created_at": draft.created_at,
-        "kind": draft.kind,
-        "tags": draft.tags,
-        "content": draft.content,
-    }))
-    .map_err(|error| RadrootsSdkError::SignerProtocol {
-        mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
-        reason: format!("failed to convert frozen draft to NIP-46 unsigned event: {error}"),
-    })?;
+    let public_key = nip46_unsigned_event_pubkey(draft)?;
+    let kind = nip46_unsigned_event_kind(draft)?;
+    let tags = nip46_unsigned_event_tags(draft)?;
+    let unsigned_event = UnsignedEvent {
+        id: None,
+        pubkey: public_key,
+        created_at: Timestamp::from_secs(u64::from(draft.created_at)),
+        kind,
+        tags: Tags::from_list(tags),
+        content: draft.content.clone(),
+    };
     Ok(RadrootsNostrConnectRequest::SignEvent(unsigned_event))
+}
+
+fn nip46_unsigned_event_pubkey(
+    draft: &RadrootsFrozenEventDraft,
+) -> Result<PublicKey, RadrootsSdkError> {
+    PublicKey::parse(draft.expected_pubkey.as_str()).map_err(|error| {
+        nip46_sign_event_protocol_error(format!(
+            "failed to parse frozen draft pubkey for NIP-46 unsigned event: {error}"
+        ))
+    })
+}
+
+fn nip46_unsigned_event_kind(draft: &RadrootsFrozenEventDraft) -> Result<Kind, RadrootsSdkError> {
+    let kind = u16::try_from(draft.kind).map_err(|error| {
+        nip46_sign_event_protocol_error(format!(
+            "failed to convert frozen draft kind to NIP-46 unsigned event: {error}"
+        ))
+    })?;
+    Ok(Kind::from_u16(kind))
+}
+
+fn nip46_unsigned_event_tags(
+    draft: &RadrootsFrozenEventDraft,
+) -> Result<Vec<Tag>, RadrootsSdkError> {
+    let mut tags = Vec::with_capacity(draft.tags.len());
+    for raw_tag in &draft.tags {
+        let tag = Tag::parse(raw_tag.clone()).map_err(|error| {
+            nip46_sign_event_protocol_error(format!(
+                "failed to convert frozen draft tags to NIP-46 unsigned event: {error}"
+            ))
+        })?;
+        tags.push(tag);
+    }
+    Ok(tags)
+}
+
+fn nip46_sign_event_protocol_error(reason: String) -> RadrootsSdkError {
+    RadrootsSdkError::SignerProtocol {
+        mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
+        reason,
+    }
 }
 
 fn signed_event_from_nip46_response(
@@ -566,12 +607,7 @@ fn signed_event_from_nip46_response(
 ) -> Result<RadrootsSignedNostrEvent, RadrootsSdkError> {
     match response {
         RadrootsNostrConnectResponse::SignedEvent(event) => {
-            let raw_json = serde_json::to_string(&event).map_err(|error| {
-                RadrootsSdkError::SignerProtocol {
-                    mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
-                    reason: format!("failed to serialize remote signed event: {error}"),
-                }
-            })?;
+            let raw_json = event.as_json();
             RadrootsSignedNostrEvent::from_event(radroots_event_from_nostr(&event), raw_json)
                 .map_err(|error| RadrootsSdkError::SignerProtocol {
                     mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),

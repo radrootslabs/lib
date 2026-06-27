@@ -7,7 +7,7 @@ use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
-    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
+    RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
 };
 use std::collections::VecDeque;
 use std::future;
@@ -573,6 +573,25 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     assert_eq!(receipt.signed_event, signed);
     assert_eq!(transport.published().len(), 1);
     let request_messages = transport.published_request_messages();
+    let sign_event_request = match &request_messages[0].request {
+        RadrootsNostrConnectRequest::SignEvent(unsigned_event) => unsigned_event,
+        other => panic!("unexpected NIP-46 request: {other:?}"),
+    };
+    let request_tags = sign_event_request
+        .tags
+        .clone()
+        .to_vec()
+        .into_iter()
+        .map(Tag::to_vec)
+        .collect::<Vec<_>>();
+    assert_eq!(sign_event_request.pubkey.to_hex(), draft.expected_pubkey);
+    assert_eq!(
+        sign_event_request.created_at.as_secs(),
+        u64::from(draft.created_at)
+    );
+    assert_eq!(sign_event_request.kind.as_u16(), draft.kind as u16);
+    assert_eq!(request_tags, draft.tags);
+    assert_eq!(sign_event_request.content, draft.content);
     let request_id = request_messages[0]
         .id
         .strip_prefix("radroots-sdk-myc-nip46-sign-")
@@ -589,6 +608,48 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
             }
         ]
     );
+}
+
+#[test]
+fn myc_nip46_sign_event_request_reports_invalid_frozen_drafts() {
+    let mut invalid_pubkey = frozen_draft();
+    invalid_pubkey.expected_pubkey = "not-a-public-key".to_owned();
+    let error = sign_event_request_from_frozen_draft(&invalid_pubkey)
+        .expect_err("invalid NIP-46 pubkey error");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerProtocol {
+            mode,
+            ref reason
+        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
+            && reason.contains("failed to parse frozen draft pubkey")
+    ));
+
+    let mut oversized_kind = frozen_draft();
+    oversized_kind.kind = u32::from(u16::MAX) + 1;
+    let error = sign_event_request_from_frozen_draft(&oversized_kind)
+        .expect_err("oversized NIP-46 event kind error");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerProtocol {
+            mode,
+            ref reason
+        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
+            && reason.contains("failed to convert frozen draft kind")
+    ));
+
+    let mut empty_tag = frozen_draft();
+    empty_tag.tags = vec![Vec::new()];
+    let error =
+        sign_event_request_from_frozen_draft(&empty_tag).expect_err("invalid NIP-46 tag error");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerProtocol {
+            mode,
+            ref reason
+        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
+            && reason.contains("failed to convert frozen draft tags")
+    ));
 }
 
 #[tokio::test]
