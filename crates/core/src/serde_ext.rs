@@ -1,5 +1,3 @@
-#![cfg(feature = "serde")]
-
 #[cfg(not(feature = "std"))]
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
