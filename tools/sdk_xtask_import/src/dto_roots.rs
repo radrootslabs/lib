@@ -1,4 +1,6 @@
-use dto_bindgen_core::{Registry, RootDescriptor, TypeDef, TypeId, build_registry};
+use std::collections::{BTreeMap, BTreeSet};
+
+use dto_bindgen_core::{Registry, RootDescriptor, build_registry};
 
 use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule, render_registry_types};
 
@@ -31,6 +33,19 @@ pub struct SdkLocalWrapperAllowance {
     pub shape_family: &'static str,
     pub reason: &'static str,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DtoExternalOverride {
+    target_type: &'static str,
+    import_name: &'static str,
+    from_package_key: &'static str,
+    from: &'static str,
+}
+
+const CORE_BINDINGS_PACKAGE_KEY: &str = "core";
+const CORE_BINDINGS_PACKAGE_NAME: &str = "@radroots/core-bindings";
+const EVENTS_BINDINGS_PACKAGE_KEY: &str = "events";
+const EVENTS_BINDINGS_PACKAGE_NAME: &str = "@radroots/events-bindings";
 
 pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
     DtoPackageRootSet {
@@ -121,6 +136,41 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
     },
 ];
 
+const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
+    core_override("RadrootsCoreCurrency"),
+    core_override("RadrootsCoreDecimal"),
+    core_override("RadrootsCoreDiscount"),
+    core_override("RadrootsCoreDiscountValue"),
+    core_override("RadrootsCoreMoney"),
+    core_override("RadrootsCoreQuantity"),
+    core_override("RadrootsCoreQuantityPrice"),
+    core_override("RadrootsCoreUnit"),
+    events_override("RadrootsFarmRef"),
+    events_override("RadrootsListing"),
+    events_override("RadrootsListingAvailability"),
+    events_override("RadrootsListingBin"),
+    events_override("RadrootsListingDeliveryMethod"),
+    events_override("RadrootsListingImage"),
+    events_override("RadrootsListingProduct"),
+    events_override("RadrootsListingPublicLocation"),
+    events_override("RadrootsListingStatus"),
+    events_override("RadrootsNostrEventPtr"),
+    events_override("RadrootsOrderCancellation"),
+    events_override("RadrootsOrderDecision"),
+    events_override("RadrootsPlotRef"),
+    events_override("RadrootsResourceAreaRef"),
+    events_override("RadrootsOrderEconomicLine"),
+    events_override("RadrootsOrderItem"),
+    events_override("RadrootsOrderRequest"),
+    events_override("RadrootsOrderRevisionDecision"),
+    events_override("RadrootsOrderRevisionProposal"),
+    events_override("RadrootsTradeListingValidateRequest"),
+    events_override("RadrootsTradeListingValidateResult"),
+];
+
+const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
+    &[CORE_BINDINGS_PACKAGE_NAME, EVENTS_BINDINGS_PACKAGE_NAME];
+
 pub fn package_root_set(package_key: &str) -> Option<&'static DtoPackageRootSet> {
     DTO_PACKAGE_ROOTS
         .iter()
@@ -144,10 +194,8 @@ pub fn events_types_module() -> Result<DtoTypesModule, String> {
     let root_set =
         package_root_set("events").ok_or_else(|| "missing events DTO roots".to_owned())?;
     let registry = root_set.registry();
-    let rendered = render_registry_types(
-        &registry,
-        &core_import_options(&registry, DtoRegistryRenderOptions::default()),
-    )?;
+    let options = core_import_options(&registry, DtoRegistryRenderOptions::default())?;
+    let rendered = render_registry_types(&registry, &options)?;
     Ok(DtoTypesModule::new(
         rendered.imports_ts().unwrap_or_default(),
         with_events_sdk_wrappers(rendered.body_ts()),
@@ -175,10 +223,10 @@ pub fn replica_db_schema_types_module() -> Result<DtoTypesModule, String> {
 pub fn trade_types_module() -> Result<DtoTypesModule, String> {
     let root_set = package_root_set("trade").ok_or_else(|| "missing trade DTO roots".to_owned())?;
     let registry = root_set.registry();
-    render_registry_types(
-        &registry,
-        &trade_import_options(DtoRegistryRenderOptions::default()),
-    )
+    let options = trade_import_options(DtoRegistryRenderOptions::default())?;
+    let rendered = render_registry_types(&registry, &options)?;
+    validate_external_override_usage(&rendered, TRADE_EXTERNAL_OVERRIDES)?;
+    Ok(rendered)
 }
 
 pub fn types_types_module() -> Result<DtoTypesModule, String> {
@@ -211,10 +259,8 @@ fn types_roots() -> Vec<RootDescriptor> {
 fn core_import_options(
     registry: &Registry,
     mut options: DtoRegistryRenderOptions,
-) -> DtoRegistryRenderOptions {
+) -> Result<DtoRegistryRenderOptions, String> {
     for export_name in [
-        "RadrootsCoreCurrency",
-        "RadrootsCoreDecimal",
         "RadrootsCoreDiscount",
         "RadrootsCoreDiscountScope",
         "RadrootsCoreDiscountThreshold",
@@ -224,69 +270,173 @@ fn core_import_options(
         "RadrootsCoreQuantity",
         "RadrootsCoreQuantityPrice",
         "RadrootsCoreUnit",
-        "RadrootsCoreUnitDimension",
     ] {
-        if let Some(type_id) = core_type_id(registry, export_name) {
-            options = options.with_external_type(type_id, export_name, "@radroots/core-bindings");
+        options =
+            with_checked_external_type(registry, options, export_name, CORE_BINDINGS_PACKAGE_NAME)?;
+    }
+    Ok(options)
+}
+
+fn with_checked_external_type(
+    registry: &Registry,
+    options: DtoRegistryRenderOptions,
+    export_name: &str,
+    from: &str,
+) -> Result<DtoRegistryRenderOptions, String> {
+    let type_id = registry
+        .type_id_by_export_name(export_name)
+        .map_err(|error| {
+            format!("failed to resolve external DTO type `{export_name}` from `{from}`: {error}")
+        })?;
+    Ok(options.with_external_type(type_id, export_name, from))
+}
+
+fn trade_import_options(
+    mut options: DtoRegistryRenderOptions,
+) -> Result<DtoRegistryRenderOptions, String> {
+    let package_exports = generated_external_package_exports()?;
+    for override_target in TRADE_EXTERNAL_OVERRIDES {
+        validate_external_override_target(*override_target, &package_exports)?;
+        options = options.with_external_override(
+            override_target.target_type,
+            override_target.import_name,
+            override_target.from,
+        );
+    }
+
+    Ok(options)
+}
+
+fn generated_external_package_exports() -> Result<BTreeMap<&'static str, BTreeSet<String>>, String>
+{
+    Ok(BTreeMap::from([
+        (
+            CORE_BINDINGS_PACKAGE_KEY,
+            type_exports(core_types_module()?.body_ts()),
+        ),
+        (
+            EVENTS_BINDINGS_PACKAGE_KEY,
+            type_exports(events_types_module()?.body_ts()),
+        ),
+    ]))
+}
+
+fn validate_external_override_target(
+    override_target: DtoExternalOverride,
+    package_exports: &BTreeMap<&'static str, BTreeSet<String>>,
+) -> Result<(), String> {
+    let exports = package_exports
+        .get(override_target.from_package_key)
+        .ok_or_else(|| {
+            format!(
+                "external DTO override `{}` references unknown package key `{}`",
+                override_target.target_type, override_target.from_package_key
+            )
+        })?;
+    if exports.contains(override_target.import_name) {
+        return Ok(());
+    }
+    Err(format!(
+        "external DTO override `{}` imports `{}` from `{}`, but package `{}` does not export it",
+        override_target.target_type,
+        override_target.import_name,
+        override_target.from,
+        override_target.from_package_key
+    ))
+}
+
+fn validate_external_override_usage(
+    module: &DtoTypesModule,
+    overrides: &[DtoExternalOverride],
+) -> Result<(), String> {
+    let imports = imported_type_inventory(module.imports_ts().unwrap_or_default());
+    let package_exports = generated_external_package_exports()?;
+    for package_name in TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS {
+        if !imports.contains_key(*package_name) {
+            return Err(format!(
+                "expected generated DTO imports from `{package_name}` but none were emitted"
+            ));
         }
     }
-    options
+
+    for override_target in overrides {
+        if type_exports(module.body_ts()).contains(override_target.target_type) {
+            return Err(format!(
+                "external DTO override `{}` from `{}` was emitted locally instead of imported",
+                override_target.target_type, override_target.from
+            ));
+        }
+        if imports
+            .get(override_target.from)
+            .is_some_and(|names| names.contains(override_target.import_name))
+        {
+            validate_external_override_target(*override_target, &package_exports)?;
+        }
+    }
+    Ok(())
 }
 
-fn core_type_id(registry: &Registry, rust_ident: &str) -> Option<TypeId> {
-    registry
-        .types_by_id
-        .iter()
-        .find_map(|(type_id, type_def)| match type_def {
-            TypeDef::Struct(def) if def.export_name == rust_ident => Some(*type_id),
-            TypeDef::Enum(def) if def.export_name == rust_ident => Some(*type_id),
-            _ => None,
-        })
+fn imported_type_inventory(imports_ts: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut imports = BTreeMap::new();
+    let mut pending_names: Option<Vec<String>> = None;
+
+    for line in imports_ts.lines() {
+        let line = line.trim();
+        if let Some(single) = line.strip_prefix("import type { ") {
+            if let Some((name, from)) = single.split_once(" } from ") {
+                insert_import(&mut imports, from, name);
+            }
+        } else if line == "import type {" {
+            pending_names = Some(Vec::new());
+        } else if let Some(from) = line.strip_prefix("} from ") {
+            if let Some(names) = pending_names.take() {
+                for name in names {
+                    insert_import(&mut imports, from, &name);
+                }
+            }
+        } else if let Some(names) = pending_names.as_mut()
+            && let Some(name) = line.strip_suffix(',')
+        {
+            names.push(name.to_owned());
+        }
+    }
+
+    imports
 }
 
-fn trade_import_options(mut options: DtoRegistryRenderOptions) -> DtoRegistryRenderOptions {
-    for export_name in [
-        "RadrootsCoreCurrency",
-        "RadrootsCoreDecimal",
-        "RadrootsCoreDiscount",
-        "RadrootsCoreDiscountValue",
-        "RadrootsCoreMoney",
-        "RadrootsCoreQuantity",
-        "RadrootsCoreQuantityPrice",
-        "RadrootsCoreUnit",
-    ] {
-        options =
-            options.with_external_override(export_name, export_name, "@radroots/core-bindings");
-    }
+fn insert_import(imports: &mut BTreeMap<String, BTreeSet<String>>, from: &str, name: &str) {
+    let from = from.trim_end_matches(';').trim_matches('"');
+    imports
+        .entry(from.to_owned())
+        .or_default()
+        .insert(name.trim().to_owned());
+}
 
-    for export_name in [
-        "RadrootsFarmRef",
-        "RadrootsListing",
-        "RadrootsListingAvailability",
-        "RadrootsListingBin",
-        "RadrootsListingDeliveryMethod",
-        "RadrootsListingImage",
-        "RadrootsListingProduct",
-        "RadrootsListingPublicLocation",
-        "RadrootsListingStatus",
-        "RadrootsNostrEventPtr",
-        "RadrootsOrderCancellation",
-        "RadrootsOrderDecision",
-        "RadrootsPlotRef",
-        "RadrootsResourceAreaRef",
-        "RadrootsOrderEconomicLine",
-        "RadrootsOrderItem",
-        "RadrootsOrderRequest",
-        "RadrootsOrderRevisionDecision",
-        "RadrootsOrderRevisionProposal",
-        "RadrootsTradeListingValidateRequest",
-        "RadrootsTradeListingValidateResult",
-    ] {
-        options =
-            options.with_external_override(export_name, export_name, "@radroots/events-bindings");
-    }
+fn type_exports(types_ts: &str) -> BTreeSet<String> {
+    types_ts
+        .lines()
+        .filter_map(|line| line.strip_prefix("export type "))
+        .filter_map(|rest| rest.split([' ', '<']).next())
+        .map(str::to_owned)
+        .collect()
+}
 
-    options
+const fn core_override(export_name: &'static str) -> DtoExternalOverride {
+    DtoExternalOverride {
+        target_type: export_name,
+        import_name: export_name,
+        from_package_key: CORE_BINDINGS_PACKAGE_KEY,
+        from: CORE_BINDINGS_PACKAGE_NAME,
+    }
+}
+
+const fn events_override(export_name: &'static str) -> DtoExternalOverride {
+    DtoExternalOverride {
+        target_type: export_name,
+        import_name: export_name,
+        from_package_key: EVENTS_BINDINGS_PACKAGE_KEY,
+        from: EVENTS_BINDINGS_PACKAGE_NAME,
+    }
 }
 
 fn with_events_sdk_wrappers(body: &str) -> String {
@@ -336,12 +486,18 @@ fn with_events_indexed_sdk_wrappers(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use dto_bindgen_core::{Registry, RustTypeId, SourceSpan, StructDef, TypeDef};
 
     use super::{
-        DTO_PACKAGE_ROOTS, MANUAL_DESCRIPTOR_FAMILIES, SDK_LOCAL_WRAPPER_ALLOWANCES,
-        package_root_set,
+        CORE_BINDINGS_PACKAGE_KEY, CORE_BINDINGS_PACKAGE_NAME, DTO_PACKAGE_ROOTS,
+        DtoExternalOverride, MANUAL_DESCRIPTOR_FAMILIES, SDK_LOCAL_WRAPPER_ALLOWANCES,
+        events_override, imported_type_inventory, package_root_set, trade_import_options,
+        type_exports, validate_external_override_target, validate_external_override_usage,
+        with_checked_external_type,
     };
+    use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule};
 
     const EVENTS_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/events-bindings/src/generated/types.ts");
@@ -509,6 +665,7 @@ mod tests {
         "RadrootsTradeReviewQueueEntry",
         "RadrootsTradeReviewStatus",
         "RadrootsTradeSortDirection",
+        "RadrootsTradeWorkflowState",
     ];
 
     #[test]
@@ -566,6 +723,130 @@ mod tests {
                 .shape_family
                 .contains("marketplace, query, projection")
         }));
+    }
+
+    #[test]
+    fn checked_external_type_lookup_rejects_missing_export() {
+        let registry = Registry::new();
+        let error = with_checked_external_type(
+            &registry,
+            DtoRegistryRenderOptions::default(),
+            "MissingType",
+            CORE_BINDINGS_PACKAGE_NAME,
+        )
+        .expect_err("missing export must fail");
+
+        assert_eq!(
+            error,
+            "failed to resolve external DTO type `MissingType` from `@radroots/core-bindings`: no DTO type exports `MissingType`"
+        );
+    }
+
+    #[test]
+    fn checked_external_type_lookup_rejects_duplicate_export() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "sdk", "FirstDuplicate"),
+            TypeDef::Struct(StructDef::new("FirstDuplicate", "DuplicateType", span())),
+        );
+        registry.register_type(
+            RustTypeId::new("sdk", "sdk", "SecondDuplicate"),
+            TypeDef::Struct(StructDef::new("SecondDuplicate", "DuplicateType", span())),
+        );
+
+        let error = with_checked_external_type(
+            &registry,
+            DtoRegistryRenderOptions::default(),
+            "DuplicateType",
+            CORE_BINDINGS_PACKAGE_NAME,
+        )
+        .expect_err("duplicate export must fail");
+
+        assert_eq!(
+            error,
+            "failed to resolve external DTO type `DuplicateType` from `@radroots/core-bindings`: DTO export name `DuplicateType` is ambiguous across 2 types"
+        );
+    }
+
+    #[test]
+    fn trade_external_override_targets_resolve_to_generated_exports() {
+        trade_import_options(DtoRegistryRenderOptions::default())
+            .expect("trade external overrides validate");
+    }
+
+    #[test]
+    fn external_override_target_validation_rejects_missing_generated_export() {
+        let package_exports = BTreeMap::from([(
+            CORE_BINDINGS_PACKAGE_KEY,
+            BTreeSet::from(["ExistingType".to_owned()]),
+        )]);
+        let error = validate_external_override_target(
+            DtoExternalOverride {
+                target_type: "MissingType",
+                import_name: "MissingType",
+                from_package_key: CORE_BINDINGS_PACKAGE_KEY,
+                from: CORE_BINDINGS_PACKAGE_NAME,
+            },
+            &package_exports,
+        )
+        .expect_err("missing target package export must fail");
+
+        assert_eq!(
+            error,
+            "external DTO override `MissingType` imports `MissingType` from `@radroots/core-bindings`, but package `core` does not export it"
+        );
+    }
+
+    #[test]
+    fn external_override_usage_rejects_absent_required_package_import() {
+        let module = DtoTypesModule::new("", "export type RadrootsTradeListing = string;");
+        let error = validate_external_override_usage(&module, &[])
+            .expect_err("missing required package import must fail");
+
+        assert_eq!(
+            error,
+            "expected generated DTO imports from `@radroots/core-bindings` but none were emitted"
+        );
+    }
+
+    #[test]
+    fn external_override_usage_rejects_local_emission_for_imported_type() {
+        let module = DtoTypesModule::new(
+            "import type { RadrootsCoreDecimal } from \"@radroots/core-bindings\";\n\nimport type { RadrootsFarmRef } from \"@radroots/events-bindings\";\n\n",
+            "export type RadrootsFarmRef = { pubkey: string, d_tag: string, };",
+        );
+        let error =
+            validate_external_override_usage(&module, &[events_override("RadrootsFarmRef")])
+                .expect_err("local emission of imported type must fail");
+
+        assert_eq!(
+            error,
+            "external DTO override `RadrootsFarmRef` from `@radroots/events-bindings` was emitted locally instead of imported"
+        );
+    }
+
+    #[test]
+    fn generated_import_inventory_parses_single_and_multiline_imports() {
+        let imports = imported_type_inventory(
+            "import type { One } from \"@radroots/one\";\nimport type {\n    Two,\n    Three,\n} from \"@radroots/many\";\n\n",
+        );
+
+        assert_eq!(
+            imports.get("@radroots/one").expect("single import package"),
+            &BTreeSet::from(["One".to_owned()])
+        );
+        assert_eq!(
+            imports.get("@radroots/many").expect("multi import package"),
+            &BTreeSet::from(["Three".to_owned(), "Two".to_owned()])
+        );
+    }
+
+    #[test]
+    fn generated_type_export_inventory_parses_type_aliases() {
+        assert_eq!(
+            type_exports("export type Alpha = string;\nexport type Beta<T> = T;\n"),
+            BTreeSet::from(["Alpha".to_owned(), "Beta".to_owned()])
+        );
     }
 
     #[test]
@@ -692,5 +973,9 @@ mod tests {
             .lines()
             .find(|line| line.starts_with(&format!("export type {name} = ")))
             .unwrap_or_else(|| panic!("missing type declaration for {name}"))
+    }
+
+    fn span() -> SourceSpan {
+        SourceSpan::new("tools/xtask/src/dto_roots.rs", 1, 1)
     }
 }

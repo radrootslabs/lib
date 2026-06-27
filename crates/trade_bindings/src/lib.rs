@@ -73,6 +73,7 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     local_shape("RadrootsTradeReviewQueueEntry"),
     local_shape("RadrootsTradeReviewStatus"),
     local_shape("RadrootsTradeSortDirection"),
+    source_root("RadrootsTradeWorkflowState"),
 ];
 
 pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
@@ -219,7 +220,8 @@ mod tests {
                 "RadrootsTradeReviewPriority",
                 "RadrootsTradeReviewQueueEntry",
                 "RadrootsTradeReviewStatus",
-                "RadrootsTradeSortDirection"
+                "RadrootsTradeSortDirection",
+                "RadrootsTradeWorkflowState"
             ]
         );
     }
@@ -256,7 +258,8 @@ mod tests {
             [
                 "RadrootsTradeListing",
                 "RadrootsTradeListingSubtotal",
-                "RadrootsTradeListingTotal"
+                "RadrootsTradeListingTotal",
+                "RadrootsTradeWorkflowState"
             ]
         );
     }
