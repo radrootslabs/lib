@@ -11,6 +11,7 @@ mod output;
 mod package_matrix;
 mod ts;
 mod wasm;
+mod wasm_declarations;
 
 enum CommandAction<'a> {
     GenerateTs,

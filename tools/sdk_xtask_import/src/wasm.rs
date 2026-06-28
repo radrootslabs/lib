@@ -9,6 +9,7 @@ use crate::{
     check::check_wasm_package_surface,
     fs::workspace_root,
     package_matrix::{WasmPackageSpec, validate_package_matrix, wasm_package_specs},
+    wasm_declarations::write_declaration_files,
 };
 
 const WASM_TARGET: &str = "wasm32-unknown-unknown";
@@ -46,6 +47,7 @@ pub fn generate(args: &[String]) -> Result<(), String> {
                 spec.key, spec.package_name, spec.key
             ));
         }
+        write_declaration_files(&root, spec)?;
         check_wasm_package_surface(&root, spec)?;
         println!("generated wasm package {}", spec.package_name);
     }
