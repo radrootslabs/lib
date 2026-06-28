@@ -496,7 +496,9 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
         let json = read_package_json_value(&package_json_path)?;
-        let required_files = required_npm_payload_files(&json, &package_json_path, None)?;
+        let expected_dist_files =
+            expected_packed_dist_files(&package_dir, &json, &package_json_path, None)?;
+        let required_files = required_npm_payload_files(&expected_dist_files);
         let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
         let packed_json = read_packed_package_json(&packed, spec.package_name)?;
         check_packed_package_json(
@@ -506,14 +508,17 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
             spec.package_name,
             spec.package_dir,
         )?;
-        let payload_files = packed_payload_files(&packed);
+        let payload_files = packed_payload_files(&packed)?;
         validate_npm_pack_payload(spec.package_name, &payload_files, &required_files, None)?;
+        validate_packed_dist_inventory(spec.package_name, &payload_files, &expected_dist_files)?;
     }
     for spec in wasm_package_specs() {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
         let json = read_package_json_value(&package_json_path)?;
-        let required_files = required_npm_payload_files(&json, &package_json_path, Some(*spec))?;
+        let expected_dist_files =
+            expected_packed_dist_files(&package_dir, &json, &package_json_path, Some(*spec))?;
+        let required_files = required_npm_payload_files(&expected_dist_files);
         let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
         let packed_json = read_packed_package_json(&packed, spec.package_name)?;
         check_packed_package_json(
@@ -523,13 +528,14 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
             spec.package_name,
             spec.package_dir,
         )?;
-        let payload_files = packed_payload_files(&packed);
+        let payload_files = packed_payload_files(&packed)?;
         validate_npm_pack_payload(
             spec.package_name,
             &payload_files,
             &required_files,
             Some(&format!("dist/{}_bg.wasm", spec.out_name)),
         )?;
+        validate_packed_dist_inventory(spec.package_name, &payload_files, &expected_dist_files)?;
     }
     Ok(())
 }
@@ -571,26 +577,58 @@ fn read_package_json_value(path: &Path) -> Result<serde_json::Value, String> {
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))
 }
 
-fn required_npm_payload_files(
-    json: &serde_json::Value,
-    package_json_path: &Path,
-    wasm_spec: Option<WasmPackageSpec>,
-) -> Result<BTreeSet<String>, String> {
-    let mut required = BTreeSet::from([
+fn required_npm_payload_files(expected_dist_files: &BTreeSet<String>) -> BTreeSet<String> {
+    let mut required = package_metadata_payload_files();
+    required.extend(expected_dist_files.iter().cloned());
+    required
+}
+
+fn package_metadata_payload_files() -> BTreeSet<String> {
+    BTreeSet::from([
         "package.json".to_owned(),
         "README.md".to_owned(),
         "LICENSE-MIT".to_owned(),
         "LICENSE-APACHE".to_owned(),
-    ]);
+    ])
+}
+
+fn expected_packed_dist_files(
+    package_dir: &Path,
+    json: &serde_json::Value,
+    package_json_path: &Path,
+    wasm_spec: Option<WasmPackageSpec>,
+) -> Result<BTreeSet<String>, String> {
+    let mut expected = BTreeSet::new();
     for path in package_surface_paths(json, package_json_path)? {
-        required.insert(normalized_package_path(&path));
+        expected.insert(normalized_package_path(&path)?);
     }
     if let Some(spec) = wasm_spec {
         for path in wasm_runtime_files(spec) {
-            required.insert(path);
+            expected.insert(path);
         }
+    } else {
+        expected.extend(expected_binding_generated_dist_files(package_dir)?);
     }
-    Ok(required)
+    Ok(expected)
+}
+
+fn expected_binding_generated_dist_files(package_dir: &Path) -> Result<BTreeSet<String>, String> {
+    let generated_dir = package_dir.join("src/generated");
+    let mut expected = BTreeSet::new();
+    for source in generated_package_files(package_dir, &generated_dir)? {
+        let stem = source
+            .strip_prefix("src/generated/")
+            .and_then(|path| path.strip_suffix(".ts"))
+            .ok_or_else(|| {
+                format!(
+                    "generated package source must be a TypeScript file under src/generated: {}",
+                    package_dir.join(&source).display()
+                )
+            })?;
+        expected.insert(format!("dist/generated/{stem}.js"));
+        expected.insert(format!("dist/generated/{stem}.d.ts"));
+    }
+    Ok(expected)
 }
 
 fn pnpm_pack_package(
@@ -668,7 +706,7 @@ fn packed_package_from_pnpm_entry(
     })
 }
 
-fn packed_payload_files(packed: &PackedPackage) -> BTreeSet<String> {
+fn packed_payload_files(packed: &PackedPackage) -> Result<BTreeSet<String>, String> {
     debug_assert!(packed.tarball_path.is_file());
     packed
         .files
@@ -921,8 +959,45 @@ fn validate_npm_pack_payload(
     Ok(())
 }
 
-fn normalized_package_path(path: &str) -> String {
-    path.trim_start_matches("./").to_owned()
+fn validate_packed_dist_inventory(
+    package_name: &str,
+    payload_files: &BTreeSet<String>,
+    expected_dist_files: &BTreeSet<String>,
+) -> Result<(), String> {
+    let actual_dist_files = payload_files
+        .iter()
+        .filter(|path| path.starts_with("dist/"))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if &actual_dist_files != expected_dist_files {
+        let missing = expected_dist_files
+            .difference(&actual_dist_files)
+            .cloned()
+            .collect::<Vec<_>>();
+        let extra = actual_dist_files
+            .difference(expected_dist_files)
+            .cloned()
+            .collect::<Vec<_>>();
+        return Err(format!(
+            "npm pack payload for {package_name} has dist inventory mismatch: missing {:?}, extra {:?}",
+            missing, extra
+        ));
+    }
+    Ok(())
+}
+
+fn normalized_package_path(path: &str) -> Result<String, String> {
+    let normalized = path.trim_start_matches("./");
+    if normalized.is_empty()
+        || normalized.starts_with('/')
+        || normalized.contains('\\')
+        || normalized
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err(format!("invalid npm pack payload path: {path}"));
+    }
+    Ok(normalized.to_owned())
 }
 
 fn forbidden_npm_payload_path(path: &str) -> Option<&'static str> {
@@ -1164,7 +1239,8 @@ mod tests {
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
         check_package_json, check_package_surface_artifacts, check_packed_package_json,
-        check_wasm_package_surface, parse_pnpm_pack_entry, validate_npm_pack_payload,
+        check_wasm_package_surface, expected_packed_dist_files, normalized_package_path,
+        parse_pnpm_pack_entry, validate_npm_pack_payload, validate_packed_dist_inventory,
     };
 
     #[test]
@@ -1396,6 +1472,45 @@ mod tests {
     }
 
     #[test]
+    fn binding_dist_inventory_includes_generated_js_and_declarations() {
+        let root = test_root("binding_dist_inventory");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(package_dir.join("src/generated")).expect("create generated dir");
+        fs::write(
+            package_dir.join("src/generated").join("types.ts"),
+            "export type Example = string;\n",
+        )
+        .expect("write generated types");
+        fs::write(
+            package_dir.join("src/generated").join("constants.ts"),
+            "export const EXAMPLE = \"example\";\n",
+        )
+        .expect("write generated constants");
+        let json = package_json_value(&package_json("example"));
+
+        let expected = expected_packed_dist_files(
+            &package_dir,
+            &json,
+            Path::new("packages/example/package.json"),
+            None,
+        )
+        .expect("expected dist files");
+
+        assert_eq!(
+            expected,
+            BTreeSet::from([
+                "dist/generated/constants.d.ts".to_owned(),
+                "dist/generated/constants.js".to_owned(),
+                "dist/generated/types.d.ts".to_owned(),
+                "dist/generated/types.js".to_owned(),
+                "dist/index.d.ts".to_owned(),
+                "dist/index.js".to_owned(),
+            ])
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn npm_pack_payload_requires_metadata_and_export_files() {
         let payload_files = BTreeSet::from([
             "package.json".to_owned(),
@@ -1418,6 +1533,55 @@ mod tests {
         assert!(error.contains("missing required files"));
         assert!(error.contains("LICENSE-APACHE"));
         assert!(error.contains("dist/index.d.ts"));
+    }
+
+    #[test]
+    fn packed_dist_inventory_rejects_missing_generated_files() {
+        let expected_dist_files = BTreeSet::from([
+            "dist/generated/types.d.ts".to_owned(),
+            "dist/generated/types.js".to_owned(),
+            "dist/index.d.ts".to_owned(),
+            "dist/index.js".to_owned(),
+        ]);
+        let payload_files = BTreeSet::from([
+            "package.json".to_owned(),
+            "README.md".to_owned(),
+            "LICENSE-MIT".to_owned(),
+            "LICENSE-APACHE".to_owned(),
+            "dist/generated/types.js".to_owned(),
+            "dist/index.d.ts".to_owned(),
+            "dist/index.js".to_owned(),
+        ]);
+
+        let error = validate_packed_dist_inventory(
+            "@radroots/example",
+            &payload_files,
+            &expected_dist_files,
+        )
+        .expect_err("missing generated declaration rejected");
+
+        assert!(error.contains("dist inventory mismatch"));
+        assert!(error.contains("dist/generated/types.d.ts"));
+    }
+
+    #[test]
+    fn packed_payload_path_normalization_rejects_invalid_paths() {
+        assert_eq!(
+            normalized_package_path("./dist/index.js").expect("valid path"),
+            "dist/index.js"
+        );
+        for invalid in [
+            "",
+            "./",
+            "/dist/index.js",
+            "dist\\index.js",
+            "dist/../index.js",
+            "dist//index.js",
+            "dist/./index.js",
+        ] {
+            let error = normalized_package_path(invalid).expect_err("invalid path rejected");
+            assert!(error.contains("invalid npm pack payload path"));
+        }
     }
 
     #[test]
