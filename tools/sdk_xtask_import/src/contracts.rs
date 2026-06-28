@@ -6,6 +6,8 @@ use std::{
 
 use serde::Deserialize;
 
+use crate::package_matrix::{PackageSpec, WasmPackageSpec, package_specs, wasm_package_specs};
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExportContract {
@@ -24,6 +26,7 @@ struct PackageContract {
     operations: BTreeMap<String, String>,
     shared_types: BTreeMap<String, String>,
     artifacts: Option<SdkArtifacts>,
+    npm_packages: Option<BTreeMap<String, NpmPackageContract>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,11 +56,35 @@ struct ExportArtifacts {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SdkPackageContract {
-    package: String,
+    package: Option<String>,
+    package_family: Option<String>,
     module_format: Option<String>,
     deterministic_codec: String,
     signing: String,
     networking: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NpmPackageContract {
+    kind: String,
+    crate_name: String,
+    crate_dir: String,
+    package: String,
+    package_dir: String,
+    out_name: Option<String>,
+    out_dir: Option<String>,
+}
+
+#[derive(Debug)]
+struct ExpectedNpmPackage {
+    kind: &'static str,
+    crate_name: &'static str,
+    crate_dir: &'static str,
+    package: &'static str,
+    package_dir: &'static str,
+    out_name: Option<&'static str>,
+    out_dir: Option<&'static str>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,7 +145,7 @@ pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
             .values()
             .cloned()
             .collect::<BTreeSet<String>>();
-        if packages.len() != 1 {
+        if export.language.id != "ts" && packages.len() != 1 {
             return Err(format!(
                 "exports {} must resolve to one curated package",
                 export.language.id
@@ -133,7 +160,12 @@ pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
     let mut rollout_orders = BTreeMap::new();
     for package in &packages {
         validate_language(&package.language, "packages")?;
-        validate_non_empty(&package.sdk.package, "packages sdk.package")?;
+        if let Some(package_name) = package.sdk.package.as_deref() {
+            validate_non_empty(package_name, "packages sdk.package")?;
+        }
+        if let Some(package_family) = package.sdk.package_family.as_deref() {
+            validate_non_empty(package_family, "packages sdk.package_family")?;
+        }
         validate_runtime(
             &package.sdk.networking,
             &package.sdk.signing,
@@ -142,6 +174,12 @@ pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
         )?;
         if let Some(module_format) = package.sdk.module_format.as_deref() {
             validate_non_empty(module_format, "packages sdk.module_format")?;
+        }
+        if package.sdk.package.is_none() && package.sdk.package_family.is_none() {
+            return Err(format!(
+                "packages {} sdk.package or sdk.package_family is required",
+                package.language.id
+            ));
         }
         validate_rollout(&package.language.id, &package.rollout)?;
         validate_non_empty_map(&package.operations, "packages operations")?;
@@ -174,14 +212,29 @@ pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
                 package.language.id
             ));
         };
-        let expected = [package.sdk.package.clone()]
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-        if packages_for_language != &expected {
-            return Err(format!(
-                "exports {} must resolve to package {}",
-                package.language.id, package.sdk.package
-            ));
+        if package.language.id == "ts" {
+            let npm_packages = package
+                .npm_packages
+                .as_ref()
+                .ok_or_else(|| "packages ts npm_packages are required".to_owned())?;
+            validate_ts_npm_packages(package, packages_for_language, npm_packages)?;
+        } else {
+            if package.npm_packages.is_some() {
+                return Err(format!(
+                    "packages {} npm_packages is only supported for ts",
+                    package.language.id
+                ));
+            }
+            let sdk_package = package.sdk.package.as_ref().ok_or_else(|| {
+                format!("packages {} sdk.package is required", package.language.id)
+            })?;
+            let expected = [sdk_package.clone()].into_iter().collect::<BTreeSet<_>>();
+            if packages_for_language != &expected {
+                return Err(format!(
+                    "exports {} must resolve to package {}",
+                    package.language.id, sdk_package
+                ));
+            }
         }
         let current_operations = package.operations.keys().cloned().collect::<BTreeSet<_>>();
         match &operation_keys {
@@ -219,6 +272,145 @@ pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
         return Err("packages ts rollout.order must be 1".to_owned());
     }
     Ok(())
+}
+
+fn validate_ts_npm_packages(
+    package: &PackageContract,
+    export_packages: &BTreeSet<String>,
+    npm_packages: &BTreeMap<String, NpmPackageContract>,
+) -> Result<(), String> {
+    if package.sdk.package.is_some() {
+        return Err(
+            "packages ts sdk.package must not be set for multi-package npm output".to_owned(),
+        );
+    }
+    let package_family = package
+        .sdk
+        .package_family
+        .as_deref()
+        .ok_or_else(|| "packages ts sdk.package_family is required".to_owned())?;
+    if package_family != "@radroots" {
+        return Err("packages ts sdk.package_family must be @radroots".to_owned());
+    }
+    let expected = expected_ts_npm_packages();
+    let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
+    let actual_keys = npm_packages.keys().cloned().collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        let missing = expected_keys
+            .difference(&actual_keys)
+            .cloned()
+            .collect::<Vec<_>>();
+        let extra = actual_keys
+            .difference(&expected_keys)
+            .cloned()
+            .collect::<Vec<_>>();
+        return Err(format!(
+            "packages ts npm_packages must match package matrix: missing {:?}, extra {:?}",
+            missing, extra
+        ));
+    }
+    for (key, expected_package) in expected {
+        let actual = npm_packages
+            .get(&key)
+            .ok_or_else(|| format!("packages ts npm package {key} is missing"))?;
+        validate_npm_package(&key, actual, &expected_package)?;
+    }
+    let expected_names = npm_packages
+        .values()
+        .map(|package| package.package.clone())
+        .collect::<BTreeSet<_>>();
+    if export_packages != &expected_names {
+        return Err("exports ts package set must match TypeScript npm package matrix".to_owned());
+    }
+    Ok(())
+}
+
+fn expected_ts_npm_packages() -> BTreeMap<String, ExpectedNpmPackage> {
+    let mut expected = BTreeMap::new();
+    for spec in package_specs() {
+        expected.insert(spec.key.to_owned(), expected_from_package_spec(*spec));
+    }
+    for spec in wasm_package_specs() {
+        expected.insert(spec.key.to_owned(), expected_from_wasm_package_spec(*spec));
+    }
+    expected
+}
+
+fn expected_from_package_spec(spec: PackageSpec) -> ExpectedNpmPackage {
+    ExpectedNpmPackage {
+        kind: "bindings",
+        crate_name: spec.crate_name,
+        crate_dir: spec.crate_dir,
+        package: spec.package_name,
+        package_dir: spec.package_dir,
+        out_name: None,
+        out_dir: None,
+    }
+}
+
+fn expected_from_wasm_package_spec(spec: WasmPackageSpec) -> ExpectedNpmPackage {
+    ExpectedNpmPackage {
+        kind: "wasm",
+        crate_name: spec.crate_name,
+        crate_dir: spec.crate_dir,
+        package: spec.package_name,
+        package_dir: spec.package_dir,
+        out_name: Some(spec.out_name),
+        out_dir: Some(spec.out_dir),
+    }
+}
+
+fn validate_npm_package(
+    key: &str,
+    actual: &NpmPackageContract,
+    expected: &ExpectedNpmPackage,
+) -> Result<(), String> {
+    validate_npm_field(key, "kind", &actual.kind, expected.kind)?;
+    validate_npm_field(key, "crate_name", &actual.crate_name, expected.crate_name)?;
+    validate_npm_field(key, "crate_dir", &actual.crate_dir, expected.crate_dir)?;
+    validate_npm_field(key, "package", &actual.package, expected.package)?;
+    validate_npm_field(
+        key,
+        "package_dir",
+        &actual.package_dir,
+        expected.package_dir,
+    )?;
+    validate_optional_npm_field(
+        key,
+        "out_name",
+        actual.out_name.as_deref(),
+        expected.out_name,
+    )?;
+    validate_optional_npm_field(key, "out_dir", actual.out_dir.as_deref(), expected.out_dir)?;
+    Ok(())
+}
+
+fn validate_npm_field(key: &str, field: &str, actual: &str, expected: &str) -> Result<(), String> {
+    validate_non_empty(actual, &format!("packages ts npm package {key} {field}"))?;
+    if actual != expected {
+        return Err(format!(
+            "packages ts npm package {key} {field} must be {expected}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_optional_npm_field(
+    key: &str,
+    field: &str,
+    actual: Option<&str>,
+    expected: Option<&str>,
+) -> Result<(), String> {
+    match (actual, expected) {
+        (Some(actual), Some(expected)) => validate_npm_field(key, field, actual, expected),
+        (None, None) => Ok(()),
+        (Some(_), None) => Err(format!(
+            "packages ts npm package {key} {field} must not be set"
+        )),
+        (None, Some(expected)) => Err(format!(
+            "packages ts npm package {key} {field} must be {expected}"
+        )),
+    }
 }
 
 fn load_contract_dir<T>(dir: &Path) -> Result<Vec<T>, String>
@@ -322,11 +514,7 @@ mod tests {
     #[test]
     fn rejects_mismatched_language_sets() {
         let root = test_root("language_mismatch");
-        write_contract(
-            &root,
-            "contracts/exports/ts.toml",
-            EXPORT_TS.replace("@radroots/sdk", "@radroots/sdk").as_str(),
-        );
+        write_contract(&root, "contracts/exports/ts.toml", EXPORT_TS);
         let error = validate_sdk_contracts(&root).expect_err("missing packages should fail");
         assert!(error.contains("contracts/packages"));
         let _ = fs::remove_dir_all(root);
@@ -335,16 +523,35 @@ mod tests {
     #[test]
     fn rejects_package_export_mismatch() {
         let root = test_root("package_mismatch");
+        write_contract(
+            &root,
+            "contracts/exports/ts.toml",
+            EXPORT_TS
+                .replace("@radroots/core-bindings", "@radroots/other")
+                .as_str(),
+        );
+        write_contract(&root, "contracts/packages/ts.toml", PACKAGE_TS);
+        let error = validate_sdk_contracts(&root).expect_err("mismatch should fail");
+        assert!(error.contains("exports ts package set"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_ts_package_matrix_drift() {
+        let root = test_root("ts_matrix_drift");
         write_contract(&root, "contracts/exports/ts.toml", EXPORT_TS);
         write_contract(
             &root,
             "contracts/packages/ts.toml",
             PACKAGE_TS
-                .replace("@radroots/sdk", "@radroots/other")
+                .replace(
+                    "package = \"@radroots/core-bindings\"",
+                    "package = \"@radroots/other\"",
+                )
                 .as_str(),
         );
         let error = validate_sdk_contracts(&root).expect_err("mismatch should fail");
-        assert!(error.contains("exports ts must resolve"));
+        assert!(error.contains("packages ts npm package core package"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -367,7 +574,16 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots_core" = "@radroots/sdk"
+"radroots_core" = "@radroots/core-bindings"
+"radroots_events" = "@radroots/events-bindings"
+"radroots_events_indexed" = "@radroots/events-indexed-bindings"
+"radroots_identity" = "@radroots/identity-bindings"
+"radroots_replica_db_schema" = "@radroots/replica-db-schema-bindings"
+"radroots_trade" = "@radroots/trade-bindings"
+"radroots_types" = "@radroots/types-bindings"
+"radroots_events_codec_wasm" = "@radroots/events-codec-wasm"
+"radroots_replica_db_wasm" = "@radroots/replica-db-wasm"
+"radroots_replica_sync_wasm" = "@radroots/replica-sync-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -386,11 +602,87 @@ id = "ts"
 repository = "sdk-typescript"
 
 [sdk]
-package = "@radroots/sdk"
+package_family = "@radroots"
 module_format = "esm"
 deterministic_codec = "wasm"
 signing = "native"
 networking = "native"
+
+[npm_packages.core]
+kind = "bindings"
+crate_name = "radroots_core_bindings"
+crate_dir = "crates/core_bindings"
+package = "@radroots/core-bindings"
+package_dir = "packages/core-bindings"
+
+[npm_packages.events]
+kind = "bindings"
+crate_name = "radroots_events_bindings"
+crate_dir = "crates/events_bindings"
+package = "@radroots/events-bindings"
+package_dir = "packages/events-bindings"
+
+[npm_packages.events_indexed]
+kind = "bindings"
+crate_name = "radroots_events_indexed_bindings"
+crate_dir = "crates/events_indexed_bindings"
+package = "@radroots/events-indexed-bindings"
+package_dir = "packages/events-indexed-bindings"
+
+[npm_packages.identity]
+kind = "bindings"
+crate_name = "radroots_identity_bindings"
+crate_dir = "crates/identity_bindings"
+package = "@radroots/identity-bindings"
+package_dir = "packages/identity-bindings"
+
+[npm_packages.replica_db_schema]
+kind = "bindings"
+crate_name = "radroots_replica_db_schema_bindings"
+crate_dir = "crates/replica_db_schema_bindings"
+package = "@radroots/replica-db-schema-bindings"
+package_dir = "packages/replica-db-schema-bindings"
+
+[npm_packages.trade]
+kind = "bindings"
+crate_name = "radroots_trade_bindings"
+crate_dir = "crates/trade_bindings"
+package = "@radroots/trade-bindings"
+package_dir = "packages/trade-bindings"
+
+[npm_packages.types]
+kind = "bindings"
+crate_name = "radroots_types_bindings"
+crate_dir = "crates/types_bindings"
+package = "@radroots/types-bindings"
+package_dir = "packages/types-bindings"
+
+[npm_packages.events_codec]
+kind = "wasm"
+crate_name = "radroots_events_codec_wasm"
+crate_dir = "crates/events_codec_wasm"
+package = "@radroots/events-codec-wasm"
+package_dir = "packages/events-codec-wasm"
+out_name = "radroots_events_codec_wasm"
+out_dir = "../../packages/events-codec-wasm/dist"
+
+[npm_packages.replica_db]
+kind = "wasm"
+crate_name = "radroots_replica_db_wasm"
+crate_dir = "crates/replica_db_wasm"
+package = "@radroots/replica-db-wasm"
+package_dir = "packages/replica-db-wasm"
+out_name = "radroots_replica_db_wasm"
+out_dir = "../../packages/replica-db-wasm/dist"
+
+[npm_packages.replica_sync]
+kind = "wasm"
+crate_name = "radroots_replica_sync_wasm"
+crate_dir = "crates/replica_sync_wasm"
+package = "@radroots/replica-sync-wasm"
+package_dir = "packages/replica-sync-wasm"
+out_name = "radroots_replica_sync_wasm"
+out_dir = "../../packages/replica-sync-wasm/dist"
 
 [rollout]
 stage = "active"
