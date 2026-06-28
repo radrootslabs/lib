@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, fs, path::Path, process::Command};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use serde::Deserialize;
 
@@ -22,11 +27,23 @@ const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.gi
 const PUBLISH_ACCESS: &str = "public";
 
 #[derive(Debug, Deserialize)]
-struct NpmPackEntry {
-    files: Vec<NpmPackFile>,
+struct PnpmPackEntry {
+    filename: String,
+    files: Vec<PnpmPackFile>,
 }
 
 #[derive(Debug, Deserialize)]
+struct PnpmPackFile {
+    path: String,
+}
+
+#[derive(Debug)]
+struct PackedPackage {
+    tarball_path: PathBuf,
+    files: Vec<NpmPackFile>,
+}
+
+#[derive(Debug)]
 struct NpmPackFile {
     path: String,
 }
@@ -254,6 +271,7 @@ fn check_package_json(
     check_publish_config(&json, path)?;
     check_repository(&json, path, expected_directory)?;
     check_package_files(&json, path)?;
+    check_no_pack_lifecycle_scripts(&json, path)?;
     check_workspace_dependencies(&json, path)?;
     Ok(json)
 }
@@ -469,12 +487,15 @@ fn check_workspace_dependencies(
 }
 
 fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
+    let pack_dir =
+        tempfile::tempdir().map_err(|error| format!("failed to create pack temp dir: {error}"))?;
     for spec in package_specs() {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
         let json = read_package_json_value(&package_json_path)?;
         let required_files = required_npm_payload_files(&json, &package_json_path, None)?;
-        let payload_files = npm_pack_payload_files(&package_dir, spec.package_name)?;
+        let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
+        let payload_files = packed_payload_files(&packed);
         validate_npm_pack_payload(spec.package_name, &payload_files, &required_files, None)?;
     }
     for spec in wasm_package_specs() {
@@ -482,13 +503,44 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
         let package_json_path = package_dir.join("package.json");
         let json = read_package_json_value(&package_json_path)?;
         let required_files = required_npm_payload_files(&json, &package_json_path, Some(*spec))?;
-        let payload_files = npm_pack_payload_files(&package_dir, spec.package_name)?;
+        let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
+        let payload_files = packed_payload_files(&packed);
         validate_npm_pack_payload(
             spec.package_name,
             &payload_files,
             &required_files,
             Some(&format!("dist/{}_bg.wasm", spec.out_name)),
         )?;
+    }
+    Ok(())
+}
+
+fn check_no_pack_lifecycle_scripts(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+) -> Result<(), String> {
+    let Some(scripts) = json.get("scripts") else {
+        return Ok(());
+    };
+    let scripts = scripts.as_object().ok_or_else(|| {
+        format!(
+            "package.json scripts must be an object: {}",
+            package_json_path.display()
+        )
+    })?;
+    for forbidden in [
+        "prepack",
+        "postpack",
+        "prepare",
+        "prepublish",
+        "prepublishOnly",
+    ] {
+        if scripts.contains_key(forbidden) {
+            return Err(format!(
+                "package.json script {forbidden} is forbidden because pnpm pack runs lifecycle scripts: {}",
+                package_json_path.display()
+            ));
+        }
     }
     Ok(())
 }
@@ -522,44 +574,88 @@ fn required_npm_payload_files(
     Ok(required)
 }
 
-fn npm_pack_payload_files(
+fn pnpm_pack_package(
     package_dir: &Path,
     package_name: &str,
-) -> Result<BTreeSet<String>, String> {
-    let output = Command::new("npm")
-        .args(["pack", "--json", "--dry-run", "--ignore-scripts"])
+    pack_destination: &Path,
+) -> Result<PackedPackage, String> {
+    let output = Command::new("pnpm")
+        .args(["pack", "--json", "--pack-destination"])
+        .arg(pack_destination)
         .current_dir(package_dir)
         .output()
         .map_err(|error| {
             format!(
-                "failed to run npm pack dry-run for {package_name} in {}: {error}",
+                "failed to run pnpm pack for {package_name} in {}: {error}",
                 package_dir.display()
             )
         })?;
     if !output.status.success() {
         return Err(format!(
-            "npm pack dry-run failed for {package_name} in {}: {}",
+            "pnpm pack failed for {package_name} in {}: {}",
             package_dir.display(),
             String::from_utf8_lossy(&output.stderr)
         ));
     }
-    let entries = serde_json::from_slice::<Vec<NpmPackEntry>>(&output.stdout).map_err(|error| {
+    let entry = parse_pnpm_pack_entry(package_name, &output.stdout, &output.stderr)?;
+    packed_package_from_pnpm_entry(package_name, pack_destination, entry)
+}
+
+fn parse_pnpm_pack_entry(
+    package_name: &str,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<PnpmPackEntry, String> {
+    serde_json::from_slice::<PnpmPackEntry>(stdout).map_err(|error| {
         format!(
-            "failed to parse npm pack dry-run output for {package_name}: {error}; stdout: {}; stderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "failed to parse pnpm pack output for {package_name}: {error}; stdout: {}; stderr: {}",
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr)
         )
-    })?;
-    let [entry] = entries.as_slice() else {
+    })
+}
+
+fn packed_package_from_pnpm_entry(
+    package_name: &str,
+    pack_destination: &Path,
+    entry: PnpmPackEntry,
+) -> Result<PackedPackage, String> {
+    if entry.filename.trim().is_empty() {
         return Err(format!(
-            "npm pack dry-run for {package_name} must return one package entry"
+            "pnpm pack output for {package_name} is missing tarball filename"
         ));
-    };
-    Ok(entry
+    }
+    let tarball_path = PathBuf::from(&entry.filename);
+    if !tarball_path.starts_with(pack_destination) {
+        return Err(format!(
+            "pnpm pack tarball for {package_name} must be written under {}: {}",
+            pack_destination.display(),
+            tarball_path.display()
+        ));
+    }
+    if !tarball_path.is_file() {
+        return Err(format!(
+            "pnpm pack tarball for {package_name} does not exist: {}",
+            tarball_path.display()
+        ));
+    }
+    Ok(PackedPackage {
+        tarball_path,
+        files: entry
+            .files
+            .into_iter()
+            .map(|file| NpmPackFile { path: file.path })
+            .collect(),
+    })
+}
+
+fn packed_payload_files(packed: &PackedPackage) -> BTreeSet<String> {
+    debug_assert!(packed.tarball_path.is_file());
+    packed
         .files
         .iter()
         .map(|file| normalized_package_path(&file.path))
-        .collect())
+        .collect()
 }
 
 fn validate_npm_pack_payload(
@@ -842,7 +938,7 @@ mod tests {
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
         check_package_json, check_package_surface_artifacts, check_wasm_package_surface,
-        validate_npm_pack_payload,
+        parse_pnpm_pack_entry, validate_npm_pack_payload,
     };
 
     #[test]
@@ -970,6 +1066,28 @@ mod tests {
     }
 
     #[test]
+    fn public_package_metadata_rejects_pack_lifecycle_scripts() {
+        let root = test_root("pack_lifecycle_scripts");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(&package_dir).expect("create package");
+        let package_json = package_json("example").replace(
+            r#""type": "module","#,
+            r#""scripts": {"prepack": "echo forbidden"}, "type": "module","#,
+        );
+        fs::write(package_dir.join("package.json"), package_json).expect("write package json");
+
+        let error = check_package_json(
+            &package_dir.join("package.json"),
+            "@radroots/example",
+            "packages/example",
+        )
+        .expect_err("pack lifecycle script rejected");
+
+        assert!(error.contains("script prepack is forbidden"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn package_distribution_metadata_matches_root_license_files() {
         let root = test_root("package_distribution_metadata");
         let package_dir = root.join("packages").join("example");
@@ -1074,6 +1192,34 @@ mod tests {
         assert!(error.contains("missing required files"));
         assert!(error.contains("LICENSE-APACHE"));
         assert!(error.contains("dist/index.d.ts"));
+    }
+
+    #[test]
+    fn pnpm_pack_json_parser_accepts_single_package_object() {
+        let entry = parse_pnpm_pack_entry(
+            "@radroots/example",
+            br#"{
+  "name": "@radroots/example",
+  "version": "0.1.0",
+  "filename": "/tmp/example.tgz",
+  "files": [
+    {"path": "dist/index.js"},
+    {"path": "package.json"}
+  ]
+}"#,
+            b"",
+        )
+        .expect("pnpm pack output parses");
+
+        assert_eq!(entry.filename, "/tmp/example.tgz");
+        assert_eq!(
+            entry
+                .files
+                .into_iter()
+                .map(|file| file.path)
+                .collect::<Vec<_>>(),
+            ["dist/index.js", "package.json"]
+        );
     }
 
     #[test]
