@@ -1,5 +1,6 @@
+use dto_bindgen_backend_ts::{DtoTypesModule, TypeScriptImport, TypeScriptModule};
+
 use crate::{
-    dto_render::DtoTypesModule,
     dto_roots,
     manifest::manifest_file_name,
     manifest::package_manifest,
@@ -10,7 +11,7 @@ use crate::{
 pub struct PackageOutput {
     pub spec: PackageSpec,
     pub types_ts: Option<TsSource>,
-    pub types_imports_ts: Option<&'static str>,
+    pub types_imports: Vec<TypeScriptImport>,
     pub constants_ts: Option<TsSource>,
     pub kinds_ts: Option<TsSource>,
 }
@@ -45,7 +46,10 @@ impl PackageOutput {
     pub fn files(&self) -> Vec<GeneratedFile> {
         let mut files = Vec::new();
         if let Some(types_ts) = &self.types_ts {
-            let imports = combined_imports(self.types_imports_ts, types_ts.imports());
+            let imports = combined_imports(
+                structured_imports_ts(&self.types_imports).as_deref(),
+                types_ts.imports(),
+            );
             files.push(GeneratedFile {
                 relative_path: format!("src/generated/{}", generated_types_file()),
                 contents: render_ts(types_ts, imports.as_deref()),
@@ -80,14 +84,14 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         PackageOutput {
             spec: spec_by_key("core"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::core_types_module()?)),
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
         },
         PackageOutput {
             spec: spec_by_key("events"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::events_types_module()?)),
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: Some(TsSource::Raw(radroots_events_bindings::constants_module())),
             kinds_ts: Some(TsSource::Raw(radroots_events_bindings::kinds_module())),
         },
@@ -96,14 +100,14 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             types_ts: Some(TsSource::DtoRegistry(
                 dto_roots::events_indexed_types_module()?,
             )),
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
         },
         PackageOutput {
             spec: spec_by_key("identity"),
             types_ts: None,
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: Some(TsSource::Raw(radroots_identity_bindings::constants_module())),
             kinds_ts: None,
         },
@@ -112,21 +116,24 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             types_ts: Some(TsSource::DtoRegistry(
                 dto_roots::replica_db_schema_types_module()?,
             )),
-            types_imports_ts: Some(REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS),
+            types_imports: vec![TypeScriptImport::type_only(
+                ["IResult", "IResultList", "IResultPass"],
+                "@radroots/types-bindings",
+            )],
             constants_ts: None,
             kinds_ts: None,
         },
         PackageOutput {
             spec: spec_by_key("trade"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::trade_types_module()?)),
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
         },
         PackageOutput {
             spec: spec_by_key("types"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::types_types_module()?)),
-            types_imports_ts: None,
+            types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
         },
@@ -160,13 +167,20 @@ fn combined_imports(first: Option<&str>, second: Option<&str>) -> Option<String>
     }
 }
 
-const REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS: &str = r#"import type {
-    IResult,
-    IResultList,
-    IResultPass,
-} from "@radroots/types-bindings";
-
-"#;
+fn structured_imports_ts(imports: &[TypeScriptImport]) -> Option<String> {
+    if imports.is_empty() {
+        return None;
+    }
+    Some(
+        imports
+            .iter()
+            .cloned()
+            .fold(TypeScriptModule::new("types.ts"), |module, import| {
+                module.with_import(import)
+            })
+            .render_source(),
+    )
+}
 
 fn render_manifest(spec: PackageSpec) -> String {
     let mut value = package_manifest(spec);
@@ -197,7 +211,8 @@ fn render_index(output: &PackageOutput) -> String {
 #[cfg(test)]
 mod tests {
     use super::{PackageOutput, TsSource, package_outputs, render_ts};
-    use crate::{dto_render::DtoTypesModule, package_matrix::package_specs};
+    use crate::package_matrix::package_specs;
+    use dto_bindgen_backend_ts::{DtoTypesModule, TypeScriptImport};
 
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
@@ -256,7 +271,10 @@ mod tests {
                 "import type { ExternalThing } from \"@radroots/external-bindings\";\n\n",
                 "export type SyntheticThing = { external: ExternalThing, };",
             ))),
-            types_imports_ts: Some("import type { LocalPrelude } from \"@radroots/local\";\n\n"),
+            types_imports: vec![TypeScriptImport::type_only(
+                ["LocalPrelude"],
+                "@radroots/local",
+            )],
             constants_ts: None,
             kinds_ts: None,
         };
@@ -276,7 +294,7 @@ mod tests {
 
         assert_eq!(
             types.contents,
-            "// @generated by cargo xtask generate ts\n// Do not edit by hand.\nimport type { LocalPrelude } from \"@radroots/local\";\n\nimport type { ExternalThing } from \"@radroots/external-bindings\";\n\nexport type SyntheticThing = { external: ExternalThing, };\n"
+            "// @generated by cargo xtask generate ts\n// Do not edit by hand.\nimport type { LocalPrelude } from \"@radroots/local\";\nimport type { ExternalThing } from \"@radroots/external-bindings\";\n\nexport type SyntheticThing = { external: ExternalThing, };\n"
         );
         assert!(manifest.contents.contains("\"generated\": true"));
         assert_eq!(index.contents, "export * from \"./generated/types.js\";\n");
@@ -291,7 +309,7 @@ mod tests {
             .expect("trade output");
 
         assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
-        assert!(output.types_imports_ts.is_none());
+        assert!(output.types_imports.is_empty());
 
         let types = output
             .files()
@@ -311,10 +329,7 @@ mod tests {
             .expect("replica_db_schema output");
 
         assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
-        assert_eq!(
-            output.types_imports_ts,
-            Some(super::REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS)
-        );
+        assert_eq!(output.types_imports.len(), 1);
 
         let types = output
             .files()

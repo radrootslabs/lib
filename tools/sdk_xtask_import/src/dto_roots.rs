@@ -1,8 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use dto_bindgen_backend_ts::{
+    DtoRegistryRenderOptions, DtoTypesModule, TypeScriptDeclaration, TypeScriptModule,
+    TypeScriptType, render_registry_types,
+};
 use dto_bindgen_core::{Registry, RootDescriptor, build_registry};
-
-use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule, render_registry_types};
 
 #[derive(Clone, Copy, Debug)]
 pub struct DtoPackageRootSet {
@@ -182,12 +184,12 @@ pub fn core_types_module() -> Result<DtoTypesModule, String> {
     let root_set = package_root_set("core").ok_or_else(|| "missing core DTO roots".to_owned())?;
     let rendered =
         render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
-    Ok(DtoTypesModule::new(
-        rendered.imports_ts().unwrap_or_default(),
-        format!(
-            "export type RadrootsCoreCurrency = string;\n\nexport type RadrootsCoreDecimal = string;\n\n{}",
-            rendered.body_ts()
-        ),
+    Ok(with_type_aliases_sorted(
+        rendered,
+        [
+            type_alias("RadrootsCoreCurrency", TypeScriptType::String),
+            type_alias("RadrootsCoreDecimal", TypeScriptType::String),
+        ],
     ))
 }
 
@@ -197,10 +199,7 @@ pub fn events_types_module() -> Result<DtoTypesModule, String> {
     let registry = root_set.registry();
     let options = core_import_options(&registry, DtoRegistryRenderOptions::default())?;
     let rendered = render_registry_types(&registry, &options)?;
-    Ok(DtoTypesModule::new(
-        rendered.imports_ts().unwrap_or_default(),
-        with_events_sdk_wrappers(rendered.body_ts()),
-    ))
+    Ok(with_events_sdk_wrappers(rendered))
 }
 
 pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
@@ -208,10 +207,7 @@ pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
         .ok_or_else(|| "missing events-indexed DTO roots".to_owned())?;
     let rendered =
         render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
-    Ok(DtoTypesModule::new(
-        rendered.imports_ts().unwrap_or_default(),
-        with_events_indexed_sdk_wrappers(rendered.body_ts()),
-    ))
+    Ok(with_events_indexed_sdk_wrappers(rendered))
 }
 
 pub fn replica_db_schema_types_module() -> Result<DtoTypesModule, String> {
@@ -393,7 +389,7 @@ fn imported_type_inventory(imports_ts: &str) -> BTreeMap<String, BTreeSet<String
         let line = line.trim();
         if let Some(single) = line.strip_prefix("import type { ") {
             if let Some((name, from)) = single.split_once(" } from ") {
-                insert_import(&mut imports, from, name);
+                insert_import_names(&mut imports, from, name);
             }
         } else if line == "import type {" {
             pending_names = Some(Vec::new());
@@ -411,6 +407,12 @@ fn imported_type_inventory(imports_ts: &str) -> BTreeMap<String, BTreeSet<String
     }
 
     imports
+}
+
+fn insert_import_names(imports: &mut BTreeMap<String, BTreeSet<String>>, from: &str, names: &str) {
+    for name in names.split(',') {
+        insert_import(imports, from, name);
+    }
 }
 
 fn insert_import(imports: &mut BTreeMap<String, BTreeSet<String>>, from: &str, name: &str) {
@@ -448,18 +450,30 @@ const fn events_override(export_name: &'static str) -> DtoExternalOverride {
     }
 }
 
-fn with_events_sdk_wrappers(body: &str) -> String {
-    let mut declarations = body
+fn with_events_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
+    let mut declarations = module
+        .body_ts()
         .split("\n\n")
         .filter(|declaration| !declaration.trim().is_empty())
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    declarations.push(
-        "export type RadrootsListingProductTagKeys = readonly [\"key\", \"title\", \"category\", \"summary\", \"process\", \"lot\", \"location\", \"profile\", \"year\"];"
-            .to_owned(),
-    );
+    declarations.push(type_alias(
+        "RadrootsListingProductTagKeys",
+        TypeScriptType::readonly_tuple(
+            [
+                "key", "title", "category", "summary", "process", "lot", "location", "profile",
+                "year",
+            ]
+            .into_iter()
+            .map(TypeScriptType::literal_string)
+            .collect::<Vec<_>>(),
+        ),
+    ));
     declarations.sort_by(|left, right| declaration_name(left).cmp(declaration_name(right)));
-    declarations.join("\n\n")
+    DtoTypesModule::new(
+        module.imports_ts().unwrap_or_default(),
+        declarations.join("\n\n"),
+    )
 }
 
 fn declaration_name(declaration: &str) -> &str {
@@ -469,13 +483,17 @@ fn declaration_name(declaration: &str) -> &str {
         .unwrap_or(declaration)
 }
 
-fn with_events_indexed_sdk_wrappers(body: &str) -> String {
-    let mut declarations = body
+fn with_events_indexed_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
+    let mut declarations = module
+        .body_ts()
         .split("\n\n")
         .filter(|declaration| !declaration.trim().is_empty())
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    declarations.push("export type RadrootsEventsIndexedShardId = string;".to_owned());
+    declarations.push(type_alias(
+        "RadrootsEventsIndexedShardId",
+        TypeScriptType::String,
+    ));
     let order = [
         "RadrootsEventsIndexedShardId",
         "RadrootsEventsIndexedIdRange",
@@ -490,7 +508,36 @@ fn with_events_indexed_sdk_wrappers(body: &str) -> String {
             .position(|name| *name == declaration_name(declaration))
             .unwrap_or(order.len())
     });
-    declarations.join("\n\n")
+    DtoTypesModule::new(
+        module.imports_ts().unwrap_or_default(),
+        declarations.join("\n\n"),
+    )
+}
+
+fn with_type_aliases_sorted(
+    module: DtoTypesModule,
+    aliases: impl IntoIterator<Item = String>,
+) -> DtoTypesModule {
+    let mut declarations = module
+        .body_ts()
+        .split("\n\n")
+        .filter(|declaration| !declaration.trim().is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    declarations.extend(aliases);
+    declarations.sort_by(|left, right| declaration_name(left).cmp(declaration_name(right)));
+    DtoTypesModule::new(
+        module.imports_ts().unwrap_or_default(),
+        declarations.join("\n\n"),
+    )
+}
+
+fn type_alias(name: impl Into<String>, type_expr: TypeScriptType) -> String {
+    TypeScriptModule::new("types.ts")
+        .with_declaration(TypeScriptDeclaration::type_alias(name, type_expr))
+        .render_source()
+        .trim()
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -506,7 +553,7 @@ mod tests {
         type_exports, validate_external_override_target, validate_external_override_usage,
         with_checked_external_type,
     };
-    use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule};
+    use dto_bindgen_backend_ts::{DtoRegistryRenderOptions, DtoTypesModule};
 
     const EVENTS_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/events-bindings/src/generated/types.ts");
@@ -836,12 +883,12 @@ mod tests {
     #[test]
     fn generated_import_inventory_parses_single_and_multiline_imports() {
         let imports = imported_type_inventory(
-            "import type { One } from \"@radroots/one\";\nimport type {\n    Two,\n    Three,\n} from \"@radroots/many\";\n\n",
+            "import type { One, Four } from \"@radroots/one\";\nimport type {\n    Two,\n    Three,\n} from \"@radroots/many\";\n\n",
         );
 
         assert_eq!(
             imports.get("@radroots/one").expect("single import package"),
-            &BTreeSet::from(["One".to_owned()])
+            &BTreeSet::from(["Four".to_owned(), "One".to_owned()])
         );
         assert_eq!(
             imports.get("@radroots/many").expect("multi import package"),
