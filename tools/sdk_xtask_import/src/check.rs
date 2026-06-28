@@ -17,6 +17,14 @@ const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
 const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
+const PACKAGE_README_FILE: &str = "README.md";
+const PACKAGE_LICENSE_FILES: [&str; 2] = ["LICENSE-MIT", "LICENSE-APACHE"];
+const PACKAGE_FILES: [&str; 4] = [
+    "dist",
+    PACKAGE_README_FILE,
+    PACKAGE_LICENSE_FILES[0],
+    PACKAGE_LICENSE_FILES[1],
+];
 
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
@@ -30,6 +38,12 @@ pub fn check() -> Result<(), String> {
         let index_path = package_dir.join("src/index.ts");
         let package_json =
             check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
+        check_package_distribution_metadata(
+            &root,
+            &package_dir,
+            &package_json_path,
+            &package_json,
+        )?;
         let _ = package_surface_paths(&package_json, &package_json_path)?;
         if !index_path.is_file() {
             return Err(format!("missing package index: {}", index_path.display()));
@@ -224,6 +238,7 @@ fn check_package_json(
             path.display()
         ));
     }
+    let _ = package_description(&json, path)?;
     require_string_field(&json, path, "version", PACKAGE_VERSION)?;
     require_string_field(&json, path, "license", PACKAGE_LICENSE)?;
     require_string_field(&json, path, "homepage", PACKAGE_HOMEPAGE)?;
@@ -236,10 +251,79 @@ fn check_package_json(
     Ok(json)
 }
 
+fn check_package_distribution_metadata(
+    root: &Path,
+    package_dir: &Path,
+    package_json_path: &Path,
+    json: &serde_json::Value,
+) -> Result<(), String> {
+    let package_name = json
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("package.json missing name: {}", package_json_path.display()))?;
+    let description = package_description(json, package_json_path)?;
+    let readme_path = package_dir.join(PACKAGE_README_FILE);
+    let expected_readme = package_readme(package_name, description);
+    check_text_file(&readme_path, &expected_readme, "stale package README")?;
+    for file_name in PACKAGE_LICENSE_FILES {
+        let source_path = root.join(file_name);
+        let package_path = package_dir.join(file_name);
+        let expected = fs::read(&source_path)
+            .map_err(|error| format!("failed to read {}: {error}", source_path.display()))?;
+        let actual = fs::read(&package_path)
+            .map_err(|error| format!("failed to read {}: {error}", package_path.display()))?;
+        if actual != expected {
+            return Err(format!(
+                "stale package license metadata: {}",
+                package_path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn package_description<'a>(
+    json: &'a serde_json::Value,
+    package_json_path: &Path,
+) -> Result<&'a str, String> {
+    let description = json
+        .get("description")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing description: {}",
+                package_json_path.display()
+            )
+        })?;
+    if description.trim().is_empty() || description.trim() != description {
+        return Err(format!(
+            "package.json description must be non-empty and trimmed: {}",
+            package_json_path.display()
+        ));
+    }
+    Ok(description)
+}
+
+fn package_readme(package_name: &str, description: &str) -> String {
+    format!(
+        "# {package_name}\n\n{description}\n\nThis package publishes generated ESM JavaScript, TypeScript declarations, and any runtime artifacts from the Radroots SDK build pipeline. Runtime files are distributed from `dist/`; source and provenance metadata are kept outside the npm package payload.\n\n## License\n\nLicensed under either MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACHE`.\n"
+    )
+}
+
+fn check_text_file(path: &Path, expected: &str, label: &str) -> Result<(), String> {
+    let actual = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    if actual != expected {
+        return Err(format!("{label}: {}", path.display()));
+    }
+    Ok(())
+}
+
 pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> Result<(), String> {
     let package_dir = root.join(spec.package_dir);
     let package_json_path = package_dir.join("package.json");
     let json = check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
+    check_package_distribution_metadata(root, &package_dir, &package_json_path, &json)?;
     let dist_manifest = package_dir.join("dist").join("package.json");
     if dist_manifest.exists() {
         return Err(format!(
@@ -414,9 +498,9 @@ fn check_package_files(json: &serde_json::Value, package_json_path: &Path) -> Re
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if actual != ["dist"] {
+    if actual != PACKAGE_FILES {
         return Err(format!(
-            "package.json files must publish dist only: {}",
+            "package.json files must publish dist plus approved metadata only: {}",
             package_json_path.display()
         ));
     }
@@ -650,8 +734,8 @@ mod tests {
 
     use super::{
         check_binding_crate_sources, check_generated_package_artifact_inventory,
-        check_no_typescript_files, check_package_index, check_package_json,
-        check_wasm_package_surface,
+        check_no_typescript_files, check_package_distribution_metadata, check_package_index,
+        check_package_json, check_wasm_package_surface, package_readme,
     };
 
     #[test]
@@ -762,8 +846,8 @@ mod tests {
         let package_dir = root.join("packages").join("example");
         fs::create_dir_all(&package_dir).expect("create package");
         let package_json = package_json("example").replace(
-            r#""files": ["dist"]"#,
-            r#""files": ["dist", "src/generated"]"#,
+            r#""files": ["dist", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]"#,
+            r#""files": ["dist", "README.md", "LICENSE-MIT", "LICENSE-APACHE", "src/generated"]"#,
         );
         fs::write(package_dir.join("package.json"), package_json).expect("write package json");
 
@@ -774,7 +858,67 @@ mod tests {
         )
         .expect_err("src generated package payload rejected");
 
-        assert!(error.contains("files must publish dist only"));
+        assert!(error.contains("files must publish dist plus approved metadata only"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn package_distribution_metadata_matches_root_license_files() {
+        let root = test_root("package_distribution_metadata");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(&package_dir).expect("create package");
+        fs::write(root.join("LICENSE-MIT"), "MIT license\n").expect("write MIT license");
+        fs::write(root.join("LICENSE-APACHE"), "Apache license\n").expect("write Apache license");
+        fs::write(package_dir.join("package.json"), package_json("example"))
+            .expect("write package json");
+        fs::write(
+            package_dir.join("README.md"),
+            package_readme("@radroots/example", "Example package"),
+        )
+        .expect("write readme");
+        fs::write(package_dir.join("LICENSE-MIT"), "MIT license\n")
+            .expect("write package MIT license");
+        fs::write(package_dir.join("LICENSE-APACHE"), "Apache license\n")
+            .expect("write package Apache license");
+        let json = check_package_json(
+            &package_dir.join("package.json"),
+            "@radroots/example",
+            "packages/example",
+        )
+        .expect("valid package json");
+
+        check_package_distribution_metadata(
+            &root,
+            &package_dir,
+            &package_dir.join("package.json"),
+            &json,
+        )
+        .expect("metadata matches");
+
+        fs::write(package_dir.join("README.md"), "stale\n").expect("stale readme");
+        let error = check_package_distribution_metadata(
+            &root,
+            &package_dir,
+            &package_dir.join("package.json"),
+            &json,
+        )
+        .expect_err("stale readme rejected");
+        assert!(error.contains("stale package README"));
+
+        fs::write(
+            package_dir.join("README.md"),
+            package_readme("@radroots/example", "Example package"),
+        )
+        .expect("restore readme");
+        fs::write(package_dir.join("LICENSE-MIT"), "stale\n").expect("stale license");
+        let error = check_package_distribution_metadata(
+            &root,
+            &package_dir,
+            &package_dir.join("package.json"),
+            &json,
+        )
+        .expect_err("stale license rejected");
+        assert!(error.contains("stale package license metadata"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -788,6 +932,12 @@ mod tests {
             package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
+        write_distribution_metadata(
+            &root,
+            &package_dir,
+            "@radroots/example-wasm",
+            "Example package",
+        );
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
         let spec = WasmPackageSpec {
             key: "example",
@@ -830,6 +980,12 @@ mod tests {
             package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
+        write_distribution_metadata(
+            &root,
+            &package_dir,
+            "@radroots/example-wasm",
+            "Example package",
+        );
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
         fs::write(
             package_dir.join("dist").join("example.d.ts"),
@@ -870,6 +1026,12 @@ mod tests {
             package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
+        write_distribution_metadata(
+            &root,
+            &package_dir,
+            "@radroots/example-wasm",
+            "Example package",
+        );
         fs::write(package_dir.join("dist").join(".gitignore"), "*\n").expect("write ignore");
         let spec = WasmPackageSpec {
             key: "example",
@@ -897,6 +1059,12 @@ mod tests {
             package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
+        write_distribution_metadata(
+            &root,
+            &package_dir,
+            "@radroots/example-wasm",
+            "Example package",
+        );
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
         fs::write(
             package_dir.join("dist").join("example.d.ts"),
@@ -948,6 +1116,12 @@ mod tests {
                 ),
         )
         .expect("write package json");
+        write_distribution_metadata(
+            &root,
+            &package_dir,
+            "@radroots/example-wasm",
+            "Example package",
+        );
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
         fs::write(
             package_dir.join("dist").join("example.d.ts"),
@@ -995,6 +1169,25 @@ mod tests {
         )
     }
 
+    fn write_distribution_metadata(
+        root: &PathBuf,
+        package_dir: &PathBuf,
+        package_name: &str,
+        description: &str,
+    ) {
+        fs::write(root.join("LICENSE-MIT"), "MIT license\n").expect("write MIT license");
+        fs::write(root.join("LICENSE-APACHE"), "Apache license\n").expect("write Apache license");
+        fs::write(package_dir.join("LICENSE-MIT"), "MIT license\n")
+            .expect("write package MIT license");
+        fs::write(package_dir.join("LICENSE-APACHE"), "Apache license\n")
+            .expect("write package Apache license");
+        fs::write(
+            package_dir.join("README.md"),
+            package_readme(package_name, description),
+        )
+        .expect("write package README");
+    }
+
     fn package_json(name: &str) -> String {
         format!(
             r#"{{
@@ -1013,7 +1206,7 @@ mod tests {
   }},
   "type": "module",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE-MIT", "LICENSE-APACHE"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {{
