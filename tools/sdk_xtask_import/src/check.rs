@@ -37,7 +37,8 @@ pub fn check() -> Result<(), String> {
             &package_json_path,
             &package_json,
         )?;
-        let _ = package_surface_paths(&package_json, &package_json_path)?;
+        let surface_paths = package_surface_paths(&package_json, &package_json_path)?;
+        check_package_surface_artifacts(&package_dir, spec.package_name, &surface_paths)?;
         if !index_path.is_file() {
             return Err(format!("missing package index: {}", index_path.display()));
         }
@@ -259,17 +260,7 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
     check_no_wasm_dist_ignore_files(&package_dir, spec)?;
     let surface_paths = package_surface_paths(&json, &package_json_path)?;
     check_public_wasm_declaration_inventory(&surface_paths, spec)?;
-    for relative in surface_paths {
-        let normalized = relative.trim_start_matches("./");
-        let path = package_dir.join(normalized);
-        if !path.is_file() {
-            return Err(format!(
-                "missing package export artifact for {}: {}",
-                spec.package_name,
-                path.display()
-            ));
-        }
-    }
+    check_package_surface_artifacts(&package_dir, spec.package_name, &surface_paths)?;
     check_wasm_runtime_files(&package_dir, spec)?;
     check_wasm_declaration_files(&package_dir, spec)?;
     Ok(())
@@ -644,9 +635,28 @@ fn validate_package_surface_path(
     Ok(())
 }
 
+fn check_package_surface_artifacts(
+    package_dir: &Path,
+    package_name: &str,
+    surface_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    for relative in surface_paths {
+        let normalized = relative.trim_start_matches("./");
+        let path = package_dir.join(normalized);
+        if !path.is_file() {
+            return Err(format!(
+                "missing package export artifact for {package_name}: {}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeSet,
         fs,
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
@@ -661,7 +671,7 @@ mod tests {
     use super::{
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
-        check_package_json, check_wasm_package_surface,
+        check_package_json, check_package_surface_artifacts, check_wasm_package_surface,
     };
 
     #[test]
@@ -845,6 +855,28 @@ mod tests {
         )
         .expect_err("stale license rejected");
         assert!(error.contains("stale package license metadata"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn package_surface_artifacts_require_dist_files() {
+        let root = test_root("package_surface_artifacts");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(package_dir.join("dist")).expect("create dist");
+        fs::write(package_dir.join("dist").join("index.js"), "export {};\n").expect("write js");
+        let surface_paths =
+            BTreeSet::from(["./dist/index.js".to_owned(), "./dist/index.d.ts".to_owned()]);
+
+        let error =
+            check_package_surface_artifacts(&package_dir, "@radroots/example", &surface_paths)
+                .expect_err("missing declaration should fail");
+        assert!(error.contains("missing package export artifact"));
+        assert!(error.contains("index.d.ts"));
+
+        fs::write(package_dir.join("dist").join("index.d.ts"), "export {};\n").expect("write d.ts");
+        check_package_surface_artifacts(&package_dir, "@radroots/example", &surface_paths)
+            .expect("surface artifacts present");
+
         let _ = fs::remove_dir_all(root);
     }
 
