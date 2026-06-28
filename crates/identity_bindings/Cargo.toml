@@ -10,4 +10,5 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
+dto_bindgen_backend_ts = { workspace = true }
 radroots_identity = { workspace = true }
