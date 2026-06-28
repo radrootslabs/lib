@@ -1,11 +1,14 @@
 use std::{
     collections::BTreeSet,
     fs,
+    io::Read,
     path::{Path, PathBuf},
     process::Command,
 };
 
+use flate2::read::GzDecoder;
 use serde::Deserialize;
+use tar::Archive;
 
 use crate::{
     contracts::validate_sdk_contracts,
@@ -495,6 +498,14 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
         let json = read_package_json_value(&package_json_path)?;
         let required_files = required_npm_payload_files(&json, &package_json_path, None)?;
         let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
+        let packed_json = read_packed_package_json(&packed, spec.package_name)?;
+        check_packed_package_json(
+            &json,
+            &packed_json,
+            &package_json_path,
+            spec.package_name,
+            spec.package_dir,
+        )?;
         let payload_files = packed_payload_files(&packed);
         validate_npm_pack_payload(spec.package_name, &payload_files, &required_files, None)?;
     }
@@ -504,6 +515,14 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
         let json = read_package_json_value(&package_json_path)?;
         let required_files = required_npm_payload_files(&json, &package_json_path, Some(*spec))?;
         let packed = pnpm_pack_package(&package_dir, spec.package_name, pack_dir.path())?;
+        let packed_json = read_packed_package_json(&packed, spec.package_name)?;
+        check_packed_package_json(
+            &json,
+            &packed_json,
+            &package_json_path,
+            spec.package_name,
+            spec.package_dir,
+        )?;
         let payload_files = packed_payload_files(&packed);
         validate_npm_pack_payload(
             spec.package_name,
@@ -656,6 +675,213 @@ fn packed_payload_files(packed: &PackedPackage) -> BTreeSet<String> {
         .iter()
         .map(|file| normalized_package_path(&file.path))
         .collect()
+}
+
+fn read_packed_package_json(
+    packed: &PackedPackage,
+    package_name: &str,
+) -> Result<serde_json::Value, String> {
+    let file = fs::File::open(&packed.tarball_path).map_err(|error| {
+        format!(
+            "failed to open pnpm pack tarball for {package_name}: {}: {error}",
+            packed.tarball_path.display()
+        )
+    })?;
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+    let entries = archive.entries().map_err(|error| {
+        format!(
+            "failed to read pnpm pack tarball entries for {package_name}: {}: {error}",
+            packed.tarball_path.display()
+        )
+    })?;
+    for entry in entries {
+        let mut entry = entry.map_err(|error| {
+            format!(
+                "failed to read pnpm pack tarball entry for {package_name}: {}: {error}",
+                packed.tarball_path.display()
+            )
+        })?;
+        let path = entry.path().map_err(|error| {
+            format!(
+                "failed to read pnpm pack tarball entry path for {package_name}: {}: {error}",
+                packed.tarball_path.display()
+            )
+        })?;
+        if path.as_ref() != Path::new("package/package.json") {
+            continue;
+        }
+        let mut raw = String::new();
+        entry.read_to_string(&mut raw).map_err(|error| {
+            format!(
+                "failed to read packed package.json for {package_name}: {}: {error}",
+                packed.tarball_path.display()
+            )
+        })?;
+        return serde_json::from_str::<serde_json::Value>(&raw).map_err(|error| {
+            format!(
+                "failed to parse packed package.json for {package_name}: {}: {error}",
+                packed.tarball_path.display()
+            )
+        });
+    }
+    Err(format!(
+        "pnpm pack tarball for {package_name} is missing package/package.json: {}",
+        packed.tarball_path.display()
+    ))
+}
+
+fn check_packed_package_json(
+    source_json: &serde_json::Value,
+    packed_json: &serde_json::Value,
+    package_json_path: &Path,
+    expected_name: &str,
+    expected_directory: &str,
+) -> Result<(), String> {
+    let source_description = package_description(source_json, package_json_path)?;
+    let packed_description = package_description(packed_json, package_json_path)?;
+    if packed_description != source_description {
+        return Err(format!(
+            "packed package.json description mismatch in {}: expected {source_description}, found {packed_description}",
+            package_json_path.display()
+        ));
+    }
+    require_string_field(packed_json, package_json_path, "name", expected_name)?;
+    require_string_field(packed_json, package_json_path, "version", PACKAGE_VERSION)?;
+    require_string_field(packed_json, package_json_path, "license", PACKAGE_LICENSE)?;
+    require_string_field(packed_json, package_json_path, "homepage", PACKAGE_HOMEPAGE)?;
+    require_string_field(packed_json, package_json_path, "type", "module")?;
+    require_bool_field(packed_json, package_json_path, "sideEffects", false)?;
+    check_publish_config(packed_json, package_json_path)?;
+    check_repository(packed_json, package_json_path, expected_directory)?;
+    check_package_files(packed_json, package_json_path)?;
+    check_no_pack_lifecycle_scripts(packed_json, package_json_path)?;
+    check_same_packed_field(source_json, packed_json, package_json_path, "main")?;
+    check_same_packed_field(source_json, packed_json, package_json_path, "types")?;
+    check_same_packed_field(source_json, packed_json, package_json_path, "exports")?;
+    check_same_packed_field(source_json, packed_json, package_json_path, "scripts")?;
+    check_packed_dependency_maps(source_json, packed_json, package_json_path)?;
+    let source_surface = package_surface_paths(source_json, package_json_path)?;
+    let packed_surface = package_surface_paths(packed_json, package_json_path)?;
+    if packed_surface != source_surface {
+        return Err(format!(
+            "packed package.json export surface mismatch in {}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_same_packed_field(
+    source_json: &serde_json::Value,
+    packed_json: &serde_json::Value,
+    package_json_path: &Path,
+    field: &'static str,
+) -> Result<(), String> {
+    if source_json.get(field) != packed_json.get(field) {
+        return Err(format!(
+            "packed package.json {field} mismatch in {}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_packed_dependency_maps(
+    source_json: &serde_json::Value,
+    packed_json: &serde_json::Value,
+    package_json_path: &Path,
+) -> Result<(), String> {
+    for field in ["dependencies", "peerDependencies", "optionalDependencies"] {
+        check_packed_dependency_map(source_json, packed_json, package_json_path, field)?;
+    }
+    Ok(())
+}
+
+fn check_packed_dependency_map(
+    source_json: &serde_json::Value,
+    packed_json: &serde_json::Value,
+    package_json_path: &Path,
+    field: &'static str,
+) -> Result<(), String> {
+    let source_dependencies = optional_dependency_map(source_json, package_json_path, field)?;
+    let packed_dependencies = optional_dependency_map(packed_json, package_json_path, field)?;
+    let source_keys = source_dependencies
+        .iter()
+        .flat_map(|dependencies| dependencies.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    let packed_keys = packed_dependencies
+        .iter()
+        .flat_map(|dependencies| dependencies.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    if packed_keys != source_keys {
+        return Err(format!(
+            "packed package.json {field} keys mismatch in {}: expected {:?}, found {:?}",
+            package_json_path.display(),
+            source_keys,
+            packed_keys
+        ));
+    }
+    let Some(packed_dependencies) = packed_dependencies else {
+        return Ok(());
+    };
+    let source_dependencies = source_dependencies.expect("matching dependency keys require source");
+    for (name, packed_version) in packed_dependencies {
+        let packed_version = packed_version.as_str().ok_or_else(|| {
+            format!(
+                "packed package.json {field} dependency versions must be strings in {}",
+                package_json_path.display()
+            )
+        })?;
+        if packed_version.starts_with("workspace:") {
+            return Err(format!(
+                "packed package.json {field} dependency {name} must not use workspace protocol in {}",
+                package_json_path.display()
+            ));
+        }
+        let source_version = source_dependencies
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                format!(
+                    "source package.json {field} dependency {name} must be a string in {}",
+                    package_json_path.display()
+                )
+            })?;
+        let expected = expected_packed_dependency_version(name, source_version);
+        if packed_version != expected {
+            return Err(format!(
+                "packed package.json {field} dependency {name} mismatch in {}: expected {expected}, found {packed_version}",
+                package_json_path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn optional_dependency_map<'a>(
+    json: &'a serde_json::Value,
+    package_json_path: &Path,
+    field: &'static str,
+) -> Result<Option<&'a serde_json::Map<String, serde_json::Value>>, String> {
+    json.get(field)
+        .map(|value| {
+            value.as_object().ok_or_else(|| {
+                format!(
+                    "package.json {field} must be an object: {}",
+                    package_json_path.display()
+                )
+            })
+        })
+        .transpose()
+}
+
+fn expected_packed_dependency_version(name: &str, source_version: &str) -> String {
+    if name.starts_with("@radroots/") && source_version == "workspace:^" {
+        format!("^{PACKAGE_VERSION}")
+    } else {
+        source_version.to_owned()
+    }
 }
 
 fn validate_npm_pack_payload(
@@ -924,7 +1150,7 @@ mod tests {
     use std::{
         collections::BTreeSet,
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -937,8 +1163,8 @@ mod tests {
     use super::{
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
-        check_package_json, check_package_surface_artifacts, check_wasm_package_surface,
-        parse_pnpm_pack_entry, validate_npm_pack_payload,
+        check_package_json, check_package_surface_artifacts, check_packed_package_json,
+        check_wasm_package_surface, parse_pnpm_pack_entry, validate_npm_pack_payload,
     };
 
     #[test]
@@ -1220,6 +1446,75 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["dist/index.js", "package.json"]
         );
+    }
+
+    #[test]
+    fn packed_manifest_accepts_pnpm_workspace_dependency_rewrite() {
+        let source = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "workspace:^",
+    "@radroots/events-bindings": "workspace:^""#,
+        ));
+        let packed = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "^0.1.0",
+    "@radroots/events-bindings": "^0.1.0""#,
+        ));
+
+        check_packed_package_json(
+            &source,
+            &packed,
+            Path::new("packages/trade-bindings/package.json"),
+            "@radroots/trade-bindings",
+            "packages/trade-bindings",
+        )
+        .expect("packed manifest accepted");
+    }
+
+    #[test]
+    fn packed_manifest_rejects_workspace_dependency_ranges() {
+        let source = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "workspace:^""#,
+        ));
+        let packed = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "workspace:^""#,
+        ));
+
+        let error = check_packed_package_json(
+            &source,
+            &packed,
+            Path::new("packages/trade-bindings/package.json"),
+            "@radroots/trade-bindings",
+            "packages/trade-bindings",
+        )
+        .expect_err("workspace dependency rejected");
+
+        assert!(error.contains("must not use workspace protocol"));
+    }
+
+    #[test]
+    fn packed_manifest_rejects_internal_dependency_range_mismatch() {
+        let source = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "workspace:^""#,
+        ));
+        let packed = package_json_value(&package_json_with_dependencies(
+            "trade-bindings",
+            r#""@radroots/core-bindings": "^0.2.0""#,
+        ));
+
+        let error = check_packed_package_json(
+            &source,
+            &packed,
+            Path::new("packages/trade-bindings/package.json"),
+            "@radroots/trade-bindings",
+            "packages/trade-bindings",
+        )
+        .expect_err("internal dependency mismatch rejected");
+
+        assert!(error.contains("expected ^0.1.0"));
     }
 
     #[test]
@@ -1577,5 +1872,21 @@ mod tests {
   }}
 }}"#
         )
+    }
+
+    fn package_json_with_dependencies(name: &str, dependencies: &str) -> String {
+        let raw = package_json(name);
+        let body = raw.strip_suffix('}').expect("root package JSON object");
+        format!(
+            r#"{body},
+  "dependencies": {{
+    {dependencies}
+  }}
+}}"#
+        )
+    }
+
+    fn package_json_value(raw: &str) -> serde_json::Value {
+        serde_json::from_str(raw).expect("package json parses")
     }
 }
