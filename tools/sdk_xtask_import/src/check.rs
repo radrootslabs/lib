@@ -58,6 +58,14 @@ pub fn check() -> Result<(), String> {
     validate_sdk_contracts(&root)?;
     check_forbidden_packages(&root)?;
     check_binding_crate_sources(&root)?;
+    check_package_source_metadata(&root)?;
+    check_generated_outputs(&root)?;
+    check_package_build_artifacts(&root)?;
+    check_npm_pack_payloads(&root)?;
+    Ok(())
+}
+
+fn check_package_source_metadata(root: &Path) -> Result<(), String> {
     for spec in package_specs() {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
@@ -70,20 +78,25 @@ pub fn check() -> Result<(), String> {
             &package_json_path,
             &package_json,
         )?;
-        let surface_paths = package_surface_paths(&package_json, &package_json_path)?;
-        check_package_surface_artifacts(&package_dir, spec.package_name, &surface_paths)?;
         if !index_path.is_file() {
             return Err(format!("missing package index: {}", index_path.display()));
         }
         check_package_index(&index_path)?;
     }
     for spec in wasm_package_specs() {
-        check_wasm_package_surface(&root, *spec)?;
+        let package_dir = root.join(spec.package_dir);
+        let package_json_path = package_dir.join("package.json");
+        let package_json =
+            check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
+        check_package_distribution_metadata(root, &package_dir, &package_json_path, &package_json)?;
     }
-    check_npm_pack_payloads(&root)?;
+    Ok(())
+}
+
+fn check_generated_outputs(root: &Path) -> Result<(), String> {
     let outputs = package_outputs()?;
     for output in &outputs {
-        check_generated_package_artifact_inventory(&root, output)?;
+        check_generated_package_artifact_inventory(root, output)?;
     }
     for output in outputs {
         for expected in output.files() {
@@ -103,6 +116,20 @@ pub fn check() -> Result<(), String> {
         if actual != expected.contents {
             return Err(format!("stale generated provenance: {}", path.display()));
         }
+    }
+    Ok(())
+}
+
+fn check_package_build_artifacts(root: &Path) -> Result<(), String> {
+    for spec in package_specs() {
+        let package_dir = root.join(spec.package_dir);
+        let package_json_path = package_dir.join("package.json");
+        let package_json = read_package_json_value(&package_json_path)?;
+        let surface_paths = package_surface_paths(&package_json, &package_json_path)?;
+        check_package_surface_artifacts(&package_dir, spec.package_name, &surface_paths)?;
+    }
+    for spec in wasm_package_specs() {
+        check_wasm_package_surface(root, *spec)?;
     }
     Ok(())
 }
@@ -1325,6 +1352,8 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use flate2::{Compression, write::GzEncoder};
+
     use crate::{
         output::package_outputs,
         package_matrix::{WasmPackageSpec, validate_package_matrix},
@@ -1332,12 +1361,12 @@ mod tests {
     };
 
     use super::{
-        check_binding_crate_sources, check_generated_package_artifact_inventory,
+        PackedPackage, check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
         check_package_json, check_package_surface_artifacts, check_packed_package_json,
         check_wasm_package_surface, consumer_smoke_script, expected_packed_dist_files,
-        normalized_package_path, parse_pnpm_pack_entry, validate_npm_pack_payload,
-        validate_packed_dist_inventory,
+        normalized_package_path, parse_pnpm_pack_entry, read_packed_package_json,
+        validate_npm_pack_payload, validate_packed_dist_inventory,
     };
 
     #[test]
@@ -1721,6 +1750,43 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["dist/index.js", "package.json"]
         );
+    }
+
+    #[test]
+    fn reads_packed_manifest_from_tgz() {
+        let root = test_root("packed_manifest_tgz");
+        fs::create_dir_all(&root).expect("create root");
+        let tarball_path = root.join("example.tgz");
+        let file = fs::File::create(&tarball_path).expect("create tarball");
+        let encoder = GzEncoder::new(file, Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        let contents = br#"{"name":"@radroots/example","version":"0.1.0"}"#;
+        let mut header = tar::Header::new_gnu();
+        header
+            .set_path("package/package.json")
+            .expect("set manifest path");
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append(&header, &contents[..])
+            .expect("append manifest");
+        let encoder = builder.into_inner().expect("finish tar");
+        encoder.finish().expect("finish gzip");
+        let packed = PackedPackage {
+            package_name: "@radroots/example".to_owned(),
+            tarball_path,
+            files: Vec::new(),
+        };
+
+        let json =
+            read_packed_package_json(&packed, "@radroots/example").expect("read packed manifest");
+
+        assert_eq!(
+            json.get("name").and_then(serde_json::Value::as_str),
+            Some("@radroots/example")
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
