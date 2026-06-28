@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path, process::Command};
+
+use serde::Deserialize;
 
 use crate::{
     contracts::validate_sdk_contracts,
@@ -18,6 +20,16 @@ const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
 const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
+
+#[derive(Debug, Deserialize)]
+struct NpmPackEntry {
+    files: Vec<NpmPackFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NpmPackFile {
+    path: String,
+}
 
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
@@ -47,6 +59,7 @@ pub fn check() -> Result<(), String> {
     for spec in wasm_package_specs() {
         check_wasm_package_surface(&root, *spec)?;
     }
+    check_npm_pack_payloads(&root)?;
     let outputs = package_outputs()?;
     for output in &outputs {
         check_generated_package_artifact_inventory(&root, output)?;
@@ -455,6 +468,163 @@ fn check_workspace_dependencies(
     Ok(())
 }
 
+fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
+    for spec in package_specs() {
+        let package_dir = root.join(spec.package_dir);
+        let package_json_path = package_dir.join("package.json");
+        let json = read_package_json_value(&package_json_path)?;
+        let required_files = required_npm_payload_files(&json, &package_json_path, None)?;
+        let payload_files = npm_pack_payload_files(&package_dir, spec.package_name)?;
+        validate_npm_pack_payload(spec.package_name, &payload_files, &required_files, None)?;
+    }
+    for spec in wasm_package_specs() {
+        let package_dir = root.join(spec.package_dir);
+        let package_json_path = package_dir.join("package.json");
+        let json = read_package_json_value(&package_json_path)?;
+        let required_files = required_npm_payload_files(&json, &package_json_path, Some(*spec))?;
+        let payload_files = npm_pack_payload_files(&package_dir, spec.package_name)?;
+        validate_npm_pack_payload(
+            spec.package_name,
+            &payload_files,
+            &required_files,
+            Some(&format!("dist/{}_bg.wasm", spec.out_name)),
+        )?;
+    }
+    Ok(())
+}
+
+fn read_package_json_value(path: &Path) -> Result<serde_json::Value, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    serde_json::from_str::<serde_json::Value>(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))
+}
+
+fn required_npm_payload_files(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+    wasm_spec: Option<WasmPackageSpec>,
+) -> Result<BTreeSet<String>, String> {
+    let mut required = BTreeSet::from([
+        "package.json".to_owned(),
+        "README.md".to_owned(),
+        "LICENSE-MIT".to_owned(),
+        "LICENSE-APACHE".to_owned(),
+    ]);
+    for path in package_surface_paths(json, package_json_path)? {
+        required.insert(normalized_package_path(&path));
+    }
+    if let Some(spec) = wasm_spec {
+        for path in wasm_runtime_files(spec) {
+            required.insert(path);
+        }
+    }
+    Ok(required)
+}
+
+fn npm_pack_payload_files(
+    package_dir: &Path,
+    package_name: &str,
+) -> Result<BTreeSet<String>, String> {
+    let output = Command::new("npm")
+        .args(["pack", "--json", "--dry-run", "--ignore-scripts"])
+        .current_dir(package_dir)
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to run npm pack dry-run for {package_name} in {}: {error}",
+                package_dir.display()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "npm pack dry-run failed for {package_name} in {}: {}",
+            package_dir.display(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let entries = serde_json::from_slice::<Vec<NpmPackEntry>>(&output.stdout).map_err(|error| {
+        format!(
+            "failed to parse npm pack dry-run output for {package_name}: {error}; stdout: {}; stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+    let [entry] = entries.as_slice() else {
+        return Err(format!(
+            "npm pack dry-run for {package_name} must return one package entry"
+        ));
+    };
+    Ok(entry
+        .files
+        .iter()
+        .map(|file| normalized_package_path(&file.path))
+        .collect())
+}
+
+fn validate_npm_pack_payload(
+    package_name: &str,
+    payload_files: &BTreeSet<String>,
+    required_files: &BTreeSet<String>,
+    expected_wasm_file: Option<&str>,
+) -> Result<(), String> {
+    let missing = required_files
+        .difference(payload_files)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(format!(
+            "npm pack payload for {package_name} is missing required files: {missing:?}"
+        ));
+    }
+    for path in payload_files {
+        if let Some(reason) = forbidden_npm_payload_path(path) {
+            return Err(format!(
+                "npm pack payload for {package_name} includes forbidden {reason}: {path}"
+            ));
+        }
+    }
+    if let Some(expected_wasm_file) = expected_wasm_file {
+        let wasm_files = payload_files
+            .iter()
+            .filter(|path| path.ends_with(".wasm"))
+            .cloned()
+            .collect::<Vec<_>>();
+        if wasm_files != [expected_wasm_file.to_owned()] {
+            return Err(format!(
+                "npm pack payload for {package_name} must include exactly {expected_wasm_file}; found {wasm_files:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn normalized_package_path(path: &str) -> String {
+    path.trim_start_matches("./").to_owned()
+}
+
+fn forbidden_npm_payload_path(path: &str) -> Option<&'static str> {
+    if path.starts_with("src/") {
+        return Some("source path");
+    }
+    if path.starts_with("contracts/") {
+        return Some("contract path");
+    }
+    if path.contains("sdk-manifest") {
+        return Some("manifest provenance path");
+    }
+    if path.ends_with(".tsbuildinfo") {
+        return Some("TypeScript build info path");
+    }
+    if path
+        .split('/')
+        .any(|segment| matches!(segment, ".gitignore" | ".npmignore"))
+    {
+        return Some("ignore file");
+    }
+    None
+}
+
 fn check_public_wasm_declaration_inventory(
     surface_paths: &BTreeSet<String>,
     spec: WasmPackageSpec,
@@ -672,6 +842,7 @@ mod tests {
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
         check_package_json, check_package_surface_artifacts, check_wasm_package_surface,
+        validate_npm_pack_payload,
     };
 
     #[test]
@@ -878,6 +1049,90 @@ mod tests {
             .expect("surface artifacts present");
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn npm_pack_payload_requires_metadata_and_export_files() {
+        let payload_files = BTreeSet::from([
+            "package.json".to_owned(),
+            "README.md".to_owned(),
+            "LICENSE-MIT".to_owned(),
+            "dist/index.js".to_owned(),
+        ]);
+        let required_files = BTreeSet::from([
+            "package.json".to_owned(),
+            "README.md".to_owned(),
+            "LICENSE-MIT".to_owned(),
+            "LICENSE-APACHE".to_owned(),
+            "dist/index.js".to_owned(),
+            "dist/index.d.ts".to_owned(),
+        ]);
+
+        let error =
+            validate_npm_pack_payload("@radroots/example", &payload_files, &required_files, None)
+                .expect_err("missing files should fail");
+        assert!(error.contains("missing required files"));
+        assert!(error.contains("LICENSE-APACHE"));
+        assert!(error.contains("dist/index.d.ts"));
+    }
+
+    #[test]
+    fn npm_pack_payload_rejects_source_and_provenance_internals() {
+        let required_files = BTreeSet::from(["package.json".to_owned()]);
+        for forbidden in [
+            "src/generated/types.ts",
+            "contracts/provenance/typescript/core.json",
+            "dist/sdk-manifest.json",
+            "dist/index.tsbuildinfo",
+            "dist/.gitignore",
+            ".npmignore",
+        ] {
+            let payload_files = BTreeSet::from(["package.json".to_owned(), forbidden.to_owned()]);
+
+            let error = validate_npm_pack_payload(
+                "@radroots/example",
+                &payload_files,
+                &required_files,
+                None,
+            )
+            .expect_err("forbidden payload path should fail");
+            assert!(error.contains("includes forbidden"));
+            assert!(error.contains(forbidden));
+        }
+    }
+
+    #[test]
+    fn npm_pack_payload_requires_exact_wasm_file() {
+        let required_files = BTreeSet::from([
+            "package.json".to_owned(),
+            "dist/example.js".to_owned(),
+            "dist/example_bg.wasm".to_owned(),
+        ]);
+        let missing_wasm =
+            BTreeSet::from(["package.json".to_owned(), "dist/example.js".to_owned()]);
+        let error = validate_npm_pack_payload(
+            "@radroots/example-wasm",
+            &missing_wasm,
+            &required_files,
+            Some("dist/example_bg.wasm"),
+        )
+        .expect_err("missing wasm should fail");
+        assert!(error.contains("missing required files"));
+
+        let extra_wasm = BTreeSet::from([
+            "package.json".to_owned(),
+            "dist/example.js".to_owned(),
+            "dist/example_bg.wasm".to_owned(),
+            "dist/extra_bg.wasm".to_owned(),
+        ]);
+        let error = validate_npm_pack_payload(
+            "@radroots/example-wasm",
+            &extra_wasm,
+            &required_files,
+            Some("dist/example_bg.wasm"),
+        )
+        .expect_err("extra wasm should fail");
+        assert!(error.contains("must include exactly dist/example_bg.wasm"));
     }
 
     #[test]
