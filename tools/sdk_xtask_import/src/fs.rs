@@ -33,6 +33,21 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+pub fn write_bytes_if_changed(path: &Path, contents: &[u8]) -> Result<bool, String> {
+    if let Ok(existing) = fs::read(path) {
+        if existing == contents {
+            return Ok(false);
+        }
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+    fs::write(path, contents)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::workspace_root;

@@ -1,4 +1,7 @@
-use crate::{fs::workspace_root, output::package_outputs, package_matrix::validate_package_matrix};
+use crate::{
+    fs::workspace_root, output::package_outputs, package_matrix::validate_package_matrix,
+    package_metadata,
+};
 
 pub fn generate_ts() -> Result<(), String> {
     validate_package_matrix()?;
@@ -18,4 +21,10 @@ pub fn generate_ts() -> Result<(), String> {
         println!("generated TypeScript package {}", output.spec.package_name);
     }
     Ok(())
+}
+
+pub fn generate_package_metadata() -> Result<(), String> {
+    validate_package_matrix()?;
+    let root = workspace_root()?;
+    package_metadata::generate_package_metadata(&root)
 }

@@ -9,6 +9,7 @@ mod generate;
 mod manifest;
 mod output;
 mod package_matrix;
+mod package_metadata;
 mod ts;
 mod wasm;
 mod wasm_declarations;
@@ -16,6 +17,7 @@ mod wasm_declarations;
 enum CommandAction<'a> {
     GenerateTs,
     GenerateWasm(&'a [String]),
+    GeneratePackageMetadata,
     Coverage(&'a [String]),
     Check,
 }
@@ -32,6 +34,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     match command_action(&args)? {
         CommandAction::GenerateTs => generate::generate_ts(),
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
+        CommandAction::GeneratePackageMetadata => generate::generate_package_metadata(),
         CommandAction::Coverage(rest) => coverage::run(rest),
         CommandAction::Check => check::check(),
     }
@@ -45,6 +48,9 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
         [command, target, rest @ ..] if command == "generate" && target == "wasm" => {
             Ok(CommandAction::GenerateWasm(rest))
         }
+        [command, target] if command == "generate" && target == "package-metadata" => {
+            Ok(CommandAction::GeneratePackageMetadata)
+        }
         [command, rest @ ..] if command == "coverage" => Ok(CommandAction::Coverage(rest)),
         [command] if command == "check" => Ok(CommandAction::Check),
         [] => Err(usage()),
@@ -53,7 +59,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask check | cargo xtask coverage run"
+    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -76,6 +82,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::GenerateWasm(rest) if rest.is_empty()
+        ));
+    }
+
+    #[test]
+    fn accepts_generate_package_metadata() {
+        let args = ["generate".to_owned(), "package-metadata".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::GeneratePackageMetadata
         ));
     }
 

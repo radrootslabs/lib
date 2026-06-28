@@ -8,6 +8,7 @@ use crate::{
         FORBIDDEN_PACKAGE_NAMES, WasmPackageSpec, package_specs, validate_package_matrix,
         wasm_package_specs,
     },
+    package_metadata::{PACKAGE_FILES, check_package_distribution_metadata, package_description},
     ts::generated_header,
     wasm_declarations::declaration_files,
 };
@@ -17,14 +18,6 @@ const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
 const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
-const PACKAGE_README_FILE: &str = "README.md";
-const PACKAGE_LICENSE_FILES: [&str; 2] = ["LICENSE-MIT", "LICENSE-APACHE"];
-const PACKAGE_FILES: [&str; 4] = [
-    "dist",
-    PACKAGE_README_FILE,
-    PACKAGE_LICENSE_FILES[0],
-    PACKAGE_LICENSE_FILES[1],
-];
 
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
@@ -249,74 +242,6 @@ fn check_package_json(
     check_package_files(&json, path)?;
     check_workspace_dependencies(&json, path)?;
     Ok(json)
-}
-
-fn check_package_distribution_metadata(
-    root: &Path,
-    package_dir: &Path,
-    package_json_path: &Path,
-    json: &serde_json::Value,
-) -> Result<(), String> {
-    let package_name = json
-        .get("name")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| format!("package.json missing name: {}", package_json_path.display()))?;
-    let description = package_description(json, package_json_path)?;
-    let readme_path = package_dir.join(PACKAGE_README_FILE);
-    let expected_readme = package_readme(package_name, description);
-    check_text_file(&readme_path, &expected_readme, "stale package README")?;
-    for file_name in PACKAGE_LICENSE_FILES {
-        let source_path = root.join(file_name);
-        let package_path = package_dir.join(file_name);
-        let expected = fs::read(&source_path)
-            .map_err(|error| format!("failed to read {}: {error}", source_path.display()))?;
-        let actual = fs::read(&package_path)
-            .map_err(|error| format!("failed to read {}: {error}", package_path.display()))?;
-        if actual != expected {
-            return Err(format!(
-                "stale package license metadata: {}",
-                package_path.display()
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn package_description<'a>(
-    json: &'a serde_json::Value,
-    package_json_path: &Path,
-) -> Result<&'a str, String> {
-    let description = json
-        .get("description")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| {
-            format!(
-                "package.json missing description: {}",
-                package_json_path.display()
-            )
-        })?;
-    if description.trim().is_empty() || description.trim() != description {
-        return Err(format!(
-            "package.json description must be non-empty and trimmed: {}",
-            package_json_path.display()
-        ));
-    }
-    Ok(description)
-}
-
-fn package_readme(package_name: &str, description: &str) -> String {
-    format!(
-        "# {package_name}\n\n{description}\n\nThis package publishes generated ESM JavaScript, TypeScript declarations, and any runtime artifacts from the Radroots SDK build pipeline. Runtime files are distributed from `dist/`; source and provenance metadata are kept outside the npm package payload.\n\n## License\n\nLicensed under either MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACHE`.\n"
-    )
-}
-
-fn check_text_file(path: &Path, expected: &str, label: &str) -> Result<(), String> {
-    let actual = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-    if actual != expected {
-        return Err(format!("{label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> Result<(), String> {
@@ -730,12 +655,13 @@ mod tests {
     use crate::{
         output::package_outputs,
         package_matrix::{WasmPackageSpec, validate_package_matrix},
+        package_metadata::package_readme,
     };
 
     use super::{
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
-        check_package_json, check_wasm_package_surface, package_readme,
+        check_package_json, check_wasm_package_surface,
     };
 
     #[test]
