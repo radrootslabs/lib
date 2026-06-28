@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fs, path::Path};
 use crate::{
     contracts::validate_sdk_contracts,
     fs::workspace_root,
-    output::package_outputs,
+    output::{PackageOutput, package_outputs},
     package_matrix::{
         FORBIDDEN_PACKAGE_NAMES, WasmPackageSpec, package_specs, validate_package_matrix,
         wasm_package_specs,
@@ -31,7 +31,11 @@ pub fn check() -> Result<(), String> {
     for spec in wasm_package_specs() {
         check_wasm_package_surface(&root, *spec)?;
     }
-    for output in package_outputs()? {
+    let outputs = package_outputs()?;
+    for output in &outputs {
+        check_generated_package_artifact_inventory(&root, output)?;
+    }
+    for output in outputs {
         for expected in output.files() {
             let path = root
                 .join(output.spec.package_dir)
@@ -44,6 +48,72 @@ pub fn check() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn check_generated_package_artifact_inventory(
+    root: &Path,
+    output: &PackageOutput,
+) -> Result<(), String> {
+    let package_dir = root.join(output.spec.package_dir);
+    let generated_dir = package_dir.join("src/generated");
+    let expected = output
+        .files()
+        .into_iter()
+        .map(|file| file.relative_path)
+        .collect::<BTreeSet<_>>();
+    let actual = generated_package_files(&package_dir, &generated_dir)?;
+    if actual != expected {
+        let missing = expected.difference(&actual).cloned().collect::<Vec<_>>();
+        let extra = actual.difference(&expected).cloned().collect::<Vec<_>>();
+        return Err(format!(
+            "generated artifact inventory mismatch for {}: missing {:?}, extra {:?}",
+            output.spec.package_name, missing, extra
+        ));
+    }
+    Ok(())
+}
+
+fn generated_package_files(
+    package_dir: &Path,
+    generated_dir: &Path,
+) -> Result<BTreeSet<String>, String> {
+    let mut files = BTreeSet::new();
+    collect_package_files(package_dir, generated_dir, &mut files)?;
+    Ok(files)
+}
+
+fn collect_package_files(
+    package_dir: &Path,
+    dir: &Path,
+    files: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    for entry in
+        fs::read_dir(dir).map_err(|error| format!("failed to read {}: {error}", dir.display()))?
+    {
+        let entry =
+            entry.map_err(|error| format!("failed to read {} entry: {error}", dir.display()))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("failed to inspect {}: {error}", path.display()))?;
+        if file_type.is_dir() {
+            collect_package_files(package_dir, &path, files)?;
+        } else if file_type.is_file() {
+            files.insert(relative_path_string(package_dir, &path)?);
+        }
+    }
+    Ok(())
+}
+
+fn relative_path_string(base: &Path, path: &Path) -> Result<String, String> {
+    let relative = path
+        .strip_prefix(base)
+        .map_err(|error| format!("failed to relativize {}: {error}", path.display()))?;
+    Ok(relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/"))
 }
 
 fn check_package_index(path: &Path) -> Result<(), String> {
@@ -154,7 +224,9 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
             dist_manifest.display()
         ));
     }
-    for relative in package_surface_paths(&json, &package_json_path)? {
+    let surface_paths = package_surface_paths(&json, &package_json_path)?;
+    check_public_wasm_declaration_inventory(&surface_paths, spec)?;
+    for relative in surface_paths {
         let normalized = relative.trim_start_matches("./");
         let path = package_dir.join(normalized);
         if !path.is_file() {
@@ -166,6 +238,25 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
         }
     }
     check_wasm_declaration_files(&package_dir, spec)?;
+    Ok(())
+}
+
+fn check_public_wasm_declaration_inventory(
+    surface_paths: &BTreeSet<String>,
+    spec: WasmPackageSpec,
+) -> Result<(), String> {
+    let actual = surface_paths
+        .iter()
+        .filter(|path| path.ends_with(".d.ts"))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let expected = BTreeSet::from([format!("./dist/{}.d.ts", spec.out_name)]);
+    if actual != expected {
+        return Err(format!(
+            "public wasm declaration inventory mismatch for {}: expected {:?}, found {:?}",
+            spec.package_name, expected, actual
+        ));
+    }
     Ok(())
 }
 
@@ -299,11 +390,14 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use crate::package_matrix::{WasmPackageSpec, validate_package_matrix};
+    use crate::{
+        output::package_outputs,
+        package_matrix::{WasmPackageSpec, validate_package_matrix},
+    };
 
     use super::{
-        check_binding_crate_sources, check_no_typescript_files, check_package_index,
-        check_wasm_package_surface,
+        check_binding_crate_sources, check_generated_package_artifact_inventory,
+        check_no_typescript_files, check_package_index, check_wasm_package_surface,
     };
 
     #[test]
@@ -355,6 +449,34 @@ mod tests {
         let error = check_package_index(&path).expect_err("generated index rejected");
 
         assert!(error.contains("package index must be handwritten source"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generated_package_artifact_inventory_rejects_extra_files() {
+        let root = test_root("generated_inventory_extra");
+        let output = package_outputs()
+            .expect("package outputs")
+            .into_iter()
+            .find(|output| output.spec.key == "core")
+            .expect("core output");
+        let package_dir = root.join(output.spec.package_dir);
+        fs::create_dir_all(package_dir.join("src/generated")).expect("create generated dir");
+        for file in output.files() {
+            let path = package_dir.join(file.relative_path);
+            fs::write(path, file.contents).expect("write expected file");
+        }
+        fs::write(
+            package_dir.join("src/generated").join("extra.ts"),
+            "export type Extra = string;\n",
+        )
+        .expect("write extra file");
+
+        let error = check_generated_package_artifact_inventory(&root, &output)
+            .expect_err("extra generated file rejected");
+
+        assert!(error.contains("generated artifact inventory mismatch"));
+        assert!(error.contains("extra.ts"));
         let _ = fs::remove_dir_all(root);
     }
 
