@@ -42,6 +42,7 @@ struct PnpmPackFile {
 
 #[derive(Debug)]
 struct PackedPackage {
+    package_name: String,
     tarball_path: PathBuf,
     files: Vec<NpmPackFile>,
 }
@@ -492,6 +493,7 @@ fn check_workspace_dependencies(
 fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
     let pack_dir =
         tempfile::tempdir().map_err(|error| format!("failed to create pack temp dir: {error}"))?;
+    let mut packed_packages = Vec::new();
     for spec in package_specs() {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
@@ -511,6 +513,7 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
         let payload_files = packed_payload_files(&packed)?;
         validate_npm_pack_payload(spec.package_name, &payload_files, &required_files, None)?;
         validate_packed_dist_inventory(spec.package_name, &payload_files, &expected_dist_files)?;
+        packed_packages.push(packed);
     }
     for spec in wasm_package_specs() {
         let package_dir = root.join(spec.package_dir);
@@ -536,7 +539,9 @@ fn check_npm_pack_payloads(root: &Path) -> Result<(), String> {
             Some(&format!("dist/{}_bg.wasm", spec.out_name)),
         )?;
         validate_packed_dist_inventory(spec.package_name, &payload_files, &expected_dist_files)?;
+        packed_packages.push(packed);
     }
+    check_clean_consumer_smoke(&packed_packages)?;
     Ok(())
 }
 
@@ -697,6 +702,7 @@ fn packed_package_from_pnpm_entry(
         ));
     }
     Ok(PackedPackage {
+        package_name: package_name.to_owned(),
         tarball_path,
         files: entry
             .files
@@ -704,6 +710,96 @@ fn packed_package_from_pnpm_entry(
             .map(|file| NpmPackFile { path: file.path })
             .collect(),
     })
+}
+
+fn check_clean_consumer_smoke(packed_packages: &[PackedPackage]) -> Result<(), String> {
+    let consumer_dir = tempfile::tempdir()
+        .map_err(|error| format!("failed to create clean npm consumer temp dir: {error}"))?;
+    fs::write(
+        consumer_dir.path().join("package.json"),
+        "{\n  \"name\": \"radroots-sdk-package-smoke\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n",
+    )
+    .map_err(|error| {
+        format!(
+            "failed to write clean npm consumer package.json in {}: {error}",
+            consumer_dir.path().display()
+        )
+    })?;
+    let npm_cache_dir = consumer_dir.path().join(".npm-cache");
+    let mut install = Command::new("npm");
+    install
+        .args([
+            "install",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+            "--registry",
+            "http://127.0.0.1:9",
+            "--cache",
+        ])
+        .arg(&npm_cache_dir);
+    for packed in packed_packages {
+        install.arg(&packed.tarball_path);
+    }
+    let output = install
+        .current_dir(consumer_dir.path())
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to run clean npm consumer install in {}: {error}",
+                consumer_dir.path().display()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "clean npm consumer install failed in {}: stdout: {}; stderr: {}",
+            consumer_dir.path().display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let package_names = packed_packages
+        .iter()
+        .map(|package| package.package_name.clone())
+        .collect::<Vec<_>>();
+    let smoke_script = consumer_smoke_script(&package_names)?;
+    fs::write(consumer_dir.path().join("smoke.mjs"), smoke_script).map_err(|error| {
+        format!(
+            "failed to write clean npm consumer smoke script in {}: {error}",
+            consumer_dir.path().display()
+        )
+    })?;
+    let output = Command::new("node")
+        .arg("smoke.mjs")
+        .current_dir(consumer_dir.path())
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to run clean npm consumer import smoke in {}: {error}",
+                consumer_dir.path().display()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "clean npm consumer import smoke failed in {}: stdout: {}; stderr: {}",
+            consumer_dir.path().display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(())
+}
+
+fn consumer_smoke_script(package_names: &[String]) -> Result<String, String> {
+    let mut script = String::new();
+    for package_name in package_names {
+        let quoted = serde_json::to_string(package_name)
+            .map_err(|error| format!("failed to quote package name {package_name}: {error}"))?;
+        script.push_str("await import(");
+        script.push_str(&quoted);
+        script.push_str(");\n");
+    }
+    Ok(script)
 }
 
 fn packed_payload_files(packed: &PackedPackage) -> Result<BTreeSet<String>, String> {
@@ -1239,8 +1335,9 @@ mod tests {
         check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_no_typescript_files, check_package_distribution_metadata, check_package_index,
         check_package_json, check_package_surface_artifacts, check_packed_package_json,
-        check_wasm_package_surface, expected_packed_dist_files, normalized_package_path,
-        parse_pnpm_pack_entry, validate_npm_pack_payload, validate_packed_dist_inventory,
+        check_wasm_package_surface, consumer_smoke_script, expected_packed_dist_files,
+        normalized_package_path, parse_pnpm_pack_entry, validate_npm_pack_payload,
+        validate_packed_dist_inventory,
     };
 
     #[test]
@@ -1582,6 +1679,20 @@ mod tests {
             let error = normalized_package_path(invalid).expect_err("invalid path rejected");
             assert!(error.contains("invalid npm pack payload path"));
         }
+    }
+
+    #[test]
+    fn consumer_smoke_script_imports_package_roots() {
+        let script = consumer_smoke_script(&[
+            "@radroots/core-bindings".to_owned(),
+            "@radroots/events-codec-wasm".to_owned(),
+        ])
+        .expect("smoke script renders");
+
+        assert_eq!(
+            script,
+            "await import(\"@radroots/core-bindings\");\nawait import(\"@radroots/events-codec-wasm\");\n"
+        );
     }
 
     #[test]
