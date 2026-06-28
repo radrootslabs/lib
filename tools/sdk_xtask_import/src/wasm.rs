@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeSet,
-    env, fs,
+    env, fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -47,6 +47,7 @@ pub fn generate(args: &[String]) -> Result<(), String> {
                 spec.key, spec.package_name, spec.key
             ));
         }
+        remove_wasm_pack_gitignore(&dist_dir, spec)?;
         write_declaration_files(&root, spec)?;
         check_wasm_package_surface(&root, spec)?;
         println!("generated wasm package {}", spec.package_name);
@@ -85,6 +86,35 @@ fn wasm_pack_args(spec: WasmPackageSpec) -> Vec<&'static str> {
         spec.out_name,
         "--no-pack",
     ]
+}
+
+fn remove_wasm_pack_gitignore(dist_dir: &Path, spec: WasmPackageSpec) -> Result<(), String> {
+    let ignore_path = dist_dir.join(".gitignore");
+    let contents = match fs::read_to_string(&ignore_path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "failed to read wasm-pack ignore file for {}: {}: {error}",
+                spec.package_name,
+                ignore_path.display()
+            ));
+        }
+    };
+    if contents.trim() != "*" {
+        return Err(format!(
+            "unexpected wasm-pack ignore file for {}: {}; refusing to remove it",
+            spec.package_name,
+            ignore_path.display()
+        ));
+    }
+    fs::remove_file(&ignore_path).map_err(|error| {
+        format!(
+            "failed to remove wasm-pack ignore file for {}: {}: {error}",
+            spec.package_name,
+            ignore_path.display()
+        )
+    })
 }
 
 fn selected_specs(args: &[String]) -> Result<Vec<WasmPackageSpec>, String> {
@@ -240,8 +270,8 @@ mod tests {
     use crate::package_matrix::wasm_package_specs;
 
     use super::{
-        resolve_path_tool_from_path, rustup_tool, selected_specs, target_list_contains,
-        wasm_pack_args,
+        remove_wasm_pack_gitignore, resolve_path_tool_from_path, rustup_tool, selected_specs,
+        target_list_contains, wasm_pack_args,
     };
 
     #[test]
@@ -265,6 +295,33 @@ mod tests {
     fn wasm_pack_arguments_disable_package_manifest_generation() {
         let args = wasm_pack_args(wasm_package_specs()[0]);
         assert!(args.contains(&"--no-pack"));
+    }
+
+    #[test]
+    fn removes_wasm_pack_generated_gitignore() {
+        let root = test_root("wasm_pack_gitignore");
+        let dist_dir = root.join("dist");
+        fs::create_dir_all(&dist_dir).expect("create dist");
+        fs::write(dist_dir.join(".gitignore"), "*\n").expect("write ignore");
+
+        remove_wasm_pack_gitignore(&dist_dir, wasm_package_specs()[0]).expect("remove ignore");
+
+        assert!(!dist_dir.join(".gitignore").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn refuses_unexpected_wasm_pack_gitignore_contents() {
+        let root = test_root("custom_gitignore");
+        let dist_dir = root.join("dist");
+        fs::create_dir_all(&dist_dir).expect("create dist");
+        fs::write(dist_dir.join(".gitignore"), "!keep\n").expect("write ignore");
+
+        let error = remove_wasm_pack_gitignore(&dist_dir, wasm_package_specs()[0])
+            .expect_err("custom ignore rejected");
+
+        assert!(error.contains("unexpected wasm-pack ignore file"));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

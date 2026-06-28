@@ -2,8 +2,8 @@ use serde_json::json;
 
 use crate::package_matrix::PackageSpec;
 
-pub fn manifest_file_name() -> &'static str {
-    "sdk-manifest.json"
+pub fn manifest_relative_path(spec: PackageSpec) -> String {
+    format!("contracts/provenance/typescript/{}.json", spec.key)
 }
 
 pub fn package_manifest(spec: PackageSpec) -> serde_json::Value {
@@ -18,13 +18,16 @@ pub fn package_manifest(spec: PackageSpec) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use crate::{
-        manifest::{manifest_file_name, package_manifest},
+        manifest::{manifest_relative_path, package_manifest},
         package_matrix::package_specs,
     };
 
     #[test]
-    fn manifest_name_is_stable() {
-        assert_eq!(manifest_file_name(), "sdk-manifest.json");
+    fn manifest_path_is_outside_package_source() {
+        assert_eq!(
+            manifest_relative_path(package_specs()[0]),
+            "contracts/provenance/typescript/core.json"
+        );
     }
 
     #[test]

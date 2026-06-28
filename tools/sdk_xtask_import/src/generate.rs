@@ -10,6 +10,11 @@ pub fn generate_ts() -> Result<(), String> {
                 .join(generated_file.relative_path);
             crate::fs::write_if_changed(&path, &generated_file.contents)?;
         }
+        let provenance_file = output.provenance_file();
+        crate::fs::write_if_changed(
+            &root.join(&provenance_file.relative_path),
+            &provenance_file.contents,
+        )?;
         println!("generated TypeScript package {}", output.spec.package_name);
     }
     Ok(())

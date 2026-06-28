@@ -12,6 +12,12 @@ use crate::{
     wasm_declarations::declaration_files,
 };
 
+const PACKAGE_VERSION: &str = "0.1.0";
+const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
+const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
+const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
+const PUBLISH_ACCESS: &str = "public";
+
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
     let root = workspace_root()?;
@@ -22,7 +28,9 @@ pub fn check() -> Result<(), String> {
         let package_dir = root.join(spec.package_dir);
         let package_json_path = package_dir.join("package.json");
         let index_path = package_dir.join("src/index.ts");
-        check_package_json(&package_json_path, spec.package_name)?;
+        let package_json =
+            check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
+        let _ = package_surface_paths(&package_json, &package_json_path)?;
         if !index_path.is_file() {
             return Err(format!("missing package index: {}", index_path.display()));
         }
@@ -45,6 +53,13 @@ pub fn check() -> Result<(), String> {
             if actual != expected.contents {
                 return Err(format!("stale generated output: {}", path.display()));
             }
+        }
+        let expected = output.provenance_file();
+        let path = root.join(&expected.relative_path);
+        let actual = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        if actual != expected.contents {
+            return Err(format!("stale generated provenance: {}", path.display()));
         }
     }
     Ok(())
@@ -184,7 +199,11 @@ fn check_forbidden_packages(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn check_package_json(path: &Path, expected_name: &str) -> Result<(), String> {
+fn check_package_json(
+    path: &Path,
+    expected_name: &str,
+    expected_directory: &str,
+) -> Result<serde_json::Value, String> {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     let json = serde_json::from_str::<serde_json::Value>(&raw)
@@ -199,24 +218,28 @@ fn check_package_json(path: &Path, expected_name: &str) -> Result<(), String> {
             path.display()
         ));
     }
-    let private = json
-        .get("private")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-    if !private {
-        return Err(format!("package must be private: {}", path.display()));
+    if json.get("private").is_some() {
+        return Err(format!(
+            "public package must not set private: {}",
+            path.display()
+        ));
     }
-    Ok(())
+    require_string_field(&json, path, "version", PACKAGE_VERSION)?;
+    require_string_field(&json, path, "license", PACKAGE_LICENSE)?;
+    require_string_field(&json, path, "homepage", PACKAGE_HOMEPAGE)?;
+    require_string_field(&json, path, "type", "module")?;
+    require_bool_field(&json, path, "sideEffects", false)?;
+    check_publish_config(&json, path)?;
+    check_repository(&json, path, expected_directory)?;
+    check_package_files(&json, path)?;
+    check_workspace_dependencies(&json, path)?;
+    Ok(json)
 }
 
 pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> Result<(), String> {
     let package_dir = root.join(spec.package_dir);
     let package_json_path = package_dir.join("package.json");
-    check_package_json(&package_json_path, spec.package_name)?;
-    let raw = fs::read_to_string(&package_json_path)
-        .map_err(|error| format!("failed to read {}: {error}", package_json_path.display()))?;
-    let json = serde_json::from_str::<serde_json::Value>(&raw)
-        .map_err(|error| format!("failed to parse {}: {error}", package_json_path.display()))?;
+    let json = check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
     let dist_manifest = package_dir.join("dist").join("package.json");
     if dist_manifest.exists() {
         return Err(format!(
@@ -224,6 +247,7 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
             dist_manifest.display()
         ));
     }
+    check_no_wasm_dist_ignore_files(&package_dir, spec)?;
     let surface_paths = package_surface_paths(&json, &package_json_path)?;
     check_public_wasm_declaration_inventory(&surface_paths, spec)?;
     for relative in surface_paths {
@@ -237,7 +261,197 @@ pub(crate) fn check_wasm_package_surface(root: &Path, spec: WasmPackageSpec) -> 
             ));
         }
     }
+    check_wasm_runtime_files(&package_dir, spec)?;
     check_wasm_declaration_files(&package_dir, spec)?;
+    Ok(())
+}
+
+fn require_string_field(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+    field: &'static str,
+    expected: &str,
+) -> Result<(), String> {
+    let actual = json
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing {field}: {}",
+                package_json_path.display()
+            )
+        })?;
+    if actual != expected {
+        return Err(format!(
+            "package.json {field} mismatch in {}: expected {expected}, found {actual}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn require_bool_field(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+    field: &'static str,
+    expected: bool,
+) -> Result<(), String> {
+    let actual = json
+        .get(field)
+        .and_then(serde_json::Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing {field}: {}",
+                package_json_path.display()
+            )
+        })?;
+    if actual != expected {
+        return Err(format!(
+            "package.json {field} mismatch in {}: expected {expected}, found {actual}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_publish_config(json: &serde_json::Value, package_json_path: &Path) -> Result<(), String> {
+    let access = json
+        .get("publishConfig")
+        .and_then(|value| value.get("access"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing publishConfig.access: {}",
+                package_json_path.display()
+            )
+        })?;
+    if access != PUBLISH_ACCESS {
+        return Err(format!(
+            "package.json publishConfig.access mismatch in {}: expected {PUBLISH_ACCESS}, found {access}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_repository(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+    expected_directory: &str,
+) -> Result<(), String> {
+    let repository = json.get("repository").ok_or_else(|| {
+        format!(
+            "package.json missing repository: {}",
+            package_json_path.display()
+        )
+    })?;
+    let repository_type = repository
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing repository.type: {}",
+                package_json_path.display()
+            )
+        })?;
+    if repository_type != "git" {
+        return Err(format!(
+            "package.json repository.type mismatch in {}: expected git, found {repository_type}",
+            package_json_path.display()
+        ));
+    }
+    let repository_url = repository
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing repository.url: {}",
+                package_json_path.display()
+            )
+        })?;
+    if repository_url != PACKAGE_REPOSITORY_URL {
+        return Err(format!(
+            "package.json repository.url mismatch in {}: expected {PACKAGE_REPOSITORY_URL}, found {repository_url}",
+            package_json_path.display()
+        ));
+    }
+    let repository_directory = repository
+        .get("directory")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing repository.directory: {}",
+                package_json_path.display()
+            )
+        })?;
+    if repository_directory != expected_directory {
+        return Err(format!(
+            "package.json repository.directory mismatch in {}: expected {expected_directory}, found {repository_directory}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_package_files(json: &serde_json::Value, package_json_path: &Path) -> Result<(), String> {
+    let files = json
+        .get("files")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            format!(
+                "package.json missing files: {}",
+                package_json_path.display()
+            )
+        })?;
+    let actual = files
+        .iter()
+        .map(|value| {
+            value.as_str().ok_or_else(|| {
+                format!(
+                    "package.json files entries must be strings: {}",
+                    package_json_path.display()
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if actual != ["dist"] {
+        return Err(format!(
+            "package.json files must publish dist only: {}",
+            package_json_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn check_workspace_dependencies(
+    json: &serde_json::Value,
+    package_json_path: &Path,
+) -> Result<(), String> {
+    let Some(dependencies) = json.get("dependencies") else {
+        return Ok(());
+    };
+    let dependencies = dependencies.as_object().ok_or_else(|| {
+        format!(
+            "package.json dependencies must be an object: {}",
+            package_json_path.display()
+        )
+    })?;
+    for (name, value) in dependencies {
+        if name.starts_with("@radroots/") {
+            let version = value.as_str().ok_or_else(|| {
+                format!(
+                    "package.json dependency versions must be strings: {}",
+                    package_json_path.display()
+                )
+            })?;
+            if version != "workspace:^" {
+                return Err(format!(
+                    "package.json workspace dependency {name} must use workspace:^ in {}",
+                    package_json_path.display()
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -258,6 +472,45 @@ fn check_public_wasm_declaration_inventory(
         ));
     }
     Ok(())
+}
+
+fn check_no_wasm_dist_ignore_files(
+    package_dir: &Path,
+    spec: WasmPackageSpec,
+) -> Result<(), String> {
+    for file_name in [".gitignore", ".npmignore"] {
+        let path = package_dir.join("dist").join(file_name);
+        if path.exists() {
+            return Err(format!(
+                "wasm dist ignore file would hide package payload from npm for {}: {}",
+                spec.package_name,
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_wasm_runtime_files(package_dir: &Path, spec: WasmPackageSpec) -> Result<(), String> {
+    for relative in wasm_runtime_files(spec) {
+        let path = package_dir.join(&relative);
+        if !path.is_file() {
+            return Err(format!(
+                "missing wasm package runtime artifact for {}: {}",
+                spec.package_name,
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn wasm_runtime_files(spec: WasmPackageSpec) -> [String; 3] {
+    [
+        format!("dist/{}.js", spec.out_name),
+        format!("dist/{}_bg.wasm", spec.out_name),
+        format!("dist/{}_bg.wasm.d.ts", spec.out_name),
+    ]
 }
 
 fn check_wasm_declaration_files(package_dir: &Path, spec: WasmPackageSpec) -> Result<(), String> {
@@ -397,7 +650,8 @@ mod tests {
 
     use super::{
         check_binding_crate_sources, check_generated_package_artifact_inventory,
-        check_no_typescript_files, check_package_index, check_wasm_package_surface,
+        check_no_typescript_files, check_package_index, check_package_json,
+        check_wasm_package_surface,
     };
 
     #[test]
@@ -481,25 +735,57 @@ mod tests {
     }
 
     #[test]
+    fn public_package_metadata_rejects_private_packages() {
+        let root = test_root("private_package_json");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(&package_dir).expect("create package");
+        let package_json = package_json("example").replace(
+            r#""sideEffects": false,"#,
+            r#""private": true, "sideEffects": false,"#,
+        );
+        fs::write(package_dir.join("package.json"), package_json).expect("write package json");
+
+        let error = check_package_json(
+            &package_dir.join("package.json"),
+            "@radroots/example",
+            "packages/example",
+        )
+        .expect_err("private package rejected");
+
+        assert!(error.contains("must not set private"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn public_package_metadata_rejects_src_generated_payloads() {
+        let root = test_root("src_generated_package_payload");
+        let package_dir = root.join("packages").join("example");
+        fs::create_dir_all(&package_dir).expect("create package");
+        let package_json = package_json("example").replace(
+            r#""files": ["dist"]"#,
+            r#""files": ["dist", "src/generated"]"#,
+        );
+        fs::write(package_dir.join("package.json"), package_json).expect("write package json");
+
+        let error = check_package_json(
+            &package_dir.join("package.json"),
+            "@radroots/example",
+            "packages/example",
+        )
+        .expect_err("src generated package payload rejected");
+
+        assert!(error.contains("files must publish dist only"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn wasm_package_surface_requires_exported_dist_files() {
         let root = test_root("wasm_surface");
         let package_dir = root.join("packages").join("example-wasm");
         fs::create_dir_all(package_dir.join("dist")).expect("create dist");
         fs::write(
             package_dir.join("package.json"),
-            r#"{
-  "name": "@radroots/example-wasm",
-  "private": true,
-  "main": "./dist/example.js",
-  "types": "./dist/example.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/example.d.ts",
-      "import": "./dist/example.js",
-      "default": "./dist/example.js"
-    }
-  }
-}"#,
+            package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
@@ -526,6 +812,7 @@ mod tests {
             dto_declaration("example_bg.wasm.d.ts"),
         )
         .expect("write d.ts");
+        fs::write(package_dir.join("dist").join("example_bg.wasm"), b"\0asm").expect("write wasm");
         let error = check_wasm_package_surface(&root, spec)
             .expect_err("unknown declaration inventory rejected");
         assert!(error.contains("missing wasm declaration inventory"));
@@ -540,13 +827,7 @@ mod tests {
         fs::create_dir_all(package_dir.join("dist")).expect("create dist");
         fs::write(
             package_dir.join("package.json"),
-            r#"{
-  "name": "@radroots/example-wasm",
-  "private": true,
-  "main": "./dist/example.js",
-  "types": "./dist/example.d.ts",
-  "exports": "./dist/example.js"
-}"#,
+            package_json("example-wasm").replace("./dist/index", "./dist/example"),
         )
         .expect("write package json");
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
@@ -580,22 +861,91 @@ mod tests {
     }
 
     #[test]
+    fn wasm_package_surface_rejects_dist_ignore_files() {
+        let root = test_root("wasm_dist_ignore");
+        let package_dir = root.join("packages").join("example-wasm");
+        fs::create_dir_all(package_dir.join("dist")).expect("create dist");
+        fs::write(
+            package_dir.join("package.json"),
+            package_json("example-wasm").replace("./dist/index", "./dist/example"),
+        )
+        .expect("write package json");
+        fs::write(package_dir.join("dist").join(".gitignore"), "*\n").expect("write ignore");
+        let spec = WasmPackageSpec {
+            key: "example",
+            crate_name: "radroots_example_wasm",
+            crate_dir: "crates/example_wasm",
+            package_name: "@radroots/example-wasm",
+            package_dir: "packages/example-wasm",
+            out_name: "example",
+            out_dir: "../../packages/example-wasm/dist",
+        };
+
+        let error = check_wasm_package_surface(&root, spec).expect_err("dist ignore file rejected");
+        assert!(error.contains("would hide package payload"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wasm_package_surface_requires_runtime_wasm_artifact() {
+        let root = test_root("wasm_runtime_artifact");
+        let package_dir = root.join("packages").join("example-wasm");
+        fs::create_dir_all(package_dir.join("dist")).expect("create dist");
+        fs::write(
+            package_dir.join("package.json"),
+            package_json("example-wasm").replace("./dist/index", "./dist/example"),
+        )
+        .expect("write package json");
+        fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
+        fs::write(
+            package_dir.join("dist").join("example.d.ts"),
+            dto_declaration("example.d.ts"),
+        )
+        .expect("write d.ts");
+        fs::write(
+            package_dir.join("dist").join("example_bg.wasm.d.ts"),
+            dto_declaration("example_bg.wasm.d.ts"),
+        )
+        .expect("write wasm d.ts");
+        let spec = WasmPackageSpec {
+            key: "example",
+            crate_name: "radroots_example_wasm",
+            crate_dir: "crates/example_wasm",
+            package_name: "@radroots/example-wasm",
+            package_dir: "packages/example-wasm",
+            out_name: "example",
+            out_dir: "../../packages/example-wasm/dist",
+        };
+
+        let error = check_wasm_package_surface(&root, spec).expect_err("missing wasm rejected");
+        assert!(error.contains("missing wasm package runtime artifact"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn wasm_package_surface_rejects_subpath_exports() {
         let root = test_root("wasm_subpath_exports");
         let package_dir = root.join("packages").join("example-wasm");
         fs::create_dir_all(package_dir.join("dist")).expect("create dist");
         fs::write(
             package_dir.join("package.json"),
-            r#"{
-  "name": "@radroots/example-wasm",
-  "private": true,
-  "main": "./dist/example.js",
-  "types": "./dist/example.d.ts",
-  "exports": {
+            package_json("example-wasm")
+                .replace("./dist/index", "./dist/example")
+                .replace(
+                    r#""exports": {
+    ".": {
+      "types": "./dist/example.d.ts",
+      "import": "./dist/example.js",
+      "default": "./dist/example.js"
+    }
+  }"#,
+                    r#""exports": {
     ".": "./dist/example.js",
     "./extra": "./dist/extra.js"
-  }
-}"#,
+  }"#,
+                ),
         )
         .expect("write package json");
         fs::write(package_dir.join("dist").join("example.js"), "export {};\n").expect("write js");
@@ -642,6 +992,38 @@ mod tests {
     fn dto_declaration(name: &str) -> String {
         format!(
             "// @generated by cargo xtask generate wasm via dto_bindgen\n// Do not edit by hand.\nexport type Generated = \"{name}\";\n"
+        )
+    }
+
+    fn package_json(name: &str) -> String {
+        format!(
+            r#"{{
+  "name": "@radroots/{name}",
+  "version": "0.1.0",
+  "description": "Example package",
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://radroots.org",
+  "repository": {{
+    "type": "git",
+    "url": "git+https://github.com/radrootslabs/sdk.git",
+    "directory": "packages/{name}"
+  }},
+  "publishConfig": {{
+    "access": "public"
+  }},
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {{
+    ".": {{
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }}
+  }}
+}}"#
         )
     }
 }
