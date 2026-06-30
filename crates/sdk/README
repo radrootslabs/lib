@@ -41,12 +41,12 @@ transport owns signing. `push_outbox_with_adapter(...)` remains available for te
 adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
 `publish.event`.
 
-`sdk.trades()` exposes local trade evidence ingestion and status projection APIs. Product workflow
-actions are split into role-specific handles: `sdk.trade_buyer()`, `sdk.trade_seller()`,
-`sdk.trade_status()`, `sdk.trade_resync()`, and `sdk.trade_validation()`. `sdk.trades().status(...)`
-and `sdk.trade_status().status(...)` accept `TradeStatusRequest` and read local projections; they
-return typed source, event count, limit state, event IDs, ambiguity candidates, eligibility,
-next-action, and reducer issue data. Status is not a network fetch.
+`sdk.trades()` exposes local trade evidence ingestion, status projection, and grouped product workflow
+handles. Product workflow actions use `sdk.trades().buyer()`, `sdk.trades().seller()`, and
+`sdk.trades().resync()`. `sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local
+projections; it returns typed source, event count, limit state, event IDs, ambiguity candidates,
+eligibility, next-action, and reducer issue data. Status is not a network fetch. DVM proof requests and
+validation receipt ingestion use `sdk.dvm()`.
 
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `relay-runtime`, and

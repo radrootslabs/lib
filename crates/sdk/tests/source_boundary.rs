@@ -56,15 +56,37 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
         pattern: "protocol::",
         reason: "SDK docs must not advertise a public protocol workflow bypass",
     },
+    ForbiddenSdkConcept {
+        pattern: "sdk.trade_buyer()",
+        reason: "SDK docs must use grouped trade product handles",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.trade_seller()",
+        reason: "SDK docs must use grouped trade product handles",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.trade_status()",
+        reason: "SDK docs must use sdk.trades().status(...) as the only product status entrypoint",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.trade_resync()",
+        reason: "SDK docs must use grouped trade product handles",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.trade_validation()",
+        reason: "SDK docs must use sdk.dvm() for validation receipt ingestion",
+    },
 ];
 
 const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "RadrootsClient::builder()",
     "sdk.trades()",
     "TradeStatusRequest",
-    "sdk.trade_buyer()",
-    "sdk.trade_seller()",
-    "sdk.trade_status()",
+    "sdk.trades().buyer()",
+    "sdk.trades().seller()",
+    "sdk.trades().status(...)",
+    "sdk.trades().resync()",
+    "sdk.dvm()",
 ];
 
 const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
@@ -234,9 +256,20 @@ const REQUIRED_TRADE_SELLER_CLIENT_METHODS: &[&str] = &[
     "pub async fn propose_revision(",
 ];
 
-const REQUIRED_TRADE_STATUS_CLIENT_METHODS: &[&str] = &["pub async fn status("];
-
 const REQUIRED_TRADE_RESYNC_CLIENT_METHODS: &[&str] = &["pub async fn resync("];
+
+const FORBIDDEN_PRODUCT_CLIENT_HANDLES: &[&str] = &[
+    "TradeStatusClient",
+    "TradeValidationClient",
+    "pub struct TradeStatusClient",
+    "pub struct TradeValidationClient",
+];
+
+const FORBIDDEN_PRODUCT_CLIENT_METHODS: &[&str] = &[
+    "pub fn status_client(",
+    "pub fn validation(",
+    "pub fn root(&self) -> &'client RadrootsClient",
+];
 
 const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "CheckoutClient",
@@ -673,13 +706,6 @@ fn trade_product_facade_methods_are_inventory_guarded() {
         );
     }
 
-    for method in REQUIRED_TRADE_STATUS_CLIENT_METHODS {
-        assert!(
-            source.contains(method),
-            "TradeStatusClient must expose product workflow method `{method}`"
-        );
-    }
-
     for method in REQUIRED_TRADE_RESYNC_CLIENT_METHODS {
         assert!(
             source.contains(method),
@@ -751,8 +777,6 @@ fn product_clients_remain_thin_sdk_handles() {
         "TradeBuyerClient",
         "TradeResyncClient",
         "TradeSellerClient",
-        "TradeStatusClient",
-        "TradeValidationClient",
         "TradesClient",
     ] {
         assert!(
@@ -762,6 +786,24 @@ fn product_clients_remain_thin_sdk_handles() {
         assert!(
             clients_source.contains(format!("pub struct {client}<'client>").as_str()),
             "product_clients.rs must define thin handle `{client}`"
+        );
+    }
+
+    for forbidden in FORBIDDEN_PRODUCT_CLIENT_HANDLES {
+        assert!(
+            !lib_source.contains(forbidden),
+            "src/lib.rs must not export removed product client handle `{forbidden}`"
+        );
+        assert!(
+            !clients_source.contains(forbidden),
+            "product_clients.rs must not define removed product client handle `{forbidden}`"
+        );
+    }
+
+    for forbidden in FORBIDDEN_PRODUCT_CLIENT_METHODS {
+        assert!(
+            !clients_source.contains(forbidden),
+            "product_clients.rs must not expose removed product client method `{forbidden}`"
         );
     }
 }
