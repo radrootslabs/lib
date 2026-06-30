@@ -90,34 +90,14 @@ const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
 ];
 
 const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
-    "TRADE_CANCELLATION_OPERATION_KIND",
-    "TRADE_DECISION_OPERATION_KIND",
-    "TRADE_REVISION_DECISION_OPERATION_KIND",
-    "TRADE_REVISION_PROPOSAL_OPERATION_KIND",
     "TRADE_STATUS_DEFAULT_LIMIT",
     "TRADE_STATUS_MAX_LIMIT",
-    "TRADE_SUBMIT_OPERATION_KIND",
-    "TradeAcceptRequest",
-    "TradeCancelRequest",
-    "TradeCancellationPlan",
-    "TradeCancellationReceipt",
-    "TradeDecisionPlan",
-    "TradeDecisionReceipt",
-    "TradeDeclineRequest",
     "TradeEvidenceIngestReceipt",
     "TradeEvidenceIngestRequest",
-    "TradeMutationOutcome",
-    "TradeProposeRequest",
     "TradeRequestEvidenceIngestReceipt",
     "TradeRequestEvidenceIngestRequest",
     "TradeResyncReceipt",
     "TradeResyncRequest",
-    "TradeRevisionDecisionPlan",
-    "TradeRevisionDecisionReceipt",
-    "TradeRevisionDecisionRequest",
-    "TradeRevisionProposalPlan",
-    "TradeRevisionProposalRequest",
-    "TradeRevisionProposalReceipt",
     "TradeSellerInboxReceipt",
     "TradeSellerInboxRequest",
     "TradeStatusAmbiguityCandidate",
@@ -127,6 +107,32 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeStatusNextActionKind",
     "TradeStatusReceipt",
     "TradeStatusRequest",
+    "SdkTradeStatusIssue",
+    "SdkTradeStatusIssueKind",
+    "SdkTradeStatusSource",
+];
+
+const REQUIRED_TRADE_SIGNER_EXPORTS: &[&str] = &[
+    "TRADE_CANCELLATION_OPERATION_KIND",
+    "TRADE_DECISION_OPERATION_KIND",
+    "TRADE_REVISION_DECISION_OPERATION_KIND",
+    "TRADE_REVISION_PROPOSAL_OPERATION_KIND",
+    "TRADE_SUBMIT_OPERATION_KIND",
+    "TradeAcceptRequest",
+    "TradeCancelRequest",
+    "TradeCancellationPlan",
+    "TradeCancellationReceipt",
+    "TradeDecisionPlan",
+    "TradeDecisionReceipt",
+    "TradeDeclineRequest",
+    "TradeMutationOutcome",
+    "TradeProposeRequest",
+    "TradeRevisionDecisionPlan",
+    "TradeRevisionDecisionReceipt",
+    "TradeRevisionDecisionRequest",
+    "TradeRevisionProposalPlan",
+    "TradeRevisionProposalRequest",
+    "TradeRevisionProposalReceipt",
     "TradeSubmitPlan",
     "TradeSubmitReceipt",
     "TradeWorkflowEnqueueReceipt",
@@ -134,9 +140,6 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeWorkflowKind",
     "TradeWorkflowPlan",
     "TradeWorkflowRetryAdvice",
-    "SdkTradeStatusIssue",
-    "SdkTradeStatusIssueKind",
-    "SdkTradeStatusSource",
 ];
 
 const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
@@ -549,10 +552,30 @@ fn order_runtime_public_exports_are_explicit() {
         "src/lib.rs must not wildcard-export the order runtime"
     );
 
+    let runtime_exports = export_block(
+        source.as_str(),
+        "#[cfg(feature = \"runtime\")]\npub use crate::orders_runtime::{",
+    );
+    let signer_exports = export_block(
+        source.as_str(),
+        "#[cfg(all(feature = \"runtime\", feature = \"signer-adapters\"))]\npub use crate::orders_runtime::{",
+    );
+
     for export in REQUIRED_TRADE_RUNTIME_EXPORTS {
         assert!(
-            source.contains(export),
+            runtime_exports.contains(export),
             "src/lib.rs must explicitly expose trade SDK runtime export `{export}`"
+        );
+    }
+
+    for export in REQUIRED_TRADE_SIGNER_EXPORTS {
+        assert!(
+            signer_exports.contains(export),
+            "src/lib.rs must expose trade SDK signer export `{export}` behind runtime plus signer-adapters"
+        );
+        assert!(
+            !runtime_exports.contains(export),
+            "src/lib.rs runtime-only export block must not expose signer workflow export `{export}`"
         );
     }
 
@@ -715,6 +738,67 @@ fn trade_product_facade_methods_are_inventory_guarded() {
 }
 
 #[test]
+fn trade_product_facade_feature_gates_are_explicit() {
+    let orders_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+    let product_clients_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/product_clients.rs")
+            .as_path(),
+    );
+
+    assert!(
+        product_clients_source.contains(
+            "#[cfg(feature = \"signer-adapters\")]\n    pub fn buyer(&self) -> TradeBuyerClient<'client> {"
+        ),
+        "TradesClient::buyer must be gated by signer-adapters inside the runtime TradesClient impl"
+    );
+    assert!(
+        product_clients_source.contains(
+            "#[cfg(all(feature = \"runtime\", feature = \"signer-adapters\"))]\n#[derive(Clone, Copy)]\npub struct TradeBuyerClient<'client>"
+        ),
+        "TradeBuyerClient must be gated by runtime plus signer-adapters"
+    );
+    assert!(
+        product_clients_source.contains(
+            "#[cfg(feature = \"runtime\")]\n#[derive(Clone, Copy)]\npub struct TradeSellerClient<'client>"
+        ),
+        "TradeSellerClient must remain runtime-visible for seller inbox reads"
+    );
+    assert!(
+        orders_source.contains(
+            "#[cfg(all(feature = \"runtime\", feature = \"signer-adapters\"))]\nimpl<'sdk> TradeBuyerClient<'sdk> {"
+        ),
+        "TradeBuyerClient product mutation impl must require runtime plus signer-adapters"
+    );
+    assert!(
+        orders_source
+            .contains("#[cfg(feature = \"runtime\")]\nimpl<'sdk> TradeSellerClient<'sdk> {"),
+        "TradeSellerClient impl must remain runtime-visible for seller inbox"
+    );
+
+    let seller_impl = impl_block(
+        orders_source.as_str(),
+        "impl<'sdk> TradeSellerClient<'sdk> {",
+    );
+    assert!(
+        seller_impl.contains("pub async fn inbox("),
+        "TradeSellerClient must expose seller inbox in the runtime impl"
+    );
+    for method in ["accept_trade", "decline_trade", "propose_revision"] {
+        let gated_method =
+            format!("#[cfg(feature = \"signer-adapters\")]\n    pub async fn {method}(");
+        assert!(
+            seller_impl.contains(gated_method.as_str()),
+            "TradeSellerClient::{method} must be gated by signer-adapters"
+        );
+    }
+}
+
+#[test]
 fn dvm_client_surface_is_inventory_guarded() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -774,7 +858,6 @@ fn product_clients_remain_thin_sdk_handles() {
         "ListingsClient",
         "MarketClient",
         "SyncClient",
-        "TradeBuyerClient",
         "TradeResyncClient",
         "TradeSellerClient",
         "TradesClient",
@@ -788,6 +871,25 @@ fn product_clients_remain_thin_sdk_handles() {
             "product_clients.rs must define thin handle `{client}`"
         );
     }
+
+    let runtime_product_exports = export_block(
+        lib_source.as_str(),
+        "#[cfg(feature = \"runtime\")]\npub use crate::product_clients::{",
+    );
+    assert!(
+        !runtime_product_exports.contains("TradeBuyerClient"),
+        "src/lib.rs runtime-only product client export block must not expose TradeBuyerClient"
+    );
+    assert!(
+        lib_source.contains(
+            "#[cfg(all(feature = \"runtime\", feature = \"signer-adapters\"))]\npub use crate::product_clients::TradeBuyerClient;"
+        ),
+        "src/lib.rs must export TradeBuyerClient only behind runtime plus signer-adapters"
+    );
+    assert!(
+        clients_source.contains("pub struct TradeBuyerClient<'client>"),
+        "product_clients.rs must define thin signer-gated handle `TradeBuyerClient`"
+    );
 
     for forbidden in FORBIDDEN_PRODUCT_CLIENT_HANDLES {
         assert!(
@@ -929,6 +1031,28 @@ fn function_source<'source>(source: &'source str, function_name: &str) -> &'sour
     let source_after_start = &source[start..];
     let end = source_after_start
         .find("\n#[tokio::test]")
+        .unwrap_or(source_after_start.len());
+    &source_after_start[..end]
+}
+
+fn export_block<'source>(source: &'source str, marker: &str) -> &'source str {
+    let start = source
+        .find(marker)
+        .unwrap_or_else(|| panic!("failed to find export block marker `{marker}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find("\n};")
+        .unwrap_or_else(|| panic!("failed to find end of export block `{marker}`"));
+    &source_after_start[..end]
+}
+
+fn impl_block<'source>(source: &'source str, marker: &str) -> &'source str {
+    let start = source
+        .find(marker)
+        .unwrap_or_else(|| panic!("failed to find impl block marker `{marker}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find("\n}\n\n#[cfg(")
         .unwrap_or(source_after_start.len());
     &source_after_start[..end]
 }
