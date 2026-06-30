@@ -4,12 +4,15 @@ use crate::workflow_runtime::enqueue_configured_signed_workflow;
 use crate::{
     AckPolicy, PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey,
-    SdkMutationState, SdkRelayUrlPolicy, TradeBuyerClient, TradeResyncClient, TradeSellerClient,
-    TradeStatusClient, TradesClient, order,
-    workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
+    SdkMutationState, TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient,
+    TradesClient, order, workflow_runtime::SdkWorkflowEnqueueRequest,
 };
+#[cfg(all(feature = "runtime", test))]
+use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
 #[cfg(feature = "runtime")]
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
+use radroots_authority::RadrootsActorContext;
+#[cfg(all(feature = "runtime", test))]
+use radroots_authority::RadrootsEventSigner;
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
@@ -170,6 +173,7 @@ pub struct TradeSubmitPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeSubmitPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -191,6 +195,7 @@ impl TradeSubmitPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeSubmitEnqueueRequest {
@@ -206,6 +211,7 @@ pub struct TradeSubmitEnqueueRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeSubmitEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -373,6 +379,7 @@ pub struct TradeDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -394,6 +401,7 @@ impl TradeDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeDecisionEnqueueRequest {
@@ -409,6 +417,7 @@ pub struct TradeDecisionEnqueueRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -508,6 +517,7 @@ pub struct TradeRevisionProposalPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeRevisionProposalPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -531,6 +541,7 @@ impl TradeRevisionProposalPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionProposalEnqueueRequest {
@@ -547,6 +558,7 @@ pub struct TradeRevisionProposalEnqueueRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeRevisionProposalEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -650,6 +662,7 @@ pub struct TradeRevisionDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeRevisionDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -673,6 +686,7 @@ impl TradeRevisionDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionDecisionEnqueueRequest {
@@ -689,6 +703,7 @@ pub struct TradeRevisionDecisionEnqueueRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeRevisionDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -792,6 +807,7 @@ pub struct TradeCancellationPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeCancellationPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -815,6 +831,7 @@ impl TradeCancellationPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeCancellationEnqueueRequest {
@@ -831,6 +848,7 @@ pub struct TradeCancellationEnqueueRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[cfg(test)]
 impl TradeCancellationEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1619,7 +1637,7 @@ impl<'sdk> TradesClient<'sdk> {
         })
     }
 
-    pub fn prepare_submit(
+    pub(crate) fn prepare_submit(
         &self,
         request: TradeSubmitPrepareRequest,
     ) -> Result<TradeSubmitPlan, RadrootsSdkError> {
@@ -1633,7 +1651,8 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_submit(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_submit(
         &self,
         request: TradeSubmitEnqueueRequest,
     ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
@@ -1666,7 +1685,8 @@ impl<'sdk> TradesClient<'sdk> {
         .await
     }
 
-    pub async fn enqueue_submit_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_submit_with_explicit_signer(
         &self,
         request: TradeSubmitEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1702,7 +1722,7 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_prepared_submit(
+    pub(crate) async fn enqueue_prepared_submit(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeSubmitPlan,
@@ -1726,7 +1746,8 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_submit_receipt(plan, enqueue))
     }
 
-    pub async fn enqueue_prepared_submit_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_prepared_submit_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeSubmitPlan,
@@ -1752,7 +1773,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_submit_receipt(plan, enqueue))
     }
 
-    pub fn prepare_decision(
+    pub(crate) fn prepare_decision(
         &self,
         request: TradeDecisionPrepareRequest,
     ) -> Result<TradeDecisionPlan, RadrootsSdkError> {
@@ -1766,7 +1787,8 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_decision(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_decision(
         &self,
         request: TradeDecisionEnqueueRequest,
     ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
@@ -1799,7 +1821,8 @@ impl<'sdk> TradesClient<'sdk> {
         .await
     }
 
-    pub async fn enqueue_decision_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_decision_with_explicit_signer(
         &self,
         request: TradeDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1835,7 +1858,7 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_prepared_decision(
+    pub(crate) async fn enqueue_prepared_decision(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeDecisionPlan,
@@ -1865,7 +1888,8 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_decision_receipt(plan, enqueue))
     }
 
-    pub async fn enqueue_prepared_decision_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_prepared_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeDecisionPlan,
@@ -1897,7 +1921,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_decision_receipt(plan, enqueue))
     }
 
-    pub fn prepare_revision_proposal(
+    pub(crate) fn prepare_revision_proposal(
         &self,
         request: TradeRevisionProposalPrepareRequest,
     ) -> Result<TradeRevisionProposalPlan, RadrootsSdkError> {
@@ -1912,7 +1936,8 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_revision_proposal(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_revision_proposal(
         &self,
         request: TradeRevisionProposalEnqueueRequest,
     ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
@@ -1947,7 +1972,8 @@ impl<'sdk> TradesClient<'sdk> {
         .await
     }
 
-    pub async fn enqueue_revision_proposal_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_revision_proposal_with_explicit_signer(
         &self,
         request: TradeRevisionProposalEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1985,7 +2011,7 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_prepared_revision_proposal(
+    pub(crate) async fn enqueue_prepared_revision_proposal(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionProposalPlan,
@@ -2015,7 +2041,8 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_proposal_receipt(plan, enqueue))
     }
 
-    pub async fn enqueue_prepared_revision_proposal_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_prepared_revision_proposal_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionProposalPlan,
@@ -2047,7 +2074,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_proposal_receipt(plan, enqueue))
     }
 
-    pub fn prepare_revision_decision(
+    pub(crate) fn prepare_revision_decision(
         &self,
         request: TradeRevisionDecisionPrepareRequest,
     ) -> Result<TradeRevisionDecisionPlan, RadrootsSdkError> {
@@ -2062,7 +2089,8 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_revision_decision(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_revision_decision(
         &self,
         request: TradeRevisionDecisionEnqueueRequest,
     ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
@@ -2097,7 +2125,8 @@ impl<'sdk> TradesClient<'sdk> {
         .await
     }
 
-    pub async fn enqueue_revision_decision_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_revision_decision_with_explicit_signer(
         &self,
         request: TradeRevisionDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -2135,7 +2164,7 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_prepared_revision_decision(
+    pub(crate) async fn enqueue_prepared_revision_decision(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionDecisionPlan,
@@ -2165,7 +2194,8 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_decision_receipt(plan, enqueue))
     }
 
-    pub async fn enqueue_prepared_revision_decision_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_prepared_revision_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionDecisionPlan,
@@ -2197,7 +2227,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_decision_receipt(plan, enqueue))
     }
 
-    pub fn prepare_cancellation(
+    pub(crate) fn prepare_cancellation(
         &self,
         request: TradeCancellationPrepareRequest,
     ) -> Result<TradeCancellationPlan, RadrootsSdkError> {
@@ -2212,7 +2242,8 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_cancellation(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_cancellation(
         &self,
         request: TradeCancellationEnqueueRequest,
     ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
@@ -2247,7 +2278,8 @@ impl<'sdk> TradesClient<'sdk> {
         .await
     }
 
-    pub async fn enqueue_cancellation_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_cancellation_with_explicit_signer(
         &self,
         request: TradeCancellationEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -2285,7 +2317,7 @@ impl<'sdk> TradesClient<'sdk> {
     }
 
     #[cfg(feature = "signer-adapters")]
-    pub async fn enqueue_prepared_cancellation(
+    pub(crate) async fn enqueue_prepared_cancellation(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeCancellationPlan,
@@ -2315,7 +2347,8 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_cancellation_receipt(plan, enqueue))
     }
 
-    pub async fn enqueue_prepared_cancellation_with_explicit_signer(
+    #[cfg(test)]
+    pub(crate) async fn enqueue_prepared_cancellation_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: TradeCancellationPlan,

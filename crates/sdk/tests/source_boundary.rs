@@ -49,13 +49,9 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TRADE_SUBMIT_OPERATION_KIND",
     "TradeAcceptRequest",
     "TradeCancelRequest",
-    "TradeCancellationEnqueueRequest",
     "TradeCancellationPlan",
-    "TradeCancellationPrepareRequest",
     "TradeCancellationReceipt",
-    "TradeDecisionEnqueueRequest",
     "TradeDecisionPlan",
-    "TradeDecisionPrepareRequest",
     "TradeDecisionReceipt",
     "TradeDeclineRequest",
     "TradeEvidenceIngestReceipt",
@@ -66,14 +62,10 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeRequestEvidenceIngestRequest",
     "TradeResyncReceipt",
     "TradeResyncRequest",
-    "TradeRevisionDecisionEnqueueRequest",
     "TradeRevisionDecisionPlan",
-    "TradeRevisionDecisionPrepareRequest",
     "TradeRevisionDecisionReceipt",
     "TradeRevisionDecisionRequest",
-    "TradeRevisionProposalEnqueueRequest",
     "TradeRevisionProposalPlan",
-    "TradeRevisionProposalPrepareRequest",
     "TradeRevisionProposalRequest",
     "TradeRevisionProposalReceipt",
     "TradeSellerInboxReceipt",
@@ -85,9 +77,7 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeStatusNextActionKind",
     "TradeStatusReceipt",
     "TradeStatusRequest",
-    "TradeSubmitEnqueueRequest",
     "TradeSubmitPlan",
-    "TradeSubmitPrepareRequest",
     "TradeSubmitReceipt",
     "TradeWorkflowEnqueueReceipt",
     "TradeWorkflowIdempotencyReceipt",
@@ -130,21 +120,6 @@ const REQUIRED_TRADE_POLICY_EXPORTS: &[&str] = &[
 const REQUIRED_TRADES_CLIENT_METHODS: &[&str] = &[
     "pub async fn ingest_evidence(",
     "pub async fn ingest_request_evidence(",
-    "pub fn prepare_submit(",
-    "pub async fn enqueue_submit(",
-    "pub async fn enqueue_prepared_submit(",
-    "pub fn prepare_decision(",
-    "pub async fn enqueue_decision(",
-    "pub async fn enqueue_prepared_decision(",
-    "pub fn prepare_revision_proposal(",
-    "pub async fn enqueue_revision_proposal(",
-    "pub async fn enqueue_prepared_revision_proposal(",
-    "pub fn prepare_revision_decision(",
-    "pub async fn enqueue_revision_decision(",
-    "pub async fn enqueue_prepared_revision_decision(",
-    "pub fn prepare_cancellation(",
-    "pub async fn enqueue_cancellation(",
-    "pub async fn enqueue_prepared_cancellation(",
     "pub async fn status(",
 ];
 
@@ -157,15 +132,30 @@ const REQUIRED_DVM_CLIENT_METHODS: &[&str] = &[
 const REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS: &[&str] =
     &["pub async fn enqueue_trade_transition_proof_request("];
 
-const REQUIRED_TRADES_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
+const FORBIDDEN_TRADES_CLIENT_PUBLIC_METHODS: &[&str] = &[
+    "pub fn prepare_submit(",
+    "pub async fn enqueue_submit(",
+    "pub async fn enqueue_prepared_submit(",
     "pub async fn enqueue_submit_with_explicit_signer(",
     "pub async fn enqueue_prepared_submit_with_explicit_signer(",
+    "pub fn prepare_decision(",
+    "pub async fn enqueue_decision(",
+    "pub async fn enqueue_prepared_decision(",
     "pub async fn enqueue_decision_with_explicit_signer(",
     "pub async fn enqueue_prepared_decision_with_explicit_signer(",
+    "pub fn prepare_revision_proposal(",
+    "pub async fn enqueue_revision_proposal(",
+    "pub async fn enqueue_prepared_revision_proposal(",
     "pub async fn enqueue_revision_proposal_with_explicit_signer(",
     "pub async fn enqueue_prepared_revision_proposal_with_explicit_signer(",
+    "pub fn prepare_revision_decision(",
+    "pub async fn enqueue_revision_decision(",
+    "pub async fn enqueue_prepared_revision_decision(",
     "pub async fn enqueue_revision_decision_with_explicit_signer(",
     "pub async fn enqueue_prepared_revision_decision_with_explicit_signer(",
+    "pub fn prepare_cancellation(",
+    "pub async fn enqueue_cancellation(",
+    "pub async fn enqueue_prepared_cancellation(",
     "pub async fn enqueue_cancellation_with_explicit_signer(",
     "pub async fn enqueue_prepared_cancellation_with_explicit_signer(",
 ];
@@ -266,6 +256,19 @@ const FORBIDDEN_LEGACY_ORDER_PRODUCT_EXPORTS: &[&str] = &[
     "SdkOrderStatusIssueKind",
     "SdkOrderStatusSource",
     "TradeProtocolClient",
+];
+
+const FORBIDDEN_TRADE_LOW_LEVEL_REQUEST_EXPORTS: &[&str] = &[
+    "TradeCancellationEnqueueRequest",
+    "TradeCancellationPrepareRequest",
+    "TradeDecisionEnqueueRequest",
+    "TradeDecisionPrepareRequest",
+    "TradeRevisionDecisionEnqueueRequest",
+    "TradeRevisionDecisionPrepareRequest",
+    "TradeRevisionProposalEnqueueRequest",
+    "TradeRevisionProposalPrepareRequest",
+    "TradeSubmitEnqueueRequest",
+    "TradeSubmitPrepareRequest",
 ];
 
 const FORBIDDEN_ORDER_RUNTIME_METHODS: &[&str] = &[
@@ -410,6 +413,13 @@ fn order_runtime_public_exports_are_explicit() {
             "src/lib.rs must not expose legacy order SDK product export `{forbidden}`"
         );
     }
+
+    for forbidden in FORBIDDEN_TRADE_LOW_LEVEL_REQUEST_EXPORTS {
+        assert!(
+            !source.contains(forbidden),
+            "src/lib.rs must not expose low-level trade mutation request export `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -465,10 +475,10 @@ fn orders_client_surface_is_inventory_guarded() {
         );
     }
 
-    for method in REQUIRED_TRADES_CLIENT_ADVANCED_SIGNER_METHODS {
+    for method in FORBIDDEN_TRADES_CLIENT_PUBLIC_METHODS {
         assert!(
-            source.contains(method),
-            "TradesClient must expose explicit-signer advanced method `{method}`"
+            !source.contains(method),
+            "TradesClient must not expose low-level trade mutation method `{method}`"
         );
     }
 }
