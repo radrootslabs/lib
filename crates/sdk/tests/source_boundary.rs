@@ -211,7 +211,7 @@ const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "ORDER_SETTLEMENT_DECISION_OPERATION_KIND",
 ];
 
-const FORBIDDEN_LEGACY_ORDER_PRODUCT_EXPORTS: &[&str] = &[
+const FORBIDDEN_REMOVED_ORDER_PRODUCT_EXPORTS: &[&str] = &[
     "ORDER_CANCELLATION_OPERATION_KIND",
     "ORDER_DECISION_OPERATION_KIND",
     "ORDER_REVISION_DECISION_OPERATION_KIND",
@@ -408,10 +408,10 @@ fn order_runtime_public_exports_are_explicit() {
         );
     }
 
-    for forbidden in FORBIDDEN_LEGACY_ORDER_PRODUCT_EXPORTS {
+    for forbidden in FORBIDDEN_REMOVED_ORDER_PRODUCT_EXPORTS {
         assert!(
             !source.contains(forbidden),
-            "src/lib.rs must not expose legacy order SDK product export `{forbidden}`"
+            "src/lib.rs must not expose removed order SDK product export `{forbidden}`"
         );
     }
 
@@ -600,7 +600,7 @@ fn product_clients_remain_thin_sdk_handles() {
 }
 
 #[test]
-fn legacy_client_and_config_modules_are_removed() {
+fn removed_client_and_config_modules_are_absent() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     for relative_path in ["src/client.rs", "src/config.rs"] {
@@ -613,7 +613,7 @@ fn legacy_client_and_config_modules_are_removed() {
 }
 
 #[test]
-fn legacy_trade_client_root_export_is_removed() {
+fn removed_trade_client_root_export_is_absent() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/lib.rs")
@@ -622,12 +622,12 @@ fn legacy_trade_client_root_export_is_removed() {
 
     assert!(
         !source.contains("TradeClient"),
-        "src/lib.rs must not re-export the legacy TradeClient facade"
+        "src/lib.rs must not re-export the removed TradeClient facade"
     );
 }
 
 #[test]
-fn legacy_client_config_modules_are_not_public() {
+fn removed_client_config_modules_are_not_public() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/lib.rs")
@@ -650,9 +650,27 @@ fn legacy_client_config_modules_are_not_public() {
     ] {
         assert!(
             !source.contains(forbidden),
-            "src/lib.rs must not expose legacy SDK client/config concept `{forbidden}`"
+            "src/lib.rs must not expose removed SDK client/config concept `{forbidden}`"
         );
     }
+}
+
+#[test]
+fn sdk_public_api_does_not_export_protocol_workflow_bypass() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = read_source(manifest_dir.join("src/lib.rs").as_path());
+
+    for forbidden in ["pub mod protocol;", "pub use crate::protocol"] {
+        assert!(
+            !source.contains(forbidden),
+            "src/lib.rs must not expose protocol workflow bypass `{forbidden}`"
+        );
+    }
+
+    assert!(
+        !manifest_dir.join("src/protocol").exists(),
+        "src/protocol must not remain as a public protocol re-export surface"
+    );
 }
 
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
@@ -675,7 +693,7 @@ fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     ] {
         assert!(
             !source.contains(forbidden),
-            "{relative_path} must not use legacy SDK client or transport concept `{forbidden}`"
+            "{relative_path} must not use removed SDK client or transport concept `{forbidden}`"
         );
     }
 }

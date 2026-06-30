@@ -1,12 +1,7 @@
-pub use radroots_events::ids::{RadrootsIdParseError, RadrootsListingAddress};
 pub use radroots_events::order::*;
-pub use radroots_events::trade_validation::*;
 pub use radroots_events_codec::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
-pub use radroots_events_codec::order::{
-    RadrootsOrderEnvelopeParseError, RadrootsOrderEventContext,
-};
-pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
+pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
 
 #[cfg(feature = "serde_json")]
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, ids::RadrootsEventId};
@@ -38,50 +33,30 @@ pub struct RadrootsOrderCancellationDraft {
 }
 
 impl RadrootsOrderRequestDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
 impl RadrootsOrderDecisionDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
 impl RadrootsOrderRevisionProposalDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
 impl RadrootsOrderRevisionDecisionDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
 impl RadrootsOrderCancellationDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
@@ -162,46 +137,4 @@ pub fn parse_order_request(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {
     radroots_events_codec::order::order_request_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_order_decision(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderDecision>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_decision_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_order_revision_proposal(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionProposal>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_revision_proposal_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_order_revision_decision(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionDecision>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_revision_decision_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_order_cancellation(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderCancellation>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_cancellation_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_listing_address(
-    listing_addr: &str,
-) -> Result<RadrootsListingAddress, RadrootsIdParseError> {
-    RadrootsListingAddress::parse(listing_addr)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn validate_listing_event(
-    event: &RadrootsNostrEvent,
-) -> Result<TradeListingValidateResult, RadrootsTradeValidationListingError> {
-    radroots_trade::listing::validation::validate_listing_event(event)
 }

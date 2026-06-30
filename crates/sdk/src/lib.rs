@@ -26,7 +26,6 @@ mod geonames;
 mod idempotency;
 #[cfg(feature = "identity-models")]
 mod identity;
-mod listing;
 #[cfg(feature = "runtime")]
 mod listings_runtime;
 #[cfg(feature = "runtime")]
@@ -40,8 +39,6 @@ mod privacy;
 mod private_store;
 #[cfg(feature = "runtime")]
 mod product_clients;
-mod profile;
-pub mod protocol;
 #[cfg(feature = "runtime")]
 mod relay_targets;
 #[cfg(feature = "runtime")]

@@ -9,24 +9,26 @@ use radroots_core::{
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
-    ids::{RadrootsEventId, RadrootsOrderId, RadrootsOrderRevisionId, RadrootsPublicKey},
+    ids::{
+        RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
+        RadrootsPublicKey,
+    },
     kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
+    order::{
+        RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
+        RadrootsOrderEconomicLine, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
+        RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
+        RadrootsOrderRevisionOutcome,
+    },
 };
+use radroots_events_codec::wire::WireEventParts;
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event,
 };
 use radroots_outbox::RadrootsOutbox;
-use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
-use radroots_sdk::protocol::order::{
-    RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
-    RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
-    RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPricingBasis,
-    RadrootsOrderRequest, RadrootsOrderRevisionOutcome,
-};
-use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
     AckPolicy, PublishMode, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, RelayResolutionPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
@@ -1784,8 +1786,8 @@ fn order_revision_proposal(
     raw_order_id: &str,
     root_event_id: &RadrootsEventId,
     previous_event_id: &RadrootsEventId,
-) -> radroots_sdk::protocol::order::RadrootsOrderRevisionProposal {
-    radroots_sdk::protocol::order::RadrootsOrderRevisionProposal {
+) -> RadrootsOrderRevisionProposal {
+    RadrootsOrderRevisionProposal {
         revision_id: format!("revision-{raw_order_id}")
             .parse()
             .expect("revision id"),
@@ -1806,11 +1808,11 @@ fn order_revision_proposal(
 
 #[cfg(any())]
 fn order_revision_decision(
-    proposal: &radroots_sdk::protocol::order::RadrootsOrderRevisionProposal,
+    proposal: &RadrootsOrderRevisionProposal,
     previous_event_id: &RadrootsEventId,
-    decision: radroots_sdk::protocol::order::RadrootsOrderRevisionOutcome,
-) -> radroots_sdk::protocol::order::RadrootsOrderRevisionDecision {
-    radroots_sdk::protocol::order::RadrootsOrderRevisionDecision {
+    decision: RadrootsOrderRevisionOutcome,
+) -> RadrootsOrderRevisionDecision {
+    RadrootsOrderRevisionDecision {
         revision_id: proposal.revision_id.clone(),
         order_id: proposal.order_id.clone(),
         listing_addr: proposal.listing_addr.clone(),
@@ -1823,10 +1825,8 @@ fn order_revision_decision(
 }
 
 #[cfg(any())]
-fn order_cancellation(
-    raw_order_id: &str,
-) -> radroots_sdk::protocol::order::RadrootsOrderCancellation {
-    radroots_sdk::protocol::order::RadrootsOrderCancellation {
+fn order_cancellation(raw_order_id: &str) -> RadrootsOrderCancellation {
+    RadrootsOrderCancellation {
         order_id: order_id(raw_order_id),
         listing_addr: listing_address(),
         buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
@@ -1875,12 +1875,12 @@ fn signed_event(
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::protocol::order::build_order_request_draft(
+    let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
     .expect("request draft");
-    signed_event(BUYER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+    signed_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
 #[cfg(any())]
@@ -1918,13 +1918,13 @@ fn signed_order_decision_event(
     root_event_id: &RadrootsEventId,
     created_at: u32,
 ) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::protocol::order::build_order_decision_draft(
+    let draft = radroots_events_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
         &order_decision(raw_order_id),
     )
     .expect("decision draft");
-    signed_event(SELLER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+    signed_event(SELLER_SECRET_KEY_HEX, created_at, draft)
 }
 
 fn signed_non_order_event(created_at: u32) -> RadrootsNostrEvent {

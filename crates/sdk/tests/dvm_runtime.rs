@@ -8,7 +8,7 @@ use radroots_core::{
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::{
@@ -27,7 +27,6 @@ use radroots_nostr::prelude::{
     radroots_nostr_build_event, radroots_nostr_sign_frozen_draft,
 };
 use radroots_outbox::RadrootsOutbox;
-use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
 use radroots_sdk::{
     DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmTradeTransitionProofEnqueueRequest,
     DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, RadrootsClient,
@@ -761,12 +760,12 @@ fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::protocol::order::build_order_request_draft(
+    let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
     .expect("request draft");
-    signed_event(BUYER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+    signed_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
 fn signed_order_decision_event(
@@ -774,13 +773,13 @@ fn signed_order_decision_event(
     root_event_id: &RadrootsEventId,
     created_at: u32,
 ) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::protocol::order::build_order_decision_draft(
+    let draft = radroots_events_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
         &order_decision(raw_order_id),
     )
     .expect("decision draft");
-    signed_event(SELLER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+    signed_event(SELLER_SECRET_KEY_HEX, created_at, draft)
 }
 
 fn signed_validation_receipt_event(
@@ -823,7 +822,7 @@ fn signed_validation_receipt_event(
 fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
-    parts: radroots_sdk::protocol::wire::WireEventParts,
+    parts: radroots_events_codec::wire::WireEventParts,
 ) -> RadrootsNostrEvent {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);
