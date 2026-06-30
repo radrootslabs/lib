@@ -1,3 +1,6 @@
+#[cfg(feature = "serde_json")]
+pub use crate::dvm::*;
+pub use crate::identity::*;
 pub use crate::listing::*;
 pub use crate::order::*;
 #[cfg(feature = "event_store")]

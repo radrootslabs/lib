@@ -34,6 +34,7 @@ use radroots_events_codec::order::{
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
 use crate::listing::{
     RadrootsPublicListingAddress, RadrootsPublicListingAddressError, parse_public_listing_address,
 };
@@ -270,6 +271,30 @@ pub struct RadrootsOrderProjectionQueryResult {
     pub event_ids: Vec<RadrootsEventId>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeLocatorProjectionResolution {
+    Missing {
+        locator: RadrootsTradeLocator,
+    },
+    Ambiguous {
+        locator: RadrootsTradeLocator,
+        candidates: Vec<RadrootsTradeLocatorCandidate>,
+    },
+    Projected {
+        locator: RadrootsTradeLocator,
+        projection: RadrootsOrderProjection,
+    },
+}
+
+#[cfg(feature = "event_store")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeLocatorProjectionQueryResult {
+    pub resolution: RadrootsTradeLocatorProjectionResolution,
+    pub event_count: usize,
+    pub limit_applied: u32,
+    pub event_ids: Vec<RadrootsEventId>,
+}
+
 #[cfg(feature = "event_store")]
 pub async fn order_events_for_order_id(
     store: &RadrootsEventStore,
@@ -313,6 +338,17 @@ pub async fn order_projection_query_for_order_id(
     limit: u32,
 ) -> Result<RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError> {
     crate::projection::trade_projection_query_for_order_id(store, order_id, limit)
+        .await
+        .map_err(Into::into)
+}
+
+#[cfg(feature = "event_store")]
+pub async fn order_projection_query_for_trade_locator(
+    store: &RadrootsEventStore,
+    locator: &RadrootsTradeLocator,
+    limit: u32,
+) -> Result<RadrootsTradeLocatorProjectionQueryResult, RadrootsOrderStoreQueryError> {
+    crate::projection::trade_projection_query_for_trade_locator(store, locator, limit)
         .await
         .map_err(Into::into)
 }
@@ -725,6 +761,21 @@ pub struct RadrootsGroupedOrderEventRecords {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RadrootsTradeLocatorGroupedOrderEventRecordsResolution {
+    Missing {
+        locator: RadrootsTradeLocator,
+    },
+    Ambiguous {
+        locator: RadrootsTradeLocator,
+        candidates: Vec<RadrootsTradeLocatorCandidate>,
+    },
+    Matched {
+        locator: RadrootsTradeLocator,
+        records: RadrootsGroupedOrderEventRecords,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsListingInventoryAccountingInputs<I, J, K, L, M, N> {
     pub bins: I,
     pub requests: J,
@@ -774,6 +825,13 @@ pub fn reduce_order_event_records<I>(
 where
     I: IntoIterator<Item = RadrootsOrderEventRecord>,
 {
+    reduce_grouped_order_event_records(order_id, group_order_event_records(records))
+}
+
+fn group_order_event_records<I>(records: I) -> RadrootsGroupedOrderEventRecords
+where
+    I: IntoIterator<Item = RadrootsOrderEventRecord>,
+{
     let mut seen_event_ids = Vec::new();
     let mut grouped = RadrootsGroupedOrderEventRecords::default();
 
@@ -796,7 +854,153 @@ where
         }
     }
 
-    reduce_grouped_order_event_records(order_id, grouped)
+    grouped
+}
+
+pub fn reduce_order_event_records_for_trade_locator<I>(
+    locator: &RadrootsTradeLocator,
+    records: I,
+) -> RadrootsTradeLocatorProjectionResolution
+where
+    I: IntoIterator<Item = RadrootsOrderEventRecord>,
+{
+    match grouped_order_event_records_for_trade_locator(locator, group_order_event_records(records))
+    {
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Missing { locator } => {
+            RadrootsTradeLocatorProjectionResolution::Missing { locator }
+        }
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Ambiguous {
+            locator,
+            candidates,
+        } => RadrootsTradeLocatorProjectionResolution::Ambiguous {
+            locator,
+            candidates,
+        },
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Matched { locator, records } => {
+            let projection = reduce_grouped_order_event_records(locator.order_id(), records);
+            RadrootsTradeLocatorProjectionResolution::Projected {
+                locator,
+                projection,
+            }
+        }
+    }
+}
+
+pub(crate) fn grouped_order_event_records_for_trade_locator(
+    locator: &RadrootsTradeLocator,
+    records: RadrootsGroupedOrderEventRecords,
+) -> RadrootsTradeLocatorGroupedOrderEventRecordsResolution {
+    let candidates = trade_locator_candidates(locator, &records);
+    match candidates.as_slice() {
+        [] => RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Missing {
+            locator: locator.clone(),
+        },
+        [candidate] => RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Matched {
+            locator: candidate.locator(),
+            records: filter_grouped_order_records_for_trade_candidate(records, candidate),
+        },
+        _ => RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Ambiguous {
+            locator: locator.clone(),
+            candidates,
+        },
+    }
+}
+
+fn trade_locator_candidates(
+    locator: &RadrootsTradeLocator,
+    records: &RadrootsGroupedOrderEventRecords,
+) -> Vec<RadrootsTradeLocatorCandidate> {
+    let mut candidates = records
+        .requests
+        .iter()
+        .filter(|request| request_matches_trade_locator(locator, request))
+        .map(|request| RadrootsTradeLocatorCandidate {
+            trade_id: request.payload.order_id.clone().into(),
+            root_event_id: request.event_id.clone(),
+            listing_addr: request.payload.listing_addr.clone(),
+            buyer_pubkey: request.payload.buyer_pubkey.clone(),
+            seller_pubkey: request.payload.seller_pubkey.clone(),
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        left.root_event_id
+            .cmp(&right.root_event_id)
+            .then_with(|| left.trade_id.cmp(&right.trade_id))
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr))
+            .then_with(|| left.buyer_pubkey.cmp(&right.buyer_pubkey))
+            .then_with(|| left.seller_pubkey.cmp(&right.seller_pubkey))
+    });
+    candidates.dedup_by(|left, right| left.root_event_id == right.root_event_id);
+    candidates
+}
+
+fn request_matches_trade_locator(
+    locator: &RadrootsTradeLocator,
+    request: &RadrootsOrderRequestRecord,
+) -> bool {
+    request.payload.order_id == *locator.order_id()
+        && optional_match(locator.root_event_id.as_ref(), &request.event_id)
+        && optional_match(locator.listing_addr.as_ref(), &request.payload.listing_addr)
+        && optional_match(locator.buyer_pubkey.as_ref(), &request.payload.buyer_pubkey)
+        && optional_match(
+            locator.seller_pubkey.as_ref(),
+            &request.payload.seller_pubkey,
+        )
+}
+
+fn optional_match<T>(expected: Option<&T>, actual: &T) -> bool
+where
+    T: PartialEq,
+{
+    expected.map(|expected| expected == actual).unwrap_or(true)
+}
+
+fn filter_grouped_order_records_for_trade_candidate(
+    records: RadrootsGroupedOrderEventRecords,
+    candidate: &RadrootsTradeLocatorCandidate,
+) -> RadrootsGroupedOrderEventRecords {
+    RadrootsGroupedOrderEventRecords {
+        requests: records
+            .requests
+            .into_iter()
+            .filter(|request| {
+                request.payload.order_id == *candidate.trade_id.as_order_id()
+                    && request.event_id == candidate.root_event_id
+            })
+            .collect(),
+        decisions: records
+            .decisions
+            .into_iter()
+            .filter(|decision| {
+                decision.payload.order_id == *candidate.trade_id.as_order_id()
+                    && decision.root_event_id == candidate.root_event_id
+            })
+            .collect(),
+        revision_proposals: records
+            .revision_proposals
+            .into_iter()
+            .filter(|proposal| {
+                proposal.payload.order_id == *candidate.trade_id.as_order_id()
+                    && proposal.root_event_id == candidate.root_event_id
+            })
+            .collect(),
+        revision_decisions: records
+            .revision_decisions
+            .into_iter()
+            .filter(|decision| {
+                decision.payload.order_id == *candidate.trade_id.as_order_id()
+                    && decision.root_event_id == candidate.root_event_id
+            })
+            .collect(),
+        cancellations: records
+            .cancellations
+            .into_iter()
+            .filter(|cancellation| {
+                cancellation.payload.order_id == *candidate.trade_id.as_order_id()
+                    && cancellation.root_event_id == candidate.root_event_id
+            })
+            .collect(),
+    }
 }
 
 pub(crate) fn reduce_grouped_order_event_records(
@@ -2437,9 +2641,12 @@ mod tests {
         RadrootsOrderDecisionRecord, RadrootsOrderEventRecord, RadrootsOrderIssue,
         RadrootsOrderReductionInputs, RadrootsOrderRequestRecord,
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
-        RadrootsTradeOrderWorkflowProjection, RadrootsTradeWorkflowState,
-        reduce_listing_inventory_accounting, reduce_order_event_records, reduce_order_events,
+        RadrootsTradeLocatorProjectionResolution, RadrootsTradeOrderWorkflowProjection,
+        RadrootsTradeWorkflowState, reduce_listing_inventory_accounting,
+        reduce_order_event_records, reduce_order_event_records_for_trade_locator,
+        reduce_order_events,
     };
+    use crate::identity::RadrootsTradeLocator;
     use core::mem::discriminant;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -2842,6 +3049,53 @@ mod tests {
             ]
         );
         assert_eq!(order_ids, vec![order_id("order-1"); 5]);
+    }
+
+    #[test]
+    fn trade_locator_reports_ambiguous_roots_for_duplicate_order_id() {
+        let mut second_request = request_record();
+        second_request.event_id = event_id(9);
+        let locator = RadrootsTradeLocator::from_order_id(order_id("order-1"));
+
+        let resolution = reduce_order_event_records_for_trade_locator(
+            &locator,
+            vec![
+                RadrootsOrderEventRecord::Request(request_record()),
+                RadrootsOrderEventRecord::Request(second_request),
+            ],
+        );
+
+        assert!(matches!(
+            resolution,
+            RadrootsTradeLocatorProjectionResolution::Ambiguous { ref candidates, .. }
+                if candidates.len() == 2
+                    && candidates.iter().any(|candidate| candidate.root_event_id == event_id(1))
+                    && candidates.iter().any(|candidate| candidate.root_event_id == event_id(9))
+        ));
+    }
+
+    #[test]
+    fn trade_locator_root_selects_exact_trade_projection() {
+        let mut second_request = request_record();
+        second_request.event_id = event_id(9);
+        let locator = RadrootsTradeLocator::from_order_id(order_id("order-1"))
+            .with_root_event_id(event_id(9));
+
+        let resolution = reduce_order_event_records_for_trade_locator(
+            &locator,
+            vec![
+                RadrootsOrderEventRecord::Request(request_record()),
+                RadrootsOrderEventRecord::Request(second_request),
+                RadrootsOrderEventRecord::Decision(accepted_decision()),
+            ],
+        );
+
+        assert!(matches!(
+            resolution,
+            RadrootsTradeLocatorProjectionResolution::Projected { projection, .. }
+                if projection.request_event_id == Some(event_id(9))
+                    && projection.decision_event_id.is_none()
+        ));
     }
 
     #[cfg(feature = "serde_json")]

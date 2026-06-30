@@ -21,15 +21,18 @@ use sqlx::Row;
 use thiserror::Error;
 
 use crate::{
+    identity::RadrootsTradeLocator,
     listing::validation::{RadrootsTradeListing, validate_listing_event},
     order::{
         RadrootsGroupedOrderEventRecords, RadrootsOrderEventDecodeError, RadrootsOrderEventRecord,
-        RadrootsOrderProjectionQueryResult, order_event_record_from_event,
+        RadrootsOrderProjectionQueryResult, RadrootsTradeLocatorProjectionQueryResult,
+        order_event_record_from_event,
     },
     validation_receipt::{RadrootsValidationReceiptError, validation_receipt_from_event},
     workflow::{
         RadrootsTradeWorkflowRecords, RadrootsTradeWorkflowState,
         RadrootsTradeWorkflowValidationReceiptRecord, reduce_trade_workflow_records,
+        reduce_trade_workflow_records_for_trade_locator,
     },
 };
 
@@ -309,6 +312,27 @@ pub async fn trade_projection_query_for_order_id(
     let projection = reduce_trade_workflow_records(order_id, inputs.workflow_records);
     Ok(RadrootsOrderProjectionQueryResult {
         projection,
+        event_count: inputs.event_ids.len(),
+        limit_applied: limit,
+        event_ids: inputs.event_ids,
+    })
+}
+
+pub async fn trade_projection_query_for_trade_locator(
+    store: &RadrootsEventStore,
+    locator: &RadrootsTradeLocator,
+    limit: u32,
+) -> Result<RadrootsTradeLocatorProjectionQueryResult, RadrootsTradeProjectionError> {
+    if limit == 0 || limit > RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX {
+        return Err(RadrootsTradeProjectionError::InvalidLimit {
+            max: RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
+        });
+    }
+    let inputs = trade_projection_inputs_for_order_id(store, locator.order_id(), limit).await?;
+    let resolution =
+        reduce_trade_workflow_records_for_trade_locator(locator, inputs.workflow_records);
+    Ok(RadrootsTradeLocatorProjectionQueryResult {
+        resolution,
         event_count: inputs.event_ids.len(),
         limit_applied: limit,
         event_ids: inputs.event_ids,

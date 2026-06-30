@@ -7,9 +7,14 @@ use alloc::{
 use radroots_events::ids::{RadrootsEventId, RadrootsOrderId};
 use radroots_events::order::RadrootsOrderInventoryCommitment;
 
-use crate::order::{
-    RadrootsGroupedOrderEventRecords, RadrootsOrderIssue, RadrootsOrderProjection,
-    reduce_grouped_order_event_records,
+use crate::{
+    identity::RadrootsTradeLocator,
+    order::{
+        RadrootsGroupedOrderEventRecords, RadrootsOrderIssue, RadrootsOrderProjection,
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution,
+        RadrootsTradeLocatorProjectionResolution, grouped_order_event_records_for_trade_locator,
+        reduce_grouped_order_event_records,
+    },
 };
 
 #[cfg(feature = "serde_json")]
@@ -109,6 +114,47 @@ pub fn reduce_trade_workflow_records(
     }
 
     projection
+}
+
+pub fn reduce_trade_workflow_records_for_trade_locator(
+    locator: &RadrootsTradeLocator,
+    mut records: RadrootsTradeWorkflowRecords,
+) -> RadrootsTradeLocatorProjectionResolution {
+    let order_events = core::mem::take(&mut records.order_events);
+    match grouped_order_event_records_for_trade_locator(locator, order_events) {
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Missing { locator } => {
+            RadrootsTradeLocatorProjectionResolution::Missing { locator }
+        }
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Ambiguous {
+            locator,
+            candidates,
+        } => RadrootsTradeLocatorProjectionResolution::Ambiguous {
+            locator,
+            candidates,
+        },
+        RadrootsTradeLocatorGroupedOrderEventRecordsResolution::Matched {
+            locator,
+            records: order_events,
+        } => {
+            #[cfg(feature = "serde_json")]
+            {
+                let root_event_id = locator
+                    .root_event_id
+                    .as_ref()
+                    .map(RadrootsEventId::as_str)
+                    .unwrap_or("");
+                records
+                    .validation_receipts
+                    .retain(|receipt| receipt.tags.root_event_id == root_event_id);
+            }
+            records.order_events = order_events;
+            let projection = reduce_trade_workflow_records(locator.order_id(), records);
+            RadrootsTradeLocatorProjectionResolution::Projected {
+                locator,
+                projection,
+            }
+        }
+    }
 }
 
 #[cfg(feature = "serde_json")]
