@@ -423,6 +423,47 @@ fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
 }
 
 #[test]
+fn default_status_noise_test_uses_production_ingest_not_perf_sql_ballast() {
+    let orders_runtime_tests = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/orders_runtime.rs")
+            .as_path(),
+    );
+    let default_status_noise_test = function_source(
+        orders_runtime_tests.as_str(),
+        "order_status_query_uses_indexed_order_id_under_background_event_noise",
+    );
+    let manual_perf_test = function_source(
+        orders_runtime_tests.as_str(),
+        "manual_local_status_perf_gate_measures_100k_events",
+    );
+
+    assert!(
+        default_status_noise_test.contains("ingest_status_noise_events("),
+        "default status noise test must use production-equivalent event-store ingest"
+    );
+    for forbidden in [
+        "insert_perf_non_trade_events(",
+        "insert_perf_trade_background_events(",
+        "sqlx::query(",
+    ] {
+        assert!(
+            !default_status_noise_test.contains(forbidden),
+            "default status noise test must not use manual SQL ballast helper `{forbidden}`"
+        );
+    }
+    for required in [
+        "insert_perf_non_trade_events(",
+        "insert_perf_trade_background_events(",
+    ] {
+        assert!(
+            manual_perf_test.contains(required),
+            "manual performance gate must retain explicit SQL ballast helper `{required}`"
+        );
+    }
+}
+
+#[test]
 fn agreement_order_runtime_excludes_post_agreement_surfaces() {
     let lib_source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -836,6 +877,18 @@ fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
         before.is_none_or(|character| !is_rust_identifier_character(character))
             && after.is_none_or(|character| !is_rust_identifier_character(character))
     })
+}
+
+fn function_source<'source>(source: &'source str, function_name: &str) -> &'source str {
+    let signature = format!("async fn {function_name}");
+    let start = source
+        .find(signature.as_str())
+        .unwrap_or_else(|| panic!("failed to find test function `{function_name}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find("\n#[tokio::test]")
+        .unwrap_or(source_after_start.len());
+    &source_after_start[..end]
 }
 
 fn is_rust_identifier_character(character: char) -> bool {

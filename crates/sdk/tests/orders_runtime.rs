@@ -16,7 +16,7 @@ use radroots_events::{
         RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
         RadrootsPublicKey,
     },
-    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
+    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST},
     order::{
         RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
         RadrootsOrderEconomicLine, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
@@ -2246,6 +2246,33 @@ async fn insert_perf_trade_background_events(store: &RadrootsEventStore, base: i
     }
 }
 
+async fn ingest_status_noise_events(
+    store: &RadrootsEventStore,
+    non_trade_count: i64,
+    trade_count: i64,
+) {
+    for index in 0..non_trade_count {
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                signed_status_noise_post_event(index, 32_000 + index as u32),
+                1_700_200_000_000 + index,
+            ))
+            .await
+            .expect("non-trade status noise ingest");
+    }
+
+    for index in 0..trade_count {
+        let order_id = format!("status-noise-background-{index:03}");
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                signed_order_request_event(&order_id, 33_000 + index as u32),
+                1_700_200_100_000 + index,
+            ))
+            .await
+            .expect("trade status noise ingest");
+    }
+}
+
 fn perf_sig() -> String {
     "0".repeat(128)
 }
@@ -2320,6 +2347,18 @@ fn signed_order_decision_event(
     )
     .expect("decision draft");
     signed_event(SELLER_SECRET_KEY_HEX, created_at, draft)
+}
+
+fn signed_status_noise_post_event(index: i64, created_at: u32) -> RadrootsNostrEvent {
+    signed_event(
+        SELLER_SECRET_KEY_HEX,
+        created_at,
+        WireEventParts {
+            kind: KIND_POST,
+            content: format!("local status noise {index}"),
+            tags: Vec::new(),
+        },
+    )
 }
 
 fn signed_non_order_event(created_at: u32) -> RadrootsNostrEvent {
@@ -4045,9 +4084,12 @@ async fn order_status_returns_not_found_for_missing_local_order() {
 #[tokio::test]
 async fn order_status_query_uses_indexed_order_id_under_background_event_noise() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    insert_perf_non_trade_events(&store, 30_000_000, STATUS_NOISE_NON_TRADE_EVENTS).await;
-    insert_perf_trade_background_events(&store, 40_000_000, STATUS_NOISE_TRADE_BACKGROUND_EVENTS)
-        .await;
+    ingest_status_noise_events(
+        &store,
+        STATUS_NOISE_NON_TRADE_EVENTS,
+        STATUS_NOISE_TRADE_BACKGROUND_EVENTS,
+    )
+    .await;
 
     let request_event = signed_order_request_event("order-status-noise-active", 31_000);
     let request_event_id = request_event.id.clone();
