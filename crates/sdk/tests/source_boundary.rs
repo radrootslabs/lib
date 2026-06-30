@@ -60,6 +60,7 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeDeclineRequest",
     "TradeEvidenceIngestReceipt",
     "TradeEvidenceIngestRequest",
+    "TradeMutationOutcome",
     "TradeProposeRequest",
     "TradeRequestEvidenceIngestReceipt",
     "TradeRequestEvidenceIngestRequest",

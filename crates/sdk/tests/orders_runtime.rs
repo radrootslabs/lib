@@ -45,11 +45,12 @@ use radroots_sdk::{
     TRADE_REVISION_PROPOSAL_OPERATION_KIND, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
     TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancellationEnqueueRequest,
     TradeCancellationPrepareRequest, TradeDecisionEnqueueRequest, TradeDecisionPrepareRequest,
-    TradeEvidenceIngestRequest, TradeProposeRequest, TradeRequestEvidenceIngestRequest,
-    TradeResyncRequest, TradeRevisionDecisionEnqueueRequest, TradeRevisionDecisionPrepareRequest,
-    TradeRevisionProposalEnqueueRequest, TradeRevisionProposalPrepareRequest,
-    TradeSellerInboxRequest, TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
-    TradeSubmitEnqueueRequest, TradeSubmitPrepareRequest, TradeWorkflowKind,
+    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
+    TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeRevisionDecisionEnqueueRequest,
+    TradeRevisionDecisionPrepareRequest, TradeRevisionProposalEnqueueRequest,
+    TradeRevisionProposalPrepareRequest, TradeSellerInboxRequest, TradeStatusKind,
+    TradeStatusNextActionKind, TradeStatusRequest, TradeSubmitEnqueueRequest,
+    TradeSubmitPrepareRequest, TradeWorkflowKind,
 };
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
@@ -459,6 +460,14 @@ fn explicit_trade_relays() -> RelayResolutionPolicy {
     )
 }
 
+fn expect_enqueued<Plan, Receipt>(outcome: TradeMutationOutcome<Plan, Receipt>) -> Receipt {
+    match outcome {
+        TradeMutationOutcome::Enqueued { receipt } => receipt,
+        TradeMutationOutcome::DryRun { .. } => panic!("expected enqueue outcome"),
+        TradeMutationOutcome::Published { .. } => panic!("expected enqueue outcome"),
+    }
+}
+
 fn deterministic_event_id(raw: &str) -> RadrootsEventId {
     let mut bytes = [0u8; 32];
     for (index, byte) in raw.bytes().enumerate() {
@@ -821,23 +830,25 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage_root = tempdir.path().join("sdk");
     let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
-    let propose_receipt = buyer_sdk
-        .trades()
-        .buyer()
-        .propose_trade(
-            TradeProposeRequest::new(
-                buyer_actor(),
-                listing_event_ptr(),
-                order_request("trade-product-facade-flow"),
-                explicit_trade_relays(),
-                PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-facade-flow"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-facade-propose")
+                .expect("propose idempotency"),
             )
-            .try_with_idempotency_key("trade-product-facade-propose")
-            .expect("propose idempotency"),
-        )
-        .await
-        .expect("propose trade");
+            .await
+            .expect("propose trade"),
+    );
 
     assert_eq!(
         propose_receipt.order_id.as_str(),
@@ -882,26 +893,28 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         Some(propose_receipt.signed_event_id.as_str())
     );
 
-    let accept_receipt = seller_sdk
-        .trades()
-        .seller()
-        .accept_trade(
-            TradeAcceptRequest::new(
-                seller_actor(),
-                propose_receipt.locator.clone(),
-                vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".parse().expect("bin id"),
-                    bin_count: 2,
-                }],
-                explicit_trade_relays(),
-                PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+    let accept_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .accept_trade(
+                TradeAcceptRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    vec![RadrootsOrderInventoryCommitment {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 2,
+                    }],
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-facade-accept")
+                .expect("accept idempotency"),
             )
-            .try_with_idempotency_key("trade-product-facade-accept")
-            .expect("accept idempotency"),
-        )
-        .await
-        .expect("accept trade");
+            .await
+            .expect("accept trade"),
+    );
 
     assert_eq!(accept_receipt.order_id, propose_receipt.order_id);
     assert_eq!(accept_receipt.locator, propose_receipt.locator);
@@ -934,6 +947,52 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     assert_eq!(
         resync.status.last_event_id,
         Some(accept_receipt.signed_event_id)
+    );
+}
+
+#[cfg(feature = "signer-adapters")]
+#[tokio::test]
+async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let outcome = sdk
+        .trades()
+        .buyer()
+        .propose_trade(TradeProposeRequest::new(
+            buyer_actor(),
+            listing_event_ptr(),
+            order_request("trade-product-dry-run"),
+            explicit_trade_relays(),
+            PublishMode::DryRun,
+            AckPolicy::NoWait,
+        ))
+        .await
+        .expect("dry-run proposal");
+    let plan = match outcome {
+        TradeMutationOutcome::DryRun { plan } => plan,
+        TradeMutationOutcome::Enqueued { .. } => panic!("expected dry-run outcome"),
+        TradeMutationOutcome::Published { .. } => panic!("expected dry-run outcome"),
+    };
+
+    assert_eq!(plan.order_id.as_str(), "trade-product-dry-run");
+    assert_eq!(plan.frozen_draft.kind, KIND_ORDER_REQUEST);
+    assert_eq!(plan.expected_event_id, plan.workflow.expected_event_id);
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    assert!(
+        outbox
+            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
+            .await
+            .expect("claim")
+            .is_none()
     );
 }
 

@@ -2220,11 +2220,15 @@ fn trade_enqueue_policy_rejects_publish_modes_without_matching_side_effects() {
             if message == "trade enqueue-only publish mode only supports no-wait acknowledgement"
     ));
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, AckPolicy::AtLeastOneRelay),
+        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, AckPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
-            if message == "trade enqueue-and-publish mode requires publish receipt orchestration"
+            if message == "trade enqueue-and-publish requires a relay acknowledgement policy"
     ));
     assert!(validate_trade_enqueue_policy(PublishMode::EnqueueOnly, AckPolicy::NoWait).is_ok());
+    assert!(
+        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, AckPolicy::AtLeastOneRelay)
+            .is_ok()
+    );
 }
 
 #[tokio::test]

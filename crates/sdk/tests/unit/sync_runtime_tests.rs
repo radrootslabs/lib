@@ -350,12 +350,14 @@ fn push_outbox_request_builders_validate_all_bounds() {
     let request = super::PushOutboxRequest::new()
         .with_limit(2)
         .republish_accepted_relays(true)
+        .with_accepted_quorum(2)
         .with_relay_url_policy(crate::SdkRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(7)
         .with_next_attempt_delay_ms(11);
     assert_eq!(request.limit, 2);
     assert!(request.republish_accepted_relays);
+    assert_eq!(request.accepted_quorum, Some(2));
     request.validate().expect("valid request");
 
     assert!(matches!(
@@ -367,6 +369,12 @@ fn push_outbox_request_builders_validate_all_bounds() {
             .with_limit(super::PUSH_OUTBOX_MAX_LIMIT + 1)
             .validate(),
         Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("limit")
+    ));
+    assert!(matches!(
+        super::PushOutboxRequest::new()
+            .with_accepted_quorum(0)
+            .validate(),
+        Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("accepted quorum")
     ));
     assert!(matches!(
         super::PushOutboxRequest::new()
@@ -490,8 +498,12 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         .expect("empty proxy push");
 
     assert_eq!(receipt.attempted_events, 0);
-    assert_eq!(proxy_delivery_policy(0), PublishDeliveryPolicy::Any);
-    assert_eq!(proxy_delivery_policy(2), PublishDeliveryPolicy::All);
+    assert_eq!(proxy_delivery_policy(0, None), PublishDeliveryPolicy::Any);
+    assert_eq!(proxy_delivery_policy(2, None), PublishDeliveryPolicy::All);
+    assert_eq!(
+        proxy_delivery_policy(3, Some(2)),
+        PublishDeliveryPolicy::Quorum { quorum: 2 }
+    );
     assert_eq!(
         proxy_outbox_idempotency_key(7, 3, "event-id"),
         "radroots-sdk-outbox-7-3-event-id"
@@ -578,7 +590,7 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
     };
 
     assert!(matches!(
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, None, 60_000, 1_700_000_000_000)
             .await,
         Err(RadrootsSdkError::RelayTransport { message })
             if message.contains("Outbox claim 41 does not contain a signed event")
@@ -593,7 +605,7 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
     let adapter =
         RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
     let receipt =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, None, 60_000, 1_700_000_000_000)
             .await
             .expect("transport error receipt");
 

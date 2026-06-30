@@ -1700,6 +1700,7 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
     let request = PushOutboxRequest::new()
         .with_limit(2)
         .republish_accepted_relays(true)
+        .with_accepted_quorum(1)
         .with_relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(1_000)
@@ -1709,6 +1710,7 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
         serde_json::json!({
             "limit": 2,
             "republish_accepted_relays": true,
+            "accepted_quorum": 1,
             "relay_url_policy": "localhost",
             "auth_policy": "detect_only",
             "claim_ttl_ms": 1000,

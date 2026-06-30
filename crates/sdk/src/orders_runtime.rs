@@ -2,9 +2,10 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    AckPolicy, PublishMode, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState, SdkRelayUrlPolicy,
-    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient, TradesClient, order,
+    AckPolicy, PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey,
+    SdkMutationState, SdkRelayUrlPolicy, TradeBuyerClient, TradeResyncClient, TradeSellerClient,
+    TradeStatusClient, TradesClient, order,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -918,6 +919,22 @@ pub struct TradeCancellationReceipt {
     pub outbox_event_id: i64,
     pub state: SdkMutationState,
     pub idempotency_digest_prefix: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case", tag = "mode")]
+pub enum TradeMutationOutcome<Plan, Receipt> {
+    DryRun {
+        plan: Plan,
+    },
+    Enqueued {
+        receipt: Receipt,
+    },
+    Published {
+        receipt: Receipt,
+        publish: PushOutboxReceipt,
+    },
 }
 
 #[cfg(feature = "runtime")]
@@ -2446,52 +2463,98 @@ impl<'sdk> TradeBuyerClient<'sdk> {
     pub async fn propose_trade(
         &self,
         request: TradeProposeRequest,
-    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
-        trades_client(self.sdk)
-            .enqueue_submit(TradeSubmitEnqueueRequest {
-                actor: request.actor,
-                listing_event: request.listing_event,
-                order: request.order,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+    ) -> Result<TradeMutationOutcome<TradeSubmitPlan, TradeSubmitReceipt>, RadrootsSdkError> {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeProposeRequest {
+            actor,
+            listing_event,
+            order,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_submit(TradeSubmitPrepareRequest {
+            actor: actor.clone(),
+            listing_event,
+            order,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_submit(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 
     pub async fn cancel_trade(
         &self,
         request: TradeCancelRequest,
-    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
-        let context = trade_mutation_context(self.sdk, request.locator, "trade.cancel").await?;
+    ) -> Result<
+        TradeMutationOutcome<TradeCancellationPlan, TradeCancellationReceipt>,
+        RadrootsSdkError,
+    > {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeCancelRequest {
+            actor,
+            locator,
+            reason,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context(self.sdk, locator, "trade.cancel").await?;
         let cancellation = RadrootsOrderCancellation {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
             buyer_pubkey: context.buyer_pubkey.clone(),
             seller_pubkey: context.seller_pubkey.clone(),
-            reason: request.reason,
+            reason,
         };
-        trades_client(self.sdk)
-            .enqueue_cancellation(TradeCancellationEnqueueRequest {
-                actor: request.actor,
-                root_event: event_ptr(&context.root_event_id),
-                previous_event: event_ptr(&context.previous_event_id),
-                cancellation,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_cancellation(TradeCancellationPrepareRequest {
+            actor: actor.clone(),
+            root_event: event_ptr(&context.root_event_id),
+            previous_event: event_ptr(&context.previous_event_id),
+            cancellation,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_cancellation(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 
     pub async fn accept_revision(
         &self,
         mut request: TradeRevisionDecisionRequest,
-    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<
+        TradeMutationOutcome<TradeRevisionDecisionPlan, TradeRevisionDecisionReceipt>,
+        RadrootsSdkError,
+    > {
         request.decision = RadrootsOrderRevisionOutcome::Accepted;
         self.decide_revision(request).await
     }
@@ -2499,44 +2562,70 @@ impl<'sdk> TradeBuyerClient<'sdk> {
     pub async fn decline_revision(
         &self,
         request: TradeRevisionDecisionRequest,
-    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<
+        TradeMutationOutcome<TradeRevisionDecisionPlan, TradeRevisionDecisionReceipt>,
+        RadrootsSdkError,
+    > {
         self.decide_revision(request).await
     }
 
     async fn decide_revision(
         &self,
         request: TradeRevisionDecisionRequest,
-    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
-        let context =
-            trade_mutation_context(self.sdk, request.locator, "trade.revision_decision").await?;
+    ) -> Result<
+        TradeMutationOutcome<TradeRevisionDecisionPlan, TradeRevisionDecisionReceipt>,
+        RadrootsSdkError,
+    > {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeRevisionDecisionRequest {
+            actor,
+            locator,
+            revision_id,
+            decision,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context(self.sdk, locator, "trade.revision_decision").await?;
         let previous_event_id = context.pending_revision_event_id.clone().ok_or_else(|| {
             RadrootsSdkError::InvalidRequest {
                 message: "trade revision decision requires a pending revision".to_owned(),
             }
         })?;
         let decision = RadrootsOrderRevisionDecision {
-            revision_id: request.revision_id,
+            revision_id,
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
             buyer_pubkey: context.buyer_pubkey.clone(),
             seller_pubkey: context.seller_pubkey.clone(),
             root_event_id: context.root_event_id.clone(),
             prev_event_id: previous_event_id.clone(),
-            decision: request.decision,
+            decision,
         };
-        trades_client(self.sdk)
-            .enqueue_revision_decision(TradeRevisionDecisionEnqueueRequest {
-                actor: request.actor,
-                root_event: event_ptr(&context.root_event_id),
-                previous_event: event_ptr(&previous_event_id),
-                decision,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_revision_decision(TradeRevisionDecisionPrepareRequest {
+            actor: actor.clone(),
+            root_event: event_ptr(&context.root_event_id),
+            previous_event: event_ptr(&previous_event_id),
+            decision,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_revision_decision(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 }
 
@@ -2617,90 +2706,155 @@ impl<'sdk> TradeSellerClient<'sdk> {
     pub async fn accept_trade(
         &self,
         request: TradeAcceptRequest,
-    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
-        let context = trade_mutation_context(self.sdk, request.locator, "trade.accept").await?;
+    ) -> Result<TradeMutationOutcome<TradeDecisionPlan, TradeDecisionReceipt>, RadrootsSdkError>
+    {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeAcceptRequest {
+            actor,
+            locator,
+            inventory_commitments,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context(self.sdk, locator, "trade.accept").await?;
         let decision = RadrootsOrderDecision {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
             buyer_pubkey: context.buyer_pubkey.clone(),
             seller_pubkey: context.seller_pubkey.clone(),
             decision: RadrootsOrderDecisionOutcome::Accepted {
-                inventory_commitments: request.inventory_commitments,
+                inventory_commitments,
             },
         };
-        trades_client(self.sdk)
-            .enqueue_decision(TradeDecisionEnqueueRequest {
-                actor: request.actor,
-                request_event: event_ptr(&context.root_event_id),
-                decision,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_decision(TradeDecisionPrepareRequest {
+            actor: actor.clone(),
+            request_event: event_ptr(&context.root_event_id),
+            decision,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_decision(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 
     pub async fn decline_trade(
         &self,
         request: TradeDeclineRequest,
-    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
-        let context = trade_mutation_context(self.sdk, request.locator, "trade.decline").await?;
+    ) -> Result<TradeMutationOutcome<TradeDecisionPlan, TradeDecisionReceipt>, RadrootsSdkError>
+    {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeDeclineRequest {
+            actor,
+            locator,
+            reason,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context(self.sdk, locator, "trade.decline").await?;
         let decision = RadrootsOrderDecision {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
             buyer_pubkey: context.buyer_pubkey.clone(),
             seller_pubkey: context.seller_pubkey.clone(),
-            decision: RadrootsOrderDecisionOutcome::Declined {
-                reason: request.reason,
-            },
+            decision: RadrootsOrderDecisionOutcome::Declined { reason },
         };
-        trades_client(self.sdk)
-            .enqueue_decision(TradeDecisionEnqueueRequest {
-                actor: request.actor,
-                request_event: event_ptr(&context.root_event_id),
-                decision,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_decision(TradeDecisionPrepareRequest {
+            actor: actor.clone(),
+            request_event: event_ptr(&context.root_event_id),
+            decision,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_decision(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 
     pub async fn propose_revision(
         &self,
         request: TradeRevisionProposalRequest,
-    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
-        let context =
-            trade_mutation_context(self.sdk, request.locator, "trade.propose_revision").await?;
+    ) -> Result<
+        TradeMutationOutcome<TradeRevisionProposalPlan, TradeRevisionProposalReceipt>,
+        RadrootsSdkError,
+    > {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeRevisionProposalRequest {
+            actor,
+            locator,
+            revision_id,
+            items,
+            economics,
+            reason,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context(self.sdk, locator, "trade.propose_revision").await?;
         let proposal = RadrootsOrderRevisionProposal {
-            revision_id: request.revision_id,
+            revision_id,
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
             buyer_pubkey: context.buyer_pubkey.clone(),
             seller_pubkey: context.seller_pubkey.clone(),
             root_event_id: context.root_event_id.clone(),
             prev_event_id: context.previous_event_id.clone(),
-            items: request.items,
-            economics: request.economics,
-            reason: request.reason,
+            items,
+            economics,
+            reason,
         };
-        trades_client(self.sdk)
-            .enqueue_revision_proposal(TradeRevisionProposalEnqueueRequest {
-                actor: request.actor,
-                root_event: event_ptr(&context.root_event_id),
-                previous_event: event_ptr(&context.previous_event_id),
-                proposal,
-                target_relays: request.target_relays,
-                publish_mode: request.publish_mode,
-                ack_policy: request.ack_policy,
-                idempotency_key: request.idempotency_key,
-                created_at: request.created_at,
-            })
-            .await
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_revision_proposal(TradeRevisionProposalPrepareRequest {
+            actor: actor.clone(),
+            root_event: event_ptr(&context.root_event_id),
+            previous_event: event_ptr(&context.previous_event_id),
+            proposal,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_revision_proposal(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
     }
 }
 
@@ -2801,6 +2955,65 @@ fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
 }
 
 #[cfg(feature = "runtime")]
+async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
+    sdk: &crate::RadrootsClient,
+    publish_mode: PublishMode,
+    ack_policy: AckPolicy,
+    receipt: Receipt,
+) -> Result<TradeMutationOutcome<Plan, Receipt>, RadrootsSdkError> {
+    match publish_mode {
+        PublishMode::DryRun => Err(RadrootsSdkError::InvalidRequest {
+            message: "trade product dry-run must return before enqueue".to_owned(),
+        }),
+        PublishMode::EnqueueOnly => Ok(TradeMutationOutcome::Enqueued { receipt }),
+        PublishMode::EnqueueAndPublish => {
+            let publish = sdk
+                .sync()
+                .push_outbox(push_request_for_ack_policy(ack_policy)?)
+                .await?;
+            Ok(TradeMutationOutcome::Published { receipt, publish })
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn push_request_for_ack_policy(
+    ack_policy: AckPolicy,
+) -> Result<PushOutboxRequest, RadrootsSdkError> {
+    let request = PushOutboxRequest::new().with_limit(1);
+    match ack_policy {
+        AckPolicy::NoWait => Err(RadrootsSdkError::InvalidRequest {
+            message: "trade enqueue-and-publish requires a relay acknowledgement policy".to_owned(),
+        }),
+        AckPolicy::AtLeastOneRelay => Ok(request.with_accepted_quorum(1)),
+        AckPolicy::AllRelays => Ok(request),
+        AckPolicy::Quorum { required } => Ok(request.with_accepted_quorum(usize::from(required))),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn validate_trade_product_publish_policy(
+    publish_mode: PublishMode,
+    ack_policy: AckPolicy,
+) -> Result<(), RadrootsSdkError> {
+    match publish_mode {
+        PublishMode::DryRun | PublishMode::EnqueueOnly if ack_policy != AckPolicy::NoWait => {
+            Err(RadrootsSdkError::InvalidRequest {
+                message: "trade dry-run and enqueue-only modes require no-wait acknowledgement"
+                    .to_owned(),
+            })
+        }
+        PublishMode::EnqueueAndPublish if ack_policy == AckPolicy::NoWait => {
+            Err(RadrootsSdkError::InvalidRequest {
+                message: "trade enqueue-and-publish requires a relay acknowledgement policy"
+                    .to_owned(),
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+#[cfg(feature = "runtime")]
 fn validate_trade_enqueue_policy(
     publish_mode: PublishMode,
     ack_policy: AckPolicy,
@@ -2816,10 +3029,9 @@ fn validate_trade_enqueue_policy(
                 .to_owned(),
         });
     }
-    if publish_mode == PublishMode::EnqueueAndPublish {
+    if publish_mode == PublishMode::EnqueueAndPublish && ack_policy == AckPolicy::NoWait {
         return Err(RadrootsSdkError::InvalidRequest {
-            message: "trade enqueue-and-publish mode requires publish receipt orchestration"
-                .to_owned(),
+            message: "trade enqueue-and-publish requires a relay acknowledgement policy".to_owned(),
         });
     }
     Ok(())

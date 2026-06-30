@@ -220,6 +220,7 @@ impl Default for SdkRelayAuthPolicy {
 pub struct PushOutboxRequest {
     pub limit: usize,
     pub republish_accepted_relays: bool,
+    pub accepted_quorum: Option<usize>,
     pub relay_url_policy: SdkRelayUrlPolicy,
     pub auth_policy: SdkRelayAuthPolicy,
     pub claim_ttl_ms: i64,
@@ -232,6 +233,7 @@ impl Default for PushOutboxRequest {
         Self {
             limit: PUSH_OUTBOX_DEFAULT_LIMIT,
             republish_accepted_relays: false,
+            accepted_quorum: None,
             relay_url_policy: SdkRelayUrlPolicy::Public,
             auth_policy: SdkRelayAuthPolicy::DetectOnly,
             claim_ttl_ms: PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS,
@@ -253,6 +255,11 @@ impl PushOutboxRequest {
 
     pub fn republish_accepted_relays(mut self, enabled: bool) -> Self {
         self.republish_accepted_relays = enabled;
+        self
+    }
+
+    pub fn with_accepted_quorum(mut self, accepted_quorum: usize) -> Self {
+        self.accepted_quorum = Some(accepted_quorum);
         self
     }
 
@@ -295,6 +302,11 @@ impl PushOutboxRequest {
         if self.next_attempt_delay_ms <= 0 {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: "push_outbox next attempt delay must be positive".to_owned(),
+            });
+        }
+        if self.accepted_quorum == Some(0) {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "push_outbox accepted quorum must be positive".to_owned(),
             });
         }
         Ok(())
@@ -522,6 +534,10 @@ impl<'sdk> SyncClient<'sdk> {
             )
             .republish_accepted_relays(request.republish_accepted_relays)
             .relay_url_policy(request.relay_url_policy.relay_transport_policy());
+            let policy = match request.accepted_quorum {
+                Some(accepted_quorum) => policy.with_accepted_quorum(accepted_quorum),
+                None => policy,
+            };
             let publish = publish_claimed_outbox_event(
                 &self.sdk._outbox,
                 &self.sdk._event_store,
@@ -569,6 +585,7 @@ impl<'sdk> SyncClient<'sdk> {
                 self,
                 adapter,
                 &claimed,
+                request.accepted_quorum,
                 request.next_attempt_delay_ms,
                 publish_now_ms,
             )
@@ -606,6 +623,7 @@ async fn push_proxy_claimed_outbox_event(
     sync: &SyncClient<'_>,
     adapter: &RadrootsdProxyPublishAdapter,
     claimed: &RadrootsOutboxClaimedEvent,
+    accepted_quorum: Option<usize>,
     next_attempt_delay_ms: i64,
     now_ms: i64,
 ) -> Result<RadrootsRelayPublishReceipt, RadrootsSdkError> {
@@ -626,7 +644,7 @@ async fn push_proxy_claimed_outbox_event(
     let request = RadrootsdProxyPublishRequest {
         signed_event: signed_event.clone(),
         relays: claimed.target_relays.clone(),
-        delivery_policy: proxy_delivery_policy(claimed.target_relays.len()),
+        delivery_policy: proxy_delivery_policy(claimed.target_relays.len(), accepted_quorum),
         idempotency_key: Some(proxy_outbox_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
@@ -656,7 +674,13 @@ async fn push_proxy_claimed_outbox_event(
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_delivery_policy(target_count: usize) -> PublishDeliveryPolicy {
+fn proxy_delivery_policy(
+    target_count: usize,
+    accepted_quorum: Option<usize>,
+) -> PublishDeliveryPolicy {
+    if let Some(quorum) = accepted_quorum {
+        return PublishDeliveryPolicy::Quorum { quorum };
+    }
     if target_count == 0 {
         PublishDeliveryPolicy::Any
     } else {
