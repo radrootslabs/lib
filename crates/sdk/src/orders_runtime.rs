@@ -2,10 +2,11 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    AckPolicy, PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey,
-    SdkMutationState, TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient,
-    TradesClient, order, workflow_runtime::SdkWorkflowEnqueueRequest,
+    AckPolicy, PrivacyPreflightConfirmation, PrivacyPreflightReceipt, ProductSensitivityField,
+    PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState,
+    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient, TradesClient, order,
+    workflow_runtime::SdkWorkflowEnqueueRequest,
 };
 #[cfg(all(feature = "runtime", test))]
 use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
@@ -966,6 +967,7 @@ pub struct TradeProposeRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -987,9 +989,18 @@ impl TradeProposeRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -1017,6 +1028,7 @@ pub struct TradeAcceptRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -1038,9 +1050,18 @@ impl TradeAcceptRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -1068,6 +1089,7 @@ pub struct TradeDeclineRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -1089,9 +1111,18 @@ impl TradeDeclineRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -1119,6 +1150,7 @@ pub struct TradeCancelRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -1140,9 +1172,18 @@ impl TradeCancelRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -1173,6 +1214,7 @@ pub struct TradeRevisionProposalRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -1200,9 +1242,18 @@ impl TradeRevisionProposalRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -1231,6 +1282,7 @@ pub struct TradeRevisionDecisionRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -1254,9 +1306,18 @@ impl TradeRevisionDecisionRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_privacy_confirmation(
+        mut self,
+        privacy_confirmation: PrivacyPreflightConfirmation,
+    ) -> Self {
+        self.privacy_confirmation = privacy_confirmation;
+        self
     }
 
     pub fn try_with_idempotency_key(
@@ -2505,9 +2566,15 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
+        require_trade_product_privacy_preflight(
+            "trade.propose",
+            trade_order_request_privacy_fields(&order),
+            &privacy_confirmation,
+        )?;
         let client = trades_client(self.sdk);
         let plan = client.prepare_submit(TradeSubmitPrepareRequest {
             actor: actor.clone(),
@@ -2553,6 +2620,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
@@ -2564,6 +2632,11 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             seller_pubkey: context.seller_pubkey.clone(),
             reason,
         };
+        require_trade_product_privacy_preflight(
+            "trade.cancel",
+            trade_reason_privacy_fields(&cancellation.reason),
+            &privacy_confirmation,
+        )?;
         let client = trades_client(self.sdk);
         let plan = client.prepare_cancellation(TradeCancellationPrepareRequest {
             actor: actor.clone(),
@@ -2632,9 +2705,15 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
+        require_trade_product_privacy_preflight(
+            "trade.revision_decision",
+            trade_revision_decision_privacy_fields(&decision),
+            &privacy_confirmation,
+        )?;
         let context = trade_mutation_context(self.sdk, locator, "trade.revision_decision").await?;
         let previous_event_id = context.pending_revision_event_id.clone().ok_or_else(|| {
             RadrootsSdkError::InvalidRequest {
@@ -2770,6 +2849,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
@@ -2783,6 +2863,11 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 inventory_commitments,
             },
         };
+        require_trade_product_privacy_preflight(
+            "trade.accept",
+            trade_decision_privacy_fields(&decision),
+            &privacy_confirmation,
+        )?;
         let client = trades_client(self.sdk);
         let plan = client.prepare_decision(TradeDecisionPrepareRequest {
             actor: actor.clone(),
@@ -2826,6 +2911,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
@@ -2837,6 +2923,11 @@ impl<'sdk> TradeSellerClient<'sdk> {
             seller_pubkey: context.seller_pubkey.clone(),
             decision: RadrootsOrderDecisionOutcome::Declined { reason },
         };
+        require_trade_product_privacy_preflight(
+            "trade.decline",
+            trade_decision_privacy_fields(&decision),
+            &privacy_confirmation,
+        )?;
         let client = trades_client(self.sdk);
         let plan = client.prepare_decision(TradeDecisionPrepareRequest {
             actor: actor.clone(),
@@ -2885,6 +2976,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
@@ -2901,6 +2993,11 @@ impl<'sdk> TradeSellerClient<'sdk> {
             economics,
             reason,
         };
+        require_trade_product_privacy_preflight(
+            "trade.propose_revision",
+            trade_revision_proposal_privacy_fields(&proposal),
+            &privacy_confirmation,
+        )?;
         let client = trades_client(self.sdk);
         let plan = client.prepare_revision_proposal(TradeRevisionProposalPrepareRequest {
             actor: actor.clone(),
@@ -3087,6 +3184,93 @@ fn validate_trade_product_publish_policy(
         }
         _ => Ok(()),
     }
+}
+
+#[cfg(feature = "runtime")]
+fn require_trade_product_privacy_preflight(
+    operation: &'static str,
+    fields: Vec<ProductSensitivityField>,
+    confirmation: &PrivacyPreflightConfirmation,
+) -> Result<(), RadrootsSdkError> {
+    PrivacyPreflightReceipt::evaluate(fields)
+        .require_public_publish_allowed(operation, confirmation)
+}
+
+#[cfg(feature = "runtime")]
+fn trade_order_request_privacy_fields(
+    order: &RadrootsOrderRequest,
+) -> Vec<ProductSensitivityField> {
+    if order.items.is_empty() && order.economics.items.is_empty() {
+        Vec::new()
+    } else {
+        vec![ProductSensitivityField::ProtocolMinimizedInventoryFields]
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn trade_decision_privacy_fields(decision: &RadrootsOrderDecision) -> Vec<ProductSensitivityField> {
+    match &decision.decision {
+        RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments,
+        } if !inventory_commitments.is_empty() => {
+            vec![ProductSensitivityField::ProtocolMinimizedInventoryFields]
+        }
+        RadrootsOrderDecisionOutcome::Accepted { .. } => Vec::new(),
+        RadrootsOrderDecisionOutcome::Declined { reason } => trade_reason_privacy_fields(reason),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn trade_revision_proposal_privacy_fields(
+    proposal: &RadrootsOrderRevisionProposal,
+) -> Vec<ProductSensitivityField> {
+    let mut fields = trade_reason_privacy_fields(&proposal.reason);
+    if !proposal.items.is_empty() || !proposal.economics.items.is_empty() {
+        fields.push(ProductSensitivityField::ProtocolMinimizedInventoryFields);
+    }
+    fields
+}
+
+#[cfg(feature = "runtime")]
+fn trade_revision_decision_privacy_fields(
+    decision: &RadrootsOrderRevisionOutcome,
+) -> Vec<ProductSensitivityField> {
+    match decision {
+        RadrootsOrderRevisionOutcome::Accepted => Vec::new(),
+        RadrootsOrderRevisionOutcome::Declined { reason } => trade_reason_privacy_fields(reason),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn trade_reason_privacy_fields(reason: &str) -> Vec<ProductSensitivityField> {
+    if reason.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut fields = vec![ProductSensitivityField::PublicButSensitiveNotes];
+    if trade_reason_contains_private_coordination(reason) {
+        fields.push(ProductSensitivityField::SensitiveFulfillmentDetails);
+    }
+    fields
+}
+
+#[cfg(feature = "runtime")]
+fn trade_reason_contains_private_coordination(reason: &str) -> bool {
+    let reason = reason.to_ascii_lowercase();
+    [
+        "pickup address",
+        "delivery address",
+        "street address",
+        "exact location",
+        "private location",
+        "gate code",
+        "door code",
+        "latitude",
+        "longitude",
+        " gps",
+        "farm gate",
+    ]
+    .iter()
+    .any(|marker| reason.contains(marker))
 }
 
 #[cfg(feature = "runtime")]

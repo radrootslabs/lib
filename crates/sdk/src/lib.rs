@@ -123,7 +123,8 @@ pub use crate::orders_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::privacy::{
-    PrivacyPreflightReceipt, PrivacyPreflightStatus, ProductSensitivityField,
+    PrivacyPreflightConfirmation, PrivacyPreflightReceipt, PrivacyPreflightStatus,
+    ProductSensitivityField,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{

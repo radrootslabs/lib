@@ -108,6 +108,7 @@ const REQUIRED_TRADE_POLICY_EXPORTS: &[&str] = &[
     "PublishMode",
     "RelayResolutionPolicy",
     "SdkTradeIdempotencyRecord",
+    "PrivacyPreflightConfirmation",
     "PrivacyPreflightReceipt",
     "PrivacyPreflightStatus",
     "ProductSensitivityField",

@@ -27,6 +27,30 @@ pub struct PrivacyPreflightReceipt {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct PrivacyPreflightConfirmation {
+    pub fields: Vec<ProductSensitivityField>,
+}
+
+#[cfg(feature = "runtime")]
+impl PrivacyPreflightConfirmation {
+    pub fn new() -> Self {
+        Self { fields: Vec::new() }
+    }
+
+    pub fn confirm(mut self, field: ProductSensitivityField) -> Self {
+        self.fields.push(field);
+        self.fields.sort();
+        self.fields.dedup();
+        self
+    }
+
+    pub fn confirms(&self, field: ProductSensitivityField) -> bool {
+        self.fields.contains(&field)
+    }
+}
+
+#[cfg(feature = "runtime")]
 impl PrivacyPreflightReceipt {
     pub fn evaluate<I>(fields: I) -> Self
     where
@@ -53,12 +77,49 @@ impl PrivacyPreflightReceipt {
         };
         Self { status, fields }
     }
+
+    pub fn require_public_publish_allowed(
+        &self,
+        operation: impl Into<String>,
+        confirmation: &PrivacyPreflightConfirmation,
+    ) -> Result<(), crate::error::RadrootsSdkError> {
+        match self.status {
+            PrivacyPreflightStatus::Ok => Ok(()),
+            PrivacyPreflightStatus::ForbiddenPublicFields => {
+                Err(crate::error::RadrootsSdkError::PrivacyPreflight {
+                    operation: operation.into(),
+                    status: self.status,
+                    fields: self.fields.clone(),
+                })
+            }
+            PrivacyPreflightStatus::ExplicitConfirmationRequired => {
+                let missing_fields = self
+                    .fields
+                    .iter()
+                    .copied()
+                    .filter(|field| !confirmation.confirms(*field))
+                    .collect::<Vec<_>>();
+                if missing_fields.is_empty() {
+                    Ok(())
+                } else {
+                    Err(crate::error::RadrootsSdkError::PrivacyPreflight {
+                        operation: operation.into(),
+                        status: self.status,
+                        fields: missing_fields,
+                    })
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 #[cfg(feature = "runtime")]
 mod tests {
-    use super::{PrivacyPreflightReceipt, PrivacyPreflightStatus, ProductSensitivityField};
+    use super::{
+        PrivacyPreflightConfirmation, PrivacyPreflightReceipt, PrivacyPreflightStatus,
+        ProductSensitivityField,
+    };
 
     #[test]
     fn privacy_preflight_classifies_public_sensitivity() {
@@ -82,5 +143,27 @@ mod tests {
             forbidden.status,
             PrivacyPreflightStatus::ForbiddenPublicFields
         );
+    }
+
+    #[test]
+    fn privacy_confirmation_allows_only_confirmable_public_fields() {
+        let confirmation = PrivacyPreflightConfirmation::new()
+            .confirm(ProductSensitivityField::PublicButSensitiveNotes);
+        PrivacyPreflightReceipt::evaluate([ProductSensitivityField::PublicButSensitiveNotes])
+            .require_public_publish_allowed("trade.test", &confirmation)
+            .expect("confirmed public note");
+
+        let missing =
+            PrivacyPreflightReceipt::evaluate([ProductSensitivityField::PublicButSensitiveNotes])
+                .require_public_publish_allowed("trade.test", &PrivacyPreflightConfirmation::new())
+                .expect_err("missing confirmation");
+        assert_eq!(missing.code(), "privacy_preflight");
+
+        let forbidden = PrivacyPreflightReceipt::evaluate([
+            ProductSensitivityField::SensitiveFulfillmentDetails,
+        ])
+        .require_public_publish_allowed("trade.test", &confirmation)
+        .expect_err("forbidden cannot be confirmed");
+        assert_eq!(forbidden.code(), "privacy_preflight");
     }
 }

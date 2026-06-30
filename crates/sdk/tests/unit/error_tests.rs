@@ -2,6 +2,7 @@ use super::{
     RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkPartialLocalMutationError,
     RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, redacted_relay_url,
 };
+use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use radroots_authority::RadrootsAuthorityError;
 use radroots_events::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
@@ -356,6 +357,11 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         },
         RadrootsSdkError::trade_status_limit_invalid(0, 1, 100),
         RadrootsSdkError::invalid_trade_id("bad order", "bad id"),
+        RadrootsSdkError::PrivacyPreflight {
+            operation: "trade.cancel".to_owned(),
+            status: PrivacyPreflightStatus::ExplicitConfirmationRequired,
+            fields: vec![ProductSensitivityField::PublicButSensitiveNotes],
+        },
         RadrootsSdkError::ProductSyncUnsupported {
             operation: "sync.push_outbox",
             required_feature: "relay-runtime",

@@ -2,6 +2,8 @@
 use std::{fmt, path::PathBuf};
 
 #[cfg(feature = "runtime")]
+use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
+#[cfg(feature = "runtime")]
 use radroots_trade::identity::RadrootsTradeLocator;
 #[cfg(feature = "runtime")]
 use serde_json::{Value, json};
@@ -155,6 +157,11 @@ pub enum RadrootsSdkError {
         locator: RadrootsTradeLocator,
         candidates: Vec<RadrootsTradeLocator>,
     },
+    PrivacyPreflight {
+        operation: String,
+        status: PrivacyPreflightStatus,
+        fields: Vec<ProductSensitivityField>,
+    },
     ProductSyncUnsupported {
         operation: &'static str,
         required_feature: &'static str,
@@ -219,6 +226,7 @@ impl RadrootsSdkError {
             Self::TradeStatusLimitInvalid { .. } => "trade_status_limit_invalid",
             Self::InvalidTradeId { .. } => "invalid_trade_id",
             Self::TradeAmbiguous { .. } => "trade_ambiguous",
+            Self::PrivacyPreflight { .. } => "privacy_preflight",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
             Self::ProductSyncRelaySetupFailure { .. } => "product_sync_relay_setup_failure",
             Self::Authority { .. } => "authority",
@@ -273,6 +281,7 @@ impl RadrootsSdkError {
             | Self::TradeStatusLimitInvalid { .. }
             | Self::InvalidTradeId { .. }
             | Self::TradeAmbiguous { .. }
+            | Self::PrivacyPreflight { .. }
             | Self::SignerProtocol { .. }
             | Self::SignerAuthChallengePending { .. }
             | Self::InvalidRequest { .. }
@@ -344,6 +353,7 @@ impl RadrootsSdkError {
                 vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
             }
             Self::TradeAmbiguous { .. } => vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
+            Self::PrivacyPreflight { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
             }
@@ -430,6 +440,15 @@ impl RadrootsSdkError {
                 "operation": operation,
                 "locator": locator,
                 "candidates": candidates
+            }),
+            Self::PrivacyPreflight {
+                operation,
+                status,
+                fields,
+            } => json!({
+                "operation": operation,
+                "status": status,
+                "fields": fields
             }),
             Self::ProductSyncUnsupported {
                 operation,
@@ -619,6 +638,15 @@ impl fmt::Display for RadrootsSdkError {
                 "sdk trade root is ambiguous for {operation}: trade_id={}, candidate_count={}",
                 locator.order_id().as_str(),
                 candidates.len()
+            ),
+            Self::PrivacyPreflight {
+                operation,
+                status,
+                fields,
+            } => write!(
+                f,
+                "sdk privacy preflight failed for {operation}: status={status:?}, field_count={}",
+                fields.len()
             ),
             Self::ProductSyncUnsupported {
                 operation,

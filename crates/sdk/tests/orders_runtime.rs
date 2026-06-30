@@ -31,10 +31,12 @@ use radroots_sdk::{
     AckPolicy, PublishMode, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, RelayResolutionPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
     SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TradeAcceptRequest, TradeEvidenceIngestRequest, TradeMutationOutcome,
-    TradeProposeRequest, TradeRequestEvidenceIngestRequest, TradeResyncRequest,
-    TradeSellerInboxRequest, TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
+    TRADE_STATUS_MAX_LIMIT, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
+    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
+    TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeSellerInboxRequest,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
 };
+use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_trade::order::RadrootsOrderIssue;
@@ -453,6 +455,10 @@ fn explicit_trade_relays() -> RelayResolutionPolicy {
     RelayResolutionPolicy::explicit(
         SdkRelayTargetSet::new([RELAY], SdkRelayUrlPolicy::Public).expect("target relays"),
     )
+}
+
+fn public_note_confirmation() -> PrivacyPreflightConfirmation {
+    PrivacyPreflightConfirmation::new().confirm(ProductSensitivityField::PublicButSensitiveNotes)
 }
 
 fn expect_enqueued<Plan, Receipt>(outcome: TradeMutationOutcome<Plan, Receipt>) -> Receipt {
@@ -947,6 +953,179 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     assert_eq!(
         resync.status.last_event_id,
         Some(accept_receipt.signed_event_id)
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-privacy-decline"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-privacy-decline-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+
+    let missing_confirmation = seller_sdk
+        .trades()
+        .seller()
+        .decline_trade(TradeDeclineRequest::new(
+            seller_actor(),
+            propose_receipt.locator.clone(),
+            "sold elsewhere",
+            explicit_trade_relays(),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
+        ))
+        .await
+        .expect_err("missing public note confirmation");
+
+    let RadrootsSdkError::PrivacyPreflight {
+        operation,
+        status,
+        fields,
+    } = &missing_confirmation
+    else {
+        panic!("expected privacy preflight error");
+    };
+    assert_eq!(operation, "trade.decline");
+    assert_eq!(
+        *status,
+        PrivacyPreflightStatus::ExplicitConfirmationRequired
+    );
+    assert_eq!(fields, &[ProductSensitivityField::PublicButSensitiveNotes]);
+    assert_eq!(missing_confirmation.code(), "privacy_preflight");
+    assert_eq!(
+        missing_confirmation.detail_json()["detail"]["fields"][0],
+        "public_but_sensitive_notes"
+    );
+    let store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+
+    let decline_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .decline_trade(
+                TradeDeclineRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    "sold elsewhere",
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .with_privacy_confirmation(public_note_confirmation())
+                .try_with_idempotency_key("trade-product-privacy-decline-confirmed")
+                .expect("decline idempotency"),
+            )
+            .await
+            .expect("confirmed decline"),
+    );
+    let status = seller_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator))
+        .await
+        .expect("status");
+    assert_eq!(status.status, TradeStatusKind::Declined);
+    assert_eq!(
+        status.decision_event_id,
+        Some(decline_receipt.signed_event_id)
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutation() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-privacy-cancel"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-privacy-cancel-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+
+    let forbidden = buyer_sdk
+        .trades()
+        .buyer()
+        .cancel_trade(
+            TradeCancelRequest::new(
+                buyer_actor(),
+                propose_receipt.locator,
+                "pickup address is 123 Farm Lane",
+                explicit_trade_relays(),
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .with_privacy_confirmation(public_note_confirmation()),
+        )
+        .await
+        .expect_err("forbidden public fulfillment details");
+
+    let RadrootsSdkError::PrivacyPreflight {
+        operation,
+        status,
+        fields,
+    } = &forbidden
+    else {
+        panic!("expected privacy preflight error");
+    };
+    assert_eq!(operation, "trade.cancel");
+    assert_eq!(*status, PrivacyPreflightStatus::ForbiddenPublicFields);
+    assert!(fields.contains(&ProductSensitivityField::SensitiveFulfillmentDetails));
+    let store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
     );
 }
 
