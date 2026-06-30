@@ -2,6 +2,8 @@
 use std::{fmt, path::PathBuf};
 
 #[cfg(feature = "runtime")]
+use radroots_trade::identity::RadrootsTradeLocator;
+#[cfg(feature = "runtime")]
 use serde_json::{Value, json};
 
 #[cfg(feature = "runtime")]
@@ -37,6 +39,7 @@ pub enum RadrootsSdkRecoveryAction {
     RetryAfterTransportFailure,
     RetryGeoNamesDownload,
     EnableRequiredFeature,
+    SelectTradeRoot,
 }
 
 #[cfg(feature = "runtime")]
@@ -147,6 +150,11 @@ pub enum RadrootsSdkError {
         value: String,
         message: String,
     },
+    TradeAmbiguous {
+        operation: String,
+        locator: RadrootsTradeLocator,
+        candidates: Vec<RadrootsTradeLocator>,
+    },
     ProductSyncUnsupported {
         operation: &'static str,
         required_feature: &'static str,
@@ -210,6 +218,7 @@ impl RadrootsSdkError {
             Self::IdempotencyConflict { .. } => "idempotency_conflict",
             Self::TradeStatusLimitInvalid { .. } => "trade_status_limit_invalid",
             Self::InvalidTradeId { .. } => "invalid_trade_id",
+            Self::TradeAmbiguous { .. } => "trade_ambiguous",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
             Self::ProductSyncRelaySetupFailure { .. } => "product_sync_relay_setup_failure",
             Self::Authority { .. } => "authority",
@@ -263,6 +272,7 @@ impl RadrootsSdkError {
             Self::IdempotencyConflict { .. }
             | Self::TradeStatusLimitInvalid { .. }
             | Self::InvalidTradeId { .. }
+            | Self::TradeAmbiguous { .. }
             | Self::SignerProtocol { .. }
             | Self::SignerAuthChallengePending { .. }
             | Self::InvalidRequest { .. }
@@ -333,6 +343,7 @@ impl RadrootsSdkError {
             Self::IdempotencyConflict { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
             }
+            Self::TradeAmbiguous { .. } => vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
             }
@@ -411,6 +422,15 @@ impl RadrootsSdkError {
             Self::InvalidTradeId { value, message } => {
                 json!({ "value": value, "message": message })
             }
+            Self::TradeAmbiguous {
+                operation,
+                locator,
+                candidates,
+            } => json!({
+                "operation": operation,
+                "locator": locator,
+                "candidates": candidates
+            }),
             Self::ProductSyncUnsupported {
                 operation,
                 required_feature,
@@ -590,6 +610,16 @@ impl fmt::Display for RadrootsSdkError {
             Self::InvalidTradeId { value, message } => {
                 write!(f, "sdk invalid order id `{value}`: {message}")
             }
+            Self::TradeAmbiguous {
+                operation,
+                locator,
+                candidates,
+            } => write!(
+                f,
+                "sdk trade root is ambiguous for {operation}: trade_id={}, candidate_count={}",
+                locator.order_id().as_str(),
+                candidates.len()
+            ),
             Self::ProductSyncUnsupported {
                 operation,
                 required_feature,

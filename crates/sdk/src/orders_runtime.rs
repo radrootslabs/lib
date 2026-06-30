@@ -2923,18 +2923,17 @@ async fn trade_mutation_context(
     operation: &'static str,
 ) -> Result<TradeProductMutationContext, RadrootsSdkError> {
     let status = trades_client(sdk)
-        .status(TradeStatusRequest::new(locator))
+        .status(TradeStatusRequest::new(locator.clone()))
         .await?;
     if status.status == TradeStatusKind::Ambiguous {
-        let roots = status
-            .ambiguity_candidates
-            .iter()
-            .filter_map(|candidate| candidate.locator.root_event_id.as_ref())
-            .map(RadrootsEventId::as_str)
-            .collect::<Vec<_>>()
-            .join(",");
-        return Err(RadrootsSdkError::InvalidRequest {
-            message: format!("{operation} requires a unique trade root; candidate_roots={roots}"),
+        return Err(RadrootsSdkError::TradeAmbiguous {
+            operation: operation.to_owned(),
+            locator,
+            candidates: status
+                .ambiguity_candidates
+                .into_iter()
+                .map(|candidate| candidate.locator)
+                .collect(),
         });
     }
     if !status.found {

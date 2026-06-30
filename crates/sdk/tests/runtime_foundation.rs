@@ -1,5 +1,6 @@
 #![cfg(feature = "runtime")]
 
+use radroots_events::ids::RadrootsOrderId;
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsClient,
     RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
@@ -10,6 +11,7 @@ use radroots_sdk::{
     SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
     StorageStatusRequest,
 };
+use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::{Path, PathBuf};
 
@@ -427,6 +429,21 @@ fn sdk_error_contract_methods_cover_all_variants() {
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::TradeAmbiguous {
+                operation: "trade.accept".to_owned(),
+                locator: RadrootsTradeLocator::from_order_id(
+                    RadrootsOrderId::parse("trade-error").expect("order id"),
+                ),
+                candidates: vec![RadrootsTradeLocator::from_order_id(
+                    RadrootsOrderId::parse("trade-error").expect("order id"),
+                )],
+            },
+            "trade_ambiguous",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
         ),
         (
             RadrootsSdkError::ProductSyncUnsupported {

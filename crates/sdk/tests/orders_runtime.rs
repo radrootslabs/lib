@@ -3937,6 +3937,83 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
     );
 }
 
+#[cfg(feature = "signer-adapters")]
+#[tokio::test]
+async fn trade_product_mutation_returns_structured_ambiguity() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let first_request_event = signed_order_request_event("order-1", 27);
+    let second_request_event = signed_order_request_event("order-1", 28);
+
+    for (event, observed_at_ms) in [
+        (first_request_event.clone(), 2_700),
+        (second_request_event.clone(), 2_800),
+    ] {
+        store
+            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .await
+            .expect("ingest");
+    }
+
+    let error = sdk
+        .trades()
+        .seller()
+        .accept_trade(TradeAcceptRequest::new(
+            seller_actor(),
+            status_request("order-1").locator,
+            vec![RadrootsOrderInventoryCommitment {
+                bin_id: "bin-1".parse().expect("bin id"),
+                bin_count: 1,
+            }],
+            explicit_trade_relays(),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
+        ))
+        .await
+        .expect_err("ambiguous product mutation");
+
+    let RadrootsSdkError::TradeAmbiguous {
+        operation,
+        locator,
+        candidates,
+    } = &error
+    else {
+        panic!("expected structured trade ambiguity error");
+    };
+    assert_eq!(operation, "trade.accept");
+    assert_eq!(locator.order_id().as_str(), "order-1");
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|candidate| {
+                candidate
+                    .root_event_id
+                    .as_ref()
+                    .map(RadrootsEventId::as_str)
+                    .expect("root event id")
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            first_request_event.id.as_str(),
+            second_request_event.id.as_str()
+        ]
+    );
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::SelectTradeRoot]
+    );
+    let detail = error.detail_json();
+    assert_eq!(detail["code"], "trade_ambiguous");
+    assert_eq!(detail["detail"]["operation"], "trade.accept");
+    assert_eq!(
+        detail["detail"]["candidates"]
+            .as_array()
+            .expect("candidates")
+            .len(),
+        2
+    );
+}
+
 #[tokio::test]
 async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
