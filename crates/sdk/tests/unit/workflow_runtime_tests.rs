@@ -166,6 +166,22 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
     assert!(receipt.outbox_operation_id > 0);
     assert!(receipt.outbox_event_id > 0);
     assert_eq!(receipt.idempotency_digest_prefix.len(), 12);
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(i64::MAX)
+            .await
+            .expect("outbox summary")
+            .total_events,
+        1
+    );
 
     let second_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-conflict");
     let error = match enqueue_signed_workflow(
@@ -185,21 +201,29 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         Ok(_) => panic!("expected idempotency conflict"),
     };
 
-    match error {
-        RadrootsSdkError::PartialLocalMutation(partial) => {
-            assert!(partial.stored);
-            assert!(!partial.queued);
-            assert_eq!(
-                partial.failure,
-                crate::RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
-            );
-            assert_eq!(
-                partial.idempotency_digest_prefix.as_deref().map(str::len),
-                Some(12)
-            );
-        }
-        other => panic!("unexpected workflow error: {other:?}"),
-    }
+    assert!(matches!(
+        error,
+        RadrootsSdkError::IdempotencyConflict {
+            operation_kind,
+            ..
+        } if operation_kind == "workflow.test.v1"
+    ));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(i64::MAX)
+            .await
+            .expect("outbox summary")
+            .total_events,
+        1
+    );
 }
 
 #[cfg(feature = "signer-adapters")]
@@ -240,12 +264,20 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
 }
 
 #[tokio::test]
-async fn enqueue_signed_workflow_reports_partial_mutation_when_outbox_fails() {
+async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutation() {
     let sdk = crate::RadrootsClient::builder()
         .relay_url("wss://relay.example.com")
         .build()
         .await
         .expect("sdk");
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        0
+    );
     sdk._outbox.pool().close().await;
     let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
         .expect("actor");
@@ -263,18 +295,15 @@ async fn enqueue_signed_workflow_reports_partial_mutation_when_outbox_fails() {
         Ok(_) => panic!("expected closed outbox error"),
     };
 
-    match error {
-        RadrootsSdkError::PartialLocalMutation(partial) => {
-            assert!(partial.stored);
-            assert!(!partial.queued);
-            assert_eq!(partial.operation_kind, "workflow.test.v1");
-            assert_eq!(
-                partial.failure,
-                crate::RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue
-            );
-        }
-        other => panic!("unexpected workflow error: {other:?}"),
-    }
+    assert!(matches!(error, RadrootsSdkError::Outbox { .. }));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        0
+    );
 }
 
 #[tokio::test]

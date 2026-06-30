@@ -32,11 +32,11 @@ use radroots_nostr::prelude::{
 use radroots_outbox::RadrootsOutbox;
 use radroots_sdk::{
     AckPolicy, DvmValidationReceiptIngestRequest, PublishMode, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest,
-    TradeDeclineRequest, TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkMutationState,
+    SdkRelayTargetSet, SdkRelayUrlPolicy, SdkTradeStatusIssue, SdkTradeStatusIssueKind,
+    SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
+    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
+    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
     TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusNextActionKind, TradeStatusRequest,
@@ -1148,6 +1148,13 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage_root = tempdir.path().join("sdk");
     let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let storage_paths = buyer_sdk.storage_paths().expect("storage paths");
+    let store = RadrootsEventStore::open_file(&storage_paths.event_store_path)
+        .await
+        .expect("event store");
+    let outbox = RadrootsOutbox::open_file(&storage_paths.outbox_path)
+        .await
+        .expect("outbox");
     let request = TradeProposeRequest::new(
         buyer_actor(),
         listing_event_ptr(),
@@ -1185,6 +1192,22 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
             .idempotency
             .safe_to_retry_with_same_idempotency_key
     );
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(i64::MAX)
+            .await
+            .expect("outbox summary")
+            .total_events,
+        1
+    );
 
     let conflict = buyer_sdk
         .trades()
@@ -1206,14 +1229,28 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
 
     assert!(matches!(
         conflict,
-        RadrootsSdkError::PartialLocalMutation(ref partial)
-            if partial.stored
-                && !partial.queued
-                && partial.operation_kind == TRADE_SUBMIT_OPERATION_KIND
-                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
-                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
+        RadrootsSdkError::IdempotencyConflict {
+            ref operation_kind,
+            ..
+        } if operation_kind == TRADE_SUBMIT_OPERATION_KIND
     ));
-    assert_eq!(conflict.code(), "partial_local_mutation");
+    assert_eq!(conflict.code(), "idempotency_conflict");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store summary")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(i64::MAX)
+            .await
+            .expect("outbox summary")
+            .total_events,
+        1
+    );
 }
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]

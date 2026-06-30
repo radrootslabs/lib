@@ -653,15 +653,16 @@ fn assert_error_display<T: core::fmt::Debug>(result: Result<T, RadrootsSdkError>
     assert!(result.unwrap_err().to_string().contains(expected));
 }
 
-fn assert_partial_outbox_enqueue(error: RadrootsSdkError, operation_kind: &str) {
-    assert!(matches!(
-        error,
-        RadrootsSdkError::PartialLocalMutation(partial)
-            if partial.operation_kind == operation_kind
-                && partial.stored
-                && !partial.queued
-                && partial.failure == crate::RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue
-    ));
+fn assert_outbox_preflight_error(error: RadrootsSdkError) {
+    assert!(matches!(error, RadrootsSdkError::Outbox { .. }));
+}
+
+async fn local_event_count(sdk: &RadrootsClient) -> i64 {
+    sdk._event_store
+        .status_summary()
+        .await
+        .expect("event store summary")
+        .total_events
 }
 
 #[test]
@@ -3389,6 +3390,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             proposal_payload,
         ))
         .expect("proposal plan");
+    let proposal_events_before = local_event_count(&proposal_sdk).await;
     proposal_sdk._outbox.pool().close().await;
     let proposal_error = proposal_sdk
         .trades()
@@ -3403,7 +3405,11 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         )
         .await
         .expect_err("closed outbox proposal");
-    assert_partial_outbox_enqueue(proposal_error, TRADE_REVISION_PROPOSAL_OPERATION_KIND);
+    assert_outbox_preflight_error(proposal_error);
+    assert_eq!(
+        local_event_count(&proposal_sdk).await,
+        proposal_events_before
+    );
 
     let revision_sdk = prepared_order_sdk().await;
     let revision_submit =
@@ -3445,6 +3451,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             fixture_revision_decision(&proposal_payload, &proposal.signed_event_id),
         ))
         .expect("revision plan");
+    let revision_events_before = local_event_count(&revision_sdk).await;
     revision_sdk._outbox.pool().close().await;
     let revision_error = revision_sdk
         .trades()
@@ -3459,7 +3466,11 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         )
         .await
         .expect_err("closed outbox revision");
-    assert_partial_outbox_enqueue(revision_error, TRADE_REVISION_DECISION_OPERATION_KIND);
+    assert_outbox_preflight_error(revision_error);
+    assert_eq!(
+        local_event_count(&revision_sdk).await,
+        revision_events_before
+    );
 
     let cancellation_sdk = prepared_order_sdk().await;
     let cancellation_submit =
@@ -3473,6 +3484,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             fixture_cancellation("order-closed-outbox-cancellation"),
         ))
         .expect("cancellation plan");
+    let cancellation_events_before = local_event_count(&cancellation_sdk).await;
     cancellation_sdk._outbox.pool().close().await;
     let cancellation_error = cancellation_sdk
         .trades()
@@ -3487,7 +3499,11 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         )
         .await
         .expect_err("closed outbox cancellation");
-    assert_partial_outbox_enqueue(cancellation_error, TRADE_CANCELLATION_OPERATION_KIND);
+    assert_outbox_preflight_error(cancellation_error);
+    assert_eq!(
+        local_event_count(&cancellation_sdk).await,
+        cancellation_events_before
+    );
 }
 
 #[tokio::test]

@@ -19,9 +19,9 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
-    RadrootsClient, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy,
 };
 use radroots_trade::listing::RadrootsListingDraftDocumentV1;
 
@@ -640,7 +640,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
 }
 
 #[tokio::test]
-async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() {
+async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation() {
     let (_tempdir, sdk) = directory_sdk().await;
     let first = ListingEnqueuePublishRequest::new(
         actor(),
@@ -653,6 +653,29 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
         .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
+    let paths = sdk.storage_paths().expect("paths");
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+        .await
+        .expect("event store");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert_eq!(
+        event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        1
+    );
 
     let second = ListingEnqueuePublishRequest::new(
         actor(),
@@ -665,20 +688,34 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
         .listings()
         .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(SELLER))
         .await
-        .expect_err("partial");
+        .expect_err("conflict");
 
     assert!(matches!(
         error,
-        RadrootsSdkError::PartialLocalMutation(ref partial)
-            if partial.stored
-                && !partial.queued
-                && partial.event_id.is_some()
-                && partial.operation_kind == LISTING_PUBLISH_OPERATION_KIND
-                && partial.idempotency_digest_prefix.is_some()
-                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
-                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
+        RadrootsSdkError::IdempotencyConflict { ref operation_kind, .. }
+            if operation_kind == LISTING_PUBLISH_OPERATION_KIND
     ));
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
+    );
     assert!(!error.to_string().contains("idem-d"));
+    assert_eq!(
+        event_store
+            .status_summary()
+            .await
+            .expect("event store status after conflict")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status after conflict")
+            .total_events,
+        1
+    );
 }
 
 #[tokio::test]

@@ -20,9 +20,9 @@ use radroots_sdk::{
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
     GeocoderLocalityQuery, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
     RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkPublicLocality, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy, StorageStatusRequest,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey,
+    SdkMutationState, SdkPublicLocality, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy, StorageStatusRequest,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
@@ -824,7 +824,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
 }
 
 #[tokio::test]
-async fn farm_enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() {
+async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mutation() {
     let (_tempdir, sdk) = directory_sdk().await;
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
@@ -837,6 +837,29 @@ async fn farm_enqueue_publish_reports_partial_local_mutation_after_outbox_confli
         .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
         .await
         .expect("first enqueue");
+    let paths = sdk.storage_paths().expect("paths");
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+        .await
+        .expect("event store");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert_eq!(
+        event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        1
+    );
 
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
@@ -849,20 +872,34 @@ async fn farm_enqueue_publish_reports_partial_local_mutation_after_outbox_confli
         .farms()
         .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(FARMER))
         .await
-        .expect_err("partial");
+        .expect_err("conflict");
 
     assert!(matches!(
         error,
-        RadrootsSdkError::PartialLocalMutation(ref partial)
-            if partial.stored
-                && !partial.queued
-                && partial.event_id.is_some()
-                && partial.operation_kind == FARM_PUBLISH_OPERATION_KIND
-                && partial.idempotency_digest_prefix.is_some()
-                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
-                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
+        RadrootsSdkError::IdempotencyConflict { ref operation_kind, .. }
+            if operation_kind == FARM_PUBLISH_OPERATION_KIND
     ));
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
+    );
     assert!(!error.to_string().contains("farm-idem-e"));
+    assert_eq!(
+        event_store
+            .status_summary()
+            .await
+            .expect("event store status after conflict")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status after conflict")
+            .total_events,
+        1
+    );
 }
 
 #[tokio::test]

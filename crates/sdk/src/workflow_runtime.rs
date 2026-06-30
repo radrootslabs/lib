@@ -12,6 +12,7 @@ use radroots_events::{
     ids::RadrootsEventId,
 };
 use radroots_outbox::{RadrootsOutboxEnqueueStatus, RadrootsOutboxSignedOperationInput};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 
 pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
@@ -76,24 +77,35 @@ async fn enqueue_signed_workflow_event(
     let observed_at_ms = sdk_now_ms(sdk)?;
     let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id.as_str())
         .expect("frozen workflow draft has a valid expected event id");
+    let allow_empty_target_relays = target_relays.allow_empty_target_relays;
+    let target_relay_values = target_relays.relays;
+    let idempotency_key_for_enqueue = idempotency_key.clone();
+    let preflight_input = signed_outbox_input(
+        request.operation_kind,
+        request.frozen_draft,
+        signed_event.clone(),
+        target_relay_values.clone(),
+        idempotency_key,
+        allow_empty_target_relays,
+        false,
+        observed_at_ms,
+    );
+    let preflight = sdk
+        ._outbox
+        .preflight_signed_operation_idempotency(&preflight_input)
+        .await?;
+    let partial_failure_digest_prefix = digest_prefix(preflight.idempotency_digest.as_str());
     let event = event_from_signed(&signed_event);
     let ingest = RadrootsEventIngest::new(event, observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone());
     let ingest_receipt = sdk._event_store.ingest_event(ingest).await?;
-    let canonical_target_relays = target_relays.canonical_relays.clone();
-    let target_relay_values = target_relays.relays;
-    let partial_failure_digest_prefix = outbox_idempotency_digest_prefix(
-        request.operation_kind,
-        request.frozen_draft,
-        canonical_target_relays.as_slice(),
-    );
     let outbox_input = signed_outbox_input(
         request.operation_kind,
         request.frozen_draft,
         signed_event,
         target_relay_values,
-        idempotency_key,
-        target_relays.allow_empty_target_relays,
+        idempotency_key_for_enqueue,
+        allow_empty_target_relays,
         ingest_receipt.inserted,
         observed_at_ms,
     );
@@ -175,6 +187,7 @@ fn resolved_target_relays(
 }
 
 #[derive(serde::Serialize)]
+#[cfg(test)]
 struct SdkWorkflowOutboxDigestInput<'a> {
     operation_kind: &'static str,
     expected_pubkey: &'a str,
@@ -182,6 +195,7 @@ struct SdkWorkflowOutboxDigestInput<'a> {
     target_relays: &'a [String],
 }
 
+#[cfg(test)]
 fn outbox_idempotency_digest_prefix(
     operation_kind: &'static str,
     frozen_draft: &RadrootsFrozenEventDraft,
