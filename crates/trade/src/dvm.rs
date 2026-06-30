@@ -727,7 +727,14 @@ fn parse_listing_addr_tag(
 }
 
 fn validate_hash32(value: &str, field: &'static str) -> Result<(), RadrootsTradeDvmError> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    let Some(hex) = value.strip_prefix("0x") else {
+        return Err(RadrootsTradeDvmError::InvalidHash { field });
+    };
+    if hex.len() != 64
+        || !hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
         return Err(RadrootsTradeDvmError::InvalidHash { field });
     }
     Ok(())
@@ -756,7 +763,7 @@ mod tests {
     }
 
     fn hash(raw: char) -> String {
-        raw.to_string().repeat(64)
+        format!("0x{}", raw.to_string().repeat(64))
     }
 
     fn request_content() -> RadrootsTradeTransitionProofRequestV1 {
