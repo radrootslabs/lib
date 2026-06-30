@@ -74,6 +74,8 @@ const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
 const PERF_TRADE_RELEVANT_EVENTS: i64 = 25_000;
 const PERF_ACTIVE_TRADES: usize = 1_000;
 const PERF_STATUS_P95_TARGET: Duration = Duration::from_millis(50);
+const STATUS_NOISE_NON_TRADE_EVENTS: i64 = 128;
+const STATUS_NOISE_TRADE_BACKGROUND_EVENTS: i64 = 64;
 
 #[derive(Clone, Copy)]
 enum FailingSerializeFailure {
@@ -4041,6 +4043,41 @@ async fn order_status_returns_not_found_for_missing_local_order() {
 }
 
 #[tokio::test]
+async fn order_status_query_uses_indexed_order_id_under_background_event_noise() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    insert_perf_non_trade_events(&store, 30_000_000, STATUS_NOISE_NON_TRADE_EVENTS).await;
+    insert_perf_trade_background_events(&store, 40_000_000, STATUS_NOISE_TRADE_BACKGROUND_EVENTS)
+        .await;
+
+    let request_event = signed_order_request_event("order-status-noise-active", 31_000);
+    let request_event_id = request_event.id.clone();
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event, 1_700_200_000_000))
+        .await
+        .expect("active order ingest");
+
+    let status = sdk
+        .trades()
+        .status(status_request("order-status-noise-active"))
+        .await
+        .expect("status");
+    let summary = store.status_summary().await.expect("status summary");
+
+    assert_eq!(
+        summary.total_events,
+        STATUS_NOISE_NON_TRADE_EVENTS + STATUS_NOISE_TRADE_BACKGROUND_EVENTS + 1
+    );
+    assert_eq!(status.status, TradeStatusKind::Requested);
+    assert_eq!(status.event_count, 1);
+    assert_eq!(status.limit_applied, TRADE_STATUS_DEFAULT_LIMIT);
+    assert_eq!(status.event_ids, vec![request_event_id]);
+    assert_eq!(
+        status.next_action,
+        TradeStatusNextActionKind::AwaitSellerDecision
+    );
+}
+
+#[tokio::test]
 async fn order_status_rejects_invalid_limits_before_querying() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
 
@@ -4812,8 +4849,8 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
 }
 
 #[tokio::test]
-#[ignore = "measures the 100k local-event MVP status target"]
-async fn local_status_meets_mvp_scale_target() {
+#[ignore = "manual expensive release-gate lane for the 100k local-event status target"]
+async fn manual_local_status_perf_gate_measures_100k_events() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let background_non_trade_events = PERF_TOTAL_LOCAL_EVENTS - PERF_TRADE_RELEVANT_EVENTS;
     let background_trade_events = PERF_TRADE_RELEVANT_EVENTS - PERF_ACTIVE_TRADES as i64;
@@ -4852,9 +4889,14 @@ async fn local_status_meets_mvp_scale_target() {
 
     durations.sort_unstable();
     let p95 = durations[(durations.len() * 95 / 100).saturating_sub(1)];
+    let cargo_target_dir =
+        std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "<unset>".to_owned());
     println!(
-        "local status p95 {}us for {PERF_TOTAL_LOCAL_EVENTS} local events, {PERF_TRADE_RELEVANT_EVENTS} trade-relevant events, and {PERF_ACTIVE_TRADES} active trades",
-        p95.as_micros()
+        "manual local status performance gate p95_us={} target_us={} total_local_events={PERF_TOTAL_LOCAL_EVENTS} trade_relevant_events={PERF_TRADE_RELEVANT_EVENTS} active_trades={PERF_ACTIVE_TRADES} os={} arch={} cargo_target_dir={cargo_target_dir}",
+        p95.as_micros(),
+        PERF_STATUS_P95_TARGET.as_micros(),
+        std::env::consts::OS,
+        std::env::consts::ARCH
     );
     assert!(
         p95 <= PERF_STATUS_P95_TARGET,
