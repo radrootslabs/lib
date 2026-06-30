@@ -25,7 +25,7 @@ mod geonames;
 #[cfg(feature = "runtime")]
 mod idempotency;
 #[cfg(feature = "identity-models")]
-mod identity;
+pub mod identity;
 #[cfg(feature = "runtime")]
 mod listings_runtime;
 #[cfg(feature = "runtime")]

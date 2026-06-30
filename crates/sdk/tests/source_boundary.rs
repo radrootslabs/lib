@@ -131,6 +131,37 @@ const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
     "RadrootsTradeInventoryBinWitnessDto",
 ];
 
+const REQUIRED_IDENTITY_MODEL_EXPORTS: &[&str] = &[
+    "DEFAULT_IDENTITY_PATH",
+    "IdentityError",
+    "RADROOTS_USERNAME_MAX_LEN",
+    "RADROOTS_USERNAME_MIN_LEN",
+    "RADROOTS_USERNAME_REGEX",
+    "RadrootsIdentity",
+    "RadrootsIdentityFile",
+    "RadrootsIdentityId",
+    "RadrootsIdentityProfile",
+    "RadrootsIdentityPublic",
+    "RadrootsIdentitySecretKeyFormat",
+    "radroots_username_is_valid",
+    "radroots_username_normalize",
+];
+
+const REQUIRED_IDENTITY_STORAGE_EXPORTS: &[&str] = &[
+    "RADROOTS_ENCRYPTED_IDENTITY_DEFAULT_KEY_SLOT",
+    "RADROOTS_ENCRYPTED_IDENTITY_KEY_SUFFIX",
+    "RadrootsEncryptedIdentityFile",
+    "encrypted_identity_wrapping_key_path",
+    "load_encrypted_identity",
+    "load_encrypted_identity_with_key_slot",
+    "load_identity_profile",
+    "rotate_encrypted_identity",
+    "rotate_encrypted_identity_with_key_slot",
+    "store_encrypted_identity",
+    "store_encrypted_identity_with_key_slot",
+    "store_identity_profile",
+];
+
 const REQUIRED_TRADE_POLICY_EXPORTS: &[&str] = &[
     "AckPolicy",
     "PublishMode",
@@ -502,6 +533,51 @@ fn dvm_runtime_public_exports_are_explicit() {
         assert!(
             source.contains(export),
             "src/lib.rs must explicitly expose DVM SDK runtime export `{export}`"
+        );
+    }
+}
+
+#[test]
+fn identity_public_surface_is_an_explicit_feature_module() {
+    let lib_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+    let identity_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/identity.rs")
+            .as_path(),
+    );
+
+    assert!(
+        lib_source
+            .lines()
+            .any(|line| line.trim() == "pub mod identity;"),
+        "src/lib.rs must expose identity as an explicit feature-gated public module"
+    );
+    assert!(
+        lib_source
+            .lines()
+            .all(|line| line.trim() != "mod identity;"),
+        "src/lib.rs must not hide identity exports in a private module"
+    );
+    assert!(
+        !lib_source.contains("pub use crate::identity::{"),
+        "src/lib.rs must not flatten identity exports into root aliases"
+    );
+
+    for export in REQUIRED_IDENTITY_MODEL_EXPORTS {
+        assert!(
+            identity_source.contains(export),
+            "src/identity.rs must expose identity model export `{export}`"
+        );
+    }
+
+    for export in REQUIRED_IDENTITY_STORAGE_EXPORTS {
+        assert!(
+            identity_source.contains(export),
+            "src/identity.rs must expose identity storage export `{export}`"
         );
     }
 }
