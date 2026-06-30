@@ -977,9 +977,20 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
 #[tokio::test]
 async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let storage_root = tempdir.path().join("sdk");
-    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
-    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let buyer_sdk =
+        directory_sdk_with_signer(buyer_storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let seller_sdk =
+        directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let buyer_store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("buyer event store");
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
     let propose_receipt = expect_enqueued(
         buyer_sdk
             .trades()
@@ -999,6 +1010,21 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
             .await
             .expect("propose trade"),
     );
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller isolated before proposal import")
+            .total_events,
+        0
+    );
+    replay_stored_event(
+        &buyer_store,
+        &seller_store,
+        &propose_receipt.signed_event_id,
+        4_000,
+    )
+    .await;
     let accept_receipt = expect_enqueued(
         seller_sdk
             .trades()
@@ -1021,6 +1047,13 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
             .await
             .expect("accept trade"),
     );
+    replay_stored_event(
+        &seller_store,
+        &buyer_store,
+        &accept_receipt.signed_event_id,
+        4_100,
+    )
+    .await;
     let receipt_event = signed_validation_receipt_event(
         "trade-product-committed-resync",
         &propose_receipt.listing_event_id,
@@ -1043,6 +1076,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         .expect("ingest validation receipt");
     assert!(ingest.inserted);
     assert_eq!(ingest.receipt_event_id, receipt_event_id);
+    replay_stored_event(&seller_store, &buyer_store, &receipt_event_id, 4_200).await;
 
     let seller_resync = seller_sdk
         .trades()
@@ -1071,6 +1105,41 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         buyer_resync.status.rhi_receipt_event_id,
         Some(receipt_event_id)
     );
+}
+
+async fn replay_stored_event(
+    source: &RadrootsEventStore,
+    target: &RadrootsEventStore,
+    event_id: &RadrootsEventId,
+    observed_at_ms: i64,
+) {
+    let stored = source
+        .get_event(event_id.as_str())
+        .await
+        .expect("source event lookup")
+        .expect("source event");
+    let event = stored_event_from_raw_json(stored.raw_json.as_str());
+    let receipt = target
+        .ingest_event(
+            RadrootsEventIngest::new(event, observed_at_ms).with_raw_json(stored.raw_json),
+        )
+        .await
+        .expect("target event ingest");
+    assert!(receipt.inserted);
+    assert!(
+        target
+            .get_event(event_id.as_str())
+            .await
+            .expect("target event lookup")
+            .is_some()
+    );
+}
+
+fn stored_event_from_raw_json(raw_json: &str) -> RadrootsNostrEvent {
+    serde_json::from_str::<nostr::Event>(raw_json)
+        .map(|event| radroots_event_from_nostr(&event))
+        .or_else(|_| serde_json::from_str::<RadrootsNostrEvent>(raw_json))
+        .expect("stored raw event json")
 }
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
