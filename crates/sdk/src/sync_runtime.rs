@@ -219,6 +219,7 @@ impl Default for SdkRelayAuthPolicy {
 #[non_exhaustive]
 pub struct PushOutboxRequest {
     pub limit: usize,
+    pub outbox_event_id: Option<i64>,
     pub republish_accepted_relays: bool,
     pub accepted_quorum: Option<usize>,
     pub relay_url_policy: SdkRelayUrlPolicy,
@@ -232,6 +233,7 @@ impl Default for PushOutboxRequest {
     fn default() -> Self {
         Self {
             limit: PUSH_OUTBOX_DEFAULT_LIMIT,
+            outbox_event_id: None,
             republish_accepted_relays: false,
             accepted_quorum: None,
             relay_url_policy: SdkRelayUrlPolicy::Public,
@@ -250,6 +252,12 @@ impl PushOutboxRequest {
 
     pub fn with_limit(mut self, limit: usize) -> Self {
         self.limit = limit;
+        self
+    }
+
+    pub fn with_outbox_event_id(mut self, outbox_event_id: i64) -> Self {
+        self.outbox_event_id = Some(outbox_event_id);
+        self.limit = 1;
         self
     }
 
@@ -292,6 +300,13 @@ impl PushOutboxRequest {
         if self.limit > PUSH_OUTBOX_MAX_LIMIT {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!("push_outbox limit must be between 1 and {PUSH_OUTBOX_MAX_LIMIT}"),
+            });
+        }
+        if let Some(outbox_event_id) = self.outbox_event_id
+            && outbox_event_id <= 0
+        {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "push_outbox outbox event id must be positive".to_owned(),
             });
         }
         if self.claim_ttl_ms <= 0 {
@@ -515,16 +530,13 @@ impl<'sdk> SyncClient<'sdk> {
         for _ in 0..request.limit {
             let claim_now_ms = sdk_now_ms(self.sdk)?;
             let claim_token = push_outbox_claim_token();
-            let Some(claimed) = self
-                .sdk
-                ._outbox
-                .claim_next_ready_signed_event(
-                    CLAIM_OWNER,
-                    claim_token.as_str(),
-                    claim_now_ms.saturating_add(request.claim_ttl_ms),
-                    claim_now_ms,
-                )
-                .await?
+            let Some(claimed) = claim_ready_signed_event_for_push(
+                self.sdk,
+                &request,
+                claim_token.as_str(),
+                claim_now_ms,
+            )
+            .await?
             else {
                 break;
             };
@@ -567,16 +579,13 @@ impl<'sdk> SyncClient<'sdk> {
         for _ in 0..request.limit {
             let claim_now_ms = sdk_now_ms(self.sdk)?;
             let claim_token = push_outbox_claim_token();
-            let Some(claimed) = self
-                .sdk
-                ._outbox
-                .claim_next_ready_signed_event(
-                    CLAIM_OWNER,
-                    claim_token.as_str(),
-                    claim_now_ms.saturating_add(request.claim_ttl_ms),
-                    claim_now_ms,
-                )
-                .await?
+            let Some(claimed) = claim_ready_signed_event_for_push(
+                self.sdk,
+                &request,
+                claim_token.as_str(),
+                claim_now_ms,
+            )
+            .await?
             else {
                 break;
             };
@@ -597,6 +606,37 @@ impl<'sdk> SyncClient<'sdk> {
             ));
         }
         Ok(receipt)
+    }
+}
+
+#[cfg(feature = "runtime")]
+async fn claim_ready_signed_event_for_push(
+    sdk: &RadrootsClient,
+    request: &PushOutboxRequest,
+    claim_token: &str,
+    claim_now_ms: i64,
+) -> Result<Option<radroots_outbox::RadrootsOutboxClaimedEvent>, RadrootsSdkError> {
+    let claim_expires_at_ms = claim_now_ms.saturating_add(request.claim_ttl_ms);
+    match request.outbox_event_id {
+        Some(outbox_event_id) => Ok(sdk
+            ._outbox
+            .claim_ready_signed_event(
+                outbox_event_id,
+                CLAIM_OWNER,
+                claim_token,
+                claim_expires_at_ms,
+                claim_now_ms,
+            )
+            .await?),
+        None => Ok(sdk
+            ._outbox
+            .claim_next_ready_signed_event(
+                CLAIM_OWNER,
+                claim_token,
+                claim_expires_at_ms,
+                claim_now_ms,
+            )
+            .await?),
     }
 }
 

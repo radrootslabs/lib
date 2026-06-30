@@ -349,13 +349,15 @@ fn sync_status_summary_conversions_preserve_all_fields() {
 fn push_outbox_request_builders_validate_all_bounds() {
     let request = super::PushOutboxRequest::new()
         .with_limit(2)
+        .with_outbox_event_id(9)
         .republish_accepted_relays(true)
         .with_accepted_quorum(2)
         .with_relay_url_policy(crate::SdkRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(7)
         .with_next_attempt_delay_ms(11);
-    assert_eq!(request.limit, 2);
+    assert_eq!(request.limit, 1);
+    assert_eq!(request.outbox_event_id, Some(9));
     assert!(request.republish_accepted_relays);
     assert_eq!(request.accepted_quorum, Some(2));
     request.validate().expect("valid request");
@@ -375,6 +377,12 @@ fn push_outbox_request_builders_validate_all_bounds() {
             .with_accepted_quorum(0)
             .validate(),
         Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("accepted quorum")
+    ));
+    assert!(matches!(
+        super::PushOutboxRequest::new()
+            .with_outbox_event_id(0)
+            .validate(),
+        Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("outbox event id")
     ));
     assert!(matches!(
         super::PushOutboxRequest::new()

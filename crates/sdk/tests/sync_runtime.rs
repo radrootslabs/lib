@@ -1699,6 +1699,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
 fn push_outbox_contract_dtos_serialize_deterministically() {
     let request = PushOutboxRequest::new()
         .with_limit(2)
+        .with_outbox_event_id(7)
         .republish_accepted_relays(true)
         .with_accepted_quorum(1)
         .with_relay_url_policy(SdkRelayUrlPolicy::Localhost)
@@ -1708,7 +1709,8 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
     assert_eq!(
         serde_json::to_value(&request).expect("request json"),
         serde_json::json!({
-            "limit": 2,
+            "limit": 1,
+            "outbox_event_id": 7,
             "republish_accepted_relays": true,
             "accepted_quorum": 1,
             "relay_url_policy": "localhost",
@@ -1887,6 +1889,46 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_can_publish_targeted_ready_event() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+    let older_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_A_D_TAG, "Earlier Coffee", &[RELAY_A]).await;
+    let targeted_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_B_D_TAG, "Target Coffee", &[RELAY_B]).await;
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(
+            &adapter,
+            PushOutboxRequest::new().with_outbox_event_id(targeted_outbox_event_id),
+        )
+        .await
+        .expect("targeted push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(receipt.events[0].outbox_event_id, targeted_outbox_event_id);
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let older = outbox
+        .get_event(older_outbox_event_id)
+        .await
+        .expect("older event")
+        .expect("older event");
+    let targeted = outbox
+        .get_event(targeted_outbox_event_id)
+        .await
+        .expect("targeted event")
+        .expect("targeted event");
+    assert_eq!(older.state, RadrootsOutboxEventState::Signed);
+    assert_eq!(targeted.state, RadrootsOutboxEventState::Published);
 }
 
 #[tokio::test]

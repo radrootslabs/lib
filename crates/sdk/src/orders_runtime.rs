@@ -2495,7 +2495,14 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 
     pub async fn cancel_trade(
@@ -2545,7 +2552,14 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 
     pub async fn accept_revision(
@@ -2625,7 +2639,14 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 }
 
@@ -2749,7 +2770,14 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 
     pub async fn decline_trade(
@@ -2796,7 +2824,14 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 
     pub async fn propose_revision(
@@ -2854,7 +2889,14 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 idempotency_key,
             )
             .await?;
-        trade_product_post_enqueue_outcome(self.sdk, publish_mode, ack_policy, receipt).await
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
     }
 }
 
@@ -2959,6 +3001,7 @@ async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
     sdk: &crate::RadrootsClient,
     publish_mode: PublishMode,
     ack_policy: AckPolicy,
+    outbox_event_id: i64,
     receipt: Receipt,
 ) -> Result<TradeMutationOutcome<Plan, Receipt>, RadrootsSdkError> {
     match publish_mode {
@@ -2969,7 +3012,7 @@ async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
         PublishMode::EnqueueAndPublish => {
             let publish = sdk
                 .sync()
-                .push_outbox(push_request_for_ack_policy(ack_policy)?)
+                .push_outbox(push_request_for_ack_policy(ack_policy, outbox_event_id)?)
                 .await?;
             Ok(TradeMutationOutcome::Published { receipt, publish })
         }
@@ -2979,8 +3022,9 @@ async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
 #[cfg(feature = "runtime")]
 fn push_request_for_ack_policy(
     ack_policy: AckPolicy,
+    outbox_event_id: i64,
 ) -> Result<PushOutboxRequest, RadrootsSdkError> {
-    let request = PushOutboxRequest::new().with_limit(1);
+    let request = PushOutboxRequest::new().with_outbox_event_id(outbox_event_id);
     match ack_policy {
         AckPolicy::NoWait => Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-and-publish requires a relay acknowledgement policy".to_owned(),
