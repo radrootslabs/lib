@@ -2,6 +2,7 @@
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
@@ -30,11 +31,12 @@ use radroots_nostr::prelude::{
 };
 use radroots_outbox::RadrootsOutbox;
 use radroots_sdk::{
-    AckPolicy, PublishMode, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, RelayResolutionPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    AckPolicy, DvmValidationReceiptIngestRequest, PublishMode, RadrootsClient, RadrootsSdkError,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet, SdkRelayUrlPolicy,
     SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
-    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
+    TRADE_STATUS_MAX_LIMIT, TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest,
+    TradeDeclineRequest, TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
     TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusNextActionKind, TradeStatusRequest,
@@ -43,6 +45,12 @@ use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, Product
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_trade::order::RadrootsOrderIssue;
+use radroots_trade::validation_receipt::{
+    RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
+    RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
+    RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
+    validation_receipt_event_build, validation_receipt_public_values_hash_hex,
+};
 use serde::Serialize;
 use serde::ser::{self, SerializeStruct};
 
@@ -54,12 +62,18 @@ const SELLER_SECRET_KEY_HEX: &str =
     "59392e9068f66431b12f70218fb61281cb6b433d7f27c55d61f1a63fe1a96ff8";
 const SELLER_PUBLIC_KEY_HEX: &str =
     "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
+const SERVICE_SECRET_KEY_HEX: &str =
+    "48314941f2c9c01ef99f531df7b1d59a8de23dbeb45a498e5aa5f671e921931f";
 const RELAY: &str = "wss://relay.radroots.test";
 #[cfg(any())]
 const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 #[cfg(any())]
 const RELAY_B: &str = "wss://relay-b.radroots.test";
+const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
+const PERF_TRADE_RELEVANT_EVENTS: i64 = 25_000;
+const PERF_ACTIVE_TRADES: usize = 1_000;
+const PERF_STATUS_P95_TARGET: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Copy)]
 enum FailingSerializeFailure {
@@ -961,6 +975,180 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 #[tokio::test]
+async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-committed-resync"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-committed-resync-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let accept_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .accept_trade(
+                TradeAcceptRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    vec![RadrootsOrderInventoryCommitment {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 2,
+                    }],
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-committed-resync-accept")
+                .expect("accept idempotency"),
+            )
+            .await
+            .expect("accept trade"),
+    );
+    let receipt_event = signed_validation_receipt_event(
+        "trade-product-committed-resync",
+        &propose_receipt.listing_event_id,
+        &propose_receipt.signed_event_id,
+        &accept_receipt.signed_event_id,
+        33,
+    );
+    let receipt_event_id = RadrootsEventId::parse(receipt_event.id.as_str()).expect("receipt id");
+
+    let ingest = seller_sdk
+        .dvm()
+        .ingest_validation_receipt(
+            DvmValidationReceiptIngestRequest::new(receipt_event)
+                .with_expected_order_id(propose_receipt.order_id.clone())
+                .with_expected_listing_event_id(propose_receipt.listing_event_id.clone())
+                .with_expected_root_event_id(propose_receipt.signed_event_id.clone())
+                .with_expected_target_event_id(accept_receipt.signed_event_id.clone()),
+        )
+        .await
+        .expect("ingest validation receipt");
+    assert!(ingest.inserted);
+    assert_eq!(ingest.receipt_event_id, receipt_event_id);
+
+    let seller_resync = seller_sdk
+        .trades()
+        .resync()
+        .resync(TradeResyncRequest::new(propose_receipt.locator.clone()))
+        .await
+        .expect("seller resync");
+    assert_eq!(seller_resync.status.status, TradeStatusKind::Committed);
+    assert_eq!(
+        seller_resync.status.rhi_receipt_event_id,
+        Some(receipt_event_id.clone())
+    );
+    assert_eq!(
+        seller_resync.status.last_event_id,
+        Some(receipt_event_id.clone())
+    );
+
+    let buyer_resync = buyer_sdk
+        .trades()
+        .resync()
+        .resync(TradeResyncRequest::new(propose_receipt.locator))
+        .await
+        .expect("buyer resync");
+    assert_eq!(buyer_resync.status.status, TradeStatusKind::Committed);
+    assert_eq!(
+        buyer_resync.status.rhi_receipt_event_id,
+        Some(receipt_event_id)
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_different_payload() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let request = TradeProposeRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("trade-product-idempotent"),
+        explicit_trade_relays(),
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
+    )
+    .try_with_idempotency_key("trade-product-idempotent-key")
+    .expect("idempotency");
+
+    let first = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(request.clone())
+            .await
+            .expect("first proposal"),
+    );
+    let replay = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(request)
+            .await
+            .expect("replay proposal"),
+    );
+    assert_eq!(replay.state, SdkMutationState::AlreadyQueued);
+    assert_eq!(replay.signed_event_id, first.signed_event_id);
+    assert_eq!(replay.outbox_event_id, first.outbox_event_id);
+    assert!(replay.workflow.idempotency.replayed_existing_operation);
+    assert!(
+        replay
+            .workflow
+            .idempotency
+            .safe_to_retry_with_same_idempotency_key
+    );
+
+    let conflict = buyer_sdk
+        .trades()
+        .buyer()
+        .propose_trade(
+            TradeProposeRequest::new(
+                buyer_actor(),
+                listing_event_ptr(),
+                order_request("trade-product-idempotent-conflict"),
+                explicit_trade_relays(),
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .try_with_idempotency_key("trade-product-idempotent-key")
+            .expect("conflict idempotency"),
+        )
+        .await
+        .expect_err("different payload conflict");
+
+    assert!(matches!(
+        conflict,
+        RadrootsSdkError::PartialLocalMutation(ref partial)
+            if partial.stored
+                && !partial.queued
+                && partial.operation_kind == TRADE_SUBMIT_OPERATION_KIND
+                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
+                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
+    ));
+    assert_eq!(conflict.code(), "partial_local_mutation");
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
 async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage_root = tempdir.path().join("sdk");
@@ -1857,6 +2045,105 @@ fn revision_economics() -> RadrootsOrderEconomics {
         adjustment_total: usd("0"),
         total: usd("15"),
     }
+}
+
+fn signed_validation_receipt_event(
+    raw_order_id: &str,
+    listing_event_id: &RadrootsEventId,
+    root_event_id: &RadrootsEventId,
+    target_event_id: &RadrootsEventId,
+    created_at: u32,
+) -> RadrootsNostrEvent {
+    let receipt = RadrootsTradeValidationReceipt {
+        changed_records_root: hash32('6'),
+        domain: "radroots.receipt".to_owned(),
+        error_bitmap: "0x00000000000000000000000000000000".to_owned(),
+        event_set_root: hash32('c'),
+        new_state_root: hash32('4'),
+        previous_state_root: hash32('3'),
+        proof: RadrootsValidationReceiptProof {
+            inline_proof_base64: None,
+            mode: None,
+            program_hash: None,
+            proof_reference: None,
+            system: RadrootsValidationReceiptProofSystem::None,
+            verifying_key_hash: None,
+        },
+        public_values_hash: validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
+        receipt_type: RadrootsValidationReceiptType::TradeTransition,
+        result: RadrootsValidationReceiptResult::Valid,
+        statement: RadrootsValidationReceiptStatement {
+            listing_event_id: listing_event_id.as_str().to_owned(),
+            root_event_id: root_event_id.as_str().to_owned(),
+            target_event_id: target_event_id.as_str().to_owned(),
+            statement_type: RadrootsValidationReceiptType::TradeTransition,
+        },
+        version: 1,
+    };
+    let parts = validation_receipt_event_build(raw_order_id, &receipt).expect("receipt event");
+    signed_event(SERVICE_SECRET_KEY_HEX, created_at, parts)
+}
+
+async fn insert_perf_non_trade_events(store: &RadrootsEventStore, base: i64, count: i64) {
+    let mut inserted = 0;
+    while inserted < count {
+        let batch = (count - inserted).min(1_000);
+        sqlx::query(
+            "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
+             INSERT INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
+             SELECT lower(printf('%064x', ? + n)), ?, 1700000000 + n, 1, json_array(), '{}', ?, '{}', 'verified', 'unsupported_kind', NULL, NULL, 0, 1700000000000 + n, 1700000000000 + n FROM seq",
+        )
+        .bind(batch)
+        .bind(base + inserted)
+        .bind(SELLER_PUBLIC_KEY_HEX)
+        .bind(perf_sig())
+        .execute(store.pool())
+        .await
+        .expect("non-trade perf seed");
+        inserted += batch;
+    }
+}
+
+async fn insert_perf_trade_background_events(store: &RadrootsEventStore, base: i64, count: i64) {
+    let mut inserted = 0;
+    while inserted < count {
+        let batch = (count - inserted).min(1_000);
+        sqlx::query(
+            "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
+             INSERT INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
+             SELECT lower(printf('%064x', ? + n)), ?, 1700000000 + n, ?, json_array(json_array('d', 'perf-bg-' || printf('%06d', ? + n))), '{}', ?, '{}', 'verified', 'supported', 'radroots.order.request.v1', 'regular', 1, 1700000000000 + n, 1700000000000 + n FROM seq",
+        )
+        .bind(batch)
+        .bind(base + inserted)
+        .bind(BUYER_PUBLIC_KEY_HEX)
+        .bind(i64::from(KIND_ORDER_REQUEST))
+        .bind(base + inserted)
+        .bind(perf_sig())
+        .execute(store.pool())
+        .await
+        .expect("trade perf event seed");
+        sqlx::query(
+            "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
+             INSERT INTO nostr_event_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed)
+             SELECT lower(printf('%064x', ? + n)), 0, 'd', 'perf-bg-' || printf('%06d', ? + n), json_array('d', 'perf-bg-' || printf('%06d', ? + n)), NULL, NULL, 0 FROM seq",
+        )
+        .bind(batch)
+        .bind(base + inserted)
+        .bind(base + inserted)
+        .bind(base + inserted)
+        .execute(store.pool())
+        .await
+        .expect("trade perf tag seed");
+        inserted += batch;
+    }
+}
+
+fn perf_sig() -> String {
+    "0".repeat(128)
+}
+
+fn hash32(ch: char) -> String {
+    format!("0x{}", ch.to_string().repeat(64))
 }
 
 fn signed_event(
@@ -4416,4 +4703,57 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     assert!(!message.contains(request_event.sig.as_str()));
     assert!(!message.contains("\"tags\""));
     assert!(!message.contains("\"content\""));
+}
+
+#[tokio::test]
+#[ignore = "measures the 100k local-event MVP status target"]
+async fn local_status_meets_mvp_scale_target() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let background_non_trade_events = PERF_TOTAL_LOCAL_EVENTS - PERF_TRADE_RELEVANT_EVENTS;
+    let background_trade_events = PERF_TRADE_RELEVANT_EVENTS - PERF_ACTIVE_TRADES as i64;
+    insert_perf_non_trade_events(&store, 10_000_000, background_non_trade_events).await;
+    insert_perf_trade_background_events(&store, 20_000_000, background_trade_events).await;
+
+    let mut active_order_ids = Vec::with_capacity(PERF_ACTIVE_TRADES);
+    for index in 0..PERF_ACTIVE_TRADES {
+        let order_id = format!("perf-active-{index:04}");
+        let event = signed_order_request_event(&order_id, 20_000 + index as u32);
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                event,
+                1_700_100_000_000 + index as i64,
+            ))
+            .await
+            .expect("active trade ingest");
+        active_order_ids.push(order_id);
+    }
+
+    let summary = store.status_summary().await.expect("status summary");
+    assert_eq!(summary.total_events, PERF_TOTAL_LOCAL_EVENTS);
+
+    let mut durations = Vec::with_capacity(active_order_ids.len());
+    for order_id in &active_order_ids {
+        let started = Instant::now();
+        let status = sdk
+            .trades()
+            .status(status_request(order_id))
+            .await
+            .expect("status");
+        durations.push(started.elapsed());
+        assert_eq!(status.status, TradeStatusKind::Requested);
+        assert_eq!(status.event_count, 1);
+    }
+
+    durations.sort_unstable();
+    let p95 = durations[(durations.len() * 95 / 100).saturating_sub(1)];
+    println!(
+        "local status p95 {}us for {PERF_TOTAL_LOCAL_EVENTS} local events, {PERF_TRADE_RELEVANT_EVENTS} trade-relevant events, and {PERF_ACTIVE_TRADES} active trades",
+        p95.as_micros()
+    );
+    assert!(
+        p95 <= PERF_STATUS_P95_TARGET,
+        "local status p95 {}us exceeded target {}us for {PERF_TOTAL_LOCAL_EVENTS} local events, {PERF_TRADE_RELEVANT_EVENTS} trade-relevant events, and {PERF_ACTIVE_TRADES} active trades",
+        p95.as_micros(),
+        PERF_STATUS_P95_TARGET.as_micros()
+    );
 }
