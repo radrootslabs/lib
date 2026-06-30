@@ -1,10 +1,10 @@
 pub use radroots_events::order::*;
 #[cfg(any(feature = "signer-adapters", test))]
 pub use radroots_events_codec::error::EventEncodeError;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "runtime")]
 pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "runtime")]
 use radroots_events::RadrootsNostrEvent;
 #[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 use radroots_events::{RadrootsNostrEventPtr, ids::RadrootsEventId};
@@ -146,7 +146,7 @@ pub fn build_order_cancellation_draft(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "runtime")]
 pub fn parse_order_request(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {

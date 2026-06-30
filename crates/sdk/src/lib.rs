@@ -17,6 +17,7 @@ pub mod adapters;
 mod dvm_runtime;
 #[cfg(feature = "runtime")]
 mod error;
+#[cfg(feature = "runtime")]
 mod farm;
 #[cfg(feature = "runtime")]
 mod farms_runtime;
@@ -30,6 +31,7 @@ pub mod identity;
 mod listings_runtime;
 #[cfg(feature = "runtime")]
 mod market_runtime;
+#[cfg(feature = "runtime")]
 mod order;
 #[cfg(feature = "runtime")]
 mod orders_runtime;
