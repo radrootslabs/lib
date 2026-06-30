@@ -82,7 +82,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             "RADROOTS_TRADE_LISTING_DOMAIN",
             "RADROOTS_TRADE_ENVELOPE_VERSION",
         ],
-        "legacy trade identifiers must not reappear",
+        "removed trade identifiers must not reappear",
         &[],
         &mut failures,
     );
@@ -97,8 +97,12 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             "KIND_TRADE_LISTING_CANCEL",
             "KIND_TRADE_LISTING_FULFILLMENT",
             "KIND_TRADE_LISTING_RECEIPT",
+            "KIND_TRADE_LISTING_VALIDATE_REQ",
+            "KIND_TRADE_LISTING_VALIDATE_RES",
+            "KIND_WORKER_TRADE_TRANSITION_PROOF_REQ",
+            "KIND_WORKER_TRADE_TRANSITION_PROOF_RES",
         ],
-        "legacy trade listing kind constants must not reappear",
+        "removed trade and DVM kind constants must not reappear",
         &[],
         &mut failures,
     );
@@ -111,7 +115,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             PathBuf::from("build"),
         ],
         &["tangle"],
-        "legacy identifier 'tangle' must not reappear",
+        "removed identifier 'tangle' must not reappear",
         &["tools/xtask/src/hygiene.rs"],
         &mut failures,
     );
@@ -443,7 +447,7 @@ mod tests {
         write_file(
             &root,
             "crates/events/src/kinds.rs",
-            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\n",
+            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\n",
         );
         write_file(
             &root,
@@ -457,8 +461,8 @@ mod tests {
         assert!(err.contains("relay fetch must not bypass event-store verification"));
         assert!(err.contains("event-store projection cursors must use last_event_seq"));
         assert!(err.contains("raw commercial protocol identifier String fields are forbidden"));
-        assert!(err.contains("legacy identifier 'tangle' must not reappear"));
-        assert!(err.contains("legacy trade listing kind constants must not reappear"));
+        assert!(err.contains("removed identifier 'tangle' must not reappear"));
+        assert!(err.contains("removed trade and DVM kind constants must not reappear"));
         assert!(err.contains("wasm-bindgen"));
         assert!(err.contains("uniffi"));
         assert!(err.contains("crates/sql_wasm_bridge"));
