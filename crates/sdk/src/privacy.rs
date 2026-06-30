@@ -97,6 +97,7 @@ impl PrivacyPreflightReceipt {
                     .fields
                     .iter()
                     .copied()
+                    .filter(|field| privacy_field_requires_confirmation(*field))
                     .filter(|field| !confirmation.confirms(*field))
                     .collect::<Vec<_>>();
                 if missing_fields.is_empty() {
@@ -111,6 +112,11 @@ impl PrivacyPreflightReceipt {
             }
         }
     }
+}
+
+#[cfg(feature = "runtime")]
+fn privacy_field_requires_confirmation(field: ProductSensitivityField) -> bool {
+    matches!(field, ProductSensitivityField::PublicButSensitiveNotes)
 }
 
 #[cfg(test)]
@@ -152,6 +158,12 @@ mod tests {
         PrivacyPreflightReceipt::evaluate([ProductSensitivityField::PublicButSensitiveNotes])
             .require_public_publish_allowed("trade.test", &confirmation)
             .expect("confirmed public note");
+        PrivacyPreflightReceipt::evaluate([
+            ProductSensitivityField::PublicButSensitiveNotes,
+            ProductSensitivityField::ProtocolMinimizedInventoryFields,
+        ])
+        .require_public_publish_allowed("trade.test", &confirmation)
+        .expect("confirmed public note with protocol inventory");
 
         let missing =
             PrivacyPreflightReceipt::evaluate([ProductSensitivityField::PublicButSensitiveNotes])

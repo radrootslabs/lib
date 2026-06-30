@@ -11,7 +11,7 @@ use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
-    ids::{RadrootsEventId, RadrootsOrderId, RadrootsPublicKey},
+    ids::{RadrootsEventId, RadrootsOrderId, RadrootsOrderRevisionId, RadrootsPublicKey},
     kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
 };
 use radroots_nostr::prelude::{
@@ -24,7 +24,7 @@ use radroots_sdk::protocol::order::{
     RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
     RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
     RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPricingBasis,
-    RadrootsOrderRequest,
+    RadrootsOrderRequest, RadrootsOrderRevisionOutcome,
 };
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
@@ -33,8 +33,9 @@ use radroots_sdk::{
     SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
     TRADE_STATUS_MAX_LIMIT, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
     TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeSellerInboxRequest,
-    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
+    TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeRevisionDecisionRequest,
+    TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
+    TradeStatusNextActionKind, TradeStatusRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -1129,6 +1130,172 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
     );
 }
 
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-cancel"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-cancel-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+
+    let cancellation = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .cancel_trade(
+                TradeCancelRequest::new(
+                    buyer_actor(),
+                    propose_receipt.locator.clone(),
+                    "changed plan",
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .with_privacy_confirmation(public_note_confirmation())
+                .try_with_idempotency_key("trade-product-cancel")
+                .expect("cancel idempotency"),
+            )
+            .await
+            .expect("cancel trade"),
+    );
+
+    assert_eq!(cancellation.locator, propose_receipt.locator);
+    assert_eq!(cancellation.root_event_id, propose_receipt.signed_event_id);
+    assert_eq!(
+        cancellation.previous_event_id,
+        propose_receipt.signed_event_id
+    );
+    let status = buyer_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator))
+        .await
+        .expect("status");
+    assert_eq!(status.status, TradeStatusKind::Cancelled);
+    assert_eq!(
+        status.cancellation_event_id,
+        Some(cancellation.signed_event_id)
+    );
+    assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-revision"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-revision-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let revision_id: RadrootsOrderRevisionId =
+        "revision-product-revision".parse().expect("revision id");
+    let proposal = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .propose_revision(
+                TradeRevisionProposalRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    revision_id.clone(),
+                    vec![RadrootsOrderItem {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 3,
+                    }],
+                    revision_economics(),
+                    "increase quantity",
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .with_privacy_confirmation(public_note_confirmation())
+                .try_with_idempotency_key("trade-product-revision-proposal")
+                .expect("revision proposal idempotency"),
+            )
+            .await
+            .expect("propose revision"),
+    );
+    let pending = buyer_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator.clone()))
+        .await
+        .expect("pending revision status");
+    assert_eq!(pending.status, TradeStatusKind::RevisionProposed);
+    assert_eq!(
+        pending.pending_revision_event_id,
+        Some(proposal.signed_event_id.clone())
+    );
+    assert!(pending.eligibility.can_decide_revision);
+
+    let decision = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .accept_revision(
+                TradeRevisionDecisionRequest::new(
+                    buyer_actor(),
+                    propose_receipt.locator.clone(),
+                    revision_id,
+                    RadrootsOrderRevisionOutcome::Accepted,
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-revision-decision")
+                .expect("revision decision idempotency"),
+            )
+            .await
+            .expect("accept revision"),
+    );
+    assert_eq!(decision.locator, propose_receipt.locator);
+    assert_eq!(decision.root_event_id, propose_receipt.signed_event_id);
+    assert_eq!(decision.previous_event_id, proposal.signed_event_id);
+    let status = buyer_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator))
+        .await
+        .expect("status");
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(status.last_event_id, Some(decision.signed_event_id));
+    assert_eq!(status.pending_revision_event_id, None);
+    assert_eq!(status.economics, Some(revision_economics()));
+}
+
 #[cfg(feature = "signer-adapters")]
 #[tokio::test]
 async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects() {
@@ -1668,7 +1835,6 @@ fn order_cancellation(
     }
 }
 
-#[cfg(any())]
 fn revision_economics() -> RadrootsOrderEconomics {
     RadrootsOrderEconomics {
         quote_id: "revision-quote-1".parse().expect("revision quote id"),
