@@ -47,6 +47,8 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TRADE_STATUS_DEFAULT_LIMIT",
     "TRADE_STATUS_MAX_LIMIT",
     "TRADE_SUBMIT_OPERATION_KIND",
+    "TradeAcceptRequest",
+    "TradeCancelRequest",
     "TradeCancellationEnqueueRequest",
     "TradeCancellationPlan",
     "TradeCancellationPrepareRequest",
@@ -55,18 +57,26 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeDecisionPlan",
     "TradeDecisionPrepareRequest",
     "TradeDecisionReceipt",
+    "TradeDeclineRequest",
     "TradeEvidenceIngestReceipt",
     "TradeEvidenceIngestRequest",
+    "TradeProposeRequest",
     "TradeRequestEvidenceIngestReceipt",
     "TradeRequestEvidenceIngestRequest",
+    "TradeResyncReceipt",
+    "TradeResyncRequest",
     "TradeRevisionDecisionEnqueueRequest",
     "TradeRevisionDecisionPlan",
     "TradeRevisionDecisionPrepareRequest",
     "TradeRevisionDecisionReceipt",
+    "TradeRevisionDecisionRequest",
     "TradeRevisionProposalEnqueueRequest",
     "TradeRevisionProposalPlan",
     "TradeRevisionProposalPrepareRequest",
+    "TradeRevisionProposalRequest",
     "TradeRevisionProposalReceipt",
+    "TradeSellerInboxReceipt",
+    "TradeSellerInboxRequest",
     "TradeStatusAmbiguityCandidate",
     "TradeStatusEligibility",
     "TradeStatusEvidenceSummary",
@@ -158,6 +168,24 @@ const REQUIRED_TRADES_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
     "pub async fn enqueue_cancellation_with_explicit_signer(",
     "pub async fn enqueue_prepared_cancellation_with_explicit_signer(",
 ];
+
+const REQUIRED_TRADE_BUYER_CLIENT_METHODS: &[&str] = &[
+    "pub async fn propose_trade(",
+    "pub async fn cancel_trade(",
+    "pub async fn accept_revision(",
+    "pub async fn decline_revision(",
+];
+
+const REQUIRED_TRADE_SELLER_CLIENT_METHODS: &[&str] = &[
+    "pub async fn inbox(",
+    "pub async fn accept_trade(",
+    "pub async fn decline_trade(",
+    "pub async fn propose_revision(",
+];
+
+const REQUIRED_TRADE_STATUS_CLIENT_METHODS: &[&str] = &["pub async fn status("];
+
+const REQUIRED_TRADE_RESYNC_CLIENT_METHODS: &[&str] = &["pub async fn resync("];
 
 const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "CheckoutClient",
@@ -440,6 +468,43 @@ fn orders_client_surface_is_inventory_guarded() {
         assert!(
             source.contains(method),
             "TradesClient must expose explicit-signer advanced method `{method}`"
+        );
+    }
+}
+
+#[test]
+fn trade_product_facade_methods_are_inventory_guarded() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+
+    for method in REQUIRED_TRADE_BUYER_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "TradeBuyerClient must expose product workflow method `{method}`"
+        );
+    }
+
+    for method in REQUIRED_TRADE_SELLER_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "TradeSellerClient must expose product workflow method `{method}`"
+        );
+    }
+
+    for method in REQUIRED_TRADE_STATUS_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "TradeStatusClient must expose product workflow method `{method}`"
+        );
+    }
+
+    for method in REQUIRED_TRADE_RESYNC_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "TradeResyncClient must expose product workflow method `{method}`"
         );
     }
 }

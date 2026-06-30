@@ -3,8 +3,8 @@ use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
     AckPolicy, PublishMode, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState, SdkRelayUrlPolicy, TradesClient,
-    order,
+    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState, SdkRelayUrlPolicy,
+    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient, TradesClient, order,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -16,15 +16,21 @@ use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
     draft::RadrootsFrozenEventDraft,
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    ids::{
+        RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
+        RadrootsPublicKey,
+    },
     kinds::{
         KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
     },
     order::{
-        RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEconomics,
-        RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
+        RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
+        RadrootsOrderEconomics, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
+        RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
+        RadrootsOrderRevisionProposal,
     },
+    tags::TAG_P,
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::order::{
@@ -37,11 +43,12 @@ use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
 #[cfg(feature = "runtime")]
 use radroots_trade::order::{
-    RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderProjection,
-    RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError,
+    RadrootsOrderCanonicalizationError, RadrootsOrderEventRecord, RadrootsOrderIssue,
+    RadrootsOrderProjection, RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError,
     RadrootsTradeLocatorProjectionQueryResult, RadrootsTradeLocatorProjectionResolution,
     canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
-    order_projection_query_for_order_id, order_projection_query_for_trade_locator,
+    order_event_record_from_event, order_projection_query_for_order_id,
+    order_projection_query_for_trade_locator,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
@@ -257,6 +264,8 @@ pub struct TradeSubmitPlan {
     pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub listing_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
     pub frozen_draft: RadrootsFrozenEventDraft,
@@ -267,8 +276,11 @@ pub struct TradeSubmitPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeSubmitReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub listing_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
     pub signed_event_id: RadrootsEventId,
@@ -467,6 +479,7 @@ pub struct TradeDecisionPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeDecisionReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -607,6 +620,7 @@ pub struct TradeRevisionProposalPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionProposalReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -748,6 +762,7 @@ pub struct TradeRevisionDecisionPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionDecisionReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -889,6 +904,7 @@ pub struct TradeCancellationPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeCancellationReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -902,6 +918,384 @@ pub struct TradeCancellationReceipt {
     pub outbox_event_id: i64,
     pub state: SdkMutationState,
     pub idempotency_digest_prefix: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeProposeRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub listing_event: RadrootsNostrEventPtr,
+    pub order: RadrootsOrderRequest,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeProposeRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        listing_event: RadrootsNostrEventPtr,
+        order: RadrootsOrderRequest,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            listing_event,
+            order,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeAcceptRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub locator: RadrootsTradeLocator,
+    pub inventory_commitments: Vec<RadrootsOrderInventoryCommitment>,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeAcceptRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        locator: RadrootsTradeLocator,
+        inventory_commitments: Vec<RadrootsOrderInventoryCommitment>,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            locator,
+            inventory_commitments,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeDeclineRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub locator: RadrootsTradeLocator,
+    pub reason: String,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeDeclineRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        locator: RadrootsTradeLocator,
+        reason: impl Into<String>,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            locator,
+            reason: reason.into(),
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeCancelRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub locator: RadrootsTradeLocator,
+    pub reason: String,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeCancelRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        locator: RadrootsTradeLocator,
+        reason: impl Into<String>,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            locator,
+            reason: reason.into(),
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeRevisionProposalRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub locator: RadrootsTradeLocator,
+    pub revision_id: RadrootsOrderRevisionId,
+    pub items: Vec<RadrootsOrderItem>,
+    pub economics: RadrootsOrderEconomics,
+    pub reason: String,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeRevisionProposalRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        locator: RadrootsTradeLocator,
+        revision_id: RadrootsOrderRevisionId,
+        items: Vec<RadrootsOrderItem>,
+        economics: RadrootsOrderEconomics,
+        reason: impl Into<String>,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            locator,
+            revision_id,
+            items,
+            economics,
+            reason: reason.into(),
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeRevisionDecisionRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub locator: RadrootsTradeLocator,
+    pub revision_id: RadrootsOrderRevisionId,
+    pub decision: RadrootsOrderRevisionOutcome,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeRevisionDecisionRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        locator: RadrootsTradeLocator,
+        revision_id: RadrootsOrderRevisionId,
+        decision: RadrootsOrderRevisionOutcome,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            locator,
+            revision_id,
+            decision,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeSellerInboxRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub limit: u32,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeSellerInboxRequest {
+    pub fn new(actor: RadrootsActorContext) -> Self {
+        Self {
+            actor,
+            limit: TRADE_STATUS_DEFAULT_LIMIT,
+        }
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeSellerInboxReceipt {
+    pub seller_pubkey: RadrootsPublicKey,
+    pub statuses: Vec<TradeStatusReceipt>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeResyncRequest {
+    pub locator: RadrootsTradeLocator,
+    pub limit: u32,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeResyncRequest {
+    pub fn new(locator: RadrootsTradeLocator) -> Self {
+        Self {
+            locator,
+            limit: TRADE_STATUS_DEFAULT_LIMIT,
+        }
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeResyncReceipt {
+    pub status: TradeStatusReceipt,
 }
 
 #[cfg(feature = "runtime")]
@@ -2025,6 +2419,388 @@ impl<'sdk> TradesClient<'sdk> {
 }
 
 #[cfg(feature = "runtime")]
+impl<'sdk> TradeStatusClient<'sdk> {
+    pub async fn status(
+        &self,
+        request: TradeStatusRequest,
+    ) -> Result<TradeStatusReceipt, RadrootsSdkError> {
+        trades_client(self.sdk).status(request).await
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl<'sdk> TradeResyncClient<'sdk> {
+    pub async fn resync(
+        &self,
+        request: TradeResyncRequest,
+    ) -> Result<TradeResyncReceipt, RadrootsSdkError> {
+        let status = trades_client(self.sdk)
+            .status(TradeStatusRequest::new(request.locator).with_limit(request.limit))
+            .await?;
+        Ok(TradeResyncReceipt { status })
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+impl<'sdk> TradeBuyerClient<'sdk> {
+    pub async fn propose_trade(
+        &self,
+        request: TradeProposeRequest,
+    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
+        trades_client(self.sdk)
+            .enqueue_submit(TradeSubmitEnqueueRequest {
+                actor: request.actor,
+                listing_event: request.listing_event,
+                order: request.order,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+
+    pub async fn cancel_trade(
+        &self,
+        request: TradeCancelRequest,
+    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
+        let context = trade_mutation_context(self.sdk, request.locator, "trade.cancel").await?;
+        let cancellation = RadrootsOrderCancellation {
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            reason: request.reason,
+        };
+        trades_client(self.sdk)
+            .enqueue_cancellation(TradeCancellationEnqueueRequest {
+                actor: request.actor,
+                root_event: event_ptr(&context.root_event_id),
+                previous_event: event_ptr(&context.previous_event_id),
+                cancellation,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+
+    pub async fn accept_revision(
+        &self,
+        mut request: TradeRevisionDecisionRequest,
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        request.decision = RadrootsOrderRevisionOutcome::Accepted;
+        self.decide_revision(request).await
+    }
+
+    pub async fn decline_revision(
+        &self,
+        request: TradeRevisionDecisionRequest,
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        self.decide_revision(request).await
+    }
+
+    async fn decide_revision(
+        &self,
+        request: TradeRevisionDecisionRequest,
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        let context =
+            trade_mutation_context(self.sdk, request.locator, "trade.revision_decision").await?;
+        let previous_event_id = context.pending_revision_event_id.clone().ok_or_else(|| {
+            RadrootsSdkError::InvalidRequest {
+                message: "trade revision decision requires a pending revision".to_owned(),
+            }
+        })?;
+        let decision = RadrootsOrderRevisionDecision {
+            revision_id: request.revision_id,
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            root_event_id: context.root_event_id.clone(),
+            prev_event_id: previous_event_id.clone(),
+            decision: request.decision,
+        };
+        trades_client(self.sdk)
+            .enqueue_revision_decision(TradeRevisionDecisionEnqueueRequest {
+                actor: request.actor,
+                root_event: event_ptr(&context.root_event_id),
+                previous_event: event_ptr(&previous_event_id),
+                decision,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+impl<'sdk> TradeSellerClient<'sdk> {
+    pub async fn inbox(
+        &self,
+        request: TradeSellerInboxRequest,
+    ) -> Result<TradeSellerInboxReceipt, RadrootsSdkError> {
+        require_seller_actor(&request.actor, "trade.inbox")?;
+        if request.limit == 0 || request.limit > TRADE_STATUS_MAX_LIMIT {
+            return Err(RadrootsSdkError::trade_status_limit_invalid(
+                request.limit,
+                1,
+                TRADE_STATUS_MAX_LIMIT,
+            ));
+        }
+        let seller_pubkey =
+            RadrootsPublicKey::parse(request.actor.pubkey().as_str()).map_err(|error| {
+                RadrootsSdkError::InvalidRequest {
+                    message: format!("seller actor pubkey is invalid: {error}"),
+                }
+            })?;
+        let events = self
+            .sdk
+            ._event_store
+            .events_by_tag(TAG_P, request.actor.pubkey().as_str(), request.limit)
+            .await?;
+        let mut locators = Vec::new();
+        for event in events {
+            let tags = serde_json::from_str(&event.tags_json).map_err(|error| {
+                RadrootsSdkError::Projection {
+                    message: format!(
+                        "stored trade inbox event {} contains invalid tags_json: {error}",
+                        event.event_id
+                    ),
+                }
+            })?;
+            let nostr_event = RadrootsNostrEvent {
+                id: event.event_id,
+                author: event.pubkey,
+                created_at: event.created_at,
+                kind: event.kind,
+                tags,
+                content: event.content,
+                sig: event.sig,
+            };
+            if let Ok(RadrootsOrderEventRecord::Request(record)) =
+                order_event_record_from_event(&nostr_event)
+            {
+                if record.payload.seller_pubkey == seller_pubkey {
+                    locators.push(
+                        RadrootsTradeLocator::from_order_id(record.payload.order_id)
+                            .with_root_event_id(record.event_id)
+                            .with_listing_addr(record.payload.listing_addr)
+                            .with_buyer_pubkey(record.payload.buyer_pubkey)
+                            .with_seller_pubkey(record.payload.seller_pubkey),
+                    );
+                }
+            }
+        }
+        locators.sort_by(|left, right| left.root_event_id.cmp(&right.root_event_id));
+        locators.dedup_by(|left, right| left.root_event_id == right.root_event_id);
+        let mut statuses = Vec::with_capacity(locators.len());
+        for locator in locators {
+            statuses.push(
+                trades_client(self.sdk)
+                    .status(TradeStatusRequest::new(locator))
+                    .await?,
+            );
+        }
+        Ok(TradeSellerInboxReceipt {
+            seller_pubkey,
+            statuses,
+        })
+    }
+
+    pub async fn accept_trade(
+        &self,
+        request: TradeAcceptRequest,
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        let context = trade_mutation_context(self.sdk, request.locator, "trade.accept").await?;
+        let decision = RadrootsOrderDecision {
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            decision: RadrootsOrderDecisionOutcome::Accepted {
+                inventory_commitments: request.inventory_commitments,
+            },
+        };
+        trades_client(self.sdk)
+            .enqueue_decision(TradeDecisionEnqueueRequest {
+                actor: request.actor,
+                request_event: event_ptr(&context.root_event_id),
+                decision,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+
+    pub async fn decline_trade(
+        &self,
+        request: TradeDeclineRequest,
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        let context = trade_mutation_context(self.sdk, request.locator, "trade.decline").await?;
+        let decision = RadrootsOrderDecision {
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            decision: RadrootsOrderDecisionOutcome::Declined {
+                reason: request.reason,
+            },
+        };
+        trades_client(self.sdk)
+            .enqueue_decision(TradeDecisionEnqueueRequest {
+                actor: request.actor,
+                request_event: event_ptr(&context.root_event_id),
+                decision,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+
+    pub async fn propose_revision(
+        &self,
+        request: TradeRevisionProposalRequest,
+    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
+        let context =
+            trade_mutation_context(self.sdk, request.locator, "trade.propose_revision").await?;
+        let proposal = RadrootsOrderRevisionProposal {
+            revision_id: request.revision_id,
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            root_event_id: context.root_event_id.clone(),
+            prev_event_id: context.previous_event_id.clone(),
+            items: request.items,
+            economics: request.economics,
+            reason: request.reason,
+        };
+        trades_client(self.sdk)
+            .enqueue_revision_proposal(TradeRevisionProposalEnqueueRequest {
+                actor: request.actor,
+                root_event: event_ptr(&context.root_event_id),
+                previous_event: event_ptr(&context.previous_event_id),
+                proposal,
+                target_relays: request.target_relays,
+                publish_mode: request.publish_mode,
+                ack_policy: request.ack_policy,
+                idempotency_key: request.idempotency_key,
+                created_at: request.created_at,
+            })
+            .await
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn trades_client(sdk: &crate::RadrootsClient) -> TradesClient<'_> {
+    TradesClient { sdk }
+}
+
+#[cfg(feature = "runtime")]
+struct TradeProductMutationContext {
+    order_id: RadrootsOrderId,
+    listing_addr: RadrootsListingAddress,
+    buyer_pubkey: RadrootsPublicKey,
+    seller_pubkey: RadrootsPublicKey,
+    root_event_id: RadrootsEventId,
+    previous_event_id: RadrootsEventId,
+    pending_revision_event_id: Option<RadrootsEventId>,
+}
+
+#[cfg(feature = "runtime")]
+async fn trade_mutation_context(
+    sdk: &crate::RadrootsClient,
+    locator: RadrootsTradeLocator,
+    operation: &'static str,
+) -> Result<TradeProductMutationContext, RadrootsSdkError> {
+    let status = trades_client(sdk)
+        .status(TradeStatusRequest::new(locator))
+        .await?;
+    if status.status == TradeStatusKind::Ambiguous {
+        let roots = status
+            .ambiguity_candidates
+            .iter()
+            .filter_map(|candidate| candidate.locator.root_event_id.as_ref())
+            .map(RadrootsEventId::as_str)
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("{operation} requires a unique trade root; candidate_roots={roots}"),
+        });
+    }
+    if !status.found {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("{operation} requires a locally projected trade"),
+        });
+    }
+    let root_event_id =
+        status
+            .root_event_id
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires a trade root event id"),
+            })?;
+    let previous_event_id =
+        status
+            .last_event_id
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires local lifecycle evidence"),
+            })?;
+    let listing_addr =
+        status
+            .listing_addr
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires listing address evidence"),
+            })?;
+    let buyer_pubkey =
+        status
+            .buyer_pubkey
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires buyer pubkey evidence"),
+            })?;
+    let seller_pubkey =
+        status
+            .seller_pubkey
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires seller pubkey evidence"),
+            })?;
+    Ok(TradeProductMutationContext {
+        order_id: status.order_id,
+        listing_addr,
+        buyer_pubkey,
+        seller_pubkey,
+        root_event_id,
+        previous_event_id,
+        pending_revision_event_id: status.pending_revision_event_id,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: event_id.as_str().to_owned(),
+        relays: None,
+    }
+}
+
+#[cfg(feature = "runtime")]
 fn validate_trade_enqueue_policy(
     publish_mode: PublishMode,
     ack_policy: AckPolicy,
@@ -2344,6 +3120,8 @@ fn order_submit_plan(
     let created_at_nostr = created_at.try_into_nostr_created_at()?;
     let order_id = order_request.order_id.clone();
     let listing_addr = order_request.listing_addr.clone();
+    let buyer_pubkey = order_request.buyer_pubkey.clone();
+    let seller_pubkey = order_request.seller_pubkey.clone();
     let draft =
         order::build_order_request_draft(&listing_event, &order_request).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
@@ -2367,6 +3145,8 @@ fn order_submit_plan(
         ),
         order_id,
         listing_addr,
+        buyer_pubkey,
+        seller_pubkey,
         listing_event_id,
         expected_event_id,
         frozen_draft,
@@ -2613,14 +3393,22 @@ fn order_submit_receipt(
     plan: TradeSubmitPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> TradeSubmitReceipt {
+    let locator = RadrootsTradeLocator::from_order_id(plan.order_id.clone())
+        .with_root_event_id(enqueue.signed_event_id.clone())
+        .with_listing_addr(plan.listing_addr.clone())
+        .with_buyer_pubkey(plan.buyer_pubkey.clone())
+        .with_seller_pubkey(plan.seller_pubkey.clone());
     TradeSubmitReceipt {
         workflow: order_workflow_enqueue_receipt(
             TradeWorkflowKind::Submit,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
+        locator,
         order_id: plan.order_id,
         listing_addr: plan.listing_addr,
+        buyer_pubkey: plan.buyer_pubkey,
+        seller_pubkey: plan.seller_pubkey,
         listing_event_id: plan.listing_event_id,
         expected_event_id: plan.expected_event_id,
         signed_event_id: enqueue.signed_event_id,
@@ -2637,12 +3425,18 @@ fn order_decision_receipt(
     plan: TradeDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> TradeDecisionReceipt {
+    let locator = RadrootsTradeLocator::from_order_id(plan.order_id.clone())
+        .with_root_event_id(plan.request_event_id.clone())
+        .with_listing_addr(plan.listing_addr.clone())
+        .with_buyer_pubkey(plan.buyer_pubkey.clone())
+        .with_seller_pubkey(plan.seller_pubkey.clone());
     TradeDecisionReceipt {
         workflow: order_workflow_enqueue_receipt(
             TradeWorkflowKind::Decision,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
+        locator,
         order_id: plan.order_id,
         listing_addr: plan.listing_addr,
         buyer_pubkey: plan.buyer_pubkey,
@@ -2663,12 +3457,18 @@ fn order_revision_proposal_receipt(
     plan: TradeRevisionProposalPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> TradeRevisionProposalReceipt {
+    let locator = RadrootsTradeLocator::from_order_id(plan.order_id.clone())
+        .with_root_event_id(plan.root_event_id.clone())
+        .with_listing_addr(plan.listing_addr.clone())
+        .with_buyer_pubkey(plan.buyer_pubkey.clone())
+        .with_seller_pubkey(plan.seller_pubkey.clone());
     TradeRevisionProposalReceipt {
         workflow: order_workflow_enqueue_receipt(
             TradeWorkflowKind::RevisionProposal,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
+        locator,
         order_id: plan.order_id,
         listing_addr: plan.listing_addr,
         buyer_pubkey: plan.buyer_pubkey,
@@ -2690,12 +3490,18 @@ fn order_revision_decision_receipt(
     plan: TradeRevisionDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> TradeRevisionDecisionReceipt {
+    let locator = RadrootsTradeLocator::from_order_id(plan.order_id.clone())
+        .with_root_event_id(plan.root_event_id.clone())
+        .with_listing_addr(plan.listing_addr.clone())
+        .with_buyer_pubkey(plan.buyer_pubkey.clone())
+        .with_seller_pubkey(plan.seller_pubkey.clone());
     TradeRevisionDecisionReceipt {
         workflow: order_workflow_enqueue_receipt(
             TradeWorkflowKind::RevisionDecision,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
+        locator,
         order_id: plan.order_id,
         listing_addr: plan.listing_addr,
         buyer_pubkey: plan.buyer_pubkey,
@@ -2717,12 +3523,18 @@ fn order_cancellation_receipt(
     plan: TradeCancellationPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> TradeCancellationReceipt {
+    let locator = RadrootsTradeLocator::from_order_id(plan.order_id.clone())
+        .with_root_event_id(plan.root_event_id.clone())
+        .with_listing_addr(plan.listing_addr.clone())
+        .with_buyer_pubkey(plan.buyer_pubkey.clone())
+        .with_seller_pubkey(plan.seller_pubkey.clone());
     TradeCancellationReceipt {
         workflow: order_workflow_enqueue_receipt(
             TradeWorkflowKind::Cancellation,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
+        locator,
         order_id: plan.order_id,
         listing_addr: plan.listing_addr,
         buyer_pubkey: plan.buyer_pubkey,

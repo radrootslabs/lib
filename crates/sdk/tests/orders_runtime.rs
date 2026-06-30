@@ -1,5 +1,8 @@
 #![cfg(feature = "runtime")]
 
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+use std::path::Path;
+
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
@@ -11,7 +14,7 @@ use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
-    ids::{RadrootsEventId, RadrootsOrderId},
+    ids::{RadrootsEventId, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
         KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
@@ -40,13 +43,16 @@ use radroots_sdk::{
     SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_CANCELLATION_OPERATION_KIND,
     TRADE_DECISION_OPERATION_KIND, TRADE_REVISION_DECISION_OPERATION_KIND,
     TRADE_REVISION_PROPOSAL_OPERATION_KIND, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
-    TRADE_SUBMIT_OPERATION_KIND, TradeCancellationEnqueueRequest, TradeCancellationPrepareRequest,
-    TradeDecisionEnqueueRequest, TradeDecisionPrepareRequest, TradeEvidenceIngestRequest,
-    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionEnqueueRequest,
-    TradeRevisionDecisionPrepareRequest, TradeRevisionProposalEnqueueRequest,
-    TradeRevisionProposalPrepareRequest, TradeStatusKind, TradeStatusNextActionKind,
-    TradeStatusRequest, TradeSubmitEnqueueRequest, TradeSubmitPrepareRequest, TradeWorkflowKind,
+    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancellationEnqueueRequest,
+    TradeCancellationPrepareRequest, TradeDecisionEnqueueRequest, TradeDecisionPrepareRequest,
+    TradeEvidenceIngestRequest, TradeProposeRequest, TradeRequestEvidenceIngestRequest,
+    TradeResyncRequest, TradeRevisionDecisionEnqueueRequest, TradeRevisionDecisionPrepareRequest,
+    TradeRevisionProposalEnqueueRequest, TradeRevisionProposalPrepareRequest,
+    TradeSellerInboxRequest, TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
+    TradeSubmitEnqueueRequest, TradeSubmitPrepareRequest, TradeWorkflowKind,
 };
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_trade::order::RadrootsOrderIssue;
 use serde::Serialize;
 use serde::ser::{self, SerializeStruct};
@@ -386,6 +392,21 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, Radroo
     (tempdir, sdk, store)
 }
 
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+async fn directory_sdk_with_signer(storage_root: &Path, secret_key_hex: &str) -> RadrootsClient {
+    let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+    let signer_keys = RadrootsNostrKeys::new(secret_key);
+    RadrootsClient::builder()
+        .directory_storage(storage_root)
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(
+            RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
+        ))
+        .build()
+        .await
+        .expect("sdk")
+}
+
 fn order_id(raw: &str) -> RadrootsOrderId {
     RadrootsOrderId::parse(raw).expect("order id")
 }
@@ -430,6 +451,12 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
         id: deterministic_event_id("listing-event").into_string(),
         relays: Some(RELAY.to_owned()),
     }
+}
+
+fn explicit_trade_relays() -> RelayResolutionPolicy {
+    RelayResolutionPolicy::explicit(
+        SdkRelayTargetSet::new([RELAY], SdkRelayUrlPolicy::Public).expect("target relays"),
+    )
 }
 
 fn deterministic_event_id(raw: &str) -> RadrootsEventId {
@@ -785,6 +812,128 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
             .as_ref()
             .map(RadrootsEventId::as_str),
         Some(receipt.signed_event_id.as_str())
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let propose_receipt = buyer_sdk
+        .trades()
+        .buyer()
+        .propose_trade(
+            TradeProposeRequest::new(
+                buyer_actor(),
+                listing_event_ptr(),
+                order_request("trade-product-facade-flow"),
+                explicit_trade_relays(),
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .try_with_idempotency_key("trade-product-facade-propose")
+            .expect("propose idempotency"),
+        )
+        .await
+        .expect("propose trade");
+
+    assert_eq!(
+        propose_receipt.order_id.as_str(),
+        "trade-product-facade-flow"
+    );
+    assert_eq!(
+        propose_receipt
+            .locator
+            .root_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(propose_receipt.signed_event_id.as_str())
+    );
+    assert_eq!(
+        propose_receipt.locator.listing_addr,
+        Some(listing_address())
+    );
+    assert_eq!(
+        propose_receipt
+            .locator
+            .seller_pubkey
+            .as_ref()
+            .map(RadrootsPublicKey::as_str),
+        Some(SELLER_PUBLIC_KEY_HEX)
+    );
+
+    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let inbox = seller_sdk
+        .trades()
+        .seller()
+        .inbox(TradeSellerInboxRequest::new(seller_actor()))
+        .await
+        .expect("seller inbox");
+    assert_eq!(inbox.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
+    assert_eq!(inbox.statuses.len(), 1);
+    assert_eq!(inbox.statuses[0].status, TradeStatusKind::Requested);
+    assert_eq!(
+        inbox.statuses[0]
+            .root_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(propose_receipt.signed_event_id.as_str())
+    );
+
+    let accept_receipt = seller_sdk
+        .trades()
+        .seller()
+        .accept_trade(
+            TradeAcceptRequest::new(
+                seller_actor(),
+                propose_receipt.locator.clone(),
+                vec![RadrootsOrderInventoryCommitment {
+                    bin_id: "bin-1".parse().expect("bin id"),
+                    bin_count: 2,
+                }],
+                explicit_trade_relays(),
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .try_with_idempotency_key("trade-product-facade-accept")
+            .expect("accept idempotency"),
+        )
+        .await
+        .expect("accept trade");
+
+    assert_eq!(accept_receipt.order_id, propose_receipt.order_id);
+    assert_eq!(accept_receipt.locator, propose_receipt.locator);
+    assert_eq!(
+        accept_receipt.request_event_id,
+        propose_receipt.signed_event_id
+    );
+    let status = seller_sdk
+        .trades()
+        .status_client()
+        .status(TradeStatusRequest::new(propose_receipt.locator.clone()))
+        .await
+        .expect("facade status");
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        status
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(accept_receipt.signed_event_id.as_str())
+    );
+
+    let resync = seller_sdk
+        .trades()
+        .resync()
+        .resync(TradeResyncRequest::new(propose_receipt.locator))
+        .await
+        .expect("facade resync");
+    assert_eq!(resync.status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        resync.status.last_event_id,
+        Some(accept_receipt.signed_event_id)
     );
 }
 
@@ -1183,7 +1332,16 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
                 }
             },
             "order_id": receipt.order_id.as_str(),
+            "locator": {
+                "trade_id": receipt.order_id.as_str(),
+                "root_event_id": receipt.signed_event_id.as_str(),
+                "listing_addr": receipt.listing_addr.as_str(),
+                "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
+                "seller_pubkey": SELLER_PUBLIC_KEY_HEX
+            },
             "listing_addr": receipt.listing_addr.as_str(),
+            "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
+            "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
             "listing_event_id": receipt.listing_event_id.as_str(),
             "expected_event_id": receipt.expected_event_id.as_str(),
             "signed_event_id": receipt.signed_event_id.as_str(),
@@ -1850,6 +2008,13 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
                 }
             },
             "order_id": receipt.order_id.as_str(),
+            "locator": {
+                "trade_id": receipt.order_id.as_str(),
+                "root_event_id": request_event.id.as_str(),
+                "listing_addr": receipt.listing_addr.as_str(),
+                "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
+                "seller_pubkey": SELLER_PUBLIC_KEY_HEX
+            },
             "listing_addr": receipt.listing_addr.as_str(),
             "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
             "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
