@@ -39,6 +39,34 @@ const FORBIDDEN_SDK_SOURCE_CONCEPTS: &[ForbiddenSdkConcept] = &[
     },
 ];
 
+const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
+    ForbiddenSdkConcept {
+        pattern: "RadrootsSdk::builder()",
+        reason: "SDK docs must describe RadrootsClient as the product runtime entrypoint",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.orders()",
+        reason: "SDK docs must describe the current trade product clients",
+    },
+    ForbiddenSdkConcept {
+        pattern: "OrderStatusRequest",
+        reason: "SDK docs must describe TradeStatusRequest as the status request DTO",
+    },
+    ForbiddenSdkConcept {
+        pattern: "protocol::",
+        reason: "SDK docs must not advertise a public protocol workflow bypass",
+    },
+];
+
+const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
+    "RadrootsClient::builder()",
+    "sdk.trades()",
+    "TradeStatusRequest",
+    "sdk.trade_buyer()",
+    "sdk.trade_seller()",
+    "sdk.trade_status()",
+];
+
 const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TRADE_CANCELLATION_OPERATION_KIND",
     "TRADE_DECISION_OPERATION_KIND",
@@ -320,6 +348,28 @@ fn sdk_manifest_does_not_depend_on_app_or_cli_crates() {
         assert!(
             !manifest.contains(crate_name),
             "SDK manifest contains forbidden downstream crate dependency `{crate_name}`"
+        );
+    }
+}
+
+#[test]
+fn sdk_readme_documents_current_public_product_surface() {
+    let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README");
+    let readme = read_source(readme_path.as_path());
+
+    for concept in FORBIDDEN_SDK_README_CONCEPTS {
+        assert!(
+            !readme.contains(concept.pattern),
+            "README contains forbidden SDK public API concept `{}`: {}",
+            concept.pattern,
+            concept.reason
+        );
+    }
+
+    for concept in REQUIRED_SDK_README_CONCEPTS {
+        assert!(
+            readme.contains(concept),
+            "README must document current SDK public API concept `{concept}`"
         );
     }
 }
