@@ -78,6 +78,14 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
     },
 ];
 
+const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[
+    "trade_buyer",
+    "trade_seller",
+    "trade_status",
+    "trade_resync",
+    "trade_validation",
+];
+
 const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "RadrootsClient::builder()",
     "sdk.trades()",
@@ -437,6 +445,70 @@ fn sdk_readme_documents_current_public_product_surface() {
         assert!(
             readme.contains(concept),
             "README must document current SDK public API concept `{concept}`"
+        );
+    }
+}
+
+#[test]
+fn sdk_sources_do_not_reintroduce_root_trade_alias_surface() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    for path in sdk_root_alias_guard_files(manifest_dir) {
+        let source = read_source(path.as_path());
+        let relative_path = relative_manifest_path(manifest_dir, path.as_path());
+        let findings = root_trade_alias_findings(relative_path.as_str(), source.as_str());
+        assert!(
+            findings.is_empty(),
+            "SDK root trade aliases are forbidden:\n{}",
+            findings.join("\n")
+        );
+    }
+}
+
+#[test]
+fn radroots_client_does_not_expose_root_trade_alias_methods() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/runtime.rs")
+            .as_path(),
+    );
+    let client_impl = impl_block(source.as_str(), "impl RadrootsClient {");
+    let findings = root_trade_alias_findings("src/runtime.rs RadrootsClient impl", client_impl);
+
+    assert!(
+        findings.is_empty(),
+        "RadrootsClient must expose grouped product handles instead of root trade aliases:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn root_trade_alias_scanner_preserves_internal_status_identifiers() {
+    let allowed_source = r#"
+        let code = "trade_status_limit_invalid";
+        let error = RadrootsSdkError::trade_status_limit_invalid(0, 1, 100);
+        async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {}
+    "#;
+    assert!(
+        root_trade_alias_findings("allowed_fixture.rs", allowed_source).is_empty(),
+        "internal status identifiers must remain allowed when they are not root alias calls or definitions"
+    );
+
+    let forbidden_source = r#"
+        impl RadrootsClient {
+            pub async fn trade_status(&self) {}
+        }
+        async fn workflow(sdk: RadrootsClient) {
+            sdk.trade_resync (request).await;
+            RadrootsClient::trade_buyer(&sdk);
+        }
+    "#;
+    let findings = root_trade_alias_findings("forbidden_fixture.rs", forbidden_source);
+
+    for alias in ["trade_status", "trade_resync", "trade_buyer"] {
+        assert!(
+            findings.iter().any(|finding| finding.contains(alias)),
+            "root trade alias scanner must reject `{alias}`"
         );
     }
 }
@@ -1009,6 +1081,23 @@ fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     }
 }
 
+fn sdk_root_alias_guard_files(manifest_dir: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![manifest_dir.join("README")];
+
+    for relative_root in ["src", "examples", "tests"] {
+        let root = manifest_dir.join(relative_root);
+        if root.exists() {
+            paths.extend(rust_source_files(root.as_path()));
+        }
+    }
+
+    paths.retain(|path| {
+        path.file_name().and_then(|file_name| file_name.to_str()) != Some("source_boundary.rs")
+    });
+    paths.sort();
+    paths
+}
+
 fn read_source(path: &Path) -> String {
     fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("failed to read source {}: {error}", path.display()))
@@ -1021,6 +1110,73 @@ fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
         before.is_none_or(|character| !is_rust_identifier_character(character))
             && after.is_none_or(|character| !is_rust_identifier_character(character))
     })
+}
+
+fn root_trade_alias_findings(relative_path: &str, source: &str) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    for alias in FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES {
+        for (index, _) in source.match_indices(alias) {
+            let before = source[..index].chars().next_back();
+            let after_index = index + alias.len();
+            let after = source[after_index..].chars().next();
+
+            if before.is_some_and(is_rust_identifier_character)
+                || after.is_some_and(is_rust_identifier_character)
+            {
+                continue;
+            }
+
+            if source[after_index..]
+                .chars()
+                .find(|character| !character.is_whitespace())
+                != Some('(')
+            {
+                continue;
+            }
+
+            let prefix = source[..index].trim_end();
+            let reason = if prefix.ends_with('.') {
+                "root client method call"
+            } else if prefix.ends_with("::") {
+                "root client associated function call"
+            } else if prefix_ends_with_keyword(prefix, "fn") {
+                "function or method definition"
+            } else {
+                continue;
+            };
+
+            findings.push(format!(
+                "{relative_path}:{} uses `{alias}` as a {reason}",
+                line_number(source, index)
+            ));
+        }
+    }
+
+    findings
+}
+
+fn prefix_ends_with_keyword(source: &str, keyword: &str) -> bool {
+    source.ends_with(keyword)
+        && source[..source.len() - keyword.len()]
+            .chars()
+            .next_back()
+            .is_none_or(|character| !is_rust_identifier_character(character))
+}
+
+fn line_number(source: &str, index: usize) -> usize {
+    source[..index]
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .count()
+        + 1
+}
+
+fn relative_manifest_path(manifest_dir: &Path, path: &Path) -> String {
+    path.strip_prefix(manifest_dir)
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }
 
 fn function_source<'source>(source: &'source str, function_name: &str) -> &'source str {
