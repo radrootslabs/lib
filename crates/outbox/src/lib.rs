@@ -11,8 +11,9 @@ pub use migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 pub use model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
-    RadrootsOutboxOperationInput, RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxRelayStatus, RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
+    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
+    RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
     RadrootsOutboxStatusSummary,
 };
 pub use store::RadrootsOutbox;

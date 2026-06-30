@@ -5,8 +5,9 @@ use crate::migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 use crate::model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
-    RadrootsOutboxOperationInput, RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxRelayStatus, RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
+    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
+    RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
     RadrootsOutboxStatusSummary,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
@@ -110,6 +111,47 @@ impl RadrootsOutbox {
             publishing_events: row.try_get("publishing_events")?,
             last_attempt_at_ms,
             last_error,
+        })
+    }
+
+    pub async fn preflight_signed_operation_idempotency(
+        &self,
+        input: &RadrootsOutboxSignedOperationInput,
+    ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
+        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        let target_relays = ordered_unique_relays(input.target_relays.clone());
+        if target_relays.is_empty() && !input.allow_empty_target_relays {
+            return Err(RadrootsOutboxError::EmptyTargetRelays);
+        }
+        let digest_relays = digest_relays(target_relays.as_slice());
+        let digest = idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey.as_str(),
+            &input.draft,
+            &digest_relays,
+        )?;
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation_for_pool(
+                &self.pool,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey.as_str(),
+                idempotency_key,
+            )
+            .await?
+            && existing.idempotency_digest != digest
+        {
+            return Err(RadrootsOutboxError::IdempotencyConflict {
+                operation_kind: input.operation_kind.clone(),
+                expected_pubkey: input.draft.expected_pubkey.clone(),
+                idempotency_key: idempotency_key.to_owned(),
+                existing_digest: existing.idempotency_digest,
+                new_digest: digest,
+            });
+        }
+
+        Ok(RadrootsOutboxIdempotencyPreflight {
+            idempotency_digest: digest,
         })
     }
 
@@ -1025,15 +1067,36 @@ async fn existing_idempotent_operation(
     .bind(idempotency_key)
     .fetch_optional(&mut **tx)
     .await?;
-    row.map(|row| {
-        Ok(ExistingOperation {
-            operation_id: row.try_get("operation_id")?,
-            outbox_event_id: row.try_get("outbox_event_id")?,
-            event_id: row.try_get("event_id")?,
-            idempotency_digest: row.try_get("idempotency_digest")?,
-        })
+    row.map(existing_operation_from_row).transpose()
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+async fn existing_idempotent_operation_for_pool(
+    pool: &SqlitePool,
+    operation_kind: &str,
+    expected_pubkey: &str,
+    idempotency_key: &str,
+) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
+    let row = sqlx::query(
+        "SELECT o.operation_id, o.idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
+    )
+    .bind(operation_kind)
+    .bind(expected_pubkey)
+    .bind(idempotency_key)
+    .fetch_optional(pool)
+    .await?;
+    row.map(existing_operation_from_row).transpose()
+}
+
+fn existing_operation_from_row(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<ExistingOperation, RadrootsOutboxError> {
+    Ok(ExistingOperation {
+        operation_id: row.try_get("operation_id")?,
+        outbox_event_id: row.try_get("outbox_event_id")?,
+        event_id: row.try_get("event_id")?,
+        idempotency_digest: row.try_get("idempotency_digest")?,
     })
-    .transpose()
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -2055,6 +2118,43 @@ mod tests {
             conflict,
             RadrootsOutboxError::IdempotencyConflict { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn preflight_signed_operation_idempotency_rejects_conflict_without_insert() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-signed");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let first_input = signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
+            .with_idempotency_key("signed-preflight");
+        let first = outbox
+            .enqueue_signed_operation(first_input.clone())
+            .await
+            .expect("first");
+
+        let same = outbox
+            .preflight_signed_operation_idempotency(&first_input)
+            .await
+            .expect("same preflight");
+        assert_eq!(same.idempotency_digest, first.idempotency_digest);
+
+        let changed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-changed");
+        let changed_signed =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft).expect("signed");
+        let conflict = outbox
+            .preflight_signed_operation_idempotency(
+                &signed_operation_input(changed_draft, changed_signed, 1_100)
+                    .with_idempotency_key("signed-preflight"),
+            )
+            .await
+            .expect_err("conflict");
+        assert!(matches!(
+            conflict,
+            RadrootsOutboxError::IdempotencyConflict { .. }
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
     }
 
     #[tokio::test]

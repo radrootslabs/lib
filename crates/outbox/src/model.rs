@@ -222,6 +222,11 @@ pub struct RadrootsOutboxEnqueueReceipt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxIdempotencyPreflight {
+    pub idempotency_digest: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxOperationRecord {
     pub operation_id: i64,
     pub operation_kind: String,
