@@ -73,14 +73,6 @@ impl<'client> TradesClient<'client> {
         TradeSellerClient { sdk: self.sdk }
     }
 
-    pub fn validation(&self) -> TradeValidationClient<'client> {
-        TradeValidationClient { sdk: self.sdk }
-    }
-
-    pub fn status_client(&self) -> TradeStatusClient<'client> {
-        TradeStatusClient { sdk: self.sdk }
-    }
-
     pub fn resync(&self) -> TradeResyncClient<'client> {
         TradeResyncClient { sdk: self.sdk }
     }
@@ -93,62 +85,15 @@ pub struct TradeBuyerClient<'client> {
 }
 
 #[cfg(feature = "runtime")]
-impl<'client> TradeBuyerClient<'client> {
-    pub fn root(&self) -> &'client RadrootsClient {
-        self.sdk
-    }
-}
-
-#[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
 pub struct TradeSellerClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
-impl<'client> TradeSellerClient<'client> {
-    pub fn root(&self) -> &'client RadrootsClient {
-        self.sdk
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy)]
-pub struct TradeValidationClient<'client> {
-    pub(crate) sdk: &'client RadrootsClient,
-}
-
-#[cfg(feature = "runtime")]
-impl<'client> TradeValidationClient<'client> {
-    pub fn root(&self) -> &'client RadrootsClient {
-        self.sdk
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy)]
-pub struct TradeStatusClient<'client> {
-    pub(crate) sdk: &'client RadrootsClient,
-}
-
-#[cfg(feature = "runtime")]
-impl<'client> TradeStatusClient<'client> {
-    pub fn root(&self) -> &'client RadrootsClient {
-        self.sdk
-    }
-}
-
-#[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
 pub struct TradeResyncClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,
-}
-
-#[cfg(feature = "runtime")]
-impl<'client> TradeResyncClient<'client> {
-    pub fn root(&self) -> &'client RadrootsClient {
-        self.sdk
-    }
 }
 
 #[cfg(feature = "runtime")]

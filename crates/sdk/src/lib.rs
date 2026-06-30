@@ -126,8 +126,7 @@ pub use crate::privacy::{
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
     DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient,
-    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient,
-    TradeValidationClient, TradesClient,
+    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{

@@ -5,7 +5,7 @@ use crate::{
     AckPolicy, PrivacyPreflightConfirmation, PrivacyPreflightReceipt, ProductSensitivityField,
     PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState,
-    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient, TradesClient, order,
+    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradesClient, order,
     workflow_runtime::SdkWorkflowEnqueueRequest,
 };
 #[cfg(all(feature = "runtime", test))]
@@ -2526,16 +2526,6 @@ impl<'sdk> TradesClient<'sdk> {
             .map_err(|error| RadrootsSdkError::EventStore {
                 message: error.to_string(),
             })
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl<'sdk> TradeStatusClient<'sdk> {
-    pub async fn status(
-        &self,
-        request: TradeStatusRequest,
-    ) -> Result<TradeStatusReceipt, RadrootsSdkError> {
-        trades_client(self.sdk).status(request).await
     }
 }
 

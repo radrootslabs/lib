@@ -949,7 +949,6 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     );
     let status = seller_sdk
         .trades()
-        .status_client()
         .status(TradeStatusRequest::new(propose_receipt.locator.clone()))
         .await
         .expect("facade status");
