@@ -65,6 +65,7 @@ impl<'client> TradesClient<'client> {
         Self { sdk }
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub fn buyer(&self) -> TradeBuyerClient<'client> {
         TradeBuyerClient { sdk: self.sdk }
     }
@@ -78,7 +79,7 @@ impl<'client> TradesClient<'client> {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 #[derive(Clone, Copy)]
 pub struct TradeBuyerClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,

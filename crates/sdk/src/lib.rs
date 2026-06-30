@@ -101,32 +101,36 @@ pub use crate::market_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
-    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource,
-    TRADE_CANCELLATION_OPERATION_KIND, TRADE_DECISION_OPERATION_KIND,
-    TRADE_REVISION_DECISION_OPERATION_KIND, TRADE_REVISION_PROPOSAL_OPERATION_KIND,
-    TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT, TRADE_SUBMIT_OPERATION_KIND,
-    TradeAcceptRequest, TradeCancelRequest, TradeCancellationPlan, TradeCancellationReceipt,
-    TradeDecisionPlan, TradeDecisionReceipt, TradeDeclineRequest, TradeEvidenceIngestReceipt,
-    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
+    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
+    TRADE_STATUS_MAX_LIMIT, TradeEvidenceIngestReceipt, TradeEvidenceIngestRequest,
     TradeRequestEvidenceIngestReceipt, TradeRequestEvidenceIngestRequest, TradeResyncReceipt,
-    TradeResyncRequest, TradeRevisionDecisionPlan, TradeRevisionDecisionReceipt,
-    TradeRevisionDecisionRequest, TradeRevisionProposalPlan, TradeRevisionProposalReceipt,
-    TradeRevisionProposalRequest, TradeSellerInboxReceipt, TradeSellerInboxRequest,
+    TradeResyncRequest, TradeSellerInboxReceipt, TradeSellerInboxRequest,
     TradeStatusAmbiguityCandidate, TradeStatusEligibility, TradeStatusEvidenceSummary,
     TradeStatusKind, TradeStatusNextActionKind, TradeStatusReceipt, TradeStatusRequest,
-    TradeSubmitPlan, TradeSubmitReceipt, TradeWorkflowEnqueueReceipt,
-    TradeWorkflowIdempotencyReceipt, TradeWorkflowKind, TradeWorkflowPlan,
-    TradeWorkflowRetryAdvice,
+};
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+pub use crate::orders_runtime::{
+    TRADE_CANCELLATION_OPERATION_KIND, TRADE_DECISION_OPERATION_KIND,
+    TRADE_REVISION_DECISION_OPERATION_KIND, TRADE_REVISION_PROPOSAL_OPERATION_KIND,
+    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeCancellationPlan,
+    TradeCancellationReceipt, TradeDecisionPlan, TradeDecisionReceipt, TradeDeclineRequest,
+    TradeMutationOutcome, TradeProposeRequest, TradeRevisionDecisionPlan,
+    TradeRevisionDecisionReceipt, TradeRevisionDecisionRequest, TradeRevisionProposalPlan,
+    TradeRevisionProposalReceipt, TradeRevisionProposalRequest, TradeSubmitPlan,
+    TradeSubmitReceipt, TradeWorkflowEnqueueReceipt, TradeWorkflowIdempotencyReceipt,
+    TradeWorkflowKind, TradeWorkflowPlan, TradeWorkflowRetryAdvice,
 };
 #[cfg(feature = "runtime")]
 pub use crate::privacy::{
     PrivacyPreflightConfirmation, PrivacyPreflightReceipt, PrivacyPreflightStatus,
     ProductSensitivityField,
 };
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+pub use crate::product_clients::TradeBuyerClient;
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
     DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient,
-    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradesClient,
+    TradeResyncClient, TradeSellerClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{

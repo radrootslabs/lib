@@ -1,68 +1,82 @@
 pub use radroots_events::order::*;
+#[cfg(any(feature = "signer-adapters", test))]
 pub use radroots_events_codec::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
 
 #[cfg(feature = "serde_json")]
-use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, ids::RadrootsEventId};
+use radroots_events::RadrootsNostrEvent;
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+use radroots_events::{RadrootsNostrEventPtr, ids::RadrootsEventId};
+#[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::WireEventParts;
 
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRequestDraft {
     parts: WireEventParts,
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderDecisionDraft {
     parts: WireEventParts,
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRevisionProposalDraft {
     parts: WireEventParts,
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRevisionDecisionDraft {
     parts: WireEventParts,
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderCancellationDraft {
     parts: WireEventParts,
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRequestDraft {
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderDecisionDraft {
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRevisionProposalDraft {
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRevisionDecisionDraft {
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
+#[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderCancellationDraft {
     pub fn into_wire_parts(self) -> WireEventParts {
         self.parts
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 pub fn build_order_request_draft(
     listing_event: &RadrootsNostrEventPtr,
     payload: &RadrootsOrderRequest,
@@ -72,7 +86,7 @@ pub fn build_order_request_draft(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 pub fn build_order_decision_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -87,7 +101,7 @@ pub fn build_order_decision_draft(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 pub fn build_order_revision_proposal_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -102,7 +116,7 @@ pub fn build_order_revision_proposal_draft(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 pub fn build_order_revision_decision_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -117,7 +131,7 @@ pub fn build_order_revision_decision_draft(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
 pub fn build_order_cancellation_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,

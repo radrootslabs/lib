@@ -62,6 +62,7 @@ impl RelayResolutionPolicy {
         Ok(Self::Explicit(SdkRelayTargetSet::new(relays, url_policy)?))
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn workflow_target_policy(self) -> SdkRelayTargetPolicy {
         match self {
             Self::ConfiguredRelays => SdkRelayTargetPolicy::UseConfiguredRelays,

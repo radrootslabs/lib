@@ -1,12 +1,18 @@
 #[cfg(feature = "signer-adapters")]
+use crate::TradeBuyerClient;
+#[cfg(feature = "signer-adapters")]
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 use crate::{
     AckPolicy, PrivacyPreflightConfirmation, PrivacyPreflightReceipt, ProductSensitivityField,
-    PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState,
-    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradesClient, order,
+    PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkRecoveryAction,
+    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState,
     workflow_runtime::SdkWorkflowEnqueueRequest,
+};
+#[cfg(feature = "runtime")]
+use crate::{
+    RadrootsSdkError, RadrootsSdkTimestamp, TradeResyncClient, TradeSellerClient, TradesClient,
+    order,
 };
 #[cfg(all(feature = "runtime", test))]
 use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
@@ -18,41 +24,47 @@ use radroots_authority::RadrootsEventSigner;
 use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    RadrootsNostrEvent,
     contract::RadrootsActorRole,
-    draft::RadrootsFrozenEventDraft,
-    ids::{
-        RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
-        RadrootsPublicKey,
-    },
+    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
         KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
     },
+    order::RadrootsOrderEconomics,
+    tags::TAG_P,
+};
+#[cfg(any(feature = "signer-adapters", test))]
+use radroots_events::{
+    RadrootsNostrEventPtr,
+    draft::RadrootsFrozenEventDraft,
+    ids::RadrootsOrderRevisionId,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
-        RadrootsOrderEconomics, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
-        RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
-        RadrootsOrderRevisionProposal,
+        RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderRequest,
+        RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
     },
-    tags::TAG_P,
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::order::{
     order_cancellation_from_event, order_decision_from_event, order_request_from_event,
     order_revision_decision_from_event, order_revision_proposal_from_event,
 };
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "runtime")]
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
+#[cfg(any(feature = "signer-adapters", test))]
+use radroots_trade::order::{
+    RadrootsOrderCanonicalizationError, RadrootsOrderProjectionQueryResult,
+    canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
+    order_projection_query_for_order_id,
+};
 #[cfg(feature = "runtime")]
 use radroots_trade::order::{
-    RadrootsOrderCanonicalizationError, RadrootsOrderEventRecord, RadrootsOrderIssue,
-    RadrootsOrderProjection, RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError,
-    RadrootsTradeLocatorProjectionQueryResult, RadrootsTradeLocatorProjectionResolution,
-    canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
-    order_event_record_from_event, order_projection_query_for_order_id,
+    RadrootsOrderEventRecord, RadrootsOrderIssue, RadrootsOrderProjection,
+    RadrootsOrderStoreQueryError, RadrootsTradeLocatorProjectionQueryResult,
+    RadrootsTradeLocatorProjectionResolution, order_event_record_from_event,
     order_projection_query_for_trade_locator,
 };
 #[cfg(feature = "runtime")]
@@ -63,29 +75,29 @@ use serde::ser::SerializeStruct;
 pub const TRADE_STATUS_DEFAULT_LIMIT: u32 = 500;
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_MAX_LIMIT: u32 = 1_000;
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_SUBMIT_OPERATION_KIND: &str = "trade.submit.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_DECISION_OPERATION_KIND: &str = "trade.decision.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_REVISION_PROPOSAL_OPERATION_KIND: &str = "trade.revision.proposal.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_REVISION_DECISION_OPERATION_KIND: &str = "trade.revision.decision.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_CANCELLATION_OPERATION_KIND: &str = "trade.cancellation.v1";
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 const TRADE_SUBMIT_CONTRACT_ID: &str = "radroots.order.request.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 const TRADE_DECISION_CONTRACT_ID: &str = "radroots.order.decision.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 const TRADE_REVISION_PROPOSAL_CONTRACT_ID: &str = "radroots.order.revision_proposal.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 const TRADE_REVISION_DECISION_CONTRACT_ID: &str = "radroots.order.revision_decision.v1";
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 const TRADE_CANCELLATION_CONTRACT_ID: &str = "radroots.order.cancellation.v1";
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -97,7 +109,7 @@ pub enum TradeWorkflowKind {
     Cancellation,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeWorkflowKind {
     pub fn operation_kind(self) -> &'static str {
         match self {
@@ -120,7 +132,7 @@ impl TradeWorkflowKind {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeWorkflowPlan {
     pub kind: TradeWorkflowKind,
@@ -130,7 +142,7 @@ pub struct TradeWorkflowPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeWorkflowEnqueueReceipt {
     pub kind: TradeWorkflowKind,
@@ -146,7 +158,7 @@ pub struct TradeWorkflowEnqueueReceipt {
     pub retry: TradeWorkflowRetryAdvice,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeWorkflowIdempotencyReceipt {
     pub digest_prefix: Option<String>,
@@ -154,7 +166,7 @@ pub struct TradeWorkflowIdempotencyReceipt {
     pub safe_to_retry_with_same_idempotency_key: bool,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeWorkflowRetryAdvice {
     pub retryable_after_error: bool,
@@ -162,7 +174,7 @@ pub struct TradeWorkflowRetryAdvice {
     pub recovery_actions: Vec<RadrootsSdkRecoveryAction>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeSubmitPrepareRequest {
@@ -173,7 +185,7 @@ pub struct TradeSubmitPrepareRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[cfg(test)]
 impl TradeSubmitPrepareRequest {
     pub fn new(
@@ -266,7 +278,7 @@ impl TradeSubmitEnqueueRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeSubmitPlan {
     pub workflow: TradeWorkflowPlan,
@@ -280,7 +292,7 @@ pub struct TradeSubmitPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeSubmitReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
@@ -368,7 +380,7 @@ pub struct TradeEvidenceIngestReceipt {
     pub inserted: bool,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeDecisionPrepareRequest {
@@ -379,7 +391,7 @@ pub struct TradeDecisionPrepareRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[cfg(test)]
 impl TradeDecisionPrepareRequest {
     pub fn new(
@@ -472,7 +484,7 @@ impl TradeDecisionEnqueueRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeDecisionPlan {
     pub workflow: TradeWorkflowPlan,
@@ -486,7 +498,7 @@ pub struct TradeDecisionPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeDecisionReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
@@ -505,7 +517,7 @@ pub struct TradeDecisionReceipt {
     pub idempotency_digest_prefix: Option<String>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionProposalPrepareRequest {
@@ -517,7 +529,7 @@ pub struct TradeRevisionProposalPrepareRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[cfg(test)]
 impl TradeRevisionProposalPrepareRequest {
     pub fn new(
@@ -615,7 +627,7 @@ impl TradeRevisionProposalEnqueueRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionProposalPlan {
     pub workflow: TradeWorkflowPlan,
@@ -630,7 +642,7 @@ pub struct TradeRevisionProposalPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionProposalReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
@@ -650,7 +662,7 @@ pub struct TradeRevisionProposalReceipt {
     pub idempotency_digest_prefix: Option<String>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionDecisionPrepareRequest {
@@ -662,7 +674,7 @@ pub struct TradeRevisionDecisionPrepareRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[cfg(test)]
 impl TradeRevisionDecisionPrepareRequest {
     pub fn new(
@@ -760,7 +772,7 @@ impl TradeRevisionDecisionEnqueueRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionDecisionPlan {
     pub workflow: TradeWorkflowPlan,
@@ -775,7 +787,7 @@ pub struct TradeRevisionDecisionPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeRevisionDecisionReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
@@ -795,7 +807,7 @@ pub struct TradeRevisionDecisionReceipt {
     pub idempotency_digest_prefix: Option<String>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeCancellationPrepareRequest {
@@ -807,7 +819,7 @@ pub struct TradeCancellationPrepareRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[cfg(test)]
 impl TradeCancellationPrepareRequest {
     pub fn new(
@@ -905,7 +917,7 @@ impl TradeCancellationEnqueueRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeCancellationPlan {
     pub workflow: TradeWorkflowPlan,
@@ -920,7 +932,7 @@ pub struct TradeCancellationPlan {
     pub created_at: RadrootsSdkTimestamp,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeCancellationReceipt {
     pub workflow: TradeWorkflowEnqueueReceipt,
@@ -940,7 +952,7 @@ pub struct TradeCancellationReceipt {
     pub idempotency_digest_prefix: Option<String>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "mode")]
 pub enum TradeMutationOutcome<Plan, Receipt> {
@@ -956,7 +968,7 @@ pub enum TradeMutationOutcome<Plan, Receipt> {
     },
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeProposeRequest {
@@ -972,7 +984,7 @@ pub struct TradeProposeRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeProposeRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1017,7 +1029,7 @@ impl TradeProposeRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeAcceptRequest {
@@ -1033,7 +1045,7 @@ pub struct TradeAcceptRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeAcceptRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1078,7 +1090,7 @@ impl TradeAcceptRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeDeclineRequest {
@@ -1094,7 +1106,7 @@ pub struct TradeDeclineRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeDeclineRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1139,7 +1151,7 @@ impl TradeDeclineRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeCancelRequest {
@@ -1155,7 +1167,7 @@ pub struct TradeCancelRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeCancelRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1200,7 +1212,7 @@ impl TradeCancelRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionProposalRequest {
@@ -1219,7 +1231,7 @@ pub struct TradeRevisionProposalRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeRevisionProposalRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1270,7 +1282,7 @@ impl TradeRevisionProposalRequest {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRevisionDecisionRequest {
@@ -1287,7 +1299,7 @@ pub struct TradeRevisionDecisionRequest {
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl TradeRevisionDecisionRequest {
     pub fn new(
         actor: RadrootsActorContext,
@@ -1698,6 +1710,7 @@ impl<'sdk> TradesClient<'sdk> {
         })
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn prepare_submit(
         &self,
         request: TradeSubmitPrepareRequest,
@@ -1834,6 +1847,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_submit_receipt(plan, enqueue))
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn prepare_decision(
         &self,
         request: TradeDecisionPrepareRequest,
@@ -1982,6 +1996,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_decision_receipt(plan, enqueue))
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn prepare_revision_proposal(
         &self,
         request: TradeRevisionProposalPrepareRequest,
@@ -2135,6 +2150,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_proposal_receipt(plan, enqueue))
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn prepare_revision_decision(
         &self,
         request: TradeRevisionDecisionPrepareRequest,
@@ -2288,6 +2304,7 @@ impl<'sdk> TradesClient<'sdk> {
         Ok(order_revision_decision_receipt(plan, enqueue))
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     pub(crate) fn prepare_cancellation(
         &self,
         request: TradeCancellationPrepareRequest,
@@ -2469,6 +2486,7 @@ impl<'sdk> TradesClient<'sdk> {
         }
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn require_decision_preflight(
         &self,
         plan: &TradeDecisionPlan,
@@ -2477,6 +2495,7 @@ impl<'sdk> TradesClient<'sdk> {
         require_decision_request_evidence(plan, &query_result.projection)
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn require_revision_proposal_preflight(
         &self,
         plan: &TradeRevisionProposalPlan,
@@ -2485,6 +2504,7 @@ impl<'sdk> TradesClient<'sdk> {
         require_revision_proposal_state(plan, &query_result.projection)
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn require_revision_decision_preflight(
         &self,
         plan: &TradeRevisionDecisionPlan,
@@ -2493,6 +2513,7 @@ impl<'sdk> TradesClient<'sdk> {
         require_revision_decision_state(plan, &query_result.projection)
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn require_cancellation_preflight(
         &self,
         plan: &TradeCancellationPlan,
@@ -2501,6 +2522,7 @@ impl<'sdk> TradesClient<'sdk> {
         require_cancellation_state(plan, &query_result.projection)
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn query_order_projection(
         &self,
         order_id: &RadrootsOrderId,
@@ -2514,6 +2536,7 @@ impl<'sdk> TradesClient<'sdk> {
         .map_err(projection_error)
     }
 
+    #[cfg(any(feature = "signer-adapters", test))]
     async fn prepared_order_event_exists(
         &self,
         expected_event_id: &RadrootsEventId,
@@ -2752,7 +2775,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
     }
 }
 
-#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+#[cfg(feature = "runtime")]
 impl<'sdk> TradeSellerClient<'sdk> {
     pub async fn inbox(
         &self,
@@ -2826,6 +2849,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         })
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn accept_trade(
         &self,
         request: TradeAcceptRequest,
@@ -2888,6 +2912,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn decline_trade(
         &self,
         request: TradeDeclineRequest,
@@ -2948,6 +2973,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn propose_revision(
         &self,
         request: TradeRevisionProposalRequest,
@@ -3025,7 +3051,7 @@ fn trades_client(sdk: &crate::RadrootsClient) -> TradesClient<'_> {
     TradesClient { sdk }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 struct TradeProductMutationContext {
     order_id: RadrootsOrderId,
     listing_addr: RadrootsListingAddress,
@@ -3036,7 +3062,7 @@ struct TradeProductMutationContext {
     pending_revision_event_id: Option<RadrootsEventId>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 async fn trade_mutation_context(
     sdk: &crate::RadrootsClient,
     locator: RadrootsTradeLocator,
@@ -3107,7 +3133,7 @@ async fn trade_mutation_context(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
         id: event_id.as_str().to_owned(),
@@ -3115,7 +3141,7 @@ fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
     sdk: &crate::RadrootsClient,
     publish_mode: PublishMode,
@@ -3138,7 +3164,7 @@ async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn push_request_for_ack_policy(
     ack_policy: AckPolicy,
     outbox_event_id: i64,
@@ -3154,7 +3180,7 @@ fn push_request_for_ack_policy(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn validate_trade_product_publish_policy(
     publish_mode: PublishMode,
     ack_policy: AckPolicy,
@@ -3176,7 +3202,7 @@ fn validate_trade_product_publish_policy(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn require_trade_product_privacy_preflight(
     operation: &'static str,
     fields: Vec<ProductSensitivityField>,
@@ -3186,7 +3212,7 @@ fn require_trade_product_privacy_preflight(
         .require_public_publish_allowed(operation, confirmation)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_order_request_privacy_fields(
     order: &RadrootsOrderRequest,
 ) -> Vec<ProductSensitivityField> {
@@ -3197,7 +3223,7 @@ fn trade_order_request_privacy_fields(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_decision_privacy_fields(decision: &RadrootsOrderDecision) -> Vec<ProductSensitivityField> {
     match &decision.decision {
         RadrootsOrderDecisionOutcome::Accepted {
@@ -3210,7 +3236,7 @@ fn trade_decision_privacy_fields(decision: &RadrootsOrderDecision) -> Vec<Produc
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_revision_proposal_privacy_fields(
     proposal: &RadrootsOrderRevisionProposal,
 ) -> Vec<ProductSensitivityField> {
@@ -3221,7 +3247,7 @@ fn trade_revision_proposal_privacy_fields(
     fields
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_revision_decision_privacy_fields(
     decision: &RadrootsOrderRevisionOutcome,
 ) -> Vec<ProductSensitivityField> {
@@ -3231,7 +3257,7 @@ fn trade_revision_decision_privacy_fields(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_reason_privacy_fields(reason: &str) -> Vec<ProductSensitivityField> {
     if reason.trim().is_empty() {
         return Vec::new();
@@ -3243,7 +3269,7 @@ fn trade_reason_privacy_fields(reason: &str) -> Vec<ProductSensitivityField> {
     fields
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "signer-adapters")]
 fn trade_reason_contains_private_coordination(reason: &str) -> bool {
     let reason = reason.to_ascii_lowercase();
     [
@@ -3263,7 +3289,7 @@ fn trade_reason_contains_private_coordination(reason: &str) -> bool {
     .any(|marker| reason.contains(marker))
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn validate_trade_enqueue_policy(
     publish_mode: PublishMode,
     ack_policy: AckPolicy,
@@ -3567,7 +3593,7 @@ impl TradeStatusNextActionKind {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_submit_plan(
     actor: &RadrootsActorContext,
     listing_event: RadrootsNostrEventPtr,
@@ -3616,7 +3642,7 @@ fn order_submit_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_decision_plan(
     actor: &RadrootsActorContext,
     request_event: RadrootsNostrEventPtr,
@@ -3668,7 +3694,7 @@ fn order_decision_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_proposal_plan(
     actor: &RadrootsActorContext,
     root_event: RadrootsNostrEventPtr,
@@ -3726,7 +3752,7 @@ fn order_revision_proposal_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_decision_plan(
     actor: &RadrootsActorContext,
     root_event: RadrootsNostrEventPtr,
@@ -3784,7 +3810,7 @@ fn order_revision_decision_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_cancellation_plan(
     actor: &RadrootsActorContext,
     root_event: RadrootsNostrEventPtr,
@@ -3835,7 +3861,7 @@ fn order_cancellation_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_workflow_plan(
     kind: TradeWorkflowKind,
     expected_event_id: RadrootsEventId,
@@ -3850,7 +3876,7 @@ fn order_workflow_plan(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_submit_receipt(
     plan: TradeSubmitPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
@@ -3882,7 +3908,7 @@ fn order_submit_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_decision_receipt(
     plan: TradeDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
@@ -3914,7 +3940,7 @@ fn order_decision_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_proposal_receipt(
     plan: TradeRevisionProposalPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
@@ -3947,7 +3973,7 @@ fn order_revision_proposal_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_decision_receipt(
     plan: TradeRevisionDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
@@ -3980,7 +4006,7 @@ fn order_revision_decision_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_cancellation_receipt(
     plan: TradeCancellationPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
@@ -4013,7 +4039,7 @@ fn order_cancellation_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_workflow_enqueue_receipt(
     kind: TradeWorkflowKind,
     expected_event_id: RadrootsEventId,
@@ -4046,7 +4072,7 @@ fn order_workflow_enqueue_receipt(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn freeze_order_workflow_draft(
     parts: WireEventParts,
     contract_id: &str,
@@ -4061,7 +4087,7 @@ fn freeze_order_workflow_draft(
     (frozen_draft, expected_event_id)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn validate_order_payload<T>(payload: &T, operation: &'static str) -> Result<(), RadrootsSdkError>
 where
     T: OrderPayloadValidate,
@@ -4073,14 +4099,14 @@ where
         })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 trait OrderPayloadValidate {
     fn validate_order_payload(
         &self,
     ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError>;
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl OrderPayloadValidate for RadrootsOrderDecision {
     fn validate_order_payload(
         &self,
@@ -4089,7 +4115,7 @@ impl OrderPayloadValidate for RadrootsOrderDecision {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl OrderPayloadValidate for RadrootsOrderRevisionProposal {
     fn validate_order_payload(
         &self,
@@ -4098,7 +4124,7 @@ impl OrderPayloadValidate for RadrootsOrderRevisionProposal {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl OrderPayloadValidate for RadrootsOrderRevisionDecision {
     fn validate_order_payload(
         &self,
@@ -4107,7 +4133,7 @@ impl OrderPayloadValidate for RadrootsOrderRevisionDecision {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 impl OrderPayloadValidate for RadrootsOrderCancellation {
     fn validate_order_payload(
         &self,
@@ -4157,7 +4183,7 @@ fn sdk_timestamp_ms(timestamp: RadrootsSdkTimestamp) -> Result<i64, RadrootsSdkE
     i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_decision_request_evidence(
     plan: &TradeDecisionPlan,
     projection: &RadrootsOrderProjection,
@@ -4227,7 +4253,7 @@ fn require_decision_request_evidence(
     Ok(())
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Copy)]
 struct OrderLifecycleReferences<'a> {
     operation: &'static str,
@@ -4239,7 +4265,7 @@ struct OrderLifecycleReferences<'a> {
     previous_event_id: &'a RadrootsEventId,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_revision_proposal_state(
     plan: &TradeRevisionProposalPlan,
     projection: &RadrootsOrderProjection,
@@ -4260,7 +4286,7 @@ fn require_revision_proposal_state(
     require_lifecycle_previous_is_current(&refs, projection)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_revision_decision_state(
     plan: &TradeRevisionDecisionPlan,
     projection: &RadrootsOrderProjection,
@@ -4285,7 +4311,7 @@ fn require_revision_decision_state(
     require_lifecycle_previous_is_current(&refs, projection)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_cancellation_state(
     plan: &TradeCancellationPlan,
     projection: &RadrootsOrderProjection,
@@ -4315,7 +4341,7 @@ fn require_cancellation_state(
     require_lifecycle_previous_is_current(&refs, projection)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_clean_lifecycle_projection(
     refs: OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4370,7 +4396,7 @@ fn require_clean_lifecycle_projection(
     )
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_lifecycle_status(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4390,7 +4416,7 @@ fn require_lifecycle_status(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_no_lifecycle_terminal(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4406,7 +4432,7 @@ fn require_no_lifecycle_terminal(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_pending_revision(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4431,7 +4457,7 @@ fn require_pending_revision(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_no_pending_revision(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4447,7 +4473,7 @@ fn require_no_pending_revision(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_lifecycle_previous_is_current(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
@@ -4470,7 +4496,7 @@ fn require_lifecycle_previous_is_current(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn lifecycle_invalid(
     operation: &'static str,
     order_id: &RadrootsOrderId,
@@ -4481,7 +4507,7 @@ fn lifecycle_invalid(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_projection_match<T>(
     operation: &'static str,
     field: &'static str,
@@ -4507,7 +4533,7 @@ where
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_buyer_actor(
     actor: &RadrootsActorContext,
     operation: &'static str,
@@ -4537,7 +4563,7 @@ fn require_seller_actor(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn listing_event_id(
     listing_event: &RadrootsNostrEventPtr,
 ) -> Result<RadrootsEventId, RadrootsSdkError> {
@@ -4548,7 +4574,7 @@ fn listing_event_id(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn request_event_id(
     request_event: &RadrootsNostrEventPtr,
 ) -> Result<RadrootsEventId, RadrootsSdkError> {
@@ -4559,7 +4585,7 @@ fn request_event_id(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_reference_event_id(
     event: &RadrootsNostrEventPtr,
     label: &'static str,
@@ -4569,7 +4595,7 @@ fn order_reference_event_id(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn require_payload_event_refs(
     operation: &'static str,
     payload_root_event_id: &RadrootsEventId,
@@ -4596,7 +4622,7 @@ fn require_payload_event_refs(
     Ok(())
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_canonicalization_error(error: RadrootsOrderCanonicalizationError) -> RadrootsSdkError {
     match error {
         RadrootsOrderCanonicalizationError::InvalidBuyerSigner => {
@@ -4611,7 +4637,7 @@ fn order_canonicalization_error(error: RadrootsOrderCanonicalizationError) -> Ra
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "signer-adapters", test))]
 fn order_decision_canonicalization_error(
     error: RadrootsOrderCanonicalizationError,
 ) -> RadrootsSdkError {
