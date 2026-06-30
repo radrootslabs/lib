@@ -531,6 +531,48 @@ fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
 }
 
 #[test]
+fn private_protocol_helper_modules_are_runtime_gated_by_lib() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
+
+    for module in ["farm", "order"] {
+        let module_gate = format!("#[cfg(feature = \"runtime\")]\nmod {module};");
+        assert!(
+            lib_source.contains(module_gate.as_str()),
+            "src/lib.rs must keep private protocol helper module `{module}` behind runtime"
+        );
+    }
+
+    for relative_path in ["src/farm.rs", "src/order.rs"] {
+        let source = read_source(manifest_dir.join(relative_path).as_path());
+        assert!(
+            !source.contains("feature = \"runtime\""),
+            "{relative_path} must rely on the lib.rs module-level runtime gate"
+        );
+        assert!(
+            !source.contains("feature = \"serde_json\""),
+            "{relative_path} must rely on the runtime feature's serde_json contract instead of duplicating it"
+        );
+    }
+
+    let order_source = read_source(manifest_dir.join("src/order.rs").as_path());
+    for helper in [
+        "build_order_request_draft",
+        "build_order_decision_draft",
+        "build_order_revision_proposal_draft",
+        "build_order_revision_decision_draft",
+        "build_order_cancellation_draft",
+    ] {
+        let helper_gate =
+            format!("#[cfg(any(feature = \"signer-adapters\", test))]\npub fn {helper}(");
+        assert!(
+            order_source.contains(helper_gate.as_str()),
+            "src/order.rs must keep `{helper}` available only for signer adapters and unit tests"
+        );
+    }
+}
+
+#[test]
 fn default_status_noise_test_uses_production_ingest_not_perf_sql_ballast() {
     let orders_runtime_tests = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))

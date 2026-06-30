@@ -1,12 +1,10 @@
 pub use radroots_events::order::*;
 #[cfg(any(feature = "signer-adapters", test))]
 pub use radroots_events_codec::error::EventEncodeError;
-#[cfg(feature = "runtime")]
 pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
 
-#[cfg(feature = "runtime")]
 use radroots_events::RadrootsNostrEvent;
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 use radroots_events::{RadrootsNostrEventPtr, ids::RadrootsEventId};
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::WireEventParts;
@@ -76,7 +74,7 @@ impl RadrootsOrderCancellationDraft {
     }
 }
 
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_request_draft(
     listing_event: &RadrootsNostrEventPtr,
     payload: &RadrootsOrderRequest,
@@ -86,7 +84,7 @@ pub fn build_order_request_draft(
     })
 }
 
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_decision_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -101,7 +99,7 @@ pub fn build_order_decision_draft(
     })
 }
 
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_revision_proposal_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -116,7 +114,7 @@ pub fn build_order_revision_proposal_draft(
     })
 }
 
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_revision_decision_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -131,7 +129,7 @@ pub fn build_order_revision_decision_draft(
     })
 }
 
-#[cfg(all(feature = "serde_json", any(feature = "signer-adapters", test)))]
+#[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_cancellation_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -146,7 +144,6 @@ pub fn build_order_cancellation_draft(
     })
 }
 
-#[cfg(feature = "runtime")]
 pub fn parse_order_request(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {
