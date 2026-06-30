@@ -23,11 +23,7 @@ use radroots_events::{
 #[cfg(feature = "runtime")]
 use radroots_events_codec::wire::{WireEventParts, canonicalize_tags, to_frozen_draft};
 #[cfg(feature = "runtime")]
-use radroots_sp1_guest_trade::{
-    RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET, RADROOTS_SP1_TRADE_PROTOCOL_VERSION,
-    RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH, RADROOTS_SP1_TRADE_WITNESS_VERSION,
-    RadrootsSp1TradeInventoryBinWitness,
-};
+use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
 #[cfg(feature = "runtime")]
 use radroots_trade::validation_receipt::{
     RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
@@ -36,14 +32,21 @@ use radroots_trade::validation_receipt::{
 };
 
 #[cfg(feature = "runtime")]
+const RADROOTS_TRADE_TRANSITION_WITNESS_VERSION: u32 = 1;
+#[cfg(feature = "runtime")]
+const RADROOTS_TRADE_TRANSITION_PROTOCOL_VERSION: &str = "radroots.trade.v1";
+#[cfg(feature = "runtime")]
+const RADROOTS_TRADE_TRANSITION_REDUCER_PROGRAM_HASH: &str =
+    "0x3d8f7f463904d71f2d0d14b1551450756697e51c7b658e10c6d5c20a7bc61f08";
+#[cfg(feature = "runtime")]
+const RADROOTS_TRADE_TRANSITION_PROOF_TARGET: &str = "trade.order_acceptance.v1";
+
+#[cfg(feature = "runtime")]
 pub const DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID: &str =
     "radroots.trade.transition_proof.request.v1";
 #[cfg(feature = "runtime")]
 pub const DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND: &str =
     "dvm.trade_transition_proof.request.v1";
-
-#[cfg(feature = "runtime")]
-pub type SdkDvmInventoryBinWitness = RadrootsSp1TradeInventoryBinWitness;
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -96,7 +99,7 @@ pub struct DvmTradeTransitionProofPrepareRequest {
     pub listing_event_id: RadrootsEventId,
     pub request_event_id: RadrootsEventId,
     pub decision_event_id: RadrootsEventId,
-    pub inventory_bins: Vec<SdkDvmInventoryBinWitness>,
+    pub inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
     pub inventory_sequence: u128,
     pub previous_state_root: Option<String>,
     pub proof_mode: DvmProofMode,
@@ -114,7 +117,7 @@ impl DvmTradeTransitionProofPrepareRequest {
         listing_event_id: RadrootsEventId,
         request_event_id: RadrootsEventId,
         decision_event_id: RadrootsEventId,
-        inventory_bins: Vec<SdkDvmInventoryBinWitness>,
+        inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
     ) -> Self {
         Self {
             actor,
@@ -183,7 +186,7 @@ impl DvmTradeTransitionProofEnqueueRequest {
         listing_event_id: RadrootsEventId,
         request_event_id: RadrootsEventId,
         decision_event_id: RadrootsEventId,
-        inventory_bins: Vec<SdkDvmInventoryBinWitness>,
+        inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
         target_relays: SdkRelayTargetPolicy,
     ) -> Self {
         Self::from_prepare(
@@ -276,7 +279,7 @@ pub struct DvmTradeTransitionProofRequestPayload {
     pub listing_event_id: String,
     pub request_event_id: String,
     pub decision_event_id: String,
-    pub inventory_bins: Vec<SdkDvmInventoryBinWitness>,
+    pub inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
     pub inventory_sequence: u128,
     pub previous_state_root: Option<String>,
     pub proof_mode: DvmProofMode,
@@ -530,8 +533,8 @@ fn dvm_trade_transition_proof_plan(
     validate_inventory_bins(&request.inventory_bins)?;
     validate_sp1_identity(&request)?;
     let payload = DvmTradeTransitionProofRequestPayload {
-        witness_version: RADROOTS_SP1_TRADE_WITNESS_VERSION,
-        proof_target: RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET.to_owned(),
+        witness_version: RADROOTS_TRADE_TRANSITION_WITNESS_VERSION,
+        proof_target: RADROOTS_TRADE_TRANSITION_PROOF_TARGET.to_owned(),
         listing_event_id: request.listing_event_id.as_str().to_owned(),
         request_event_id: request.request_event_id.as_str().to_owned(),
         decision_event_id: request.decision_event_id.as_str().to_owned(),
@@ -539,8 +542,8 @@ fn dvm_trade_transition_proof_plan(
         inventory_sequence: request.inventory_sequence,
         previous_state_root: request.previous_state_root.clone(),
         proof_mode: request.proof_mode,
-        reducer_program_hash: RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH.to_owned(),
-        radroots_protocol_version: RADROOTS_SP1_TRADE_PROTOCOL_VERSION.to_owned(),
+        reducer_program_hash: RADROOTS_TRADE_TRANSITION_REDUCER_PROGRAM_HASH.to_owned(),
+        radroots_protocol_version: RADROOTS_TRADE_TRANSITION_PROTOCOL_VERSION.to_owned(),
         sp1_program_hash: request.sp1_program_hash.clone(),
         sp1_verifying_key_hash: request.sp1_verifying_key_hash.clone(),
     };
@@ -552,19 +555,19 @@ fn dvm_trade_transition_proof_plan(
             "i".to_owned(),
             request.listing_event_id.as_str().to_owned(),
             "event".to_owned(),
-            "listing".to_owned(),
+            "radroots:listing_event".to_owned(),
         ],
         vec![
             "i".to_owned(),
             request.request_event_id.as_str().to_owned(),
             "event".to_owned(),
-            "order_request".to_owned(),
+            "radroots:order_request_event".to_owned(),
         ],
         vec![
             "i".to_owned(),
             request.decision_event_id.as_str().to_owned(),
             "event".to_owned(),
-            "order_decision".to_owned(),
+            "radroots:order_decision_event".to_owned(),
         ],
     ];
     canonicalize_tags(&mut tags);
@@ -599,7 +602,7 @@ fn dvm_trade_transition_proof_plan(
 
 #[cfg(feature = "runtime")]
 fn validate_inventory_bins(
-    inventory_bins: &[SdkDvmInventoryBinWitness],
+    inventory_bins: &[RadrootsTradeInventoryBinWitnessDto],
 ) -> Result<(), RadrootsSdkError> {
     if inventory_bins.is_empty() {
         return Err(RadrootsSdkError::InvalidRequest {
@@ -607,7 +610,7 @@ fn validate_inventory_bins(
         });
     }
     for bin in inventory_bins {
-        if bin.bin_id.trim().is_empty() {
+        if bin.bin_id.as_str().trim().is_empty() {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: "DVM proof request inventory bin id cannot be empty".to_owned(),
             });
@@ -616,7 +619,7 @@ fn validate_inventory_bins(
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!(
                     "DVM proof request inventory bin `{}` previous_reserved exceeds listing_capacity",
-                    bin.bin_id
+                    bin.bin_id.as_str()
                 ),
             });
         }

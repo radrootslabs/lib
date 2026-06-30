@@ -1,10 +1,50 @@
-use super::{SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy};
+use super::{
+    AckPolicy, PublishMode, RelayResolutionPolicy, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy,
+};
 use crate::{RadrootsSdkError, SDK_RELAY_TARGET_MAX_COUNT};
 
 #[path = "../support/serializer_failure.rs"]
 mod serializer_failure;
 
 use serializer_failure::assert_struct_serialize_error_paths;
+
+#[test]
+fn publish_mode_and_ack_policy_serialize_explicit_product_contracts() {
+    assert_eq!(
+        serde_json::to_value(PublishMode::DryRun).expect("json"),
+        serde_json::json!("dry_run")
+    );
+    assert_eq!(
+        serde_json::to_value(PublishMode::EnqueueOnly).expect("json"),
+        serde_json::json!("enqueue_only")
+    );
+    assert_eq!(
+        serde_json::to_value(PublishMode::EnqueueAndPublish).expect("json"),
+        serde_json::json!("enqueue_and_publish")
+    );
+    assert_eq!(
+        serde_json::to_value(AckPolicy::NoWait).expect("json"),
+        serde_json::json!("no_wait")
+    );
+    assert_eq!(
+        serde_json::to_value(AckPolicy::AtLeastOneRelay).expect("json"),
+        serde_json::json!("at_least_one_relay")
+    );
+    assert_eq!(
+        serde_json::to_value(AckPolicy::AllRelays).expect("json"),
+        serde_json::json!("all_relays")
+    );
+    assert_eq!(
+        serde_json::to_value(AckPolicy::quorum(2).expect("quorum")).expect("json"),
+        serde_json::json!({ "quorum": { "required": 2 } })
+    );
+    assert!(matches!(
+        AckPolicy::quorum(0),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message == "ack policy quorum must require at least one relay"
+    ));
+}
 
 fn is_local_ws_relay(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("ws://") else {
@@ -34,6 +74,13 @@ fn relay_authority_host(authority: &str) -> Option<String> {
 
 #[test]
 fn use_configured_policy_serializes_as_kind_only() {
+    let trade_policy = RelayResolutionPolicy::ConfiguredRelays;
+    assert_eq!(
+        serde_json::to_value(&trade_policy).expect("json"),
+        serde_json::json!({ "kind": "configured_relays" })
+    );
+    assert_struct_serialize_error_paths(&trade_policy, 1);
+
     let policy = SdkRelayTargetPolicy::UseConfiguredRelays;
     assert_eq!(
         serde_json::to_value(&policy).expect("json"),
@@ -93,6 +140,21 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
             SdkRelayTargetSet::new(["wss://relay-c.example.com"], SdkRelayUrlPolicy::Public)
                 .expect("target set"),
         )
+    );
+    assert_eq!(
+        serde_json::to_value(
+            RelayResolutionPolicy::try_explicit(
+                vec!["wss://relay-c.example.com".to_owned()],
+                SdkRelayUrlPolicy::Public,
+            )
+            .expect("trade explicit policy")
+        )
+        .expect("trade policy json"),
+        serde_json::json!({
+            "kind": "explicit",
+            "relays": ["wss://relay-c.example.com"],
+            "canonical_relays": ["wss://relay-c.example.com"]
+        })
     );
 }
 

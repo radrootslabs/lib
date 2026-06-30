@@ -408,22 +408,22 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey],
         ),
         (
-            RadrootsSdkError::OrderStatusLimitInvalid {
+            RadrootsSdkError::TradeStatusLimitInvalid {
                 limit: 0,
                 min: 1,
                 max: 1000,
             },
-            "order_status_limit_invalid",
+            "trade_status_limit_invalid",
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
-            RadrootsSdkError::InvalidOrderId {
+            RadrootsSdkError::InvalidTradeId {
                 value: "bad".to_owned(),
                 message: "invalid".to_owned(),
             },
-            "invalid_order_id",
+            "invalid_trade_id",
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
@@ -892,7 +892,7 @@ fn sdk_examples_stay_on_product_api_boundary() {
     assert!(local_enqueue.contains("enqueue_prepared_publish"));
     assert!(!local_enqueue.contains("enqueue_prepared_publish_with_explicit_signer"));
     assert!(local_enqueue.contains("push_outbox_with_adapter"));
-    assert!(local_enqueue.contains("OrderStatusRequest"));
+    assert!(local_enqueue.contains("TradeStatusRequest"));
 
     let myc_setup = include_str!("../examples/sdk_v1_myc_nip46_signer_setup.rs");
     assert!(myc_setup.contains("RadrootsSdkMycNip46Signer"));

@@ -1,7 +1,7 @@
 use super::{
     DvmProofMode, DvmTradeTransitionProofEnqueueRequest, DvmTradeTransitionProofPrepareRequest,
-    DvmValidationReceiptIngestRequest, SdkDvmInventoryBinWitness, dvm_trade_transition_proof_plan,
-    sdk_timestamp_ms,
+    DvmValidationReceiptIngestRequest, RadrootsTradeInventoryBinWitnessDto,
+    dvm_trade_transition_proof_plan, sdk_timestamp_ms,
 };
 use crate::{
     RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
@@ -11,7 +11,7 @@ use radroots_authority::RadrootsActorContext;
 use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsPublicKey},
+    ids::{RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
 };
 use radroots_trade::validation_receipt::RadrootsValidationReceiptProofSystem;
@@ -60,15 +60,30 @@ fn trade_transition_proof_plan_builds_microstandard_wire_payload() {
     );
     assert_eq!(
         plan.frozen_draft.tags[1],
-        vec!["i", event_id('1').as_str(), "event", "listing"]
+        vec![
+            "i",
+            event_id('1').as_str(),
+            "event",
+            "radroots:listing_event"
+        ]
     );
     assert_eq!(
         plan.frozen_draft.tags[2],
-        vec!["i", event_id('2').as_str(), "event", "order_request"]
+        vec![
+            "i",
+            event_id('2').as_str(),
+            "event",
+            "radroots:order_request_event"
+        ]
     );
     assert_eq!(
         plan.frozen_draft.tags[3],
-        vec!["i", event_id('3').as_str(), "event", "order_decision"]
+        vec![
+            "i",
+            event_id('3').as_str(),
+            "event",
+            "radroots:order_decision_event"
+        ]
     );
     assert_eq!(plan.frozen_draft.tags[4], vec!["p", WORKER]);
 }
@@ -110,8 +125,8 @@ fn trade_transition_proof_plan_rejects_inventory_and_sp1_identity_edges() {
         event_id('1'),
         event_id('2'),
         event_id('3'),
-        vec![SdkDvmInventoryBinWitness {
-            bin_id: "bin-1".to_owned(),
+        vec![RadrootsTradeInventoryBinWitnessDto {
+            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             listing_capacity: 2,
             previous_reserved: 3,
         }],
@@ -124,22 +139,11 @@ fn trade_transition_proof_plan_rejects_inventory_and_sp1_identity_edges() {
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
 
-    let empty_bin_id = DvmTradeTransitionProofPrepareRequest::new(
-        service_actor(),
-        worker_pubkey(),
-        listing_addr(),
-        event_id('1'),
-        event_id('2'),
-        event_id('3'),
-        vec![SdkDvmInventoryBinWitness {
-            bin_id: " ".to_owned(),
-            listing_capacity: 2,
-            previous_reserved: 1,
-        }],
-    );
+    let invalid_previous_state_root =
+        proof_request(service_actor()).with_previous_state_root("not-a-hash");
     assert!(matches!(
         dvm_trade_transition_proof_plan(
-            empty_bin_id,
+            invalid_previous_state_root,
             RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
         ),
         Err(RadrootsSdkError::InvalidRequest { .. })
@@ -344,17 +348,17 @@ fn proof_request(actor: RadrootsActorContext) -> DvmTradeTransitionProofPrepareR
         event_id('1'),
         event_id('2'),
         event_id('3'),
-        vec![SdkDvmInventoryBinWitness {
-            bin_id: "bin-1".to_owned(),
+        vec![RadrootsTradeInventoryBinWitnessDto {
+            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             listing_capacity: 5,
             previous_reserved: 1,
         }],
     )
 }
 
-fn inventory_bins() -> Vec<SdkDvmInventoryBinWitness> {
-    vec![SdkDvmInventoryBinWitness {
-        bin_id: "bin-1".to_owned(),
+fn inventory_bins() -> Vec<RadrootsTradeInventoryBinWitnessDto> {
+    vec![RadrootsTradeInventoryBinWitnessDto {
+        bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         listing_capacity: 5,
         previous_reserved: 1,
     }]

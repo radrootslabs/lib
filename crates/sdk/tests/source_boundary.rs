@@ -39,52 +39,53 @@ const FORBIDDEN_SDK_SOURCE_CONCEPTS: &[ForbiddenSdkConcept] = &[
     },
 ];
 
-const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
-    "ORDER_CANCELLATION_OPERATION_KIND",
-    "ORDER_DECISION_OPERATION_KIND",
-    "ORDER_REVISION_DECISION_OPERATION_KIND",
-    "ORDER_REVISION_PROPOSAL_OPERATION_KIND",
-    "ORDER_STATUS_DEFAULT_LIMIT",
-    "ORDER_STATUS_MAX_LIMIT",
-    "ORDER_SUBMIT_OPERATION_KIND",
-    "OrderCancellationEnqueueRequest",
-    "OrderCancellationPlan",
-    "OrderCancellationPrepareRequest",
-    "OrderCancellationReceipt",
-    "OrderDecisionEnqueueRequest",
-    "OrderDecisionPlan",
-    "OrderDecisionPrepareRequest",
-    "OrderDecisionReceipt",
-    "OrderEvidenceIngestReceipt",
-    "OrderEvidenceIngestRequest",
-    "OrderRequestEvidenceIngestReceipt",
-    "OrderRequestEvidenceIngestRequest",
-    "OrderRevisionDecisionEnqueueRequest",
-    "OrderRevisionDecisionPlan",
-    "OrderRevisionDecisionPrepareRequest",
-    "OrderRevisionDecisionReceipt",
-    "OrderRevisionProposalEnqueueRequest",
-    "OrderRevisionProposalPlan",
-    "OrderRevisionProposalPrepareRequest",
-    "OrderRevisionProposalReceipt",
-    "OrderStatusEligibility",
-    "OrderStatusEvidenceSummary",
-    "OrderStatusKind",
-    "OrderStatusNextActionKind",
-    "OrderStatusReceipt",
-    "OrderStatusRequest",
-    "OrderSubmitEnqueueRequest",
-    "OrderSubmitPlan",
-    "OrderSubmitPrepareRequest",
-    "OrderSubmitReceipt",
-    "OrderWorkflowEnqueueReceipt",
-    "OrderWorkflowIdempotencyReceipt",
-    "OrderWorkflowKind",
-    "OrderWorkflowPlan",
-    "OrderWorkflowRetryAdvice",
-    "SdkOrderStatusIssue",
-    "SdkOrderStatusIssueKind",
-    "SdkOrderStatusSource",
+const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
+    "TRADE_CANCELLATION_OPERATION_KIND",
+    "TRADE_DECISION_OPERATION_KIND",
+    "TRADE_REVISION_DECISION_OPERATION_KIND",
+    "TRADE_REVISION_PROPOSAL_OPERATION_KIND",
+    "TRADE_STATUS_DEFAULT_LIMIT",
+    "TRADE_STATUS_MAX_LIMIT",
+    "TRADE_SUBMIT_OPERATION_KIND",
+    "TradeCancellationEnqueueRequest",
+    "TradeCancellationPlan",
+    "TradeCancellationPrepareRequest",
+    "TradeCancellationReceipt",
+    "TradeDecisionEnqueueRequest",
+    "TradeDecisionPlan",
+    "TradeDecisionPrepareRequest",
+    "TradeDecisionReceipt",
+    "TradeEvidenceIngestReceipt",
+    "TradeEvidenceIngestRequest",
+    "TradeRequestEvidenceIngestReceipt",
+    "TradeRequestEvidenceIngestRequest",
+    "TradeRevisionDecisionEnqueueRequest",
+    "TradeRevisionDecisionPlan",
+    "TradeRevisionDecisionPrepareRequest",
+    "TradeRevisionDecisionReceipt",
+    "TradeRevisionProposalEnqueueRequest",
+    "TradeRevisionProposalPlan",
+    "TradeRevisionProposalPrepareRequest",
+    "TradeRevisionProposalReceipt",
+    "TradeStatusAmbiguityCandidate",
+    "TradeStatusEligibility",
+    "TradeStatusEvidenceSummary",
+    "TradeStatusKind",
+    "TradeStatusNextActionKind",
+    "TradeStatusReceipt",
+    "TradeStatusRequest",
+    "TradeSubmitEnqueueRequest",
+    "TradeSubmitPlan",
+    "TradeSubmitPrepareRequest",
+    "TradeSubmitReceipt",
+    "TradeWorkflowEnqueueReceipt",
+    "TradeWorkflowIdempotencyReceipt",
+    "TradeWorkflowKind",
+    "TradeWorkflowPlan",
+    "TradeWorkflowRetryAdvice",
+    "SdkTradeStatusIssue",
+    "SdkTradeStatusIssueKind",
+    "SdkTradeStatusSource",
 ];
 
 const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
@@ -98,10 +99,24 @@ const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
     "DvmTradeTransitionProofRequestPayload",
     "DvmValidationReceiptIngestReceipt",
     "DvmValidationReceiptIngestRequest",
-    "SdkDvmInventoryBinWitness",
+    "RadrootsTradeInventoryBinWitnessDto",
 ];
 
-const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
+const REQUIRED_TRADE_POLICY_EXPORTS: &[&str] = &[
+    "AckPolicy",
+    "PublishMode",
+    "RelayResolutionPolicy",
+    "SdkTradeIdempotencyRecord",
+    "PrivacyPreflightReceipt",
+    "PrivacyPreflightStatus",
+    "ProductSensitivityField",
+    "SDK_TRADE_PROJECTION_CACHE_VERSION",
+    "SdkTradeProjectionCache",
+    "SdkTradeProjectionCacheKey",
+    "SdkTradeProjectionCacheRecord",
+];
+
+const REQUIRED_TRADES_CLIENT_METHODS: &[&str] = &[
     "pub async fn ingest_evidence(",
     "pub async fn ingest_request_evidence(",
     "pub fn prepare_submit(",
@@ -131,7 +146,7 @@ const REQUIRED_DVM_CLIENT_METHODS: &[&str] = &[
 const REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS: &[&str] =
     &["pub async fn enqueue_trade_transition_proof_request("];
 
-const REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
+const REQUIRED_TRADES_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
     "pub async fn enqueue_submit_with_explicit_signer(",
     "pub async fn enqueue_prepared_submit_with_explicit_signer(",
     "pub async fn enqueue_decision_with_explicit_signer(",
@@ -174,6 +189,54 @@ const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "ORDER_PAYMENT_RECORD_OPERATION_KIND",
     "ORDER_RECEIPT_RECORD_OPERATION_KIND",
     "ORDER_SETTLEMENT_DECISION_OPERATION_KIND",
+];
+
+const FORBIDDEN_LEGACY_ORDER_PRODUCT_EXPORTS: &[&str] = &[
+    "ORDER_CANCELLATION_OPERATION_KIND",
+    "ORDER_DECISION_OPERATION_KIND",
+    "ORDER_REVISION_DECISION_OPERATION_KIND",
+    "ORDER_REVISION_PROPOSAL_OPERATION_KIND",
+    "ORDER_STATUS_DEFAULT_LIMIT",
+    "ORDER_STATUS_MAX_LIMIT",
+    "ORDER_SUBMIT_OPERATION_KIND",
+    "OrderCancellationEnqueueRequest",
+    "OrderCancellationPlan",
+    "OrderCancellationPrepareRequest",
+    "OrderCancellationReceipt",
+    "OrderDecisionEnqueueRequest",
+    "OrderDecisionPlan",
+    "OrderDecisionPrepareRequest",
+    "OrderDecisionReceipt",
+    "OrderEvidenceIngestReceipt",
+    "OrderEvidenceIngestRequest",
+    "OrderRequestEvidenceIngestReceipt",
+    "OrderRequestEvidenceIngestRequest",
+    "OrderRevisionDecisionEnqueueRequest",
+    "OrderRevisionDecisionPlan",
+    "OrderRevisionDecisionPrepareRequest",
+    "OrderRevisionDecisionReceipt",
+    "OrderRevisionProposalEnqueueRequest",
+    "OrderRevisionProposalPlan",
+    "OrderRevisionProposalPrepareRequest",
+    "OrderRevisionProposalReceipt",
+    "OrderStatusEligibility",
+    "OrderStatusEvidenceSummary",
+    "OrderStatusReceipt",
+    "OrderStatusRequest",
+    "OrderSubmitEnqueueRequest",
+    "OrderSubmitPlan",
+    "OrderSubmitPrepareRequest",
+    "OrderSubmitReceipt",
+    "OrderWorkflowEnqueueReceipt",
+    "OrderWorkflowIdempotencyReceipt",
+    "OrderWorkflowKind",
+    "OrderWorkflowPlan",
+    "OrderWorkflowRetryAdvice",
+    "SdkDvmInventoryBinWitness",
+    "SdkOrderStatusIssue",
+    "SdkOrderStatusIssueKind",
+    "SdkOrderStatusSource",
+    "TradeProtocolClient",
 ];
 
 const FORBIDDEN_ORDER_RUNTIME_METHODS: &[&str] = &[
@@ -298,10 +361,24 @@ fn order_runtime_public_exports_are_explicit() {
         "src/lib.rs must not wildcard-export the order runtime"
     );
 
-    for export in REQUIRED_ORDER_RUNTIME_EXPORTS {
+    for export in REQUIRED_TRADE_RUNTIME_EXPORTS {
         assert!(
             source.contains(export),
-            "src/lib.rs must explicitly expose order SDK runtime export `{export}`"
+            "src/lib.rs must explicitly expose trade SDK runtime export `{export}`"
+        );
+    }
+
+    for export in REQUIRED_TRADE_POLICY_EXPORTS {
+        assert!(
+            source.contains(export),
+            "src/lib.rs must explicitly expose trade policy export `{export}`"
+        );
+    }
+
+    for forbidden in FORBIDDEN_LEGACY_ORDER_PRODUCT_EXPORTS {
+        assert!(
+            !source.contains(forbidden),
+            "src/lib.rs must not expose legacy order SDK product export `{forbidden}`"
         );
     }
 }
@@ -352,14 +429,14 @@ fn orders_client_surface_is_inventory_guarded() {
         "src/orders_runtime.rs must own TradesClient runtime methods"
     );
 
-    for method in REQUIRED_ORDERS_CLIENT_METHODS {
+    for method in REQUIRED_TRADES_CLIENT_METHODS {
         assert!(
             source.contains(method),
             "TradesClient must expose inventory-guarded method `{method}`"
         );
     }
 
-    for method in REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS {
+    for method in REQUIRED_TRADES_CLIENT_ADVANCED_SIGNER_METHODS {
         assert!(
             source.contains(method),
             "TradesClient must expose explicit-signer advanced method `{method}`"
@@ -427,6 +504,11 @@ fn product_clients_remain_thin_sdk_handles() {
         "ListingsClient",
         "MarketClient",
         "SyncClient",
+        "TradeBuyerClient",
+        "TradeResyncClient",
+        "TradeSellerClient",
+        "TradeStatusClient",
+        "TradeValidationClient",
         "TradesClient",
     ] {
         assert!(

@@ -138,12 +138,12 @@ pub enum RadrootsSdkError {
         existing_digest_prefix: String,
         new_digest_prefix: String,
     },
-    OrderStatusLimitInvalid {
+    TradeStatusLimitInvalid {
         limit: u32,
         min: u32,
         max: u32,
     },
-    InvalidOrderId {
+    InvalidTradeId {
         value: String,
         message: String,
     },
@@ -208,8 +208,8 @@ impl RadrootsSdkError {
             Self::RelayTargetLimitExceeded { .. } => "relay_target_limit_exceeded",
             Self::InvalidRelayUrl { .. } => "invalid_relay_url",
             Self::IdempotencyConflict { .. } => "idempotency_conflict",
-            Self::OrderStatusLimitInvalid { .. } => "order_status_limit_invalid",
-            Self::InvalidOrderId { .. } => "invalid_order_id",
+            Self::TradeStatusLimitInvalid { .. } => "trade_status_limit_invalid",
+            Self::InvalidTradeId { .. } => "invalid_trade_id",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
             Self::ProductSyncRelaySetupFailure { .. } => "product_sync_relay_setup_failure",
             Self::Authority { .. } => "authority",
@@ -261,8 +261,8 @@ impl RadrootsSdkError {
             | Self::RelayTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => RadrootsSdkErrorClass::Configuration,
             Self::IdempotencyConflict { .. }
-            | Self::OrderStatusLimitInvalid { .. }
-            | Self::InvalidOrderId { .. }
+            | Self::TradeStatusLimitInvalid { .. }
+            | Self::InvalidTradeId { .. }
             | Self::SignerProtocol { .. }
             | Self::SignerAuthChallengePending { .. }
             | Self::InvalidRequest { .. }
@@ -348,8 +348,8 @@ impl RadrootsSdkError {
             Self::PartialLocalMutation(error) => vec![error.recovery],
             Self::ClockBeforeUnixEpoch
             | Self::TimestampOutOfRange { .. }
-            | Self::OrderStatusLimitInvalid { .. }
-            | Self::InvalidOrderId { .. }
+            | Self::TradeStatusLimitInvalid { .. }
+            | Self::InvalidTradeId { .. }
             | Self::SignerProtocol { .. }
             | Self::InvalidRequest { .. }
             | Self::ListingDraft { .. }
@@ -405,10 +405,10 @@ impl RadrootsSdkError {
                 "existing_digest_prefix": existing_digest_prefix,
                 "new_digest_prefix": new_digest_prefix
             }),
-            Self::OrderStatusLimitInvalid { limit, min, max } => {
+            Self::TradeStatusLimitInvalid { limit, min, max } => {
                 json!({ "limit": limit, "min": min, "max": max })
             }
-            Self::InvalidOrderId { value, message } => {
+            Self::InvalidTradeId { value, message } => {
                 json!({ "value": value, "message": message })
             }
             Self::ProductSyncUnsupported {
@@ -491,12 +491,12 @@ impl RadrootsSdkError {
         }
     }
 
-    pub(crate) fn order_status_limit_invalid(limit: u32, min: u32, max: u32) -> Self {
-        Self::OrderStatusLimitInvalid { limit, min, max }
+    pub(crate) fn trade_status_limit_invalid(limit: u32, min: u32, max: u32) -> Self {
+        Self::TradeStatusLimitInvalid { limit, min, max }
     }
 
-    pub(crate) fn invalid_order_id(value: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::InvalidOrderId {
+    pub(crate) fn invalid_trade_id(value: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::InvalidTradeId {
             value: value.into(),
             message: message.into(),
         }
@@ -583,11 +583,11 @@ impl fmt::Display for RadrootsSdkError {
                 f,
                 "sdk idempotency conflict for {operation_kind}: expected_pubkey_prefix={expected_pubkey_prefix}, existing_digest_prefix={existing_digest_prefix}, new_digest_prefix={new_digest_prefix}"
             ),
-            Self::OrderStatusLimitInvalid { limit, min, max } => write!(
+            Self::TradeStatusLimitInvalid { limit, min, max } => write!(
                 f,
                 "sdk order status limit invalid: limit={limit}, min={min}, max={max}"
             ),
-            Self::InvalidOrderId { value, message } => {
+            Self::InvalidTradeId { value, message } => {
                 write!(f, "sdk invalid order id `{value}`: {message}")
             }
             Self::ProductSyncUnsupported {

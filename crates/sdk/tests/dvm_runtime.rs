@@ -11,7 +11,10 @@ use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    ids::{
+        RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
+        RadrootsPublicKey,
+    },
     kinds::{KIND_LISTING, KIND_TRADE_TRANSITION_PROOF_REQUEST},
     order::{
         RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
@@ -27,10 +30,10 @@ use radroots_outbox::RadrootsOutbox;
 use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
 use radroots_sdk::{
     DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmTradeTransitionProofEnqueueRequest,
-    DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, OrderStatusKind,
-    OrderStatusNextActionKind, OrderStatusRequest, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkStorageConfig, RadrootsSdkTimestamp, SdkDvmInventoryBinWitness, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, RadrootsClient,
+    RadrootsSdkError, RadrootsSdkStorageConfig, RadrootsSdkTimestamp,
+    RadrootsTradeInventoryBinWitnessDto, SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
 };
 #[cfg(feature = "signer-adapters")]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
@@ -272,7 +275,7 @@ async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
         .status(status_request("order-dvm-ingest"))
         .await
         .expect("pending status");
-    assert_eq!(pending.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(pending.status, TradeStatusKind::AgreedPendingRhi);
     assert!(pending.rhi_receipt_event_id.is_none());
 
     let listing_event_id = deterministic_event_id("listing-event");
@@ -321,9 +324,9 @@ async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
         .status(status_request("order-dvm-ingest"))
         .await
         .expect("committed status");
-    assert_eq!(committed.status, OrderStatusKind::Committed);
+    assert_eq!(committed.status, TradeStatusKind::Committed);
     assert!(committed.lifecycle_terminal);
-    assert_eq!(committed.next_action, OrderStatusNextActionKind::Terminal);
+    assert_eq!(committed.next_action, TradeStatusNextActionKind::Terminal);
     assert_eq!(
         committed.rhi_receipt_event_id,
         Some(receipt_event_id.clone())
@@ -648,9 +651,9 @@ fn explicit_relays() -> SdkRelayTargetPolicy {
     SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public).expect("relay targets")
 }
 
-fn inventory_bins() -> Vec<SdkDvmInventoryBinWitness> {
-    vec![SdkDvmInventoryBinWitness {
-        bin_id: "bin-1".to_owned(),
+fn inventory_bins() -> Vec<RadrootsTradeInventoryBinWitnessDto> {
+    vec![RadrootsTradeInventoryBinWitnessDto {
+        bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         listing_capacity: 5,
         previous_reserved: 1,
     }]
@@ -660,8 +663,8 @@ fn order_id(raw: &str) -> RadrootsOrderId {
     RadrootsOrderId::parse(raw).expect("order id")
 }
 
-fn status_request(raw: &str) -> OrderStatusRequest {
-    OrderStatusRequest::parse(raw).expect("status request")
+fn status_request(raw: &str) -> TradeStatusRequest {
+    TradeStatusRequest::parse(raw).expect("status request")
 }
 
 fn listing_address() -> RadrootsListingAddress {

@@ -1,5 +1,6 @@
 use crate::RadrootsSdkError;
 use core::fmt;
+use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
 use serde::ser::SerializeStruct;
 use sha2::{Digest, Sha256};
 
@@ -86,6 +87,32 @@ struct SdkIdempotencyDerivationInput<'a> {
     expected_event_id: &'a str,
     expected_pubkey: &'a str,
     target_relays: &'a [String],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkTradeIdempotencyRecord {
+    pub idempotency_key: SdkIdempotencyKey,
+    pub operation_kind: String,
+    pub actor_pubkey: RadrootsPublicKey,
+    pub digest: String,
+    pub canonical_payload_hash: String,
+    pub expected_event_id: RadrootsEventId,
+    pub outbox_operation_id: i64,
+}
+
+impl SdkTradeIdempotencyRecord {
+    pub fn matches_payload(&self, canonical_payload_hash: &str) -> bool {
+        self.canonical_payload_hash == canonical_payload_hash
+    }
+
+    pub fn conflict_error(&self, new_digest: impl Into<String>) -> RadrootsSdkError {
+        RadrootsSdkError::IdempotencyConflict {
+            operation_kind: self.operation_kind.clone(),
+            expected_pubkey_prefix: self.actor_pubkey.as_str().chars().take(12).collect(),
+            existing_digest_prefix: self.digest.chars().take(12).collect(),
+            new_digest_prefix: new_digest.into().chars().take(12).collect(),
+        }
+    }
 }
 
 fn invalid_request(message: impl Into<String>) -> RadrootsSdkError {

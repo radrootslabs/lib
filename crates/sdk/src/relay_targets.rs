@@ -8,6 +8,93 @@ pub const SDK_RELAY_TARGET_MAX_COUNT: usize = 20;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
+pub enum PublishMode {
+    DryRun,
+    EnqueueOnly,
+    EnqueueAndPublish,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum AckPolicy {
+    NoWait,
+    AtLeastOneRelay,
+    AllRelays,
+    Quorum { required: u16 },
+}
+
+impl AckPolicy {
+    pub fn quorum(required: u16) -> Result<Self, RadrootsSdkError> {
+        if required == 0 {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "ack policy quorum must require at least one relay".to_owned(),
+            });
+        }
+        Ok(Self::Quorum { required })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RelayResolutionPolicy {
+    ConfiguredRelays,
+    Explicit(SdkRelayTargetSet),
+}
+
+impl RelayResolutionPolicy {
+    pub fn configured_relays() -> Self {
+        Self::ConfiguredRelays
+    }
+
+    pub fn explicit(targets: SdkRelayTargetSet) -> Self {
+        Self::Explicit(targets)
+    }
+
+    pub fn try_explicit<I, S>(
+        relays: I,
+        url_policy: SdkRelayUrlPolicy,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Ok(Self::Explicit(SdkRelayTargetSet::new(relays, url_policy)?))
+    }
+
+    pub(crate) fn workflow_target_policy(self) -> SdkRelayTargetPolicy {
+        match self {
+            Self::ConfiguredRelays => SdkRelayTargetPolicy::UseConfiguredRelays,
+            Self::Explicit(targets) => SdkRelayTargetPolicy::Explicit(targets),
+        }
+    }
+}
+
+impl serde::Serialize for RelayResolutionPolicy {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::ConfiguredRelays => {
+                let mut state = serializer.serialize_struct("RelayResolutionPolicy", 1)?;
+                state.serialize_field("kind", "configured_relays")?;
+                state.end()
+            }
+            Self::Explicit(targets) => {
+                let mut state = serializer.serialize_struct("RelayResolutionPolicy", 3)?;
+                state.serialize_field("kind", "explicit")?;
+                state.serialize_field("relays", targets.relays())?;
+                state.serialize_field("canonical_relays", targets.canonical_relays())?;
+                state.end()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SdkRelayUrlPolicy {
     Public,
     Localhost,

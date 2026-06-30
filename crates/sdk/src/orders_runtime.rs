@@ -2,8 +2,9 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey,
-    SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradesClient, order,
+    AckPolicy, PublishMode, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState, SdkRelayUrlPolicy, TradesClient,
+    order,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -33,47 +34,50 @@ use radroots_events_codec::order::{
 #[cfg(feature = "runtime")]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "runtime")]
+use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
+#[cfg(feature = "runtime")]
 use radroots_trade::order::{
     RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderProjection,
     RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError,
+    RadrootsTradeLocatorProjectionQueryResult, RadrootsTradeLocatorProjectionResolution,
     canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
-    order_projection_query_for_order_id,
+    order_projection_query_for_order_id, order_projection_query_for_trade_locator,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
 #[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
 #[cfg(feature = "runtime")]
-pub const ORDER_STATUS_DEFAULT_LIMIT: u32 = 500;
+pub const TRADE_STATUS_DEFAULT_LIMIT: u32 = 500;
 #[cfg(feature = "runtime")]
-pub const ORDER_STATUS_MAX_LIMIT: u32 = 1_000;
+pub const TRADE_STATUS_MAX_LIMIT: u32 = 1_000;
 #[cfg(feature = "runtime")]
-pub const ORDER_SUBMIT_OPERATION_KIND: &str = "order.submit.v1";
+pub const TRADE_SUBMIT_OPERATION_KIND: &str = "trade.submit.v1";
 #[cfg(feature = "runtime")]
-pub const ORDER_DECISION_OPERATION_KIND: &str = "order.decision.v1";
+pub const TRADE_DECISION_OPERATION_KIND: &str = "trade.decision.v1";
 #[cfg(feature = "runtime")]
-pub const ORDER_REVISION_PROPOSAL_OPERATION_KIND: &str = "order.revision.proposal.v1";
+pub const TRADE_REVISION_PROPOSAL_OPERATION_KIND: &str = "trade.revision.proposal.v1";
 #[cfg(feature = "runtime")]
-pub const ORDER_REVISION_DECISION_OPERATION_KIND: &str = "order.revision.decision.v1";
+pub const TRADE_REVISION_DECISION_OPERATION_KIND: &str = "trade.revision.decision.v1";
 #[cfg(feature = "runtime")]
-pub const ORDER_CANCELLATION_OPERATION_KIND: &str = "order.cancellation.v1";
+pub const TRADE_CANCELLATION_OPERATION_KIND: &str = "trade.cancellation.v1";
 
 #[cfg(feature = "runtime")]
-const ORDER_REQUEST_CONTRACT_ID: &str = "radroots.order.request.v1";
+const TRADE_SUBMIT_CONTRACT_ID: &str = "radroots.order.request.v1";
 #[cfg(feature = "runtime")]
-const ORDER_DECISION_CONTRACT_ID: &str = "radroots.order.decision.v1";
+const TRADE_DECISION_CONTRACT_ID: &str = "radroots.order.decision.v1";
 #[cfg(feature = "runtime")]
-const ORDER_REVISION_PROPOSAL_CONTRACT_ID: &str = "radroots.order.revision_proposal.v1";
+const TRADE_REVISION_PROPOSAL_CONTRACT_ID: &str = "radroots.order.revision_proposal.v1";
 #[cfg(feature = "runtime")]
-const ORDER_REVISION_DECISION_CONTRACT_ID: &str = "radroots.order.revision_decision.v1";
+const TRADE_REVISION_DECISION_CONTRACT_ID: &str = "radroots.order.revision_decision.v1";
 #[cfg(feature = "runtime")]
-const ORDER_CANCELLATION_CONTRACT_ID: &str = "radroots.order.cancellation.v1";
+const TRADE_CANCELLATION_CONTRACT_ID: &str = "radroots.order.cancellation.v1";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum OrderWorkflowKind {
+pub enum TradeWorkflowKind {
     Submit,
     Decision,
     RevisionProposal,
@@ -82,32 +86,32 @@ pub enum OrderWorkflowKind {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderWorkflowKind {
+impl TradeWorkflowKind {
     pub fn operation_kind(self) -> &'static str {
         match self {
-            Self::Submit => ORDER_SUBMIT_OPERATION_KIND,
-            Self::Decision => ORDER_DECISION_OPERATION_KIND,
-            Self::RevisionProposal => ORDER_REVISION_PROPOSAL_OPERATION_KIND,
-            Self::RevisionDecision => ORDER_REVISION_DECISION_OPERATION_KIND,
-            Self::Cancellation => ORDER_CANCELLATION_OPERATION_KIND,
+            Self::Submit => TRADE_SUBMIT_OPERATION_KIND,
+            Self::Decision => TRADE_DECISION_OPERATION_KIND,
+            Self::RevisionProposal => TRADE_REVISION_PROPOSAL_OPERATION_KIND,
+            Self::RevisionDecision => TRADE_REVISION_DECISION_OPERATION_KIND,
+            Self::Cancellation => TRADE_CANCELLATION_OPERATION_KIND,
         }
     }
 
     pub fn contract_id(self) -> &'static str {
         match self {
-            Self::Submit => ORDER_REQUEST_CONTRACT_ID,
-            Self::Decision => ORDER_DECISION_CONTRACT_ID,
-            Self::RevisionProposal => ORDER_REVISION_PROPOSAL_CONTRACT_ID,
-            Self::RevisionDecision => ORDER_REVISION_DECISION_CONTRACT_ID,
-            Self::Cancellation => ORDER_CANCELLATION_CONTRACT_ID,
+            Self::Submit => TRADE_SUBMIT_CONTRACT_ID,
+            Self::Decision => TRADE_DECISION_CONTRACT_ID,
+            Self::RevisionProposal => TRADE_REVISION_PROPOSAL_CONTRACT_ID,
+            Self::RevisionDecision => TRADE_REVISION_DECISION_CONTRACT_ID,
+            Self::Cancellation => TRADE_CANCELLATION_CONTRACT_ID,
         }
     }
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderWorkflowPlan {
-    pub kind: OrderWorkflowKind,
+pub struct TradeWorkflowPlan {
+    pub kind: TradeWorkflowKind,
     pub operation_kind: &'static str,
     pub contract_id: &'static str,
     pub expected_event_id: RadrootsEventId,
@@ -116,8 +120,8 @@ pub struct OrderWorkflowPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderWorkflowEnqueueReceipt {
-    pub kind: OrderWorkflowKind,
+pub struct TradeWorkflowEnqueueReceipt {
+    pub kind: TradeWorkflowKind,
     pub operation_kind: &'static str,
     pub expected_event_id: RadrootsEventId,
     pub signed_event_id: RadrootsEventId,
@@ -126,13 +130,13 @@ pub struct OrderWorkflowEnqueueReceipt {
     pub outbox_event_id: i64,
     pub state: SdkMutationState,
     pub idempotency_digest_prefix: Option<String>,
-    pub idempotency: OrderWorkflowIdempotencyReceipt,
-    pub retry: OrderWorkflowRetryAdvice,
+    pub idempotency: TradeWorkflowIdempotencyReceipt,
+    pub retry: TradeWorkflowRetryAdvice,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderWorkflowIdempotencyReceipt {
+pub struct TradeWorkflowIdempotencyReceipt {
     pub digest_prefix: Option<String>,
     pub replayed_existing_operation: bool,
     pub safe_to_retry_with_same_idempotency_key: bool,
@@ -140,7 +144,7 @@ pub struct OrderWorkflowIdempotencyReceipt {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderWorkflowRetryAdvice {
+pub struct TradeWorkflowRetryAdvice {
     pub retryable_after_error: bool,
     pub safe_to_retry_enqueue_with_same_idempotency_key: bool,
     pub recovery_actions: Vec<RadrootsSdkRecoveryAction>,
@@ -149,7 +153,7 @@ pub struct OrderWorkflowRetryAdvice {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderSubmitPrepareRequest {
+pub struct TradeSubmitPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub listing_event: RadrootsNostrEventPtr,
@@ -158,7 +162,7 @@ pub struct OrderSubmitPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderSubmitPrepareRequest {
+impl TradeSubmitPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
         listing_event: RadrootsNostrEventPtr,
@@ -181,29 +185,35 @@ impl OrderSubmitPrepareRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderSubmitEnqueueRequest {
+pub struct TradeSubmitEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub listing_event: RadrootsNostrEventPtr,
     pub order: RadrootsOrderRequest,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderSubmitEnqueueRequest {
+impl TradeSubmitEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
         listing_event: RadrootsNostrEventPtr,
         order: RadrootsOrderRequest,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
     ) -> Self {
         Self {
             actor,
             listing_event,
             order,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key: None,
             created_at: None,
         }
@@ -218,7 +228,7 @@ impl OrderSubmitEnqueueRequest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
         Ok(self)
     }
 
@@ -243,8 +253,8 @@ impl OrderSubmitEnqueueRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderSubmitPlan {
-    pub workflow: OrderWorkflowPlan,
+pub struct TradeSubmitPlan {
+    pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: RadrootsEventId,
@@ -255,8 +265,8 @@ pub struct OrderSubmitPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderSubmitReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
+pub struct TradeSubmitReceipt {
+    pub workflow: TradeWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: RadrootsEventId,
@@ -272,13 +282,13 @@ pub struct OrderSubmitReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderRequestEvidenceIngestRequest {
+pub struct TradeRequestEvidenceIngestRequest {
     pub event: RadrootsNostrEvent,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderRequestEvidenceIngestRequest {
+impl TradeRequestEvidenceIngestRequest {
     pub fn new(event: RadrootsNostrEvent) -> Self {
         Self {
             event,
@@ -294,7 +304,7 @@ impl OrderRequestEvidenceIngestRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderRequestEvidenceIngestReceipt {
+pub struct TradeRequestEvidenceIngestReceipt {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -307,13 +317,13 @@ pub struct OrderRequestEvidenceIngestReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderEvidenceIngestRequest {
+pub struct TradeEvidenceIngestRequest {
     pub event: RadrootsNostrEvent,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderEvidenceIngestRequest {
+impl TradeEvidenceIngestRequest {
     pub fn new(event: RadrootsNostrEvent) -> Self {
         Self {
             event,
@@ -329,7 +339,7 @@ impl OrderEvidenceIngestRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderEvidenceIngestReceipt {
+pub struct TradeEvidenceIngestReceipt {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub event_id: RadrootsEventId,
@@ -341,7 +351,7 @@ pub struct OrderEvidenceIngestReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderDecisionPrepareRequest {
+pub struct TradeDecisionPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub request_event: RadrootsNostrEventPtr,
@@ -350,7 +360,7 @@ pub struct OrderDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderDecisionPrepareRequest {
+impl TradeDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
         request_event: RadrootsNostrEventPtr,
@@ -373,29 +383,35 @@ impl OrderDecisionPrepareRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderDecisionEnqueueRequest {
+pub struct TradeDecisionEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub request_event: RadrootsNostrEventPtr,
     pub decision: RadrootsOrderDecision,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderDecisionEnqueueRequest {
+impl TradeDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
         request_event: RadrootsNostrEventPtr,
         decision: RadrootsOrderDecision,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
     ) -> Self {
         Self {
             actor,
             request_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key: None,
             created_at: None,
         }
@@ -410,7 +426,7 @@ impl OrderDecisionEnqueueRequest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
         Ok(self)
     }
 
@@ -435,8 +451,8 @@ impl OrderDecisionEnqueueRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderDecisionPlan {
-    pub workflow: OrderWorkflowPlan,
+pub struct TradeDecisionPlan {
+    pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -449,8 +465,8 @@ pub struct OrderDecisionPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderDecisionReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
+pub struct TradeDecisionReceipt {
+    pub workflow: TradeWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -468,7 +484,7 @@ pub struct OrderDecisionReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderRevisionProposalPrepareRequest {
+pub struct TradeRevisionProposalPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
@@ -478,7 +494,7 @@ pub struct OrderRevisionProposalPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderRevisionProposalPrepareRequest {
+impl TradeRevisionProposalPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
@@ -503,25 +519,29 @@ impl OrderRevisionProposalPrepareRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderRevisionProposalEnqueueRequest {
+pub struct TradeRevisionProposalEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub proposal: RadrootsOrderRevisionProposal,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderRevisionProposalEnqueueRequest {
+impl TradeRevisionProposalEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         proposal: RadrootsOrderRevisionProposal,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
     ) -> Self {
         Self {
             actor,
@@ -529,6 +549,8 @@ impl OrderRevisionProposalEnqueueRequest {
             previous_event,
             proposal,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key: None,
             created_at: None,
         }
@@ -543,7 +565,7 @@ impl OrderRevisionProposalEnqueueRequest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
         Ok(self)
     }
 
@@ -568,8 +590,8 @@ impl OrderRevisionProposalEnqueueRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderRevisionProposalPlan {
-    pub workflow: OrderWorkflowPlan,
+pub struct TradeRevisionProposalPlan {
+    pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -583,8 +605,8 @@ pub struct OrderRevisionProposalPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderRevisionProposalReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
+pub struct TradeRevisionProposalReceipt {
+    pub workflow: TradeWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -603,7 +625,7 @@ pub struct OrderRevisionProposalReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderRevisionDecisionPrepareRequest {
+pub struct TradeRevisionDecisionPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
@@ -613,7 +635,7 @@ pub struct OrderRevisionDecisionPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderRevisionDecisionPrepareRequest {
+impl TradeRevisionDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
@@ -638,25 +660,29 @@ impl OrderRevisionDecisionPrepareRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderRevisionDecisionEnqueueRequest {
+pub struct TradeRevisionDecisionEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub decision: RadrootsOrderRevisionDecision,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderRevisionDecisionEnqueueRequest {
+impl TradeRevisionDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         decision: RadrootsOrderRevisionDecision,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
     ) -> Self {
         Self {
             actor,
@@ -664,6 +690,8 @@ impl OrderRevisionDecisionEnqueueRequest {
             previous_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key: None,
             created_at: None,
         }
@@ -678,7 +706,7 @@ impl OrderRevisionDecisionEnqueueRequest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
         Ok(self)
     }
 
@@ -703,8 +731,8 @@ impl OrderRevisionDecisionEnqueueRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderRevisionDecisionPlan {
-    pub workflow: OrderWorkflowPlan,
+pub struct TradeRevisionDecisionPlan {
+    pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -718,8 +746,8 @@ pub struct OrderRevisionDecisionPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderRevisionDecisionReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
+pub struct TradeRevisionDecisionReceipt {
+    pub workflow: TradeWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -738,7 +766,7 @@ pub struct OrderRevisionDecisionReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderCancellationPrepareRequest {
+pub struct TradeCancellationPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
@@ -748,7 +776,7 @@ pub struct OrderCancellationPrepareRequest {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderCancellationPrepareRequest {
+impl TradeCancellationPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
@@ -773,25 +801,29 @@ impl OrderCancellationPrepareRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderCancellationEnqueueRequest {
+pub struct TradeCancellationEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub cancellation: RadrootsOrderCancellation,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: RelayResolutionPolicy,
+    pub publish_mode: PublishMode,
+    pub ack_policy: AckPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderCancellationEnqueueRequest {
+impl TradeCancellationEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         cancellation: RadrootsOrderCancellation,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
     ) -> Self {
         Self {
             actor,
@@ -799,6 +831,8 @@ impl OrderCancellationEnqueueRequest {
             previous_event,
             cancellation,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key: None,
             created_at: None,
         }
@@ -813,7 +847,7 @@ impl OrderCancellationEnqueueRequest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
         Ok(self)
     }
 
@@ -838,8 +872,8 @@ impl OrderCancellationEnqueueRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderCancellationPlan {
-    pub workflow: OrderWorkflowPlan,
+pub struct TradeCancellationPlan {
+    pub workflow: TradeWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -853,8 +887,8 @@ pub struct OrderCancellationPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderCancellationReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
+pub struct TradeCancellationReceipt {
+    pub workflow: TradeWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -873,24 +907,25 @@ pub struct OrderCancellationReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
-pub struct OrderStatusRequest {
-    pub order_id: RadrootsOrderId,
+pub struct TradeStatusRequest {
+    pub locator: RadrootsTradeLocator,
     pub limit: u32,
 }
 
 #[cfg(feature = "runtime")]
-impl OrderStatusRequest {
-    pub fn new(order_id: RadrootsOrderId) -> Self {
+impl TradeStatusRequest {
+    pub fn new(locator: RadrootsTradeLocator) -> Self {
         Self {
-            order_id,
-            limit: ORDER_STATUS_DEFAULT_LIMIT,
+            locator,
+            limit: TRADE_STATUS_DEFAULT_LIMIT,
         }
     }
 
     pub fn parse(order_id: &str) -> Result<Self, RadrootsSdkError> {
         RadrootsOrderId::parse(order_id)
+            .map(RadrootsTradeLocator::from_order_id)
             .map(Self::new)
-            .map_err(|error| RadrootsSdkError::invalid_order_id(order_id, error.to_string()))
+            .map_err(|error| RadrootsSdkError::invalid_trade_id(order_id, error.to_string()))
     }
 
     pub fn with_limit(mut self, limit: u32) -> Self {
@@ -899,11 +934,11 @@ impl OrderStatusRequest {
     }
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
-        if self.limit == 0 || self.limit > ORDER_STATUS_MAX_LIMIT {
-            return Err(RadrootsSdkError::order_status_limit_invalid(
+        if self.limit == 0 || self.limit > TRADE_STATUS_MAX_LIMIT {
+            return Err(RadrootsSdkError::trade_status_limit_invalid(
                 self.limit,
                 1,
-                ORDER_STATUS_MAX_LIMIT,
+                TRADE_STATUS_MAX_LIMIT,
             ));
         }
         Ok(())
@@ -912,21 +947,24 @@ impl OrderStatusRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderStatusReceipt {
+pub struct TradeStatusReceipt {
+    pub locator: RadrootsTradeLocator,
     pub order_id: RadrootsOrderId,
-    pub source: SdkOrderStatusSource,
+    pub root_event_id: Option<RadrootsEventId>,
+    pub ambiguity_candidates: Vec<TradeStatusAmbiguityCandidate>,
+    pub source: SdkTradeStatusSource,
     pub found: bool,
     pub event_count: usize,
     pub limit_applied: u32,
-    pub status: OrderStatusKind,
+    pub status: TradeStatusKind,
     pub lifecycle_terminal: bool,
     pub listing_addr: Option<RadrootsListingAddress>,
     pub buyer_pubkey: Option<RadrootsPublicKey>,
     pub seller_pubkey: Option<RadrootsPublicKey>,
     pub economics: Option<RadrootsOrderEconomics>,
-    pub evidence: OrderStatusEvidenceSummary,
-    pub eligibility: OrderStatusEligibility,
-    pub next_action: OrderStatusNextActionKind,
+    pub evidence: TradeStatusEvidenceSummary,
+    pub eligibility: TradeStatusEligibility,
+    pub next_action: TradeStatusNextActionKind,
     pub event_ids: Vec<RadrootsEventId>,
     pub request_event_id: Option<RadrootsEventId>,
     pub decision_event_id: Option<RadrootsEventId>,
@@ -935,12 +973,18 @@ pub struct OrderStatusReceipt {
     pub pending_revision_event_id: Option<RadrootsEventId>,
     pub cancellation_event_id: Option<RadrootsEventId>,
     pub last_event_id: Option<RadrootsEventId>,
-    pub issues: Vec<SdkOrderStatusIssue>,
+    pub issues: Vec<SdkTradeStatusIssue>,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderStatusEvidenceSummary {
+pub struct TradeStatusAmbiguityCandidate {
+    pub locator: RadrootsTradeLocator,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeStatusEvidenceSummary {
     pub event_count: usize,
     pub limit_applied: u32,
     pub has_request: bool,
@@ -953,7 +997,7 @@ pub struct OrderStatusEvidenceSummary {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderStatusEligibility {
+pub struct TradeStatusEligibility {
     pub can_decide: bool,
     pub can_propose_revision: bool,
     pub can_decide_revision: bool,
@@ -964,7 +1008,7 @@ pub struct OrderStatusEligibility {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum OrderStatusNextActionKind {
+pub enum TradeStatusNextActionKind {
     NoLocalOrder,
     InspectEvidenceIssues,
     AwaitSellerDecision,
@@ -977,7 +1021,7 @@ pub enum OrderStatusNextActionKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum SdkOrderStatusSource {
+pub enum SdkTradeStatusSource {
     LocalEventStore,
 }
 
@@ -985,8 +1029,9 @@ pub enum SdkOrderStatusSource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum OrderStatusKind {
+pub enum TradeStatusKind {
     Missing,
+    Ambiguous,
     Requested,
     RevisionProposed,
     AgreedPendingRhi,
@@ -998,18 +1043,18 @@ pub enum OrderStatusKind {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SdkOrderStatusIssue {
-    pub kind: SdkOrderStatusIssueKind,
+pub struct SdkTradeStatusIssue {
+    pub kind: SdkTradeStatusIssueKind,
     pub event_ids: Vec<RadrootsEventId>,
 }
 
 #[cfg(feature = "runtime")]
-impl SdkOrderStatusIssue {
-    fn new(kind: SdkOrderStatusIssueKind, event_ids: Vec<RadrootsEventId>) -> Self {
+impl SdkTradeStatusIssue {
+    fn new(kind: SdkTradeStatusIssueKind, event_ids: Vec<RadrootsEventId>) -> Self {
         Self { kind, event_ids }
     }
 
-    fn single(kind: SdkOrderStatusIssueKind, event_id: RadrootsEventId) -> Self {
+    fn single(kind: SdkTradeStatusIssueKind, event_id: RadrootsEventId) -> Self {
         Self::new(kind, vec![event_id])
     }
 
@@ -1019,12 +1064,12 @@ impl SdkOrderStatusIssue {
 }
 
 #[cfg(feature = "runtime")]
-impl serde::Serialize for SdkOrderStatusIssue {
+impl serde::Serialize for SdkTradeStatusIssue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("SdkOrderStatusIssue", 3)?;
+        let mut state = serializer.serialize_struct("SdkTradeStatusIssue", 3)?;
         state.serialize_field("code", &self.code())?;
         state.serialize_field("kind", &self.kind)?;
         state.serialize_field("event_ids", &self.event_ids)?;
@@ -1036,7 +1081,7 @@ impl serde::Serialize for SdkOrderStatusIssue {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum SdkOrderStatusIssueKind {
+pub enum SdkTradeStatusIssueKind {
     MissingRequest,
     MultipleRequests,
     RequestPayloadInvalid,
@@ -1104,7 +1149,7 @@ pub enum SdkOrderStatusIssueKind {
 }
 
 #[cfg(feature = "runtime")]
-impl SdkOrderStatusIssueKind {
+impl SdkTradeStatusIssueKind {
     pub fn code(self) -> String {
         camel_to_snake(format!("{self:?}").as_str())
     }
@@ -1114,8 +1159,8 @@ impl SdkOrderStatusIssueKind {
 impl<'sdk> TradesClient<'sdk> {
     pub async fn ingest_evidence(
         &self,
-        request: OrderEvidenceIngestRequest,
-    ) -> Result<OrderEvidenceIngestReceipt, RadrootsSdkError> {
+        request: TradeEvidenceIngestRequest,
+    ) -> Result<TradeEvidenceIngestReceipt, RadrootsSdkError> {
         let evidence = parse_order_evidence(&request.event)?;
         let observed_at = self.resolved_created_at(request.observed_at)?;
         let observed_at_ms = sdk_timestamp_ms(observed_at)?;
@@ -1127,7 +1172,7 @@ impl<'sdk> TradesClient<'sdk> {
             .map_err(|error| RadrootsSdkError::EventStore {
                 message: error.to_string(),
             })?;
-        Ok(OrderEvidenceIngestReceipt {
+        Ok(TradeEvidenceIngestReceipt {
             order_id: evidence.order_id,
             listing_addr: evidence.listing_addr,
             event_id: evidence.event_id,
@@ -1139,8 +1184,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub async fn ingest_request_evidence(
         &self,
-        request: OrderRequestEvidenceIngestRequest,
-    ) -> Result<OrderRequestEvidenceIngestReceipt, RadrootsSdkError> {
+        request: TradeRequestEvidenceIngestRequest,
+    ) -> Result<TradeRequestEvidenceIngestReceipt, RadrootsSdkError> {
         let evidence = parse_order_request_evidence(&request.event)?;
         let observed_at = self.resolved_created_at(request.observed_at)?;
         let observed_at_ms = sdk_timestamp_ms(observed_at)?;
@@ -1152,7 +1197,7 @@ impl<'sdk> TradesClient<'sdk> {
             .map_err(|error| RadrootsSdkError::EventStore {
                 message: error.to_string(),
             })?;
-        Ok(OrderRequestEvidenceIngestReceipt {
+        Ok(TradeRequestEvidenceIngestReceipt {
             order_id: evidence.order_id,
             listing_addr: evidence.listing_addr,
             buyer_pubkey: evidence.buyer_pubkey,
@@ -1165,8 +1210,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub fn prepare_submit(
         &self,
-        request: OrderSubmitPrepareRequest,
-    ) -> Result<OrderSubmitPlan, RadrootsSdkError> {
+        request: TradeSubmitPrepareRequest,
+    ) -> Result<TradeSubmitPlan, RadrootsSdkError> {
         let created_at = self.resolved_created_at(request.created_at)?;
         order_submit_plan(
             &request.actor,
@@ -1179,41 +1224,54 @@ impl<'sdk> TradesClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_submit(
         &self,
-        request: OrderSubmitEnqueueRequest,
-    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
-        let OrderSubmitEnqueueRequest {
+        request: TradeSubmitEnqueueRequest,
+    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
+        let TradeSubmitEnqueueRequest {
             actor,
             listing_event,
             order,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderSubmitPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeSubmitPrepareRequest {
             actor: actor.clone(),
             listing_event,
             order,
             created_at,
         };
         let plan = self.prepare_submit(prepare_request)?;
-        self.enqueue_prepared_submit(&actor, plan, target_relays, idempotency_key)
-            .await
+        self.enqueue_prepared_submit(
+            &actor,
+            plan,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+        )
+        .await
     }
 
     pub async fn enqueue_submit_with_explicit_signer(
         &self,
-        request: OrderSubmitEnqueueRequest,
+        request: TradeSubmitEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
-        let OrderSubmitEnqueueRequest {
+    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
+        let TradeSubmitEnqueueRequest {
             actor,
             listing_event,
             order,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderSubmitPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeSubmitPrepareRequest {
             actor: actor.clone(),
             listing_event,
             order,
@@ -1224,6 +1282,8 @@ impl<'sdk> TradesClient<'sdk> {
             &actor,
             plan,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             signer,
         )
@@ -1234,17 +1294,20 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_submit(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderSubmitPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeSubmitPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
+    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Submit.operation_kind(),
+                operation_kind: TradeWorkflowKind::Submit.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
         )
@@ -1255,18 +1318,21 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_submit_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderSubmitPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeSubmitPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
+    ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Submit.operation_kind(),
+                operation_kind: TradeWorkflowKind::Submit.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
             signer,
@@ -1277,8 +1343,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub fn prepare_decision(
         &self,
-        request: OrderDecisionPrepareRequest,
-    ) -> Result<OrderDecisionPlan, RadrootsSdkError> {
+        request: TradeDecisionPrepareRequest,
+    ) -> Result<TradeDecisionPlan, RadrootsSdkError> {
         let created_at = self.resolved_created_at(request.created_at)?;
         order_decision_plan(
             &request.actor,
@@ -1291,41 +1357,54 @@ impl<'sdk> TradesClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_decision(
         &self,
-        request: OrderDecisionEnqueueRequest,
-    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
-        let OrderDecisionEnqueueRequest {
+        request: TradeDecisionEnqueueRequest,
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        let TradeDecisionEnqueueRequest {
             actor,
             request_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderDecisionPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeDecisionPrepareRequest {
             actor: actor.clone(),
             request_event,
             decision,
             created_at,
         };
         let plan = self.prepare_decision(prepare_request)?;
-        self.enqueue_prepared_decision(&actor, plan, target_relays, idempotency_key)
-            .await
+        self.enqueue_prepared_decision(
+            &actor,
+            plan,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+        )
+        .await
     }
 
     pub async fn enqueue_decision_with_explicit_signer(
         &self,
-        request: OrderDecisionEnqueueRequest,
+        request: TradeDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
-        let OrderDecisionEnqueueRequest {
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        let TradeDecisionEnqueueRequest {
             actor,
             request_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderDecisionPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeDecisionPrepareRequest {
             actor: actor.clone(),
             request_event,
             decision,
@@ -1336,6 +1415,8 @@ impl<'sdk> TradesClient<'sdk> {
             &actor,
             plan,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             signer,
         )
@@ -1346,10 +1427,13 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_decision(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderDecisionPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeDecisionPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1359,10 +1443,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Decision.operation_kind(),
+                operation_kind: TradeWorkflowKind::Decision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
         )
@@ -1373,11 +1457,14 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderDecisionPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeDecisionPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1387,10 +1474,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Decision.operation_kind(),
+                operation_kind: TradeWorkflowKind::Decision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
             signer,
@@ -1401,8 +1488,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub fn prepare_revision_proposal(
         &self,
-        request: OrderRevisionProposalPrepareRequest,
-    ) -> Result<OrderRevisionProposalPlan, RadrootsSdkError> {
+        request: TradeRevisionProposalPrepareRequest,
+    ) -> Result<TradeRevisionProposalPlan, RadrootsSdkError> {
         let created_at = self.resolved_created_at(request.created_at)?;
         order_revision_proposal_plan(
             &request.actor,
@@ -1416,18 +1503,21 @@ impl<'sdk> TradesClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_revision_proposal(
         &self,
-        request: OrderRevisionProposalEnqueueRequest,
-    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
-        let OrderRevisionProposalEnqueueRequest {
+        request: TradeRevisionProposalEnqueueRequest,
+    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
+        let TradeRevisionProposalEnqueueRequest {
             actor,
             root_event,
             previous_event,
             proposal,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderRevisionProposalPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeRevisionProposalPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1435,25 +1525,35 @@ impl<'sdk> TradesClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_revision_proposal(prepare_request)?;
-        self.enqueue_prepared_revision_proposal(&actor, plan, target_relays, idempotency_key)
-            .await
+        self.enqueue_prepared_revision_proposal(
+            &actor,
+            plan,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+        )
+        .await
     }
 
     pub async fn enqueue_revision_proposal_with_explicit_signer(
         &self,
-        request: OrderRevisionProposalEnqueueRequest,
+        request: TradeRevisionProposalEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
-        let OrderRevisionProposalEnqueueRequest {
+    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
+        let TradeRevisionProposalEnqueueRequest {
             actor,
             root_event,
             previous_event,
             proposal,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderRevisionProposalPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeRevisionProposalPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1465,6 +1565,8 @@ impl<'sdk> TradesClient<'sdk> {
             &actor,
             plan,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             signer,
         )
@@ -1475,10 +1577,13 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_revision_proposal(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderRevisionProposalPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeRevisionProposalPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
+    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1488,10 +1593,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::RevisionProposal.operation_kind(),
+                operation_kind: TradeWorkflowKind::RevisionProposal.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
         )
@@ -1502,11 +1607,14 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_revision_proposal_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderRevisionProposalPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeRevisionProposalPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
+    ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1516,10 +1624,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::RevisionProposal.operation_kind(),
+                operation_kind: TradeWorkflowKind::RevisionProposal.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
             signer,
@@ -1530,8 +1638,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub fn prepare_revision_decision(
         &self,
-        request: OrderRevisionDecisionPrepareRequest,
-    ) -> Result<OrderRevisionDecisionPlan, RadrootsSdkError> {
+        request: TradeRevisionDecisionPrepareRequest,
+    ) -> Result<TradeRevisionDecisionPlan, RadrootsSdkError> {
         let created_at = self.resolved_created_at(request.created_at)?;
         order_revision_decision_plan(
             &request.actor,
@@ -1545,18 +1653,21 @@ impl<'sdk> TradesClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_revision_decision(
         &self,
-        request: OrderRevisionDecisionEnqueueRequest,
-    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
-        let OrderRevisionDecisionEnqueueRequest {
+        request: TradeRevisionDecisionEnqueueRequest,
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        let TradeRevisionDecisionEnqueueRequest {
             actor,
             root_event,
             previous_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderRevisionDecisionPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeRevisionDecisionPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1564,25 +1675,35 @@ impl<'sdk> TradesClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_revision_decision(prepare_request)?;
-        self.enqueue_prepared_revision_decision(&actor, plan, target_relays, idempotency_key)
-            .await
+        self.enqueue_prepared_revision_decision(
+            &actor,
+            plan,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+        )
+        .await
     }
 
     pub async fn enqueue_revision_decision_with_explicit_signer(
         &self,
-        request: OrderRevisionDecisionEnqueueRequest,
+        request: TradeRevisionDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
-        let OrderRevisionDecisionEnqueueRequest {
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        let TradeRevisionDecisionEnqueueRequest {
             actor,
             root_event,
             previous_event,
             decision,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderRevisionDecisionPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeRevisionDecisionPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1594,6 +1715,8 @@ impl<'sdk> TradesClient<'sdk> {
             &actor,
             plan,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             signer,
         )
@@ -1604,10 +1727,13 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_revision_decision(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderRevisionDecisionPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeRevisionDecisionPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1617,10 +1743,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::RevisionDecision.operation_kind(),
+                operation_kind: TradeWorkflowKind::RevisionDecision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
         )
@@ -1631,11 +1757,14 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_revision_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderRevisionDecisionPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeRevisionDecisionPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
+    ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1645,10 +1774,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::RevisionDecision.operation_kind(),
+                operation_kind: TradeWorkflowKind::RevisionDecision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
             signer,
@@ -1659,8 +1788,8 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub fn prepare_cancellation(
         &self,
-        request: OrderCancellationPrepareRequest,
-    ) -> Result<OrderCancellationPlan, RadrootsSdkError> {
+        request: TradeCancellationPrepareRequest,
+    ) -> Result<TradeCancellationPlan, RadrootsSdkError> {
         let created_at = self.resolved_created_at(request.created_at)?;
         order_cancellation_plan(
             &request.actor,
@@ -1674,18 +1803,21 @@ impl<'sdk> TradesClient<'sdk> {
     #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_cancellation(
         &self,
-        request: OrderCancellationEnqueueRequest,
-    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
-        let OrderCancellationEnqueueRequest {
+        request: TradeCancellationEnqueueRequest,
+    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
+        let TradeCancellationEnqueueRequest {
             actor,
             root_event,
             previous_event,
             cancellation,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderCancellationPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeCancellationPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1693,25 +1825,35 @@ impl<'sdk> TradesClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_cancellation(prepare_request)?;
-        self.enqueue_prepared_cancellation(&actor, plan, target_relays, idempotency_key)
-            .await
+        self.enqueue_prepared_cancellation(
+            &actor,
+            plan,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            idempotency_key,
+        )
+        .await
     }
 
     pub async fn enqueue_cancellation_with_explicit_signer(
         &self,
-        request: OrderCancellationEnqueueRequest,
+        request: TradeCancellationEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
-        let OrderCancellationEnqueueRequest {
+    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
+        let TradeCancellationEnqueueRequest {
             actor,
             root_event,
             previous_event,
             cancellation,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             created_at,
         } = request;
-        let prepare_request = OrderCancellationPrepareRequest {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
+        let prepare_request = TradeCancellationPrepareRequest {
             actor: actor.clone(),
             root_event,
             previous_event,
@@ -1723,6 +1865,8 @@ impl<'sdk> TradesClient<'sdk> {
             &actor,
             plan,
             target_relays,
+            publish_mode,
+            ack_policy,
             idempotency_key,
             signer,
         )
@@ -1733,10 +1877,13 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_cancellation(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderCancellationPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeCancellationPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
+    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1746,10 +1893,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Cancellation.operation_kind(),
+                operation_kind: TradeWorkflowKind::Cancellation.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
         )
@@ -1760,11 +1907,14 @@ impl<'sdk> TradesClient<'sdk> {
     pub async fn enqueue_prepared_cancellation_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
-        plan: OrderCancellationPlan,
-        target_relays: SdkRelayTargetPolicy,
+        plan: TradeCancellationPlan,
+        target_relays: RelayResolutionPolicy,
+        publish_mode: PublishMode,
+        ack_policy: AckPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
-    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
+    ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
+        validate_trade_enqueue_policy(publish_mode, ack_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -1774,10 +1924,10 @@ impl<'sdk> TradesClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::Cancellation.operation_kind(),
+                operation_kind: TradeWorkflowKind::Cancellation.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_relays: target_relays.workflow_target_policy(),
                 idempotency_key,
             },
             signer,
@@ -1788,17 +1938,20 @@ impl<'sdk> TradesClient<'sdk> {
 
     pub async fn status(
         &self,
-        request: OrderStatusRequest,
-    ) -> Result<OrderStatusReceipt, RadrootsSdkError> {
+        request: TradeStatusRequest,
+    ) -> Result<TradeStatusReceipt, RadrootsSdkError> {
         request.validate()?;
-        let query_result = order_projection_query_for_order_id(
+        let query_result = order_projection_query_for_trade_locator(
             &self.sdk._event_store,
-            &request.order_id,
+            &request.locator,
             request.limit,
         )
         .await
         .map_err(projection_error)?;
-        Ok(OrderStatusReceipt::from_query_result(query_result))
+        Ok(TradeStatusReceipt::from_locator_query_result(
+            request.locator,
+            query_result,
+        ))
     }
 
     fn resolved_created_at(
@@ -1813,7 +1966,7 @@ impl<'sdk> TradesClient<'sdk> {
 
     async fn require_decision_preflight(
         &self,
-        plan: &OrderDecisionPlan,
+        plan: &TradeDecisionPlan,
     ) -> Result<(), RadrootsSdkError> {
         let query_result = self.query_order_projection(&plan.order_id).await?;
         require_decision_request_evidence(plan, &query_result.projection)
@@ -1821,7 +1974,7 @@ impl<'sdk> TradesClient<'sdk> {
 
     async fn require_revision_proposal_preflight(
         &self,
-        plan: &OrderRevisionProposalPlan,
+        plan: &TradeRevisionProposalPlan,
     ) -> Result<(), RadrootsSdkError> {
         let query_result = self.query_order_projection(&plan.order_id).await?;
         require_revision_proposal_state(plan, &query_result.projection)
@@ -1829,7 +1982,7 @@ impl<'sdk> TradesClient<'sdk> {
 
     async fn require_revision_decision_preflight(
         &self,
-        plan: &OrderRevisionDecisionPlan,
+        plan: &TradeRevisionDecisionPlan,
     ) -> Result<(), RadrootsSdkError> {
         let query_result = self.query_order_projection(&plan.order_id).await?;
         require_revision_decision_state(plan, &query_result.projection)
@@ -1837,7 +1990,7 @@ impl<'sdk> TradesClient<'sdk> {
 
     async fn require_cancellation_preflight(
         &self,
-        plan: &OrderCancellationPlan,
+        plan: &TradeCancellationPlan,
     ) -> Result<(), RadrootsSdkError> {
         let query_result = self.query_order_projection(&plan.order_id).await?;
         require_cancellation_state(plan, &query_result.projection)
@@ -1850,7 +2003,7 @@ impl<'sdk> TradesClient<'sdk> {
         order_projection_query_for_order_id(
             &self.sdk._event_store,
             order_id,
-            ORDER_STATUS_MAX_LIMIT,
+            TRADE_STATUS_MAX_LIMIT,
         )
         .await
         .map_err(projection_error)
@@ -1869,6 +2022,31 @@ impl<'sdk> TradesClient<'sdk> {
                 message: error.to_string(),
             })
     }
+}
+
+#[cfg(feature = "runtime")]
+fn validate_trade_enqueue_policy(
+    publish_mode: PublishMode,
+    ack_policy: AckPolicy,
+) -> Result<(), RadrootsSdkError> {
+    if publish_mode == PublishMode::DryRun {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "trade dry-run publish mode must use a prepare request".to_owned(),
+        });
+    }
+    if publish_mode == PublishMode::EnqueueOnly && ack_policy != AckPolicy::NoWait {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "trade enqueue-only publish mode only supports no-wait acknowledgement"
+                .to_owned(),
+        });
+    }
+    if publish_mode == PublishMode::EnqueueAndPublish {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "trade enqueue-and-publish mode requires publish receipt orchestration"
+                .to_owned(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(feature = "runtime")]
@@ -1945,23 +2123,65 @@ fn order_evidence_parse_error(
 }
 
 #[cfg(feature = "runtime")]
-impl OrderStatusReceipt {
-    fn from_query_result(query_result: RadrootsOrderProjectionQueryResult) -> Self {
-        let projection = query_result.projection;
+impl TradeStatusReceipt {
+    fn from_locator_query_result(
+        locator: RadrootsTradeLocator,
+        query_result: RadrootsTradeLocatorProjectionQueryResult,
+    ) -> Self {
+        match query_result.resolution {
+            RadrootsTradeLocatorProjectionResolution::Projected {
+                locator,
+                projection,
+            } => Self::from_projection(
+                locator.clone(),
+                locator.root_event_id,
+                Vec::new(),
+                projection,
+                query_result.event_count,
+                query_result.limit_applied,
+                query_result.event_ids,
+            ),
+            RadrootsTradeLocatorProjectionResolution::Ambiguous { candidates, .. } => {
+                Self::ambiguous(
+                    locator,
+                    candidates,
+                    query_result.event_count,
+                    query_result.limit_applied,
+                    query_result.event_ids,
+                )
+            }
+            RadrootsTradeLocatorProjectionResolution::Missing { .. } => Self::missing(
+                locator,
+                query_result.event_count,
+                query_result.limit_applied,
+                query_result.event_ids,
+            ),
+        }
+    }
+
+    fn from_projection(
+        locator: RadrootsTradeLocator,
+        root_event_id: Option<RadrootsEventId>,
+        ambiguity_candidates: Vec<TradeStatusAmbiguityCandidate>,
+        projection: RadrootsOrderProjection,
+        event_count: usize,
+        limit_applied: u32,
+        event_ids: Vec<RadrootsEventId>,
+    ) -> Self {
         let found = projection.status != RadrootsTradeWorkflowState::Missing;
-        let evidence = OrderStatusEvidenceSummary::from_projection(
-            &projection,
-            query_result.event_count,
-            query_result.limit_applied,
-        );
-        let eligibility = OrderStatusEligibility::from_projection(&projection);
-        let next_action = OrderStatusNextActionKind::from_projection(&projection, &eligibility);
+        let evidence =
+            TradeStatusEvidenceSummary::from_projection(&projection, event_count, limit_applied);
+        let eligibility = TradeStatusEligibility::from_projection(&projection);
+        let next_action = TradeStatusNextActionKind::from_projection(&projection, &eligibility);
         Self {
+            locator,
             order_id: projection.order_id,
-            source: SdkOrderStatusSource::LocalEventStore,
+            root_event_id,
+            ambiguity_candidates,
+            source: SdkTradeStatusSource::LocalEventStore,
             found,
-            event_count: query_result.event_count,
-            limit_applied: query_result.limit_applied,
+            event_count,
+            limit_applied,
             status: projection.status.into(),
             lifecycle_terminal: projection.lifecycle_terminal,
             listing_addr: projection.listing_addr,
@@ -1971,7 +2191,7 @@ impl OrderStatusReceipt {
             evidence,
             eligibility,
             next_action,
-            event_ids: query_result.event_ids,
+            event_ids,
             request_event_id: projection.request_event_id,
             decision_event_id: projection.decision_event_id,
             agreement_event_id: projection.agreement_event_id,
@@ -1982,10 +2202,65 @@ impl OrderStatusReceipt {
             issues: projection.issues.into_iter().map(Into::into).collect(),
         }
     }
+
+    fn missing(
+        locator: RadrootsTradeLocator,
+        event_count: usize,
+        limit_applied: u32,
+        event_ids: Vec<RadrootsEventId>,
+    ) -> Self {
+        Self::from_projection(
+            locator.clone(),
+            locator.root_event_id.clone(),
+            Vec::new(),
+            RadrootsOrderProjection {
+                order_id: locator.order_id().clone(),
+                status: RadrootsTradeWorkflowState::Missing,
+                request_event_id: None,
+                decision_event_id: None,
+                cancellation_event_id: None,
+                validation_receipt_event_id: None,
+                lifecycle_terminal: false,
+                economics: None,
+                agreement_event_id: None,
+                pending_revision_event_id: None,
+                pending_inventory_reservations: Vec::new(),
+                committed_inventory_reservations: Vec::new(),
+                listing_addr: locator.listing_addr.clone(),
+                buyer_pubkey: locator.buyer_pubkey.clone(),
+                seller_pubkey: locator.seller_pubkey.clone(),
+                last_event_id: None,
+                issues: Vec::new(),
+            },
+            event_count,
+            limit_applied,
+            event_ids,
+        )
+    }
+
+    fn ambiguous(
+        locator: RadrootsTradeLocator,
+        candidates: Vec<RadrootsTradeLocatorCandidate>,
+        event_count: usize,
+        limit_applied: u32,
+        event_ids: Vec<RadrootsEventId>,
+    ) -> Self {
+        let ambiguity_candidates = candidates
+            .into_iter()
+            .map(|candidate| TradeStatusAmbiguityCandidate {
+                locator: candidate.locator(),
+            })
+            .collect::<Vec<_>>();
+        let mut receipt = Self::missing(locator, event_count, limit_applied, event_ids);
+        receipt.status = TradeStatusKind::Ambiguous;
+        receipt.next_action = TradeStatusNextActionKind::InspectEvidenceIssues;
+        receipt.ambiguity_candidates = ambiguity_candidates;
+        receipt
+    }
 }
 
 #[cfg(feature = "runtime")]
-impl OrderStatusEvidenceSummary {
+impl TradeStatusEvidenceSummary {
     fn from_projection(
         projection: &RadrootsOrderProjection,
         event_count: usize,
@@ -2005,7 +2280,7 @@ impl OrderStatusEvidenceSummary {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderStatusEligibility {
+impl TradeStatusEligibility {
     fn from_projection(projection: &RadrootsOrderProjection) -> Self {
         let clean = projection.issues.is_empty();
         let open = clean && !projection.lifecycle_terminal;
@@ -2026,10 +2301,10 @@ impl OrderStatusEligibility {
 }
 
 #[cfg(feature = "runtime")]
-impl OrderStatusNextActionKind {
+impl TradeStatusNextActionKind {
     fn from_projection(
         projection: &RadrootsOrderProjection,
-        eligibility: &OrderStatusEligibility,
+        eligibility: &TradeStatusEligibility,
     ) -> Self {
         if projection.status == RadrootsTradeWorkflowState::Missing {
             return Self::NoLocalOrder;
@@ -2060,8 +2335,8 @@ fn order_submit_plan(
     listing_event: RadrootsNostrEventPtr,
     order_request: RadrootsOrderRequest,
     created_at: RadrootsSdkTimestamp,
-) -> Result<OrderSubmitPlan, RadrootsSdkError> {
-    require_buyer_actor(actor, "order.prepare_submit")?;
+) -> Result<TradeSubmitPlan, RadrootsSdkError> {
+    require_buyer_actor(actor, "trade.prepare_submit")?;
     let listing_event_id = listing_event_id(&listing_event)?;
     let order_request =
         canonicalize_order_request_for_signer(order_request, actor.pubkey().as_str())
@@ -2077,16 +2352,16 @@ fn order_submit_plan(
         })?;
     let frozen_draft = to_frozen_draft(
         draft.into_wire_parts(),
-        ORDER_REQUEST_CONTRACT_ID,
+        TRADE_SUBMIT_CONTRACT_ID,
         order_request.buyer_pubkey.as_str(),
         created_at_nostr,
     )
     .expect("validated order submit draft freezes");
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
         .expect("frozen order submit draft produces a valid event id");
-    Ok(OrderSubmitPlan {
+    Ok(TradeSubmitPlan {
         workflow: order_workflow_plan(
-            OrderWorkflowKind::Submit,
+            TradeWorkflowKind::Submit,
             expected_event_id.clone(),
             created_at,
         ),
@@ -2105,12 +2380,12 @@ fn order_decision_plan(
     request_event: RadrootsNostrEventPtr,
     decision: RadrootsOrderDecision,
     created_at: RadrootsSdkTimestamp,
-) -> Result<OrderDecisionPlan, RadrootsSdkError> {
-    require_seller_actor(actor, "order.prepare_decision")?;
+) -> Result<TradeDecisionPlan, RadrootsSdkError> {
+    require_seller_actor(actor, "trade.prepare_decision")?;
     let request_event_id = request_event_id(&request_event)?;
     if decision.seller_pubkey.as_str() != actor.pubkey().as_str() {
         return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_decision".to_owned(),
+            operation: "trade.prepare_decision".to_owned(),
             reason: "actor pubkey must match order seller_pubkey".to_owned(),
         });
     }
@@ -2127,16 +2402,16 @@ fn order_decision_plan(
         .expect("validated order decision draft encodes");
     let frozen_draft = to_frozen_draft(
         draft.into_wire_parts(),
-        ORDER_DECISION_CONTRACT_ID,
+        TRADE_DECISION_CONTRACT_ID,
         decision.seller_pubkey.as_str(),
         created_at_nostr,
     )
     .expect("validated order decision draft freezes");
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
         .expect("frozen order decision draft produces a valid event id");
-    Ok(OrderDecisionPlan {
+    Ok(TradeDecisionPlan {
         workflow: order_workflow_plan(
-            OrderWorkflowKind::Decision,
+            TradeWorkflowKind::Decision,
             expected_event_id.clone(),
             created_at,
         ),
@@ -2158,13 +2433,13 @@ fn order_revision_proposal_plan(
     previous_event: RadrootsNostrEventPtr,
     proposal: RadrootsOrderRevisionProposal,
     created_at: RadrootsSdkTimestamp,
-) -> Result<OrderRevisionProposalPlan, RadrootsSdkError> {
-    require_seller_actor(actor, "order.prepare_revision_proposal")?;
+) -> Result<TradeRevisionProposalPlan, RadrootsSdkError> {
+    require_seller_actor(actor, "trade.prepare_revision_proposal")?;
     let root_event_id = order_reference_event_id(&root_event, "root")?;
     let previous_event_id = order_reference_event_id(&previous_event, "previous")?;
     if proposal.seller_pubkey.as_str() != actor.pubkey().as_str() {
         return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_revision_proposal".to_owned(),
+            operation: "trade.prepare_revision_proposal".to_owned(),
             reason: "actor pubkey must match order seller_pubkey".to_owned(),
         });
     }
@@ -2186,14 +2461,14 @@ fn order_revision_proposal_plan(
             .expect("validated order revision proposal draft encodes");
     let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
         draft.into_wire_parts(),
-        ORDER_REVISION_PROPOSAL_CONTRACT_ID,
+        TRADE_REVISION_PROPOSAL_CONTRACT_ID,
         seller_pubkey.as_str(),
         created_at_nostr,
         "order revision proposal",
     );
-    Ok(OrderRevisionProposalPlan {
+    Ok(TradeRevisionProposalPlan {
         workflow: order_workflow_plan(
-            OrderWorkflowKind::RevisionProposal,
+            TradeWorkflowKind::RevisionProposal,
             expected_event_id.clone(),
             created_at,
         ),
@@ -2216,13 +2491,13 @@ fn order_revision_decision_plan(
     previous_event: RadrootsNostrEventPtr,
     decision: RadrootsOrderRevisionDecision,
     created_at: RadrootsSdkTimestamp,
-) -> Result<OrderRevisionDecisionPlan, RadrootsSdkError> {
-    require_buyer_actor(actor, "order.prepare_revision_decision")?;
+) -> Result<TradeRevisionDecisionPlan, RadrootsSdkError> {
+    require_buyer_actor(actor, "trade.prepare_revision_decision")?;
     let root_event_id = order_reference_event_id(&root_event, "root")?;
     let previous_event_id = order_reference_event_id(&previous_event, "previous")?;
     if decision.buyer_pubkey.as_str() != actor.pubkey().as_str() {
         return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_revision_decision".to_owned(),
+            operation: "trade.prepare_revision_decision".to_owned(),
             reason: "actor pubkey must match order buyer_pubkey".to_owned(),
         });
     }
@@ -2244,14 +2519,14 @@ fn order_revision_decision_plan(
             .expect("validated order revision decision draft encodes");
     let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
         draft.into_wire_parts(),
-        ORDER_REVISION_DECISION_CONTRACT_ID,
+        TRADE_REVISION_DECISION_CONTRACT_ID,
         buyer_pubkey.as_str(),
         created_at_nostr,
         "order revision decision",
     );
-    Ok(OrderRevisionDecisionPlan {
+    Ok(TradeRevisionDecisionPlan {
         workflow: order_workflow_plan(
-            OrderWorkflowKind::RevisionDecision,
+            TradeWorkflowKind::RevisionDecision,
             expected_event_id.clone(),
             created_at,
         ),
@@ -2274,13 +2549,13 @@ fn order_cancellation_plan(
     previous_event: RadrootsNostrEventPtr,
     cancellation: RadrootsOrderCancellation,
     created_at: RadrootsSdkTimestamp,
-) -> Result<OrderCancellationPlan, RadrootsSdkError> {
-    require_buyer_actor(actor, "order.prepare_cancellation")?;
+) -> Result<TradeCancellationPlan, RadrootsSdkError> {
+    require_buyer_actor(actor, "trade.prepare_cancellation")?;
     let root_event_id = order_reference_event_id(&root_event, "root")?;
     let previous_event_id = order_reference_event_id(&previous_event, "previous")?;
     if cancellation.buyer_pubkey.as_str() != actor.pubkey().as_str() {
         return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_cancellation".to_owned(),
+            operation: "trade.prepare_cancellation".to_owned(),
             reason: "actor pubkey must match order buyer_pubkey".to_owned(),
         });
     }
@@ -2295,14 +2570,14 @@ fn order_cancellation_plan(
             .expect("validated order cancellation draft encodes");
     let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
         draft.into_wire_parts(),
-        ORDER_CANCELLATION_CONTRACT_ID,
+        TRADE_CANCELLATION_CONTRACT_ID,
         buyer_pubkey.as_str(),
         created_at_nostr,
         "order cancellation",
     );
-    Ok(OrderCancellationPlan {
+    Ok(TradeCancellationPlan {
         workflow: order_workflow_plan(
-            OrderWorkflowKind::Cancellation,
+            TradeWorkflowKind::Cancellation,
             expected_event_id.clone(),
             created_at,
         ),
@@ -2320,11 +2595,11 @@ fn order_cancellation_plan(
 
 #[cfg(feature = "runtime")]
 fn order_workflow_plan(
-    kind: OrderWorkflowKind,
+    kind: TradeWorkflowKind,
     expected_event_id: RadrootsEventId,
     created_at: RadrootsSdkTimestamp,
-) -> OrderWorkflowPlan {
-    OrderWorkflowPlan {
+) -> TradeWorkflowPlan {
+    TradeWorkflowPlan {
         kind,
         operation_kind: kind.operation_kind(),
         contract_id: kind.contract_id(),
@@ -2335,12 +2610,12 @@ fn order_workflow_plan(
 
 #[cfg(feature = "runtime")]
 fn order_submit_receipt(
-    plan: OrderSubmitPlan,
+    plan: TradeSubmitPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderSubmitReceipt {
-    OrderSubmitReceipt {
+) -> TradeSubmitReceipt {
+    TradeSubmitReceipt {
         workflow: order_workflow_enqueue_receipt(
-            OrderWorkflowKind::Submit,
+            TradeWorkflowKind::Submit,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
@@ -2359,12 +2634,12 @@ fn order_submit_receipt(
 
 #[cfg(feature = "runtime")]
 fn order_decision_receipt(
-    plan: OrderDecisionPlan,
+    plan: TradeDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderDecisionReceipt {
-    OrderDecisionReceipt {
+) -> TradeDecisionReceipt {
+    TradeDecisionReceipt {
         workflow: order_workflow_enqueue_receipt(
-            OrderWorkflowKind::Decision,
+            TradeWorkflowKind::Decision,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
@@ -2385,12 +2660,12 @@ fn order_decision_receipt(
 
 #[cfg(feature = "runtime")]
 fn order_revision_proposal_receipt(
-    plan: OrderRevisionProposalPlan,
+    plan: TradeRevisionProposalPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderRevisionProposalReceipt {
-    OrderRevisionProposalReceipt {
+) -> TradeRevisionProposalReceipt {
+    TradeRevisionProposalReceipt {
         workflow: order_workflow_enqueue_receipt(
-            OrderWorkflowKind::RevisionProposal,
+            TradeWorkflowKind::RevisionProposal,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
@@ -2412,12 +2687,12 @@ fn order_revision_proposal_receipt(
 
 #[cfg(feature = "runtime")]
 fn order_revision_decision_receipt(
-    plan: OrderRevisionDecisionPlan,
+    plan: TradeRevisionDecisionPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderRevisionDecisionReceipt {
-    OrderRevisionDecisionReceipt {
+) -> TradeRevisionDecisionReceipt {
+    TradeRevisionDecisionReceipt {
         workflow: order_workflow_enqueue_receipt(
-            OrderWorkflowKind::RevisionDecision,
+            TradeWorkflowKind::RevisionDecision,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
@@ -2439,12 +2714,12 @@ fn order_revision_decision_receipt(
 
 #[cfg(feature = "runtime")]
 fn order_cancellation_receipt(
-    plan: OrderCancellationPlan,
+    plan: TradeCancellationPlan,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderCancellationReceipt {
-    OrderCancellationReceipt {
+) -> TradeCancellationReceipt {
+    TradeCancellationReceipt {
         workflow: order_workflow_enqueue_receipt(
-            OrderWorkflowKind::Cancellation,
+            TradeWorkflowKind::Cancellation,
             plan.expected_event_id.clone(),
             &enqueue,
         ),
@@ -2466,15 +2741,15 @@ fn order_cancellation_receipt(
 
 #[cfg(feature = "runtime")]
 fn order_workflow_enqueue_receipt(
-    kind: OrderWorkflowKind,
+    kind: TradeWorkflowKind,
     expected_event_id: RadrootsEventId,
     enqueue: &crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
-) -> OrderWorkflowEnqueueReceipt {
+) -> TradeWorkflowEnqueueReceipt {
     let state = SdkMutationState::from(enqueue.state);
     let digest_prefix = Some(enqueue.idempotency_digest_prefix.clone());
     let safe_retry_same_key = true;
     let replayed_existing_operation = state == SdkMutationState::AlreadyQueued;
-    OrderWorkflowEnqueueReceipt {
+    TradeWorkflowEnqueueReceipt {
         kind,
         operation_kind: kind.operation_kind(),
         expected_event_id,
@@ -2484,12 +2759,12 @@ fn order_workflow_enqueue_receipt(
         outbox_event_id: enqueue.outbox_event_id,
         state,
         idempotency_digest_prefix: digest_prefix.clone(),
-        idempotency: OrderWorkflowIdempotencyReceipt {
+        idempotency: TradeWorkflowIdempotencyReceipt {
             digest_prefix,
             replayed_existing_operation,
             safe_to_retry_with_same_idempotency_key: safe_retry_same_key,
         },
-        retry: OrderWorkflowRetryAdvice {
+        retry: TradeWorkflowRetryAdvice {
             retryable_after_error: false,
             safe_to_retry_enqueue_with_same_idempotency_key: safe_retry_same_key,
             recovery_actions: Vec::new(),
@@ -2568,7 +2843,7 @@ impl OrderPayloadValidate for RadrootsOrderCancellation {
 }
 
 #[cfg(feature = "runtime")]
-struct OrderRequestEvidence {
+struct TradeRequestEvidence {
     order_id: RadrootsOrderId,
     listing_addr: RadrootsListingAddress,
     buyer_pubkey: RadrootsPublicKey,
@@ -2579,7 +2854,7 @@ struct OrderRequestEvidence {
 #[cfg(feature = "runtime")]
 fn parse_order_request_evidence(
     event: &RadrootsNostrEvent,
-) -> Result<OrderRequestEvidence, RadrootsSdkError> {
+) -> Result<TradeRequestEvidence, RadrootsSdkError> {
     let request_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("order request evidence event id is invalid: {error}"),
@@ -2590,7 +2865,7 @@ fn parse_order_request_evidence(
             message: format!("order request evidence decode failed: {error}"),
         })?;
     let payload = envelope.payload;
-    Ok(OrderRequestEvidence {
+    Ok(TradeRequestEvidence {
         order_id: payload.order_id,
         listing_addr: payload.listing_addr,
         buyer_pubkey: payload.buyer_pubkey,
@@ -2610,7 +2885,7 @@ fn sdk_timestamp_ms(timestamp: RadrootsSdkTimestamp) -> Result<i64, RadrootsSdkE
 
 #[cfg(feature = "runtime")]
 fn require_decision_request_evidence(
-    plan: &OrderDecisionPlan,
+    plan: &TradeDecisionPlan,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
     let Some(request_event_id) = &projection.request_event_id else {
@@ -2692,7 +2967,7 @@ struct OrderLifecycleReferences<'a> {
 
 #[cfg(feature = "runtime")]
 fn require_revision_proposal_state(
-    plan: &OrderRevisionProposalPlan,
+    plan: &TradeRevisionProposalPlan,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
     let refs = OrderLifecycleReferences {
@@ -2713,7 +2988,7 @@ fn require_revision_proposal_state(
 
 #[cfg(feature = "runtime")]
 fn require_revision_decision_state(
-    plan: &OrderRevisionDecisionPlan,
+    plan: &TradeRevisionDecisionPlan,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
     let refs = OrderLifecycleReferences {
@@ -2738,7 +3013,7 @@ fn require_revision_decision_state(
 
 #[cfg(feature = "runtime")]
 fn require_cancellation_state(
-    plan: &OrderCancellationPlan,
+    plan: &TradeCancellationPlan,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
     let refs = OrderLifecycleReferences {
@@ -3052,7 +3327,7 @@ fn order_canonicalization_error(error: RadrootsOrderCanonicalizationError) -> Ra
     match error {
         RadrootsOrderCanonicalizationError::InvalidBuyerSigner => {
             RadrootsSdkError::UnauthorizedActor {
-                operation: "order.prepare_submit".to_owned(),
+                operation: "trade.prepare_submit".to_owned(),
                 reason: "actor pubkey must match order buyer_pubkey".to_owned(),
             }
         }
@@ -3072,7 +3347,7 @@ fn order_decision_canonicalization_error(
 }
 
 #[cfg(feature = "runtime")]
-impl From<RadrootsTradeWorkflowState> for OrderStatusKind {
+impl From<RadrootsTradeWorkflowState> for TradeStatusKind {
     fn from(status: RadrootsTradeWorkflowState) -> Self {
         match status {
             RadrootsTradeWorkflowState::Missing => Self::Missing,
@@ -3088,250 +3363,250 @@ impl From<RadrootsTradeWorkflowState> for OrderStatusKind {
 }
 
 #[cfg(feature = "runtime")]
-impl From<RadrootsOrderIssue> for SdkOrderStatusIssue {
+impl From<RadrootsOrderIssue> for SdkTradeStatusIssue {
     fn from(issue: RadrootsOrderIssue) -> Self {
         match issue {
             RadrootsOrderIssue::MissingRequest => {
-                Self::new(SdkOrderStatusIssueKind::MissingRequest, Vec::new())
+                Self::new(SdkTradeStatusIssueKind::MissingRequest, Vec::new())
             }
             RadrootsOrderIssue::MultipleRequests { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::MultipleRequests, event_ids)
+                Self::new(SdkTradeStatusIssueKind::MultipleRequests, event_ids)
             }
             RadrootsOrderIssue::RequestPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::RequestPayloadInvalid, event_id)
+                Self::single(SdkTradeStatusIssueKind::RequestPayloadInvalid, event_id)
             }
             RadrootsOrderIssue::RequestOrderIdMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::RequestOrderIdMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::RequestOrderIdMismatch, event_id)
             }
             RadrootsOrderIssue::RequestAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::RequestAuthorMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::RequestAuthorMismatch, event_id)
             }
             RadrootsOrderIssue::RequestListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RequestListingAddressInvalid,
+                SdkTradeStatusIssueKind::RequestListingAddressInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::RequestSellerListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RequestSellerListingMismatch,
+                SdkTradeStatusIssueKind::RequestSellerListingMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::DecisionPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionPayloadInvalid, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionPayloadInvalid, event_id)
             }
             RadrootsOrderIssue::DecisionOrderIdMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionOrderIdMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionOrderIdMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionAuthorMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionAuthorMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::DecisionCounterpartyMismatch,
+                SdkTradeStatusIssueKind::DecisionCounterpartyMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::DecisionBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionBuyerMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionBuyerMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionSellerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionSellerMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionSellerMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::DecisionListingAddressInvalid,
+                SdkTradeStatusIssueKind::DecisionListingAddressInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::DecisionListingMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionListingMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionListingMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionRootMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionRootMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionPreviousMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionPreviousMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionPreviousMismatch, event_id)
             }
             RadrootsOrderIssue::DecisionMissingInventoryCommitments { event_id } => Self::single(
-                SdkOrderStatusIssueKind::DecisionMissingInventoryCommitments,
+                SdkTradeStatusIssueKind::DecisionMissingInventoryCommitments,
                 event_id,
             ),
             RadrootsOrderIssue::DecisionInventoryCommitmentMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::DecisionInventoryCommitmentMismatch,
+                SdkTradeStatusIssueKind::DecisionInventoryCommitmentMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::DecisionMissingReason { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::DecisionMissingReason, event_id)
+                Self::single(SdkTradeStatusIssueKind::DecisionMissingReason, event_id)
             }
             RadrootsOrderIssue::ConflictingDecisions { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::ConflictingDecisions, event_ids)
+                Self::new(SdkTradeStatusIssueKind::ConflictingDecisions, event_ids)
             }
             RadrootsOrderIssue::RevisionProposalPayloadInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalPayloadInvalid,
+                SdkTradeStatusIssueKind::RevisionProposalPayloadInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalOrderIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalOrderIdMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalOrderIdMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalAuthorMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalAuthorMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalAuthorMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalCounterpartyMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalCounterpartyMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalBuyerMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalBuyerMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalBuyerMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalSellerMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalSellerMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalSellerMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalListingAddressInvalid,
+                SdkTradeStatusIssueKind::RevisionProposalListingAddressInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalListingMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalListingMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalRootMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalRootMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalRootMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionProposalPreviousMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionProposalPreviousMismatch,
+                SdkTradeStatusIssueKind::RevisionProposalPreviousMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionWithoutProposal { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionWithoutProposal,
+                SdkTradeStatusIssueKind::RevisionDecisionWithoutProposal,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionPayloadInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionPayloadInvalid,
+                SdkTradeStatusIssueKind::RevisionDecisionPayloadInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionOrderIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionOrderIdMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionOrderIdMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionAuthorMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionAuthorMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionAuthorMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionCounterpartyMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionCounterpartyMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionBuyerMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionBuyerMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionBuyerMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionSellerMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionSellerMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionSellerMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionListingAddressInvalid,
+                SdkTradeStatusIssueKind::RevisionDecisionListingAddressInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionListingMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionListingMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionRootMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionRootMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionRootMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionPreviousMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionPreviousMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionPreviousMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::RevisionDecisionRevisionIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::RevisionDecisionRevisionIdMismatch,
+                SdkTradeStatusIssueKind::RevisionDecisionRevisionIdMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationWithoutCancellableOrder { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationWithoutCancellableOrder,
+                SdkTradeStatusIssueKind::CancellationWithoutCancellableOrder,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationPayloadInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationPayloadInvalid,
+                SdkTradeStatusIssueKind::CancellationPayloadInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationOrderIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationOrderIdMismatch,
+                SdkTradeStatusIssueKind::CancellationOrderIdMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationAuthorMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationAuthorMismatch,
+                SdkTradeStatusIssueKind::CancellationAuthorMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationCounterpartyMismatch,
+                SdkTradeStatusIssueKind::CancellationCounterpartyMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::CancellationBuyerMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::CancellationBuyerMismatch, event_id)
             }
             RadrootsOrderIssue::CancellationSellerMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationSellerMismatch,
+                SdkTradeStatusIssueKind::CancellationSellerMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationListingAddressInvalid,
+                SdkTradeStatusIssueKind::CancellationListingAddressInvalid,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationListingMismatch,
+                SdkTradeStatusIssueKind::CancellationListingMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::CancellationRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::CancellationRootMismatch, event_id)
+                Self::single(SdkTradeStatusIssueKind::CancellationRootMismatch, event_id)
             }
             RadrootsOrderIssue::CancellationPreviousMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationPreviousMismatch,
+                SdkTradeStatusIssueKind::CancellationPreviousMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ForkedLifecycle { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::ForkedLifecycle, event_ids)
+                Self::new(SdkTradeStatusIssueKind::ForkedLifecycle, event_ids)
             }
             RadrootsOrderIssue::ValidationReceiptWithoutPendingAgreement { event_id } => {
                 Self::single(
-                    SdkOrderStatusIssueKind::ValidationReceiptWithoutPendingAgreement,
+                    SdkTradeStatusIssueKind::ValidationReceiptWithoutPendingAgreement,
                     event_id,
                 )
             }
             RadrootsOrderIssue::ValidationReceiptOrderIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ValidationReceiptOrderIdMismatch,
+                SdkTradeStatusIssueKind::ValidationReceiptOrderIdMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ValidationReceiptTypeMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ValidationReceiptTypeMismatch,
+                SdkTradeStatusIssueKind::ValidationReceiptTypeMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ValidationReceiptRootMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ValidationReceiptRootMismatch,
+                SdkTradeStatusIssueKind::ValidationReceiptRootMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ValidationReceiptTargetMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ValidationReceiptTargetMismatch,
+                SdkTradeStatusIssueKind::ValidationReceiptTargetMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ValidationReceiptListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ValidationReceiptListingMismatch,
+                SdkTradeStatusIssueKind::ValidationReceiptListingMismatch,
                 event_id,
             ),
             RadrootsOrderIssue::ConflictingValidationReceipts { event_ids } => Self::new(
-                SdkOrderStatusIssueKind::ConflictingValidationReceipts,
+                SdkTradeStatusIssueKind::ConflictingValidationReceipts,
                 event_ids,
             ),
             RadrootsOrderIssue::DeterministicValidationFailure { event_id, .. } => Self::single(
-                SdkOrderStatusIssueKind::DeterministicValidationFailure,
+                SdkTradeStatusIssueKind::DeterministicValidationFailure,
                 event_id,
             ),
             RadrootsOrderIssue::StaleListingEvent {
                 expected_event_id,
                 current_event_id,
             } => Self::new(
-                SdkOrderStatusIssueKind::StaleListingEvent,
+                SdkTradeStatusIssueKind::StaleListingEvent,
                 vec![expected_event_id, current_event_id],
             ),
         }

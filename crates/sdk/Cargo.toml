@@ -62,7 +62,6 @@ runtime = [
   "dep:radroots_outbox",
   "dep:radroots_relay_transport",
   "dep:radroots_runtime_paths",
-  "dep:radroots_sp1_guest_trade",
   "dep:sha2",
   "dep:sqlx",
   "dep:uuid",
@@ -116,7 +115,6 @@ radroots_outbox = { workspace = true, optional = true, default-features = false 
 radroots_publish_proxy_protocol = { workspace = true, optional = true, default-features = false }
 radroots_relay_transport = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
-radroots_sp1_guest_trade = { workspace = true, optional = true }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }

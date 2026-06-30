@@ -33,19 +33,19 @@ use radroots_sdk::protocol::order::{
 };
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
-    ORDER_CANCELLATION_OPERATION_KIND, ORDER_DECISION_OPERATION_KIND,
-    ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
-    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
-    OrderCancellationEnqueueRequest, OrderCancellationPrepareRequest, OrderDecisionEnqueueRequest,
-    OrderDecisionPrepareRequest, OrderEvidenceIngestRequest, OrderRequestEvidenceIngestRequest,
-    OrderRevisionDecisionEnqueueRequest, OrderRevisionDecisionPrepareRequest,
-    OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPrepareRequest, OrderStatusKind,
-    OrderStatusNextActionKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
-    OrderSubmitPrepareRequest, OrderWorkflowKind, PushOutboxEventState, PushOutboxRelayOutcomeKind,
-    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
-    SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy,
+    AckPolicy, PublishMode, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkIdempotencyKey,
+    SdkMutationState, SdkRelayTargetSet, SdkRelayUrlPolicy, SdkTradeStatusIssue,
+    SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_CANCELLATION_OPERATION_KIND,
+    TRADE_DECISION_OPERATION_KIND, TRADE_REVISION_DECISION_OPERATION_KIND,
+    TRADE_REVISION_PROPOSAL_OPERATION_KIND, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
+    TRADE_SUBMIT_OPERATION_KIND, TradeCancellationEnqueueRequest, TradeCancellationPrepareRequest,
+    TradeDecisionEnqueueRequest, TradeDecisionPrepareRequest, TradeEvidenceIngestRequest,
+    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionEnqueueRequest,
+    TradeRevisionDecisionPrepareRequest, TradeRevisionProposalEnqueueRequest,
+    TradeRevisionProposalPrepareRequest, TradeStatusKind, TradeStatusNextActionKind,
+    TradeStatusRequest, TradeSubmitEnqueueRequest, TradeSubmitPrepareRequest, TradeWorkflowKind,
 };
 use radroots_trade::order::RadrootsOrderIssue;
 use serde::Serialize;
@@ -390,8 +390,8 @@ fn order_id(raw: &str) -> RadrootsOrderId {
     RadrootsOrderId::parse(raw).expect("order id")
 }
 
-fn status_request(raw: &str) -> OrderStatusRequest {
-    OrderStatusRequest::parse(raw).expect("order status request")
+fn status_request(raw: &str) -> TradeStatusRequest {
+    TradeStatusRequest::parse(raw).expect("order status request")
 }
 
 fn buyer_actor() -> RadrootsActorContext {
@@ -507,7 +507,7 @@ fn invalid_listing_event_ptr() -> RadrootsNostrEventPtr {
 async fn order_submit_prepare_is_side_effect_free() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let listing_event = listing_event_ptr();
-    let request = OrderSubmitPrepareRequest::new(
+    let request = TradeSubmitPrepareRequest::new(
         buyer_actor(),
         listing_event.clone(),
         order_request("order-submit-prepare"),
@@ -559,7 +559,7 @@ async fn order_submit_prepare_is_side_effect_free() {
 #[tokio::test]
 async fn order_submit_prepare_rejects_missing_listing_evidence() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let request = OrderSubmitPrepareRequest::new(
+    let request = TradeSubmitPrepareRequest::new(
         buyer_actor(),
         invalid_listing_event_ptr(),
         order_request("order-submit-missing-listing"),
@@ -579,7 +579,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
 
     let non_buyer = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             non_buyer_actor(),
             listing_event_ptr(),
             order_request("order-submit-non-buyer"),
@@ -592,7 +592,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
 
     let wrong_actor = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             other_buyer_actor(),
             listing_event_ptr(),
             order_request("order-submit-wrong-actor"),
@@ -607,7 +607,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     seller_mismatch.seller_pubkey = OTHER_PUBLIC_KEY_HEX.parse().expect("seller pubkey");
     let seller_error = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
             seller_mismatch,
@@ -622,7 +622,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     empty_items.items.clear();
     let empty_items_error = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
             empty_items,
@@ -637,7 +637,7 @@ async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
     empty_economics.economics.items.clear();
     let empty_economics_error = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
             empty_economics,
@@ -655,16 +655,16 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     let order = order_request("order-submit-enqueue");
     let prepared = sdk
         .trades()
-        .prepare_submit(OrderSubmitPrepareRequest::new(
+        .prepare_submit(TradeSubmitPrepareRequest::new(
             buyer_actor(),
             listing_event_ptr(),
             order.clone(),
         ))
         .expect("prepared");
-    assert_eq!(prepared.workflow.kind, OrderWorkflowKind::Submit);
+    assert_eq!(prepared.workflow.kind, TradeWorkflowKind::Submit);
     assert_eq!(
         prepared.workflow.operation_kind,
-        ORDER_SUBMIT_OPERATION_KIND
+        TRADE_SUBMIT_OPERATION_KIND
     );
     assert_eq!(prepared.workflow.contract_id, "radroots.order.request.v1");
     assert_eq!(
@@ -672,11 +672,13 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         prepared.expected_event_id
     );
     assert_eq!(prepared.workflow.created_at, prepared.created_at);
-    let request = OrderSubmitEnqueueRequest::new(
+    let request = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays")
@@ -692,8 +694,8 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     assert_eq!(receipt.order_id, prepared.order_id);
     assert_eq!(receipt.listing_addr, prepared.listing_addr);
     assert_eq!(receipt.listing_event_id, prepared.listing_event_id);
-    assert_eq!(receipt.workflow.kind, OrderWorkflowKind::Submit);
-    assert_eq!(receipt.workflow.operation_kind, ORDER_SUBMIT_OPERATION_KIND);
+    assert_eq!(receipt.workflow.kind, TradeWorkflowKind::Submit);
+    assert_eq!(receipt.workflow.operation_kind, TRADE_SUBMIT_OPERATION_KIND);
     assert_eq!(
         receipt.workflow.expected_event_id,
         prepared.expected_event_id
@@ -775,7 +777,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         .await
         .expect("status");
     assert!(status.found);
-    assert_eq!(status.status, OrderStatusKind::Requested);
+    assert_eq!(status.status, TradeStatusKind::Requested);
     assert_eq!(status.event_count, 1);
     assert_eq!(
         status
@@ -789,11 +791,13 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
 #[tokio::test]
 async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request = OrderSubmitEnqueueRequest::new(
+    let request = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-wrong-signer"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -836,22 +840,26 @@ async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() 
 #[tokio::test]
 async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let first = OrderSubmitEnqueueRequest::new(
+    let first = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
     .expect("first target relays");
-    let second = OrderSubmitEnqueueRequest::new(
+    let second = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
-        SdkRelayTargetPolicy::explicit(
+        RelayResolutionPolicy::explicit(
             SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
                 .expect("second target relays"),
         ),
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     );
 
     let first_receipt = sdk
@@ -918,11 +926,13 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
 #[tokio::test]
 async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let enqueue_request = OrderSubmitEnqueueRequest::new(
+    let enqueue_request = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-sync"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -979,11 +989,13 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
 #[tokio::test]
 async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_conflict() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let first = OrderSubmitEnqueueRequest::new(
+    let first = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-a"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("first target relays")
@@ -994,11 +1006,13 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         .await
         .expect("first enqueue");
 
-    let second = OrderSubmitEnqueueRequest::new(
+    let second = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-b"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("second target relays")
@@ -1016,7 +1030,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
             if partial.stored
                 && !partial.queued
                 && partial.event_id.is_some()
-                && partial.operation_kind == ORDER_SUBMIT_OPERATION_KIND
+                && partial.operation_kind == TRADE_SUBMIT_OPERATION_KIND
                 && partial.idempotency_digest_prefix.is_some()
                 && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
@@ -1044,7 +1058,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
 async fn order_submit_runtime_dtos_serialize_deterministically() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
     let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
-    let prepare_request = OrderSubmitPrepareRequest::new(
+    let prepare_request = TradeSubmitPrepareRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-serialized"),
@@ -1083,11 +1097,13 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     assert_eq!(prepare_json["order"]["items"][0]["bin_count"], 2);
     assert_eq!(prepare_json["created_at"], 1_700_000_123);
 
-    let enqueue_request = OrderSubmitEnqueueRequest::new(
+    let enqueue_request = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-serialized-enqueue"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -1117,11 +1133,13 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
             .contains("order-serialized-idempotency")
     );
 
-    let try_key_enqueue = OrderSubmitEnqueueRequest::new(
+    let try_key_enqueue = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-try-idempotency"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_idempotency_key("order-submit-try-key")
     .expect("try idempotency key");
@@ -1145,7 +1163,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         serde_json::json!({
             "workflow": {
                 "kind": "submit",
-                "operation_kind": ORDER_SUBMIT_OPERATION_KIND,
+                "operation_kind": TRADE_SUBMIT_OPERATION_KIND,
                 "expected_event_id": receipt.workflow.expected_event_id.as_str(),
                 "signed_event_id": receipt.workflow.signed_event_id.as_str(),
                 "local_event_seq": 1,
@@ -1350,7 +1368,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-ingested", 39);
     let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
-    let ingest_request = OrderRequestEvidenceIngestRequest::new(request_event.clone())
+    let ingest_request = TradeRequestEvidenceIngestRequest::new(request_event.clone())
         .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
 
     let ingest_receipt = sdk
@@ -1370,7 +1388,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
     let actor = seller_actor();
     let plan = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             actor.clone(),
             request_event_ptr(&request_event),
             order_decision("order-decision-ingested"),
@@ -1381,8 +1399,10 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
         .enqueue_prepared_decision_with_explicit_signer(
             &actor,
             plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
                 .expect("target relays"),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
             None,
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -1392,7 +1412,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
     assert_eq!(receipt.local_event_seq, 2);
     let duplicate_receipt = sdk
         .trades()
-        .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(
+        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(
             request_event.clone(),
         ))
         .await
@@ -1419,7 +1439,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 
     let request_receipt = sdk
         .trades()
-        .ingest_evidence(OrderEvidenceIngestRequest::new(request_event.clone()))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(request_event.clone()))
         .await
         .expect("request evidence");
     assert_eq!(request_receipt.order_id.as_str(), "order-evidence-ingest");
@@ -1429,7 +1449,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 
     let decision_receipt = sdk
         .trades()
-        .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event.clone()))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(decision_event.clone()))
         .await
         .expect("decision evidence");
     assert_eq!(decision_receipt.order_id.as_str(), "order-evidence-ingest");
@@ -1439,7 +1459,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 
     let duplicate_receipt = sdk
         .trades()
-        .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(decision_event))
         .await
         .expect("duplicate decision evidence");
     assert_eq!(duplicate_receipt.local_event_seq, 2);
@@ -1458,7 +1478,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
         .status(status_request("order-evidence-ingest"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 2);
     assert_eq!(
         status
@@ -1474,7 +1494,7 @@ async fn order_evidence_ingest_rejects_non_order_events() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let error = sdk
         .trades()
-        .ingest_evidence(OrderEvidenceIngestRequest::new(signed_non_order_event(41)))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_non_order_event(41)))
         .await
         .expect_err("non order event");
 
@@ -1497,7 +1517,7 @@ async fn order_request_evidence_ingest_rejects_non_request_events() {
 
     let error = sdk
         .trades()
-        .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(decision_event))
+        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(decision_event))
         .await
         .expect_err("non request event");
 
@@ -1520,7 +1540,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
         id: request_event_id.as_str().to_owned(),
         relays: Some(RELAY.to_owned()),
     };
-    let accepted_request = OrderDecisionPrepareRequest::new(
+    let accepted_request = TradeDecisionPrepareRequest::new(
         seller_actor(),
         request_event.clone(),
         order_decision("order-decision-prepare-accept"),
@@ -1549,7 +1569,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
     };
     let declined = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             seller_actor(),
             request_event,
             declined_payload,
@@ -1592,7 +1612,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
 
     let non_seller = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             non_seller_actor(),
             request_event.clone(),
             order_decision("order-decision-non-seller"),
@@ -1605,7 +1625,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
 
     let wrong_actor = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             other_seller_actor(),
             request_event.clone(),
             order_decision("order-decision-wrong-seller"),
@@ -1618,7 +1638,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
 
     let invalid_evidence = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             seller_actor(),
             RadrootsNostrEventPtr {
                 id: String::new(),
@@ -1638,7 +1658,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     };
     let commitment_error = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             seller_actor(),
             request_event.clone(),
             empty_commitments,
@@ -1655,7 +1675,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     };
     let reason_error = sdk
         .trades()
-        .prepare_decision(OrderDecisionPrepareRequest::new(
+        .prepare_decision(TradeDecisionPrepareRequest::new(
             seller_actor(),
             request_event,
             missing_reason,
@@ -1672,7 +1692,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_321);
     let prepare_event_id = deterministic_event_id("order-decision-serialized-request");
-    let prepare_request = OrderDecisionPrepareRequest::new(
+    let prepare_request = TradeDecisionPrepareRequest::new(
         seller_actor(),
         RadrootsNostrEventPtr {
             id: prepare_event_id.as_str().to_owned(),
@@ -1715,11 +1735,13 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_500))
         .await
         .expect("ingest request");
-    let enqueue_request = OrderDecisionEnqueueRequest::new(
+    let enqueue_request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-serialized-enqueue"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("target relays")
@@ -1749,11 +1771,13 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
             .contains("order-decision-serialized-idempotency")
     );
 
-    let try_key_enqueue = OrderDecisionEnqueueRequest::new(
+    let try_key_enqueue = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-try-idempotency"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_idempotency_key("order-decision-try-key")
     .expect("try idempotency key");
@@ -1770,10 +1794,10 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         )
         .await
         .expect("enqueue");
-    assert_eq!(receipt.workflow.kind, OrderWorkflowKind::Decision);
+    assert_eq!(receipt.workflow.kind, TradeWorkflowKind::Decision);
     assert_eq!(
         receipt.workflow.operation_kind,
-        ORDER_DECISION_OPERATION_KIND
+        TRADE_DECISION_OPERATION_KIND
     );
     assert_eq!(
         receipt.workflow.expected_event_id,
@@ -1806,7 +1830,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         serde_json::json!({
             "workflow": {
                 "kind": "decision",
-                "operation_kind": ORDER_DECISION_OPERATION_KIND,
+                "operation_kind": TRADE_DECISION_OPERATION_KIND,
                 "expected_event_id": receipt.workflow.expected_event_id.as_str(),
                 "signed_event_id": receipt.workflow.signed_event_id.as_str(),
                 "local_event_seq": 2,
@@ -1859,7 +1883,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     let cancellation = order_cancellation("order-revision-dto");
 
-    let proposal_prepare = OrderRevisionProposalPrepareRequest::new(
+    let proposal_prepare = TradeRevisionProposalPrepareRequest::new(
         seller_actor(),
         root_event.clone(),
         previous_event.clone(),
@@ -1891,12 +1915,14 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     assert_eq!(proposal_prepare_json["created_at"], 1_700_000_654);
 
-    let proposal_enqueue = OrderRevisionProposalEnqueueRequest::new(
+    let proposal_enqueue = TradeRevisionProposalEnqueueRequest::new(
         seller_actor(),
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("proposal relays")
@@ -1919,12 +1945,14 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     assert!(!proposal_enqueue_json.to_string().contains("proposal-dto"));
 
-    let proposal_try_key = OrderRevisionProposalEnqueueRequest::new(
+    let proposal_try_key = TradeRevisionProposalEnqueueRequest::new(
         seller_actor(),
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_idempotency_key("order-revision-proposal-try")
     .expect("proposal try key");
@@ -1933,7 +1961,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         serde_json::json!({ "value": "<redacted>", "len": 27 })
     );
 
-    let decision_prepare = OrderRevisionDecisionPrepareRequest::new(
+    let decision_prepare = TradeRevisionDecisionPrepareRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
@@ -1960,12 +1988,14 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     assert_eq!(decision_prepare_json["created_at"], 1_700_000_654);
 
-    let decision_enqueue = OrderRevisionDecisionEnqueueRequest::new(
+    let decision_enqueue = TradeRevisionDecisionEnqueueRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
         revision_decision,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("decision relays")
@@ -1983,7 +2013,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     assert_eq!(decision_enqueue_json["created_at"], 1_700_000_654);
     assert!(!decision_enqueue_json.to_string().contains("decision-dto"));
 
-    let decision_try_key = OrderRevisionDecisionEnqueueRequest::new(
+    let decision_try_key = TradeRevisionDecisionEnqueueRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
@@ -1992,7 +2022,9 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             &previous_event_id,
             RadrootsOrderRevisionOutcome::Accepted,
         ),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_idempotency_key("order-revision-decision-try")
     .expect("decision try key");
@@ -2001,7 +2033,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         serde_json::json!({ "value": "<redacted>", "len": 27 })
     );
 
-    let cancellation_prepare = OrderCancellationPrepareRequest::new(
+    let cancellation_prepare = TradeCancellationPrepareRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
@@ -2017,12 +2049,14 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     assert_eq!(cancellation_prepare_json["created_at"], 1_700_000_654);
 
-    let cancellation_enqueue = OrderCancellationEnqueueRequest::new(
+    let cancellation_enqueue = TradeCancellationEnqueueRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
         cancellation,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("cancellation relays")
@@ -2044,12 +2078,14 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             .contains("cancellation-dto")
     );
 
-    let cancellation_try_key = OrderCancellationEnqueueRequest::new(
+    let cancellation_try_key = TradeCancellationEnqueueRequest::new(
         buyer_actor(),
         root_event.clone(),
         previous_event.clone(),
         order_cancellation("order-revision-dto"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_idempotency_key("order-cancellation-try")
     .expect("cancellation try key");
@@ -2060,7 +2096,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
 
     let event = signed_order_request_event("order-evidence-dto", 77);
     let request_evidence =
-        OrderRequestEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+        TradeRequestEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
     let request_evidence_json =
         serde_json::to_value(&request_evidence).expect("request evidence json");
     assert_struct_serialize_error_paths(&request_evidence, 2);
@@ -2068,7 +2104,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     assert_eq!(request_evidence_json["observed_at"], 1_700_000_654);
 
     let order_evidence =
-        OrderEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+        TradeEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
     let order_evidence_json = serde_json::to_value(&order_evidence).expect("order evidence json");
     assert_struct_serialize_error_paths(&order_evidence, 2);
     assert_eq!(order_evidence_json["event"]["id"], event.id.as_str());
@@ -2084,11 +2120,13 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_000))
         .await
         .expect("ingest request");
-    let request = OrderDecisionEnqueueRequest::new(
+    let request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-accept"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays")
@@ -2133,7 +2171,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         .await
         .expect("outbox operation")
         .expect("outbox operation");
-    assert_eq!(operation.operation_kind, ORDER_DECISION_OPERATION_KIND);
+    assert_eq!(operation.operation_kind, TRADE_DECISION_OPERATION_KIND);
     let outbox_event = outbox
         .get_event(receipt.outbox_event_id)
         .await
@@ -2149,7 +2187,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         .await
         .expect("status");
     assert!(status.found);
-    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 2);
     assert_eq!(
         status
@@ -2188,11 +2226,13 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
     decision.decision = RadrootsOrderDecisionOutcome::Declined {
         reason: " unavailable ".to_owned(),
     };
-    let request = OrderDecisionEnqueueRequest::new(
+    let request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         decision,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -2209,7 +2249,7 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
         .status(status_request("order-decision-decline"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Declined);
+    assert_eq!(status.status, TradeStatusKind::Declined);
     assert_eq!(
         status
             .decision_event_id
@@ -2229,11 +2269,13 @@ async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation
             .to_owned(),
         relays: Some(RELAY.to_owned()),
     };
-    let request = OrderDecisionEnqueueRequest::new(
+    let request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         missing_request,
         order_decision("order-decision-missing-request"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -2274,11 +2316,13 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_200))
         .await
         .expect("ingest request");
-    let request = OrderDecisionEnqueueRequest::new(
+    let request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-wrong-signer"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -2326,11 +2370,13 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
     decline.decision = RadrootsOrderDecisionOutcome::Declined {
         reason: "too late".to_owned(),
     };
-    let request = OrderDecisionEnqueueRequest::new(
+    let request = TradeDecisionEnqueueRequest::new(
         seller_actor(),
         request_event_ptr(&request_event),
         decline,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        RelayResolutionPolicy::ConfiguredRelays,
+        PublishMode::EnqueueOnly,
+        AckPolicy::NoWait,
     )
     .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
     .expect("target relays");
@@ -2355,7 +2401,7 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         .status(status_request("order-decision-conflict"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(
         status
             .decision_event_id
@@ -2383,7 +2429,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     let proposal_actor = seller_actor();
     let proposal_plan = sdk
         .trades()
-        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+        .prepare_revision_proposal(TradeRevisionProposalPrepareRequest::new(
             proposal_actor.clone(),
             request_event_ptr(&request_event),
             request_event_ptr(&request_event),
@@ -2395,8 +2441,10 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &proposal_actor,
             proposal_plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
                 .expect("proposal target relays"),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
             Some(
                 SdkIdempotencyKey::new("order-lifecycle-revision-proposal")
                     .expect("proposal idempotency"),
@@ -2411,7 +2459,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     );
     assert_eq!(
         outbox_operation_kind(&sdk, proposal_receipt.outbox_operation_id).await,
-        ORDER_REVISION_PROPOSAL_OPERATION_KIND
+        TRADE_REVISION_PROPOSAL_OPERATION_KIND
     );
     let stored_proposal = store
         .get_event(proposal_receipt.signed_event_id.as_str())
@@ -2432,7 +2480,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     let revision_decision_actor = buyer_actor();
     let revision_decision_plan = sdk
         .trades()
-        .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
+        .prepare_revision_decision(TradeRevisionDecisionPrepareRequest::new(
             revision_decision_actor.clone(),
             request_event_ptr(&request_event),
             order_event_ptr(&proposal_receipt.signed_event_id),
@@ -2444,8 +2492,10 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &revision_decision_actor,
             revision_decision_plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
                 .expect("revision decision target relays"),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
             None,
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2453,7 +2503,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .expect("enqueue revision decision");
     assert_eq!(
         outbox_operation_kind(&sdk, revision_decision_receipt.outbox_operation_id).await,
-        ORDER_REVISION_DECISION_OPERATION_KIND
+        TRADE_REVISION_DECISION_OPERATION_KIND
     );
     assert_eq!(
         store
@@ -2470,7 +2520,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .status(status_request("order-lifecycle-agreement"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(status.event_count, 3);
     assert_eq!(
         status
@@ -2495,7 +2545,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     assert!(!status.lifecycle_terminal);
     assert_eq!(
         status.next_action,
-        OrderStatusNextActionKind::AwaitRhiValidation
+        TradeStatusNextActionKind::AwaitRhiValidation
     );
     assert!(status.evidence.has_request);
     assert!(!status.evidence.has_decision);
@@ -2527,12 +2577,14 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
     let proposal_receipt = sdk
         .trades()
         .enqueue_revision_proposal_with_explicit_signer(
-            OrderRevisionProposalEnqueueRequest::new(
+            TradeRevisionProposalEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("proposal target relays"),
@@ -2546,7 +2598,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
         .status(status_request("order-lifecycle-pending-revision"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::RevisionProposed);
+    assert_eq!(status.status, TradeStatusKind::RevisionProposed);
     assert_eq!(status.event_count, 2);
     assert!(status.agreement_event_id.is_none());
     assert_eq!(
@@ -2569,11 +2621,13 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
     let decision_error = sdk
         .trades()
         .enqueue_decision_with_explicit_signer(
-            OrderDecisionEnqueueRequest::new(
+            TradeDecisionEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-pending-revision"),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("decision target relays"),
@@ -2594,12 +2648,14 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
     let proposal_error = sdk
         .trades()
         .enqueue_revision_proposal_with_explicit_signer(
-            OrderRevisionProposalEnqueueRequest::new(
+            TradeRevisionProposalEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 blocked_proposal,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("blocked proposal target relays"),
@@ -2638,12 +2694,14 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
     let proposal_receipt = sdk
         .trades()
         .enqueue_revision_proposal_with_explicit_signer(
-            OrderRevisionProposalEnqueueRequest::new(
+            TradeRevisionProposalEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal.clone(),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("proposal target relays"),
@@ -2661,12 +2719,14 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
     let declined_revision_receipt = sdk
         .trades()
         .enqueue_revision_decision_with_explicit_signer(
-            OrderRevisionDecisionEnqueueRequest::new(
+            TradeRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 declined_revision,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("declined revision target relays"),
@@ -2680,7 +2740,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         .status(status_request("order-lifecycle-declined-revision"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Declined);
+    assert_eq!(status.status, TradeStatusKind::Declined);
     assert_eq!(status.event_count, 3);
     assert!(status.agreement_event_id.is_none());
     assert_eq!(
@@ -2695,7 +2755,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
         Some(declined_revision_receipt.signed_event_id.as_str())
     );
     assert!(status.lifecycle_terminal);
-    assert_eq!(status.next_action, OrderStatusNextActionKind::Terminal);
+    assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
     assert!(!status.eligibility.can_decide);
     assert!(!status.eligibility.can_propose_revision);
     assert!(!status.eligibility.can_decide_revision);
@@ -2709,12 +2769,14 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
     let second_decision_error = sdk
         .trades()
         .enqueue_revision_decision_with_explicit_signer(
-            OrderRevisionDecisionEnqueueRequest::new(
+            TradeRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 second_decision,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("second decision target relays"),
@@ -2748,7 +2810,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
     let cancellation_actor = buyer_actor();
     let cancellation_plan = sdk
         .trades()
-        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+        .prepare_cancellation(TradeCancellationPrepareRequest::new(
             cancellation_actor.clone(),
             request_event_ptr(&request_event),
             request_event_ptr(&request_event),
@@ -2760,8 +2822,10 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         .enqueue_prepared_cancellation_with_explicit_signer(
             &cancellation_actor,
             cancellation_plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
                 .expect("cancellation target relays"),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
             Some(
                 SdkIdempotencyKey::new("order-lifecycle-cancel").expect("cancellation idempotency"),
             ),
@@ -2774,7 +2838,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
     assert_eq!(cancellation.previous_event_id, request_event_id);
     assert_eq!(
         outbox_operation_kind(&sdk, cancellation.outbox_operation_id).await,
-        ORDER_CANCELLATION_OPERATION_KIND
+        TRADE_CANCELLATION_OPERATION_KIND
     );
     assert_eq!(
         store
@@ -2788,12 +2852,14 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
     let replay = sdk
         .trades()
         .enqueue_cancellation_with_explicit_signer(
-            OrderCancellationEnqueueRequest::new(
+            TradeCancellationEnqueueRequest::new(
                 buyer_actor(),
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 order_cancellation("order-lifecycle-cancel"),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("replay target relays")
@@ -2811,7 +2877,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         .status(status_request("order-lifecycle-cancel"))
         .await
         .expect("status");
-    assert_eq!(status.status, OrderStatusKind::Cancelled);
+    assert_eq!(status.status, TradeStatusKind::Cancelled);
     assert_eq!(
         status
             .cancellation_event_id
@@ -2820,7 +2886,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         Some(cancellation.signed_event_id.as_str())
     );
     assert!(status.lifecycle_terminal);
-    assert_eq!(status.next_action, OrderStatusNextActionKind::Terminal);
+    assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
     assert!(status.evidence.has_request);
     assert!(!status.evidence.has_decision);
     assert!(status.evidence.has_cancellation);
@@ -2837,7 +2903,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let missing = sdk
         .trades()
         .enqueue_revision_proposal_with_explicit_signer(
-            OrderRevisionProposalEnqueueRequest::new(
+            TradeRevisionProposalEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
@@ -2846,7 +2912,9 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                     &request_event_id,
                     &request_event_id,
                 ),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("missing target relays"),
@@ -2871,11 +2939,13 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let decision_receipt = sdk
         .trades()
         .enqueue_decision_with_explicit_signer(
-            OrderDecisionEnqueueRequest::new(
+            TradeDecisionEnqueueRequest::new(
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-invalid"),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("decision target relays"),
@@ -2895,12 +2965,14 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let revision_error = sdk
         .trades()
         .enqueue_revision_decision_with_explicit_signer(
-            OrderRevisionDecisionEnqueueRequest::new(
+            TradeRevisionDecisionEnqueueRequest::new(
                 buyer_actor(),
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 revision_without_proposal,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("revision decision target relays"),
@@ -2916,12 +2988,14 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let cancellation_error = sdk
         .trades()
         .enqueue_cancellation_with_explicit_signer(
-            OrderCancellationEnqueueRequest::new(
+            TradeCancellationEnqueueRequest::new(
                 buyer_actor(),
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 order_cancellation("order-lifecycle-invalid"),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                RelayResolutionPolicy::ConfiguredRelays,
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
             )
             .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
             .expect("cancellation target relays"),
@@ -2948,24 +3022,24 @@ async fn order_status_returns_not_found_for_missing_local_order() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
     let request = status_request("order-1");
 
-    assert_eq!(request.limit, ORDER_STATUS_DEFAULT_LIMIT);
+    assert_eq!(request.limit, TRADE_STATUS_DEFAULT_LIMIT);
 
     let receipt = sdk.trades().status(request).await.expect("status");
 
     assert!(!receipt.found);
     assert_eq!(receipt.order_id.as_str(), "order-1");
-    assert_eq!(receipt.source, SdkOrderStatusSource::LocalEventStore);
+    assert_eq!(receipt.source, SdkTradeStatusSource::LocalEventStore);
     assert_eq!(receipt.event_count, 0);
-    assert_eq!(receipt.limit_applied, ORDER_STATUS_DEFAULT_LIMIT);
+    assert_eq!(receipt.limit_applied, TRADE_STATUS_DEFAULT_LIMIT);
     assert!(receipt.event_ids.is_empty());
-    assert_eq!(receipt.status, OrderStatusKind::Missing);
+    assert_eq!(receipt.status, TradeStatusKind::Missing);
     assert!(receipt.listing_addr.is_none());
     assert!(receipt.buyer_pubkey.is_none());
     assert!(receipt.seller_pubkey.is_none());
     assert!(receipt.economics.is_none());
-    assert_eq!(receipt.next_action, OrderStatusNextActionKind::NoLocalOrder);
+    assert_eq!(receipt.next_action, TradeStatusNextActionKind::NoLocalOrder);
     assert_eq!(receipt.evidence.event_count, 0);
-    assert_eq!(receipt.evidence.limit_applied, ORDER_STATUS_DEFAULT_LIMIT);
+    assert_eq!(receipt.evidence.limit_applied, TRADE_STATUS_DEFAULT_LIMIT);
     assert!(!receipt.evidence.has_request);
     assert!(!receipt.evidence.has_issues);
     assert!(!receipt.eligibility.can_decide);
@@ -2986,33 +3060,33 @@ async fn order_status_rejects_invalid_limits_before_querying() {
         .expect_err("zero limit");
     let too_large = sdk
         .trades()
-        .status(status_request("order-1").with_limit(ORDER_STATUS_MAX_LIMIT + 1))
+        .status(status_request("order-1").with_limit(TRADE_STATUS_MAX_LIMIT + 1))
         .await
         .expect_err("too large");
 
     assert!(matches!(
         zero,
-        RadrootsSdkError::OrderStatusLimitInvalid {
+        RadrootsSdkError::TradeStatusLimitInvalid {
             limit: 0,
             min: 1,
-            max: ORDER_STATUS_MAX_LIMIT
+            max: TRADE_STATUS_MAX_LIMIT
         }
     ));
     assert!(matches!(
         too_large,
-        RadrootsSdkError::OrderStatusLimitInvalid {
+        RadrootsSdkError::TradeStatusLimitInvalid {
             limit,
             min: 1,
-            max: ORDER_STATUS_MAX_LIMIT
-        } if limit == ORDER_STATUS_MAX_LIMIT + 1
+            max: TRADE_STATUS_MAX_LIMIT
+        } if limit == TRADE_STATUS_MAX_LIMIT + 1
     ));
 }
 
 #[test]
 fn order_status_parse_rejects_invalid_order_ids() {
-    let error = OrderStatusRequest::parse("bad order id").expect_err("invalid order id");
+    let error = TradeStatusRequest::parse("bad order id").expect_err("invalid order id");
 
-    assert!(matches!(error, RadrootsSdkError::InvalidOrderId { .. }));
+    assert!(matches!(error, RadrootsSdkError::InvalidTradeId { .. }));
 }
 
 #[tokio::test]
@@ -3025,7 +3099,13 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     assert_eq!(
         request_json,
         serde_json::json!({
-            "order_id": "order-1",
+            "locator": {
+                "trade_id": "order-1",
+                "root_event_id": null,
+                "listing_addr": null,
+                "buyer_pubkey": null,
+                "seller_pubkey": null
+            },
             "limit": 25
         })
     );
@@ -3035,6 +3115,10 @@ async fn order_status_contract_dtos_serialize_deterministically() {
 
     assert_eq!(receipt_json["source"], "local_event_store");
     assert_eq!(receipt_json["status"], "missing");
+    assert_eq!(receipt_json["locator"], request_json["locator"]);
+    assert_eq!(receipt_json["order_id"], "order-1");
+    assert_eq!(receipt_json["root_event_id"], serde_json::Value::Null);
+    assert_eq!(receipt_json["ambiguity_candidates"], serde_json::json!([]));
     assert_eq!(receipt_json["listing_addr"], serde_json::Value::Null);
     assert_eq!(receipt_json["buyer_pubkey"], serde_json::Value::Null);
     assert_eq!(receipt_json["seller_pubkey"], serde_json::Value::Null);
@@ -3052,8 +3136,8 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     assert_eq!(receipt_json["eligibility"]["can_propose_revision"], false);
     assert_eq!(receipt_json["eligibility"]["can_decide_revision"], false);
 
-    let issue = SdkOrderStatusIssue {
-        kind: SdkOrderStatusIssueKind::DecisionPayloadInvalid,
+    let issue = SdkTradeStatusIssue {
+        kind: SdkTradeStatusIssueKind::DecisionPayloadInvalid,
         event_ids: vec![deterministic_event_id("issue-event")],
     };
     assert_eq!(issue.code(), "decision_payload_invalid");
@@ -3077,7 +3161,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
                 RadrootsOrderIssue::$variant {
                     event_id: event_id.clone(),
                 },
-                SdkOrderStatusIssueKind::$kind,
+                SdkTradeStatusIssueKind::$kind,
                 $code,
                 vec![event_id],
             )
@@ -3094,7 +3178,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
                 RadrootsOrderIssue::$variant {
                     event_ids: event_ids.clone(),
                 },
-                SdkOrderStatusIssueKind::$kind,
+                SdkTradeStatusIssueKind::$kind,
                 $code,
                 event_ids,
             )
@@ -3104,7 +3188,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
     let cases = vec![
         (
             RadrootsOrderIssue::MissingRequest,
-            SdkOrderStatusIssueKind::MissingRequest,
+            SdkTradeStatusIssueKind::MissingRequest,
             "missing_request",
             Vec::new(),
         ),
@@ -3412,7 +3496,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
                     event_id: event_id.clone(),
                     reason: "fixture validation failed".to_owned(),
                 },
-                SdkOrderStatusIssueKind::DeterministicValidationFailure,
+                SdkTradeStatusIssueKind::DeterministicValidationFailure,
                 "deterministic_validation_failure",
                 vec![event_id],
             )
@@ -3425,7 +3509,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
                     expected_event_id: expected_event_id.clone(),
                     current_event_id: current_event_id.clone(),
                 },
-                SdkOrderStatusIssueKind::StaleListingEvent,
+                SdkTradeStatusIssueKind::StaleListingEvent,
                 "stale_listing_event",
                 vec![expected_event_id, current_event_id],
             )
@@ -3433,7 +3517,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
     ];
 
     for (issue, expected_kind, expected_code, expected_event_ids) in cases {
-        let sdk_issue = SdkOrderStatusIssue::from(issue);
+        let sdk_issue = SdkTradeStatusIssue::from(issue);
 
         assert_eq!(sdk_issue.kind, expected_kind);
         assert_eq!(sdk_issue.code(), expected_code);
@@ -3466,7 +3550,7 @@ async fn order_status_projects_local_request_and_decision_events() {
 
     assert!(receipt.found);
     assert_eq!(receipt.order_id.as_str(), "order-1");
-    assert_eq!(receipt.source, SdkOrderStatusSource::LocalEventStore);
+    assert_eq!(receipt.source, SdkTradeStatusSource::LocalEventStore);
     assert_eq!(receipt.event_count, 2);
     assert_eq!(receipt.limit_applied, 1_000);
     assert_eq!(
@@ -3477,7 +3561,7 @@ async fn order_status_projects_local_request_and_decision_events() {
             .collect::<Vec<_>>(),
         vec![request_event.id.as_str(), decision_event.id.as_str()]
     );
-    assert_eq!(receipt.status, OrderStatusKind::AgreedPendingRhi);
+    assert_eq!(receipt.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(
         receipt
             .request_event_id
@@ -3510,7 +3594,7 @@ async fn order_status_projects_local_request_and_decision_events() {
     assert!(!receipt.lifecycle_terminal);
     assert_eq!(
         receipt.next_action,
-        OrderStatusNextActionKind::AwaitRhiValidation
+        TradeStatusNextActionKind::AwaitRhiValidation
     );
     assert_eq!(receipt.evidence.event_count, 2);
     assert!(receipt.evidence.has_request);
@@ -3545,7 +3629,7 @@ async fn order_status_reports_limited_local_results() {
         .expect("status");
 
     assert!(receipt.found);
-    assert_eq!(receipt.status, OrderStatusKind::Requested);
+    assert_eq!(receipt.status, TradeStatusKind::Requested);
     assert_eq!(receipt.event_count, 1);
     assert_eq!(receipt.limit_applied, 1);
     assert_eq!(
@@ -3572,7 +3656,7 @@ async fn order_status_reports_limited_local_results() {
 }
 
 #[tokio::test]
-async fn order_status_reports_typed_reducer_issues() {
+async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let first_request_event = signed_order_request_event("order-1", 27);
     let second_request_event = signed_order_request_event("order-1", 28);
@@ -3593,8 +3677,8 @@ async fn order_status_reports_typed_reducer_issues() {
         .await
         .expect("status");
 
-    assert!(receipt.found);
-    assert_eq!(receipt.status, OrderStatusKind::Invalid);
+    assert!(!receipt.found);
+    assert_eq!(receipt.status, TradeStatusKind::Ambiguous);
     assert_eq!(receipt.event_count, 2);
     assert_eq!(
         receipt
@@ -3607,17 +3691,21 @@ async fn order_status_reports_typed_reducer_issues() {
             second_request_event.id.as_str()
         ]
     );
-    let issue = receipt
-        .issues
+    assert!(receipt.issues.is_empty());
+    let candidate_roots = receipt
+        .ambiguity_candidates
         .iter()
-        .find(|issue| issue.kind == SdkOrderStatusIssueKind::MultipleRequests)
-        .expect("multiple request issue");
+        .map(|candidate| {
+            candidate
+                .locator
+                .root_event_id
+                .as_ref()
+                .map(RadrootsEventId::as_str)
+                .expect("root event id")
+        })
+        .collect::<Vec<_>>();
     assert_eq!(
-        issue
-            .event_ids
-            .iter()
-            .map(RadrootsEventId::as_str)
-            .collect::<Vec<_>>(),
+        candidate_roots,
         vec![
             first_request_event.id.as_str(),
             second_request_event.id.as_str()

@@ -35,6 +35,8 @@ mod order;
 #[cfg(feature = "runtime")]
 mod orders_runtime;
 #[cfg(feature = "runtime")]
+mod privacy;
+#[cfg(feature = "runtime")]
 mod private_store;
 #[cfg(feature = "runtime")]
 mod product_clients;
@@ -49,6 +51,8 @@ mod signer_provider;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
 #[cfg(feature = "runtime")]
+mod trade_storage;
+#[cfg(feature = "runtime")]
 mod workflow_runtime;
 
 #[cfg(feature = "runtime")]
@@ -58,7 +62,7 @@ pub use crate::dvm_runtime::{
     DvmTradeTransitionProofEnqueueRequest, DvmTradeTransitionProofPlan,
     DvmTradeTransitionProofPrepareRequest, DvmTradeTransitionProofReceipt,
     DvmTradeTransitionProofRequestPayload, DvmValidationReceiptIngestReceipt,
-    DvmValidationReceiptIngestRequest, SdkDvmInventoryBinWitness,
+    DvmValidationReceiptIngestRequest,
 };
 #[cfg(feature = "runtime")]
 pub use crate::error::{
@@ -85,7 +89,9 @@ pub use crate::geonames::{
     RadrootsGeoNamesConfig,
 };
 #[cfg(feature = "runtime")]
-pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
+pub use crate::idempotency::{
+    SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey, SdkTradeIdempotencyRecord,
+};
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingEnqueueReceipt,
@@ -98,30 +104,38 @@ pub use crate::market_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
-    ORDER_CANCELLATION_OPERATION_KIND, ORDER_DECISION_OPERATION_KIND,
-    ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
-    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
-    OrderCancellationEnqueueRequest, OrderCancellationPlan, OrderCancellationPrepareRequest,
-    OrderCancellationReceipt, OrderDecisionEnqueueRequest, OrderDecisionPlan,
-    OrderDecisionPrepareRequest, OrderDecisionReceipt, OrderEvidenceIngestReceipt,
-    OrderEvidenceIngestRequest, OrderRequestEvidenceIngestReceipt,
-    OrderRequestEvidenceIngestRequest, OrderRevisionDecisionEnqueueRequest,
-    OrderRevisionDecisionPlan, OrderRevisionDecisionPrepareRequest, OrderRevisionDecisionReceipt,
-    OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPlan,
-    OrderRevisionProposalPrepareRequest, OrderRevisionProposalReceipt, OrderStatusEligibility,
-    OrderStatusEvidenceSummary, OrderStatusKind, OrderStatusNextActionKind, OrderStatusReceipt,
-    OrderStatusRequest, OrderSubmitEnqueueRequest, OrderSubmitPlan, OrderSubmitPrepareRequest,
-    OrderSubmitReceipt, OrderWorkflowEnqueueReceipt, OrderWorkflowIdempotencyReceipt,
-    OrderWorkflowKind, OrderWorkflowPlan, OrderWorkflowRetryAdvice, SdkOrderStatusIssue,
-    SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource,
+    TRADE_CANCELLATION_OPERATION_KIND, TRADE_DECISION_OPERATION_KIND,
+    TRADE_REVISION_DECISION_OPERATION_KIND, TRADE_REVISION_PROPOSAL_OPERATION_KIND,
+    TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT, TRADE_SUBMIT_OPERATION_KIND,
+    TradeCancellationEnqueueRequest, TradeCancellationPlan, TradeCancellationPrepareRequest,
+    TradeCancellationReceipt, TradeDecisionEnqueueRequest, TradeDecisionPlan,
+    TradeDecisionPrepareRequest, TradeDecisionReceipt, TradeEvidenceIngestReceipt,
+    TradeEvidenceIngestRequest, TradeRequestEvidenceIngestReceipt,
+    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionEnqueueRequest,
+    TradeRevisionDecisionPlan, TradeRevisionDecisionPrepareRequest, TradeRevisionDecisionReceipt,
+    TradeRevisionProposalEnqueueRequest, TradeRevisionProposalPlan,
+    TradeRevisionProposalPrepareRequest, TradeRevisionProposalReceipt,
+    TradeStatusAmbiguityCandidate, TradeStatusEligibility, TradeStatusEvidenceSummary,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusReceipt, TradeStatusRequest,
+    TradeSubmitEnqueueRequest, TradeSubmitPlan, TradeSubmitPrepareRequest, TradeSubmitReceipt,
+    TradeWorkflowEnqueueReceipt, TradeWorkflowIdempotencyReceipt, TradeWorkflowKind,
+    TradeWorkflowPlan, TradeWorkflowRetryAdvice,
+};
+#[cfg(feature = "runtime")]
+pub use crate::privacy::{
+    PrivacyPreflightReceipt, PrivacyPreflightStatus, ProductSensitivityField,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
-    DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient, TradesClient,
+    DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient,
+    TradeBuyerClient, TradeResyncClient, TradeSellerClient, TradeStatusClient,
+    TradeValidationClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{
-    SDK_RELAY_TARGET_MAX_COUNT, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    AckPolicy, PublishMode, RelayResolutionPolicy, SDK_RELAY_TARGET_MAX_COUNT,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 #[cfg(feature = "runtime")]
 pub use crate::runtime::{
@@ -153,3 +167,10 @@ pub use crate::sync_runtime::{
     SyncProjectionRefreshRequest, SyncRelayTargetSummary, SyncStatusReceipt, SyncStatusRequest,
     SyncStatusSource,
 };
+#[cfg(feature = "runtime")]
+pub use crate::trade_storage::{
+    SDK_TRADE_PROJECTION_CACHE_VERSION, SdkTradeProjectionCache, SdkTradeProjectionCacheKey,
+    SdkTradeProjectionCacheRecord,
+};
+#[cfg(feature = "runtime")]
+pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;

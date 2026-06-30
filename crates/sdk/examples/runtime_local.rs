@@ -11,9 +11,9 @@ use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
-    ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsClient,
-    RadrootsSdkError, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
-    SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    ListingPreparePublishRequest, PushOutboxRequest, RadrootsClient, RadrootsSdkError,
+    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradeStatusRequest,
 };
 
 const RELAY: &str = "wss://relay.example.com";
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await;
     let order_status = sdk
         .trades()
-        .status(OrderStatusRequest::parse("example-order-1")?)
+        .status(TradeStatusRequest::parse("example-order-1")?)
         .await?;
 
     assert_eq!(
