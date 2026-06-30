@@ -459,6 +459,48 @@ impl RadrootsOutbox {
         }))
     }
 
+    pub async fn claim_ready_signed_event(
+        &self,
+        outbox_event_id: i64,
+        claim_owner: impl AsRef<str>,
+        claim_token: impl AsRef<str>,
+        claim_expires_at_ms: i64,
+        now_ms: i64,
+    ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
+        let mut tx = self.pool.begin().await?;
+        let changed = sqlx::query(
+            "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+        )
+        .bind(RadrootsOutboxEventState::Publishing.as_str())
+        .bind(claim_token.as_ref())
+        .bind(claim_owner.as_ref())
+        .bind(claim_expires_at_ms)
+        .bind(now_ms)
+        .bind(outbox_event_id)
+        .bind(now_ms)
+        .bind(now_ms)
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() == 0 {
+            tx.commit().await?;
+            return Ok(None);
+        }
+        let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
+        let target_relays = relay_urls_for_tx(&mut tx, outbox_event_id).await?;
+        tx.commit().await?;
+        Ok(Some(RadrootsOutboxClaimedEvent {
+            outbox_event_id: record.outbox_event_id,
+            operation_id: record.operation_id,
+            expected_event_id: record.event_id,
+            attempt_count: record.attempt_count,
+            state: RadrootsOutboxEventState::Publishing,
+            claim_token: claim_token.as_ref().to_owned(),
+            draft: record.draft,
+            signed_event: record.signed_event,
+            target_relays,
+        }))
+    }
+
     pub async fn complete_signing(
         &self,
         outbox_event_id: i64,
@@ -1908,6 +1950,66 @@ mod tests {
         assert_eq!(signing_claim.outbox_event_id, unsigned.outbox_event_id);
         assert_eq!(signing_claim.state, RadrootsOutboxEventState::Signing);
         assert!(signing_claim.signed_event.is_none());
+    }
+
+    #[tokio::test]
+    async fn claim_ready_signed_event_targets_requested_record() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let older_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "older-ready");
+        let older_signed =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &older_draft).expect("older event");
+        let older = outbox
+            .enqueue_signed_operation(signed_operation_input(older_draft, older_signed, 1_000))
+            .await
+            .expect("older enqueue");
+        let targeted_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "targeted-ready");
+        let targeted_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &targeted_draft)
+            .expect("targeted event");
+        let targeted = outbox
+            .enqueue_signed_operation(signed_operation_input(
+                targeted_draft,
+                targeted_signed,
+                1_100,
+            ))
+            .await
+            .expect("targeted enqueue");
+
+        let claimed = outbox
+            .claim_ready_signed_event(
+                targeted.outbox_event_id,
+                "publisher-a",
+                "claim-a",
+                2_000,
+                1_200,
+            )
+            .await
+            .expect("claim")
+            .expect("targeted claim");
+        assert_eq!(claimed.outbox_event_id, targeted.outbox_event_id);
+        assert_eq!(claimed.state, RadrootsOutboxEventState::Publishing);
+        assert!(claimed.signed_event.is_some());
+
+        let older_event = outbox
+            .get_event(older.outbox_event_id)
+            .await
+            .expect("older event")
+            .expect("older event");
+        assert_eq!(older_event.state, RadrootsOutboxEventState::Signed);
+        assert!(older_event.claim_token.is_none());
+
+        assert!(
+            outbox
+                .claim_ready_signed_event(
+                    targeted.outbox_event_id,
+                    "publisher-b",
+                    "claim-b",
+                    2_100,
+                    1_300
+                )
+                .await
+                .expect("second claim")
+                .is_none()
+        );
     }
 
     #[tokio::test]
