@@ -41,12 +41,18 @@ transport owns signing. `push_outbox_with_adapter(...)` remains available for te
 adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
 `publish.event`.
 
-`sdk.trades()` exposes local trade evidence ingestion, status projection, and grouped product workflow
-handles. Product workflow actions use `sdk.trades().buyer()`, `sdk.trades().seller()`, and
-`sdk.trades().resync()`. `sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local
-projections; it returns typed source, event count, limit state, event IDs, ambiguity candidates,
-eligibility, next-action, and reducer issue data. Status is not a network fetch. DVM proof requests and
-validation receipt ingestion use `sdk.dvm()`.
+`sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
+evidence, ingest DVM validation receipts through `sdk.dvm()`, read `sdk.trades().status(...)`, resync
+through `sdk.trades().resync()`, and read seller inbox projections through `sdk.trades().seller()`.
+`sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local projections; it returns typed
+source, event count, limit state, event IDs, ambiguity candidates, eligibility, next-action, and
+reducer issue data. Status is not a network fetch.
+
+Configured-signer trade writes compile when both `runtime` and `signer-adapters` are enabled. Buyer
+write workflows use `sdk.trades().buyer()` for propose, cancel, and revision-decision actions.
+Seller write workflows use `sdk.trades().seller()` for accept, decline, and revision-proposal
+actions. Runtime-only builds intentionally expose no buyer write handle and no trade mutation request
+DTOs. DVM proof requests and validation receipt ingestion use `sdk.dvm()`.
 
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `relay-runtime`, and
@@ -96,7 +102,8 @@ Optional advanced substrate is explicitly feature-scoped:
 - `identity-storage`: encrypted identity-file helpers
 - `signing`: Nostr builder and local signing adapters
 - `relay-client`: relay client and publish adapters
-- `signer-adapters`: SDK local-key and Myc NIP-46 signer providers
+- `signer-adapters`: SDK local-key and Myc NIP-46 signer providers plus configured-signer product
+  write APIs
 
 The crate is licensed as `MIT OR Apache-2.0`. Its manifest is configured for a future crates.io
 release, but a public release still requires the full SDK check lane, generated artifact
