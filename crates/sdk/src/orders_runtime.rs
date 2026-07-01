@@ -3499,7 +3499,7 @@ async fn attach_worker_evidence<A>(
 where
     A: RadrootsRelayFetchAdapter,
 {
-    if receipts.is_empty() || trusted_worker_pubkeys.is_empty() {
+    if receipts.is_empty() {
         return Ok(());
     }
     let Some(fetch_request) =

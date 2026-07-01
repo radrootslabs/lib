@@ -46,7 +46,7 @@ use radroots_sdk::{
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusNextActionKind, TradeStatusRequest, TradeValidationReceiptInspectRequest,
-    TradeValidationReceiptListRequest,
+    TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -1303,6 +1303,107 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
             .receipt
             .as_ref()
             .and_then(|receipt| receipt.worker_evidence.trusted.as_ref())
+            .map(|evidence| evidence.result_event_id.as_str()),
+        Some(worker_event_id.as_str())
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_trust_config() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let order_id = "trade-validation-receipts-untrusted-default";
+    let listing_event_id = deterministic_event_id("validation-receipt-untrusted-listing");
+    let root_event_id = deterministic_event_id("validation-receipt-untrusted-request");
+    let target_event_id = deterministic_event_id("validation-receipt-untrusted-decision");
+    let receipt_raw_event = signed_raw_validation_receipt_event(
+        order_id,
+        &listing_event_id,
+        &root_event_id,
+        &target_event_id,
+        36,
+    );
+    let receipt_event_id =
+        RadrootsEventId::parse(receipt_raw_event.id.to_hex()).expect("receipt event id");
+    let worker_raw_event = signed_raw_worker_result_event(
+        order_id,
+        &receipt_event_id,
+        &listing_event_id,
+        &root_event_id,
+        &target_event_id,
+        37,
+    );
+    let worker_event_id = worker_raw_event.id.to_hex();
+    let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&receipt_raw_event, RELAY, 4_000),
+        relay_raw_event_item(&worker_raw_event, RELAY, 4_001),
+        relay_eose(RELAY),
+    ]);
+
+    let list = sdk
+        .trades()
+        .validation_receipts()
+        .list_with_fetch_adapter(
+            TradeValidationReceiptListRequest::parse(order_id).expect("list request"),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt list");
+    let list_evidence = &list.receipts[0].worker_evidence;
+    assert!(list_evidence.trusted.is_none());
+    let list_untrusted = list_evidence.untrusted.as_ref().expect("list untrusted");
+    assert_eq!(list_untrusted.result_event_id.as_str(), worker_event_id);
+    assert_eq!(list_untrusted.author.as_str(), service_pubkey);
+    assert_eq!(
+        list_untrusted
+            .commitment_confidence
+            .map(|confidence| confidence.as_str()),
+        Some("committed_by_trusted_service")
+    );
+
+    let inspect = sdk
+        .trades()
+        .validation_receipts()
+        .inspect_with_fetch_adapter(
+            TradeValidationReceiptInspectRequest::new(receipt_event_id.clone()),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt inspect");
+    let inspect_evidence = &inspect
+        .receipt
+        .as_ref()
+        .expect("inspect receipt")
+        .worker_evidence;
+    assert!(inspect_evidence.trusted.is_none());
+    assert_eq!(
+        inspect_evidence
+            .untrusted
+            .as_ref()
+            .map(|evidence| evidence.result_event_id.as_str()),
+        Some(worker_event_id.as_str())
+    );
+
+    let verify = sdk
+        .trades()
+        .validation_receipts()
+        .verify_with_fetch_adapter(
+            TradeValidationReceiptVerifyRequest::new(receipt_event_id),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt verify");
+    let verify_evidence = &verify
+        .receipt
+        .as_ref()
+        .expect("verify receipt")
+        .worker_evidence;
+    assert!(verify_evidence.trusted.is_none());
+    assert_eq!(
+        verify_evidence
+            .untrusted
+            .as_ref()
             .map(|evidence| evidence.result_event_id.as_str()),
         Some(worker_event_id.as_str())
     );
