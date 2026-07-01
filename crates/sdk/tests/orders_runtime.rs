@@ -1196,7 +1196,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
 #[cfg(feature = "relay-runtime")]
 #[tokio::test]
 async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
     let order_id = "trade-validation-receipts-sdk";
     let listing_event_id = deterministic_event_id("validation-receipt-listing");
     let root_event_id = deterministic_event_id("validation-receipt-request");
@@ -1219,10 +1219,21 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
         34,
     );
     let worker_event_id = worker_raw_event.id.to_hex();
+    let wrong_root_event_id = deterministic_event_id("validation-receipt-worker-wrong-root");
+    let wrong_worker_raw_event = signed_raw_worker_result_event(
+        order_id,
+        &receipt_event_id,
+        &listing_event_id,
+        &wrong_root_event_id,
+        &target_event_id,
+        35,
+    );
+    let wrong_worker_event_id = wrong_worker_raw_event.id.to_hex();
     let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         relay_raw_event_item(&receipt_raw_event, RELAY, 4_000),
         relay_raw_event_item(&worker_raw_event, RELAY, 4_001),
+        relay_raw_event_item(&wrong_worker_raw_event, RELAY, 4_002),
         relay_eose(RELAY),
     ]);
 
@@ -1242,6 +1253,7 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
     assert_eq!(list.relay_targets, vec![RELAY.to_owned()]);
     assert_eq!(list.receipts.len(), 1);
     assert!(list.invalid_receipts.is_empty());
+    assert_eq!(list.relay_evidence.out_of_filter_count, 2);
     assert_eq!(
         list.receipts[0].event.id.as_str(),
         receipt_event_id.as_str()
@@ -1263,6 +1275,13 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
             .commitment_confidence
             .map(|confidence| confidence.as_str()),
         Some("committed_by_trusted_service")
+    );
+    assert!(
+        store
+            .get_event(wrong_worker_event_id.as_str())
+            .await
+            .expect("wrong worker event lookup")
+            .is_none()
     );
 
     let inspect = sdk
@@ -1286,6 +1305,102 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
             .and_then(|receipt| receipt.worker_evidence.trusted.as_ref())
             .map(|evidence| evidence.result_event_id.as_str()),
         Some(worker_event_id.as_str())
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_validation_receipt_list_rejects_out_of_filter_order_receipts() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let requested_order_id = "validation-receipt-list-requested";
+    let unrelated_order_id = "validation-receipt-list-unrelated";
+    let unrelated_receipt = signed_raw_validation_receipt_event(
+        unrelated_order_id,
+        &deterministic_event_id("validation-receipt-list-unrelated-listing"),
+        &deterministic_event_id("validation-receipt-list-unrelated-request"),
+        &deterministic_event_id("validation-receipt-list-unrelated-decision"),
+        36,
+    );
+    let unrelated_receipt_id =
+        RadrootsEventId::parse(unrelated_receipt.id.to_hex()).expect("unrelated receipt id");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&unrelated_receipt, RELAY, 4_010),
+        relay_eose(RELAY),
+    ]);
+
+    let list = sdk
+        .trades()
+        .validation_receipts()
+        .list_with_fetch_adapter(
+            TradeValidationReceiptListRequest::parse(requested_order_id).expect("list request"),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt list");
+
+    assert!(list.receipts.is_empty());
+    assert!(list.invalid_receipts.is_empty());
+    assert_eq!(list.relay_evidence.inserted_count, 0);
+    assert_eq!(list.relay_evidence.out_of_filter_count, 1);
+    assert!(list.relay_evidence.events[0].out_of_filter);
+    assert!(
+        store
+            .get_event(unrelated_receipt_id.as_str())
+            .await
+            .expect("unrelated receipt lookup")
+            .is_none()
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_validation_receipt_inspect_rejects_unrequested_relay_receipts() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let requested_receipt = signed_raw_validation_receipt_event(
+        "validation-receipt-inspect-requested",
+        &deterministic_event_id("validation-receipt-inspect-requested-listing"),
+        &deterministic_event_id("validation-receipt-inspect-requested-request"),
+        &deterministic_event_id("validation-receipt-inspect-requested-decision"),
+        37,
+    );
+    let requested_receipt_id =
+        RadrootsEventId::parse(requested_receipt.id.to_hex()).expect("requested receipt id");
+    let unrelated_receipt = signed_raw_validation_receipt_event(
+        "validation-receipt-inspect-unrelated",
+        &deterministic_event_id("validation-receipt-inspect-unrelated-listing"),
+        &deterministic_event_id("validation-receipt-inspect-unrelated-request"),
+        &deterministic_event_id("validation-receipt-inspect-unrelated-decision"),
+        38,
+    );
+    let unrelated_receipt_id =
+        RadrootsEventId::parse(unrelated_receipt.id.to_hex()).expect("unrelated receipt id");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&unrelated_receipt, RELAY, 4_020),
+        relay_eose(RELAY),
+    ]);
+
+    let inspect = sdk
+        .trades()
+        .validation_receipts()
+        .inspect_with_fetch_adapter(
+            TradeValidationReceiptInspectRequest::new(requested_receipt_id.clone()),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt inspect");
+
+    assert_eq!(inspect.receipt_event_id, requested_receipt_id);
+    assert!(inspect.receipt.is_none());
+    assert!(inspect.invalid_receipt.is_none());
+    assert_eq!(inspect.relay_evidence.inserted_count, 0);
+    assert_eq!(inspect.relay_evidence.out_of_filter_count, 1);
+    assert!(inspect.relay_evidence.events[0].out_of_filter);
+    assert!(
+        store
+            .get_event(unrelated_receipt_id.as_str())
+            .await
+            .expect("unrelated receipt lookup")
+            .is_none()
     );
 }
 
@@ -1388,6 +1503,43 @@ async fn trade_resync_reports_malformed_evidence_without_poisoning_store() {
             .expect("store summary")
             .total_events,
         0
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_rejects_out_of_filter_evidence_without_poisoning_store() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let unrelated_event = signed_raw_order_request_event("resync-out-of-filter-unrelated", 43);
+    let unrelated_event_id =
+        RadrootsEventId::parse(unrelated_event.id.to_hex()).expect("unrelated event id");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&unrelated_event, RELAY, 5_150),
+        relay_eose(RELAY),
+    ]);
+
+    let resync = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-out-of-filter-requested",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect("resync");
+
+    assert_eq!(resync.status.status, TradeStatusKind::Missing);
+    assert_eq!(resync.evidence.inserted_count, 0);
+    assert_eq!(resync.evidence.out_of_filter_count, 1);
+    assert!(resync.evidence.events[0].out_of_filter);
+    assert!(
+        store
+            .get_event(unrelated_event_id.as_str())
+            .await
+            .expect("unrelated event lookup")
+            .is_none()
     );
 }
 

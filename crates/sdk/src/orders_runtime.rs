@@ -1454,6 +1454,7 @@ pub struct TradeResyncEvidenceReceipt {
     pub inserted_count: usize,
     pub duplicate_count: usize,
     pub malformed_count: usize,
+    pub out_of_filter_count: usize,
     pub unsupported_count: usize,
     pub eose_count: usize,
     pub closed_count: usize,
@@ -1471,6 +1472,7 @@ pub struct TradeResyncEventImportReceipt {
     pub duplicate: bool,
     pub unsupported: bool,
     pub malformed: bool,
+    pub out_of_filter: bool,
     pub projection_eligible: bool,
     pub verification_status: Option<String>,
     pub message: Option<String>,
@@ -1728,6 +1730,7 @@ pub struct TradeValidationReceiptRelayEvidenceReceipt {
     pub inserted_count: usize,
     pub duplicate_count: usize,
     pub malformed_count: usize,
+    pub out_of_filter_count: usize,
     pub unsupported_count: usize,
     pub eose_count: usize,
     pub closed_count: usize,
@@ -3056,6 +3059,7 @@ impl TradeResyncEvidenceReceipt {
             inserted_count: receipt.inserted_count,
             duplicate_count: receipt.duplicate_count,
             malformed_count: receipt.malformed_count,
+            out_of_filter_count: receipt.out_of_filter_count,
             unsupported_count: receipt.unsupported_count,
             eose_count: receipt.eose_count,
             closed_count: receipt.closed_count,
@@ -3076,6 +3080,7 @@ impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
             duplicate: receipt.duplicate,
             unsupported: receipt.unsupported,
             malformed: receipt.malformed,
+            out_of_filter: receipt.out_of_filter,
             projection_eligible: receipt.projection_eligible,
             verification_status: receipt.verification_status,
             message: receipt.message,
@@ -3297,6 +3302,8 @@ where
     )
     .await?;
     let (mut receipts, mut invalid_receipts) = classify_validation_receipts(events, None)?;
+    receipts.retain(|receipt| receipt.event.id == receipt_event_id.as_str());
+    invalid_receipts.retain(|receipt| receipt.event.id == receipt_event_id.as_str());
     attach_worker_evidence(
         sdk,
         adapter,
@@ -3413,6 +3420,7 @@ async fn validation_receipt_events_from_fetch(
     let mut event_ids = events
         .iter()
         .filter(|event| !event.malformed)
+        .filter(|event| !event.out_of_filter)
         .filter_map(|event| event.event_id.as_deref())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -3662,6 +3670,7 @@ impl TradeValidationReceiptRelayEvidenceReceipt {
             inserted_count: receipt.inserted_count,
             duplicate_count: receipt.duplicate_count,
             malformed_count: receipt.malformed_count,
+            out_of_filter_count: receipt.out_of_filter_count,
             unsupported_count: receipt.unsupported_count,
             eose_count: receipt.eose_count,
             closed_count: receipt.closed_count,
