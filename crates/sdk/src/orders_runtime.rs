@@ -17,8 +17,8 @@ use crate::{
 };
 #[cfg(feature = "runtime")]
 use crate::{
-    RadrootsSdkError, RadrootsSdkTimestamp, TradeResyncClient, TradeSellerClient, TradesClient,
-    order,
+    RadrootsSdkError, RadrootsSdkTimestamp, TradeResyncClient, TradeSellerClient,
+    TradeValidationReceiptsClient, TradesClient, order,
 };
 #[cfg(all(feature = "runtime", test))]
 use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
@@ -27,7 +27,7 @@ use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
 #[cfg(feature = "runtime")]
-use radroots_event_store::RadrootsEventIngest;
+use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
 #[cfg(feature = "runtime")]
 use radroots_events::{
     RadrootsNostrEvent,
@@ -35,11 +35,11 @@ use radroots_events::{
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
         KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
-        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_TRADE_VALIDATION_RECEIPT,
-        ORDER_EVENT_KINDS,
+        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
+        KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT, ORDER_EVENT_KINDS,
     },
     order::RadrootsOrderEconomics,
-    tags::{TAG_D, TAG_P},
+    tags::{TAG_D, TAG_E, TAG_P},
 };
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events::{
@@ -60,7 +60,9 @@ use radroots_events_codec::order::{
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
-use radroots_nostr::prelude::{RadrootsNostrFilter, RadrootsNostrKind, radroots_nostr_filter_tag};
+use radroots_nostr::prelude::{
+    RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, radroots_nostr_filter_tag,
+};
 #[cfg(feature = "runtime")]
 use radroots_relay_transport::{
     RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
@@ -83,9 +85,20 @@ use radroots_trade::order::{
     order_projection_query_for_trade_locator,
 };
 #[cfg(feature = "runtime")]
+use radroots_trade::validation_receipt::{
+    RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
+    RadrootsTradeValidationReceipt, RadrootsValidationReceiptError,
+    RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
+    RadrootsValidationReceiptTags, verify_validation_receipt_event,
+};
+#[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
 #[cfg(feature = "runtime")]
+use serde::Deserialize;
+#[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
+#[cfg(feature = "runtime")]
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_DEFAULT_LIMIT: u32 = 500;
 #[cfg(feature = "runtime")]
@@ -1509,6 +1522,266 @@ pub enum TradeResyncRelayTransportOutcomeKind {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
+pub struct TradeValidationReceiptListRequest {
+    pub order_id: RadrootsOrderId,
+    pub limit: u32,
+    pub trusted_worker_pubkeys: Vec<RadrootsPublicKey>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeValidationReceiptListRequest {
+    pub fn new(order_id: RadrootsOrderId) -> Self {
+        Self {
+            order_id,
+            limit: TRADE_STATUS_DEFAULT_LIMIT,
+            trusted_worker_pubkeys: Vec::new(),
+        }
+    }
+
+    pub fn parse(order_id: &str) -> Result<Self, RadrootsSdkError> {
+        RadrootsOrderId::parse(order_id)
+            .map(Self::new)
+            .map_err(|error| RadrootsSdkError::invalid_trade_id(order_id, error.to_string()))
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = limit;
+        self
+    }
+
+    pub fn try_with_trusted_worker_pubkeys<I, S>(
+        mut self,
+        pubkeys: I,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.trusted_worker_pubkeys = parse_worker_pubkeys(pubkeys)?;
+        Ok(self)
+    }
+
+    fn validate(&self) -> Result<(), RadrootsSdkError> {
+        validate_validation_receipt_limit(self.limit)
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeValidationReceiptInspectRequest {
+    pub receipt_event_id: RadrootsEventId,
+    pub trusted_worker_pubkeys: Vec<RadrootsPublicKey>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeValidationReceiptInspectRequest {
+    pub fn new(receipt_event_id: RadrootsEventId) -> Self {
+        Self {
+            receipt_event_id,
+            trusted_worker_pubkeys: Vec::new(),
+        }
+    }
+
+    pub fn parse(receipt_event_id: &str) -> Result<Self, RadrootsSdkError> {
+        RadrootsEventId::parse(receipt_event_id)
+            .map(Self::new)
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "invalid validation receipt event id `{receipt_event_id}`: {error}"
+                ),
+            })
+    }
+
+    pub fn try_with_trusted_worker_pubkeys<I, S>(
+        mut self,
+        pubkeys: I,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.trusted_worker_pubkeys = parse_worker_pubkeys(pubkeys)?;
+        Ok(self)
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeValidationReceiptVerifyRequest {
+    pub receipt_event_id: RadrootsEventId,
+    pub trusted_worker_pubkeys: Vec<RadrootsPublicKey>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeValidationReceiptVerifyRequest {
+    pub fn new(receipt_event_id: RadrootsEventId) -> Self {
+        Self {
+            receipt_event_id,
+            trusted_worker_pubkeys: Vec::new(),
+        }
+    }
+
+    pub fn parse(receipt_event_id: &str) -> Result<Self, RadrootsSdkError> {
+        RadrootsEventId::parse(receipt_event_id)
+            .map(Self::new)
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "invalid validation receipt event id `{receipt_event_id}`: {error}"
+                ),
+            })
+    }
+
+    pub fn try_with_trusted_worker_pubkeys<I, S>(
+        mut self,
+        pubkeys: I,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.trusted_worker_pubkeys = parse_worker_pubkeys(pubkeys)?;
+        Ok(self)
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptListReceipt {
+    pub relay_targets: Vec<String>,
+    pub relay_evidence: TradeValidationReceiptRelayEvidenceReceipt,
+    pub order_id: RadrootsOrderId,
+    pub receipts: Vec<TradeValidationReceiptEvent>,
+    pub invalid_receipts: Vec<TradeValidationReceiptInvalidCandidate>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptInspectReceipt {
+    pub relay_targets: Vec<String>,
+    pub relay_evidence: TradeValidationReceiptRelayEvidenceReceipt,
+    pub receipt_event_id: RadrootsEventId,
+    pub receipt: Option<TradeValidationReceiptEvent>,
+    pub invalid_receipt: Option<TradeValidationReceiptInvalidCandidate>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptEvent {
+    pub event: RadrootsNostrEvent,
+    pub receipt: RadrootsTradeValidationReceipt,
+    pub tags: TradeValidationReceiptTags,
+    pub worker_evidence: TradeValidationReceiptWorkerEvidenceSelection,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptInvalidCandidate {
+    pub event: RadrootsNostrEvent,
+    pub reason_code: String,
+    pub reason: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptTags {
+    pub order_id: String,
+    pub event_set_root: String,
+    pub listing_event_id: String,
+    pub reducer_output_root: String,
+    pub public_values_hash: String,
+    pub proof_system: String,
+    pub receipt_type: String,
+    pub root_event_id: String,
+    pub target_event_id: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptWorkerEvidenceSelection {
+    pub trusted: Option<TradeValidationReceiptWorkerEvidence>,
+    pub untrusted: Option<TradeValidationReceiptWorkerEvidence>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptWorkerEvidence {
+    pub result_event_id: RadrootsEventId,
+    pub author: RadrootsPublicKey,
+    pub status: String,
+    pub prover_backend: String,
+    pub proof_mode: String,
+    pub proof_system: String,
+    pub proof_generated: bool,
+    pub sp1_execute_checked: bool,
+    pub sp1_execute_public_values_hash: Option<String>,
+    pub cryptographic_proof_verified: bool,
+    pub public_values_hash: String,
+    pub validation_authority: Option<RadrootsTradeValidationAuthority>,
+    pub commitment_confidence: Option<RadrootsTradeCommitmentConfidence>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptRelayEvidenceReceipt {
+    pub inserted_count: usize,
+    pub duplicate_count: usize,
+    pub malformed_count: usize,
+    pub unsupported_count: usize,
+    pub eose_count: usize,
+    pub closed_count: usize,
+    pub notice_count: usize,
+    pub events: Vec<TradeResyncEventImportReceipt>,
+    pub relays: Vec<TradeValidationReceiptRelayOutcomeReceipt>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationReceiptRelayOutcomeReceipt {
+    pub relay_url: String,
+    pub outcome_kind: TradeValidationReceiptRelayOutcomeKind,
+    pub transport_outcome_kind: Option<TradeValidationReceiptRelayTransportOutcomeKind>,
+    pub message: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeValidationReceiptRelayOutcomeKind {
+    Eose,
+    Closed,
+    Notice,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeValidationReceiptRelayTransportOutcomeKind {
+    Accepted,
+    DuplicateAccepted,
+    Blocked,
+    RateLimited,
+    Invalid,
+    PowRequired,
+    Restricted,
+    AuthRequired,
+    Muted,
+    Unsupported,
+    PaymentRequired,
+    Error,
+    Timeout,
+    ConnectionFailed,
+    RelayUrlRejected,
+    SkippedAlreadyAccepted,
+    Unknown,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct TradeStatusRequest {
     pub locator: RadrootsTradeLocator,
     pub limit: u32,
@@ -2855,6 +3128,716 @@ impl From<RadrootsRelayOutcomeKind> for TradeResyncRelayTransportOutcomeKind {
             RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => Self::SkippedAlreadyAccepted,
             RadrootsRelayOutcomeKind::Unknown => Self::Unknown,
         }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl<'sdk> TradeValidationReceiptsClient<'sdk> {
+    pub async fn list(
+        &self,
+        request: TradeValidationReceiptListRequest,
+    ) -> Result<TradeValidationReceiptListReceipt, RadrootsSdkError> {
+        #[cfg(feature = "relay-runtime")]
+        {
+            let adapter = RadrootsNostrClientFetchAdapter;
+            return self.list_with_fetch_adapter(request, &adapter).await;
+        }
+        #[cfg(not(feature = "relay-runtime"))]
+        {
+            let _ = request;
+            Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "trade.validation_receipts.list",
+                required_feature: "relay-runtime",
+            })
+        }
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn list_with_fetch_adapter<A>(
+        &self,
+        request: TradeValidationReceiptListRequest,
+        adapter: &A,
+    ) -> Result<TradeValidationReceiptListReceipt, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        request.validate()?;
+        let relay_targets =
+            validation_receipt_relay_targets(self.sdk, "trade.validation_receipts.list")?;
+        let fetch_request =
+            validation_receipt_list_fetch_request(self.sdk, &request, &relay_targets)?;
+        let fetch_receipt =
+            fetch_and_ingest_relay_events(adapter, &self.sdk._event_store, fetch_request).await?;
+        let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+        let events = validation_receipt_events_from_fetch(
+            self.sdk,
+            &relay_evidence.events,
+            KIND_TRADE_VALIDATION_RECEIPT,
+        )
+        .await?;
+        let (mut receipts, mut invalid_receipts) =
+            classify_validation_receipts(events, Some(request.order_id.as_str()))?;
+        attach_worker_evidence(
+            self.sdk,
+            adapter,
+            &relay_targets,
+            &request.trusted_worker_pubkeys,
+            &mut receipts,
+        )
+        .await?;
+        receipts.sort_by(validation_receipt_event_order);
+        invalid_receipts.sort_by(validation_receipt_invalid_order);
+        Ok(TradeValidationReceiptListReceipt {
+            relay_targets,
+            relay_evidence,
+            order_id: request.order_id,
+            receipts,
+            invalid_receipts,
+        })
+    }
+
+    pub async fn inspect(
+        &self,
+        request: TradeValidationReceiptInspectRequest,
+    ) -> Result<TradeValidationReceiptInspectReceipt, RadrootsSdkError> {
+        #[cfg(feature = "relay-runtime")]
+        {
+            let adapter = RadrootsNostrClientFetchAdapter;
+            return self.inspect_with_fetch_adapter(request, &adapter).await;
+        }
+        #[cfg(not(feature = "relay-runtime"))]
+        {
+            let _ = request;
+            Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "trade.validation_receipts.inspect",
+                required_feature: "relay-runtime",
+            })
+        }
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn inspect_with_fetch_adapter<A>(
+        &self,
+        request: TradeValidationReceiptInspectRequest,
+        adapter: &A,
+    ) -> Result<TradeValidationReceiptInspectReceipt, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        validation_receipt_inspect(
+            self.sdk,
+            request.receipt_event_id,
+            request.trusted_worker_pubkeys,
+            adapter,
+            "trade.validation_receipts.inspect",
+        )
+        .await
+    }
+
+    pub async fn verify(
+        &self,
+        request: TradeValidationReceiptVerifyRequest,
+    ) -> Result<TradeValidationReceiptInspectReceipt, RadrootsSdkError> {
+        #[cfg(feature = "relay-runtime")]
+        {
+            let adapter = RadrootsNostrClientFetchAdapter;
+            return self.verify_with_fetch_adapter(request, &adapter).await;
+        }
+        #[cfg(not(feature = "relay-runtime"))]
+        {
+            let _ = request;
+            Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "trade.validation_receipts.verify",
+                required_feature: "relay-runtime",
+            })
+        }
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn verify_with_fetch_adapter<A>(
+        &self,
+        request: TradeValidationReceiptVerifyRequest,
+        adapter: &A,
+    ) -> Result<TradeValidationReceiptInspectReceipt, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        validation_receipt_inspect(
+            self.sdk,
+            request.receipt_event_id,
+            request.trusted_worker_pubkeys,
+            adapter,
+            "trade.validation_receipts.verify",
+        )
+        .await
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+async fn validation_receipt_inspect<A>(
+    sdk: &crate::RadrootsClient,
+    receipt_event_id: RadrootsEventId,
+    trusted_worker_pubkeys: Vec<RadrootsPublicKey>,
+    adapter: &A,
+    operation: &'static str,
+) -> Result<TradeValidationReceiptInspectReceipt, RadrootsSdkError>
+where
+    A: RadrootsRelayFetchAdapter,
+{
+    let relay_targets = validation_receipt_relay_targets(sdk, operation)?;
+    let fetch_request =
+        validation_receipt_inspect_fetch_request(sdk, &receipt_event_id, &relay_targets)?;
+    let fetch_receipt =
+        fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
+    let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+    let events = validation_receipt_events_from_fetch(
+        sdk,
+        &relay_evidence.events,
+        KIND_TRADE_VALIDATION_RECEIPT,
+    )
+    .await?;
+    let (mut receipts, mut invalid_receipts) = classify_validation_receipts(events, None)?;
+    attach_worker_evidence(
+        sdk,
+        adapter,
+        &relay_targets,
+        &trusted_worker_pubkeys,
+        &mut receipts,
+    )
+    .await?;
+    receipts.sort_by(validation_receipt_event_order);
+    invalid_receipts.sort_by(validation_receipt_invalid_order);
+    Ok(TradeValidationReceiptInspectReceipt {
+        relay_targets,
+        relay_evidence,
+        receipt_event_id,
+        receipt: receipts.into_iter().next(),
+        invalid_receipt: invalid_receipts.into_iter().next(),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn validation_receipt_relay_targets(
+    sdk: &crate::RadrootsClient,
+    operation: impl Into<String>,
+) -> Result<Vec<String>, RadrootsSdkError> {
+    let relay_targets = sdk.relay_urls().to_vec();
+    if relay_targets.is_empty() {
+        return Err(RadrootsSdkError::empty_target_relays(operation));
+    }
+    Ok(relay_targets)
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn validation_receipt_list_fetch_request(
+    sdk: &crate::RadrootsClient,
+    request: &TradeValidationReceiptListRequest,
+    relay_targets: &[String],
+) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
+    let filter = RadrootsNostrFilter::new()
+        .kind(RadrootsNostrKind::Custom(
+            KIND_TRADE_VALIDATION_RECEIPT as u16,
+        ))
+        .limit(request.limit as usize);
+    let filter =
+        radroots_nostr_filter_tag(filter, TAG_D, vec![request.order_id.as_str().to_owned()])
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!("validation receipt list filter invalid: {error}"),
+            })?;
+    Ok(
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize)
+            .with_relay_urls(relay_targets.iter().cloned())
+            .with_filters([filter]),
+    )
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn validation_receipt_inspect_fetch_request(
+    sdk: &crate::RadrootsClient,
+    receipt_event_id: &RadrootsEventId,
+    relay_targets: &[String],
+) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
+    let nostr_event_id =
+        RadrootsNostrEventId::parse(receipt_event_id.as_str()).map_err(|error| {
+            RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "validation receipt event id `{}` cannot build relay filter: {error}",
+                    receipt_event_id.as_str()
+                ),
+            }
+        })?;
+    let filter = RadrootsNostrFilter::new().id(nostr_event_id);
+    Ok(RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, 1)
+        .with_relay_urls(relay_targets.iter().cloned())
+        .with_filters([filter]))
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn validation_receipt_worker_fetch_request(
+    sdk: &crate::RadrootsClient,
+    receipts: &[TradeValidationReceiptEvent],
+    relay_targets: &[String],
+) -> Result<Option<RadrootsRelayFetchRequest>, RadrootsSdkError> {
+    let root_event_ids = receipts
+        .iter()
+        .map(|receipt| receipt.tags.root_event_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if root_event_ids.is_empty() {
+        return Ok(None);
+    }
+    let filter = RadrootsNostrFilter::new()
+        .kind(RadrootsNostrKind::Custom(
+            KIND_TRADE_TRANSITION_PROOF_RESULT as u16,
+        ))
+        .limit(receipts.len().saturating_mul(4).max(1));
+    let filter = radroots_nostr_filter_tag(filter, TAG_E, root_event_ids).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("validation receipt worker evidence filter invalid: {error}"),
+        }
+    })?;
+    Ok(Some(
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, receipts.len().saturating_mul(4).max(1))
+            .with_relay_urls(relay_targets.iter().cloned())
+            .with_filters([filter]),
+    ))
+}
+
+#[cfg(feature = "runtime")]
+async fn validation_receipt_events_from_fetch(
+    sdk: &crate::RadrootsClient,
+    events: &[TradeResyncEventImportReceipt],
+    expected_kind: u32,
+) -> Result<Vec<RadrootsNostrEvent>, RadrootsSdkError> {
+    let mut event_ids = events
+        .iter()
+        .filter(|event| !event.malformed)
+        .filter_map(|event| event.event_id.as_deref())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    event_ids.sort();
+    let mut fetched = Vec::new();
+    for event_id in event_ids {
+        let Some(stored_event) = sdk
+            ._event_store
+            .get_event(event_id)
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?
+        else {
+            continue;
+        };
+        if stored_event.kind == expected_kind {
+            fetched.push(stored_event_to_nostr_event(&stored_event)?);
+        }
+    }
+    Ok(fetched)
+}
+
+#[cfg(feature = "runtime")]
+fn classify_validation_receipts(
+    events: Vec<RadrootsNostrEvent>,
+    expected_order_id: Option<&str>,
+) -> Result<
+    (
+        Vec<TradeValidationReceiptEvent>,
+        Vec<TradeValidationReceiptInvalidCandidate>,
+    ),
+    RadrootsSdkError,
+> {
+    let mut receipts = Vec::new();
+    let mut invalid_receipts = Vec::new();
+    for event in events {
+        let expected = RadrootsValidationReceiptExpectedBinding {
+            order_id: expected_order_id,
+            ..RadrootsValidationReceiptExpectedBinding::default()
+        };
+        match verify_validation_receipt_event(&event, expected) {
+            Ok(verified) => receipts.push(TradeValidationReceiptEvent {
+                event,
+                receipt: verified.receipt,
+                tags: TradeValidationReceiptTags::from(verified.tags),
+                worker_evidence: TradeValidationReceiptWorkerEvidenceSelection::default(),
+            }),
+            Err(error) => invalid_receipts.push(TradeValidationReceiptInvalidCandidate {
+                event,
+                reason_code: validation_receipt_invalid_reason_code(&error).to_owned(),
+                reason: error.to_string(),
+            }),
+        }
+    }
+    Ok((receipts, invalid_receipts))
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+async fn attach_worker_evidence<A>(
+    sdk: &crate::RadrootsClient,
+    adapter: &A,
+    relay_targets: &[String],
+    trusted_worker_pubkeys: &[RadrootsPublicKey],
+    receipts: &mut [TradeValidationReceiptEvent],
+) -> Result<(), RadrootsSdkError>
+where
+    A: RadrootsRelayFetchAdapter,
+{
+    if receipts.is_empty() || trusted_worker_pubkeys.is_empty() {
+        return Ok(());
+    }
+    let Some(fetch_request) =
+        validation_receipt_worker_fetch_request(sdk, receipts, relay_targets)?
+    else {
+        return Ok(());
+    };
+    let fetch_receipt =
+        fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
+    let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+    let events = validation_receipt_events_from_fetch(
+        sdk,
+        &relay_evidence.events,
+        KIND_TRADE_TRANSITION_PROOF_RESULT,
+    )
+    .await?;
+    let mut selections = worker_evidence_for_receipts(trusted_worker_pubkeys, receipts, events)?;
+    for receipt in receipts {
+        receipt.worker_evidence = selections
+            .remove(receipt.event.id.as_str())
+            .unwrap_or_default();
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn worker_evidence_for_receipts(
+    trusted_worker_pubkeys: &[RadrootsPublicKey],
+    receipts: &[TradeValidationReceiptEvent],
+    events: Vec<RadrootsNostrEvent>,
+) -> Result<BTreeMap<String, TradeValidationReceiptWorkerEvidenceSelection>, RadrootsSdkError> {
+    let trusted_pubkeys = trusted_worker_pubkeys
+        .iter()
+        .map(|pubkey| pubkey.as_str().to_ascii_lowercase())
+        .collect::<BTreeSet<_>>();
+    let binding_by_receipt_id = receipts
+        .iter()
+        .map(|receipt| (receipt.event.id.as_str(), receipt))
+        .collect::<BTreeMap<_, _>>();
+    let mut by_receipt =
+        BTreeMap::<String, Vec<(u32, String, bool, TradeValidationReceiptWorkerEvidence)>>::new();
+
+    for event in events {
+        let payload =
+            match serde_json::from_str::<RawTradeValidationReceiptWorkerResult>(&event.content) {
+                Ok(payload) => payload,
+                Err(_) => continue,
+            };
+        let Some(binding) = binding_by_receipt_id.get(payload.receipt_event_id.as_str()) else {
+            continue;
+        };
+        if !worker_payload_binds_receipt(&payload, binding) {
+            continue;
+        }
+        let author = RadrootsPublicKey::parse(event.author.as_str()).map_err(|error| {
+            RadrootsSdkError::InvalidRequest {
+                message: format!("validation receipt worker evidence author is invalid: {error}"),
+            }
+        })?;
+        let result_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+            RadrootsSdkError::InvalidRequest {
+                message: format!("validation receipt worker evidence event id is invalid: {error}"),
+            }
+        })?;
+        let trusted = trusted_pubkeys.contains(author.as_str().to_ascii_lowercase().as_str());
+        let receipt_event_id = payload.receipt_event_id.clone();
+        let view = TradeValidationReceiptWorkerEvidence {
+            result_event_id,
+            author,
+            status: payload.status,
+            prover_backend: payload.prover_backend,
+            proof_mode: payload.proof_mode,
+            proof_system: payload.proof_system,
+            proof_generated: payload.proof_generated,
+            sp1_execute_checked: payload.sp1_execute_checked,
+            sp1_execute_public_values_hash: payload.sp1_execute_public_values_hash,
+            cryptographic_proof_verified: payload.cryptographic_proof_verified,
+            public_values_hash: payload.public_values_hash,
+            validation_authority: payload
+                .validation_authority
+                .as_deref()
+                .and_then(RadrootsTradeValidationAuthority::from_label),
+            commitment_confidence: payload
+                .confidence
+                .as_deref()
+                .and_then(RadrootsTradeCommitmentConfidence::from_label),
+        };
+        by_receipt.entry(receipt_event_id).or_default().push((
+            event.created_at,
+            event.id,
+            trusted,
+            view,
+        ));
+    }
+
+    Ok(by_receipt
+        .into_iter()
+        .map(|(receipt_event_id, mut candidates)| {
+            candidates.sort_by(|left, right| {
+                left.0
+                    .cmp(&right.0)
+                    .then_with(|| left.1.cmp(&right.1))
+                    .then_with(|| left.2.cmp(&right.2))
+            });
+            let mut selection = TradeValidationReceiptWorkerEvidenceSelection::default();
+            for (_, _, trusted, view) in candidates.into_iter().rev() {
+                if trusted && selection.trusted.is_none() {
+                    selection.trusted = Some(view);
+                } else if !trusted && selection.untrusted.is_none() {
+                    selection.untrusted = Some(view);
+                }
+                if selection.trusted.is_some() && selection.untrusted.is_some() {
+                    break;
+                }
+            }
+            (receipt_event_id, selection)
+        })
+        .collect())
+}
+
+#[cfg(feature = "runtime")]
+fn worker_payload_binds_receipt(
+    payload: &RawTradeValidationReceiptWorkerResult,
+    receipt: &TradeValidationReceiptEvent,
+) -> bool {
+    payload.status == "succeeded"
+        && payload.worker_role.as_deref() == Some("non_authoritative_prover")
+        && payload.receipt_kind == Some(KIND_TRADE_VALIDATION_RECEIPT)
+        && payload.receipt_event_id == receipt.event.id
+        && payload.order_id.as_deref() == Some(receipt.tags.order_id.as_str())
+        && payload.listing_event_id.as_deref() == Some(receipt.tags.listing_event_id.as_str())
+        && payload.event_set_root.as_deref() == Some(receipt.tags.event_set_root.as_str())
+        && payload.reducer_output_root.as_deref() == Some(receipt.tags.reducer_output_root.as_str())
+        && payload.request_event_id.as_deref() == Some(receipt.tags.root_event_id.as_str())
+        && payload.decision_event_id.as_deref() == Some(receipt.tags.target_event_id.as_str())
+        && payload.public_values_hash == receipt.receipt.public_values_hash
+        && payload.proof_system == receipt.receipt.proof.system.as_str()
+        && payload.proof_mode == receipt.receipt.proof.mode.as_deref().unwrap_or("none")
+        && payload.proof_generated
+            == (receipt.receipt.proof.system != RadrootsValidationReceiptProofSystem::None)
+        && payload.cryptographic_proof_verified == payload.proof_generated
+        && payload.sp1_execute_checked
+        && payload.sp1_execute_public_values_hash.as_deref()
+            == Some(receipt.receipt.public_values_hash.as_str())
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Debug, Deserialize)]
+struct RawTradeValidationReceiptWorkerResult {
+    cryptographic_proof_verified: bool,
+    decision_event_id: Option<String>,
+    event_set_root: Option<String>,
+    listing_event_id: Option<String>,
+    order_id: Option<String>,
+    proof_generated: bool,
+    proof_mode: String,
+    proof_system: String,
+    public_values_hash: String,
+    prover_backend: String,
+    receipt_event_id: String,
+    receipt_kind: Option<u32>,
+    reducer_output_root: Option<String>,
+    request_event_id: Option<String>,
+    sp1_execute_checked: bool,
+    sp1_execute_public_values_hash: Option<String>,
+    status: String,
+    validation_authority: Option<String>,
+    confidence: Option<String>,
+    worker_role: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeValidationReceiptRelayEvidenceReceipt {
+    fn from_fetch(receipt: RadrootsRelayFetchReceipt) -> Self {
+        Self {
+            inserted_count: receipt.inserted_count,
+            duplicate_count: receipt.duplicate_count,
+            malformed_count: receipt.malformed_count,
+            unsupported_count: receipt.unsupported_count,
+            eose_count: receipt.eose_count,
+            closed_count: receipt.closed_count,
+            notice_count: receipt.notice_count,
+            events: receipt.events.into_iter().map(Into::into).collect(),
+            relays: receipt.relay_outcomes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptRelayOutcomeReceipt {
+    fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
+        Self {
+            relay_url: receipt.relay_url,
+            outcome_kind: receipt.kind.into(),
+            transport_outcome_kind: receipt.relay_outcome.map(|outcome| outcome.kind.into()),
+            message: receipt.message,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptRelayOutcomeKind {
+    fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
+        match kind {
+            RadrootsRelayFetchOutcomeKind::Eose => Self::Eose,
+            RadrootsRelayFetchOutcomeKind::Closed => Self::Closed,
+            RadrootsRelayFetchOutcomeKind::Notice => Self::Notice,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayOutcomeKind> for TradeValidationReceiptRelayTransportOutcomeKind {
+    fn from(kind: RadrootsRelayOutcomeKind) -> Self {
+        match kind {
+            RadrootsRelayOutcomeKind::Accepted => Self::Accepted,
+            RadrootsRelayOutcomeKind::DuplicateAccepted => Self::DuplicateAccepted,
+            RadrootsRelayOutcomeKind::Blocked => Self::Blocked,
+            RadrootsRelayOutcomeKind::RateLimited => Self::RateLimited,
+            RadrootsRelayOutcomeKind::Invalid => Self::Invalid,
+            RadrootsRelayOutcomeKind::PowRequired => Self::PowRequired,
+            RadrootsRelayOutcomeKind::Restricted => Self::Restricted,
+            RadrootsRelayOutcomeKind::AuthRequired => Self::AuthRequired,
+            RadrootsRelayOutcomeKind::Muted => Self::Muted,
+            RadrootsRelayOutcomeKind::Unsupported => Self::Unsupported,
+            RadrootsRelayOutcomeKind::PaymentRequired => Self::PaymentRequired,
+            RadrootsRelayOutcomeKind::Error => Self::Error,
+            RadrootsRelayOutcomeKind::Timeout => Self::Timeout,
+            RadrootsRelayOutcomeKind::ConnectionFailed => Self::ConnectionFailed,
+            RadrootsRelayOutcomeKind::RelayUrlRejected => Self::RelayUrlRejected,
+            RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => Self::SkippedAlreadyAccepted,
+            RadrootsRelayOutcomeKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsValidationReceiptTags> for TradeValidationReceiptTags {
+    fn from(tags: RadrootsValidationReceiptTags) -> Self {
+        Self {
+            order_id: tags.order_id,
+            event_set_root: tags.event_set_root,
+            listing_event_id: tags.listing_event_id,
+            reducer_output_root: tags.reducer_output_root,
+            public_values_hash: tags.public_values_hash,
+            proof_system: tags.proof_system.as_str().to_owned(),
+            receipt_type: tags.receipt_type.as_str().to_owned(),
+            root_event_id: tags.root_event_id,
+            target_event_id: tags.target_event_id,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn stored_event_to_nostr_event(
+    stored_event: &RadrootsStoredEvent,
+) -> Result<RadrootsNostrEvent, RadrootsSdkError> {
+    let tags = serde_json::from_str(&stored_event.tags_json).map_err(|error| {
+        RadrootsSdkError::EventStore {
+            message: format!(
+                "stored event {} contains invalid tags_json: {error}",
+                stored_event.event_id
+            ),
+        }
+    })?;
+    Ok(RadrootsNostrEvent {
+        id: stored_event.event_id.clone(),
+        author: stored_event.pubkey.clone(),
+        created_at: stored_event.created_at,
+        kind: stored_event.kind,
+        tags,
+        content: stored_event.content.clone(),
+        sig: stored_event.sig.clone(),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn validation_receipt_event_order(
+    left: &TradeValidationReceiptEvent,
+    right: &TradeValidationReceiptEvent,
+) -> core::cmp::Ordering {
+    left.event
+        .created_at
+        .cmp(&right.event.created_at)
+        .then_with(|| left.event.id.cmp(&right.event.id))
+}
+
+#[cfg(feature = "runtime")]
+fn validation_receipt_invalid_order(
+    left: &TradeValidationReceiptInvalidCandidate,
+    right: &TradeValidationReceiptInvalidCandidate,
+) -> core::cmp::Ordering {
+    left.event
+        .created_at
+        .cmp(&right.event.created_at)
+        .then_with(|| left.event.id.cmp(&right.event.id))
+}
+
+#[cfg(feature = "runtime")]
+fn validate_validation_receipt_limit(limit: u32) -> Result<(), RadrootsSdkError> {
+    if limit == 0 || limit > TRADE_STATUS_MAX_LIMIT {
+        return Err(RadrootsSdkError::trade_status_limit_invalid(
+            limit,
+            1,
+            TRADE_STATUS_MAX_LIMIT,
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn parse_worker_pubkeys<I, S>(pubkeys: I) -> Result<Vec<RadrootsPublicKey>, RadrootsSdkError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    pubkeys
+        .into_iter()
+        .map(|pubkey| {
+            let value = pubkey.as_ref();
+            RadrootsPublicKey::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!("invalid trusted worker pubkey `{value}`: {error}"),
+            })
+        })
+        .collect()
+}
+
+#[cfg(feature = "runtime")]
+fn validation_receipt_invalid_reason_code(error: &RadrootsValidationReceiptError) -> &'static str {
+    match error {
+        RadrootsValidationReceiptError::InvalidProofMetadata("proof.material")
+        | RadrootsValidationReceiptError::InvalidProofMetadata("proof.material_missing") => {
+            "sp1_proof_material_missing"
+        }
+        RadrootsValidationReceiptError::InvalidProofMetadata("proof.material_conflict") => {
+            "sp1_proof_material_conflict"
+        }
+        RadrootsValidationReceiptError::InvalidProofMetadata("proof.inline_proof_base64") => {
+            "sp1_inline_proof_invalid"
+        }
+        RadrootsValidationReceiptError::InvalidProofMetadata("proof.proof_reference") => {
+            "sp1_proof_reference_invalid"
+        }
+        RadrootsValidationReceiptError::TagMismatch("public_values_hash")
+        | RadrootsValidationReceiptError::ExpectedBindingMismatch("public_values_hash") => {
+            "public_values_hash_mismatch"
+        }
+        RadrootsValidationReceiptError::ExpectedBindingMismatch("program_hash") => {
+            "sp1_program_hash_mismatch"
+        }
+        RadrootsValidationReceiptError::ExpectedBindingMismatch("verifying_key_hash") => {
+            "sp1_verifying_key_hash_mismatch"
+        }
+        _ => "validation_receipt_invalid",
     }
 }
 

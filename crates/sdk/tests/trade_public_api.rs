@@ -4,7 +4,7 @@ use radroots_authority::RadrootsActorContext;
 use radroots_events::contract::RadrootsActorRole;
 use radroots_sdk::{
     RadrootsClient, TradeResyncRequest, TradeSellerInboxRequest, TradeStatusKind,
-    TradeStatusRequest,
+    TradeStatusRequest, TradeValidationReceiptListRequest,
 };
 
 const SELLER_PUBLIC_KEY_HEX: &str =
@@ -17,6 +17,7 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
 
     let _seller = trades.seller();
     let _resync = trades.resync();
+    let validation_receipts = trades.validation_receipts();
 
     let status = trades
         .status(TradeStatusRequest::parse("trade-public-api-order").expect("status request"))
@@ -32,6 +33,16 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
         .expect_err("resync requires configured relays");
 
     assert_eq!(resync_error.code(), "empty_target_relays");
+
+    let validation_receipt_error = validation_receipts
+        .list(
+            TradeValidationReceiptListRequest::parse("trade-public-api-order")
+                .expect("validation receipt list request"),
+        )
+        .await
+        .expect_err("validation receipt list requires configured relays");
+
+    assert_eq!(validation_receipt_error.code(), "empty_target_relays");
 
     let seller_actor =
         RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller])

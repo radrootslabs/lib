@@ -111,7 +111,13 @@ pub use crate::orders_runtime::{
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxReceipt,
     TradeSellerInboxRequest, TradeStatusAmbiguityCandidate, TradeStatusEligibility,
     TradeStatusEvidenceSummary, TradeStatusKind, TradeStatusNextActionKind, TradeStatusReceipt,
-    TradeStatusRequest,
+    TradeStatusRequest, TradeValidationReceiptEvent, TradeValidationReceiptInspectReceipt,
+    TradeValidationReceiptInspectRequest, TradeValidationReceiptInvalidCandidate,
+    TradeValidationReceiptListReceipt, TradeValidationReceiptListRequest,
+    TradeValidationReceiptRelayEvidenceReceipt, TradeValidationReceiptRelayOutcomeKind,
+    TradeValidationReceiptRelayOutcomeReceipt, TradeValidationReceiptRelayTransportOutcomeKind,
+    TradeValidationReceiptTags, TradeValidationReceiptVerifyRequest,
+    TradeValidationReceiptWorkerEvidence, TradeValidationReceiptWorkerEvidenceSelection,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::orders_runtime::{
@@ -135,7 +141,7 @@ pub use crate::product_clients::TradeBuyerClient;
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
     DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient,
-    TradeResyncClient, TradeSellerClient, TradesClient,
+    TradeResyncClient, TradeSellerClient, TradeValidationReceiptsClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{

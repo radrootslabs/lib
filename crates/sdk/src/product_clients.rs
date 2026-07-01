@@ -77,6 +77,10 @@ impl<'client> TradesClient<'client> {
     pub fn resync(&self) -> TradeResyncClient<'client> {
         TradeResyncClient { sdk: self.sdk }
     }
+
+    pub fn validation_receipts(&self) -> TradeValidationReceiptsClient<'client> {
+        TradeValidationReceiptsClient { sdk: self.sdk }
+    }
 }
 
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
@@ -94,6 +98,12 @@ pub struct TradeSellerClient<'client> {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
 pub struct TradeResyncClient<'client> {
+    pub(crate) sdk: &'client RadrootsClient,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy)]
+pub struct TradeValidationReceiptsClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,
 }
 

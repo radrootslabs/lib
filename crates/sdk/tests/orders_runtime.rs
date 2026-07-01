@@ -17,7 +17,10 @@ use radroots_events::{
         RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
         RadrootsPublicKey,
     },
-    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST},
+    kinds::{
+        KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST,
+        KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
+    },
     order::{
         RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
         RadrootsOrderEconomicLine, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
@@ -42,7 +45,8 @@ use radroots_sdk::{
     TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
-    TradeStatusNextActionKind, TradeStatusRequest,
+    TradeStatusNextActionKind, TradeStatusRequest, TradeValidationReceiptInspectRequest,
+    TradeValidationReceiptListRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -1187,6 +1191,102 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         Some(receipt_event_id)
     );
     assert_eq!(buyer_resync.evidence.inserted_count, 2);
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let order_id = "trade-validation-receipts-sdk";
+    let listing_event_id = deterministic_event_id("validation-receipt-listing");
+    let root_event_id = deterministic_event_id("validation-receipt-request");
+    let target_event_id = deterministic_event_id("validation-receipt-decision");
+    let receipt_raw_event = signed_raw_validation_receipt_event(
+        order_id,
+        &listing_event_id,
+        &root_event_id,
+        &target_event_id,
+        33,
+    );
+    let receipt_event_id =
+        RadrootsEventId::parse(receipt_raw_event.id.to_hex()).expect("receipt event id");
+    let worker_raw_event = signed_raw_worker_result_event(
+        order_id,
+        &receipt_event_id,
+        &listing_event_id,
+        &root_event_id,
+        &target_event_id,
+        34,
+    );
+    let worker_event_id = worker_raw_event.id.to_hex();
+    let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&receipt_raw_event, RELAY, 4_000),
+        relay_raw_event_item(&worker_raw_event, RELAY, 4_001),
+        relay_eose(RELAY),
+    ]);
+
+    let list = sdk
+        .trades()
+        .validation_receipts()
+        .list_with_fetch_adapter(
+            TradeValidationReceiptListRequest::parse(order_id)
+                .expect("list request")
+                .try_with_trusted_worker_pubkeys([service_pubkey.as_str()])
+                .expect("trusted worker"),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt list");
+
+    assert_eq!(list.relay_targets, vec![RELAY.to_owned()]);
+    assert_eq!(list.receipts.len(), 1);
+    assert!(list.invalid_receipts.is_empty());
+    assert_eq!(
+        list.receipts[0].event.id.as_str(),
+        receipt_event_id.as_str()
+    );
+    let trusted = list.receipts[0]
+        .worker_evidence
+        .trusted
+        .as_ref()
+        .expect("trusted evidence");
+    assert_eq!(trusted.author.as_str(), service_pubkey);
+    assert_eq!(
+        trusted
+            .validation_authority
+            .map(|authority| authority.as_str()),
+        Some("trusted_rhi_service_key")
+    );
+    assert_eq!(
+        trusted
+            .commitment_confidence
+            .map(|confidence| confidence.as_str()),
+        Some("committed_by_trusted_service")
+    );
+
+    let inspect = sdk
+        .trades()
+        .validation_receipts()
+        .inspect_with_fetch_adapter(
+            TradeValidationReceiptInspectRequest::new(receipt_event_id.clone())
+                .try_with_trusted_worker_pubkeys([service_pubkey.as_str()])
+                .expect("trusted worker"),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt inspect");
+
+    assert_eq!(inspect.receipt_event_id, receipt_event_id);
+    assert!(inspect.invalid_receipt.is_none());
+    assert_eq!(
+        inspect
+            .receipt
+            .as_ref()
+            .and_then(|receipt| receipt.worker_evidence.trusted.as_ref())
+            .map(|evidence| evidence.result_event_id.as_str()),
+        Some(worker_event_id.as_str())
+    );
 }
 
 #[cfg(feature = "relay-runtime")]
@@ -2465,6 +2565,62 @@ fn validation_receipt_wire_parts(
         version: 1,
     };
     validation_receipt_event_build(raw_order_id, &receipt).expect("receipt event")
+}
+
+fn signed_raw_worker_result_event(
+    raw_order_id: &str,
+    receipt_event_id: &RadrootsEventId,
+    listing_event_id: &RadrootsEventId,
+    root_event_id: &RadrootsEventId,
+    target_event_id: &RadrootsEventId,
+    created_at: u32,
+) -> nostr::Event {
+    let content = serde_json::json!({
+        "confidence": "committed_by_trusted_service",
+        "cryptographic_proof_verified": false,
+        "customer_pubkey": BUYER_PUBLIC_KEY_HEX,
+        "decision_event_id": target_event_id.as_str(),
+        "event_set_root": hash32('c'),
+        "listing_event_id": listing_event_id.as_str(),
+        "order_id": raw_order_id,
+        "proof_generated": false,
+        "proof_mode": "none",
+        "proof_system": "none",
+        "public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
+        "prover_backend": "local_execute",
+        "receipt_event_id": receipt_event_id.as_str(),
+        "receipt_kind": KIND_TRADE_VALIDATION_RECEIPT,
+        "reducer_output_root": hash32('4'),
+        "request_event_id": root_event_id.as_str(),
+        "request_hash": hash32('9'),
+        "sp1_execute_checked": true,
+        "sp1_execute_public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
+        "status": "succeeded",
+        "validation_authority": "trusted_rhi_service_key",
+        "worker_pubkey": public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX),
+        "worker_role": "non_authoritative_prover"
+    })
+    .to_string();
+    signed_raw_event(
+        SERVICE_SECRET_KEY_HEX,
+        created_at,
+        WireEventParts {
+            kind: KIND_TRADE_TRANSITION_PROOF_RESULT,
+            content,
+            tags: vec![
+                vec!["e".to_owned(), root_event_id.as_str().to_owned()],
+                vec![
+                    "radroots:validation_receipt".to_owned(),
+                    receipt_event_id.as_str().to_owned(),
+                ],
+            ],
+        },
+    )
+}
+
+fn public_key_hex_for_secret(secret_key_hex: &str) -> String {
+    let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+    RadrootsNostrKeys::new(secret_key).public_key().to_hex()
 }
 
 async fn insert_perf_non_trade_events(store: &RadrootsEventStore, base: i64, count: i64) {

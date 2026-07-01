@@ -94,6 +94,7 @@ const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "sdk.trades().seller()",
     "sdk.trades().status(...)",
     "sdk.trades().resync()",
+    "sdk.trades().validation_receipts()",
     "sdk.dvm()",
 ];
 
@@ -115,6 +116,20 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeStatusNextActionKind",
     "TradeStatusReceipt",
     "TradeStatusRequest",
+    "TradeValidationReceiptEvent",
+    "TradeValidationReceiptInspectReceipt",
+    "TradeValidationReceiptInspectRequest",
+    "TradeValidationReceiptInvalidCandidate",
+    "TradeValidationReceiptListReceipt",
+    "TradeValidationReceiptListRequest",
+    "TradeValidationReceiptRelayEvidenceReceipt",
+    "TradeValidationReceiptRelayOutcomeKind",
+    "TradeValidationReceiptRelayOutcomeReceipt",
+    "TradeValidationReceiptRelayTransportOutcomeKind",
+    "TradeValidationReceiptTags",
+    "TradeValidationReceiptVerifyRequest",
+    "TradeValidationReceiptWorkerEvidence",
+    "TradeValidationReceiptWorkerEvidenceSelection",
     "SdkTradeStatusIssue",
     "SdkTradeStatusIssueKind",
     "SdkTradeStatusSource",
@@ -268,6 +283,12 @@ const REQUIRED_TRADE_SELLER_CLIENT_METHODS: &[&str] = &[
 ];
 
 const REQUIRED_TRADE_RESYNC_CLIENT_METHODS: &[&str] = &["pub async fn resync("];
+
+const REQUIRED_TRADE_VALIDATION_RECEIPTS_CLIENT_METHODS: &[&str] = &[
+    "pub async fn list(",
+    "pub async fn inspect(",
+    "pub async fn verify(",
+];
 
 const FORBIDDEN_PRODUCT_CLIENT_HANDLES: &[&str] = &[
     "TradeStatusClient",
@@ -849,6 +870,13 @@ fn trade_product_facade_methods_are_inventory_guarded() {
             "TradeResyncClient must expose product workflow method `{method}`"
         );
     }
+
+    for method in REQUIRED_TRADE_VALIDATION_RECEIPTS_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "TradeValidationReceiptsClient must expose product workflow method `{method}`"
+        );
+    }
 }
 
 #[test]
@@ -869,6 +897,12 @@ fn trade_product_facade_feature_gates_are_explicit() {
             "#[cfg(feature = \"signer-adapters\")]\n    pub fn buyer(&self) -> TradeBuyerClient<'client> {"
         ),
         "TradesClient::buyer must be gated by signer-adapters inside the runtime TradesClient impl"
+    );
+    assert!(
+        product_clients_source.contains(
+            "pub fn validation_receipts(&self) -> TradeValidationReceiptsClient<'client>"
+        ),
+        "TradesClient must expose validation receipts through the grouped trade product facade"
     );
     assert!(
         product_clients_source.contains(
@@ -974,6 +1008,7 @@ fn product_clients_remain_thin_sdk_handles() {
         "SyncClient",
         "TradeResyncClient",
         "TradeSellerClient",
+        "TradeValidationReceiptsClient",
         "TradesClient",
     ] {
         assert!(

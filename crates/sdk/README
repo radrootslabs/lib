@@ -43,7 +43,9 @@ adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishin
 
 `sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
 evidence, ingest DVM validation receipts through `sdk.dvm()`, read `sdk.trades().status(...)`, resync
-through `sdk.trades().resync()`, and read seller inbox projections through `sdk.trades().seller()`.
+through `sdk.trades().resync()`, inspect validation receipts through
+`sdk.trades().validation_receipts()`, and read seller inbox projections through
+`sdk.trades().seller()`.
 `sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local projections; it returns typed
 source, event count, limit state, event IDs, ambiguity candidates, eligibility, next-action, and
 reducer issue data. Status is not a network fetch.
