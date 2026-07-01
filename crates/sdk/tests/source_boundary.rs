@@ -76,6 +76,26 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
         pattern: "sdk.trade_validation()",
         reason: "SDK docs must use sdk.dvm() for validation receipt ingestion",
     },
+    ForbiddenSdkConcept {
+        pattern: "`relay-client` is retained",
+        reason: "SDK docs must describe canonical feature behavior instead of retained surfaces",
+    },
+    ForbiddenSdkConcept {
+        pattern: "direct relay publish callers",
+        reason: "SDK docs must describe adapter behavior rather than caller compatibility posture",
+    },
+    ForbiddenSdkConcept {
+        pattern: "compatibility",
+        reason: "SDK docs must not frame target-state runtime surfaces as compatibility policy",
+    },
+    ForbiddenSdkConcept {
+        pattern: "legacy",
+        reason: "SDK docs must not frame target-state runtime surfaces as legacy policy",
+    },
+    ForbiddenSdkConcept {
+        pattern: "preserve serde",
+        reason: "SDK docs must describe serialized-field stability without serde-compat wording",
+    },
 ];
 
 const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[

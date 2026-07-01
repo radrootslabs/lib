@@ -59,10 +59,9 @@ DTOs. DVM proof requests and validation receipt ingestion use `sdk.dvm()`.
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `relay-runtime`, and
 `relay-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
-`relay-client` is retained in this bundle only for direct relay publish callers. `local-runtime`
-does not enable `radrootsd-proxy`; use `local-runtime-radrootsd-proxy` when the runtime should
-publish through Radrootsd instead of a direct relay transport. Both bundles use the same configured
-signer provider API.
+`relay-client` supplies the relay WebSocket publish adapter used when signed outbox work targets
+configured relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publishing through
+`publish.event` and the same configured signer provider API.
 
 `radroots_sdk_myc_nip46_product_permissions()` and
 `radroots_sdk_myc_nip46_product_permission_strings()` expose the SDK product NIP-46
@@ -127,5 +126,6 @@ relay-target, mutation-state, trade-status, sync-status, relay-auth, and push-ou
 outcome enums.
 
 Runtime receipts and status records expose stable serialized public fields for CLI and local-runtime
-reporting. Future additive reporting should preserve serde compatibility for existing fields.
-Restore archive and receipt records follow that same stable serialized-field stance.
+reporting. Future additive reporting must add fields without changing existing serialized field
+names, meanings, or types. Restore archive and receipt records follow that same serialized-field
+stance.
