@@ -1406,6 +1406,73 @@ async fn trade_validation_receipt_inspect_rejects_unrequested_relay_receipts() {
 
 #[cfg(feature = "relay-runtime")]
 #[tokio::test]
+async fn trade_validation_receipt_inspect_skips_noise_before_exact_receipt_match() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let requested_receipt = signed_raw_validation_receipt_event(
+        "validation-receipt-inspect-noise-requested",
+        &deterministic_event_id("validation-receipt-inspect-noise-requested-listing"),
+        &deterministic_event_id("validation-receipt-inspect-noise-requested-request"),
+        &deterministic_event_id("validation-receipt-inspect-noise-requested-decision"),
+        39,
+    );
+    let requested_receipt_id =
+        RadrootsEventId::parse(requested_receipt.id.to_hex()).expect("requested receipt id");
+    let unrelated_receipt = signed_raw_validation_receipt_event(
+        "validation-receipt-inspect-noise-unrelated",
+        &deterministic_event_id("validation-receipt-inspect-noise-unrelated-listing"),
+        &deterministic_event_id("validation-receipt-inspect-noise-unrelated-request"),
+        &deterministic_event_id("validation-receipt-inspect-noise-unrelated-decision"),
+        40,
+    );
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_malformed(RELAY),
+        relay_raw_event_item(&unrelated_receipt, RELAY, 4_021),
+        relay_raw_event_item(&requested_receipt, RELAY, 4_022),
+        relay_eose(RELAY),
+    ]);
+
+    let inspect = sdk
+        .trades()
+        .validation_receipts()
+        .inspect_with_fetch_adapter(
+            TradeValidationReceiptInspectRequest::new(requested_receipt_id.clone()),
+            &adapter,
+        )
+        .await
+        .expect("validation receipt inspect");
+
+    assert_eq!(inspect.receipt_event_id, requested_receipt_id);
+    assert!(inspect.receipt.is_some());
+    assert!(inspect.invalid_receipt.is_none());
+    assert_eq!(inspect.relay_evidence.inserted_count, 1);
+    assert_eq!(inspect.relay_evidence.malformed_count, 1);
+    assert_eq!(inspect.relay_evidence.out_of_filter_count, 1);
+    assert_eq!(inspect.relay_evidence.skipped_over_limit_count, 0);
+    assert!(
+        inspect
+            .relay_evidence
+            .events
+            .iter()
+            .any(|event| event.malformed)
+    );
+    assert!(
+        inspect
+            .relay_evidence
+            .events
+            .iter()
+            .any(|event| event.out_of_filter)
+    );
+    assert!(
+        store
+            .get_event(requested_receipt_id.as_str())
+            .await
+            .expect("requested receipt lookup")
+            .is_some()
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
 async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
     let request_event = signed_raw_order_request_event("resync-empty-local-import", 41);
@@ -1435,6 +1502,46 @@ async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
         resync.evidence.events[0].event_id.as_deref(),
         Some(request_event_id.as_str())
     );
+    assert!(
+        store
+            .get_event(request_event_id.as_str())
+            .await
+            .expect("stored event")
+            .is_some()
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_skips_noise_before_matching_trade_event() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let requested_order_id = order_id("resync-noise-requested");
+    let request_event = signed_raw_order_request_event(requested_order_id.as_str(), 44);
+    let request_event_id =
+        RadrootsEventId::parse(request_event.id.to_hex()).expect("request event id");
+    let unrelated_event = signed_raw_order_request_event("resync-noise-unrelated", 45);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_malformed(RELAY),
+        relay_raw_event_item(&unrelated_event, RELAY, 5_020),
+        relay_raw_event_item(&request_event, RELAY, 5_021),
+        relay_eose(RELAY),
+    ]);
+
+    let resync = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(requested_order_id)),
+            &adapter,
+        )
+        .await
+        .expect("resync");
+
+    assert_eq!(resync.status.status, TradeStatusKind::Requested);
+    assert_eq!(resync.evidence.inserted_count, 1);
+    assert_eq!(resync.evidence.malformed_count, 1);
+    assert_eq!(resync.evidence.out_of_filter_count, 1);
+    assert_eq!(resync.evidence.skipped_over_limit_count, 0);
     assert!(
         store
             .get_event(request_event_id.as_str())
