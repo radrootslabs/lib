@@ -448,7 +448,20 @@ pub fn build_transition_proof_result_tags(
         .map_err(RadrootsTradeDvmError::SerializeRequestEvent)?;
     let mut tags = vec![
         vec![RADROOTS_DVM_TAG_REQUEST.to_string(), request_json],
-        vec![TAG_E.to_string(), request_event_id.as_str().to_string()],
+        vec![
+            TAG_E.to_string(),
+            request_event_id.as_str().to_string(),
+            String::new(),
+            String::new(),
+            "request".to_string(),
+        ],
+        vec![
+            TAG_E.to_string(),
+            binding.root_event_id.as_str().to_string(),
+            String::new(),
+            String::new(),
+            "root".to_string(),
+        ],
         vec![TAG_P.to_string(), customer_pubkey.as_str().to_string()],
         vec![
             RADROOTS_DVM_TAG_LISTING_EVENT.to_string(),
@@ -467,6 +480,13 @@ pub fn build_transition_proof_result_tags(
         tags.push(vec![
             RADROOTS_DVM_TAG_VALIDATION_RECEIPT.to_string(),
             receipt_event_id.as_str().to_string(),
+        ]);
+        tags.push(vec![
+            TAG_E.to_string(),
+            receipt_event_id.as_str().to_string(),
+            String::new(),
+            String::new(),
+            "receipt".to_string(),
         ]);
     }
     for input in inputs {
@@ -753,6 +773,18 @@ mod tests {
         RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")
     }
 
+    fn has_marked_event_tag(
+        tags: &[Vec<String>],
+        event_id: &RadrootsEventId,
+        marker: &str,
+    ) -> bool {
+        tags.iter().any(|tag| {
+            tag.first().map(String::as_str) == Some(TAG_E)
+                && tag.get(1).map(String::as_str) == Some(event_id.as_str())
+                && tag.get(4).map(String::as_str) == Some(marker)
+        })
+    }
+
     fn public_key(raw: &str) -> RadrootsPublicKey {
         RadrootsPublicKey::parse(raw).expect("public key")
     }
@@ -862,6 +894,13 @@ mod tests {
         assert_eq!(parsed.customer_pubkey, public_key(BUYER));
         assert_eq!(parsed.inputs, request_tags.inputs);
         assert_eq!(parsed.binding, binding);
+        assert!(has_marked_event_tag(&tags, &event_id(10), "request"));
+        assert!(has_marked_event_tag(
+            &tags,
+            &content.request_event_id,
+            "root"
+        ));
+        assert!(has_marked_event_tag(&tags, &event_id(11), "receipt"));
     }
 
     #[test]
