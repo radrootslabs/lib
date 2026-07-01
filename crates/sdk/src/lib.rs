@@ -105,10 +105,13 @@ pub use crate::market_runtime::{
 pub use crate::orders_runtime::{
     SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
     TRADE_STATUS_MAX_LIMIT, TradeEvidenceIngestReceipt, TradeEvidenceIngestRequest,
-    TradeRequestEvidenceIngestReceipt, TradeRequestEvidenceIngestRequest, TradeResyncReceipt,
-    TradeResyncRequest, TradeSellerInboxReceipt, TradeSellerInboxRequest,
-    TradeStatusAmbiguityCandidate, TradeStatusEligibility, TradeStatusEvidenceSummary,
-    TradeStatusKind, TradeStatusNextActionKind, TradeStatusReceipt, TradeStatusRequest,
+    TradeRequestEvidenceIngestReceipt, TradeRequestEvidenceIngestRequest,
+    TradeResyncEventImportReceipt, TradeResyncEvidenceReceipt, TradeResyncReceipt,
+    TradeResyncRelayOutcomeKind, TradeResyncRelayOutcomeReceipt,
+    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxReceipt,
+    TradeSellerInboxRequest, TradeStatusAmbiguityCandidate, TradeStatusEligibility,
+    TradeStatusEvidenceSummary, TradeStatusKind, TradeStatusNextActionKind, TradeStatusReceipt,
+    TradeStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::orders_runtime::{

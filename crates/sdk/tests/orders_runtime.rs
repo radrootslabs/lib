@@ -4,6 +4,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use nostr::JsonUtil;
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -30,6 +31,7 @@ use radroots_nostr::prelude::{
     radroots_nostr_build_event,
 };
 use radroots_outbox::RadrootsOutbox;
+use radroots_relay_transport::{RadrootsMockRelayFetchAdapter, RadrootsRelayFetchItem};
 use radroots_sdk::{
     AckPolicy, DvmValidationReceiptIngestRequest, PublishMode, RadrootsClient, RadrootsSdkError,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkMutationState,
@@ -37,20 +39,21 @@ use radroots_sdk::{
     SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
     TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
     TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeResyncRequest, TradeRevisionDecisionRequest,
+    TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
+    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusNextActionKind, TradeStatusRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
-use radroots_trade::order::RadrootsOrderIssue;
 use radroots_trade::validation_receipt::{
     RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
     RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
     validation_receipt_event_build, validation_receipt_public_values_hash_hex,
 };
+use radroots_trade::{identity::RadrootsTradeLocator, order::RadrootsOrderIssue};
 use serde::Serialize;
 use serde::ser::{self, SerializeStruct};
 
@@ -68,7 +71,6 @@ const RELAY: &str = "wss://relay.radroots.test";
 #[cfg(any())]
 const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-#[cfg(any())]
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
 const PERF_TRADE_RELEVANT_EVENTS: i64 = 25_000;
@@ -405,19 +407,47 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, Radroo
     (tempdir, sdk, store)
 }
 
+async fn directory_sdk_and_store_with_relays(
+    relays: &[&str],
+) -> (tempfile::TempDir, RadrootsClient, RadrootsEventStore) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let mut builder = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
+    for relay in relays {
+        builder = builder.relay_url(*relay);
+    }
+    let sdk = builder.build().await.expect("sdk");
+    let store =
+        RadrootsEventStore::open_file(&sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    (tempdir, sdk, store)
+}
+
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 async fn directory_sdk_with_signer(storage_root: &Path, secret_key_hex: &str) -> RadrootsClient {
+    directory_sdk_with_signer_and_relays(storage_root, secret_key_hex, &[]).await
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+async fn directory_sdk_with_signer_and_relays(
+    storage_root: &Path,
+    secret_key_hex: &str,
+    relays: &[&str],
+) -> RadrootsClient {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let signer_keys = RadrootsNostrKeys::new(secret_key);
-    RadrootsClient::builder()
+    let mut builder = RadrootsClient::builder()
         .directory_storage(storage_root)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
             RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
-        ))
-        .build()
-        .await
-        .expect("sdk")
+        ));
+    for relay in relays {
+        builder = builder.relay_url(*relay);
+    }
+    builder.build().await.expect("sdk")
 }
 
 fn order_id(raw: &str) -> RadrootsOrderId {
@@ -849,12 +879,21 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     );
 }
 
-#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[cfg(all(
+    feature = "signer-adapters",
+    feature = "local-signer",
+    feature = "relay-runtime"
+))]
 #[tokio::test]
 async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage_root = tempdir.path().join("sdk");
-    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let buyer_sdk = directory_sdk_with_signer_and_relays(
+        storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
     let propose_receipt = expect_enqueued(
         buyer_sdk
             .trades()
@@ -900,7 +939,12 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         Some(SELLER_PUBLIC_KEY_HEX)
     );
 
-    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let seller_sdk = directory_sdk_with_signer_and_relays(
+        storage_root.as_path(),
+        SELLER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
     let inbox = seller_sdk
         .trades()
         .seller()
@@ -961,12 +1005,18 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         Some(accept_receipt.signed_event_id.as_str())
     );
 
+    let resync_adapter = RadrootsMockRelayFetchAdapter::new(vec![relay_eose(RELAY)]);
     let resync = seller_sdk
         .trades()
         .resync()
-        .resync(TradeResyncRequest::new(propose_receipt.locator))
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(propose_receipt.locator),
+            &resync_adapter,
+        )
         .await
         .expect("facade resync");
+    assert_eq!(resync.relay_targets, vec![RELAY.to_owned()]);
+    assert_eq!(resync.evidence.eose_count, 1);
     assert_eq!(resync.status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(
         resync.status.last_event_id,
@@ -974,16 +1024,28 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
     );
 }
 
-#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[cfg(all(
+    feature = "signer-adapters",
+    feature = "local-signer",
+    feature = "relay-runtime"
+))]
 #[tokio::test]
 async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let buyer_storage_root = tempdir.path().join("buyer-sdk");
     let seller_storage_root = tempdir.path().join("seller-sdk");
-    let buyer_sdk =
-        directory_sdk_with_signer(buyer_storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
-    let seller_sdk =
-        directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let buyer_sdk = directory_sdk_with_signer_and_relays(
+        buyer_storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let seller_sdk = directory_sdk_with_signer_and_relays(
+        seller_storage_root.as_path(),
+        SELLER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
     let buyer_store =
         RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
             .await
@@ -1019,13 +1081,25 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
             .total_events,
         0
     );
-    replay_stored_event(
-        &buyer_store,
-        &seller_store,
-        &propose_receipt.signed_event_id,
-        4_000,
-    )
-    .await;
+    let seller_proposal_resync_adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_event_item_from_store(&buyer_store, &propose_receipt.signed_event_id, RELAY, 4_000)
+            .await,
+        relay_eose(RELAY),
+    ]);
+    let seller_proposal_resync = seller_sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(propose_receipt.locator.clone()),
+            &seller_proposal_resync_adapter,
+        )
+        .await
+        .expect("seller proposal resync");
+    assert_eq!(
+        seller_proposal_resync.status.status,
+        TradeStatusKind::Requested
+    );
+    assert_eq!(seller_proposal_resync.evidence.inserted_count, 1);
     let accept_receipt = expect_enqueued(
         seller_sdk
             .trades()
@@ -1048,21 +1122,16 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
             .await
             .expect("accept trade"),
     );
-    replay_stored_event(
-        &seller_store,
-        &buyer_store,
-        &accept_receipt.signed_event_id,
-        4_100,
-    )
-    .await;
-    let receipt_event = signed_validation_receipt_event(
+    let receipt_raw_event = signed_raw_validation_receipt_event(
         "trade-product-committed-resync",
         &propose_receipt.listing_event_id,
         &propose_receipt.signed_event_id,
         &accept_receipt.signed_event_id,
         33,
     );
-    let receipt_event_id = RadrootsEventId::parse(receipt_event.id.as_str()).expect("receipt id");
+    let receipt_event = radroots_event_from_nostr(&receipt_raw_event);
+    let receipt_event_id =
+        RadrootsEventId::parse(receipt_raw_event.id.to_hex().as_str()).expect("receipt id");
 
     let ingest = seller_sdk
         .dvm()
@@ -1077,12 +1146,14 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         .expect("ingest validation receipt");
     assert!(ingest.inserted);
     assert_eq!(ingest.receipt_event_id, receipt_event_id);
-    replay_stored_event(&seller_store, &buyer_store, &receipt_event_id, 4_200).await;
 
     let seller_resync = seller_sdk
         .trades()
         .resync()
-        .resync(TradeResyncRequest::new(propose_receipt.locator.clone()))
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(propose_receipt.locator.clone()),
+            &RadrootsMockRelayFetchAdapter::new(vec![relay_eose(RELAY)]),
+        )
         .await
         .expect("seller resync");
     assert_eq!(seller_resync.status.status, TradeStatusKind::Committed);
@@ -1095,10 +1166,19 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         Some(receipt_event_id.clone())
     );
 
+    let buyer_committed_resync_adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_event_item_from_store(&seller_store, &accept_receipt.signed_event_id, RELAY, 4_100)
+            .await,
+        relay_raw_event_item(&receipt_raw_event, RELAY, 4_200),
+        relay_eose(RELAY),
+    ]);
     let buyer_resync = buyer_sdk
         .trades()
         .resync()
-        .resync(TradeResyncRequest::new(propose_receipt.locator))
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(propose_receipt.locator),
+            &buyer_committed_resync_adapter,
+        )
         .await
         .expect("buyer resync");
     assert_eq!(buyer_resync.status.status, TradeStatusKind::Committed);
@@ -1106,41 +1186,220 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         buyer_resync.status.rhi_receipt_event_id,
         Some(receipt_event_id)
     );
+    assert_eq!(buyer_resync.evidence.inserted_count, 2);
 }
 
-async fn replay_stored_event(
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let request_event = signed_raw_order_request_event("resync-empty-local-import", 41);
+    let request_event_id =
+        RadrootsEventId::parse(request_event.id.to_hex().as_str()).expect("event id");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&request_event, RELAY, 5_000),
+        relay_eose(RELAY),
+    ]);
+
+    let resync = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-empty-local-import",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect("resync");
+
+    assert_eq!(resync.status.status, TradeStatusKind::Requested);
+    assert_eq!(resync.evidence.inserted_count, 1);
+    assert_eq!(resync.evidence.duplicate_count, 0);
+    assert_eq!(
+        resync.evidence.events[0].event_id.as_deref(),
+        Some(request_event_id.as_str())
+    );
+    assert!(
+        store
+            .get_event(request_event_id.as_str())
+            .await
+            .expect("stored event")
+            .is_some()
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_duplicate_replay_is_idempotent() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let request_event = signed_raw_order_request_event("resync-duplicate-replay", 42);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&request_event, RELAY, 5_100),
+        relay_eose(RELAY),
+    ]);
+    let locator = RadrootsTradeLocator::from_order_id(order_id("resync-duplicate-replay"));
+
+    let first = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(TradeResyncRequest::new(locator.clone()), &adapter)
+        .await
+        .expect("first resync");
+    let second = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(TradeResyncRequest::new(locator), &adapter)
+        .await
+        .expect("second resync");
+
+    assert_eq!(first.evidence.inserted_count, 1);
+    assert_eq!(second.evidence.inserted_count, 0);
+    assert_eq!(second.evidence.duplicate_count, 1);
+    assert_eq!(second.status.status, TradeStatusKind::Requested);
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_reports_malformed_evidence_without_poisoning_store() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let adapter =
+        RadrootsMockRelayFetchAdapter::new(vec![relay_malformed(RELAY), relay_eose(RELAY)]);
+
+    let resync = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-malformed-evidence",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect("resync");
+
+    assert_eq!(resync.status.status, TradeStatusKind::Missing);
+    assert_eq!(resync.evidence.malformed_count, 1);
+    assert_eq!(resync.evidence.inserted_count, 0);
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("store summary")
+            .total_events,
+        0
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_errors_on_total_relay_failure() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY, RELAY_B]).await;
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_closed(RELAY, "timeout: relay offline"),
+        relay_closed(RELAY_B, "error: relay unavailable"),
+    ]);
+
+    let error = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-total-relay-failure",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect_err("total relay failure");
+
+    assert_eq!(error.code(), "product_sync_relay_setup_failure");
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_resync_reports_partial_relay_failure() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY, RELAY_B]).await;
+    let request_event = signed_raw_order_request_event("resync-partial-relay-failure", 43);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_closed(RELAY_B, "timeout: relay unavailable"),
+        relay_raw_event_item(&request_event, RELAY, 5_200),
+        relay_eose(RELAY),
+    ]);
+
+    let resync = sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-partial-relay-failure",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect("partial failure resync");
+
+    assert_eq!(resync.status.status, TradeStatusKind::Requested);
+    assert_eq!(resync.evidence.closed_count, 1);
+    assert_eq!(resync.evidence.eose_count, 1);
+    assert_eq!(
+        resync.evidence.relays[0].outcome_kind,
+        TradeResyncRelayOutcomeKind::Closed
+    );
+    assert_eq!(
+        resync.evidence.relays[0].transport_outcome_kind,
+        Some(TradeResyncRelayTransportOutcomeKind::Timeout)
+    );
+}
+
+async fn relay_event_item_from_store(
     source: &RadrootsEventStore,
-    target: &RadrootsEventStore,
     event_id: &RadrootsEventId,
+    relay_url: &str,
     observed_at_ms: i64,
-) {
+) -> RadrootsRelayFetchItem {
     let stored = source
         .get_event(event_id.as_str())
         .await
         .expect("source event lookup")
         .expect("source event");
-    let event = stored_event_from_raw_json(stored.raw_json.as_str());
-    let receipt = target
-        .ingest_event(
-            RadrootsEventIngest::new(event, observed_at_ms).with_raw_json(stored.raw_json),
-        )
-        .await
-        .expect("target event ingest");
-    assert!(receipt.inserted);
-    assert!(
-        target
-            .get_event(event_id.as_str())
-            .await
-            .expect("target event lookup")
-            .is_some()
-    );
+    RadrootsRelayFetchItem::Event {
+        relay_url: relay_url.to_owned(),
+        raw_json: stored.raw_json,
+        observed_at_ms,
+    }
 }
 
-fn stored_event_from_raw_json(raw_json: &str) -> RadrootsNostrEvent {
-    serde_json::from_str::<nostr::Event>(raw_json)
-        .map(|event| radroots_event_from_nostr(&event))
-        .or_else(|_| serde_json::from_str::<RadrootsNostrEvent>(raw_json))
-        .expect("stored raw event json")
+fn relay_raw_event_item(
+    event: &nostr::Event,
+    relay_url: &str,
+    observed_at_ms: i64,
+) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::Event {
+        relay_url: relay_url.to_owned(),
+        raw_json: event.as_json(),
+        observed_at_ms,
+    }
+}
+
+fn relay_eose(relay_url: &str) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::Eose {
+        relay_url: relay_url.to_owned(),
+    }
+}
+
+fn relay_closed(relay_url: &str, message: &str) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::Closed {
+        relay_url: relay_url.to_owned(),
+        message: message.to_owned(),
+    }
+}
+
+fn relay_malformed(relay_url: &str) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::Event {
+        relay_url: relay_url.to_owned(),
+        raw_json: "{".to_owned(),
+        observed_at_ms: 4_999,
+    }
 }
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -2154,13 +2413,31 @@ fn revision_economics() -> RadrootsOrderEconomics {
     }
 }
 
-fn signed_validation_receipt_event(
+fn signed_raw_validation_receipt_event(
     raw_order_id: &str,
     listing_event_id: &RadrootsEventId,
     root_event_id: &RadrootsEventId,
     target_event_id: &RadrootsEventId,
     created_at: u32,
-) -> RadrootsNostrEvent {
+) -> nostr::Event {
+    signed_raw_event(
+        SERVICE_SECRET_KEY_HEX,
+        created_at,
+        validation_receipt_wire_parts(
+            raw_order_id,
+            listing_event_id,
+            root_event_id,
+            target_event_id,
+        ),
+    )
+}
+
+fn validation_receipt_wire_parts(
+    raw_order_id: &str,
+    listing_event_id: &RadrootsEventId,
+    root_event_id: &RadrootsEventId,
+    target_event_id: &RadrootsEventId,
+) -> WireEventParts {
     let receipt = RadrootsTradeValidationReceipt {
         changed_records_root: hash32('6'),
         domain: "radroots.receipt".to_owned(),
@@ -2187,8 +2464,7 @@ fn signed_validation_receipt_event(
         },
         version: 1,
     };
-    let parts = validation_receipt_event_build(raw_order_id, &receipt).expect("receipt event");
-    signed_event(SERVICE_SECRET_KEY_HEX, created_at, parts)
+    validation_receipt_event_build(raw_order_id, &receipt).expect("receipt event")
 }
 
 async fn insert_perf_non_trade_events(store: &RadrootsEventStore, base: i64, count: i64) {
@@ -2285,14 +2561,18 @@ fn signed_event(
     created_at: u32,
     parts: WireEventParts,
 ) -> RadrootsNostrEvent {
+    let event = signed_raw_event(secret_key_hex, created_at, parts);
+    radroots_event_from_nostr(&event)
+}
+
+fn signed_raw_event(secret_key_hex: &str, created_at: u32, parts: WireEventParts) -> nostr::Event {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);
-    let event = radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
+    radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
         .expect("event builder")
         .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
         .sign_with_keys(&keys)
-        .expect("signed event");
-    radroots_event_from_nostr(&event)
+        .expect("signed event")
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
@@ -2302,6 +2582,15 @@ fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNo
     )
     .expect("request draft");
     signed_event(BUYER_SECRET_KEY_HEX, created_at, draft)
+}
+
+fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr::Event {
+    let draft = radroots_events_codec::order::order_request_event_build(
+        &listing_event_ptr(),
+        &order_request(raw_order_id),
+    )
+    .expect("request draft");
+    signed_raw_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
 #[cfg(any())]

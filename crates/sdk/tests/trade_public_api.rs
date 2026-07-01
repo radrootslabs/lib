@@ -25,13 +25,13 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
 
     assert_eq!(status.status, TradeStatusKind::Missing);
 
-    let resync = trades
+    let resync_error = trades
         .resync()
         .resync(TradeResyncRequest::new(status.locator))
         .await
-        .expect("resync");
+        .expect_err("resync requires configured relays");
 
-    assert_eq!(resync.status.status, TradeStatusKind::Missing);
+    assert_eq!(resync_error.code(), "empty_target_relays");
 
     let seller_actor =
         RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller])

@@ -1,5 +1,11 @@
 #[cfg(feature = "signer-adapters")]
 use crate::TradeBuyerClient;
+#[cfg(feature = "runtime")]
+use crate::runtime::sdk_now_ms;
+#[cfg(feature = "runtime")]
+use crate::sync_runtime::{
+    SyncProjectionRefreshReceipt, SyncProjectionRefreshRequest, refresh_product_projections_for_sdk,
+};
 #[cfg(feature = "signer-adapters")]
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(any(feature = "signer-adapters", test))]
@@ -29,10 +35,11 @@ use radroots_events::{
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
         KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
-        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
+        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_TRADE_VALIDATION_RECEIPT,
+        ORDER_EVENT_KINDS,
     },
     order::RadrootsOrderEconomics,
-    tags::TAG_P,
+    tags::{TAG_D, TAG_P},
 };
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events::{
@@ -52,6 +59,14 @@ use radroots_events_codec::order::{
 };
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_nostr::prelude::{RadrootsNostrFilter, RadrootsNostrKind, radroots_nostr_filter_tag};
+#[cfg(feature = "runtime")]
+use radroots_relay_transport::{
+    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
+    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome,
+    RadrootsRelayFetchRequest, RadrootsRelayOutcomeKind, fetch_and_ingest_relay_events,
+};
 #[cfg(feature = "runtime")]
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
 #[cfg(any(feature = "signer-adapters", test))]
@@ -1398,12 +1413,97 @@ impl TradeResyncRequest {
         self.limit = limit;
         self
     }
+
+    fn validate(&self) -> Result<(), RadrootsSdkError> {
+        if self.limit == 0 || self.limit > TRADE_STATUS_MAX_LIMIT {
+            return Err(RadrootsSdkError::trade_status_limit_invalid(
+                self.limit,
+                1,
+                TRADE_STATUS_MAX_LIMIT,
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeResyncReceipt {
+    pub relay_targets: Vec<String>,
+    pub evidence: TradeResyncEvidenceReceipt,
+    pub refresh: SyncProjectionRefreshReceipt,
     pub status: TradeStatusReceipt,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeResyncEvidenceReceipt {
+    pub inserted_count: usize,
+    pub duplicate_count: usize,
+    pub malformed_count: usize,
+    pub unsupported_count: usize,
+    pub eose_count: usize,
+    pub closed_count: usize,
+    pub notice_count: usize,
+    pub events: Vec<TradeResyncEventImportReceipt>,
+    pub relays: Vec<TradeResyncRelayOutcomeReceipt>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeResyncEventImportReceipt {
+    pub relay_url: String,
+    pub event_id: Option<String>,
+    pub inserted: bool,
+    pub duplicate: bool,
+    pub unsupported: bool,
+    pub malformed: bool,
+    pub projection_eligible: bool,
+    pub verification_status: Option<String>,
+    pub message: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeResyncRelayOutcomeReceipt {
+    pub relay_url: String,
+    pub outcome_kind: TradeResyncRelayOutcomeKind,
+    pub transport_outcome_kind: Option<TradeResyncRelayTransportOutcomeKind>,
+    pub message: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeResyncRelayOutcomeKind {
+    Eose,
+    Closed,
+    Notice,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeResyncRelayTransportOutcomeKind {
+    Accepted,
+    DuplicateAccepted,
+    Blocked,
+    RateLimited,
+    Invalid,
+    PowRequired,
+    Restricted,
+    AuthRequired,
+    Muted,
+    Unsupported,
+    PaymentRequired,
+    Error,
+    Timeout,
+    ConnectionFailed,
+    RelayUrlRejected,
+    SkippedAlreadyAccepted,
+    Unknown,
 }
 
 #[cfg(feature = "runtime")]
@@ -2558,10 +2658,203 @@ impl<'sdk> TradeResyncClient<'sdk> {
         &self,
         request: TradeResyncRequest,
     ) -> Result<TradeResyncReceipt, RadrootsSdkError> {
+        #[cfg(feature = "relay-runtime")]
+        {
+            let adapter = RadrootsNostrClientFetchAdapter;
+            return self.resync_with_fetch_adapter(request, &adapter).await;
+        }
+        #[cfg(not(feature = "relay-runtime"))]
+        {
+            let _ = request;
+            Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "trade.resync",
+                required_feature: "relay-runtime",
+            })
+        }
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn resync_with_fetch_adapter<A>(
+        &self,
+        request: TradeResyncRequest,
+        adapter: &A,
+    ) -> Result<TradeResyncReceipt, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        request.validate()?;
+        let relay_targets = self.sdk.relay_urls().to_vec();
+        if relay_targets.is_empty() {
+            return Err(RadrootsSdkError::empty_target_relays("trade.resync"));
+        }
+        let fetch_request = trade_resync_fetch_request(self.sdk, &request, &relay_targets)?;
+        let fetch_receipt =
+            fetch_and_ingest_relay_events(adapter, &self.sdk._event_store, fetch_request).await?;
+        if trade_resync_total_relay_failure(&fetch_receipt, relay_targets.len()) {
+            return Err(RadrootsSdkError::ProductSyncRelaySetupFailure {
+                message: trade_resync_total_failure_message(&fetch_receipt),
+            });
+        }
+        let evidence = TradeResyncEvidenceReceipt::from_fetch(fetch_receipt);
+        let refresh = refresh_product_projections_for_sdk(
+            self.sdk,
+            SyncProjectionRefreshRequest::new().with_limit(request.limit),
+        )
+        .await?;
         let status = trades_client(self.sdk)
-            .status(TradeStatusRequest::new(request.locator).with_limit(request.limit))
+            .status(TradeStatusRequest::new(request.locator.clone()).with_limit(request.limit))
             .await?;
-        Ok(TradeResyncReceipt { status })
+        if status.status == TradeStatusKind::Ambiguous {
+            return Err(RadrootsSdkError::TradeAmbiguous {
+                operation: "trade.resync".to_owned(),
+                locator: request.locator,
+                candidates: status
+                    .ambiguity_candidates
+                    .iter()
+                    .map(|candidate| candidate.locator.clone())
+                    .collect(),
+            });
+        }
+        Ok(TradeResyncReceipt {
+            relay_targets,
+            evidence,
+            refresh,
+            status,
+        })
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn trade_resync_fetch_request(
+    sdk: &crate::RadrootsClient,
+    request: &TradeResyncRequest,
+    relay_targets: &[String],
+) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
+    Ok(
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize)
+            .with_relay_urls(relay_targets.iter().cloned())
+            .with_filters([trade_resync_filter(&request.locator, request.limit)?]),
+    )
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn trade_resync_filter(
+    locator: &RadrootsTradeLocator,
+    limit: u32,
+) -> Result<RadrootsNostrFilter, RadrootsSdkError> {
+    let mut filter = RadrootsNostrFilter::new().limit(limit as usize);
+    for kind in ORDER_EVENT_KINDS
+        .iter()
+        .copied()
+        .chain([KIND_TRADE_VALIDATION_RECEIPT])
+    {
+        let kind = u16::try_from(kind).map_err(|_| RadrootsSdkError::InvalidRequest {
+            message: format!("trade resync event kind {kind} exceeds Nostr filter range"),
+        })?;
+        filter = filter.kind(RadrootsNostrKind::Custom(kind));
+    }
+    radroots_nostr_filter_tag(filter, TAG_D, vec![locator.order_id().as_str().to_owned()]).map_err(
+        |error| RadrootsSdkError::InvalidRequest {
+            message: format!("trade resync filter invalid: {error}"),
+        },
+    )
+}
+
+#[cfg(feature = "runtime")]
+fn trade_resync_total_relay_failure(
+    receipt: &RadrootsRelayFetchReceipt,
+    relay_count: usize,
+) -> bool {
+    relay_count > 0 && receipt.eose_count == 0 && receipt.closed_count >= relay_count
+}
+
+#[cfg(feature = "runtime")]
+fn trade_resync_total_failure_message(receipt: &RadrootsRelayFetchReceipt) -> String {
+    format!(
+        "trade.resync failed for all configured relays: closed_count={}, notice_count={}, malformed_count={}",
+        receipt.closed_count, receipt.notice_count, receipt.malformed_count
+    )
+}
+
+#[cfg(feature = "runtime")]
+impl TradeResyncEvidenceReceipt {
+    fn from_fetch(receipt: RadrootsRelayFetchReceipt) -> Self {
+        Self {
+            inserted_count: receipt.inserted_count,
+            duplicate_count: receipt.duplicate_count,
+            malformed_count: receipt.malformed_count,
+            unsupported_count: receipt.unsupported_count,
+            eose_count: receipt.eose_count,
+            closed_count: receipt.closed_count,
+            notice_count: receipt.notice_count,
+            events: receipt.events.into_iter().map(Into::into).collect(),
+            relays: receipt.relay_outcomes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
+    fn from(receipt: RadrootsRelayFetchEventReceipt) -> Self {
+        Self {
+            relay_url: receipt.relay_url,
+            event_id: receipt.event_id,
+            inserted: receipt.inserted,
+            duplicate: receipt.duplicate,
+            unsupported: receipt.unsupported,
+            malformed: receipt.malformed,
+            projection_eligible: receipt.projection_eligible,
+            verification_status: receipt.verification_status,
+            message: receipt.message,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncRelayOutcomeReceipt {
+    fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
+        Self {
+            relay_url: receipt.relay_url,
+            outcome_kind: receipt.kind.into(),
+            transport_outcome_kind: receipt.relay_outcome.map(|outcome| outcome.kind.into()),
+            message: receipt.message,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncRelayOutcomeKind {
+    fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
+        match kind {
+            RadrootsRelayFetchOutcomeKind::Eose => Self::Eose,
+            RadrootsRelayFetchOutcomeKind::Closed => Self::Closed,
+            RadrootsRelayFetchOutcomeKind::Notice => Self::Notice,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsRelayOutcomeKind> for TradeResyncRelayTransportOutcomeKind {
+    fn from(kind: RadrootsRelayOutcomeKind) -> Self {
+        match kind {
+            RadrootsRelayOutcomeKind::Accepted => Self::Accepted,
+            RadrootsRelayOutcomeKind::DuplicateAccepted => Self::DuplicateAccepted,
+            RadrootsRelayOutcomeKind::Blocked => Self::Blocked,
+            RadrootsRelayOutcomeKind::RateLimited => Self::RateLimited,
+            RadrootsRelayOutcomeKind::Invalid => Self::Invalid,
+            RadrootsRelayOutcomeKind::PowRequired => Self::PowRequired,
+            RadrootsRelayOutcomeKind::Restricted => Self::Restricted,
+            RadrootsRelayOutcomeKind::AuthRequired => Self::AuthRequired,
+            RadrootsRelayOutcomeKind::Muted => Self::Muted,
+            RadrootsRelayOutcomeKind::Unsupported => Self::Unsupported,
+            RadrootsRelayOutcomeKind::PaymentRequired => Self::PaymentRequired,
+            RadrootsRelayOutcomeKind::Error => Self::Error,
+            RadrootsRelayOutcomeKind::Timeout => Self::Timeout,
+            RadrootsRelayOutcomeKind::ConnectionFailed => Self::ConnectionFailed,
+            RadrootsRelayOutcomeKind::RelayUrlRejected => Self::RelayUrlRejected,
+            RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => Self::SkippedAlreadyAccepted,
+            RadrootsRelayOutcomeKind::Unknown => Self::Unknown,
+        }
     }
 }
 
