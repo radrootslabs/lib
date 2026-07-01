@@ -64,6 +64,74 @@ pub enum RadrootsValidationReceiptResult {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum RadrootsTradeValidationAuthority {
+    DevDeterministicOnly,
+    TrustedRhiServiceKey,
+    CryptographicProofVerified,
+    TrustedServiceAndProofVerified,
+}
+
+impl RadrootsTradeValidationAuthority {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DevDeterministicOnly => "dev_deterministic_only",
+            Self::TrustedRhiServiceKey => "trusted_rhi_service_key",
+            Self::CryptographicProofVerified => "cryptographic_proof_verified",
+            Self::TrustedServiceAndProofVerified => "trusted_service_and_proof_verified",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Option<Self> {
+        match value {
+            "dev_deterministic_only" => Some(Self::DevDeterministicOnly),
+            "trusted_rhi_service_key" => Some(Self::TrustedRhiServiceKey),
+            "cryptographic_proof_verified" => Some(Self::CryptographicProofVerified),
+            "trusted_service_and_proof_verified" => Some(Self::TrustedServiceAndProofVerified),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadrootsTradeCommitmentConfidence {
+    LocalOnly,
+    PendingRhi,
+    CommittedByTrustedService,
+    CommittedByCryptographicProof,
+    CommittedByTrustedServiceAndProof,
+    Invalid,
+}
+
+impl RadrootsTradeCommitmentConfidence {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalOnly => "local_only",
+            Self::PendingRhi => "pending_rhi",
+            Self::CommittedByTrustedService => "committed_by_trusted_service",
+            Self::CommittedByCryptographicProof => "committed_by_cryptographic_proof",
+            Self::CommittedByTrustedServiceAndProof => "committed_by_trusted_service_and_proof",
+            Self::Invalid => "invalid",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Option<Self> {
+        match value {
+            "local_only" => Some(Self::LocalOnly),
+            "pending_rhi" => Some(Self::PendingRhi),
+            "committed_by_trusted_service" => Some(Self::CommittedByTrustedService),
+            "committed_by_cryptographic_proof" => Some(Self::CommittedByCryptographicProof),
+            "committed_by_trusted_service_and_proof" => {
+                Some(Self::CommittedByTrustedServiceAndProof)
+            }
+            "invalid" => Some(Self::Invalid),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RadrootsValidationReceiptProofSystem {
     None,
     Sp1Core,
@@ -695,6 +763,7 @@ fn zero_error_bitmap() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
+        RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
         RadrootsTradeValidationReceipt, RadrootsValidationReceiptError,
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
@@ -1414,6 +1483,84 @@ mod tests {
         assert_eq!(
             verified.tags.proof_system,
             RadrootsValidationReceiptProofSystem::None
+        );
+    }
+
+    #[test]
+    fn validation_authority_contract_uses_stable_snake_case_labels() {
+        for (authority, label) in [
+            (
+                RadrootsTradeValidationAuthority::DevDeterministicOnly,
+                "dev_deterministic_only",
+            ),
+            (
+                RadrootsTradeValidationAuthority::TrustedRhiServiceKey,
+                "trusted_rhi_service_key",
+            ),
+            (
+                RadrootsTradeValidationAuthority::CryptographicProofVerified,
+                "cryptographic_proof_verified",
+            ),
+            (
+                RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
+                "trusted_service_and_proof_verified",
+            ),
+        ] {
+            assert_eq!(authority.as_str(), label);
+            assert_eq!(
+                RadrootsTradeValidationAuthority::from_label(label),
+                Some(authority)
+            );
+            assert_eq!(
+                serde_json::to_string(&authority).expect("serialize authority"),
+                format!("\"{label}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<RadrootsTradeValidationAuthority>(&format!("\"{label}\""))
+                    .expect("deserialize authority"),
+                authority
+            );
+        }
+        assert_eq!(RadrootsTradeValidationAuthority::from_label("legacy"), None);
+    }
+
+    #[test]
+    fn commitment_confidence_contract_uses_stable_snake_case_labels() {
+        for (confidence, label) in [
+            (RadrootsTradeCommitmentConfidence::LocalOnly, "local_only"),
+            (RadrootsTradeCommitmentConfidence::PendingRhi, "pending_rhi"),
+            (
+                RadrootsTradeCommitmentConfidence::CommittedByTrustedService,
+                "committed_by_trusted_service",
+            ),
+            (
+                RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof,
+                "committed_by_cryptographic_proof",
+            ),
+            (
+                RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof,
+                "committed_by_trusted_service_and_proof",
+            ),
+            (RadrootsTradeCommitmentConfidence::Invalid, "invalid"),
+        ] {
+            assert_eq!(confidence.as_str(), label);
+            assert_eq!(
+                RadrootsTradeCommitmentConfidence::from_label(label),
+                Some(confidence)
+            );
+            assert_eq!(
+                serde_json::to_string(&confidence).expect("serialize confidence"),
+                format!("\"{label}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<RadrootsTradeCommitmentConfidence>(&format!("\"{label}\""))
+                    .expect("deserialize confidence"),
+                confidence
+            );
+        }
+        assert_eq!(
+            RadrootsTradeCommitmentConfidence::from_label("legacy"),
+            None
         );
     }
 
