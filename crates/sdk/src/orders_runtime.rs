@@ -3641,9 +3641,25 @@ fn worker_payload_binds_receipt(
         && payload.proof_generated
             == (receipt.receipt.proof.system != RadrootsValidationReceiptProofSystem::None)
         && payload.cryptographic_proof_verified == payload.proof_generated
-        && payload.sp1_execute_checked
-        && payload.sp1_execute_public_values_hash.as_deref()
-            == Some(receipt.receipt.public_values_hash.as_str())
+        && worker_payload_execution_binds_receipt(payload, receipt)
+}
+
+#[cfg(feature = "runtime")]
+fn worker_payload_execution_binds_receipt(
+    payload: &RawTradeValidationReceiptWorkerResult,
+    receipt: &TradeValidationReceiptEvent,
+) -> bool {
+    if payload.sp1_execute_checked {
+        return payload.sp1_execute_public_values_hash.as_deref()
+            == Some(receipt.receipt.public_values_hash.as_str());
+    }
+    payload.sp1_execute_public_values_hash.is_none()
+        && payload.proof_system == RadrootsValidationReceiptProofSystem::None.as_str()
+        && payload.proof_mode == "none"
+        && payload.validation_authority.as_deref()
+            == Some(RadrootsTradeValidationAuthority::DevDeterministicOnly.as_str())
+        && payload.confidence.as_deref()
+            == Some(RadrootsTradeCommitmentConfidence::LocalOnly.as_str())
 }
 
 #[cfg(feature = "runtime")]
