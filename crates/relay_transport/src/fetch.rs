@@ -1,15 +1,20 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsRelayOutcome, RadrootsRelayTransportError};
+use core::time::Duration;
 use futures::future::BoxFuture;
 use nostr::JsonUtil;
 use radroots_event_store::{
     RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore, RadrootsRelayObservation,
     RadrootsRelayObservationType,
 };
-use radroots_nostr::prelude::{RadrootsNostrEvent, radroots_event_from_nostr};
+use radroots_nostr::prelude::{
+    RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter, radroots_event_from_nostr,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, PoisonError};
+
+const DEFAULT_RELAY_FETCH_TIMEOUT_MS: u64 = 10_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchMode {
@@ -22,6 +27,9 @@ pub struct RadrootsRelayFetchRequest {
     pub mode: RadrootsRelayFetchMode,
     pub observed_at_ms: i64,
     pub max_events: usize,
+    pub relay_urls: Vec<String>,
+    pub filters: Vec<RadrootsNostrFilter>,
+    pub timeout_ms: u64,
 }
 
 impl RadrootsRelayFetchRequest {
@@ -30,6 +38,9 @@ impl RadrootsRelayFetchRequest {
             mode: RadrootsRelayFetchMode::Fetch,
             observed_at_ms,
             max_events,
+            relay_urls: Vec::new(),
+            filters: Vec::new(),
+            timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
         }
     }
 
@@ -38,7 +49,32 @@ impl RadrootsRelayFetchRequest {
             mode: RadrootsRelayFetchMode::Subscription,
             observed_at_ms,
             max_events,
+            relay_urls: Vec::new(),
+            filters: Vec::new(),
+            timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
         }
+    }
+
+    pub fn with_relay_urls<I, S>(mut self, relay_urls: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.relay_urls = relay_urls.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn with_filters<I>(mut self, filters: I) -> Self
+    where
+        I: IntoIterator<Item = RadrootsNostrFilter>,
+    {
+        self.filters = filters.into_iter().collect();
+        self
+    }
+
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
     }
 }
 
@@ -246,6 +282,70 @@ where
         }
     }
     Ok(receipt)
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RadrootsNostrClientFetchAdapter;
+
+impl RadrootsRelayFetchAdapter for RadrootsNostrClientFetchAdapter {
+    fn fetch<'a>(
+        &'a self,
+        request: RadrootsRelayFetchRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError>> {
+        Box::pin(async move { fetch_from_nostr_relays(request).await })
+    }
+}
+
+async fn fetch_from_nostr_relays(
+    request: RadrootsRelayFetchRequest,
+) -> Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError> {
+    if request.relay_urls.is_empty() {
+        return Err(RadrootsRelayTransportError::EmptyTargetSet);
+    }
+    if request.filters.is_empty() {
+        return Err(RadrootsRelayTransportError::Transport(
+            "relay fetch filters must not be empty".to_owned(),
+        ));
+    }
+    let timeout = Duration::from_millis(request.timeout_ms);
+    let mut items = Vec::new();
+    for relay_url in request.relay_urls {
+        let client = RadrootsNostrClient::new_signerless();
+        if let Err(error) = client.add_read_relay(relay_url.as_str()).await {
+            items.push(RadrootsRelayFetchItem::Closed {
+                relay_url,
+                message: error.to_string(),
+            });
+            continue;
+        }
+        client.connect().await;
+        let mut closed = false;
+        for filter in request.filters.iter().cloned() {
+            match client.fetch_events(filter, timeout).await {
+                Ok(events) => {
+                    for event in events {
+                        items.push(RadrootsRelayFetchItem::Event {
+                            relay_url: relay_url.clone(),
+                            raw_json: event.as_json(),
+                            observed_at_ms: request.observed_at_ms,
+                        });
+                    }
+                }
+                Err(error) => {
+                    items.push(RadrootsRelayFetchItem::Closed {
+                        relay_url: relay_url.clone(),
+                        message: error.to_string(),
+                    });
+                    closed = true;
+                    break;
+                }
+            }
+        }
+        if !closed {
+            items.push(RadrootsRelayFetchItem::Eose { relay_url });
+        }
+    }
+    Ok(items)
 }
 
 #[derive(Clone, Default)]
