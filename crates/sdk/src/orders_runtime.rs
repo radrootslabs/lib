@@ -3006,10 +3006,10 @@ fn trade_resync_fetch_request(
     request: &TradeResyncRequest,
     relay_targets: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
+    let filter = trade_resync_filter(&request.locator, request.limit)?;
     Ok(
-        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize)
-            .with_relay_urls(relay_targets.iter().cloned())
-            .with_filters([trade_resync_filter(&request.locator, request.limit)?]),
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize, [filter])?
+            .with_relay_urls(relay_targets.iter().cloned()),
     )
 }
 
@@ -3352,9 +3352,8 @@ fn validation_receipt_list_fetch_request(
                 message: format!("validation receipt list filter invalid: {error}"),
             })?;
     Ok(
-        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize)
-            .with_relay_urls(relay_targets.iter().cloned())
-            .with_filters([filter]),
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize, [filter])?
+            .with_relay_urls(relay_targets.iter().cloned()),
     )
 }
 
@@ -3374,9 +3373,10 @@ fn validation_receipt_inspect_fetch_request(
             }
         })?;
     let filter = RadrootsNostrFilter::new().id(nostr_event_id);
-    Ok(RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, 1)
-        .with_relay_urls(relay_targets.iter().cloned())
-        .with_filters([filter]))
+    Ok(
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, 1, [filter])?
+            .with_relay_urls(relay_targets.iter().cloned()),
+    )
 }
 
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
@@ -3405,9 +3405,12 @@ fn validation_receipt_worker_fetch_request(
         }
     })?;
     Ok(Some(
-        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, receipts.len().saturating_mul(4).max(1))
-            .with_relay_urls(relay_targets.iter().cloned())
-            .with_filters([filter]),
+        RadrootsRelayFetchRequest::fetch(
+            sdk_now_ms(sdk)?,
+            receipts.len().saturating_mul(4).max(1),
+            [filter],
+        )?
+        .with_relay_urls(relay_targets.iter().cloned()),
     ))
 }
 
