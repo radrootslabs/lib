@@ -131,6 +131,47 @@ fn unsupported_raw_event() -> String {
     event.as_json()
 }
 
+fn post_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
+    radroots_nostr_filter_tag(
+        RadrootsNostrFilter::new()
+            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .limit(limit),
+        "t",
+        vec!["soil".to_owned()],
+    )
+    .expect("post relay fetch filter")
+}
+
+fn unsupported_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
+    RadrootsNostrFilter::new()
+        .kind(RadrootsNostrKind::Custom(999))
+        .limit(limit)
+}
+
+fn fixture_relay_fetch_request(
+    observed_at_ms: i64,
+    max_events: usize,
+) -> RadrootsRelayFetchRequest {
+    RadrootsRelayFetchRequest::fetch(
+        observed_at_ms,
+        max_events,
+        [
+            post_relay_fetch_filter(max_events),
+            unsupported_relay_fetch_filter(max_events),
+        ],
+    )
+    .expect("fixture relay fetch request")
+}
+
+fn post_relay_fetch_request(observed_at_ms: i64, max_events: usize) -> RadrootsRelayFetchRequest {
+    RadrootsRelayFetchRequest::fetch(
+        observed_at_ms,
+        max_events,
+        [post_relay_fetch_filter(max_events)],
+    )
+    .expect("post relay fetch request")
+}
+
 fn tampered_raw_event() -> String {
     let signed = signed_post("trusted");
     let mut value =
@@ -434,6 +475,18 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     assert!(matches!(error, RadrootsRelayTransportError::Transport(_)));
 }
 
+#[test]
+fn fetch_requests_reject_empty_filter_sets() {
+    assert!(matches!(
+        RadrootsRelayFetchRequest::fetch(1_000, 10, Vec::<RadrootsNostrFilter>::new()),
+        Err(RadrootsRelayTransportError::EmptyFetchFilters)
+    ));
+    assert!(matches!(
+        RadrootsRelayFetchRequest::subscription(1_000, 10, Vec::<RadrootsNostrFilter>::new()),
+        Err(RadrootsRelayTransportError::EmptyFetchFilters)
+    ));
+}
+
 #[tokio::test]
 async fn fetch_ingests_events_and_records_relay_observations() {
     let signed = signed_post("hello");
@@ -481,13 +534,10 @@ async fn fetch_ingests_events_and_records_relay_observations() {
         },
     ]);
 
-    let receipt = fetch_and_ingest_relay_events(
-        &adapter,
-        &store,
-        RadrootsRelayFetchRequest::fetch(1_000, 10),
-    )
-    .await
-    .expect("fetch ingest");
+    let receipt =
+        fetch_and_ingest_relay_events(&adapter, &store, fixture_relay_fetch_request(1_000, 10))
+            .await
+            .expect("fetch ingest");
 
     assert_eq!(receipt.inserted_count, 3);
     assert_eq!(receipt.duplicate_count, 1);
@@ -597,7 +647,7 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
         &store,
-        RadrootsRelayFetchRequest::fetch(1_005, 10).with_filters([filter]),
+        RadrootsRelayFetchRequest::fetch(1_005, 10, [filter]).expect("fetch request"),
     )
     .await
     .expect("fetch ingest");
@@ -673,7 +723,7 @@ async fn fetch_event_cap_preserves_later_control_outcomes() {
     ]);
 
     let receipt =
-        fetch_and_ingest_relay_events(&adapter, &store, RadrootsRelayFetchRequest::fetch(1_100, 1))
+        fetch_and_ingest_relay_events(&adapter, &store, post_relay_fetch_request(1_100, 1))
             .await
             .expect("fetch ingest");
 
@@ -717,7 +767,8 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
         &store,
-        RadrootsRelayFetchRequest::subscription(1_200, 10),
+        RadrootsRelayFetchRequest::subscription(1_200, 10, [post_relay_fetch_filter(10)])
+            .expect("subscription request"),
     )
     .await
     .expect("fetch ingest");
@@ -737,13 +788,10 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
         raw_json: signed.raw_json,
         observed_at_ms: 1_210,
     }]);
-    let receipt = fetch_and_ingest_relay_events(
-        &adapter,
-        &closed_store,
-        RadrootsRelayFetchRequest::fetch(1_210, 10),
-    )
-    .await
-    .expect("fetch ingest");
+    let receipt =
+        fetch_and_ingest_relay_events(&adapter, &closed_store, post_relay_fetch_request(1_210, 10))
+            .await
+            .expect("fetch ingest");
 
     assert_eq!(receipt.inserted_count, 0);
     assert_eq!(receipt.malformed_count, 1);
@@ -1499,13 +1547,10 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
         });
     }
     let adapter = RadrootsMockRelayFetchAdapter::new(items);
-    let receipt = fetch_and_ingest_relay_events(
-        &adapter,
-        &store,
-        RadrootsRelayFetchRequest::fetch(10_000, 1_000),
-    )
-    .await
-    .expect("fetch");
+    let receipt =
+        fetch_and_ingest_relay_events(&adapter, &store, post_relay_fetch_request(10_000, 1_000))
+            .await
+            .expect("fetch");
 
     assert_eq!(receipt.inserted_count, 1_000);
     assert_eq!(receipt.duplicate_count, 0);

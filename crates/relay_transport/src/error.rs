@@ -35,6 +35,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay target set must not be empty")]
     EmptyTargetSet,
 
+    #[error("Relay fetch filters must not be empty")]
+    EmptyFetchFilters,
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 

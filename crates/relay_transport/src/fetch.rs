@@ -23,36 +23,93 @@ pub enum RadrootsRelayFetchMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsRelayFetchFilters {
+    filters: Vec<RadrootsNostrFilter>,
+}
+
+impl RadrootsRelayFetchFilters {
+    pub fn new<I>(filters: I) -> Result<Self, RadrootsRelayTransportError>
+    where
+        I: IntoIterator<Item = RadrootsNostrFilter>,
+    {
+        let filters = filters.into_iter().collect::<Vec<_>>();
+        if filters.is_empty() {
+            return Err(RadrootsRelayTransportError::EmptyFetchFilters);
+        }
+        Ok(Self { filters })
+    }
+
+    pub fn as_slice(&self) -> &[RadrootsNostrFilter] {
+        &self.filters
+    }
+}
+
+impl AsRef<[RadrootsNostrFilter]> for RadrootsRelayFetchFilters {
+    fn as_ref(&self) -> &[RadrootsNostrFilter] {
+        self.as_slice()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayFetchRequest {
-    pub mode: RadrootsRelayFetchMode,
-    pub observed_at_ms: i64,
-    pub max_events: usize,
-    pub relay_urls: Vec<String>,
-    pub filters: Vec<RadrootsNostrFilter>,
-    pub timeout_ms: u64,
+    mode: RadrootsRelayFetchMode,
+    observed_at_ms: i64,
+    max_events: usize,
+    relay_urls: Vec<String>,
+    filters: RadrootsRelayFetchFilters,
+    timeout_ms: u64,
 }
 
 impl RadrootsRelayFetchRequest {
-    pub fn fetch(observed_at_ms: i64, max_events: usize) -> Self {
-        Self {
-            mode: RadrootsRelayFetchMode::Fetch,
+    pub fn fetch<I>(
+        observed_at_ms: i64,
+        max_events: usize,
+        filters: I,
+    ) -> Result<Self, RadrootsRelayTransportError>
+    where
+        I: IntoIterator<Item = RadrootsNostrFilter>,
+    {
+        Self::new(
+            RadrootsRelayFetchMode::Fetch,
             observed_at_ms,
             max_events,
-            relay_urls: Vec::new(),
-            filters: Vec::new(),
-            timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
-        }
+            filters,
+        )
     }
 
-    pub fn subscription(observed_at_ms: i64, max_events: usize) -> Self {
-        Self {
-            mode: RadrootsRelayFetchMode::Subscription,
+    pub fn subscription<I>(
+        observed_at_ms: i64,
+        max_events: usize,
+        filters: I,
+    ) -> Result<Self, RadrootsRelayTransportError>
+    where
+        I: IntoIterator<Item = RadrootsNostrFilter>,
+    {
+        Self::new(
+            RadrootsRelayFetchMode::Subscription,
+            observed_at_ms,
+            max_events,
+            filters,
+        )
+    }
+
+    fn new<I>(
+        mode: RadrootsRelayFetchMode,
+        observed_at_ms: i64,
+        max_events: usize,
+        filters: I,
+    ) -> Result<Self, RadrootsRelayTransportError>
+    where
+        I: IntoIterator<Item = RadrootsNostrFilter>,
+    {
+        Ok(Self {
+            mode,
             observed_at_ms,
             max_events,
             relay_urls: Vec::new(),
-            filters: Vec::new(),
+            filters: RadrootsRelayFetchFilters::new(filters)?,
             timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
-        }
+        })
     }
 
     pub fn with_relay_urls<I, S>(mut self, relay_urls: I) -> Self
@@ -64,17 +121,33 @@ impl RadrootsRelayFetchRequest {
         self
     }
 
-    pub fn with_filters<I>(mut self, filters: I) -> Self
-    where
-        I: IntoIterator<Item = RadrootsNostrFilter>,
-    {
-        self.filters = filters.into_iter().collect();
-        self
-    }
-
     pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
         self
+    }
+
+    pub fn mode(&self) -> RadrootsRelayFetchMode {
+        self.mode
+    }
+
+    pub fn observed_at_ms(&self) -> i64 {
+        self.observed_at_ms
+    }
+
+    pub fn max_events(&self) -> usize {
+        self.max_events
+    }
+
+    pub fn relay_urls(&self) -> &[String] {
+        &self.relay_urls
+    }
+
+    pub fn filters(&self) -> &[RadrootsNostrFilter] {
+        self.filters.as_slice()
+    }
+
+    pub fn timeout_ms(&self) -> u64 {
+        self.timeout_ms
     }
 }
 
@@ -158,7 +231,10 @@ where
 {
     let mode = request.mode;
     let max_events = request.max_events;
-    let filters = request.filters.clone();
+    if request.filters.as_slice().is_empty() {
+        return Err(RadrootsRelayTransportError::EmptyFetchFilters);
+    }
+    let filters = request.filters.as_slice().to_vec();
     let items = adapter.fetch(request).await?;
     let mut receipt = RadrootsRelayFetchReceipt {
         inserted_count: 0,
@@ -311,8 +387,8 @@ fn relay_fetch_event_matches_filters(
     filters: &[RadrootsNostrFilter],
     event: &RadrootsNostrEvent,
 ) -> bool {
-    filters.is_empty()
-        || filters
+    !filters.is_empty()
+        && filters
             .iter()
             .any(|filter| filter.match_event(event, MatchEventOptions::new()))
 }
@@ -335,12 +411,12 @@ async fn fetch_from_nostr_relays(
     if request.relay_urls.is_empty() {
         return Err(RadrootsRelayTransportError::EmptyTargetSet);
     }
-    if request.filters.is_empty() {
-        return Err(RadrootsRelayTransportError::Transport(
-            "relay fetch filters must not be empty".to_owned(),
-        ));
+    if request.filters.as_slice().is_empty() {
+        return Err(RadrootsRelayTransportError::EmptyFetchFilters);
     }
     let timeout = Duration::from_millis(request.timeout_ms);
+    let filters = request.filters.as_slice().to_vec();
+    let observed_at_ms = request.observed_at_ms;
     let mut items = Vec::new();
     for relay_url in request.relay_urls {
         let client = RadrootsNostrClient::new_signerless();
@@ -353,14 +429,14 @@ async fn fetch_from_nostr_relays(
         }
         client.connect().await;
         let mut closed = false;
-        for filter in request.filters.iter().cloned() {
+        for filter in filters.iter().cloned() {
             match client.fetch_events(filter, timeout).await {
                 Ok(events) => {
                     for event in events {
                         items.push(RadrootsRelayFetchItem::Event {
                             relay_url: relay_url.clone(),
                             raw_json: event.as_json(),
-                            observed_at_ms: request.observed_at_ms,
+                            observed_at_ms,
                         });
                     }
                 }
