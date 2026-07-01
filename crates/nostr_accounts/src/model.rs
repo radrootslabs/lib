@@ -16,7 +16,6 @@ pub struct RadrootsNostrAccountRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrAccountStoreState {
     pub version: u32,
-    #[serde(alias = "selected_account_id")]
     pub default_account_id: Option<RadrootsIdentityId>,
     pub accounts: Vec<RadrootsNostrAccountRecord>,
 }

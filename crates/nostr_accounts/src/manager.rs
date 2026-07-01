@@ -47,20 +47,14 @@ impl RadrootsNostrAccountsManager {
         vault: Arc<dyn RadrootsSecretVault>,
     ) -> Result<Self, RadrootsNostrAccountsError> {
         let mut state = store.load()?;
-        let mut state_dirty = match state.version {
-            1 => {
-                state.version = crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION;
-                true
-            }
-            crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION => false,
-            _ => {
-                return Err(RadrootsNostrAccountsError::InvalidState(format!(
-                    "unsupported accounts schema version {}",
-                    state.version
-                )));
-            }
-        };
+        if state.version != crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION {
+            return Err(RadrootsNostrAccountsError::InvalidState(format!(
+                "unsupported accounts schema version {}",
+                state.version
+            )));
+        }
 
+        let mut state_dirty = false;
         if let Some(default_account_id) = state.default_account_id.clone() {
             let exists = state
                 .accounts
@@ -470,16 +464,6 @@ impl RadrootsNostrAccountsManager {
             .map_err(Into::into)
     }
 
-    pub fn migrate_legacy_identity_file(
-        &self,
-        path: impl AsRef<Path>,
-        label: Option<String>,
-        make_default: bool,
-    ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
-        let identity = RadrootsIdentity::load_from_path_auto(path)?;
-        self.upsert_identity(&identity, label, make_default)
-    }
-
     fn resolve_signing_identity(
         &self,
         record: RadrootsNostrAccountRecord,
@@ -855,62 +839,39 @@ mod tests {
     }
 
     #[test]
-    fn new_migrates_legacy_store_file_to_default_account_semantics() {
+    fn new_rejects_non_current_store_file_schema() {
         let temp = tempfile::tempdir().expect("tempdir");
         let path = temp.path().join("accounts.json");
-        let identity = RadrootsIdentity::generate();
-        let public_identity = identity.to_public();
-        let account_id = public_identity.id.clone();
-        let legacy_record =
-            RadrootsNostrAccountRecord::new(public_identity, Some("legacy".into()), 1);
         fs::write(
             &path,
             serde_json::to_vec_pretty(&json!({
                 "version": 1,
-                "selected_account_id": account_id,
-                "accounts": [legacy_record],
+                "default_account_id": RadrootsIdentity::generate().id(),
+                "accounts": [],
             }))
-            .expect("serialize legacy store"),
+            .expect("serialize store"),
         )
-        .expect("write legacy store");
+        .expect("write store");
 
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
-        vault
-            .store_secret(
-                account_secret_slot(&account_id).as_str(),
-                identity.secret_key_hex().as_str(),
-            )
-            .expect("store secret");
-
-        let manager = RadrootsNostrAccountsManager::new(
+        let err = match RadrootsNostrAccountsManager::new(
             Arc::new(RadrootsNostrFileAccountStore::new(&path)),
             vault,
-        )
-        .expect("manager");
+        ) {
+            Ok(_) => panic!("unsupported schema was accepted"),
+            Err(error) => error,
+        };
 
-        assert_eq!(
-            manager.default_account_id().expect("default"),
-            Some(account_id.clone())
+        assert!(
+            err.to_string()
+                .contains("unsupported accounts schema version 1")
         );
-
-        let migrated_store: serde_json::Value =
-            serde_json::from_slice(&fs::read(&path).expect("read migrated store"))
-                .expect("parse migrated store");
-        assert_eq!(
-            migrated_store["version"],
-            serde_json::Value::from(crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION),
-        );
-        assert_eq!(
-            migrated_store["default_account_id"],
-            serde_json::Value::from(account_id.to_string()),
-        );
-        assert!(migrated_store.get("selected_account_id").is_none());
     }
 
     #[test]
     fn new_reports_save_error_when_dirty_state_requires_rewrite() {
         let mut state = RadrootsNostrAccountStoreState::default();
-        state.version = 1;
+        state.default_account_id = Some(RadrootsIdentity::generate().id());
         let store = Arc::new(SaveErrorStore::new(state));
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
 
@@ -1303,28 +1264,27 @@ mod tests {
     }
 
     #[test]
-    fn migrate_legacy_identity_file_imports_identity() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let legacy_path = temp.path().join("legacy_identity.json");
-        let legacy_identity = RadrootsIdentity::generate();
-        legacy_identity
-            .save_json(&legacy_path)
-            .expect("legacy save");
+    fn manager_source_rejects_identity_migration_api() {
+        let source = include_str!("manager.rs");
+        let removed_api = ["migrate", "_legacy", "_identity", "_file"].concat();
+        assert!(
+            !source.contains(removed_api.as_str()),
+            "nostr accounts manager must not expose removed identity migration API"
+        );
+    }
 
-        let store = Arc::new(RadrootsNostrFileAccountStore::new(
-            temp.path().join("accounts.json"),
-        ));
-        let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
-        let manager = RadrootsNostrAccountsManager::new(store, vault).expect("manager");
-        let id = manager
-            .migrate_legacy_identity_file(&legacy_path, Some("legacy".into()), true)
-            .expect("migrate");
-        assert_eq!(
-            manager
-                .default_account_id()
-                .expect("default")
-                .expect("default id"),
-            id
+    #[test]
+    fn model_source_rejects_account_store_aliases() {
+        let source = include_str!("model.rs");
+        let removed_field = ["selected", "_account", "_id"].concat();
+        let removed_serde_alias = ["serde", "(alias"].concat();
+        assert!(
+            !source.contains(removed_field.as_str()),
+            "nostr account store model must not accept removed account-store field aliases"
+        );
+        assert!(
+            !source.contains(removed_serde_alias.as_str()),
+            "nostr account store model must not expose serde alias compatibility"
         );
     }
 
@@ -1931,17 +1891,6 @@ mod tests {
             .default_signing_identity()
             .expect_err("invalid secret");
         assert!(invalid_secret.to_string().starts_with("identity error:"));
-    }
-
-    #[test]
-    fn migrate_legacy_identity_file_returns_error_for_missing_path() {
-        let manager = RadrootsNostrAccountsManager::new_in_memory();
-        let temp = tempfile::tempdir().expect("tempdir");
-        let missing = temp.path().join("missing_legacy.json");
-        let migrated = manager
-            .migrate_legacy_identity_file(&missing, None, false)
-            .expect_err("missing legacy");
-        assert!(migrated.to_string().starts_with("identity error:"));
     }
 
     #[test]
