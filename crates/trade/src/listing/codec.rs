@@ -21,8 +21,6 @@ use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 use radroots_events_codec::d_tag::is_d_tag_base64url;
-use radroots_events_codec::error::EventEncodeError;
-use radroots_events_codec::listing::tags::listing_tags_full;
 
 const TAG_PRICE: &str = "price";
 const TAG_RADROOTS_BIN: &str = "radroots:bin";
@@ -193,25 +191,6 @@ pub fn listing_from_event_parts(
     }
 
     listing_from_tags(tags, d_tag, farm_ref, farm_pubkey, resource_area, plot)
-}
-
-#[allow(dead_code)]
-pub fn listing_tags_build(
-    listing: &RadrootsListing,
-) -> Result<Vec<Vec<String>>, ListingParseError> {
-    listing_tags_full(listing).map_err(map_listing_tags_error)
-}
-
-#[allow(dead_code)]
-fn map_listing_tags_error(err: EventEncodeError) -> ListingParseError {
-    match err {
-        EventEncodeError::EmptyRequiredField(field) => {
-            ListingParseError::MissingTag(field.to_string())
-        }
-        EventEncodeError::InvalidField(field) => ListingParseError::InvalidTag(field.to_string()),
-        EventEncodeError::Json => ListingParseError::InvalidJson("discount".to_string()),
-        EventEncodeError::InvalidKind(kind) => ListingParseError::InvalidKind(kind),
-    }
 }
 
 fn listing_from_tags(
@@ -690,6 +669,27 @@ mod tests {
     };
     use radroots_events::farm::RadrootsFarmRef;
     use radroots_events::listing::RadrootsListing;
+    use radroots_events_codec::error::EventEncodeError;
+    use radroots_events_codec::listing::tags::listing_tags_full;
+
+    fn listing_tags_build(
+        listing: &RadrootsListing,
+    ) -> Result<Vec<Vec<String>>, ListingParseError> {
+        listing_tags_full(listing).map_err(map_listing_tags_error)
+    }
+
+    fn map_listing_tags_error(err: EventEncodeError) -> ListingParseError {
+        match err {
+            EventEncodeError::EmptyRequiredField(field) => {
+                ListingParseError::MissingTag(field.to_string())
+            }
+            EventEncodeError::InvalidField(field) => {
+                ListingParseError::InvalidTag(field.to_string())
+            }
+            EventEncodeError::Json => ListingParseError::InvalidJson("discount".to_string()),
+            EventEncodeError::InvalidKind(kind) => ListingParseError::InvalidKind(kind),
+        }
+    }
 
     fn farm_ref() -> RadrootsFarmRef {
         RadrootsFarmRef {
@@ -769,6 +769,12 @@ mod tests {
             ListingParseError::InvalidJson(field) => field,
             ListingParseError::InvalidDiscount(kind) => kind,
         }
+    }
+
+    #[test]
+    fn production_source_has_no_dead_code_allowance() {
+        let forbidden = ["#[allow(", "dead_code", ")]"].concat();
+        assert!(!include_str!("codec.rs").contains(forbidden.as_str()));
     }
 
     #[test]

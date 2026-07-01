@@ -199,7 +199,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
 
         let relay_rows: Vec<SignerConnectionRelayRow> = query_rows(
             self.db.as_ref(),
-            "SELECT connection_id, ordinal, relay_url FROM signer_connection_relay ORDER BY connection_id, ordinal",
+            "SELECT connection_id, relay_url FROM signer_connection_relay ORDER BY connection_id, ordinal",
         )?;
         for row in relay_rows {
             let index = *connection_indexes
@@ -547,8 +547,6 @@ impl SignerConnectionPermissionGrantRow {
 #[derive(Debug, Deserialize)]
 struct SignerConnectionRelayRow {
     connection_id: String,
-    #[allow(dead_code)]
-    ordinal: i64,
     relay_url: String,
 }
 
@@ -876,6 +874,12 @@ mod tests {
         RadrootsNostrConnectRequestMessage,
     };
     use std::thread;
+
+    #[test]
+    fn production_source_has_no_dead_code_allowance() {
+        let forbidden = ["#[allow(", "dead_code", ")]"].concat();
+        assert!(!include_str!("store.rs").contains(forbidden.as_str()));
+    }
 
     #[test]
     fn file_store_round_trip_and_path_accessor() {
