@@ -488,6 +488,38 @@ fn fetch_requests_reject_empty_filter_sets() {
     ));
 }
 
+#[test]
+fn fetch_requests_reject_zero_limits_and_timeouts() {
+    let filter = post_relay_fetch_filter(1);
+    assert!(matches!(
+        RadrootsRelayFetchRequest::fetch(1_000, 0, [filter.clone()]),
+        Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_events"
+    ));
+    assert!(matches!(
+        RadrootsRelayFetchRequest::subscription(1_000, 0, [filter.clone()]),
+        Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_events"
+    ));
+
+    let request =
+        RadrootsRelayFetchRequest::fetch(1_000, 1, [filter]).expect("valid fetch request");
+    assert!(matches!(
+        request.clone().with_timeout_ms(0),
+        Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "timeout_ms"
+    ));
+    assert!(matches!(
+        request.clone().with_raw_event_scan_limit(0),
+        Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_raw_events"
+    ));
+
+    let request = request
+        .with_timeout_ms(1)
+        .expect("minimum timeout")
+        .with_raw_event_scan_limit(1)
+        .expect("minimum raw scan limit");
+    assert_eq!(request.timeout_ms(), 1);
+    assert_eq!(request.max_raw_events(), 1);
+}
+
 #[tokio::test]
 async fn fetch_ingests_events_and_records_relay_observations() {
     let signed = signed_post("hello");
@@ -896,7 +928,9 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
         &store,
-        post_relay_fetch_request(1_130, 1).with_raw_event_scan_limit(2),
+        post_relay_fetch_request(1_130, 1)
+            .with_raw_event_scan_limit(2)
+            .expect("raw scan limit"),
     )
     .await
     .expect("fetch ingest");

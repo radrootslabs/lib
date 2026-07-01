@@ -38,6 +38,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay fetch filters must not be empty")]
     EmptyFetchFilters,
 
+    #[error("Relay fetch {field} must be greater than zero")]
+    InvalidFetchLimit { field: &'static str },
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 

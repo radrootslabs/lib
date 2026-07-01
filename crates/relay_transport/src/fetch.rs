@@ -104,6 +104,7 @@ impl RadrootsRelayFetchRequest {
     where
         I: IntoIterator<Item = RadrootsNostrFilter>,
     {
+        ensure_positive_limit("max_events", max_events)?;
         Ok(Self {
             mode,
             observed_at_ms,
@@ -124,14 +125,19 @@ impl RadrootsRelayFetchRequest {
         self
     }
 
-    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Result<Self, RadrootsRelayTransportError> {
+        ensure_positive_timeout("timeout_ms", timeout_ms)?;
         self.timeout_ms = timeout_ms;
-        self
+        Ok(self)
     }
 
-    pub fn with_raw_event_scan_limit(mut self, max_raw_events: usize) -> Self {
+    pub fn with_raw_event_scan_limit(
+        mut self,
+        max_raw_events: usize,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        ensure_positive_limit("max_raw_events", max_raw_events)?;
         self.max_raw_events = max_raw_events;
-        self
+        Ok(self)
     }
 
     pub fn mode(&self) -> RadrootsRelayFetchMode {
@@ -167,7 +173,26 @@ fn default_raw_event_scan_limit(max_events: usize) -> usize {
     max_events
         .saturating_mul(DEFAULT_RELAY_FETCH_RAW_SCAN_MULTIPLIER)
         .max(max_events)
-        .max(1)
+}
+
+fn ensure_positive_limit(
+    field: &'static str,
+    value: usize,
+) -> Result<(), RadrootsRelayTransportError> {
+    if value == 0 {
+        return Err(RadrootsRelayTransportError::InvalidFetchLimit { field });
+    }
+    Ok(())
+}
+
+fn ensure_positive_timeout(
+    field: &'static str,
+    value: u64,
+) -> Result<(), RadrootsRelayTransportError> {
+    if value == 0 {
+        return Err(RadrootsRelayTransportError::InvalidFetchLimit { field });
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
