@@ -176,3 +176,7 @@ pub use crate::trade_storage::{
 };
 #[cfg(feature = "runtime")]
 pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
+#[cfg(feature = "runtime")]
+pub use radroots_trade::validation_receipt::{
+    RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
+};

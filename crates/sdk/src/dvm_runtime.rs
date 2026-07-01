@@ -26,6 +26,7 @@ use radroots_events_codec::wire::{WireEventParts, canonicalize_tags, to_frozen_d
 use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
 #[cfg(feature = "runtime")]
 use radroots_trade::validation_receipt::{
+    RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
     RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
     RadrootsValidationReceiptResult, RadrootsValidationReceiptType,
     verify_validation_receipt_event,
@@ -393,6 +394,8 @@ pub struct DvmValidationReceiptIngestReceipt {
     pub receipt_type: RadrootsValidationReceiptType,
     pub result: RadrootsValidationReceiptResult,
     pub proof_system: RadrootsValidationReceiptProofSystem,
+    pub validation_authority: Option<RadrootsTradeValidationAuthority>,
+    pub commitment_confidence: RadrootsTradeCommitmentConfidence,
     pub local_event_seq: i64,
     pub inserted: bool,
     pub refresh: SyncProjectionRefreshReceipt,
@@ -518,10 +521,22 @@ impl<'sdk> DvmClient<'sdk> {
             receipt_type: verified.receipt.receipt_type,
             result: verified.receipt.result,
             proof_system: verified.receipt.proof.system,
+            validation_authority: None,
+            commitment_confidence: validation_receipt_ingest_confidence(verified.receipt.result),
             local_event_seq: ingest.seq,
             inserted: ingest.inserted,
             refresh,
         })
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn validation_receipt_ingest_confidence(
+    result: RadrootsValidationReceiptResult,
+) -> RadrootsTradeCommitmentConfidence {
+    match result {
+        RadrootsValidationReceiptResult::Valid => RadrootsTradeCommitmentConfidence::LocalOnly,
+        RadrootsValidationReceiptResult::Invalid => RadrootsTradeCommitmentConfidence::Invalid,
     }
 }
 

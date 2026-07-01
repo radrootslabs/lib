@@ -37,10 +37,11 @@ use radroots_sdk::{
 #[cfg(feature = "signer-adapters")]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_trade::validation_receipt::{
-    RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
-    RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
-    RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
-    validation_receipt_event_build, validation_receipt_public_values_hash_hex,
+    RadrootsTradeCommitmentConfidence, RadrootsTradeValidationReceipt,
+    RadrootsValidationReceiptProof, RadrootsValidationReceiptProofSystem,
+    RadrootsValidationReceiptResult, RadrootsValidationReceiptStatement,
+    RadrootsValidationReceiptType, validation_receipt_event_build,
+    validation_receipt_public_values_hash_hex,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -312,6 +313,11 @@ async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
     assert_eq!(
         ingest.proof_system,
         RadrootsValidationReceiptProofSystem::None
+    );
+    assert_eq!(ingest.validation_authority, None);
+    assert_eq!(
+        ingest.commitment_confidence,
+        RadrootsTradeCommitmentConfidence::LocalOnly
     );
     assert_eq!(ingest.local_event_seq, 3);
     assert!(ingest.inserted);
