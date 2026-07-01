@@ -11,12 +11,16 @@ mod publish;
 mod relay;
 
 pub use error::RadrootsRelayTransportError;
+#[cfg(all(feature = "storage", feature = "runtime-tokio"))]
+pub use fetch::fetch_relay_events_blocking;
 #[cfg(feature = "storage")]
 pub use fetch::{
     RadrootsMockRelayFetchAdapter, RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter,
-    RadrootsRelayFetchEventReceipt, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
-    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt,
-    RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest, fetch_and_ingest_relay_events,
+    RadrootsRelayFetchEventReceipt, RadrootsRelayFetchFailure, RadrootsRelayFetchFilters,
+    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind,
+    RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest,
+    RadrootsRelayFetchedEvent, RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events,
+    fetch_relay_events,
 };
 #[cfg(feature = "storage")]
 pub use outbox::{

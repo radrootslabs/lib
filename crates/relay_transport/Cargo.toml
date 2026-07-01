@@ -22,6 +22,7 @@ client = [
 ]
 storage = ["dep:radroots_event_store", "dep:radroots_outbox", "client"]
 runtime-tokio = [
+  "dep:tokio",
   "storage",
   "radroots_event_store/runtime-tokio",
   "radroots_outbox/runtime-tokio",
@@ -50,6 +51,7 @@ nostr = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["rt"] }
 url = { workspace = true }
 
 [dev-dependencies]

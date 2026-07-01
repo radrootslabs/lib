@@ -18,7 +18,8 @@ use radroots_relay_transport::{
     RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
     RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
-    fetch_and_ingest_relay_events, publish_claimed_outbox_event, publish_signed_event,
+    fetch_and_ingest_relay_events, fetch_relay_events, publish_claimed_outbox_event,
+    publish_signed_event,
 };
 use std::net::{IpAddr, Ipv4Addr};
 
@@ -783,6 +784,86 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
             .expect("wrong tag lookup")
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
+    let accepted = signed_event_with_kind_and_hashtag("shared fetch accepted", KIND_POST, "soil");
+    let skipped = signed_event_with_kind_and_hashtag("shared fetch skipped", KIND_POST, "soil");
+    let wrong_tag =
+        signed_event_with_kind_and_hashtag("shared fetch wrong tag", KIND_POST, "compost");
+    let filter = radroots_nostr_filter_tag(
+        RadrootsNostrFilter::new()
+            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .limit(10),
+        "t",
+        vec!["soil".to_owned()],
+    )
+    .expect("filter");
+    let accepted_id = accepted.id.clone();
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: "{not json".to_owned(),
+            observed_at_ms: 2_100,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: wrong_tag.raw_json,
+            observed_at_ms: 2_101,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: accepted.raw_json.clone(),
+            observed_at_ms: 2_102,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: skipped.raw_json,
+            observed_at_ms: 2_103,
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+        RadrootsRelayFetchItem::Closed {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            message: "auth-required: challenge".to_owned(),
+        },
+        RadrootsRelayFetchItem::Notice {
+            relay_url: RELAY_TERTIARY_WSS.to_owned(),
+            message: "notice: still visible".to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_relay_events(
+        &adapter,
+        RadrootsRelayFetchRequest::fetch(2_100, 1, [filter])
+            .expect("fetch request")
+            .with_relay_urls([RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS]),
+    )
+    .await
+    .expect("fetch events");
+
+    assert_eq!(
+        receipt.target_relays,
+        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS]
+    );
+    assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
+    assert_eq!(receipt.failed_relays.len(), 1);
+    assert_eq!(receipt.failed_relays[0].relay_url, RELAY_SECONDARY_WSS);
+    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.malformed_count, 1);
+    assert_eq!(receipt.out_of_filter_count, 1);
+    assert_eq!(receipt.skipped_over_limit_count, 1);
+    assert_eq!(receipt.eose_count, 1);
+    assert_eq!(receipt.closed_count, 1);
+    assert_eq!(receipt.notice_count, 1);
+    assert_eq!(receipt.event_receipts.len(), 4);
+    assert!(receipt.event_receipts[0].malformed);
+    assert!(receipt.event_receipts[1].out_of_filter);
+    assert!(!receipt.event_receipts[2].malformed);
+    assert!(receipt.event_receipts[3].skipped_over_limit);
 }
 
 #[tokio::test]
