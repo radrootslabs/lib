@@ -436,6 +436,24 @@ fn sdk_sources_do_not_import_app_or_cli_concepts() {
 }
 
 #[test]
+fn sdk_sources_reject_production_dead_code_suppressions() {
+    let offenders = rust_source_files(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path())
+        .into_iter()
+        .filter_map(|path| {
+            let source = read_source(path.as_path());
+            source
+                .contains("allow(dead_code)")
+                .then(|| path.display().to_string())
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        offenders.is_empty(),
+        "SDK sources contain production dead-code suppressions: {offenders:?}"
+    );
+}
+
+#[test]
 fn sdk_manifest_does_not_depend_on_app_or_cli_crates() {
     let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let manifest = read_source(manifest_path.as_path());
