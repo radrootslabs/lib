@@ -4,7 +4,8 @@ use radroots_event_store::{RadrootsEventStore, RadrootsEventVerificationStatus};
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::kinds::KIND_POST;
 use radroots_nostr::prelude::{
-    RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_nostr_build_event,
+    RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
+    RadrootsNostrTimestamp, radroots_nostr_build_event, radroots_nostr_filter_tag,
     radroots_nostr_sign_frozen_draft,
 };
 use radroots_outbox::{
@@ -68,16 +69,36 @@ fn fixture_keys() -> RadrootsNostrKeys {
 }
 
 fn signed_post(content: &str) -> RadrootsSignedNostrEvent {
+    signed_event_with_kind_and_hashtag(content, KIND_POST, "soil")
+}
+
+fn signed_event_with_kind_and_hashtag(
+    content: &str,
+    kind: u32,
+    hashtag: &str,
+) -> RadrootsSignedNostrEvent {
     let draft = RadrootsFrozenEventDraft::new(
         "radroots.social.post.v1",
-        KIND_POST,
+        kind,
         1_700_000_000,
-        vec![vec!["t".to_owned(), "soil".to_owned()]],
+        vec![vec!["t".to_owned(), hashtag.to_owned()]],
         content,
         FIXTURE_ALICE_PUBLIC_KEY_HEX,
     )
     .expect("draft");
     radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event")
+}
+
+fn signed_raw_event_with_kind_and_hashtag(content: &str, kind: u32, hashtag: &str) -> nostr::Event {
+    radroots_nostr_build_event(
+        kind,
+        content,
+        vec![vec!["t".to_owned(), hashtag.to_owned()]],
+    )
+    .expect("event builder")
+    .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
+    .sign_with_keys(&fixture_keys())
+    .expect("signed event")
 }
 
 async fn complete_claimed_signing(
@@ -535,6 +556,81 @@ async fn fetch_ingests_events_and_records_relay_observations() {
     assert_eq!(observations.len(), 1);
     assert_eq!(observations[0].relay_url, RELAY_PRIMARY_WSS);
     assert_eq!(observations[0].observation_count, 2);
+}
+
+#[tokio::test]
+async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
+    let accepted = signed_post("filter match");
+    let wrong_tag = signed_event_with_kind_and_hashtag("filter wrong tag", KIND_POST, "compost");
+    let wrong_kind = signed_raw_event_with_kind_and_hashtag("filter wrong kind", 999, "soil");
+    let wrong_kind_event_id = wrong_kind.id.to_hex();
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: wrong_tag.raw_json.clone(),
+            observed_at_ms: 1_005,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: accepted.raw_json.clone(),
+            observed_at_ms: 1_006,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: wrong_kind.as_json(),
+            observed_at_ms: 1_007,
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+    ]);
+    let filter = radroots_nostr_filter_tag(
+        RadrootsNostrFilter::new()
+            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .limit(10),
+        "t",
+        vec!["soil".to_owned()],
+    )
+    .expect("filter");
+
+    let receipt = fetch_and_ingest_relay_events(
+        &adapter,
+        &store,
+        RadrootsRelayFetchRequest::fetch(1_005, 10).with_filters([filter]),
+    )
+    .await
+    .expect("fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 1);
+    assert_eq!(receipt.out_of_filter_count, 2);
+    assert_eq!(receipt.malformed_count, 0);
+    assert_eq!(receipt.unsupported_count, 0);
+    assert_eq!(receipt.events.len(), 3);
+    assert!(receipt.events[0].out_of_filter);
+    assert!(!receipt.events[1].out_of_filter);
+    assert!(receipt.events[2].out_of_filter);
+    assert!(
+        store
+            .get_event(accepted.id.as_str())
+            .await
+            .expect("accepted lookup")
+            .is_some()
+    );
+    assert!(
+        store
+            .get_event(wrong_tag.id.as_str())
+            .await
+            .expect("wrong tag lookup")
+            .is_none()
+    );
+    assert!(
+        store
+            .get_event(wrong_kind_event_id.as_str())
+            .await
+            .expect("wrong kind lookup")
+            .is_none()
+    );
 }
 
 #[tokio::test]

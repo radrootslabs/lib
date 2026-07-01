@@ -3,7 +3,7 @@
 use crate::{RadrootsRelayOutcome, RadrootsRelayTransportError};
 use core::time::Duration;
 use futures::future::BoxFuture;
-use nostr::JsonUtil;
+use nostr::{JsonUtil, filter::MatchEventOptions};
 use radroots_event_store::{
     RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore, RadrootsRelayObservation,
     RadrootsRelayObservationType,
@@ -121,6 +121,7 @@ pub struct RadrootsRelayFetchEventReceipt {
     pub duplicate: bool,
     pub unsupported: bool,
     pub malformed: bool,
+    pub out_of_filter: bool,
     pub projection_eligible: bool,
     pub verification_status: Option<String>,
     pub message: Option<String>,
@@ -131,6 +132,7 @@ pub struct RadrootsRelayFetchReceipt {
     pub inserted_count: usize,
     pub duplicate_count: usize,
     pub malformed_count: usize,
+    pub out_of_filter_count: usize,
     pub unsupported_count: usize,
     pub eose_count: usize,
     pub closed_count: usize,
@@ -156,11 +158,13 @@ where
 {
     let mode = request.mode;
     let max_events = request.max_events;
+    let filters = request.filters.clone();
     let items = adapter.fetch(request).await?;
     let mut receipt = RadrootsRelayFetchReceipt {
         inserted_count: 0,
         duplicate_count: 0,
         malformed_count: 0,
+        out_of_filter_count: 0,
         unsupported_count: 0,
         eose_count: 0,
         closed_count: 0,
@@ -190,12 +194,29 @@ where
                         duplicate: false,
                         unsupported: false,
                         malformed: true,
+                        out_of_filter: false,
                         projection_eligible: false,
                         verification_status: None,
                         message: Some("event JSON parse failed".to_owned()),
                     });
                     continue;
                 };
+                if !relay_fetch_event_matches_filters(&filters, &raw_event) {
+                    receipt.out_of_filter_count += 1;
+                    receipt.events.push(RadrootsRelayFetchEventReceipt {
+                        relay_url,
+                        event_id: Some(raw_event.id.to_hex()),
+                        inserted: false,
+                        duplicate: false,
+                        unsupported: false,
+                        malformed: false,
+                        out_of_filter: true,
+                        projection_eligible: false,
+                        verification_status: None,
+                        message: Some("event did not match relay fetch filters".to_owned()),
+                    });
+                    continue;
+                }
                 let event = radroots_event_from_nostr(&raw_event);
                 let observation_type = match mode {
                     RadrootsRelayFetchMode::Fetch => RadrootsRelayObservationType::Fetch,
@@ -229,6 +250,7 @@ where
                             duplicate: !store_receipt.inserted,
                             unsupported,
                             malformed: false,
+                            out_of_filter: false,
                             projection_eligible: store_receipt.projection_eligible,
                             verification_status: Some(
                                 store_receipt.verification_status.as_str().to_owned(),
@@ -245,6 +267,7 @@ where
                             duplicate: false,
                             unsupported: false,
                             malformed: true,
+                            out_of_filter: false,
                             projection_eligible: false,
                             verification_status: None,
                             message: Some(error.to_string()),
@@ -282,6 +305,16 @@ where
         }
     }
     Ok(receipt)
+}
+
+fn relay_fetch_event_matches_filters(
+    filters: &[RadrootsNostrFilter],
+    event: &RadrootsNostrEvent,
+) -> bool {
+    filters.is_empty()
+        || filters
+            .iter()
+            .any(|filter| filter.match_event(event, MatchEventOptions::new()))
 }
 
 #[derive(Clone, Copy, Debug, Default)]
