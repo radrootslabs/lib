@@ -684,30 +684,34 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
 }
 
 #[tokio::test]
-async fn fetch_event_cap_preserves_later_control_outcomes() {
-    let first = signed_post("first capped event");
+async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_control_outcomes() {
+    let accepted = signed_post("accepted capped event");
     let skipped = signed_post("skipped capped event");
+    let wrong_tag = signed_event_with_kind_and_hashtag("wrong capped tag", KIND_POST, "compost");
+    let accepted_id = accepted.id.clone();
+    let skipped_id = skipped.id.clone();
+    let wrong_tag_id = wrong_tag.id.clone();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: first.raw_json.clone(),
+            raw_json: "{not json".to_owned(),
+            observed_at_ms: 1_099,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: wrong_tag.raw_json,
             observed_at_ms: 1_100,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: skipped.raw_json,
+            raw_json: accepted.raw_json.clone(),
             observed_at_ms: 1_101,
         },
         RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: skipped.raw_json,
             observed_at_ms: 1_102,
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: unsupported_raw_event(),
-            observed_at_ms: 1_103,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -730,8 +734,14 @@ async fn fetch_event_cap_preserves_later_control_outcomes() {
     assert_eq!(receipt.inserted_count, 1);
     assert_eq!(receipt.duplicate_count, 0);
     assert_eq!(receipt.unsupported_count, 0);
-    assert_eq!(receipt.malformed_count, 0);
-    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.malformed_count, 1);
+    assert_eq!(receipt.out_of_filter_count, 1);
+    assert_eq!(receipt.skipped_over_limit_count, 1);
+    assert_eq!(receipt.events.len(), 4);
+    assert!(receipt.events[0].malformed);
+    assert!(receipt.events[1].out_of_filter);
+    assert!(receipt.events[2].inserted);
+    assert!(receipt.events[3].skipped_over_limit);
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 1);
     assert_eq!(receipt.notice_count, 1);
@@ -751,6 +761,77 @@ async fn fetch_event_cap_preserves_later_control_outcomes() {
     assert_eq!(
         receipt.relay_outcomes[2].kind,
         RadrootsRelayFetchOutcomeKind::Notice
+    );
+    assert!(
+        store
+            .get_event(accepted_id.as_str())
+            .await
+            .expect("accepted lookup")
+            .is_some()
+    );
+    assert!(
+        store
+            .get_event(skipped_id.as_str())
+            .await
+            .expect("skipped lookup")
+            .is_none()
+    );
+    assert!(
+        store
+            .get_event(wrong_tag_id.as_str())
+            .await
+            .expect("wrong tag lookup")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
+    let accepted = signed_post("raw scan accepted event");
+    let wrong_tag = signed_event_with_kind_and_hashtag("raw scan wrong tag", KIND_POST, "compost");
+    let accepted_id = accepted.id.clone();
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: "{not json".to_owned(),
+            observed_at_ms: 1_130,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: wrong_tag.raw_json,
+            observed_at_ms: 1_131,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: accepted.raw_json,
+            observed_at_ms: 1_132,
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_and_ingest_relay_events(
+        &adapter,
+        &store,
+        post_relay_fetch_request(1_130, 1).with_raw_event_scan_limit(2),
+    )
+    .await
+    .expect("fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 0);
+    assert_eq!(receipt.malformed_count, 1);
+    assert_eq!(receipt.out_of_filter_count, 1);
+    assert_eq!(receipt.skipped_over_limit_count, 1);
+    assert_eq!(receipt.events.len(), 2);
+    assert_eq!(receipt.eose_count, 1);
+    assert!(
+        store
+            .get_event(accepted_id.as_str())
+            .await
+            .expect("accepted lookup")
+            .is_none()
     );
 }
 

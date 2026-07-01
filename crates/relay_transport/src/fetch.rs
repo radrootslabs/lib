@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, PoisonError};
 
 const DEFAULT_RELAY_FETCH_TIMEOUT_MS: u64 = 10_000;
+const DEFAULT_RELAY_FETCH_RAW_SCAN_MULTIPLIER: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchMode {
@@ -55,6 +56,7 @@ pub struct RadrootsRelayFetchRequest {
     mode: RadrootsRelayFetchMode,
     observed_at_ms: i64,
     max_events: usize,
+    max_raw_events: usize,
     relay_urls: Vec<String>,
     filters: RadrootsRelayFetchFilters,
     timeout_ms: u64,
@@ -106,6 +108,7 @@ impl RadrootsRelayFetchRequest {
             mode,
             observed_at_ms,
             max_events,
+            max_raw_events: default_raw_event_scan_limit(max_events),
             relay_urls: Vec::new(),
             filters: RadrootsRelayFetchFilters::new(filters)?,
             timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
@@ -126,6 +129,11 @@ impl RadrootsRelayFetchRequest {
         self
     }
 
+    pub fn with_raw_event_scan_limit(mut self, max_raw_events: usize) -> Self {
+        self.max_raw_events = max_raw_events;
+        self
+    }
+
     pub fn mode(&self) -> RadrootsRelayFetchMode {
         self.mode
     }
@@ -136,6 +144,10 @@ impl RadrootsRelayFetchRequest {
 
     pub fn max_events(&self) -> usize {
         self.max_events
+    }
+
+    pub fn max_raw_events(&self) -> usize {
+        self.max_raw_events
     }
 
     pub fn relay_urls(&self) -> &[String] {
@@ -149,6 +161,13 @@ impl RadrootsRelayFetchRequest {
     pub fn timeout_ms(&self) -> u64 {
         self.timeout_ms
     }
+}
+
+fn default_raw_event_scan_limit(max_events: usize) -> usize {
+    max_events
+        .saturating_mul(DEFAULT_RELAY_FETCH_RAW_SCAN_MULTIPLIER)
+        .max(max_events)
+        .max(1)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -195,6 +214,7 @@ pub struct RadrootsRelayFetchEventReceipt {
     pub unsupported: bool,
     pub malformed: bool,
     pub out_of_filter: bool,
+    pub skipped_over_limit: bool,
     pub projection_eligible: bool,
     pub verification_status: Option<String>,
     pub message: Option<String>,
@@ -206,6 +226,7 @@ pub struct RadrootsRelayFetchReceipt {
     pub duplicate_count: usize,
     pub malformed_count: usize,
     pub out_of_filter_count: usize,
+    pub skipped_over_limit_count: usize,
     pub unsupported_count: usize,
     pub eose_count: usize,
     pub closed_count: usize,
@@ -231,6 +252,7 @@ where
 {
     let mode = request.mode;
     let max_events = request.max_events;
+    let max_raw_events = request.max_raw_events;
     if request.filters.as_slice().is_empty() {
         return Err(RadrootsRelayTransportError::EmptyFetchFilters);
     }
@@ -241,6 +263,7 @@ where
         duplicate_count: 0,
         malformed_count: 0,
         out_of_filter_count: 0,
+        skipped_over_limit_count: 0,
         unsupported_count: 0,
         eose_count: 0,
         closed_count: 0,
@@ -248,7 +271,8 @@ where
         events: Vec::new(),
         relay_outcomes: Vec::new(),
     };
-    let mut processed_events = 0usize;
+    let mut scanned_raw_events = 0usize;
+    let mut accepted_events = 0usize;
     for item in items {
         match item {
             RadrootsRelayFetchItem::Event {
@@ -256,10 +280,11 @@ where
                 raw_json,
                 observed_at_ms,
             } => {
-                if processed_events >= max_events {
+                if scanned_raw_events >= max_raw_events {
+                    receipt.skipped_over_limit_count += 1;
                     continue;
                 }
-                processed_events += 1;
+                scanned_raw_events += 1;
                 let parsed = RadrootsNostrEvent::from_json(raw_json.as_str());
                 let Ok(raw_event) = parsed else {
                     receipt.malformed_count += 1;
@@ -271,6 +296,7 @@ where
                         unsupported: false,
                         malformed: true,
                         out_of_filter: false,
+                        skipped_over_limit: false,
                         projection_eligible: false,
                         verification_status: None,
                         message: Some("event JSON parse failed".to_owned()),
@@ -287,12 +313,31 @@ where
                         unsupported: false,
                         malformed: false,
                         out_of_filter: true,
+                        skipped_over_limit: false,
                         projection_eligible: false,
                         verification_status: None,
                         message: Some("event did not match relay fetch filters".to_owned()),
                     });
                     continue;
                 }
+                if accepted_events >= max_events {
+                    receipt.skipped_over_limit_count += 1;
+                    receipt.events.push(RadrootsRelayFetchEventReceipt {
+                        relay_url,
+                        event_id: Some(raw_event.id.to_hex()),
+                        inserted: false,
+                        duplicate: false,
+                        unsupported: false,
+                        malformed: false,
+                        out_of_filter: false,
+                        skipped_over_limit: true,
+                        projection_eligible: false,
+                        verification_status: None,
+                        message: Some("accepted relay fetch event limit reached".to_owned()),
+                    });
+                    continue;
+                }
+                accepted_events += 1;
                 let event = radroots_event_from_nostr(&raw_event);
                 let observation_type = match mode {
                     RadrootsRelayFetchMode::Fetch => RadrootsRelayObservationType::Fetch,
@@ -327,6 +372,7 @@ where
                             unsupported,
                             malformed: false,
                             out_of_filter: false,
+                            skipped_over_limit: false,
                             projection_eligible: store_receipt.projection_eligible,
                             verification_status: Some(
                                 store_receipt.verification_status.as_str().to_owned(),
@@ -344,6 +390,7 @@ where
                             unsupported: false,
                             malformed: true,
                             out_of_filter: false,
+                            skipped_over_limit: false,
                             projection_eligible: false,
                             verification_status: None,
                             message: Some(error.to_string()),
