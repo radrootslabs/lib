@@ -170,7 +170,7 @@ let
     export RADROOTS_WORKSPACE_ROOT="$PWD"
   '';
   checkCommand = ''
-    cargo check --workspace
+    cargo check --workspace --all-targets
   '';
   contractCommand = ''
     cargo run -q -p xtask -- hygiene forbidden-identifiers

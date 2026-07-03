@@ -8,7 +8,7 @@ let
       pname = "radroots-cargo-check";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo check ${common.coreContractCargoArgs}
+        cargo check --workspace --all-targets
       '';
       installPhaseCommand = "mkdir -p $out";
     }
