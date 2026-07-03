@@ -12,6 +12,7 @@ use radroots_sdk::{
     StorageStatusRequest,
 };
 use radroots_trade::identity::RadrootsTradeLocator;
+use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::{Path, PathBuf};
 
@@ -167,6 +168,10 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     assert!(event_tables.iter().any(|name| name == "listing_search_fts"));
     assert!(!event_tables.iter().any(|name| name == "nostr_event"));
     assert!(!event_tables.iter().any(|name| name == "nostr_event_tag"));
+    assert_eq!(
+        sqlite_trade_projection_primary_key(&paths.event_store_path).await,
+        vec!["order_id", "root_event_id", "projection_version"]
+    );
     let outbox_tables = sqlite_table_names(&paths.outbox_path).await;
     assert!(outbox_tables.iter().any(|name| name == "outbox_operations"));
     assert!(!outbox_tables.iter().any(|name| name == "outbox_operation"));
@@ -862,6 +867,38 @@ async fn sqlite_table_names(path: &Path) -> Vec<String> {
     .expect("table names");
     pool.close().await;
     names
+}
+
+async fn sqlite_trade_projection_primary_key(path: &Path) -> Vec<String> {
+    let options = SqliteConnectOptions::new().filename(path).read_only(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("open sqlite for trade projection inspection");
+    let rows = sqlx::query("PRAGMA table_info(trade_projection)")
+        .fetch_all(&pool)
+        .await
+        .expect("trade projection table info");
+    let mut primary_key = rows
+        .iter()
+        .filter_map(|row| {
+            let pk = row.try_get::<i64, _>("pk").expect("pk");
+            (pk > 0).then(|| {
+                (
+                    pk,
+                    row.try_get::<String, _>("name")
+                        .expect("primary key column"),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    primary_key.sort_by_key(|(pk, _)| *pk);
+    pool.close().await;
+    primary_key
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect::<Vec<_>>()
 }
 
 #[test]
