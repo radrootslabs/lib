@@ -883,13 +883,12 @@ mod tests {
     }
 
     #[test]
-    fn resolve_local_backend_applies_shared_fallback_policy() {
-        let resolved = RadrootsNostrAccountsManager::resolve_local_backend(
+    fn resolve_local_backend_fails_when_primary_is_unavailable() {
+        let err = RadrootsNostrAccountsManager::resolve_local_backend(
             RadrootsSecretBackendSelection {
                 primary: RadrootsSecretBackend::HostVault(
                     radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
                 ),
-                fallback: Some(RadrootsSecretBackend::EncryptedFile),
             },
             RadrootsSecretBackendAvailability {
                 host_vault: RadrootsHostVaultCapabilities::unavailable(),
@@ -898,10 +897,9 @@ mod tests {
                 memory: false,
             },
         )
-        .expect("fallback resolves");
+        .expect_err("unavailable primary fails");
 
-        assert_eq!(resolved.backend, RadrootsSecretBackend::EncryptedFile);
-        assert!(resolved.used_fallback);
+        assert_eq!(err.to_string(), "secret backend host_vault is unavailable");
     }
 
     #[test]
@@ -912,7 +910,6 @@ mod tests {
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
                 primary: RadrootsSecretBackend::ExternalCommand,
-                fallback: None,
             },
             RadrootsSecretBackendAvailability {
                 host_vault: RadrootsHostVaultCapabilities::unavailable(),
@@ -941,7 +938,6 @@ mod tests {
                 primary: RadrootsSecretBackend::HostVault(
                     radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
                 ),
-                fallback: None,
             },
             RadrootsSecretBackendAvailability {
                 host_vault: RadrootsHostVaultCapabilities::unavailable(),
@@ -968,7 +964,6 @@ mod tests {
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
                 primary: RadrootsSecretBackend::EncryptedFile,
-                fallback: None,
             },
             RadrootsSecretBackendAvailability {
                 host_vault: RadrootsHostVaultCapabilities::unavailable(),
@@ -992,7 +987,6 @@ mod tests {
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
                 primary: RadrootsSecretBackend::EncryptedFile,
-                fallback: None,
             },
             RadrootsSecretBackendAvailability {
                 host_vault: RadrootsHostVaultCapabilities::unavailable(),
@@ -1005,7 +999,6 @@ mod tests {
         .expect("encrypted file manager");
 
         assert_eq!(resolved.backend, RadrootsSecretBackend::EncryptedFile);
-        assert!(!resolved.used_fallback);
         assert!(manager.list_accounts().expect("accounts").is_empty());
     }
 

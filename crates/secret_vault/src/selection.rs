@@ -1,11 +1,10 @@
-use crate::backend::{RadrootsSecretBackend, RadrootsSecretBackendKind};
+use crate::backend::RadrootsSecretBackend;
 use crate::error::RadrootsSecretVaultError;
 use crate::policy::RadrootsHostVaultCapabilities;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RadrootsSecretBackendSelection {
     pub primary: RadrootsSecretBackend,
-    pub fallback: Option<RadrootsSecretBackend>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,7 +18,6 @@ pub struct RadrootsSecretBackendAvailability {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RadrootsResolvedSecretBackend {
     pub backend: RadrootsSecretBackend,
-    pub used_fallback: bool,
 }
 
 impl RadrootsSecretBackendSelection {
@@ -27,44 +25,10 @@ impl RadrootsSecretBackendSelection {
         self,
         availability: RadrootsSecretBackendAvailability,
     ) -> Result<RadrootsResolvedSecretBackend, RadrootsSecretVaultError> {
-        if availability.supports(self.primary).is_ok() {
-            return Ok(RadrootsResolvedSecretBackend {
-                backend: self.primary,
-                used_fallback: false,
-            });
-        }
-
-        if let RadrootsSecretBackend::HostVault(policy) = self.primary
-            && availability.host_vault.available
-        {
-            availability.host_vault.validate(policy)?;
-        }
-
-        match self.fallback {
-            Some(fallback) => {
-                if !self.primary.allows_fallback_to(fallback.kind()) {
-                    return Err(RadrootsSecretVaultError::FallbackDisallowed {
-                        primary: self.primary.kind(),
-                        fallback: fallback.kind(),
-                    });
-                }
-
-                availability.supports(fallback).map_err(|_| {
-                    RadrootsSecretVaultError::FallbackUnavailable {
-                        primary: self.primary.kind(),
-                        fallback: fallback.kind(),
-                    }
-                })?;
-
-                Ok(RadrootsResolvedSecretBackend {
-                    backend: fallback,
-                    used_fallback: true,
-                })
-            }
-            None => Err(RadrootsSecretVaultError::BackendUnavailable {
-                backend: self.primary.kind(),
-            }),
-        }
+        availability.supports(self.primary)?;
+        Ok(RadrootsResolvedSecretBackend {
+            backend: self.primary,
+        })
     }
 }
 
@@ -82,21 +46,10 @@ impl RadrootsSecretBackendAvailability {
     }
 }
 
-impl RadrootsSecretBackend {
-    const fn allows_fallback_to(self, fallback: RadrootsSecretBackendKind) -> bool {
-        matches!(
-            (self.kind(), fallback),
-            (
-                RadrootsSecretBackendKind::HostVault,
-                RadrootsSecretBackendKind::EncryptedFile
-            )
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::RadrootsSecretBackendKind;
     use crate::error::RadrootsHostVaultRequirement;
     use crate::policy::{
         RadrootsHostVaultHardwarePolicy, RadrootsHostVaultPolicy, RadrootsHostVaultResidency,
@@ -107,7 +60,6 @@ mod tests {
     fn host_vault_is_selected_when_available() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()),
-            fallback: Some(RadrootsSecretBackend::EncryptedFile),
         };
 
         let resolved = selection
@@ -123,41 +75,14 @@ mod tests {
             resolved,
             RadrootsResolvedSecretBackend {
                 backend: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()),
-                used_fallback: false,
             }
         );
     }
 
     #[test]
-    fn host_vault_may_explicitly_fallback_to_encrypted_file() {
+    fn host_vault_unavailable_fails_closed() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()),
-            fallback: Some(RadrootsSecretBackend::EncryptedFile),
-        };
-
-        let resolved = selection
-            .resolve(RadrootsSecretBackendAvailability {
-                host_vault: RadrootsHostVaultCapabilities::unavailable(),
-                encrypted_file: true,
-                external_command: false,
-                memory: false,
-            })
-            .expect("encrypted file fallback resolves");
-
-        assert_eq!(
-            resolved,
-            RadrootsResolvedSecretBackend {
-                backend: RadrootsSecretBackend::EncryptedFile,
-                used_fallback: true,
-            }
-        );
-    }
-
-    #[test]
-    fn host_vault_without_explicit_fallback_fails_closed() {
-        let selection = RadrootsSecretBackendSelection {
-            primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()),
-            fallback: None,
         };
 
         let err = selection
@@ -167,7 +92,7 @@ mod tests {
                 external_command: false,
                 memory: false,
             })
-            .expect_err("missing fallback must fail");
+            .expect_err("unavailable primary must fail");
 
         assert_eq!(
             err,
@@ -178,14 +103,36 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_host_vault_policy_fails_before_any_downgrade() {
+    fn encrypted_file_unavailable_fails_closed() {
+        let selection = RadrootsSecretBackendSelection {
+            primary: RadrootsSecretBackend::EncryptedFile,
+        };
+
+        let err = selection
+            .resolve(RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: false,
+                external_command: false,
+                memory: false,
+            })
+            .expect_err("unavailable primary must fail");
+
+        assert_eq!(
+            err,
+            RadrootsSecretVaultError::BackendUnavailable {
+                backend: RadrootsSecretBackendKind::EncryptedFile,
+            }
+        );
+    }
+
+    #[test]
+    fn unsupported_host_vault_policy_fails_closed() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy {
                 residency: RadrootsHostVaultResidency::DeviceLocalOnly,
                 user_presence: RadrootsHostVaultUserPresencePolicy::Required,
                 hardware: RadrootsHostVaultHardwarePolicy::RequireHardwareBacked,
             }),
-            fallback: Some(RadrootsSecretBackend::EncryptedFile),
         };
 
         let err = selection
@@ -206,10 +153,9 @@ mod tests {
     }
 
     #[test]
-    fn external_command_may_not_downgrade_to_encrypted_file() {
+    fn external_command_unavailable_fails_closed() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::ExternalCommand,
-            fallback: Some(RadrootsSecretBackend::EncryptedFile),
         };
 
         let err = selection
@@ -219,13 +165,12 @@ mod tests {
                 external_command: false,
                 memory: false,
             })
-            .expect_err("external command downgrade must fail");
+            .expect_err("unavailable primary must fail");
 
         assert_eq!(
             err,
-            RadrootsSecretVaultError::FallbackDisallowed {
-                primary: RadrootsSecretBackendKind::ExternalCommand,
-                fallback: RadrootsSecretBackendKind::EncryptedFile,
+            RadrootsSecretVaultError::BackendUnavailable {
+                backend: RadrootsSecretBackendKind::ExternalCommand,
             }
         );
     }
@@ -234,7 +179,6 @@ mod tests {
     fn external_command_resolves_when_available() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::ExternalCommand,
-            fallback: None,
         };
 
         let resolved = selection
@@ -250,7 +194,6 @@ mod tests {
             resolved,
             RadrootsResolvedSecretBackend {
                 backend: RadrootsSecretBackend::ExternalCommand,
-                used_fallback: false,
             }
         );
     }
@@ -259,7 +202,6 @@ mod tests {
     fn memory_backend_must_be_selected_explicitly() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::Memory,
-            fallback: None,
         };
 
         let resolved = selection
@@ -275,7 +217,6 @@ mod tests {
             resolved,
             RadrootsResolvedSecretBackend {
                 backend: RadrootsSecretBackend::Memory,
-                used_fallback: false,
             }
         );
 
@@ -292,31 +233,6 @@ mod tests {
             err,
             RadrootsSecretVaultError::BackendUnavailable {
                 backend: RadrootsSecretBackendKind::Memory,
-            }
-        );
-    }
-
-    #[test]
-    fn unavailable_explicit_fallback_reports_fallback_unavailable() {
-        let selection = RadrootsSecretBackendSelection {
-            primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()),
-            fallback: Some(RadrootsSecretBackend::EncryptedFile),
-        };
-
-        let err = selection
-            .resolve(RadrootsSecretBackendAvailability {
-                host_vault: RadrootsHostVaultCapabilities::unavailable(),
-                encrypted_file: false,
-                external_command: false,
-                memory: false,
-            })
-            .expect_err("unavailable fallback must fail");
-
-        assert_eq!(
-            err,
-            RadrootsSecretVaultError::FallbackUnavailable {
-                primary: RadrootsSecretBackendKind::HostVault,
-                fallback: RadrootsSecretBackendKind::EncryptedFile,
             }
         );
     }

@@ -4,8 +4,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    RadrootsMigrationReport, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
-    RadrootsPaths, RadrootsRuntimeNamespace, RadrootsRuntimePathsError,
+    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsPaths,
+    RadrootsRuntimeNamespace, RadrootsRuntimePathsError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +62,6 @@ pub struct RadrootsRuntimePathPolicyContract {
     pub canonical_root_selection: String,
     pub canonical_subordinate_path_override: String,
     pub leaf_path_env_posture: String,
-    pub compatibility_leaf_path_keys: Vec<String>,
 }
 
 impl RadrootsRuntimePathPolicyContract {
@@ -70,58 +69,12 @@ impl RadrootsRuntimePathPolicyContract {
         canonical_root_selection: &str,
         canonical_subordinate_path_override: &str,
         leaf_path_env_posture: &str,
-        compatibility_leaf_path_keys: &[&str],
     ) -> Self {
         Self {
             canonical_root_selection: canonical_root_selection.to_owned(),
             canonical_subordinate_path_override: canonical_subordinate_path_override.to_owned(),
             leaf_path_env_posture: leaf_path_env_posture.to_owned(),
-            compatibility_leaf_path_keys: compatibility_leaf_path_keys
-                .iter()
-                .map(|entry| (*entry).to_owned())
-                .collect(),
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct RadrootsRuntimeMigrationContract {
-    pub posture: String,
-    pub state: String,
-    pub silent_startup_relocation: bool,
-    pub compatibility_window: String,
-    pub detected_legacy_paths: Vec<RadrootsRuntimeLegacyPathContract>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct RadrootsRuntimeLegacyPathContract {
-    pub id: String,
-    pub description: String,
-    pub path: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub destination: Option<PathBuf>,
-    pub import_hint: String,
-}
-
-pub fn runtime_migration_contract(
-    report: RadrootsMigrationReport,
-) -> RadrootsRuntimeMigrationContract {
-    RadrootsRuntimeMigrationContract {
-        posture: report.posture.to_owned(),
-        state: report.state.to_owned(),
-        silent_startup_relocation: report.silent_startup_relocation,
-        compatibility_window: report.compatibility_window.to_owned(),
-        detected_legacy_paths: report
-            .detected_legacy_paths
-            .into_iter()
-            .map(|path| RadrootsRuntimeLegacyPathContract {
-                id: path.id,
-                description: path.description,
-                path: path.path,
-                destination: path.destination,
-                import_hint: path.import_hint,
-            })
-            .collect(),
     }
 }
 
@@ -352,9 +305,7 @@ mod tests {
     use super::{
         RadrootsRuntimePathConfigEntry, RadrootsRuntimePathPolicyContract,
         RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError,
-        runtime_migration_contract,
     };
-    use crate::{RadrootsLegacyPathDetection, RadrootsMigrationReport};
 
     #[test]
     fn caller_selection_preserves_profile_and_sources() {
@@ -611,8 +562,7 @@ mod tests {
         let contract = RadrootsRuntimePathPolicyContract::new(
             "profile_root_env_or_repo_wrapper",
             "config_artifact",
-            "compatibility_break_glass",
-            &["MYC_PATHS_STATE_DIR"],
+            "runtime_owned_leaf_overrides",
         );
 
         assert_eq!(
@@ -620,31 +570,8 @@ mod tests {
             "profile_root_env_or_repo_wrapper"
         );
         assert_eq!(
-            contract.compatibility_leaf_path_keys,
-            vec!["MYC_PATHS_STATE_DIR".to_owned()]
+            contract.leaf_path_env_posture,
+            "runtime_owned_leaf_overrides"
         );
-    }
-
-    #[test]
-    fn runtime_migration_contract_maps_detected_paths() {
-        let report = RadrootsMigrationReport {
-            posture: "explicit_operator_import_required",
-            state: "legacy_state_detected",
-            silent_startup_relocation: false,
-            compatibility_window: "detect_and_report_only",
-            detected_legacy_paths: vec![RadrootsLegacyPathDetection {
-                id: "legacy_path".to_owned(),
-                description: "legacy path".to_owned(),
-                path: PathBuf::from("/tmp/legacy"),
-                destination: Some(PathBuf::from("/tmp/new")),
-                import_hint: "copy it manually".to_owned(),
-            }],
-        };
-
-        let contract = runtime_migration_contract(report);
-
-        assert_eq!(contract.posture, "explicit_operator_import_required");
-        assert_eq!(contract.detected_legacy_paths.len(), 1);
-        assert_eq!(contract.detected_legacy_paths[0].id, "legacy_path");
     }
 }

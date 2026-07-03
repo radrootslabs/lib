@@ -14,14 +14,6 @@ pub enum RadrootsSecretVaultError {
     BackendUnavailable {
         backend: RadrootsSecretBackendKind,
     },
-    FallbackDisallowed {
-        primary: RadrootsSecretBackendKind,
-        fallback: RadrootsSecretBackendKind,
-    },
-    FallbackUnavailable {
-        primary: RadrootsSecretBackendKind,
-        fallback: RadrootsSecretBackendKind,
-    },
     HostVaultPolicyUnsupported {
         requirement: RadrootsHostVaultRequirement,
     },
@@ -57,14 +49,6 @@ impl fmt::Display for RadrootsSecretVaultError {
             Self::BackendUnavailable { backend } => {
                 write!(f, "secret backend {backend} is unavailable")
             }
-            Self::FallbackDisallowed { primary, fallback } => write!(
-                f,
-                "secret backend {primary} may not silently downgrade to {fallback}"
-            ),
-            Self::FallbackUnavailable { primary, fallback } => write!(
-                f,
-                "secret backend {primary} fallback {fallback} is unavailable"
-            ),
             Self::HostVaultPolicyUnsupported { requirement } => write!(
                 f,
                 "host vault does not satisfy the required {requirement} policy"
@@ -136,22 +120,6 @@ mod tests {
             }
             .to_string(),
             "secret backend host_vault is unavailable"
-        );
-        assert_eq!(
-            RadrootsSecretVaultError::FallbackDisallowed {
-                primary: RadrootsSecretBackendKind::ExternalCommand,
-                fallback: RadrootsSecretBackendKind::EncryptedFile,
-            }
-            .to_string(),
-            "secret backend external_command may not silently downgrade to encrypted_file"
-        );
-        assert_eq!(
-            RadrootsSecretVaultError::FallbackUnavailable {
-                primary: RadrootsSecretBackendKind::HostVault,
-                fallback: RadrootsSecretBackendKind::EncryptedFile,
-            }
-            .to_string(),
-            "secret backend host_vault fallback encrypted_file is unavailable"
         );
         assert_eq!(
             RadrootsSecretVaultError::HostVaultPolicyUnsupported {
