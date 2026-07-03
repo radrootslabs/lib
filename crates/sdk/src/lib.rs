@@ -104,7 +104,9 @@ pub use crate::market_runtime::{
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
     SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TradeEvidenceIngestReceipt, TradeEvidenceIngestRequest,
+    TRADE_STATUS_MAX_LIMIT, TradeEvidenceBranchReceipt, TradeEvidenceIngestReceipt,
+    TradeEvidenceIngestRequest, TradeEvidenceQueryBranch, TradeEvidenceQueryBranchKind,
+    TradeEvidenceQueryPlan, TradeEvidenceRelayFilter, TradeEvidenceRelayTagFilter,
     TradeRequestEvidenceIngestReceipt, TradeRequestEvidenceIngestRequest,
     TradeResyncEventImportReceipt, TradeResyncEvidenceReceipt, TradeResyncReceipt,
     TradeResyncRelayOutcomeKind, TradeResyncRelayOutcomeReceipt,

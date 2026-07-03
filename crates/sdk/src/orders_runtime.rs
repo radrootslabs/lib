@@ -27,16 +27,16 @@ use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
 #[cfg(feature = "runtime")]
-use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
+use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent, RadrootsStoredEventTag};
 #[cfg(feature = "runtime")]
 use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
-        KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
+        KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
-        KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT, ORDER_EVENT_KINDS,
+        KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
     },
     order::RadrootsOrderEconomics,
     tags::{TAG_D, TAG_E, TAG_P},
@@ -61,7 +61,8 @@ use radroots_events_codec::order::{
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_nostr::prelude::{
-    RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, radroots_nostr_filter_tag,
+    RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKey,
+    radroots_nostr_filter_tag,
 };
 #[cfg(feature = "runtime")]
 use radroots_relay_transport::{
@@ -71,6 +72,8 @@ use radroots_relay_transport::{
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
+#[cfg(feature = "runtime")]
+use radroots_trade::listing::parse_listing_address;
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_trade::order::{
     RadrootsOrderCanonicalizationError, RadrootsOrderProjectionQueryResult,
@@ -1451,6 +1454,7 @@ pub struct TradeResyncReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeResyncEvidenceReceipt {
+    pub query_plan: TradeEvidenceQueryPlan,
     pub inserted_count: usize,
     pub duplicate_count: usize,
     pub malformed_count: usize,
@@ -1460,6 +1464,69 @@ pub struct TradeResyncEvidenceReceipt {
     pub eose_count: usize,
     pub closed_count: usize,
     pub notice_count: usize,
+    pub branches: Vec<TradeEvidenceBranchReceipt>,
+    pub events: Vec<TradeResyncEventImportReceipt>,
+    pub relays: Vec<TradeResyncRelayOutcomeReceipt>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeEvidenceQueryPlan {
+    pub locator: RadrootsTradeLocator,
+    pub limit: u32,
+    pub branches: Vec<TradeEvidenceQueryBranch>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeEvidenceQueryBranch {
+    pub kind: TradeEvidenceQueryBranchKind,
+    pub filter: TradeEvidenceRelayFilter,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeEvidenceQueryBranchKind {
+    RequestRoots,
+    LifecycleChain,
+    ValidationReceipts,
+    ListingSnapshot,
+    WorkerResults,
+    RejectedEvidence,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeEvidenceRelayFilter {
+    pub active: bool,
+    pub event_kinds: Vec<u32>,
+    pub author_pubkey: Option<String>,
+    pub tag: Option<TradeEvidenceRelayTagFilter>,
+    pub limit: u32,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeEvidenceRelayTagFilter {
+    pub tag_name: String,
+    pub values: Vec<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeEvidenceBranchReceipt {
+    pub branch: TradeEvidenceQueryBranchKind,
+    pub accepted_count: usize,
+    pub inserted_count: usize,
+    pub duplicate_count: usize,
+    pub malformed_count: usize,
+    pub out_of_filter_count: usize,
+    pub skipped_over_limit_count: usize,
+    pub unsupported_count: usize,
+    pub relay_failure_count: usize,
+    pub empty_result: bool,
     pub events: Vec<TradeResyncEventImportReceipt>,
     pub relays: Vec<TradeResyncRelayOutcomeReceipt>,
 }
@@ -1791,6 +1858,7 @@ pub enum TradeValidationReceiptRelayTransportOutcomeKind {
 pub struct TradeStatusRequest {
     pub locator: RadrootsTradeLocator,
     pub limit: u32,
+    pub source: SdkTradeStatusSource,
 }
 
 #[cfg(feature = "runtime")]
@@ -1799,6 +1867,7 @@ impl TradeStatusRequest {
         Self {
             locator,
             limit: TRADE_STATUS_DEFAULT_LIMIT,
+            source: SdkTradeStatusSource::LocalOnly,
         }
     }
 
@@ -1811,6 +1880,11 @@ impl TradeStatusRequest {
 
     pub fn with_limit(mut self, limit: u32) -> Self {
         self.limit = limit;
+        self
+    }
+
+    pub fn with_source(mut self, source: SdkTradeStatusSource) -> Self {
+        self.source = source;
         self
     }
 
@@ -1844,6 +1918,7 @@ pub struct TradeStatusReceipt {
     pub seller_pubkey: Option<RadrootsPublicKey>,
     pub economics: Option<RadrootsOrderEconomics>,
     pub evidence: TradeStatusEvidenceSummary,
+    pub online_evidence: Option<TradeResyncEvidenceReceipt>,
     pub eligibility: TradeStatusEligibility,
     pub next_action: TradeStatusNextActionKind,
     pub event_ids: Vec<RadrootsEventId>,
@@ -1903,7 +1978,8 @@ pub enum TradeStatusNextActionKind {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SdkTradeStatusSource {
-    LocalEventStore,
+    LocalOnly,
+    ResyncThenLocal,
 }
 
 #[cfg(feature = "runtime")]
@@ -2841,6 +2917,63 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         request: TradeStatusRequest,
     ) -> Result<TradeStatusReceipt, RadrootsSdkError> {
+        match request.source {
+            SdkTradeStatusSource::LocalOnly => self.local_status(request).await,
+            SdkTradeStatusSource::ResyncThenLocal => {
+                #[cfg(feature = "relay-runtime")]
+                {
+                    let adapter = RadrootsNostrClientFetchAdapter;
+                    return self.status_with_fetch_adapter(request, &adapter).await;
+                }
+                #[cfg(not(feature = "relay-runtime"))]
+                {
+                    let _ = request;
+                    Err(RadrootsSdkError::ProductSyncUnsupported {
+                        operation: "trade.status.resync_then_local",
+                        required_feature: "relay-runtime",
+                    })
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn status_with_fetch_adapter<A>(
+        &self,
+        request: TradeStatusRequest,
+        adapter: &A,
+    ) -> Result<TradeStatusReceipt, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        match request.source {
+            SdkTradeStatusSource::LocalOnly => self.local_status(request).await,
+            SdkTradeStatusSource::ResyncThenLocal => {
+                request.validate()?;
+                let execution = execute_trade_resync_with_fetch_adapter(
+                    self.sdk,
+                    request.locator.clone(),
+                    request.limit,
+                    adapter,
+                    "trade.status.resync_then_local",
+                )
+                .await?;
+                let mut status = self
+                    .local_status(
+                        TradeStatusRequest::new(request.locator).with_limit(request.limit),
+                    )
+                    .await?;
+                status.source = SdkTradeStatusSource::ResyncThenLocal;
+                status.online_evidence = Some(execution.evidence);
+                Ok(status)
+            }
+        }
+    }
+
+    async fn local_status(
+        &self,
+        request: TradeStatusRequest,
+    ) -> Result<TradeStatusReceipt, RadrootsSdkError> {
         request.validate()?;
         let query_result = order_projection_query_for_trade_locator(
             &self.sdk._event_store,
@@ -2849,10 +2982,10 @@ impl<'sdk> TradesClient<'sdk> {
         )
         .await
         .map_err(projection_error)?;
-        Ok(TradeStatusReceipt::from_locator_query_result(
-            request.locator,
-            query_result,
-        ))
+        let mut receipt =
+            TradeStatusReceipt::from_locator_query_result(request.locator, query_result);
+        receipt.source = request.source;
+        Ok(receipt)
     }
 
     fn resolved_created_at(
@@ -2962,22 +3095,12 @@ impl<'sdk> TradeResyncClient<'sdk> {
         A: RadrootsRelayFetchAdapter,
     {
         request.validate()?;
-        let relay_targets = self.sdk.relay_urls().to_vec();
-        if relay_targets.is_empty() {
-            return Err(RadrootsSdkError::empty_target_relays("trade.resync"));
-        }
-        let fetch_request = trade_resync_fetch_request(self.sdk, &request, &relay_targets)?;
-        let fetch_receipt =
-            fetch_and_ingest_relay_events(adapter, &self.sdk._event_store, fetch_request).await?;
-        if trade_resync_total_relay_failure(&fetch_receipt, relay_targets.len()) {
-            return Err(RadrootsSdkError::ProductSyncRelaySetupFailure {
-                message: trade_resync_total_failure_message(&fetch_receipt),
-            });
-        }
-        let evidence = TradeResyncEvidenceReceipt::from_fetch(fetch_receipt);
-        let refresh = refresh_product_projections_for_sdk(
+        let execution = execute_trade_resync_with_fetch_adapter(
             self.sdk,
-            SyncProjectionRefreshRequest::new().with_limit(request.limit),
+            request.locator.clone(),
+            request.limit,
+            adapter,
+            "trade.resync",
         )
         .await?;
         let status = trades_client(self.sdk)
@@ -2995,48 +3118,224 @@ impl<'sdk> TradeResyncClient<'sdk> {
             });
         }
         Ok(TradeResyncReceipt {
-            relay_targets,
-            evidence,
-            refresh,
+            relay_targets: execution.relay_targets,
+            evidence: execution.evidence,
+            refresh: execution.refresh,
             status,
         })
     }
 }
 
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
-fn trade_resync_fetch_request(
+struct TradeResyncExecution {
+    relay_targets: Vec<String>,
+    evidence: TradeResyncEvidenceReceipt,
+    refresh: SyncProjectionRefreshReceipt,
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+async fn execute_trade_resync_with_fetch_adapter<A>(
     sdk: &crate::RadrootsClient,
-    request: &TradeResyncRequest,
+    locator: RadrootsTradeLocator,
+    limit: u32,
+    adapter: &A,
+    operation: &'static str,
+) -> Result<TradeResyncExecution, RadrootsSdkError>
+where
+    A: RadrootsRelayFetchAdapter,
+{
+    let relay_targets = sdk.relay_urls().to_vec();
+    if relay_targets.is_empty() {
+        return Err(RadrootsSdkError::empty_target_relays(operation));
+    }
+    let query_plan = trade_evidence_query_plan(locator, limit)?;
+    let fetch_request = trade_evidence_fetch_request(sdk, &query_plan, &relay_targets)?;
+    let fetch_receipt =
+        fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
+    if trade_resync_total_relay_failure(&fetch_receipt, relay_targets.len()) {
+        return Err(RadrootsSdkError::ProductSyncRelaySetupFailure {
+            message: trade_resync_total_failure_message(operation, &fetch_receipt),
+        });
+    }
+    let evidence = TradeResyncEvidenceReceipt::from_fetch(sdk, query_plan, fetch_receipt).await?;
+    let refresh = refresh_product_projections_for_sdk(
+        sdk,
+        SyncProjectionRefreshRequest::new().with_limit(limit),
+    )
+    .await?;
+    Ok(TradeResyncExecution {
+        relay_targets,
+        evidence,
+        refresh,
+    })
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn trade_evidence_fetch_request(
+    sdk: &crate::RadrootsClient,
+    query_plan: &TradeEvidenceQueryPlan,
     relay_targets: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
-    let filter = trade_resync_filter(&request.locator, request.limit)?;
+    let filters = query_plan
+        .branches
+        .iter()
+        .filter(|branch| branch.filter.active)
+        .map(trade_evidence_branch_filter)
+        .collect::<Result<Vec<_>, _>>()?;
+    if filters.is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "trade evidence query plan has no active relay filters".to_owned(),
+        });
+    }
     Ok(
-        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize, [filter])?
+        RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, query_plan.limit as usize, filters)?
             .with_relay_urls(relay_targets.iter().cloned()),
     )
 }
 
-#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
-fn trade_resync_filter(
-    locator: &RadrootsTradeLocator,
+#[cfg(feature = "runtime")]
+fn trade_evidence_query_plan(
+    locator: RadrootsTradeLocator,
     limit: u32,
-) -> Result<RadrootsNostrFilter, RadrootsSdkError> {
-    let mut filter = RadrootsNostrFilter::new().limit(limit as usize);
-    for kind in ORDER_EVENT_KINDS
-        .iter()
-        .copied()
-        .chain([KIND_TRADE_VALIDATION_RECEIPT])
-    {
-        let kind = u16::try_from(kind).map_err(|_| RadrootsSdkError::InvalidRequest {
-            message: format!("trade resync event kind {kind} exceeds Nostr filter range"),
-        })?;
-        filter = filter.kind(RadrootsNostrKind::Custom(kind));
-    }
-    radroots_nostr_filter_tag(filter, TAG_D, vec![locator.order_id().as_str().to_owned()]).map_err(
-        |error| RadrootsSdkError::InvalidRequest {
-            message: format!("trade resync filter invalid: {error}"),
+) -> Result<TradeEvidenceQueryPlan, RadrootsSdkError> {
+    let order_id = locator.order_id().as_str().to_owned();
+    let root_event_id = locator
+        .root_event_id
+        .as_ref()
+        .map(|value| value.as_str().to_owned());
+    let listing_filter = locator
+        .listing_addr
+        .as_ref()
+        .map(|value| listing_snapshot_filter_parts(value.as_str()))
+        .transpose()?;
+    let branches = vec![
+        trade_evidence_branch(
+            TradeEvidenceQueryBranchKind::RequestRoots,
+            vec![KIND_ORDER_REQUEST],
+            Some((TAG_D, vec![order_id.clone()])),
+            None,
+            limit,
+            true,
+        ),
+        trade_evidence_branch(
+            TradeEvidenceQueryBranchKind::LifecycleChain,
+            vec![
+                KIND_ORDER_DECISION,
+                KIND_ORDER_REVISION_PROPOSAL,
+                KIND_ORDER_REVISION_DECISION,
+                KIND_ORDER_CANCELLATION,
+            ],
+            Some((TAG_D, vec![order_id.clone()])),
+            None,
+            limit,
+            true,
+        ),
+        trade_evidence_branch(
+            TradeEvidenceQueryBranchKind::ValidationReceipts,
+            vec![KIND_TRADE_VALIDATION_RECEIPT],
+            Some((TAG_D, vec![order_id])),
+            None,
+            limit,
+            true,
+        ),
+        trade_evidence_branch(
+            TradeEvidenceQueryBranchKind::ListingSnapshot,
+            vec![KIND_LISTING],
+            listing_filter
+                .as_ref()
+                .map(|parts| (TAG_D, vec![parts.listing_id.clone()])),
+            listing_filter
+                .as_ref()
+                .map(|parts| parts.seller_pubkey.clone()),
+            limit,
+            locator.listing_addr.is_some(),
+        ),
+        trade_evidence_branch(
+            TradeEvidenceQueryBranchKind::WorkerResults,
+            vec![KIND_TRADE_TRANSITION_PROOF_RESULT],
+            root_event_id.map(|value| (TAG_E, vec![value])),
+            None,
+            limit,
+            locator.root_event_id.is_some(),
+        ),
+    ];
+    Ok(TradeEvidenceQueryPlan {
+        locator,
+        limit,
+        branches,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn trade_evidence_branch(
+    kind: TradeEvidenceQueryBranchKind,
+    event_kinds: Vec<u32>,
+    tag: Option<(&'static str, Vec<String>)>,
+    author_pubkey: Option<String>,
+    limit: u32,
+    active: bool,
+) -> TradeEvidenceQueryBranch {
+    TradeEvidenceQueryBranch {
+        kind,
+        filter: TradeEvidenceRelayFilter {
+            active,
+            event_kinds,
+            author_pubkey,
+            tag: tag.map(|(tag_name, values)| TradeEvidenceRelayTagFilter {
+                tag_name: tag_name.to_owned(),
+                values,
+            }),
+            limit,
         },
-    )
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn trade_evidence_branch_filter(
+    branch: &TradeEvidenceQueryBranch,
+) -> Result<RadrootsNostrFilter, RadrootsSdkError> {
+    let mut filter = RadrootsNostrFilter::new().limit(branch.filter.limit as usize);
+    for kind in &branch.filter.event_kinds {
+        let nostr_kind = u16::try_from(*kind).map_err(|_| RadrootsSdkError::InvalidRequest {
+            message: format!("trade evidence event kind {kind} exceeds Nostr filter range"),
+        })?;
+        filter = filter.kind(RadrootsNostrKind::Custom(nostr_kind));
+    }
+    if let Some(author_pubkey) = branch.filter.author_pubkey.as_ref() {
+        let author = author_pubkey
+            .parse::<RadrootsNostrPublicKey>()
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!("trade evidence filter author invalid: {error}"),
+            })?;
+        filter = filter.author(author);
+    }
+    match branch.filter.tag.as_ref() {
+        Some(tag) => radroots_nostr_filter_tag(filter, tag.tag_name.as_str(), tag.values.clone())
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!("trade evidence filter invalid: {error}"),
+            }),
+        None => Ok(filter),
+    }
+}
+
+#[cfg(feature = "runtime")]
+struct ListingSnapshotFilterParts {
+    seller_pubkey: String,
+    listing_id: String,
+}
+
+#[cfg(feature = "runtime")]
+fn listing_snapshot_filter_parts(
+    listing_addr: &str,
+) -> Result<ListingSnapshotFilterParts, RadrootsSdkError> {
+    let parts =
+        parse_listing_address(listing_addr).map_err(|error| RadrootsSdkError::InvalidRequest {
+            message: format!("trade listing snapshot filter invalid: {error}"),
+        })?;
+    Ok(ListingSnapshotFilterParts {
+        seller_pubkey: parts.seller_pubkey.as_str().to_owned(),
+        listing_id: parts.listing_id.as_str().to_owned(),
+    })
 }
 
 #[cfg(feature = "runtime")]
@@ -3048,17 +3347,38 @@ fn trade_resync_total_relay_failure(
 }
 
 #[cfg(feature = "runtime")]
-fn trade_resync_total_failure_message(receipt: &RadrootsRelayFetchReceipt) -> String {
+fn trade_resync_total_failure_message(
+    operation: &str,
+    receipt: &RadrootsRelayFetchReceipt,
+) -> String {
     format!(
-        "trade.resync failed for all configured relays: closed_count={}, notice_count={}, malformed_count={}",
+        "{operation} failed for all configured relays: closed_count={}, notice_count={}, malformed_count={}",
         receipt.closed_count, receipt.notice_count, receipt.malformed_count
     )
 }
 
 #[cfg(feature = "runtime")]
 impl TradeResyncEvidenceReceipt {
-    fn from_fetch(receipt: RadrootsRelayFetchReceipt) -> Self {
-        Self {
+    async fn from_fetch(
+        sdk: &crate::RadrootsClient,
+        query_plan: TradeEvidenceQueryPlan,
+        receipt: RadrootsRelayFetchReceipt,
+    ) -> Result<Self, RadrootsSdkError> {
+        let events = receipt
+            .events
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>();
+        let relays = receipt
+            .relay_outcomes
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>();
+        let branches =
+            trade_evidence_branch_receipts(sdk, &query_plan, events.as_slice(), relays.as_slice())
+                .await?;
+        Ok(Self {
+            query_plan,
             inserted_count: receipt.inserted_count,
             duplicate_count: receipt.duplicate_count,
             malformed_count: receipt.malformed_count,
@@ -3068,8 +3388,160 @@ impl TradeResyncEvidenceReceipt {
             eose_count: receipt.eose_count,
             closed_count: receipt.closed_count,
             notice_count: receipt.notice_count,
-            events: receipt.events.into_iter().map(Into::into).collect(),
-            relays: receipt.relay_outcomes.into_iter().map(Into::into).collect(),
+            branches,
+            events,
+            relays,
+        })
+    }
+}
+
+#[cfg(feature = "runtime")]
+async fn trade_evidence_branch_receipts(
+    sdk: &crate::RadrootsClient,
+    query_plan: &TradeEvidenceQueryPlan,
+    events: &[TradeResyncEventImportReceipt],
+    relays: &[TradeResyncRelayOutcomeReceipt],
+) -> Result<Vec<TradeEvidenceBranchReceipt>, RadrootsSdkError> {
+    let mut branch_events = query_plan
+        .branches
+        .iter()
+        .filter(|branch| branch.filter.active)
+        .map(|branch| (branch.kind, Vec::<TradeResyncEventImportReceipt>::new()))
+        .collect::<BTreeMap<_, _>>();
+    branch_events
+        .entry(TradeEvidenceQueryBranchKind::RejectedEvidence)
+        .or_default();
+    for event in events {
+        let branch = trade_evidence_event_branch(sdk, query_plan, event).await?;
+        branch_events.entry(branch).or_default().push(event.clone());
+    }
+    let relay_failure_count = relays
+        .iter()
+        .filter(|relay| relay.outcome_kind != TradeResyncRelayOutcomeKind::Eose)
+        .count();
+    Ok(branch_events
+        .into_iter()
+        .map(|(branch, events)| {
+            TradeEvidenceBranchReceipt::from_parts(
+                branch,
+                events,
+                relays.to_vec(),
+                relay_failure_count,
+            )
+        })
+        .collect())
+}
+
+#[cfg(feature = "runtime")]
+async fn trade_evidence_event_branch(
+    sdk: &crate::RadrootsClient,
+    query_plan: &TradeEvidenceQueryPlan,
+    event: &TradeResyncEventImportReceipt,
+) -> Result<TradeEvidenceQueryBranchKind, RadrootsSdkError> {
+    if event.malformed || event.out_of_filter || event.skipped_over_limit {
+        return Ok(TradeEvidenceQueryBranchKind::RejectedEvidence);
+    }
+    let Some(event_id) = event.event_id.as_deref() else {
+        return Ok(TradeEvidenceQueryBranchKind::RejectedEvidence);
+    };
+    let Some(stored_event) = sdk
+        ._event_store
+        .get_event(event_id)
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?
+    else {
+        return Ok(TradeEvidenceQueryBranchKind::RejectedEvidence);
+    };
+    let stored_tags = sdk
+        ._event_store
+        .tags_for_event(event_id)
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    Ok(query_plan
+        .branches
+        .iter()
+        .filter(|branch| branch.filter.active)
+        .find(|branch| trade_evidence_branch_matches_event(branch, &stored_event, &stored_tags))
+        .map(|branch| branch.kind)
+        .unwrap_or(TradeEvidenceQueryBranchKind::RejectedEvidence))
+}
+
+#[cfg(feature = "runtime")]
+fn trade_evidence_branch_matches_event(
+    branch: &TradeEvidenceQueryBranch,
+    stored_event: &RadrootsStoredEvent,
+    stored_tags: &[RadrootsStoredEventTag],
+) -> bool {
+    if !branch.filter.event_kinds.contains(&stored_event.kind) {
+        return false;
+    }
+    if let Some(author_pubkey) = branch.filter.author_pubkey.as_ref()
+        && stored_event.pubkey != *author_pubkey
+    {
+        return false;
+    }
+    match branch.filter.tag.as_ref() {
+        Some(tag) => stored_tags.iter().any(|stored_tag| {
+            stored_tag.tag_name == tag.tag_name
+                && stored_tag
+                    .tag_value
+                    .as_ref()
+                    .is_some_and(|value| tag.values.iter().any(|expected| expected == value))
+        }),
+        None => true,
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl TradeEvidenceBranchReceipt {
+    fn from_parts(
+        branch: TradeEvidenceQueryBranchKind,
+        events: Vec<TradeResyncEventImportReceipt>,
+        relays: Vec<TradeResyncRelayOutcomeReceipt>,
+        relay_failure_count: usize,
+    ) -> Self {
+        let inserted_count = events.iter().filter(|event| event.inserted).count();
+        let duplicate_count = events.iter().filter(|event| event.duplicate).count();
+        let malformed_count = events.iter().filter(|event| event.malformed).count();
+        let out_of_filter_count = events.iter().filter(|event| event.out_of_filter).count();
+        let skipped_over_limit_count = events
+            .iter()
+            .filter(|event| event.skipped_over_limit)
+            .count();
+        let unsupported_count = events.iter().filter(|event| event.unsupported).count();
+        let accepted_count = events
+            .iter()
+            .filter(|event| {
+                !event.malformed
+                    && !event.out_of_filter
+                    && !event.skipped_over_limit
+                    && !event.unsupported
+                    && (event.inserted || event.duplicate)
+            })
+            .count();
+        let empty_result = accepted_count == 0
+            && duplicate_count == 0
+            && malformed_count == 0
+            && out_of_filter_count == 0
+            && skipped_over_limit_count == 0
+            && unsupported_count == 0;
+        Self {
+            branch,
+            accepted_count,
+            inserted_count,
+            duplicate_count,
+            malformed_count,
+            out_of_filter_count,
+            skipped_over_limit_count,
+            unsupported_count,
+            relay_failure_count,
+            empty_result,
+            events,
+            relays,
         }
     }
 }
@@ -4752,7 +5224,7 @@ impl TradeStatusReceipt {
             order_id: projection.order_id,
             root_event_id,
             ambiguity_candidates,
-            source: SdkTradeStatusSource::LocalEventStore,
+            source: SdkTradeStatusSource::LocalOnly,
             found,
             event_count,
             limit_applied,
@@ -4763,6 +5235,7 @@ impl TradeStatusReceipt {
             seller_pubkey: projection.seller_pubkey,
             economics: projection.economics,
             evidence,
+            online_evidence: None,
             eligibility,
             next_action,
             event_ids,

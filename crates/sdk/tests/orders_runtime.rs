@@ -41,8 +41,8 @@ use radroots_sdk::{
     SdkRelayTargetSet, SdkRelayUrlPolicy, SdkTradeStatusIssue, SdkTradeStatusIssueKind,
     SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
     TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
-    TradeEvidenceIngestRequest, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
+    TradeEvidenceIngestRequest, TradeEvidenceQueryBranchKind, TradeMutationOutcome,
+    TradeProposeRequest, TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
     TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusNextActionKind, TradeStatusRequest, TradeValidationReceiptInspectRequest,
@@ -1599,8 +1599,100 @@ async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
     assert_eq!(resync.status.status, TradeStatusKind::Requested);
     assert_eq!(resync.evidence.inserted_count, 1);
     assert_eq!(resync.evidence.duplicate_count, 0);
+    assert_eq!(resync.evidence.query_plan.branches.len(), 5);
+    assert!(
+        resync
+            .evidence
+            .query_plan
+            .branches
+            .iter()
+            .any(|branch| branch.kind == TradeEvidenceQueryBranchKind::RequestRoots)
+    );
+    let request_branch = resync
+        .evidence
+        .branches
+        .iter()
+        .find(|branch| branch.branch == TradeEvidenceQueryBranchKind::RequestRoots)
+        .expect("request root branch");
+    assert_eq!(request_branch.accepted_count, 1);
+    assert_eq!(request_branch.inserted_count, 1);
+    assert!(!request_branch.empty_result);
+    let lifecycle_branch = resync
+        .evidence
+        .branches
+        .iter()
+        .find(|branch| branch.branch == TradeEvidenceQueryBranchKind::LifecycleChain)
+        .expect("lifecycle branch");
+    assert!(lifecycle_branch.empty_result);
     assert_eq!(
         resync.evidence.events[0].event_id.as_deref(),
+        Some(request_event_id.as_str())
+    );
+    assert!(
+        store
+            .get_event(request_event_id.as_str())
+            .await
+            .expect("stored event")
+            .is_some()
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_status_local_only_ignores_failing_fetch_adapter() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![relay_closed(RELAY, "must not fetch")]);
+
+    let status = sdk
+        .trades()
+        .status_with_fetch_adapter(
+            status_request("status-local-only-no-fetch")
+                .with_source(SdkTradeStatusSource::LocalOnly),
+            &adapter,
+        )
+        .await
+        .expect("local-only status");
+
+    assert_eq!(status.source, SdkTradeStatusSource::LocalOnly);
+    assert_eq!(status.status, TradeStatusKind::Missing);
+    assert!(status.online_evidence.is_none());
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn trade_status_resync_then_local_fetches_evidence_before_status() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let request_event = signed_raw_order_request_event("status-resync-then-local", 46);
+    let request_event_id =
+        RadrootsEventId::parse(request_event.id.to_hex().as_str()).expect("request id");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_raw_event_item(&request_event, RELAY, 5_250),
+        relay_eose(RELAY),
+    ]);
+
+    let status = sdk
+        .trades()
+        .status_with_fetch_adapter(
+            status_request("status-resync-then-local")
+                .with_source(SdkTradeStatusSource::ResyncThenLocal),
+            &adapter,
+        )
+        .await
+        .expect("resync-then-local status");
+
+    assert_eq!(status.source, SdkTradeStatusSource::ResyncThenLocal);
+    assert_eq!(status.status, TradeStatusKind::Requested);
+    assert_eq!(status.request_event_id, Some(request_event_id.clone()));
+    let evidence = status.online_evidence.as_ref().expect("online evidence");
+    assert_eq!(evidence.inserted_count, 1);
+    let request_branch = evidence
+        .branches
+        .iter()
+        .find(|branch| branch.branch == TradeEvidenceQueryBranchKind::RequestRoots)
+        .expect("request branch");
+    assert_eq!(request_branch.accepted_count, 1);
+    assert_eq!(
+        request_branch.events[0].event_id.as_deref(),
         Some(request_event_id.as_str())
     );
     assert!(
@@ -4864,7 +4956,7 @@ async fn order_status_returns_not_found_for_missing_local_order() {
 
     assert!(!receipt.found);
     assert_eq!(receipt.order_id.as_str(), "order-1");
-    assert_eq!(receipt.source, SdkTradeStatusSource::LocalEventStore);
+    assert_eq!(receipt.source, SdkTradeStatusSource::LocalOnly);
     assert_eq!(receipt.event_count, 0);
     assert_eq!(receipt.limit_applied, TRADE_STATUS_DEFAULT_LIMIT);
     assert!(receipt.event_ids.is_empty());
@@ -4968,7 +5060,7 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
     let request = status_request("order-1").with_limit(25);
     let request_json = serde_json::to_value(&request).expect("request json");
-    assert_struct_serialize_error_paths(&request, 2);
+    assert_struct_serialize_error_paths(&request, 3);
 
     assert_eq!(
         request_json,
@@ -4980,14 +5072,15 @@ async fn order_status_contract_dtos_serialize_deterministically() {
                 "buyer_pubkey": null,
                 "seller_pubkey": null
             },
-            "limit": 25
+            "limit": 25,
+            "source": "local_only"
         })
     );
 
     let receipt = sdk.trades().status(request).await.expect("status");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
 
-    assert_eq!(receipt_json["source"], "local_event_store");
+    assert_eq!(receipt_json["source"], "local_only");
     assert_eq!(receipt_json["status"], "missing");
     assert_eq!(receipt_json["locator"], request_json["locator"]);
     assert_eq!(receipt_json["order_id"], "order-1");
@@ -5001,6 +5094,7 @@ async fn order_status_contract_dtos_serialize_deterministically() {
         serde_json::Value::Null
     );
     assert_eq!(receipt_json["economics"], serde_json::Value::Null);
+    assert_eq!(receipt_json["online_evidence"], serde_json::Value::Null);
     assert_eq!(receipt_json["next_action"], "no_local_order");
     assert_eq!(receipt_json["evidence"]["event_count"], 0);
     assert_eq!(receipt_json["evidence"]["limit_applied"], 25);
@@ -5424,7 +5518,7 @@ async fn order_status_projects_local_request_and_decision_events() {
 
     assert!(receipt.found);
     assert_eq!(receipt.order_id.as_str(), "order-1");
-    assert_eq!(receipt.source, SdkTradeStatusSource::LocalEventStore);
+    assert_eq!(receipt.source, SdkTradeStatusSource::LocalOnly);
     assert_eq!(receipt.event_count, 2);
     assert_eq!(receipt.limit_applied, 1_000);
     assert_eq!(

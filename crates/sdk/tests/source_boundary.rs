@@ -121,8 +121,14 @@ const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
 const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TRADE_STATUS_DEFAULT_LIMIT",
     "TRADE_STATUS_MAX_LIMIT",
+    "TradeEvidenceBranchReceipt",
     "TradeEvidenceIngestReceipt",
     "TradeEvidenceIngestRequest",
+    "TradeEvidenceQueryBranch",
+    "TradeEvidenceQueryBranchKind",
+    "TradeEvidenceQueryPlan",
+    "TradeEvidenceRelayFilter",
+    "TradeEvidenceRelayTagFilter",
     "TradeRequestEvidenceIngestReceipt",
     "TradeRequestEvidenceIngestRequest",
     "TradeResyncReceipt",
@@ -770,6 +776,22 @@ fn order_runtime_public_exports_are_explicit() {
         assert!(
             !source.contains(forbidden),
             "src/lib.rs must not expose low-level trade mutation request export `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn order_runtime_rejects_retired_status_source_names() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+
+    for retired in ["LocalEventStore", "local_event_store"] {
+        assert!(
+            !source.contains(retired),
+            "src/orders_runtime.rs must not expose retired trade status source `{retired}`"
         );
     }
 }
