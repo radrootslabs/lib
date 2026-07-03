@@ -590,6 +590,19 @@ mod tests {
     use std::sync::RwLock;
     use std::thread;
 
+    mod removed_surface_fixtures {
+        pub const MIGRATE_LEGACY_IDENTITY_FILE: &str = "migrate_legacy_identity_file";
+        pub const SELECTED_ACCOUNT_ID: &str = "selected_account_id";
+        pub const SERDE_ALIAS_ATTRIBUTE: &str = "serde(alias";
+    }
+
+    fn production_manager_source() -> &'static str {
+        include_str!("manager.rs")
+            .split_once("#[cfg(test)]\nmod tests")
+            .expect("manager tests boundary")
+            .0
+    }
+
     struct LoadErrorStore;
 
     impl RadrootsNostrAccountStore for LoadErrorStore {
@@ -1258,10 +1271,9 @@ mod tests {
 
     #[test]
     fn manager_source_rejects_identity_migration_api() {
-        let source = include_str!("manager.rs");
-        let removed_api = ["migrate", "_legacy", "_identity", "_file"].concat();
         assert!(
-            !source.contains(removed_api.as_str()),
+            !production_manager_source()
+                .contains(removed_surface_fixtures::MIGRATE_LEGACY_IDENTITY_FILE),
             "nostr accounts manager must not expose removed identity migration API"
         );
     }
@@ -1269,14 +1281,12 @@ mod tests {
     #[test]
     fn model_source_rejects_account_store_aliases() {
         let source = include_str!("model.rs");
-        let removed_field = ["selected", "_account", "_id"].concat();
-        let removed_serde_alias = ["serde", "(alias"].concat();
         assert!(
-            !source.contains(removed_field.as_str()),
+            !source.contains(removed_surface_fixtures::SELECTED_ACCOUNT_ID),
             "nostr account store model must not accept removed account-store field aliases"
         );
         assert!(
-            !source.contains(removed_serde_alias.as_str()),
+            !source.contains(removed_surface_fixtures::SERDE_ALIAS_ATTRIBUTE),
             "nostr account store model must not expose serde alias compatibility"
         );
     }
