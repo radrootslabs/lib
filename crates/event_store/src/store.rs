@@ -1036,6 +1036,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn migration_installs_root_aware_trade_projection_key() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let rows = sqlx::query("PRAGMA table_info(trade_projection)")
+            .fetch_all(store.pool())
+            .await
+            .expect("table info");
+        let columns = rows
+            .iter()
+            .map(|row| {
+                (
+                    row.try_get::<String, _>("name").expect("name"),
+                    row.try_get::<i64, _>("notnull").expect("notnull"),
+                    row.try_get::<i64, _>("pk").expect("pk"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut primary_key = columns
+            .iter()
+            .filter_map(|(name, _, pk)| (*pk > 0).then_some((name.as_str(), *pk)))
+            .collect::<Vec<_>>();
+        primary_key.sort_by_key(|(_, pk)| *pk);
+
+        assert_eq!(
+            primary_key,
+            vec![
+                ("order_id", 1),
+                ("root_event_id", 2),
+                ("projection_version", 3)
+            ]
+        );
+        assert!(
+            columns
+                .iter()
+                .any(|(name, notnull, _)| name == "evidence_hash" && *notnull == 1)
+        );
+    }
+
+    #[tokio::test]
     async fn migration_can_run_down() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store.migrate_down().await.expect("down");

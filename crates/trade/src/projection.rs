@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use radroots_event_store::{
     RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, RadrootsEventStoreError,
@@ -26,7 +26,7 @@ use crate::{
     order::{
         RadrootsGroupedOrderEventRecords, RadrootsOrderEventDecodeError, RadrootsOrderEventRecord,
         RadrootsOrderProjectionQueryResult, RadrootsTradeLocatorProjectionQueryResult,
-        order_event_record_from_event,
+        RadrootsTradeLocatorProjectionResolution, order_event_record_from_event,
     },
     validation_receipt::{RadrootsValidationReceiptError, validation_receipt_from_event},
     workflow::{
@@ -35,6 +35,7 @@ use crate::{
         reduce_trade_workflow_records_for_trade_locator,
     },
 };
+use sha2::{Digest, Sha256};
 
 pub const RADROOTS_PRODUCT_PROJECTION_ID: &str = "radroots.product_projection.v1";
 pub const RADROOTS_PRODUCT_PROJECTION_VERSION: u32 = 1;
@@ -256,8 +257,8 @@ pub async fn refresh_product_projections(
     }
 
     for order_id in affected_orders {
-        upsert_trade_projection(store, &order_id, request.limit, updated_at_ms).await?;
-        receipt.trade_upserts += 1;
+        receipt.trade_upserts +=
+            upsert_trade_projection(store, &order_id, request.limit, updated_at_ms).await?;
     }
 
     if let Some(last_event_seq) = receipt.last_event_seq {
@@ -408,14 +409,80 @@ async fn upsert_trade_projection(
     order_id: &RadrootsOrderId,
     limit: u32,
     updated_at_ms: i64,
-) -> Result<(), RadrootsTradeProjectionError> {
+) -> Result<usize, RadrootsTradeProjectionError> {
     let inputs = trade_projection_inputs_for_order_id(store, order_id, limit).await?;
-    let event_ids = inputs.event_ids.clone();
-    let source_event_count = event_ids.len();
-    let relay_observation_count = relay_observation_count_for_events(store, &event_ids).await?;
-    let expected_listing_event_id = inputs.expected_listing_event_id.clone();
-    let current_listing_event_id = inputs.current_listing_event_id.clone();
-    let projection = reduce_trade_workflow_records(order_id, inputs.workflow_records);
+    let mut root_event_ids = inputs
+        .workflow_records
+        .order_events
+        .requests
+        .iter()
+        .map(|request| request.event_id.clone())
+        .collect::<Vec<_>>();
+    root_event_ids.sort();
+    root_event_ids.dedup();
+    let mut upserts = 0;
+    for root_event_id in root_event_ids {
+        let mut workflow_records = inputs.workflow_records.clone();
+        let expected_listing_event_id = inputs
+            .expected_listing_event_ids
+            .get(&root_event_id)
+            .cloned()
+            .flatten();
+        let current_listing_event_id = inputs
+            .current_listing_event_ids
+            .get(&root_event_id)
+            .cloned()
+            .flatten();
+        workflow_records.expected_listing_event_id = expected_listing_event_id.clone();
+        workflow_records.current_listing_event_id = current_listing_event_id.clone();
+        let locator =
+            RadrootsTradeLocator::from_order_id(order_id.clone()).with_root_event_id(root_event_id);
+        let RadrootsTradeLocatorProjectionResolution::Projected {
+            locator,
+            projection,
+        } = reduce_trade_workflow_records_for_trade_locator(&locator, workflow_records)
+        else {
+            continue;
+        };
+        let Some(root_event_id) = locator.root_event_id else {
+            continue;
+        };
+        let event_ids = projection_source_event_ids(&root_event_id, &projection);
+        let source_event_count = event_ids.len();
+        let relay_observation_count = relay_observation_count_for_events(store, &event_ids).await?;
+        let evidence_hash = projection_evidence_hash(&event_ids);
+        upsert_trade_projection_row(
+            store,
+            order_id,
+            &root_event_id,
+            &projection,
+            expected_listing_event_id.as_ref(),
+            current_listing_event_id.as_ref(),
+            source_event_count,
+            relay_observation_count,
+            &evidence_hash,
+            inputs.last_source_event_seq,
+            updated_at_ms,
+        )
+        .await?;
+        upserts += 1;
+    }
+    Ok(upserts)
+}
+
+async fn upsert_trade_projection_row(
+    store: &RadrootsEventStore,
+    order_id: &RadrootsOrderId,
+    root_event_id: &RadrootsEventId,
+    projection: &crate::order::RadrootsOrderProjection,
+    expected_listing_event_id: Option<&RadrootsEventId>,
+    current_listing_event_id: Option<&RadrootsEventId>,
+    source_event_count: usize,
+    relay_observation_count: i64,
+    evidence_hash: &str,
+    last_source_event_seq: Option<i64>,
+    updated_at_ms: i64,
+) -> Result<(), RadrootsTradeProjectionError> {
     let economics_json = projection
         .economics
         .as_ref()
@@ -453,9 +520,11 @@ async fn upsert_trade_projection(
     })?;
 
     sqlx::query(
-        "INSERT INTO trade_projection(order_id, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, pending_revision_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, relay_observation_count, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, pending_revision_event_id = excluded.pending_revision_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, relay_observation_count = excluded.relay_observation_count, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
+        "INSERT INTO trade_projection(order_id, root_event_id, projection_version, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, pending_revision_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, relay_observation_count, evidence_hash, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id, root_event_id, projection_version) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, pending_revision_event_id = excluded.pending_revision_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, relay_observation_count = excluded.relay_observation_count, evidence_hash = excluded.evidence_hash, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
     )
     .bind(order_id.as_str())
+    .bind(root_event_id.as_str())
+    .bind(i64::from(RADROOTS_PRODUCT_PROJECTION_VERSION))
     .bind(trade_workflow_status_label(&projection.status))
     .bind(bool_i64(projection.lifecycle_terminal))
     .bind(trade_rhi_state_label(&projection.status, projection.validation_receipt_event_id.as_ref()))
@@ -478,7 +547,8 @@ async fn upsert_trade_projection(
     .bind(i64::try_from(projection.issues.len()).unwrap_or(i64::MAX))
     .bind(i64::try_from(source_event_count).unwrap_or(i64::MAX))
     .bind(relay_observation_count)
-    .bind(inputs.last_source_event_seq)
+    .bind(evidence_hash)
+    .bind(last_source_event_seq)
     .bind(updated_at_ms)
     .execute(store.pool())
     .await?;
@@ -488,8 +558,8 @@ async fn upsert_trade_projection(
 struct TradeProjectionInputs {
     workflow_records: RadrootsTradeWorkflowRecords,
     event_ids: Vec<RadrootsEventId>,
-    expected_listing_event_id: Option<RadrootsEventId>,
-    current_listing_event_id: Option<RadrootsEventId>,
+    expected_listing_event_ids: BTreeMap<RadrootsEventId, Option<RadrootsEventId>>,
+    current_listing_event_ids: BTreeMap<RadrootsEventId, Option<RadrootsEventId>>,
     last_source_event_seq: Option<i64>,
 }
 
@@ -510,6 +580,8 @@ async fn trade_projection_inputs_for_order_id(
     let mut event_ids = Vec::with_capacity(stored_events.len());
     let mut expected_listing_event_id = None;
     let mut listing_addr = None;
+    let mut expected_listing_event_ids = BTreeMap::new();
+    let mut current_listing_event_ids = BTreeMap::new();
     let mut last_source_event_seq = None;
 
     for stored_event in stored_events {
@@ -557,8 +629,14 @@ async fn trade_projection_inputs_for_order_id(
         event_ids.push(record.event_id().clone());
         if let RadrootsOrderEventRecord::Request(request) = &record {
             listing_addr.get_or_insert_with(|| request.payload.listing_addr.clone());
+            let request_listing_event_id = request_listing_event_id(&event)?;
+            let current_listing_event_id =
+                current_listing_event_id(store, request.payload.listing_addr.as_str()).await?;
+            expected_listing_event_ids
+                .insert(request.event_id.clone(), request_listing_event_id.clone());
+            current_listing_event_ids.insert(request.event_id.clone(), current_listing_event_id);
             if expected_listing_event_id.is_none() {
-                expected_listing_event_id = request_listing_event_id(&event)?;
+                expected_listing_event_id = request_listing_event_id;
             }
         }
         push_order_record(&mut workflow_records.order_events, record);
@@ -574,10 +652,41 @@ async fn trade_projection_inputs_for_order_id(
     Ok(TradeProjectionInputs {
         workflow_records,
         event_ids,
-        expected_listing_event_id,
-        current_listing_event_id,
+        expected_listing_event_ids,
+        current_listing_event_ids,
         last_source_event_seq,
     })
+}
+
+fn projection_source_event_ids(
+    root_event_id: &RadrootsEventId,
+    projection: &crate::order::RadrootsOrderProjection,
+) -> Vec<RadrootsEventId> {
+    let mut event_ids = [
+        Some(root_event_id.clone()),
+        projection.request_event_id.clone(),
+        projection.decision_event_id.clone(),
+        projection.agreement_event_id.clone(),
+        projection.pending_revision_event_id.clone(),
+        projection.cancellation_event_id.clone(),
+        projection.validation_receipt_event_id.clone(),
+        projection.last_event_id.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    event_ids.sort();
+    event_ids.dedup();
+    event_ids
+}
+
+fn projection_evidence_hash(event_ids: &[RadrootsEventId]) -> String {
+    let mut hasher = Sha256::new();
+    for event_id in event_ids {
+        hasher.update(event_id.as_str().as_bytes());
+        hasher.update([0]);
+    }
+    hex::encode(hasher.finalize())
 }
 
 fn push_order_record(
@@ -956,6 +1065,13 @@ mod tests {
     }
 
     fn signed_order_request_event(listing_event: &RadrootsNostrEvent) -> RadrootsNostrEvent {
+        signed_order_request_event_at(listing_event, 1_700_000_010)
+    }
+
+    fn signed_order_request_event_at(
+        listing_event: &RadrootsNostrEvent,
+        created_at: u32,
+    ) -> RadrootsNostrEvent {
         let parts = order_request_event_build(
             &RadrootsNostrEventPtr {
                 id: listing_event.id.clone(),
@@ -968,7 +1084,7 @@ mod tests {
             parts.kind,
             parts.content,
             parts.tags,
-            1_700_000_010,
+            created_at,
             &keys(BUYER_SECRET),
         )
     }
@@ -1146,13 +1262,24 @@ mod tests {
             Some(RadrootsEventId::parse(receipt_event.id).expect("receipt"))
         );
 
+        let root_event_id = RadrootsEventId::parse(request_event.id).expect("request");
         let trade_row = sqlx::query(
-            "SELECT status, rhi_state, relay_observation_count FROM trade_projection WHERE order_id = ?",
+            "SELECT root_event_id, projection_version, status, rhi_state, relay_observation_count, source_event_count, evidence_hash FROM trade_projection WHERE order_id = ? AND root_event_id = ? AND projection_version = ?",
         )
         .bind(order_id().as_str())
+        .bind(root_event_id.as_str())
+        .bind(i64::from(RADROOTS_PRODUCT_PROJECTION_VERSION))
         .fetch_one(store.pool())
         .await
         .expect("trade row");
+        assert_eq!(
+            trade_row.try_get::<String, _>("root_event_id").unwrap(),
+            root_event_id.as_str()
+        );
+        assert_eq!(
+            trade_row.try_get::<i64, _>("projection_version").unwrap(),
+            i64::from(RADROOTS_PRODUCT_PROJECTION_VERSION)
+        );
         assert_eq!(
             trade_row.try_get::<String, _>("status").unwrap(),
             "committed"
@@ -1167,6 +1294,120 @@ mod tests {
                 .unwrap(),
             1
         );
+        assert_eq!(
+            trade_row.try_get::<i64, _>("source_event_count").unwrap(),
+            3
+        );
+        assert_eq!(
+            trade_row
+                .try_get::<String, _>("evidence_hash")
+                .unwrap()
+                .len(),
+            64
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_materializes_duplicate_order_roots_as_distinct_trade_projections() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let listing_event = signed_listing_event();
+        let first_request_event = signed_order_request_event_at(&listing_event, 1_700_000_010);
+        let second_request_event = signed_order_request_event_at(&listing_event, 1_700_000_011);
+        let first_root = RadrootsEventId::parse(first_request_event.id.clone()).expect("first");
+        let second_root = RadrootsEventId::parse(second_request_event.id.clone()).expect("second");
+
+        store
+            .ingest_event(RadrootsEventIngest::new(listing_event.clone(), 10))
+            .await
+            .expect("listing");
+        store
+            .ingest_event(RadrootsEventIngest::new(first_request_event, 20))
+            .await
+            .expect("first request");
+        store
+            .ingest_event(RadrootsEventIngest::new(second_request_event, 30))
+            .await
+            .expect("second request");
+
+        let refresh =
+            refresh_product_projections(&store, RadrootsProjectionRefreshRequest::new(), 40)
+                .await
+                .expect("refresh");
+        assert_eq!(refresh.trade_upserts, 2);
+
+        let rows = sqlx::query(
+            "SELECT root_event_id, request_event_id, status, source_event_count, evidence_hash FROM trade_projection WHERE order_id = ? AND projection_version = ? ORDER BY root_event_id",
+        )
+        .bind(order_id().as_str())
+        .bind(i64::from(RADROOTS_PRODUCT_PROJECTION_VERSION))
+        .fetch_all(store.pool())
+        .await
+        .expect("trade rows");
+        assert_eq!(rows.len(), 2);
+        let materialized_roots = rows
+            .iter()
+            .map(|row| row.try_get::<String, _>("root_event_id").expect("root"))
+            .collect::<Vec<_>>();
+        assert!(
+            materialized_roots
+                .iter()
+                .any(|root| root == first_root.as_str())
+        );
+        assert!(
+            materialized_roots
+                .iter()
+                .any(|root| root == second_root.as_str())
+        );
+        for row in &rows {
+            let root = row.try_get::<String, _>("root_event_id").unwrap();
+            assert_eq!(row.try_get::<String, _>("request_event_id").unwrap(), root);
+            assert_eq!(row.try_get::<String, _>("status").unwrap(), "requested");
+            assert_eq!(row.try_get::<i64, _>("source_event_count").unwrap(), 1);
+            assert_eq!(row.try_get::<String, _>("evidence_hash").unwrap().len(), 64);
+        }
+        assert_ne!(
+            rows[0].try_get::<String, _>("evidence_hash").unwrap(),
+            rows[1].try_get::<String, _>("evidence_hash").unwrap()
+        );
+
+        let ambiguous = trade_projection_query_for_order_id(&store, &order_id(), 100)
+            .await
+            .expect("ambiguous");
+        assert!(ambiguous.projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                crate::order::RadrootsOrderIssue::MultipleRequests { event_ids }
+                    if event_ids.iter().any(|event_id| event_id == &first_root)
+                        && event_ids.iter().any(|event_id| event_id == &second_root)
+            )
+        }));
+
+        let first_status = trade_projection_query_for_trade_locator(
+            &store,
+            &RadrootsTradeLocator::from_order_id(order_id()).with_root_event_id(first_root.clone()),
+            100,
+        )
+        .await
+        .expect("first status");
+        assert!(matches!(
+            first_status.resolution,
+            RadrootsTradeLocatorProjectionResolution::Projected { ref projection, .. }
+                if projection.request_event_id.as_ref() == Some(&first_root)
+        ));
+
+        let second_status = trade_projection_query_for_trade_locator(
+            &store,
+            &RadrootsTradeLocator::from_order_id(order_id())
+                .with_root_event_id(second_root.clone()),
+            100,
+        )
+        .await
+        .expect("second status");
+        assert!(matches!(
+            second_status.resolution,
+            RadrootsTradeLocatorProjectionResolution::Projected { ref projection, .. }
+                if projection.request_event_id.as_ref() == Some(&second_root)
+        ));
     }
 
     #[tokio::test]

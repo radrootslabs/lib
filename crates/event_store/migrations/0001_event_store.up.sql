@@ -128,7 +128,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS listing_search_fts USING fts5(
 );
 
 CREATE TABLE IF NOT EXISTS trade_projection (
-  order_id TEXT PRIMARY KEY NOT NULL,
+  order_id TEXT NOT NULL,
+  root_event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+  projection_version INTEGER NOT NULL,
   status TEXT NOT NULL,
   lifecycle_terminal INTEGER NOT NULL,
   rhi_state TEXT NOT NULL,
@@ -151,15 +153,20 @@ CREATE TABLE IF NOT EXISTS trade_projection (
   issue_count INTEGER NOT NULL,
   source_event_count INTEGER NOT NULL,
   relay_observation_count INTEGER NOT NULL,
+  evidence_hash TEXT NOT NULL,
   last_source_event_seq INTEGER,
-  updated_at_ms INTEGER NOT NULL
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY(order_id, root_event_id, projection_version)
 );
 
 CREATE INDEX IF NOT EXISTS trade_projection_status_idx
-ON trade_projection(status, updated_at_ms, order_id);
+ON trade_projection(status, updated_at_ms, order_id, root_event_id);
 
 CREATE INDEX IF NOT EXISTS trade_projection_listing_idx
-ON trade_projection(listing_addr, updated_at_ms, order_id);
+ON trade_projection(listing_addr, updated_at_ms, order_id, root_event_id);
 
 CREATE INDEX IF NOT EXISTS trade_projection_actor_idx
-ON trade_projection(buyer_pubkey, seller_pubkey, updated_at_ms, order_id);
+ON trade_projection(buyer_pubkey, seller_pubkey, updated_at_ms, order_id, root_event_id);
+
+CREATE INDEX IF NOT EXISTS trade_projection_root_idx
+ON trade_projection(root_event_id, projection_version);
