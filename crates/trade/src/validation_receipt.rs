@@ -8,7 +8,9 @@ use alloc::{
 };
 
 use base64::Engine as _;
-use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D};
+use radroots_events::{
+    RadrootsNostrEvent, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D,
+};
 use radroots_events_codec::wire::WireEventParts;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -124,6 +126,96 @@ impl RadrootsTradeCommitmentConfidence {
             "committed_by_trusted_service_and_proof" => {
                 Some(Self::CommittedByTrustedServiceAndProof)
             }
+            "invalid" => Some(Self::Invalid),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsTradeValidationTrustPolicy {
+    pub trusted_rhi_pubkeys: Vec<RadrootsPublicKey>,
+    pub allow_deterministic_none: bool,
+    pub require_cryptographic_proof: bool,
+}
+
+impl Default for RadrootsTradeValidationTrustPolicy {
+    fn default() -> Self {
+        Self::production()
+    }
+}
+
+impl RadrootsTradeValidationTrustPolicy {
+    pub fn production() -> Self {
+        Self {
+            trusted_rhi_pubkeys: Vec::new(),
+            allow_deterministic_none: false,
+            require_cryptographic_proof: true,
+        }
+    }
+
+    pub fn explicit_dev_test() -> Self {
+        Self {
+            trusted_rhi_pubkeys: Vec::new(),
+            allow_deterministic_none: true,
+            require_cryptographic_proof: false,
+        }
+    }
+
+    pub fn with_trusted_rhi_pubkeys(mut self, pubkeys: Vec<RadrootsPublicKey>) -> Self {
+        self.trusted_rhi_pubkeys = pubkeys;
+        self
+    }
+
+    pub fn with_allow_deterministic_none(mut self, allow_deterministic_none: bool) -> Self {
+        self.allow_deterministic_none = allow_deterministic_none;
+        self
+    }
+
+    pub fn with_require_cryptographic_proof(mut self, require_cryptographic_proof: bool) -> Self {
+        self.require_cryptographic_proof = require_cryptographic_proof;
+        self
+    }
+
+    pub fn trusts_rhi_pubkey(&self, pubkey: &RadrootsPublicKey) -> bool {
+        self.trusted_rhi_pubkeys
+            .iter()
+            .any(|trusted| trusted == pubkey)
+    }
+
+    pub fn trusted_rhi_pubkey_count(&self) -> usize {
+        self.trusted_rhi_pubkeys.len()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadrootsTradeValidationTrustState {
+    Pending,
+    Untrusted,
+    TrustedLocal,
+    CryptographicCommitted,
+    Invalid,
+}
+
+impl RadrootsTradeValidationTrustState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Untrusted => "untrusted",
+            Self::TrustedLocal => "trusted_local",
+            Self::CryptographicCommitted => "cryptographic_committed",
+            Self::Invalid => "invalid",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "untrusted" => Some(Self::Untrusted),
+            "trusted_local" => Some(Self::TrustedLocal),
+            "cryptographic_committed" => Some(Self::CryptographicCommitted),
             "invalid" => Some(Self::Invalid),
             _ => None,
         }
@@ -764,7 +856,8 @@ fn zero_error_bitmap() -> &'static str {
 mod tests {
     use super::{
         RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
-        RadrootsTradeValidationReceipt, RadrootsValidationReceiptError,
+        RadrootsTradeValidationReceipt, RadrootsTradeValidationTrustPolicy,
+        RadrootsTradeValidationTrustState, RadrootsValidationReceiptError,
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
         RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
@@ -1562,6 +1655,56 @@ mod tests {
             RadrootsTradeCommitmentConfidence::from_label("legacy"),
             None
         );
+    }
+
+    #[test]
+    fn validation_trust_state_contract_uses_stable_snake_case_labels() {
+        for (state, label) in [
+            (RadrootsTradeValidationTrustState::Pending, "pending"),
+            (RadrootsTradeValidationTrustState::Untrusted, "untrusted"),
+            (
+                RadrootsTradeValidationTrustState::TrustedLocal,
+                "trusted_local",
+            ),
+            (
+                RadrootsTradeValidationTrustState::CryptographicCommitted,
+                "cryptographic_committed",
+            ),
+            (RadrootsTradeValidationTrustState::Invalid, "invalid"),
+        ] {
+            assert_eq!(state.as_str(), label);
+            assert_eq!(
+                RadrootsTradeValidationTrustState::from_label(label),
+                Some(state)
+            );
+            assert_eq!(
+                serde_json::to_string(&state).expect("serialize trust state"),
+                format!("\"{label}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<RadrootsTradeValidationTrustState>(&format!("\"{label}\""))
+                    .expect("deserialize trust state"),
+                state
+            );
+        }
+        assert_eq!(
+            RadrootsTradeValidationTrustState::from_label("legacy"),
+            None
+        );
+    }
+
+    #[test]
+    fn validation_trust_policy_defaults_to_empty_production_trust() {
+        let production = RadrootsTradeValidationTrustPolicy::default();
+        assert!(production.trusted_rhi_pubkeys.is_empty());
+        assert!(!production.allow_deterministic_none);
+        assert!(production.require_cryptographic_proof);
+        assert_eq!(production.trusted_rhi_pubkey_count(), 0);
+
+        let dev_test = RadrootsTradeValidationTrustPolicy::explicit_dev_test();
+        assert!(dev_test.trusted_rhi_pubkeys.is_empty());
+        assert!(dev_test.allow_deterministic_none);
+        assert!(!dev_test.require_cryptographic_proof);
     }
 
     #[test]
