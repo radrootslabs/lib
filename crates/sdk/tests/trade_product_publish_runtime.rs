@@ -204,6 +204,26 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
     }
 }
 
+fn trade_propose_request(
+    raw_order_id: &str,
+    publish_mode: PublishMode,
+    ack_policy: AckPolicy,
+) -> TradeProposeRequest {
+    let order = order_request(raw_order_id);
+    TradeProposeRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order.order_id,
+        order.listing_addr,
+        order.seller_pubkey,
+        order.items,
+        order.economics,
+        explicit_trade_relays(),
+        publish_mode,
+        ack_policy,
+    )
+}
+
 fn explicit_trade_relays() -> RelayResolutionPolicy {
     RelayResolutionPolicy::explicit(
         SdkRelayTargetSet::new([RELAY], SdkRelayUrlPolicy::Public).expect("target relays"),
@@ -233,11 +253,8 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         .trades()
         .buyer()
         .propose_trade(
-            TradeProposeRequest::new(
-                buyer_actor(),
-                listing_event_ptr(),
-                order_request("trade-product-publish"),
-                explicit_trade_relays(),
+            trade_propose_request(
+                "trade-product-publish",
                 PublishMode::EnqueueAndPublish,
                 AckPolicy::AtLeastOneRelay,
             )

@@ -1058,6 +1058,34 @@ fn trade_product_facade_feature_gates_are_explicit() {
 }
 
 #[test]
+fn trade_propose_request_stays_product_shaped() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+    let request = struct_block(source.as_str(), "TradeProposeRequest");
+
+    assert!(
+        !request.contains("RadrootsOrderRequest"),
+        "TradeProposeRequest must not expose protocol-shaped order request input"
+    );
+    for required_field in [
+        "pub order_id: RadrootsOrderId",
+        "pub listing_addr: RadrootsListingAddress",
+        "pub seller_pubkey: RadrootsPublicKey",
+        "pub items: Vec<RadrootsOrderItem>",
+        "pub economics: RadrootsOrderEconomics",
+        "pub public_note: Option<String>",
+    ] {
+        assert!(
+            request.contains(required_field),
+            "TradeProposeRequest must expose product field `{required_field}`"
+        );
+    }
+}
+
+#[test]
 fn dvm_client_surface_is_inventory_guarded() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -629,6 +629,26 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
     }
 }
 
+fn trade_propose_request(
+    raw_order_id: &str,
+    publish_mode: PublishMode,
+    ack_policy: AckPolicy,
+) -> TradeProposeRequest {
+    let order = order_request(raw_order_id);
+    TradeProposeRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order.order_id,
+        order.listing_addr,
+        order.seller_pubkey,
+        order.items,
+        order.economics,
+        explicit_trade_relays(),
+        publish_mode,
+        ack_policy,
+    )
+}
+
 #[cfg(any())]
 fn invalid_listing_event_ptr() -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
@@ -946,11 +966,8 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-facade-flow"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-facade-flow",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1107,11 +1124,8 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-committed-resync"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-committed-resync",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1273,11 +1287,8 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-resync-before-accept"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-resync-before-accept",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1398,11 +1409,8 @@ async fn trade_product_revision_status_resync_imports_pending_revision_proposal(
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-resync-before-revision-decision"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-resync-before-revision-decision",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1529,11 +1537,8 @@ async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-local-only-no-fetch"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-local-only-no-fetch",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1601,11 +1606,8 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-explicit-accept"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-explicit-accept",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -1680,11 +1682,8 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-empty-explicit-accept"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-empty-explicit-accept",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -2546,11 +2545,8 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
     let outbox = RadrootsOutbox::open_file(&storage_paths.outbox_path)
         .await
         .expect("outbox");
-    let request = TradeProposeRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("trade-product-idempotent"),
-        explicit_trade_relays(),
+    let request = trade_propose_request(
+        "trade-product-idempotent",
         PublishMode::EnqueueOnly,
         AckPolicy::NoWait,
     )
@@ -2604,11 +2600,8 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
         .trades()
         .buyer()
         .propose_trade(
-            TradeProposeRequest::new(
-                buyer_actor(),
-                listing_event_ptr(),
-                order_request("trade-product-idempotent-conflict"),
-                explicit_trade_relays(),
+            trade_propose_request(
+                "trade-product-idempotent-conflict",
                 PublishMode::EnqueueOnly,
                 AckPolicy::NoWait,
             )
@@ -2646,6 +2639,152 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 #[tokio::test]
+async fn trade_product_propose_requires_public_note_privacy_confirmation() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+
+    let missing_confirmation = buyer_sdk
+        .trades()
+        .buyer()
+        .propose_trade(
+            trade_propose_request(
+                "trade-product-propose-public-note",
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .with_public_note("please leave at the community table"),
+        )
+        .await
+        .expect_err("missing public note confirmation");
+
+    let RadrootsSdkError::PrivacyPreflight {
+        operation,
+        status,
+        fields,
+    } = &missing_confirmation
+    else {
+        panic!("expected privacy preflight error");
+    };
+    assert_eq!(operation, "trade.propose");
+    assert_eq!(
+        *status,
+        PrivacyPreflightStatus::ExplicitConfirmationRequired
+    );
+    assert_eq!(fields, &[ProductSensitivityField::PublicButSensitiveNotes]);
+    assert_eq!(missing_confirmation.code(), "privacy_preflight");
+    assert_eq!(
+        missing_confirmation.detail_json()["detail"]["fields"][0],
+        "public_but_sensitive_notes"
+    );
+
+    let store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_propose_publishes_public_note_after_confirmation() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+
+    let receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                trade_propose_request(
+                    "trade-product-propose-public-note-confirmed",
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .with_public_note("please leave at the community table")
+                .with_privacy_confirmation(public_note_confirmation())
+                .try_with_idempotency_key("trade-product-propose-public-note-confirmed")
+                .expect("proposal idempotency"),
+            )
+            .await
+            .expect("confirmed proposal"),
+    );
+
+    assert_eq!(
+        receipt.order_id.as_str(),
+        "trade-product-propose-public-note-confirmed"
+    );
+    let store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_propose_blocks_sensitive_fulfillment_note_even_when_confirmed() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage_root = tempdir.path().join("sdk");
+    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+
+    let forbidden = buyer_sdk
+        .trades()
+        .buyer()
+        .propose_trade(
+            trade_propose_request(
+                "trade-product-propose-sensitive-note",
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+            )
+            .with_public_note("pickup address is 123 Farm Lane")
+            .with_privacy_confirmation(public_note_confirmation()),
+        )
+        .await
+        .expect_err("forbidden public fulfillment details");
+
+    let RadrootsSdkError::PrivacyPreflight {
+        operation,
+        status,
+        fields,
+    } = &forbidden
+    else {
+        panic!("expected privacy preflight error");
+    };
+    assert_eq!(operation, "trade.propose");
+    assert_eq!(*status, PrivacyPreflightStatus::ForbiddenPublicFields);
+    assert!(fields.contains(&ProductSensitivityField::SensitiveFulfillmentDetails));
+    let store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("event store");
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
 async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage_root = tempdir.path().join("sdk");
@@ -2655,11 +2794,8 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-privacy-decline"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-privacy-decline",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -2762,11 +2898,8 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-privacy-cancel"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-privacy-cancel",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -2831,11 +2964,8 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-cancel"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-cancel",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -2899,11 +3029,8 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
             .trades()
             .buyer()
             .propose_trade(
-                TradeProposeRequest::new(
-                    buyer_actor(),
-                    listing_event_ptr(),
-                    order_request("trade-product-revision"),
-                    explicit_trade_relays(),
+                trade_propose_request(
+                    "trade-product-revision",
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
                 )
@@ -2996,11 +3123,8 @@ async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects()
     let outcome = sdk
         .trades()
         .buyer()
-        .propose_trade(TradeProposeRequest::new(
-            buyer_actor(),
-            listing_event_ptr(),
-            order_request("trade-product-dry-run"),
-            explicit_trade_relays(),
+        .propose_trade(trade_propose_request(
+            "trade-product-dry-run",
             PublishMode::DryRun,
             AckPolicy::NoWait,
         ))

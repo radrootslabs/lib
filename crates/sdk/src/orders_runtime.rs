@@ -32,13 +32,12 @@ use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent, RadrootsSto
 use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    ids::RadrootsEventId,
     kinds::{
         KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
         KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
     },
-    order::RadrootsOrderEconomics,
     tags::{TAG_D, TAG_E, TAG_P},
 };
 #[cfg(any(feature = "signer-adapters", test))]
@@ -51,6 +50,11 @@ use radroots_events::{
         RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderRequest,
         RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
     },
+};
+#[cfg(any(feature = "runtime", feature = "signer-adapters", test))]
+use radroots_events::{
+    ids::{RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    order::RadrootsOrderEconomics,
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::order::{
@@ -1029,7 +1033,12 @@ pub struct TradeProposeRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub listing_event: RadrootsNostrEventPtr,
-    pub order: RadrootsOrderRequest,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub items: Vec<RadrootsOrderItem>,
+    pub economics: RadrootsOrderEconomics,
+    pub public_note: Option<String>,
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
@@ -1043,7 +1052,11 @@ impl TradeProposeRequest {
     pub fn new(
         actor: RadrootsActorContext,
         listing_event: RadrootsNostrEventPtr,
-        order: RadrootsOrderRequest,
+        order_id: RadrootsOrderId,
+        listing_addr: RadrootsListingAddress,
+        seller_pubkey: RadrootsPublicKey,
+        items: Vec<RadrootsOrderItem>,
+        economics: RadrootsOrderEconomics,
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
@@ -1051,7 +1064,12 @@ impl TradeProposeRequest {
         Self {
             actor,
             listing_event,
-            order,
+            order_id,
+            listing_addr,
+            seller_pubkey,
+            items,
+            economics,
+            public_note: None,
             target_relays,
             publish_mode,
             ack_policy,
@@ -1059,6 +1077,16 @@ impl TradeProposeRequest {
             idempotency_key: None,
             created_at: None,
         }
+    }
+
+    pub fn with_public_note(mut self, public_note: impl Into<String>) -> Self {
+        self.public_note = Some(public_note.into());
+        self
+    }
+
+    pub fn with_optional_public_note(mut self, public_note: Option<String>) -> Self {
+        self.public_note = public_note;
+        self
     }
 
     pub fn with_privacy_confirmation(
@@ -4410,22 +4438,35 @@ impl<'sdk> TradeBuyerClient<'sdk> {
         request: TradeProposeRequest,
     ) -> Result<TradeMutationOutcome<TradeSubmitPlan, TradeSubmitReceipt>, RadrootsSdkError> {
         validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        require_trade_product_privacy_preflight(
+            "trade.propose",
+            trade_propose_privacy_fields(&request),
+            &request.privacy_confirmation,
+        )?;
         let TradeProposeRequest {
             actor,
             listing_event,
-            order,
+            order_id,
+            listing_addr,
+            seller_pubkey,
+            items,
+            economics,
+            public_note: _,
             target_relays,
             publish_mode,
             ack_policy,
-            privacy_confirmation,
+            privacy_confirmation: _,
             idempotency_key,
             created_at,
         } = request;
-        require_trade_product_privacy_preflight(
-            "trade.propose",
-            trade_order_request_privacy_fields(&order),
-            &privacy_confirmation,
-        )?;
+        let order = RadrootsOrderRequest {
+            order_id,
+            listing_addr,
+            buyer_pubkey: actor.pubkey().clone(),
+            seller_pubkey,
+            items,
+            economics,
+        };
         let client = trades_client(self.sdk);
         let plan = client.prepare_submit(TradeSubmitPrepareRequest {
             actor: actor.clone(),
@@ -5292,14 +5333,20 @@ fn require_trade_product_privacy_preflight(
 }
 
 #[cfg(feature = "signer-adapters")]
-fn trade_order_request_privacy_fields(
-    order: &RadrootsOrderRequest,
-) -> Vec<ProductSensitivityField> {
-    if order.items.is_empty() && order.economics.items.is_empty() {
-        Vec::new()
-    } else {
-        vec![ProductSensitivityField::ProtocolMinimizedInventoryFields]
+fn trade_propose_privacy_fields(request: &TradeProposeRequest) -> Vec<ProductSensitivityField> {
+    let mut fields = Vec::new();
+    if !request.items.is_empty() || !request.economics.items.is_empty() {
+        fields.push(ProductSensitivityField::ProtocolMinimizedInventoryFields);
     }
+    if let Some(public_note) = request.public_note.as_deref()
+        && !public_note.trim().is_empty()
+    {
+        fields.push(ProductSensitivityField::PublicButSensitiveNotes);
+        if trade_reason_contains_private_coordination(public_note) {
+            fields.push(ProductSensitivityField::SensitiveFulfillmentDetails);
+        }
+    }
+    fields
 }
 
 #[cfg(feature = "signer-adapters")]
