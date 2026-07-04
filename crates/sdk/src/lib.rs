@@ -120,6 +120,7 @@ pub use crate::orders_runtime::{
     TradeValidationReceiptRelayOutcomeReceipt, TradeValidationReceiptRelayTransportOutcomeKind,
     TradeValidationReceiptTags, TradeValidationReceiptVerifyRequest,
     TradeValidationReceiptWorkerEvidence, TradeValidationReceiptWorkerEvidenceSelection,
+    TradeValidationTrustDecision,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::orders_runtime::{
@@ -190,4 +191,5 @@ pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
 #[cfg(feature = "runtime")]
 pub use radroots_trade::validation_receipt::{
     RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
+    RadrootsTradeValidationTrustPolicy, RadrootsTradeValidationTrustState,
 };

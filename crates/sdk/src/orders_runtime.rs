@@ -75,6 +75,8 @@ use radroots_relay_transport::{
     RadrootsRelayFetchRequest, RadrootsRelayOutcomeKind, fetch_and_ingest_relay_events,
 };
 #[cfg(feature = "runtime")]
+use radroots_trade::dvm::RADROOTS_DVM_TAG_VALIDATION_RECEIPT;
+#[cfg(feature = "runtime")]
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
 #[cfg(feature = "runtime")]
 use radroots_trade::listing::parse_listing_address;
@@ -94,9 +96,11 @@ use radroots_trade::order::{
 #[cfg(feature = "runtime")]
 use radroots_trade::validation_receipt::{
     RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
-    RadrootsTradeValidationReceipt, RadrootsValidationReceiptError,
+    RadrootsTradeValidationReceipt, RadrootsTradeValidationTrustPolicy,
+    RadrootsTradeValidationTrustState, RadrootsValidationReceiptError,
     RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
-    RadrootsValidationReceiptTags, verify_validation_receipt_event,
+    RadrootsValidationReceiptResult, RadrootsValidationReceiptTags,
+    verify_validation_receipt_event,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
@@ -1480,6 +1484,7 @@ pub struct TradeSellerInboxReceipt {
 pub struct TradeResyncRequest {
     pub locator: RadrootsTradeLocator,
     pub limit: u32,
+    pub validation_trust_policy: RadrootsTradeValidationTrustPolicy,
 }
 
 #[cfg(feature = "runtime")]
@@ -1488,12 +1493,33 @@ impl TradeResyncRequest {
         Self {
             locator,
             limit: TRADE_STATUS_DEFAULT_LIMIT,
+            validation_trust_policy: RadrootsTradeValidationTrustPolicy::production(),
         }
     }
 
     pub fn with_limit(mut self, limit: u32) -> Self {
         self.limit = limit;
         self
+    }
+
+    pub fn with_validation_trust_policy(
+        mut self,
+        policy: RadrootsTradeValidationTrustPolicy,
+    ) -> Self {
+        self.validation_trust_policy = policy;
+        self
+    }
+
+    pub fn try_with_trusted_rhi_pubkeys<I, S>(
+        mut self,
+        pubkeys: I,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.validation_trust_policy.trusted_rhi_pubkeys = parse_worker_pubkeys(pubkeys)?;
+        Ok(self)
     }
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
@@ -1925,6 +1951,7 @@ pub struct TradeStatusRequest {
     pub locator: RadrootsTradeLocator,
     pub limit: u32,
     pub source: SdkTradeStatusSource,
+    pub validation_trust_policy: RadrootsTradeValidationTrustPolicy,
 }
 
 #[cfg(feature = "runtime")]
@@ -1934,6 +1961,7 @@ impl TradeStatusRequest {
             locator,
             limit: TRADE_STATUS_DEFAULT_LIMIT,
             source: SdkTradeStatusSource::LocalOnly,
+            validation_trust_policy: RadrootsTradeValidationTrustPolicy::production(),
         }
     }
 
@@ -1952,6 +1980,26 @@ impl TradeStatusRequest {
     pub fn with_source(mut self, source: SdkTradeStatusSource) -> Self {
         self.source = source;
         self
+    }
+
+    pub fn with_validation_trust_policy(
+        mut self,
+        policy: RadrootsTradeValidationTrustPolicy,
+    ) -> Self {
+        self.validation_trust_policy = policy;
+        self
+    }
+
+    pub fn try_with_trusted_rhi_pubkeys<I, S>(
+        mut self,
+        pubkeys: I,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.validation_trust_policy.trusted_rhi_pubkeys = parse_worker_pubkeys(pubkeys)?;
+        Ok(self)
     }
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
@@ -1984,6 +2032,7 @@ pub struct TradeStatusReceipt {
     pub seller_pubkey: Option<RadrootsPublicKey>,
     pub economics: Option<RadrootsOrderEconomics>,
     pub evidence: TradeStatusEvidenceSummary,
+    pub validation_trust: Option<TradeValidationTrustDecision>,
     pub online_evidence: Option<TradeResyncEvidenceReceipt>,
     pub eligibility: TradeStatusEligibility,
     pub next_action: TradeStatusNextActionKind,
@@ -2012,9 +2061,31 @@ pub struct TradeStatusEvidenceSummary {
     pub has_request: bool,
     pub has_decision: bool,
     pub has_agreement: bool,
+    pub has_validation_receipt: bool,
     pub has_pending_revision: bool,
     pub has_cancellation: bool,
     pub has_issues: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeValidationTrustDecision {
+    pub state: RadrootsTradeValidationTrustState,
+    pub trusted_rhi_pubkey_count: usize,
+    pub allow_deterministic_none: bool,
+    pub require_cryptographic_proof: bool,
+    pub receipt_event_id: Option<RadrootsEventId>,
+    pub receipt_author: Option<RadrootsPublicKey>,
+    pub result_event_id: Option<RadrootsEventId>,
+    pub result_author: Option<RadrootsPublicKey>,
+    pub proof_system: Option<String>,
+    pub validation_authority: Option<RadrootsTradeValidationAuthority>,
+    pub commitment_confidence: Option<RadrootsTradeCommitmentConfidence>,
+    pub cryptographic_proof_required: bool,
+    pub cryptographic_proof_verified: bool,
+    pub production_committed: bool,
+    pub reason_code: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[cfg(feature = "runtime")]
@@ -3026,7 +3097,9 @@ impl<'sdk> TradesClient<'sdk> {
                 .await?;
                 let mut status = self
                     .local_status(
-                        TradeStatusRequest::new(request.locator).with_limit(request.limit),
+                        TradeStatusRequest::new(request.locator)
+                            .with_limit(request.limit)
+                            .with_validation_trust_policy(request.validation_trust_policy),
                     )
                     .await?;
                 status.source = SdkTradeStatusSource::ResyncThenLocal;
@@ -3051,6 +3124,12 @@ impl<'sdk> TradesClient<'sdk> {
         let mut receipt =
             TradeStatusReceipt::from_locator_query_result(request.locator, query_result);
         receipt.source = request.source;
+        apply_trade_status_validation_trust(
+            self.sdk,
+            &mut receipt,
+            &request.validation_trust_policy,
+        )
+        .await?;
         Ok(receipt)
     }
 
@@ -3170,7 +3249,11 @@ impl<'sdk> TradeResyncClient<'sdk> {
         )
         .await?;
         let status = trades_client(self.sdk)
-            .status(TradeStatusRequest::new(request.locator.clone()).with_limit(request.limit))
+            .status(
+                TradeStatusRequest::new(request.locator.clone())
+                    .with_limit(request.limit)
+                    .with_validation_trust_policy(request.validation_trust_policy.clone()),
+            )
             .await?;
         if status.status == TradeStatusKind::Ambiguous {
             return Err(RadrootsSdkError::TradeAmbiguous {
@@ -4216,6 +4299,452 @@ fn worker_payload_execution_binds_receipt(
             == Some(RadrootsTradeValidationAuthority::DevDeterministicOnly.as_str())
         && payload.confidence.as_deref()
             == Some(RadrootsTradeCommitmentConfidence::LocalOnly.as_str())
+}
+
+#[cfg(feature = "runtime")]
+async fn apply_trade_status_validation_trust(
+    sdk: &crate::RadrootsClient,
+    status: &mut TradeStatusReceipt,
+    policy: &RadrootsTradeValidationTrustPolicy,
+) -> Result<(), RadrootsSdkError> {
+    if !status.found
+        || matches!(
+            status.status,
+            TradeStatusKind::Missing | TradeStatusKind::Ambiguous
+        )
+    {
+        return Ok(());
+    }
+    let decision = trade_status_validation_trust_decision(sdk, status, policy).await?;
+    status.validation_trust = Some(decision);
+    apply_validation_trust_decision_to_status(status);
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+async fn trade_status_validation_trust_decision(
+    sdk: &crate::RadrootsClient,
+    status: &TradeStatusReceipt,
+    policy: &RadrootsTradeValidationTrustPolicy,
+) -> Result<TradeValidationTrustDecision, RadrootsSdkError> {
+    let Some(receipt_event_id) = status.rhi_receipt_event_id.clone() else {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some("validation_receipt_missing"),
+            Some("validation receipt is not present in local product evidence"),
+        ));
+    };
+    let Some(stored_event) = sdk
+        ._event_store
+        .get_event(receipt_event_id.as_str())
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?
+    else {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            Some(receipt_event_id),
+            None,
+            None,
+            None,
+            false,
+            Some("validation_receipt_event_missing"),
+            Some("validation receipt event is referenced by projection but missing from storage"),
+        ));
+    };
+    if stored_event.kind != KIND_TRADE_VALIDATION_RECEIPT {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Invalid,
+            Some(receipt_event_id),
+            None,
+            None,
+            None,
+            false,
+            Some("validation_receipt_event_kind_invalid"),
+            Some("validation receipt reference does not point to a validation receipt event"),
+        ));
+    }
+    let event = stored_event_to_nostr_event(&stored_event)?;
+    let receipt_author = match RadrootsPublicKey::parse(event.author.as_str()) {
+        Ok(author) => author,
+        Err(_) => {
+            return Ok(trade_validation_trust_decision(
+                policy,
+                RadrootsTradeValidationTrustState::Invalid,
+                Some(receipt_event_id),
+                None,
+                None,
+                None,
+                false,
+                Some("validation_receipt_author_invalid"),
+                Some("validation receipt author is not a valid public key"),
+            ));
+        }
+    };
+    let expected = RadrootsValidationReceiptExpectedBinding {
+        order_id: Some(status.order_id.as_str()),
+        root_event_id: status
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        target_event_id: status
+            .agreement_event_id
+            .as_ref()
+            .or(status.decision_event_id.as_ref())
+            .map(RadrootsEventId::as_str),
+        ..RadrootsValidationReceiptExpectedBinding::default()
+    };
+    let verified = match verify_validation_receipt_event(&event, expected) {
+        Ok(verified) => verified,
+        Err(error) => {
+            let reason = error.to_string();
+            return Ok(trade_validation_trust_decision(
+                policy,
+                RadrootsTradeValidationTrustState::Invalid,
+                Some(receipt_event_id),
+                Some(receipt_author),
+                None,
+                None,
+                false,
+                Some("validation_receipt_invalid"),
+                Some(reason.as_str()),
+            ));
+        }
+    };
+    let receipt = TradeValidationReceiptEvent {
+        event,
+        receipt: verified.receipt,
+        tags: TradeValidationReceiptTags::from(verified.tags),
+        worker_evidence: TradeValidationReceiptWorkerEvidenceSelection::default(),
+    };
+    if receipt.receipt.result == RadrootsValidationReceiptResult::Invalid {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Invalid,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(&receipt.receipt),
+            None,
+            false,
+            Some("validation_receipt_result_invalid"),
+            Some("validation receipt reports an invalid trade transition"),
+        ));
+    }
+    if policy.trusted_rhi_pubkeys.is_empty() {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(&receipt.receipt),
+            None,
+            false,
+            Some("validation_trust_policy_empty"),
+            Some("validation trust policy has no trusted RHI public keys"),
+        ));
+    }
+    if !policy.trusts_rhi_pubkey(&receipt_author) {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(&receipt.receipt),
+            None,
+            false,
+            Some("validation_receipt_author_untrusted"),
+            Some("validation receipt author is not trusted by the active policy"),
+        ));
+    }
+    let result_events =
+        validation_receipt_worker_result_events_for_receipt(sdk, &receipt_event_id).await?;
+    let mut selections = worker_evidence_for_receipts(
+        &policy.trusted_rhi_pubkeys,
+        core::slice::from_ref(&receipt),
+        result_events,
+    )?;
+    let selection = selections
+        .remove(receipt_event_id.as_str())
+        .unwrap_or_default();
+    let Some(evidence) = selection.trusted.as_ref() else {
+        if selection.untrusted.is_some() {
+            return Ok(trade_validation_trust_decision(
+                policy,
+                RadrootsTradeValidationTrustState::Untrusted,
+                Some(receipt_event_id),
+                Some(receipt_author),
+                Some(&receipt.receipt),
+                selection.untrusted.as_ref(),
+                false,
+                Some("validation_result_author_untrusted"),
+                Some("validation result metadata was produced by an untrusted RHI public key"),
+            ));
+        }
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(&receipt.receipt),
+            None,
+            false,
+            Some("validation_result_metadata_missing"),
+            Some("trusted validation result metadata is not present in local product evidence"),
+        ));
+    };
+    Ok(evaluate_trade_validation_trust_evidence(
+        policy,
+        receipt_event_id,
+        receipt_author,
+        &receipt.receipt,
+        evidence,
+    ))
+}
+
+#[cfg(feature = "runtime")]
+async fn validation_receipt_worker_result_events_for_receipt(
+    sdk: &crate::RadrootsClient,
+    receipt_event_id: &RadrootsEventId,
+) -> Result<Vec<RadrootsNostrEvent>, RadrootsSdkError> {
+    let events = sdk
+        ._event_store
+        .events_by_tag(
+            RADROOTS_DVM_TAG_VALIDATION_RECEIPT,
+            receipt_event_id.as_str(),
+            TRADE_STATUS_MAX_LIMIT,
+        )
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    events
+        .into_iter()
+        .filter(|event| event.kind == KIND_TRADE_TRANSITION_PROOF_RESULT)
+        .map(|event| stored_event_to_nostr_event(&event))
+        .collect()
+}
+
+#[cfg(feature = "runtime")]
+fn evaluate_trade_validation_trust_evidence(
+    policy: &RadrootsTradeValidationTrustPolicy,
+    receipt_event_id: RadrootsEventId,
+    receipt_author: RadrootsPublicKey,
+    receipt: &RadrootsTradeValidationReceipt,
+    evidence: &TradeValidationReceiptWorkerEvidence,
+) -> TradeValidationTrustDecision {
+    let Some(authority) = evidence.validation_authority else {
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            false,
+            Some("validation_authority_missing"),
+            Some("trusted validation result metadata does not declare validation authority"),
+        );
+    };
+    let Some(confidence) = evidence.commitment_confidence else {
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            false,
+            Some("commitment_confidence_missing"),
+            Some("trusted validation result metadata does not declare commitment confidence"),
+        );
+    };
+    if authority == RadrootsTradeValidationAuthority::DevDeterministicOnly
+        || confidence == RadrootsTradeCommitmentConfidence::LocalOnly
+    {
+        if !policy.allow_deterministic_none {
+            return trade_validation_trust_decision(
+                policy,
+                RadrootsTradeValidationTrustState::Untrusted,
+                Some(receipt_event_id),
+                Some(receipt_author),
+                Some(receipt),
+                Some(evidence),
+                false,
+                Some("deterministic_none_not_allowed"),
+                Some("deterministic-none validation is not allowed by the active policy"),
+            );
+        }
+        if policy.require_cryptographic_proof {
+            return trade_validation_trust_decision(
+                policy,
+                RadrootsTradeValidationTrustState::Pending,
+                Some(receipt_event_id),
+                Some(receipt_author),
+                Some(receipt),
+                Some(evidence),
+                false,
+                Some("cryptographic_proof_required"),
+                Some("active policy requires cryptographic proof for committed confidence"),
+            );
+        }
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::TrustedLocal,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            false,
+            None,
+            None,
+        );
+    }
+    let cryptographic_metadata = matches!(
+        (authority, confidence),
+        (
+            RadrootsTradeValidationAuthority::CryptographicProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof
+        ) | (
+            RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof
+        )
+    );
+    if cryptographic_metadata
+        && receipt.proof.system != RadrootsValidationReceiptProofSystem::None
+        && evidence.cryptographic_proof_verified
+    {
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::CryptographicCommitted,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            true,
+            None,
+            None,
+        );
+    }
+    if policy.require_cryptographic_proof {
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Pending,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            false,
+            Some("cryptographic_proof_required"),
+            Some("active policy requires trusted cryptographic proof metadata"),
+        );
+    }
+    if matches!(
+        (authority, confidence),
+        (
+            RadrootsTradeValidationAuthority::TrustedRhiServiceKey,
+            RadrootsTradeCommitmentConfidence::CommittedByTrustedService
+        ) | (
+            RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof
+        ) | (
+            RadrootsTradeValidationAuthority::CryptographicProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof
+        )
+    ) {
+        return trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::TrustedLocal,
+            Some(receipt_event_id),
+            Some(receipt_author),
+            Some(receipt),
+            Some(evidence),
+            false,
+            None,
+            None,
+        );
+    }
+    trade_validation_trust_decision(
+        policy,
+        RadrootsTradeValidationTrustState::Pending,
+        Some(receipt_event_id),
+        Some(receipt_author),
+        Some(receipt),
+        Some(evidence),
+        false,
+        Some("validation_trust_metadata_insufficient"),
+        Some("trusted validation result metadata does not satisfy the active policy"),
+    )
+}
+
+#[cfg(feature = "runtime")]
+fn trade_validation_trust_decision(
+    policy: &RadrootsTradeValidationTrustPolicy,
+    state: RadrootsTradeValidationTrustState,
+    receipt_event_id: Option<RadrootsEventId>,
+    receipt_author: Option<RadrootsPublicKey>,
+    receipt: Option<&RadrootsTradeValidationReceipt>,
+    evidence: Option<&TradeValidationReceiptWorkerEvidence>,
+    production_committed: bool,
+    reason_code: Option<&str>,
+    reason: Option<&str>,
+) -> TradeValidationTrustDecision {
+    TradeValidationTrustDecision {
+        state,
+        trusted_rhi_pubkey_count: policy.trusted_rhi_pubkey_count(),
+        allow_deterministic_none: policy.allow_deterministic_none,
+        require_cryptographic_proof: policy.require_cryptographic_proof,
+        receipt_event_id,
+        receipt_author,
+        result_event_id: evidence.map(|evidence| evidence.result_event_id.clone()),
+        result_author: evidence.map(|evidence| evidence.author.clone()),
+        proof_system: receipt.map(|receipt| receipt.proof.system.as_str().to_owned()),
+        validation_authority: evidence.and_then(|evidence| evidence.validation_authority),
+        commitment_confidence: evidence.and_then(|evidence| evidence.commitment_confidence),
+        cryptographic_proof_required: policy.require_cryptographic_proof,
+        cryptographic_proof_verified: evidence
+            .is_some_and(|evidence| evidence.cryptographic_proof_verified),
+        production_committed,
+        reason_code: reason_code.map(str::to_owned),
+        reason: reason.map(str::to_owned),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn apply_validation_trust_decision_to_status(status: &mut TradeStatusReceipt) {
+    let Some(decision) = status.validation_trust.as_ref() else {
+        return;
+    };
+    match decision.state {
+        RadrootsTradeValidationTrustState::Pending
+        | RadrootsTradeValidationTrustState::Untrusted => {
+            if status.status == TradeStatusKind::Committed {
+                status.status = TradeStatusKind::AgreedPendingRhi;
+                status.lifecycle_terminal = false;
+                status.next_action = TradeStatusNextActionKind::AwaitRhiValidation;
+                status.last_event_id = status
+                    .agreement_event_id
+                    .clone()
+                    .or_else(|| status.decision_event_id.clone())
+                    .or_else(|| status.request_event_id.clone());
+            }
+        }
+        RadrootsTradeValidationTrustState::Invalid => {
+            status.status = TradeStatusKind::Invalid;
+            status.lifecycle_terminal = true;
+            status.next_action = TradeStatusNextActionKind::InspectEvidenceIssues;
+        }
+        RadrootsTradeValidationTrustState::TrustedLocal
+        | RadrootsTradeValidationTrustState::CryptographicCommitted => {}
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -5579,6 +6108,7 @@ impl TradeStatusReceipt {
             seller_pubkey: projection.seller_pubkey,
             economics: projection.economics,
             evidence,
+            validation_trust: None,
             online_evidence: None,
             eligibility,
             next_action,
@@ -5663,6 +6193,7 @@ impl TradeStatusEvidenceSummary {
             has_request: projection.request_event_id.is_some(),
             has_decision: projection.decision_event_id.is_some(),
             has_agreement: projection.agreement_event_id.is_some(),
+            has_validation_receipt: projection.validation_receipt_event_id.is_some(),
             has_pending_revision: projection.pending_revision_event_id.is_some(),
             has_cancellation: projection.cancellation_event_id.is_some(),
             has_issues: !projection.issues.is_empty(),

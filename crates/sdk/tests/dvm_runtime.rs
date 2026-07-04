@@ -31,8 +31,9 @@ use radroots_sdk::{
     DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmTradeTransitionProofEnqueueRequest,
     DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, RadrootsClient,
     RadrootsSdkError, RadrootsSdkStorageConfig, RadrootsSdkTimestamp,
-    RadrootsTradeInventoryBinWitnessDto, SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
-    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
+    RadrootsTradeInventoryBinWitnessDto, RadrootsTradeValidationTrustState, SdkMutationState,
+    SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradeStatusKind, TradeStatusNextActionKind,
+    TradeStatusRequest,
 };
 #[cfg(feature = "signer-adapters")]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
@@ -329,14 +330,25 @@ async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
         .status(status_request("order-dvm-ingest"))
         .await
         .expect("committed status");
-    assert_eq!(committed.status, TradeStatusKind::Committed);
-    assert!(committed.lifecycle_terminal);
-    assert_eq!(committed.next_action, TradeStatusNextActionKind::Terminal);
+    assert_eq!(committed.status, TradeStatusKind::AgreedPendingRhi);
+    assert!(!committed.lifecycle_terminal);
+    assert_eq!(
+        committed.next_action,
+        TradeStatusNextActionKind::AwaitRhiValidation
+    );
     assert_eq!(
         committed.rhi_receipt_event_id,
         Some(receipt_event_id.clone())
     );
-    assert_eq!(committed.last_event_id, Some(receipt_event_id));
+    assert_eq!(committed.last_event_id, Some(decision_event_id));
+    let trust = committed.validation_trust.expect("validation trust");
+    assert_eq!(trust.state, RadrootsTradeValidationTrustState::Untrusted);
+    assert_eq!(
+        trust.reason_code.as_deref(),
+        Some("validation_trust_policy_empty")
+    );
+    assert!(!trust.production_committed);
+    assert_eq!(trust.proof_system.as_deref(), Some("none"));
 }
 
 #[tokio::test]
