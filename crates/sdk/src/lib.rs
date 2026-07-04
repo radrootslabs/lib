@@ -127,7 +127,7 @@ pub use crate::orders_runtime::{
     TRADE_REVISION_DECISION_OPERATION_KIND, TRADE_REVISION_PROPOSAL_OPERATION_KIND,
     TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeCancellationPlan,
     TradeCancellationReceipt, TradeDecisionPlan, TradeDecisionReceipt, TradeDeclineRequest,
-    TradeMutationOutcome, TradeProposeRequest, TradeRevisionDecisionPlan,
+    TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest, TradeRevisionDecisionPlan,
     TradeRevisionDecisionReceipt, TradeRevisionDecisionRequest, TradeRevisionProposalPlan,
     TradeRevisionProposalReceipt, TradeRevisionProposalRequest, TradeSubmitPlan,
     TradeSubmitReceipt, TradeWorkflowEnqueueReceipt, TradeWorkflowIdempotencyReceipt,

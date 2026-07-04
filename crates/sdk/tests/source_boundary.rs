@@ -174,6 +174,7 @@ const REQUIRED_TRADE_SIGNER_EXPORTS: &[&str] = &[
     "TradeDecisionPlan",
     "TradeDecisionReceipt",
     "TradeDeclineRequest",
+    "TradeEvidenceMode",
     "TradeMutationOutcome",
     "TradeProposeRequest",
     "TradeRevisionDecisionPlan",
@@ -797,6 +798,56 @@ fn order_runtime_rejects_retired_status_source_names() {
 }
 
 #[test]
+fn order_runtime_mutation_requests_require_evidence_mode() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+
+    assert!(
+        source.contains("pub enum TradeEvidenceMode"),
+        "src/orders_runtime.rs must define explicit trade mutation evidence modes"
+    );
+    for variant in [
+        "LocalOnly",
+        "ResyncBeforeMutation",
+        "RequireExplicitEvidence",
+    ] {
+        assert!(
+            source.contains(variant),
+            "TradeEvidenceMode must retain `{variant}`"
+        );
+    }
+    for request in [
+        "TradeAcceptRequest",
+        "TradeDeclineRequest",
+        "TradeCancelRequest",
+        "TradeRevisionProposalRequest",
+        "TradeRevisionDecisionRequest",
+    ] {
+        let struct_block = struct_block(source.as_str(), request);
+        assert!(
+            struct_block.contains("pub evidence_mode: TradeEvidenceMode"),
+            "{request} must carry explicit evidence_mode"
+        );
+    }
+    for constructor in [
+        "impl TradeAcceptRequest",
+        "impl TradeDeclineRequest",
+        "impl TradeCancelRequest",
+        "impl TradeRevisionProposalRequest",
+        "impl TradeRevisionDecisionRequest",
+    ] {
+        let impl_source = impl_block(source.as_str(), constructor);
+        assert!(
+            impl_source.contains("evidence_mode: TradeEvidenceMode"),
+            "{constructor}::new must require explicit evidence mode"
+        );
+    }
+}
+
+#[test]
 fn dvm_runtime_public_exports_are_explicit() {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1343,6 +1394,18 @@ fn impl_block<'source>(source: &'source str, marker: &str) -> &'source str {
     let start = source
         .find(marker)
         .unwrap_or_else(|| panic!("failed to find impl block marker `{marker}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find("\n}\n\n#[cfg(")
+        .unwrap_or(source_after_start.len());
+    &source_after_start[..end]
+}
+
+fn struct_block<'source>(source: &'source str, marker: &str) -> &'source str {
+    let signature = format!("pub struct {marker}");
+    let start = source
+        .find(signature.as_str())
+        .unwrap_or_else(|| panic!("failed to find struct block marker `{marker}`"));
     let source_after_start = &source[start..];
     let end = source_after_start
         .find("\n}\n\n#[cfg(")

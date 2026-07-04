@@ -2,8 +2,12 @@
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use std::path::Path;
+#[cfg(feature = "relay-runtime")]
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "relay-runtime")]
+use futures::future::BoxFuture;
 use nostr::JsonUtil;
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
@@ -35,18 +39,23 @@ use radroots_nostr::prelude::{
 };
 use radroots_outbox::RadrootsOutbox;
 use radroots_relay_transport::{RadrootsMockRelayFetchAdapter, RadrootsRelayFetchItem};
+#[cfg(feature = "relay-runtime")]
+use radroots_relay_transport::{
+    RadrootsRelayFetchAdapter, RadrootsRelayFetchRequest, RadrootsRelayTransportError,
+};
 use radroots_sdk::{
     AckPolicy, DvmValidationReceiptIngestRequest, PublishMode, RadrootsClient, RadrootsSdkError,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkMutationState,
     SdkRelayTargetSet, SdkRelayUrlPolicy, SdkTradeStatusIssue, SdkTradeStatusIssueKind,
     SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
     TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
-    TradeEvidenceIngestRequest, TradeEvidenceQueryBranchKind, TradeMutationOutcome,
-    TradeProposeRequest, TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
-    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
-    TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
-    TradeStatusNextActionKind, TradeStatusRequest, TradeValidationReceiptInspectRequest,
-    TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
+    TradeEvidenceIngestRequest, TradeEvidenceMode, TradeEvidenceQueryBranchKind,
+    TradeMutationOutcome, TradeProposeRequest, TradeRequestEvidenceIngestRequest,
+    TradeResyncRelayOutcomeKind, TradeResyncRelayTransportOutcomeKind, TradeResyncRequest,
+    TradeRevisionDecisionRequest, TradeRevisionProposalRequest, TradeSellerInboxRequest,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
+    TradeValidationReceiptInspectRequest, TradeValidationReceiptListRequest,
+    TradeValidationReceiptVerifyRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -92,6 +101,40 @@ enum FailingSerializeFailure {
 
 struct FailingStructSerializer {
     failure: FailingSerializeFailure,
+}
+
+#[cfg(feature = "relay-runtime")]
+#[derive(Clone, Default)]
+struct CapturingRelayFetchAdapter {
+    filters_json: Arc<Mutex<Vec<String>>>,
+}
+
+#[cfg(feature = "relay-runtime")]
+impl CapturingRelayFetchAdapter {
+    fn filters_json(&self) -> Vec<String> {
+        self.filters_json
+            .lock()
+            .expect("captured filters lock")
+            .clone()
+    }
+}
+
+#[cfg(feature = "relay-runtime")]
+impl RadrootsRelayFetchAdapter for CapturingRelayFetchAdapter {
+    fn fetch<'a>(
+        &'a self,
+        request: RadrootsRelayFetchRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError>> {
+        Box::pin(async move {
+            let filters = request
+                .filters()
+                .iter()
+                .map(JsonUtil::as_json)
+                .collect::<Vec<_>>();
+            *self.filters_json.lock().expect("captured filters lock") = filters;
+            Ok(vec![relay_eose(RELAY)])
+        })
+    }
 }
 
 struct FailingSerializeStruct {
@@ -981,6 +1024,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-facade-accept")
                 .expect("accept idempotency"),
@@ -1119,6 +1163,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-committed-resync-accept")
                 .expect("accept idempotency"),
@@ -1191,6 +1236,493 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         Some(receipt_event_id)
     );
     assert_eq!(buyer_resync.evidence.inserted_count, 2);
+}
+
+#[cfg(all(
+    feature = "signer-adapters",
+    feature = "local-signer",
+    feature = "relay-runtime"
+))]
+#[tokio::test]
+async fn trade_product_accept_resync_before_mutation_imports_relay_visible_request() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let buyer_sdk = directory_sdk_with_signer_and_relays(
+        buyer_storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let seller_sdk = directory_sdk_with_signer_and_relays(
+        seller_storage_root.as_path(),
+        SELLER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let buyer_store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("buyer event store");
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-resync-before-accept"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-resync-before-accept-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller isolated before mutation")
+            .total_events,
+        0
+    );
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_event_item_from_store(&buyer_store, &propose_receipt.signed_event_id, RELAY, 4_300)
+            .await,
+        relay_eose(RELAY),
+    ]);
+    let accept_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .accept_trade_with_fetch_adapter(
+                TradeAcceptRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    vec![RadrootsOrderInventoryCommitment {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 2,
+                    }],
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                    TradeEvidenceMode::ResyncBeforeMutation,
+                )
+                .try_with_idempotency_key("trade-product-resync-before-accept")
+                .expect("accept idempotency"),
+                &adapter,
+            )
+            .await
+            .expect("accept trade"),
+    );
+    assert_eq!(
+        accept_receipt.request_event_id,
+        propose_receipt.signed_event_id
+    );
+    let status = seller_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator))
+        .await
+        .expect("seller status after accept");
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        status.decision_event_id,
+        Some(accept_receipt.signed_event_id)
+    );
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller imported request and decision")
+            .total_events,
+        2
+    );
+}
+
+#[cfg(all(
+    feature = "signer-adapters",
+    feature = "local-signer",
+    feature = "relay-runtime"
+))]
+#[tokio::test]
+async fn trade_product_revision_status_resync_imports_pending_revision_proposal() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let decision_storage_root = tempdir.path().join("decision-sdk");
+    let buyer_sdk = directory_sdk_with_signer_and_relays(
+        buyer_storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let seller_sdk = directory_sdk_with_signer_and_relays(
+        seller_storage_root.as_path(),
+        SELLER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let decision_sdk = directory_sdk_with_signer_and_relays(
+        decision_storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let buyer_store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("buyer event store");
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
+    let decision_store = RadrootsEventStore::open_file(
+        &decision_sdk
+            .storage_paths()
+            .expect("paths")
+            .event_store_path,
+    )
+    .await
+    .expect("decision event store");
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-resync-before-revision-decision"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-resync-before-revision-decision-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    seller_sdk
+        .trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(propose_receipt.locator.clone()),
+            &RadrootsMockRelayFetchAdapter::new(vec![
+                relay_event_item_from_store(
+                    &buyer_store,
+                    &propose_receipt.signed_event_id,
+                    RELAY,
+                    4_400,
+                )
+                .await,
+                relay_eose(RELAY),
+            ]),
+        )
+        .await
+        .expect("seller request resync");
+    let revision_id: RadrootsOrderRevisionId = "revision-product-resync-before-decision"
+        .parse()
+        .expect("revision id");
+    let proposal_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .propose_revision(
+                TradeRevisionProposalRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    revision_id,
+                    vec![RadrootsOrderItem {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 3,
+                    }],
+                    revision_economics(),
+                    "increase quantity",
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
+                )
+                .with_privacy_confirmation(public_note_confirmation())
+                .try_with_idempotency_key("trade-product-resync-before-revision-proposal")
+                .expect("revision proposal idempotency"),
+            )
+            .await
+            .expect("propose revision"),
+    );
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        relay_event_item_from_store(&buyer_store, &propose_receipt.signed_event_id, RELAY, 4_500)
+            .await,
+        relay_event_item_from_store(
+            &seller_store,
+            &proposal_receipt.signed_event_id,
+            RELAY,
+            4_501,
+        )
+        .await,
+        relay_eose(RELAY),
+    ]);
+    let status = decision_sdk
+        .trades()
+        .status_with_fetch_adapter(
+            TradeStatusRequest::new(propose_receipt.locator.clone())
+                .with_source(SdkTradeStatusSource::ResyncThenLocal),
+            &adapter,
+        )
+        .await
+        .expect("decision resync status");
+
+    assert_eq!(status.status, TradeStatusKind::RevisionProposed);
+    assert_eq!(
+        status.pending_revision_event_id,
+        Some(proposal_receipt.signed_event_id)
+    );
+    assert!(status.eligibility.can_decide_revision);
+    assert_eq!(
+        decision_store
+            .status_summary()
+            .await
+            .expect("decision imported request and proposal")
+            .total_events,
+        2
+    );
+}
+
+#[cfg(all(
+    feature = "signer-adapters",
+    feature = "local-signer",
+    feature = "relay-runtime"
+))]
+#[tokio::test]
+async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let buyer_sdk = directory_sdk_with_signer_and_relays(
+        buyer_storage_root.as_path(),
+        BUYER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let seller_sdk = directory_sdk_with_signer_and_relays(
+        seller_storage_root.as_path(),
+        SELLER_SECRET_KEY_HEX,
+        &[RELAY],
+    )
+    .await;
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-local-only-no-fetch"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-local-only-no-fetch-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![relay_closed(RELAY, "must not fetch")]);
+    let error = seller_sdk
+        .trades()
+        .seller()
+        .accept_trade_with_fetch_adapter(
+            TradeAcceptRequest::new(
+                seller_actor(),
+                propose_receipt.locator,
+                vec![RadrootsOrderInventoryCommitment {
+                    bin_id: "bin-1".parse().expect("bin id"),
+                    bin_count: 2,
+                }],
+                explicit_trade_relays(),
+                PublishMode::EnqueueOnly,
+                AckPolicy::NoWait,
+                TradeEvidenceMode::LocalOnly,
+            ),
+            &adapter,
+        )
+        .await
+        .expect_err("local-only accept without local evidence");
+    let RadrootsSdkError::InvalidRequest { message } = error else {
+        panic!("expected invalid request");
+    };
+    assert!(message.contains("trade.accept requires a locally projected trade"));
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller remains empty")
+            .total_events,
+        0
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let buyer_sdk =
+        directory_sdk_with_signer(buyer_storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let seller_sdk =
+        directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let buyer_store =
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("buyer event store");
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-explicit-accept"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-explicit-accept-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let request_event = event_from_store(&buyer_store, &propose_receipt.signed_event_id).await;
+    let accept_receipt = expect_enqueued(
+        seller_sdk
+            .trades()
+            .seller()
+            .accept_trade(
+                TradeAcceptRequest::new(
+                    seller_actor(),
+                    propose_receipt.locator.clone(),
+                    vec![RadrootsOrderInventoryCommitment {
+                        bin_id: "bin-1".parse().expect("bin id"),
+                        bin_count: 2,
+                    }],
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                    TradeEvidenceMode::require_explicit_evidence([
+                        TradeEvidenceIngestRequest::new(request_event),
+                    ]),
+                )
+                .try_with_idempotency_key("trade-product-explicit-accept")
+                .expect("accept idempotency"),
+            )
+            .await
+            .expect("accept trade"),
+    );
+    assert_eq!(
+        accept_receipt.request_event_id,
+        propose_receipt.signed_event_id
+    );
+    let status = seller_sdk
+        .trades()
+        .status(TradeStatusRequest::new(propose_receipt.locator))
+        .await
+        .expect("seller explicit status after accept");
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller imported request and decision")
+            .total_events,
+        2
+    );
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+#[tokio::test]
+async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let buyer_storage_root = tempdir.path().join("buyer-sdk");
+    let seller_storage_root = tempdir.path().join("seller-sdk");
+    let buyer_sdk =
+        directory_sdk_with_signer(buyer_storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
+    let seller_sdk =
+        directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
+    let seller_store =
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+            .await
+            .expect("seller event store");
+    let propose_receipt = expect_enqueued(
+        buyer_sdk
+            .trades()
+            .buyer()
+            .propose_trade(
+                TradeProposeRequest::new(
+                    buyer_actor(),
+                    listing_event_ptr(),
+                    order_request("trade-product-empty-explicit-accept"),
+                    explicit_trade_relays(),
+                    PublishMode::EnqueueOnly,
+                    AckPolicy::NoWait,
+                )
+                .try_with_idempotency_key("trade-product-empty-explicit-accept-propose")
+                .expect("propose idempotency"),
+            )
+            .await
+            .expect("propose trade"),
+    );
+    let error = seller_sdk
+        .trades()
+        .seller()
+        .accept_trade(TradeAcceptRequest::new(
+            seller_actor(),
+            propose_receipt.locator,
+            vec![RadrootsOrderInventoryCommitment {
+                bin_id: "bin-1".parse().expect("bin id"),
+                bin_count: 2,
+            }],
+            explicit_trade_relays(),
+            PublishMode::EnqueueOnly,
+            AckPolicy::NoWait,
+            TradeEvidenceMode::require_explicit_evidence(Vec::<TradeEvidenceIngestRequest>::new()),
+        ))
+        .await
+        .expect_err("empty explicit evidence");
+    let RadrootsSdkError::InvalidRequest { message } = error else {
+        panic!("expected invalid request");
+    };
+    assert_eq!(message, "trade.accept requires explicit trade evidence");
+    assert_eq!(
+        seller_store
+            .status_summary()
+            .await
+            .expect("seller remains empty")
+            .total_events,
+        0
+    );
 }
 
 #[cfg(feature = "relay-runtime")]
@@ -1776,6 +2308,39 @@ async fn trade_resync_duplicate_replay_is_idempotent() {
 
 #[cfg(feature = "relay-runtime")]
 #[tokio::test]
+async fn trade_resync_splits_lifecycle_branch_into_single_kind_filters() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
+    let adapter = CapturingRelayFetchAdapter::default();
+    sdk.trades()
+        .resync()
+        .resync_with_fetch_adapter(
+            TradeResyncRequest::new(RadrootsTradeLocator::from_order_id(order_id(
+                "resync-lifecycle-filter-shape",
+            ))),
+            &adapter,
+        )
+        .await
+        .expect("resync");
+
+    let filters = adapter.filters_json();
+    assert_eq!(filters.len(), 6);
+    for kind in [3422, 3423, 3424, 3425, 3432, 3440] {
+        assert!(
+            filters
+                .iter()
+                .any(|filter| filter.contains(format!("\"kinds\":[{kind}]").as_str())),
+            "missing single-kind filter for {kind}: {filters:?}"
+        );
+    }
+    assert!(
+        !filters
+            .iter()
+            .any(|filter| filter.contains("\"kinds\":[3423,3424,3425,3432]"))
+    );
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
 async fn trade_resync_reports_malformed_evidence_without_poisoning_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
     let adapter =
@@ -1919,6 +2484,20 @@ async fn relay_event_item_from_store(
         raw_json: stored.raw_json,
         observed_at_ms,
     }
+}
+
+async fn event_from_store(
+    source: &RadrootsEventStore,
+    event_id: &RadrootsEventId,
+) -> RadrootsNostrEvent {
+    let stored = source
+        .get_event(event_id.as_str())
+        .await
+        .expect("source event lookup")
+        .expect("source event");
+    let event =
+        serde_json::from_str::<nostr::Event>(stored.raw_json.as_str()).expect("stored raw event");
+    radroots_event_from_nostr(&event)
 }
 
 fn relay_raw_event_item(
@@ -2102,6 +2681,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
             explicit_trade_relays(),
             PublishMode::EnqueueOnly,
             AckPolicy::NoWait,
+            TradeEvidenceMode::LocalOnly,
         ))
         .await
         .expect_err("missing public note confirmation");
@@ -2150,6 +2730,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
                 .try_with_idempotency_key("trade-product-privacy-decline-confirmed")
@@ -2207,6 +2788,7 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
                 explicit_trade_relays(),
                 PublishMode::EnqueueOnly,
                 AckPolicy::NoWait,
+                TradeEvidenceMode::LocalOnly,
             )
             .with_privacy_confirmation(public_note_confirmation()),
         )
@@ -2276,6 +2858,7 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
                 .try_with_idempotency_key("trade-product-cancel")
@@ -2350,6 +2933,7 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
                 .try_with_idempotency_key("trade-product-revision-proposal")
@@ -2383,6 +2967,7 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
                     AckPolicy::NoWait,
+                    TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-revision-decision")
                 .expect("revision decision idempotency"),
@@ -5711,6 +6296,7 @@ async fn trade_product_mutation_returns_structured_ambiguity() {
             explicit_trade_relays(),
             PublishMode::EnqueueOnly,
             AckPolicy::NoWait,
+            TradeEvidenceMode::LocalOnly,
         ))
         .await
         .expect_err("ambiguous product mutation");

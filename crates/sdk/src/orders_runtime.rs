@@ -1001,6 +1001,29 @@ pub enum TradeMutationOutcome<Plan, Receipt> {
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeEvidenceMode {
+    LocalOnly,
+    ResyncBeforeMutation,
+    RequireExplicitEvidence {
+        evidence: Vec<TradeEvidenceIngestRequest>,
+    },
+}
+
+#[cfg(any(feature = "signer-adapters", test))]
+impl TradeEvidenceMode {
+    pub fn require_explicit_evidence(
+        evidence: impl IntoIterator<Item = TradeEvidenceIngestRequest>,
+    ) -> Self {
+        Self::RequireExplicitEvidence {
+            evidence: evidence.into_iter().collect(),
+        }
+    }
+}
+
+#[cfg(any(feature = "signer-adapters", test))]
+#[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeProposeRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
@@ -1071,6 +1094,7 @@ pub struct TradeAcceptRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1085,6 +1109,7 @@ impl TradeAcceptRequest {
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
+        evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
             actor,
@@ -1093,6 +1118,7 @@ impl TradeAcceptRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
@@ -1132,6 +1158,7 @@ pub struct TradeDeclineRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1146,6 +1173,7 @@ impl TradeDeclineRequest {
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
+        evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
             actor,
@@ -1154,6 +1182,7 @@ impl TradeDeclineRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
@@ -1193,6 +1222,7 @@ pub struct TradeCancelRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1207,6 +1237,7 @@ impl TradeCancelRequest {
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
+        evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
             actor,
@@ -1215,6 +1246,7 @@ impl TradeCancelRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
@@ -1257,6 +1289,7 @@ pub struct TradeRevisionProposalRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1274,6 +1307,7 @@ impl TradeRevisionProposalRequest {
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
+        evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
             actor,
@@ -1285,6 +1319,7 @@ impl TradeRevisionProposalRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
@@ -1325,6 +1360,7 @@ pub struct TradeRevisionDecisionRequest {
     pub target_relays: RelayResolutionPolicy,
     pub publish_mode: PublishMode,
     pub ack_policy: AckPolicy,
+    pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1340,6 +1376,7 @@ impl TradeRevisionDecisionRequest {
         target_relays: RelayResolutionPolicy,
         publish_mode: PublishMode,
         ack_policy: AckPolicy,
+        evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
             actor,
@@ -1349,6 +1386,7 @@ impl TradeRevisionDecisionRequest {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation: PrivacyPreflightConfirmation::new(),
             idempotency_key: None,
             created_at: None,
@@ -2937,7 +2975,7 @@ impl<'sdk> TradesClient<'sdk> {
         }
     }
 
-    #[cfg(feature = "relay-runtime")]
+    #[cfg(all(feature = "signer-adapters", feature = "relay-runtime"))]
     pub async fn status_with_fetch_adapter<A>(
         &self,
         request: TradeStatusRequest,
@@ -3176,12 +3214,14 @@ fn trade_evidence_fetch_request(
     query_plan: &TradeEvidenceQueryPlan,
     relay_targets: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
-    let filters = query_plan
+    let mut filters = Vec::new();
+    for branch in query_plan
         .branches
         .iter()
         .filter(|branch| branch.filter.active)
-        .map(trade_evidence_branch_filter)
-        .collect::<Result<Vec<_>, _>>()?;
+    {
+        filters.extend(trade_evidence_branch_filters(branch)?);
+    }
     if filters.is_empty() {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade evidence query plan has no active relay filters".to_owned(),
@@ -3291,16 +3331,32 @@ fn trade_evidence_branch(
 }
 
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+fn trade_evidence_branch_filters(
+    branch: &TradeEvidenceQueryBranch,
+) -> Result<Vec<RadrootsNostrFilter>, RadrootsSdkError> {
+    if branch.filter.event_kinds.is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "trade evidence branch has no event kinds".to_owned(),
+        });
+    }
+    branch
+        .filter
+        .event_kinds
+        .iter()
+        .map(|kind| trade_evidence_branch_filter(branch, *kind))
+        .collect()
+}
+
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_evidence_branch_filter(
     branch: &TradeEvidenceQueryBranch,
+    kind: u32,
 ) -> Result<RadrootsNostrFilter, RadrootsSdkError> {
     let mut filter = RadrootsNostrFilter::new().limit(branch.filter.limit as usize);
-    for kind in &branch.filter.event_kinds {
-        let nostr_kind = u16::try_from(*kind).map_err(|_| RadrootsSdkError::InvalidRequest {
-            message: format!("trade evidence event kind {kind} exceeds Nostr filter range"),
-        })?;
-        filter = filter.kind(RadrootsNostrKind::Custom(nostr_kind));
-    }
+    let nostr_kind = u16::try_from(kind).map_err(|_| RadrootsSdkError::InvalidRequest {
+        message: format!("trade evidence event kind {kind} exceeds Nostr filter range"),
+    })?;
+    filter = filter.kind(RadrootsNostrKind::Custom(nostr_kind));
     if let Some(author_pubkey) = branch.filter.author_pubkey.as_ref() {
         let author = author_pubkey
             .parse::<RadrootsNostrPublicKey>()
@@ -4415,11 +4471,13 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
-        let context = trade_mutation_context(self.sdk, locator, "trade.cancel").await?;
+        let context =
+            trade_mutation_context(self.sdk, locator, evidence_mode, "trade.cancel").await?;
         let cancellation = RadrootsOrderCancellation {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
@@ -4500,6 +4558,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation,
             idempotency_key,
             created_at,
@@ -4509,7 +4568,9 @@ impl<'sdk> TradeBuyerClient<'sdk> {
             trade_revision_decision_privacy_fields(&decision),
             &privacy_confirmation,
         )?;
-        let context = trade_mutation_context(self.sdk, locator, "trade.revision_decision").await?;
+        let context =
+            trade_mutation_context(self.sdk, locator, evidence_mode, "trade.revision_decision")
+                .await?;
         let previous_event_id = context.pending_revision_event_id.clone().ok_or_else(|| {
             RadrootsSdkError::InvalidRequest {
                 message: "trade revision decision requires a pending revision".to_owned(),
@@ -4645,11 +4706,87 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
-        let context = trade_mutation_context(self.sdk, locator, "trade.accept").await?;
+        let context =
+            trade_mutation_context(self.sdk, locator, evidence_mode, "trade.accept").await?;
+        let decision = RadrootsOrderDecision {
+            order_id: context.order_id.clone(),
+            listing_addr: context.listing_addr.clone(),
+            buyer_pubkey: context.buyer_pubkey.clone(),
+            seller_pubkey: context.seller_pubkey.clone(),
+            decision: RadrootsOrderDecisionOutcome::Accepted {
+                inventory_commitments,
+            },
+        };
+        require_trade_product_privacy_preflight(
+            "trade.accept",
+            trade_decision_privacy_fields(&decision),
+            &privacy_confirmation,
+        )?;
+        let client = trades_client(self.sdk);
+        let plan = client.prepare_decision(TradeDecisionPrepareRequest {
+            actor: actor.clone(),
+            request_event: event_ptr(&context.root_event_id),
+            decision,
+            created_at,
+        })?;
+        if publish_mode == PublishMode::DryRun {
+            return Ok(TradeMutationOutcome::DryRun { plan });
+        }
+        let receipt = client
+            .enqueue_prepared_decision(
+                &actor,
+                plan,
+                target_relays,
+                publish_mode,
+                ack_policy,
+                idempotency_key,
+            )
+            .await?;
+        trade_product_post_enqueue_outcome(
+            self.sdk,
+            publish_mode,
+            ack_policy,
+            receipt.outbox_event_id,
+            receipt,
+        )
+        .await
+    }
+
+    #[cfg(feature = "relay-runtime")]
+    pub async fn accept_trade_with_fetch_adapter<A>(
+        &self,
+        request: TradeAcceptRequest,
+        adapter: &A,
+    ) -> Result<TradeMutationOutcome<TradeDecisionPlan, TradeDecisionReceipt>, RadrootsSdkError>
+    where
+        A: RadrootsRelayFetchAdapter,
+    {
+        validate_trade_product_publish_policy(request.publish_mode, request.ack_policy)?;
+        let TradeAcceptRequest {
+            actor,
+            locator,
+            inventory_commitments,
+            target_relays,
+            publish_mode,
+            ack_policy,
+            evidence_mode,
+            privacy_confirmation,
+            idempotency_key,
+            created_at,
+        } = request;
+        let context = trade_mutation_context_with_fetch_adapter(
+            self.sdk,
+            locator,
+            evidence_mode,
+            "trade.accept",
+            adapter,
+        )
+        .await?;
         let decision = RadrootsOrderDecision {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
@@ -4708,11 +4845,13 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
-        let context = trade_mutation_context(self.sdk, locator, "trade.decline").await?;
+        let context =
+            trade_mutation_context(self.sdk, locator, evidence_mode, "trade.decline").await?;
         let decision = RadrootsOrderDecision {
             order_id: context.order_id.clone(),
             listing_addr: context.listing_addr.clone(),
@@ -4774,11 +4913,14 @@ impl<'sdk> TradeSellerClient<'sdk> {
             target_relays,
             publish_mode,
             ack_policy,
+            evidence_mode,
             privacy_confirmation,
             idempotency_key,
             created_at,
         } = request;
-        let context = trade_mutation_context(self.sdk, locator, "trade.propose_revision").await?;
+        let context =
+            trade_mutation_context(self.sdk, locator, evidence_mode, "trade.propose_revision")
+                .await?;
         let proposal = RadrootsOrderRevisionProposal {
             revision_id,
             order_id: context.order_id.clone(),
@@ -4848,11 +4990,113 @@ struct TradeProductMutationContext {
 async fn trade_mutation_context(
     sdk: &crate::RadrootsClient,
     locator: RadrootsTradeLocator,
+    evidence_mode: TradeEvidenceMode,
     operation: &'static str,
 ) -> Result<TradeProductMutationContext, RadrootsSdkError> {
-    let status = trades_client(sdk)
-        .status(TradeStatusRequest::new(locator.clone()))
-        .await?;
+    let status = trade_mutation_status(sdk, locator.clone(), &evidence_mode, operation).await?;
+    trade_mutation_context_from_status(locator, &evidence_mode, operation, status)
+}
+
+#[cfg(feature = "signer-adapters")]
+async fn trade_mutation_status(
+    sdk: &crate::RadrootsClient,
+    locator: RadrootsTradeLocator,
+    evidence_mode: &TradeEvidenceMode,
+    operation: &'static str,
+) -> Result<TradeStatusReceipt, RadrootsSdkError> {
+    match evidence_mode {
+        TradeEvidenceMode::LocalOnly => {
+            trades_client(sdk)
+                .status(
+                    TradeStatusRequest::new(locator).with_source(SdkTradeStatusSource::LocalOnly),
+                )
+                .await
+        }
+        TradeEvidenceMode::RequireExplicitEvidence { evidence } => {
+            ingest_explicit_trade_mutation_evidence(sdk, operation, evidence).await?;
+            trades_client(sdk)
+                .status(
+                    TradeStatusRequest::new(locator).with_source(SdkTradeStatusSource::LocalOnly),
+                )
+                .await
+        }
+        TradeEvidenceMode::ResyncBeforeMutation => {
+            #[cfg(feature = "relay-runtime")]
+            {
+                let adapter = RadrootsNostrClientFetchAdapter;
+                let status = trades_client(sdk)
+                    .status_with_fetch_adapter(
+                        TradeStatusRequest::new(locator)
+                            .with_source(SdkTradeStatusSource::ResyncThenLocal),
+                        &adapter,
+                    )
+                    .await?;
+                require_trade_mutation_online_evidence_clean(operation, &status)?;
+                Ok(status)
+            }
+            #[cfg(not(feature = "relay-runtime"))]
+            {
+                let _ = locator;
+                Err(RadrootsSdkError::ProductSyncUnsupported {
+                    operation,
+                    required_feature: "relay-runtime",
+                })
+            }
+        }
+    }
+}
+
+#[cfg(all(feature = "signer-adapters", feature = "relay-runtime"))]
+async fn trade_mutation_context_with_fetch_adapter<A>(
+    sdk: &crate::RadrootsClient,
+    locator: RadrootsTradeLocator,
+    evidence_mode: TradeEvidenceMode,
+    operation: &'static str,
+    adapter: &A,
+) -> Result<TradeProductMutationContext, RadrootsSdkError>
+where
+    A: RadrootsRelayFetchAdapter,
+{
+    let status = match evidence_mode {
+        TradeEvidenceMode::LocalOnly => {
+            trades_client(sdk)
+                .status(
+                    TradeStatusRequest::new(locator.clone())
+                        .with_source(SdkTradeStatusSource::LocalOnly),
+                )
+                .await?
+        }
+        TradeEvidenceMode::RequireExplicitEvidence { ref evidence } => {
+            ingest_explicit_trade_mutation_evidence(sdk, operation, evidence).await?;
+            trades_client(sdk)
+                .status(
+                    TradeStatusRequest::new(locator.clone())
+                        .with_source(SdkTradeStatusSource::LocalOnly),
+                )
+                .await?
+        }
+        TradeEvidenceMode::ResyncBeforeMutation => {
+            let status = trades_client(sdk)
+                .status_with_fetch_adapter(
+                    TradeStatusRequest::new(locator.clone())
+                        .with_source(SdkTradeStatusSource::ResyncThenLocal),
+                    adapter,
+                )
+                .await?;
+            require_trade_mutation_online_evidence_clean(operation, &status)?;
+            status
+        }
+    };
+    trade_mutation_context_from_status(locator, &evidence_mode, operation, status)
+}
+
+#[cfg(feature = "signer-adapters")]
+fn trade_mutation_context_from_status(
+    locator: RadrootsTradeLocator,
+    evidence_mode: &TradeEvidenceMode,
+    operation: &'static str,
+    status: TradeStatusReceipt,
+) -> Result<TradeProductMutationContext, RadrootsSdkError> {
     if status.status == TradeStatusKind::Ambiguous {
         return Err(RadrootsSdkError::TradeAmbiguous {
             operation: operation.to_owned(),
@@ -4865,8 +5109,13 @@ async fn trade_mutation_context(
         });
     }
     if !status.found {
+        let evidence_requirement = match evidence_mode {
+            TradeEvidenceMode::LocalOnly => "locally projected",
+            TradeEvidenceMode::ResyncBeforeMutation => "resynced",
+            TradeEvidenceMode::RequireExplicitEvidence { .. } => "explicitly ingested",
+        };
         return Err(RadrootsSdkError::InvalidRequest {
-            message: format!("{operation} requires a locally projected trade"),
+            message: format!("{operation} requires a {evidence_requirement} trade"),
         });
     }
     let root_event_id =
@@ -4913,6 +5162,54 @@ async fn trade_mutation_context(
         previous_event_id,
         pending_revision_event_id: status.pending_revision_event_id,
     })
+}
+
+#[cfg(feature = "signer-adapters")]
+async fn ingest_explicit_trade_mutation_evidence(
+    sdk: &crate::RadrootsClient,
+    operation: &'static str,
+    evidence: &[TradeEvidenceIngestRequest],
+) -> Result<(), RadrootsSdkError> {
+    if evidence.is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("{operation} requires explicit trade evidence"),
+        });
+    }
+    let client = trades_client(sdk);
+    for event in evidence {
+        client.ingest_evidence(event.clone()).await?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "signer-adapters")]
+fn require_trade_mutation_online_evidence_clean(
+    operation: &'static str,
+    status: &TradeStatusReceipt,
+) -> Result<(), RadrootsSdkError> {
+    let evidence =
+        status
+            .online_evidence
+            .as_ref()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!("{operation} requires online mutation evidence"),
+            })?;
+    if evidence.malformed_count > 0
+        || evidence.out_of_filter_count > 0
+        || evidence.skipped_over_limit_count > 0
+        || evidence.unsupported_count > 0
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "{operation} refused online mutation evidence: malformed_count={}, out_of_filter_count={}, skipped_over_limit_count={}, unsupported_count={}",
+                evidence.malformed_count,
+                evidence.out_of_filter_count,
+                evidence.skipped_over_limit_count,
+                evidence.unsupported_count
+            ),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(feature = "signer-adapters")]
