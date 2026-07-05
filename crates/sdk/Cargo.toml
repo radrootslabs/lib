@@ -23,6 +23,13 @@ serde_json = [
   "radroots_trade/serde_json",
 ]
 nostr = ["radroots_events_codec/nostr"]
+knowledge = [
+  "serde",
+  "serde_json",
+  "radroots_events/knowledge-nip54",
+  "radroots_events_codec/contract-manifest",
+  "radroots_events_codec/knowledge-nip54",
+]
 identity-models = [
   "dep:radroots_identity",
   "radroots_identity/profile",
@@ -146,6 +153,11 @@ uuid = { workspace = true, optional = true }
 name = "sdk_v1_listing_prepare"
 path = "examples/sdk_v1_listing_prepare.rs"
 required-features = ["runtime"]
+
+[[example]]
+name = "sdk_v1_knowledge_prepare"
+path = "examples/sdk_v1_knowledge_prepare.rs"
+required-features = ["knowledge"]
 
 [[example]]
 name = "sdk_v1_local_enqueue_and_mock_sync"

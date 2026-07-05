@@ -10,6 +10,7 @@ mod manifest;
 mod output;
 mod package_matrix;
 mod package_metadata;
+mod smoke;
 mod ts;
 mod wasm;
 mod wasm_declarations;
@@ -20,6 +21,7 @@ enum CommandAction<'a> {
     GeneratePackageMetadata,
     Coverage(&'a [String]),
     Check,
+    Smoke(&'a [String]),
 }
 
 fn main() {
@@ -37,6 +39,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
         CommandAction::GeneratePackageMetadata => generate::generate_package_metadata(),
         CommandAction::Coverage(rest) => coverage::run(rest),
         CommandAction::Check => check::check(),
+        CommandAction::Smoke(rest) => smoke::run(rest),
     }
 }
 
@@ -53,13 +56,14 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
         }
         [command, rest @ ..] if command == "coverage" => Ok(CommandAction::Coverage(rest)),
         [command] if command == "check" => Ok(CommandAction::Check),
+        [command, rest @ ..] if command == "smoke" => Ok(CommandAction::Smoke(rest)),
         [] => Err(usage()),
         _ => Err(usage()),
     }
 }
 
 fn usage() -> String {
-    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask coverage run"
+    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -100,6 +104,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Check
+        ));
+    }
+
+    #[test]
+    fn accepts_smoke() {
+        let args = ["smoke".to_owned(), "knowledge-rust-local".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::Smoke(rest) if rest == ["knowledge-rust-local"]
         ));
     }
 

@@ -27,6 +27,8 @@ mod geonames;
 mod idempotency;
 #[cfg(feature = "identity-models")]
 pub mod identity;
+#[cfg(feature = "knowledge")]
+pub mod knowledge;
 #[cfg(feature = "runtime")]
 mod listings_runtime;
 #[cfg(feature = "runtime")]
@@ -90,6 +92,42 @@ pub use crate::geonames::{
 #[cfg(feature = "runtime")]
 pub use crate::idempotency::{
     SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey, SdkTradeIdempotencyRecord,
+};
+#[cfg(feature = "knowledge")]
+pub use crate::knowledge::{
+    KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION,
+    KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE, KIND_WIKI_MERGE_REQUEST,
+    KIND_WIKI_REDIRECT, KNOWLEDGE_CLAIM_CONTRACT_ID, KNOWLEDGE_FIELD_REPORT_CONTRACT_ID,
+    KNOWLEDGE_RELATION_CONTRACT_ID, KNOWLEDGE_REVIEW_CONTRACT_ID, KNOWLEDGE_SOURCE_CONTRACT_ID,
+    KnowledgeCodec, KnowledgeDraftBuilder, KnowledgeEventBuilder,
+    RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
+    RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
+    RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
+    RADROOTS_KNOWLEDGE_RELATION_SCHEMA, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA,
+    RADROOTS_KNOWLEDGE_SCHEMA_VERSION, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA,
+    RADROOTS_WIKI_D_TAG_MAX_LEN, RadrootsAddressableRef, RadrootsContractValidatedEvent,
+    RadrootsDecodeError, RadrootsDecodedEvent, RadrootsDraftError, RadrootsEncodeError,
+    RadrootsFrozenEventDraft, RadrootsIdVerifiedEvent, RadrootsKnowledgeChangeProposal,
+    RadrootsKnowledgeCitationSpan, RadrootsKnowledgeClaim, RadrootsKnowledgeContractManifest,
+    RadrootsKnowledgeContractManifestEntry, RadrootsKnowledgeFieldContext,
+    RadrootsKnowledgeFieldReport, RadrootsKnowledgeLocation, RadrootsKnowledgeLocationPrecision,
+    RadrootsKnowledgeManifestCodecSupport, RadrootsKnowledgeManifestDiscriminator,
+    RadrootsKnowledgeManifestTagContract, RadrootsKnowledgeNodeRef, RadrootsKnowledgeObservation,
+    RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
+    RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
+    RadrootsKnowledgeSource, RadrootsNip01VerificationError, RadrootsNostrEvent,
+    RadrootsNostrEventRef, RadrootsRightsAssertion, RadrootsSdkKnowledgeError,
+    RadrootsSignatureVerifiedEvent, RadrootsWikiArticle, RadrootsWikiDTagError,
+    RadrootsWikiMergeRequest, RadrootsWikiRedirect, WIKI_ARTICLE_CONTRACT_ID,
+    WIKI_MERGE_REQUEST_CONTRACT_ID, WIKI_REDIRECT_CONTRACT_ID, WireEventParts,
+    build_knowledge_claim_event, build_knowledge_field_report_event,
+    build_knowledge_relation_event, build_knowledge_review_event, build_knowledge_source_event,
+    build_wiki_article_event, build_wiki_merge_request_event, build_wiki_redirect_event,
+    contract_manifest, contract_manifest_json, contract_manifest_sha256, normalize_wiki_d_tag,
+    prepare_knowledge_claim_draft, prepare_knowledge_field_report_draft,
+    prepare_knowledge_relation_draft, prepare_knowledge_review_draft,
+    prepare_knowledge_source_draft, prepare_wiki_article_draft, prepare_wiki_merge_request_draft,
+    prepare_wiki_redirect_draft, validate_wiki_d_tag, verify_and_decode_radroots_event,
 };
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{

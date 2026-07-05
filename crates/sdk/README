@@ -82,12 +82,16 @@ Compile the SDK v1 product examples with:
 
 ```bash
 cargo check -p radroots_sdk --example sdk_v1_listing_prepare --features runtime
+cargo check -p radroots_sdk --example sdk_v1_knowledge_prepare --features knowledge
 cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,signer-adapters
 cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features runtime,signer-adapters
 ```
 
 `sdk_v1_listing_prepare` shows `RadrootsClient::builder()`,
 `ListingPreparePublishRequest`, and `ListingPublishPlan`.
+`sdk_v1_knowledge_prepare` shows `radroots_sdk::knowledge`, typed event builders, frozen draft
+preparation, signed-event verification, decoded event matching, and manifest hash access without
+local runtime storage.
 `sdk_v1_local_enqueue_and_mock_sync` shows localhost relay target selection, configured local-key
 signing, prepared listing enqueue, `push_outbox_with_adapter(...)` with a mock relay adapter, and
 `TradeStatusRequest`. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
