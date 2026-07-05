@@ -6031,6 +6031,35 @@ fn order_status_parse_rejects_invalid_order_ids() {
     assert!(matches!(error, RadrootsSdkError::InvalidTradeId { .. }));
 }
 
+#[test]
+fn order_status_parse_accepts_root_specific_selectors() {
+    let root_event_id = deterministic_event_id("order-status-root-selector");
+    let request = TradeStatusRequest::parse(&format!("order-1@{}", root_event_id.as_str()))
+        .expect("root-specific status request");
+
+    assert_eq!(request.locator.order_id().as_str(), "order-1");
+    assert_eq!(
+        request
+            .locator
+            .root_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(root_event_id.as_str())
+    );
+    assert_eq!(
+        TradeStatusRequest::locator_selector(&request.locator),
+        format!("order-1@{}", root_event_id.as_str())
+    );
+}
+
+#[test]
+fn order_status_parse_rejects_malformed_root_selectors() {
+    for selector in ["order-1@", "@aaaaaaaa", "order-1@aaaaaaaa@bbbbbbbb"] {
+        let error = TradeStatusRequest::parse(selector).expect_err("malformed root selector");
+        assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    }
+}
+
 #[tokio::test]
 async fn order_status_contract_dtos_serialize_deterministically() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
@@ -6662,6 +6691,37 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
             second_request_event.id.as_str()
         ]
     );
+    assert_eq!(
+        receipt
+            .ambiguity_candidates
+            .iter()
+            .map(|candidate| TradeStatusRequest::locator_selector(&candidate.locator))
+            .collect::<Vec<_>>(),
+        vec![
+            format!("order-1@{}", first_request_event.id.as_str()),
+            format!("order-1@{}", second_request_event.id.as_str())
+        ]
+    );
+
+    let root_specific = sdk
+        .trades()
+        .status(
+            TradeStatusRequest::parse(&format!("order-1@{}", second_request_event.id.as_str()))
+                .expect("root status request"),
+        )
+        .await
+        .expect("root-specific status");
+
+    assert!(root_specific.found);
+    assert_eq!(root_specific.status, TradeStatusKind::Requested);
+    assert_eq!(
+        root_specific
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(second_request_event.id.as_str())
+    );
+    assert!(root_specific.ambiguity_candidates.is_empty());
 }
 
 #[cfg(feature = "signer-adapters")]

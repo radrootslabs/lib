@@ -114,6 +114,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const TRADE_STATUS_DEFAULT_LIMIT: u32 = 500;
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_MAX_LIMIT: u32 = 1_000;
+#[cfg(feature = "runtime")]
+pub const TRADE_STATUS_ROOT_SELECTOR_SEPARATOR: char = '@';
 #[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_SUBMIT_OPERATION_KIND: &str = "trade.submit.v1";
 #[cfg(any(feature = "signer-adapters", test))]
@@ -1965,11 +1967,35 @@ impl TradeStatusRequest {
         }
     }
 
-    pub fn parse(order_id: &str) -> Result<Self, RadrootsSdkError> {
-        RadrootsOrderId::parse(order_id)
+    pub fn parse(selector: &str) -> Result<Self, RadrootsSdkError> {
+        let (trade_id, root_event_id) = trade_status_selector_parts(selector)?;
+        let locator = RadrootsOrderId::parse(trade_id)
             .map(RadrootsTradeLocator::from_order_id)
-            .map(Self::new)
-            .map_err(|error| RadrootsSdkError::invalid_trade_id(order_id, error.to_string()))
+            .map_err(|error| RadrootsSdkError::invalid_trade_id(trade_id, error.to_string()))?;
+        let locator = match root_event_id {
+            Some(root_event_id) => {
+                locator.with_root_event_id(root_event_id.parse().map_err(|error| {
+                    RadrootsSdkError::InvalidRequest {
+                        message: format!(
+                            "invalid trade status root selector `{selector}`: {error}"
+                        ),
+                    }
+                })?)
+            }
+            None => locator,
+        };
+        Ok(Self::new(locator))
+    }
+
+    pub fn locator_selector(locator: &RadrootsTradeLocator) -> String {
+        match locator.root_event_id.as_ref() {
+            Some(root_event_id) => format!(
+                "{}{TRADE_STATUS_ROOT_SELECTOR_SEPARATOR}{}",
+                locator.trade_id.as_str(),
+                root_event_id.as_str()
+            ),
+            None => locator.trade_id.as_str().to_owned(),
+        }
     }
 
     pub fn with_limit(mut self, limit: u32) -> Self {
@@ -2012,6 +2038,30 @@ impl TradeStatusRequest {
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "runtime")]
+fn trade_status_selector_parts(selector: &str) -> Result<(&str, Option<&str>), RadrootsSdkError> {
+    let selector = selector.trim();
+    if selector.is_empty() {
+        return Err(RadrootsSdkError::invalid_trade_id(
+            selector,
+            "empty trade id",
+        ));
+    }
+    let Some((trade_id, root_event_id)) = selector.split_once(TRADE_STATUS_ROOT_SELECTOR_SEPARATOR)
+    else {
+        return Ok((selector, None));
+    };
+    if trade_id.trim().is_empty()
+        || root_event_id.trim().is_empty()
+        || root_event_id.contains(TRADE_STATUS_ROOT_SELECTOR_SEPARATOR)
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("invalid trade status selector `{selector}`"),
+        });
+    }
+    Ok((trade_id, Some(root_event_id)))
 }
 
 #[cfg(feature = "runtime")]
