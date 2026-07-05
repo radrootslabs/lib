@@ -1,11 +1,11 @@
 #[cfg(feature = "signer-adapters")]
 use crate::TradeBuyerClient;
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use crate::runtime::sdk_now_ms;
 #[cfg(feature = "runtime")]
-use crate::sync_runtime::{
-    SyncProjectionRefreshReceipt, SyncProjectionRefreshRequest, refresh_product_projections_for_sdk,
-};
+use crate::sync_runtime::SyncProjectionRefreshReceipt;
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use crate::sync_runtime::{SyncProjectionRefreshRequest, refresh_product_projections_for_sdk};
 #[cfg(feature = "signer-adapters")]
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(any(feature = "signer-adapters", test))]
@@ -26,19 +26,21 @@ use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
 use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_event_store::RadrootsStoredEventTag;
 #[cfg(feature = "runtime")]
-use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent, RadrootsStoredEventTag};
+use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
 #[cfg(feature = "runtime")]
 use radroots_events::{
     RadrootsNostrEvent,
     contract::RadrootsActorRole,
     ids::RadrootsEventId,
     kinds::{
-        KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
+        KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
         KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
         KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
     },
-    tags::{TAG_D, TAG_E, TAG_P},
+    tags::TAG_P,
 };
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events::{
@@ -56,6 +58,11 @@ use radroots_events::{
     ids::{RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     order::RadrootsOrderEconomics,
 };
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_events::{
+    kinds::KIND_LISTING,
+    tags::{TAG_D, TAG_E},
+};
 #[cfg(feature = "runtime")]
 use radroots_events_codec::order::{
     order_cancellation_from_event, order_decision_from_event, order_request_from_event,
@@ -68,7 +75,7 @@ use radroots_nostr::prelude::{
     RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKey,
     radroots_nostr_filter_tag,
 };
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_relay_transport::{
     RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
     RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome,
@@ -78,7 +85,7 @@ use radroots_relay_transport::{
 use radroots_trade::dvm::RADROOTS_DVM_TAG_VALIDATION_RECEIPT;
 #[cfg(feature = "runtime")]
 use radroots_trade::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_trade::listing::parse_listing_address;
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_trade::order::{
@@ -93,14 +100,15 @@ use radroots_trade::order::{
     RadrootsTradeLocatorProjectionResolution, order_event_record_from_event,
     order_projection_query_for_trade_locator,
 };
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_trade::validation_receipt::RadrootsValidationReceiptError;
 #[cfg(feature = "runtime")]
 use radroots_trade::validation_receipt::{
     RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
     RadrootsTradeValidationReceipt, RadrootsTradeValidationTrustPolicy,
-    RadrootsTradeValidationTrustState, RadrootsValidationReceiptError,
-    RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
-    RadrootsValidationReceiptResult, RadrootsValidationReceiptTags,
-    verify_validation_receipt_event,
+    RadrootsTradeValidationTrustState, RadrootsValidationReceiptExpectedBinding,
+    RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
+    RadrootsValidationReceiptTags, verify_validation_receipt_event,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
@@ -1540,6 +1548,7 @@ impl TradeResyncRequest {
         Ok(self)
     }
 
+    #[cfg(feature = "relay-runtime")]
     fn validate(&self) -> Result<(), RadrootsSdkError> {
         if self.limit == 0 || self.limit > TRADE_STATUS_MAX_LIMIT {
             return Err(RadrootsSdkError::trade_status_limit_invalid(
@@ -1742,6 +1751,7 @@ impl TradeValidationReceiptListRequest {
         Ok(self)
     }
 
+    #[cfg(feature = "relay-runtime")]
     fn validate(&self) -> Result<(), RadrootsSdkError> {
         validate_validation_receipt_limit(self.limit)
     }
@@ -3525,6 +3535,7 @@ impl<'sdk> TradeResyncClient<'sdk> {
         }
         #[cfg(not(feature = "relay-runtime"))]
         {
+            let _ = self.sdk;
             let _ = request;
             Err(RadrootsSdkError::ProductSyncUnsupported {
                 operation: "trade.resync",
@@ -3647,7 +3658,7 @@ fn trade_evidence_fetch_request(
     )
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_evidence_query_plan(
     locator: RadrootsTradeLocator,
     limit: u32,
@@ -3720,7 +3731,7 @@ fn trade_evidence_query_plan(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_evidence_branch(
     kind: TradeEvidenceQueryBranchKind,
     event_kinds: Vec<u32>,
@@ -3788,13 +3799,13 @@ fn trade_evidence_branch_filter(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 struct ListingSnapshotFilterParts {
     seller_pubkey: String,
     listing_id: String,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn listing_snapshot_filter_parts(
     listing_addr: &str,
 ) -> Result<ListingSnapshotFilterParts, RadrootsSdkError> {
@@ -3808,7 +3819,7 @@ fn listing_snapshot_filter_parts(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_resync_total_relay_failure(
     receipt: &RadrootsRelayFetchReceipt,
     relay_count: usize,
@@ -3816,7 +3827,7 @@ fn trade_resync_total_relay_failure(
     relay_count > 0 && receipt.eose_count == 0 && receipt.closed_count >= relay_count
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_resync_total_failure_message(
     operation: &str,
     receipt: &RadrootsRelayFetchReceipt,
@@ -3827,7 +3838,7 @@ fn trade_resync_total_failure_message(
     )
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl TradeResyncEvidenceReceipt {
     async fn from_fetch(
         sdk: &crate::RadrootsClient,
@@ -3865,7 +3876,7 @@ impl TradeResyncEvidenceReceipt {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 async fn trade_evidence_branch_receipts(
     sdk: &crate::RadrootsClient,
     query_plan: &TradeEvidenceQueryPlan,
@@ -3902,7 +3913,7 @@ async fn trade_evidence_branch_receipts(
         .collect())
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 async fn trade_evidence_event_branch(
     sdk: &crate::RadrootsClient,
     query_plan: &TradeEvidenceQueryPlan,
@@ -3940,7 +3951,7 @@ async fn trade_evidence_event_branch(
         .unwrap_or(TradeEvidenceQueryBranchKind::RejectedEvidence))
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn trade_evidence_branch_matches_event(
     branch: &TradeEvidenceQueryBranch,
     stored_event: &RadrootsStoredEvent,
@@ -3966,7 +3977,7 @@ fn trade_evidence_branch_matches_event(
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl TradeEvidenceBranchReceipt {
     fn from_parts(
         branch: TradeEvidenceQueryBranchKind,
@@ -4016,7 +4027,7 @@ impl TradeEvidenceBranchReceipt {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
     fn from(receipt: RadrootsRelayFetchEventReceipt) -> Self {
         Self {
@@ -4035,7 +4046,7 @@ impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncRelayOutcomeReceipt {
     fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
         Self {
@@ -4047,7 +4058,7 @@ impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncRelayOutcomeReceipt {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncRelayOutcomeKind {
     fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
         match kind {
@@ -4058,7 +4069,7 @@ impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncRelayOutcomeKind {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayOutcomeKind> for TradeResyncRelayTransportOutcomeKind {
     fn from(kind: RadrootsRelayOutcomeKind) -> Self {
         match kind {
@@ -4096,6 +4107,7 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         }
         #[cfg(not(feature = "relay-runtime"))]
         {
+            let _ = self.sdk;
             let _ = request;
             Err(RadrootsSdkError::ProductSyncUnsupported {
                 operation: "trade.validation_receipts.list",
@@ -4159,6 +4171,7 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         }
         #[cfg(not(feature = "relay-runtime"))]
         {
+            let _ = self.sdk;
             let _ = request;
             Err(RadrootsSdkError::ProductSyncUnsupported {
                 operation: "trade.validation_receipts.inspect",
@@ -4197,6 +4210,7 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         }
         #[cfg(not(feature = "relay-runtime"))]
         {
+            let _ = self.sdk;
             let _ = request;
             Err(RadrootsSdkError::ProductSyncUnsupported {
                 operation: "trade.validation_receipts.verify",
@@ -4270,7 +4284,7 @@ where
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn validation_receipt_relay_targets(
     sdk: &crate::RadrootsClient,
     operation: impl Into<String>,
@@ -4361,7 +4375,7 @@ fn validation_receipt_worker_fetch_request(
     ))
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 async fn validation_receipt_events_from_fetch(
     sdk: &crate::RadrootsClient,
     events: &[TradeResyncEventImportReceipt],
@@ -4395,7 +4409,7 @@ async fn validation_receipt_events_from_fetch(
     Ok(fetched)
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn classify_validation_receipts(
     events: Vec<RadrootsNostrEvent>,
     expected_order_id: Option<&str>,
@@ -5075,7 +5089,7 @@ struct RawTradeValidationReceiptWorkerResult {
     worker_role: Option<String>,
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl TradeValidationReceiptRelayEvidenceReceipt {
     fn from_fetch(receipt: RadrootsRelayFetchReceipt) -> Self {
         Self {
@@ -5094,7 +5108,7 @@ impl TradeValidationReceiptRelayEvidenceReceipt {
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptRelayOutcomeReceipt {
     fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
         Self {
@@ -5106,7 +5120,7 @@ impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptRelayOutcome
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptRelayOutcomeKind {
     fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
         match kind {
@@ -5117,7 +5131,7 @@ impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptRelayOutcomeK
     }
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 impl From<RadrootsRelayOutcomeKind> for TradeValidationReceiptRelayTransportOutcomeKind {
     fn from(kind: RadrootsRelayOutcomeKind) -> Self {
         match kind {
@@ -5182,7 +5196,7 @@ fn stored_event_to_nostr_event(
     })
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn validation_receipt_event_order(
     left: &TradeValidationReceiptEvent,
     right: &TradeValidationReceiptEvent,
@@ -5193,7 +5207,7 @@ fn validation_receipt_event_order(
         .then_with(|| left.event.id.cmp(&right.event.id))
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn validation_receipt_invalid_order(
     left: &TradeValidationReceiptInvalidCandidate,
     right: &TradeValidationReceiptInvalidCandidate,
@@ -5204,7 +5218,7 @@ fn validation_receipt_invalid_order(
         .then_with(|| left.event.id.cmp(&right.event.id))
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn validate_validation_receipt_limit(limit: u32) -> Result<(), RadrootsSdkError> {
     if limit == 0 || limit > TRADE_STATUS_MAX_LIMIT {
         return Err(RadrootsSdkError::trade_status_limit_invalid(
@@ -5233,7 +5247,7 @@ where
         .collect()
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 fn validation_receipt_invalid_reason_code(error: &RadrootsValidationReceiptError) -> &'static str {
     match error {
         RadrootsValidationReceiptError::InvalidProofMetadata("proof.material")
@@ -6055,7 +6069,7 @@ async fn ingest_explicit_trade_mutation_evidence(
     Ok(())
 }
 
-#[cfg(feature = "signer-adapters")]
+#[cfg(all(feature = "signer-adapters", feature = "relay-runtime"))]
 fn require_trade_mutation_online_evidence_clean(
     operation: &'static str,
     status: &TradeStatusReceipt,

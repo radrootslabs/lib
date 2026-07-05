@@ -8,8 +8,8 @@ use radroots_sdk::{
     SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
     SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
-    StorageStatusRequest,
+    SdkRestoreState, SdkSqliteStoreStatus, SdkSqliteWalCheckpointStatus, SdkStorageKind,
+    StorageStatusReceipt, StorageStatusRequest,
 };
 use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::Row;
@@ -678,6 +678,13 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         journal_mode: "wal".to_owned(),
         foreign_keys_enabled: true,
         busy_timeout_ms: 5_000,
+        wal_checkpoint: SdkSqliteWalCheckpointStatus {
+            wal_enabled: true,
+            busy: 0,
+            log_frame_count: 8,
+            checkpointed_frame_count: 8,
+            checkpoint_complete: true,
+        },
         integrity_ok: true,
         integrity_result: "ok".to_owned(),
     };
@@ -728,6 +735,13 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
+                    "wal_checkpoint": {
+                        "wal_enabled": true,
+                        "busy": 0,
+                        "log_frame_count": 8,
+                        "checkpointed_frame_count": 8,
+                        "checkpoint_complete": true
+                    },
                     "integrity_ok": true,
                     "integrity_result": "ok"
                 },
@@ -743,6 +757,13 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
+                    "wal_checkpoint": {
+                        "wal_enabled": true,
+                        "busy": 0,
+                        "log_frame_count": 8,
+                        "checkpointed_frame_count": 8,
+                        "checkpoint_complete": true
+                    },
                     "integrity_ok": true,
                     "integrity_result": "ok"
                 },
@@ -762,6 +783,13 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
+                    "wal_checkpoint": {
+                        "wal_enabled": true,
+                        "busy": 0,
+                        "log_frame_count": 8,
+                        "checkpointed_frame_count": 8,
+                        "checkpoint_complete": true
+                    },
                     "integrity_ok": true,
                     "integrity_result": "ok"
                 },

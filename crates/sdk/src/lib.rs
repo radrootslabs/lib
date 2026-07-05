@@ -162,7 +162,8 @@ pub use crate::runtime::{
     RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
     SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkPublishTransport, SdkRestoreState,
-    SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
+    SdkSqliteStoreStatus, SdkSqliteWalCheckpointStatus, SdkStorageKind, StorageStatusReceipt,
+    StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::signer_provider::{

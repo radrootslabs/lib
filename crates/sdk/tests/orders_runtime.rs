@@ -8,19 +8,19 @@ use std::time::{Duration, Instant};
 
 #[cfg(feature = "relay-runtime")]
 use futures::future::BoxFuture;
+#[cfg(feature = "relay-runtime")]
 use nostr::JsonUtil;
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
+#[cfg(feature = "relay-runtime")]
+use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
-    ids::{
-        RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId,
-        RadrootsPublicKey,
-    },
+    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId},
     kinds::{
         KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST,
         KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
@@ -38,36 +38,42 @@ use radroots_nostr::prelude::{
     radroots_nostr_build_event,
 };
 use radroots_outbox::RadrootsOutbox;
-use radroots_relay_transport::{RadrootsMockRelayFetchAdapter, RadrootsRelayFetchItem};
 #[cfg(feature = "relay-runtime")]
 use radroots_relay_transport::{
-    RadrootsRelayFetchAdapter, RadrootsRelayFetchRequest, RadrootsRelayTransportError,
+    RadrootsMockRelayFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchItem,
+    RadrootsRelayFetchRequest, RadrootsRelayTransportError,
 };
 use radroots_sdk::{
-    AckPolicy, DvmValidationReceiptIngestRequest, PublishMode, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy,
-    RadrootsTradeValidationTrustState, RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource,
-    TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY,
-    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
-    TradeEvidenceIngestRequest, TradeEvidenceMode, TradeEvidenceQueryBranchKind,
-    TradeMutationOutcome, TradeProposeRequest, TradeRequestEvidenceIngestRequest,
-    TradeResyncRelayOutcomeKind, TradeResyncRelayTransportOutcomeKind, TradeResyncRequest,
-    TradeRevisionDecisionRequest, TradeRevisionProposalRequest, TradeSellerInboxRequest,
+    AckPolicy, PublishMode, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy, RadrootsTradeValidationTrustState,
+    RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
+    TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY, TRADE_SUBMIT_OPERATION_KIND,
+    TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest, TradeEvidenceIngestRequest,
+    TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest,
+    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionRequest, TradeRevisionProposalRequest,
     TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest, TradeStatusWatchCancelState,
-    TradeStatusWatchRequest, TradeValidationReceiptInspectRequest,
-    TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
+    TradeStatusWatchRequest,
+};
+#[cfg(feature = "relay-runtime")]
+use radroots_sdk::{
+    DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind, TradeResyncRelayOutcomeKind,
+    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxRequest,
+    TradeValidationReceiptInspectRequest, TradeValidationReceiptListRequest,
+    TradeValidationReceiptVerifyRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
+#[cfg(feature = "relay-runtime")]
+use radroots_trade::identity::RadrootsTradeLocator;
+use radroots_trade::order::RadrootsOrderIssue;
 use radroots_trade::validation_receipt::{
     RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
     RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
     validation_receipt_event_build, validation_receipt_public_values_hash_hex,
 };
-use radroots_trade::{identity::RadrootsTradeLocator, order::RadrootsOrderIssue};
 use serde::Serialize;
 use serde::ser::{self, SerializeStruct};
 
@@ -85,6 +91,7 @@ const RELAY: &str = "wss://relay.radroots.test";
 #[cfg(any())]
 const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+#[cfg(feature = "relay-runtime")]
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
 const PERF_TRADE_RELEVANT_EVENTS: i64 = 25_000;
@@ -455,6 +462,7 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, Radroo
     (tempdir, sdk, store)
 }
 
+#[cfg(feature = "relay-runtime")]
 async fn directory_sdk_and_store_with_relays(
     relays: &[&str],
 ) -> (tempfile::TempDir, RadrootsClient, RadrootsEventStore) {
@@ -2613,6 +2621,7 @@ async fn trade_resync_reports_partial_relay_failure() {
     );
 }
 
+#[cfg(feature = "relay-runtime")]
 async fn relay_event_item_from_store(
     source: &RadrootsEventStore,
     event_id: &RadrootsEventId,
@@ -2645,6 +2654,7 @@ async fn event_from_store(
     radroots_event_from_nostr(&event)
 }
 
+#[cfg(feature = "relay-runtime")]
 fn relay_raw_event_item(
     event: &nostr::Event,
     relay_url: &str,
@@ -2657,12 +2667,14 @@ fn relay_raw_event_item(
     }
 }
 
+#[cfg(feature = "relay-runtime")]
 fn relay_eose(relay_url: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Eose {
         relay_url: relay_url.to_owned(),
     }
 }
 
+#[cfg(feature = "relay-runtime")]
 fn relay_closed(relay_url: &str, message: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Closed {
         relay_url: relay_url.to_owned(),
@@ -2670,6 +2682,7 @@ fn relay_closed(relay_url: &str, message: &str) -> RadrootsRelayFetchItem {
     }
 }
 
+#[cfg(feature = "relay-runtime")]
 fn relay_malformed(relay_url: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Event {
         relay_url: relay_url.to_owned(),
@@ -3820,6 +3833,7 @@ fn revision_economics() -> RadrootsOrderEconomics {
     }
 }
 
+#[cfg(feature = "relay-runtime")]
 fn signed_raw_validation_receipt_event(
     raw_order_id: &str,
     listing_event_id: &RadrootsEventId,
@@ -3859,6 +3873,7 @@ fn signed_raw_sp1_validation_receipt_event(
     )
 }
 
+#[cfg(feature = "relay-runtime")]
 fn validation_receipt_wire_parts(
     raw_order_id: &str,
     listing_event_id: &RadrootsEventId,
@@ -3996,6 +4011,7 @@ fn signed_raw_sp1_worker_result_event(
     )
 }
 
+#[cfg(feature = "relay-runtime")]
 fn signed_raw_worker_result_event(
     raw_order_id: &str,
     receipt_event_id: &RadrootsEventId,
@@ -4169,6 +4185,7 @@ fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNo
     signed_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
+#[cfg(feature = "relay-runtime")]
 fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr::Event {
     let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),

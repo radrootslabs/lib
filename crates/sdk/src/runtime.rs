@@ -15,7 +15,7 @@ use radroots_event_store::RadrootsEventStore;
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "runtime")]
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 #[cfg(feature = "runtime")]
 use std::{
     fs,
@@ -166,8 +166,19 @@ pub struct SdkSqliteStoreStatus {
     pub journal_mode: String,
     pub foreign_keys_enabled: bool,
     pub busy_timeout_ms: i64,
+    pub wal_checkpoint: SdkSqliteWalCheckpointStatus,
     pub integrity_ok: bool,
     pub integrity_result: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkSqliteWalCheckpointStatus {
+    pub wal_enabled: bool,
+    pub busy: i64,
+    pub log_frame_count: i64,
+    pub checkpointed_frame_count: i64,
+    pub checkpoint_complete: bool,
 }
 
 #[cfg(feature = "runtime")]
@@ -1400,12 +1411,14 @@ async fn sqlite_store_status(
     foreign_keys_enabled: bool,
     busy_timeout_ms: i64,
 ) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    let wal_checkpoint = sqlite_wal_checkpoint_status(pool, &journal_mode).await?;
     let integrity = sqlite_integrity_result(pool).await?;
     Ok(SdkSqliteStoreStatus {
         schema_version,
         journal_mode,
         foreign_keys_enabled,
         busy_timeout_ms,
+        wal_checkpoint,
         integrity_ok: integrity.ok,
         integrity_result: integrity.result,
     })
@@ -1419,15 +1432,104 @@ async fn private_sqlite_store_status(
     foreign_keys_enabled: bool,
     busy_timeout_ms: i64,
 ) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    let wal_checkpoint = private_store_sqlite_wal_checkpoint_status(pool, &journal_mode).await?;
     let integrity = private_store_sqlite_integrity_result(pool).await?;
     Ok(SdkSqliteStoreStatus {
         schema_version,
         journal_mode,
         foreign_keys_enabled,
         busy_timeout_ms,
+        wal_checkpoint,
         integrity_ok: integrity.ok,
         integrity_result: integrity.result,
     })
+}
+
+#[cfg(feature = "runtime")]
+async fn sqlite_wal_checkpoint_status(
+    pool: &SqlitePool,
+    journal_mode: &str,
+) -> Result<SdkSqliteWalCheckpointStatus, RadrootsSdkError> {
+    let row = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+        .fetch_one(pool)
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let busy = row
+        .try_get(0)
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let log_frame_count = row
+        .try_get(1)
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let checkpointed_frame_count =
+        row.try_get(2)
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+    Ok(sqlite_wal_checkpoint_status_from_values(
+        journal_mode,
+        busy,
+        log_frame_count,
+        checkpointed_frame_count,
+    ))
+}
+
+#[cfg(feature = "runtime")]
+async fn private_store_sqlite_wal_checkpoint_status(
+    pool: &SqlitePool,
+    journal_mode: &str,
+) -> Result<SdkSqliteWalCheckpointStatus, RadrootsSdkError> {
+    let row = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+        .fetch_one(pool)
+        .await
+        .map_err(|error| RadrootsSdkError::PrivateStore {
+            message: error.to_string(),
+        })?;
+    let busy = row
+        .try_get(0)
+        .map_err(|error| RadrootsSdkError::PrivateStore {
+            message: error.to_string(),
+        })?;
+    let log_frame_count = row
+        .try_get(1)
+        .map_err(|error| RadrootsSdkError::PrivateStore {
+            message: error.to_string(),
+        })?;
+    let checkpointed_frame_count =
+        row.try_get(2)
+            .map_err(|error| RadrootsSdkError::PrivateStore {
+                message: error.to_string(),
+            })?;
+    Ok(sqlite_wal_checkpoint_status_from_values(
+        journal_mode,
+        busy,
+        log_frame_count,
+        checkpointed_frame_count,
+    ))
+}
+
+#[cfg(feature = "runtime")]
+fn sqlite_wal_checkpoint_status_from_values(
+    journal_mode: &str,
+    busy: i64,
+    log_frame_count: i64,
+    checkpointed_frame_count: i64,
+) -> SdkSqliteWalCheckpointStatus {
+    let wal_enabled = journal_mode.eq_ignore_ascii_case("wal");
+    let checkpoint_complete = busy == 0
+        && (!wal_enabled || (log_frame_count >= 0 && log_frame_count == checkpointed_frame_count));
+    SdkSqliteWalCheckpointStatus {
+        wal_enabled,
+        busy,
+        log_frame_count,
+        checkpointed_frame_count,
+        checkpoint_complete,
+    }
 }
 
 #[cfg(feature = "runtime")]

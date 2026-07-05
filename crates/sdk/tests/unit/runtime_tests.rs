@@ -45,6 +45,13 @@ fn sqlite_status() -> SdkSqliteStoreStatus {
         journal_mode: "wal".to_owned(),
         foreign_keys_enabled: true,
         busy_timeout_ms: 5_000,
+        wal_checkpoint: SdkSqliteWalCheckpointStatus {
+            wal_enabled: true,
+            busy: 0,
+            log_frame_count: 0,
+            checkpointed_frame_count: 0,
+            checkpoint_complete: true,
+        },
         integrity_ok: true,
         integrity_result: "ok".to_owned(),
     }
@@ -55,6 +62,18 @@ fn private_sqlite_status() -> SdkSqliteStoreStatus {
         schema_version: 2,
         ..sqlite_status()
     }
+}
+
+fn assert_wal_checkpoint_ready(status: &SdkSqliteStoreStatus) {
+    assert_eq!(status.journal_mode, "wal");
+    assert!(status.wal_checkpoint.wal_enabled);
+    assert_eq!(status.wal_checkpoint.busy, 0);
+    assert!(status.wal_checkpoint.log_frame_count >= 0);
+    assert_eq!(
+        status.wal_checkpoint.log_frame_count,
+        status.wal_checkpoint.checkpointed_frame_count
+    );
+    assert!(status.wal_checkpoint.checkpoint_complete);
 }
 
 fn storage_status() -> StorageStatusReceipt {
@@ -360,6 +379,30 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .await
         .expect("memory status");
     assert_eq!(memory_status.storage, SdkStorageKind::Memory);
+    assert!(!memory_status.event_store.store.wal_checkpoint.wal_enabled);
+    assert!(!memory_status.outbox.store.wal_checkpoint.wal_enabled);
+    assert!(!memory_status.private_store.store.wal_checkpoint.wal_enabled);
+    assert!(
+        memory_status
+            .event_store
+            .store
+            .wal_checkpoint
+            .checkpoint_complete
+    );
+    assert!(
+        memory_status
+            .outbox
+            .store
+            .wal_checkpoint
+            .checkpoint_complete
+    );
+    assert!(
+        memory_status
+            .private_store
+            .store
+            .wal_checkpoint
+            .checkpoint_complete
+    );
     let memory_integrity = memory_sdk
         .integrity(IntegrityRequest::new())
         .await
@@ -376,6 +419,14 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .await
         .expect("directory sdk");
     assert!(directory_sdk.storage_paths().is_some());
+    let directory_status = directory_sdk
+        .storage_status(StorageStatusRequest::new())
+        .await
+        .expect("directory status");
+    assert_eq!(directory_status.storage, SdkStorageKind::Directory);
+    assert_wal_checkpoint_ready(&directory_status.event_store.store);
+    assert_wal_checkpoint_ready(&directory_status.outbox.store);
+    assert_wal_checkpoint_ready(&directory_status.private_store.store);
 
     let backup_destination = tempdir.path().join("backup");
     let backup = directory_sdk
