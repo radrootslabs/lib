@@ -45,13 +45,7 @@ fn sqlite_status() -> SdkSqliteStoreStatus {
         journal_mode: "wal".to_owned(),
         foreign_keys_enabled: true,
         busy_timeout_ms: 5_000,
-        wal_checkpoint: SdkSqliteWalCheckpointStatus {
-            wal_enabled: true,
-            busy: 0,
-            log_frame_count: 0,
-            checkpointed_frame_count: 0,
-            checkpoint_complete: true,
-        },
+        wal_status: SdkSqliteWalStatus { wal_enabled: true },
         integrity_ok: true,
         integrity_result: "ok".to_owned(),
     }
@@ -64,16 +58,17 @@ fn private_sqlite_status() -> SdkSqliteStoreStatus {
     }
 }
 
-fn assert_wal_checkpoint_ready(status: &SdkSqliteStoreStatus) {
+fn assert_wal_status_ready(status: &SdkSqliteStoreStatus) {
     assert_eq!(status.journal_mode, "wal");
-    assert!(status.wal_checkpoint.wal_enabled);
-    assert_eq!(status.wal_checkpoint.busy, 0);
-    assert!(status.wal_checkpoint.log_frame_count >= 0);
-    assert_eq!(
-        status.wal_checkpoint.log_frame_count,
-        status.wal_checkpoint.checkpointed_frame_count
-    );
-    assert!(status.wal_checkpoint.checkpoint_complete);
+    assert!(status.wal_status.wal_enabled);
+}
+
+fn assert_wal_checkpoint_complete(receipt: &SdkSqliteWalCheckpointReceipt) {
+    assert!(receipt.wal_enabled);
+    assert_eq!(receipt.busy, 0);
+    assert!(receipt.log_frame_count >= 0);
+    assert_eq!(receipt.log_frame_count, receipt.checkpointed_frame_count);
+    assert!(receipt.checkpoint_complete);
 }
 
 fn storage_status() -> StorageStatusReceipt {
@@ -379,30 +374,17 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .await
         .expect("memory status");
     assert_eq!(memory_status.storage, SdkStorageKind::Memory);
-    assert!(!memory_status.event_store.store.wal_checkpoint.wal_enabled);
-    assert!(!memory_status.outbox.store.wal_checkpoint.wal_enabled);
-    assert!(!memory_status.private_store.store.wal_checkpoint.wal_enabled);
-    assert!(
-        memory_status
-            .event_store
-            .store
-            .wal_checkpoint
-            .checkpoint_complete
-    );
-    assert!(
-        memory_status
-            .outbox
-            .store
-            .wal_checkpoint
-            .checkpoint_complete
-    );
-    assert!(
-        memory_status
-            .private_store
-            .store
-            .wal_checkpoint
-            .checkpoint_complete
-    );
+    assert!(!memory_status.event_store.store.wal_status.wal_enabled);
+    assert!(!memory_status.outbox.store.wal_status.wal_enabled);
+    assert!(!memory_status.private_store.store.wal_status.wal_enabled);
+    let memory_checkpoint = memory_sdk
+        .storage_checkpoint(StorageCheckpointRequest::new())
+        .await
+        .expect("memory checkpoint");
+    assert_eq!(memory_checkpoint.storage, SdkStorageKind::Memory);
+    assert!(memory_checkpoint.event_store.checkpoint_complete);
+    assert!(memory_checkpoint.outbox.checkpoint_complete);
+    assert!(memory_checkpoint.private_store.checkpoint_complete);
     let memory_integrity = memory_sdk
         .integrity(IntegrityRequest::new())
         .await
@@ -424,9 +406,17 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .await
         .expect("directory status");
     assert_eq!(directory_status.storage, SdkStorageKind::Directory);
-    assert_wal_checkpoint_ready(&directory_status.event_store.store);
-    assert_wal_checkpoint_ready(&directory_status.outbox.store);
-    assert_wal_checkpoint_ready(&directory_status.private_store.store);
+    assert_wal_status_ready(&directory_status.event_store.store);
+    assert_wal_status_ready(&directory_status.outbox.store);
+    assert_wal_status_ready(&directory_status.private_store.store);
+    let directory_checkpoint = directory_sdk
+        .storage_checkpoint(StorageCheckpointRequest::new())
+        .await
+        .expect("directory checkpoint");
+    assert_eq!(directory_checkpoint.storage, SdkStorageKind::Directory);
+    assert_wal_checkpoint_complete(&directory_checkpoint.event_store);
+    assert_wal_checkpoint_complete(&directory_checkpoint.outbox);
+    assert_wal_checkpoint_complete(&directory_checkpoint.private_store);
 
     let backup_destination = tempdir.path().join("backup");
     let backup = directory_sdk
@@ -523,6 +513,41 @@ fn system_time_converters_cover_epoch_success_and_failure_edges() {
     ));
 }
 
+#[test]
+fn sqlite_wal_checkpoint_receipt_mapping_covers_edge_states() {
+    let complete = sqlite_wal_checkpoint_receipt_from_values("wal", 0, 8, 8);
+    assert_eq!(
+        complete,
+        SdkSqliteWalCheckpointReceipt {
+            wal_enabled: true,
+            busy: 0,
+            log_frame_count: 8,
+            checkpointed_frame_count: 8,
+            checkpoint_complete: true,
+        }
+    );
+
+    let incomplete = sqlite_wal_checkpoint_receipt_from_values("wal", 0, 8, 7);
+    assert!(incomplete.wal_enabled);
+    assert!(!incomplete.checkpoint_complete);
+
+    let busy = sqlite_wal_checkpoint_receipt_from_values("wal", 1, 8, 8);
+    assert!(busy.wal_enabled);
+    assert!(!busy.checkpoint_complete);
+
+    let recovered_or_invalid = sqlite_wal_checkpoint_receipt_from_values("wal", 0, -1, 0);
+    assert!(recovered_or_invalid.wal_enabled);
+    assert!(!recovered_or_invalid.checkpoint_complete);
+
+    let non_wal_idle = sqlite_wal_checkpoint_receipt_from_values("memory", 0, -1, -1);
+    assert!(!non_wal_idle.wal_enabled);
+    assert!(non_wal_idle.checkpoint_complete);
+
+    let non_wal_busy = sqlite_wal_checkpoint_receipt_from_values("delete", 1, 0, 0);
+    assert!(!non_wal_busy.wal_enabled);
+    assert!(!non_wal_busy.checkpoint_complete);
+}
+
 #[tokio::test]
 async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     let event_store_closed = RadrootsClient::builder().build().await.expect("sdk");
@@ -560,7 +585,7 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     assert_outbox_error(outbox_status_summary(&outbox_closed._outbox, 1).await);
     assert!(matches!(
         outbox_closed.integrity(IntegrityRequest::new()).await,
-        Err(RadrootsSdkError::EventStore { .. })
+        Err(RadrootsSdkError::Outbox { .. })
     ));
 
     let private_store_closed = RadrootsClient::builder().build().await.expect("sdk");
@@ -599,12 +624,13 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
         private_store_sqlite_status(&private_store_closed._private_store).await,
     );
     assert_private_store_error(
-        private_sqlite_store_status(
+        sqlite_store_status(
             private_store_closed._private_store.pool(),
             SDK_PRIVATE_STORE_SCHEMA_VERSION_CURRENT,
             "memory".to_owned(),
             true,
             5_000,
+            SqliteStoreRole::PrivateStore,
         )
         .await,
     );
@@ -671,7 +697,7 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     let private_store = SdkPrivateStore::open_memory().await.expect("private store");
     private_store.pool().close().await;
     let tempdir = tempfile::tempdir().expect("tempdir");
-    assert_event_store_error(
+    assert_private_store_error(
         backup_sqlite_stores(
             event_store.pool(),
             outbox.pool(),
@@ -1249,7 +1275,12 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
 
     assert!(
         invalid_request_message(
-            sqlite_vacuum_into(storage.event_store.pool(), &non_utf8_path(), "event store",).await
+            sqlite_vacuum_into(
+                storage.event_store.pool(),
+                &non_utf8_path(),
+                SqliteStoreRole::EventStore,
+            )
+            .await
         )
         .contains("valid UTF-8")
     );
@@ -1260,7 +1291,7 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
     let error = sqlite_vacuum_into(
         storage.event_store.pool(),
         &closed_pool_destination,
-        "event store",
+        SqliteStoreRole::EventStore,
     )
     .await
     .err()
@@ -1293,7 +1324,7 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
         outbox_path: tempdir.path().join("closed-outbox-backup.sqlite"),
         private_store_path: tempdir.path().join("outbox-closed-private.sqlite"),
     };
-    assert_event_store_error(
+    assert_outbox_error(
         backup_sqlite_stores(
             outbox_closed_storage.event_store.pool(),
             outbox_closed_storage.outbox.pool(),
@@ -1316,16 +1347,25 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
         .is_empty()
     );
 
-    let integrity_error = sqlite_integrity_result(storage.event_store.pool())
-        .await
-        .err()
-        .expect("integrity error");
+    let integrity_error =
+        sqlite_integrity_result(storage.event_store.pool(), SqliteStoreRole::EventStore)
+            .await
+            .err()
+            .expect("integrity error");
     assert!(matches!(
         integrity_error,
         RadrootsSdkError::EventStore { .. }
     ));
     assert_event_store_error(
-        sqlite_store_status(storage.event_store.pool(), 1, "wal".to_owned(), true, 5_000).await,
+        sqlite_store_status(
+            storage.event_store.pool(),
+            1,
+            "wal".to_owned(),
+            true,
+            5_000,
+            SqliteStoreRole::EventStore,
+        )
+        .await,
     );
 }
 

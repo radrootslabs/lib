@@ -8,8 +8,9 @@ use radroots_sdk::{
     SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
     SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkRestoreState, SdkSqliteStoreStatus, SdkSqliteWalCheckpointStatus, SdkStorageKind,
-    StorageStatusReceipt, StorageStatusRequest,
+    SdkRestoreState, SdkSqliteStoreStatus, SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus,
+    SdkStorageKind, StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt,
+    StorageStatusRequest,
 };
 use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::Row;
@@ -678,15 +679,16 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         journal_mode: "wal".to_owned(),
         foreign_keys_enabled: true,
         busy_timeout_ms: 5_000,
-        wal_checkpoint: SdkSqliteWalCheckpointStatus {
-            wal_enabled: true,
-            busy: 0,
-            log_frame_count: 8,
-            checkpointed_frame_count: 8,
-            checkpoint_complete: true,
-        },
+        wal_status: SdkSqliteWalStatus { wal_enabled: true },
         integrity_ok: true,
         integrity_result: "ok".to_owned(),
+    };
+    let checkpoint = SdkSqliteWalCheckpointReceipt {
+        wal_enabled: true,
+        busy: 0,
+        log_frame_count: 8,
+        checkpointed_frame_count: 8,
+        checkpoint_complete: true,
     };
     let private_store = SdkSqliteStoreStatus {
         schema_version: 2,
@@ -735,12 +737,8 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
-                    "wal_checkpoint": {
-                        "wal_enabled": true,
-                        "busy": 0,
-                        "log_frame_count": 8,
-                        "checkpointed_frame_count": 8,
-                        "checkpoint_complete": true
+                    "wal_status": {
+                        "wal_enabled": true
                     },
                     "integrity_ok": true,
                     "integrity_result": "ok"
@@ -757,12 +755,8 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
-                    "wal_checkpoint": {
-                        "wal_enabled": true,
-                        "busy": 0,
-                        "log_frame_count": 8,
-                        "checkpointed_frame_count": 8,
-                        "checkpoint_complete": true
+                    "wal_status": {
+                        "wal_enabled": true
                     },
                     "integrity_ok": true,
                     "integrity_result": "ok"
@@ -783,17 +777,52 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,
-                    "wal_checkpoint": {
-                        "wal_enabled": true,
-                        "busy": 0,
-                        "log_frame_count": 8,
-                        "checkpointed_frame_count": 8,
-                        "checkpoint_complete": true
+                    "wal_status": {
+                        "wal_enabled": true
                     },
                     "integrity_ok": true,
                     "integrity_result": "ok"
                 },
                 "farm_private_locations": 4
+            }
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(StorageCheckpointRequest::new()).expect("checkpoint request"),
+        serde_json::json!({})
+    );
+    assert_eq!(
+        serde_json::to_value(StorageCheckpointReceipt {
+            storage: SdkStorageKind::Directory,
+            paths: None,
+            event_store: checkpoint.clone(),
+            outbox: checkpoint.clone(),
+            private_store: checkpoint,
+        })
+        .expect("checkpoint receipt"),
+        serde_json::json!({
+            "storage": "directory",
+            "paths": null,
+            "event_store": {
+                "wal_enabled": true,
+                "busy": 0,
+                "log_frame_count": 8,
+                "checkpointed_frame_count": 8,
+                "checkpoint_complete": true
+            },
+            "outbox": {
+                "wal_enabled": true,
+                "busy": 0,
+                "log_frame_count": 8,
+                "checkpointed_frame_count": 8,
+                "checkpoint_complete": true
+            },
+            "private_store": {
+                "wal_enabled": true,
+                "busy": 0,
+                "log_frame_count": 8,
+                "checkpointed_frame_count": 8,
+                "checkpoint_complete": true
             }
         })
     );

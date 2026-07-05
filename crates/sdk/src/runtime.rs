@@ -141,6 +141,18 @@ impl StorageStatusRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub struct StorageCheckpointRequest {}
+
+#[cfg(feature = "runtime")]
+impl StorageCheckpointRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StorageStatusReceipt {
     pub storage: SdkStorageKind,
@@ -161,19 +173,35 @@ pub enum SdkStorageKind {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StorageCheckpointReceipt {
+    pub storage: SdkStorageKind,
+    pub paths: Option<RadrootsSdkStoragePaths>,
+    pub event_store: SdkSqliteWalCheckpointReceipt,
+    pub outbox: SdkSqliteWalCheckpointReceipt,
+    pub private_store: SdkSqliteWalCheckpointReceipt,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkSqliteStoreStatus {
     pub schema_version: i64,
     pub journal_mode: String,
     pub foreign_keys_enabled: bool,
     pub busy_timeout_ms: i64,
-    pub wal_checkpoint: SdkSqliteWalCheckpointStatus,
+    pub wal_status: SdkSqliteWalStatus,
     pub integrity_ok: bool,
     pub integrity_result: String,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SdkSqliteWalCheckpointStatus {
+pub struct SdkSqliteWalStatus {
+    pub wal_enabled: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkSqliteWalCheckpointReceipt {
     pub wal_enabled: bool,
     pub busy: i64,
     pub log_frame_count: i64,
@@ -659,14 +687,48 @@ impl RadrootsClient {
         })
     }
 
+    pub async fn storage_checkpoint(
+        &self,
+        _request: StorageCheckpointRequest,
+    ) -> Result<StorageCheckpointReceipt, RadrootsSdkError> {
+        let event_store = sqlite_wal_checkpoint(
+            self._event_store.pool(),
+            &self._event_store.pragma_journal_mode().await?,
+            SqliteStoreRole::EventStore,
+        )
+        .await?;
+        let outbox = sqlite_wal_checkpoint(
+            self._outbox.pool(),
+            &self._outbox.pragma_journal_mode().await?,
+            SqliteStoreRole::Outbox,
+        )
+        .await?;
+        let private_store = sqlite_wal_checkpoint(
+            self._private_store.pool(),
+            &self._private_store.pragma_journal_mode().await?,
+            SqliteStoreRole::PrivateStore,
+        )
+        .await?;
+        Ok(StorageCheckpointReceipt {
+            storage: self.storage_kind(),
+            paths: self.storage_paths.clone(),
+            event_store,
+            outbox,
+            private_store,
+        })
+    }
+
     pub async fn integrity(
         &self,
         _request: IntegrityRequest,
     ) -> Result<IntegrityReceipt, RadrootsSdkError> {
-        let event_store_integrity = sqlite_integrity_result(self._event_store.pool()).await?;
-        let outbox_integrity = sqlite_integrity_result(self._outbox.pool()).await?;
+        let event_store_integrity =
+            sqlite_integrity_result(self._event_store.pool(), SqliteStoreRole::EventStore).await?;
+        let outbox_integrity =
+            sqlite_integrity_result(self._outbox.pool(), SqliteStoreRole::Outbox).await?;
         let private_store_integrity =
-            private_store_sqlite_integrity_result(self._private_store.pool()).await?;
+            sqlite_integrity_result(self._private_store.pool(), SqliteStoreRole::PrivateStore)
+                .await?;
         let checked_paths = self
             .storage_paths
             .as_ref()
@@ -791,6 +853,7 @@ async fn event_store_sqlite_status(
         event_store.pragma_journal_mode().await?,
         event_store.pragma_foreign_keys().await? != 0,
         event_store.pragma_busy_timeout().await?,
+        SqliteStoreRole::EventStore,
     )
     .await
 }
@@ -805,6 +868,7 @@ async fn outbox_sqlite_status(
         outbox.pragma_journal_mode().await?,
         outbox.pragma_foreign_keys().await? != 0,
         outbox.pragma_busy_timeout().await?,
+        SqliteStoreRole::Outbox,
     )
     .await
 }
@@ -813,12 +877,13 @@ async fn outbox_sqlite_status(
 async fn private_store_sqlite_status(
     private_store: &SdkPrivateStore,
 ) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
-    private_sqlite_store_status(
+    sqlite_store_status(
         private_store.pool(),
         SDK_PRIVATE_STORE_SCHEMA_VERSION_CURRENT,
         private_store.pragma_journal_mode().await?,
         private_store.pragma_foreign_keys().await? != 0,
         private_store.pragma_busy_timeout().await?,
+        SqliteStoreRole::PrivateStore,
     )
     .await
 }
@@ -848,14 +913,19 @@ async fn backup_sqlite_stores(
     sqlite_vacuum_into(
         event_store_pool,
         &backup_paths.event_store_path,
-        "event store",
+        SqliteStoreRole::EventStore,
     )
     .await?;
-    sqlite_vacuum_into(outbox_pool, &backup_paths.outbox_path, "outbox").await?;
+    sqlite_vacuum_into(
+        outbox_pool,
+        &backup_paths.outbox_path,
+        SqliteStoreRole::Outbox,
+    )
+    .await?;
     sqlite_vacuum_into(
         private_store_pool,
         &backup_paths.private_store_path,
-        "private store",
+        SqliteStoreRole::PrivateStore,
     )
     .await?;
     verify_backup_paths(backup_paths).await
@@ -1398,6 +1468,33 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SqliteStoreRole {
+    EventStore,
+    Outbox,
+    PrivateStore,
+}
+
+#[cfg(feature = "runtime")]
+impl SqliteStoreRole {
+    fn label(self) -> &'static str {
+        match self {
+            Self::EventStore => "event store",
+            Self::Outbox => "outbox",
+            Self::PrivateStore => "private store",
+        }
+    }
+
+    fn error(self, message: String) -> RadrootsSdkError {
+        match self {
+            Self::EventStore => RadrootsSdkError::EventStore { message },
+            Self::Outbox => RadrootsSdkError::Outbox { message },
+            Self::PrivateStore => RadrootsSdkError::PrivateStore { message },
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 struct SqliteIntegrityResult {
     ok: bool,
     result: String,
@@ -1410,68 +1507,48 @@ async fn sqlite_store_status(
     journal_mode: String,
     foreign_keys_enabled: bool,
     busy_timeout_ms: i64,
+    store_role: SqliteStoreRole,
 ) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
-    let wal_checkpoint = sqlite_wal_checkpoint_status(pool, &journal_mode).await?;
-    let integrity = sqlite_integrity_result(pool).await?;
+    let wal_status = sqlite_wal_status(&journal_mode);
+    let integrity = sqlite_integrity_result(pool, store_role).await?;
     Ok(SdkSqliteStoreStatus {
         schema_version,
         journal_mode,
         foreign_keys_enabled,
         busy_timeout_ms,
-        wal_checkpoint,
+        wal_status,
         integrity_ok: integrity.ok,
         integrity_result: integrity.result,
     })
 }
 
 #[cfg(feature = "runtime")]
-async fn private_sqlite_store_status(
-    pool: &SqlitePool,
-    schema_version: i64,
-    journal_mode: String,
-    foreign_keys_enabled: bool,
-    busy_timeout_ms: i64,
-) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
-    let wal_checkpoint = private_store_sqlite_wal_checkpoint_status(pool, &journal_mode).await?;
-    let integrity = private_store_sqlite_integrity_result(pool).await?;
-    Ok(SdkSqliteStoreStatus {
-        schema_version,
-        journal_mode,
-        foreign_keys_enabled,
-        busy_timeout_ms,
-        wal_checkpoint,
-        integrity_ok: integrity.ok,
-        integrity_result: integrity.result,
-    })
+fn sqlite_wal_status(journal_mode: &str) -> SdkSqliteWalStatus {
+    SdkSqliteWalStatus {
+        wal_enabled: journal_mode.eq_ignore_ascii_case("wal"),
+    }
 }
 
 #[cfg(feature = "runtime")]
-async fn sqlite_wal_checkpoint_status(
+async fn sqlite_wal_checkpoint(
     pool: &SqlitePool,
     journal_mode: &str,
-) -> Result<SdkSqliteWalCheckpointStatus, RadrootsSdkError> {
+    store_role: SqliteStoreRole,
+) -> Result<SdkSqliteWalCheckpointReceipt, RadrootsSdkError> {
     let row = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
         .fetch_one(pool)
         .await
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: error.to_string(),
-        })?;
+        .map_err(|error| store_role.error(error.to_string()))?;
     let busy = row
         .try_get(0)
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: error.to_string(),
-        })?;
+        .map_err(|error| store_role.error(error.to_string()))?;
     let log_frame_count = row
         .try_get(1)
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: error.to_string(),
-        })?;
-    let checkpointed_frame_count =
-        row.try_get(2)
-            .map_err(|error| RadrootsSdkError::EventStore {
-                message: error.to_string(),
-            })?;
-    Ok(sqlite_wal_checkpoint_status_from_values(
+        .map_err(|error| store_role.error(error.to_string()))?;
+    let checkpointed_frame_count = row
+        .try_get(2)
+        .map_err(|error| store_role.error(error.to_string()))?;
+    Ok(sqlite_wal_checkpoint_receipt_from_values(
         journal_mode,
         busy,
         log_frame_count,
@@ -1480,50 +1557,16 @@ async fn sqlite_wal_checkpoint_status(
 }
 
 #[cfg(feature = "runtime")]
-async fn private_store_sqlite_wal_checkpoint_status(
-    pool: &SqlitePool,
-    journal_mode: &str,
-) -> Result<SdkSqliteWalCheckpointStatus, RadrootsSdkError> {
-    let row = sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
-        .fetch_one(pool)
-        .await
-        .map_err(|error| RadrootsSdkError::PrivateStore {
-            message: error.to_string(),
-        })?;
-    let busy = row
-        .try_get(0)
-        .map_err(|error| RadrootsSdkError::PrivateStore {
-            message: error.to_string(),
-        })?;
-    let log_frame_count = row
-        .try_get(1)
-        .map_err(|error| RadrootsSdkError::PrivateStore {
-            message: error.to_string(),
-        })?;
-    let checkpointed_frame_count =
-        row.try_get(2)
-            .map_err(|error| RadrootsSdkError::PrivateStore {
-                message: error.to_string(),
-            })?;
-    Ok(sqlite_wal_checkpoint_status_from_values(
-        journal_mode,
-        busy,
-        log_frame_count,
-        checkpointed_frame_count,
-    ))
-}
-
-#[cfg(feature = "runtime")]
-fn sqlite_wal_checkpoint_status_from_values(
+fn sqlite_wal_checkpoint_receipt_from_values(
     journal_mode: &str,
     busy: i64,
     log_frame_count: i64,
     checkpointed_frame_count: i64,
-) -> SdkSqliteWalCheckpointStatus {
+) -> SdkSqliteWalCheckpointReceipt {
     let wal_enabled = journal_mode.eq_ignore_ascii_case("wal");
     let checkpoint_complete = busy == 0
         && (!wal_enabled || (log_frame_count >= 0 && log_frame_count == checkpointed_frame_count));
-    SdkSqliteWalCheckpointStatus {
+    SdkSqliteWalCheckpointReceipt {
         wal_enabled,
         busy,
         log_frame_count,
@@ -1535,30 +1578,12 @@ fn sqlite_wal_checkpoint_status_from_values(
 #[cfg(feature = "runtime")]
 async fn sqlite_integrity_result(
     pool: &SqlitePool,
+    store_role: SqliteStoreRole,
 ) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
     let results = sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
         .fetch_all(pool)
         .await
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: error.to_string(),
-        })?;
-    let result = results.join("; ");
-    Ok(SqliteIntegrityResult {
-        ok: result == "ok",
-        result,
-    })
-}
-
-#[cfg(feature = "runtime")]
-async fn private_store_sqlite_integrity_result(
-    pool: &SqlitePool,
-) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
-    let results = sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
-        .fetch_all(pool)
-        .await
-        .map_err(|error| RadrootsSdkError::PrivateStore {
-            message: error.to_string(),
-        })?;
+        .map_err(|error| store_role.error(error.to_string()))?;
     let result = results.join("; ");
     Ok(SqliteIntegrityResult {
         ok: result == "ok",
@@ -1609,11 +1634,14 @@ fn prepare_backup_destination(path: &Path, overwrite: bool) -> Result<(), Radroo
 async fn sqlite_vacuum_into(
     pool: &SqlitePool,
     destination: &Path,
-    store_name: &'static str,
+    store_role: SqliteStoreRole,
 ) -> Result<(), RadrootsSdkError> {
     let Some(destination) = destination.to_str() else {
         return Err(RadrootsSdkError::InvalidRequest {
-            message: format!("{store_name} backup destination must be valid UTF-8"),
+            message: format!(
+                "{} backup destination must be valid UTF-8",
+                store_role.label()
+            ),
         });
     };
     sqlx::query("VACUUM INTO ?")
@@ -1621,9 +1649,7 @@ async fn sqlite_vacuum_into(
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: format!("{store_name} backup failed: {error}"),
-        })
+        .map_err(|error| store_role.error(format!("{} backup failed: {error}", store_role.label())))
 }
 
 #[cfg(feature = "runtime")]
@@ -1633,10 +1659,11 @@ async fn verify_backup_paths(
     let event_store = RadrootsEventStore::open_file(&paths.event_store_path).await?;
     let outbox = RadrootsOutbox::open_file(&paths.outbox_path).await?;
     let private_store = SdkPrivateStore::open_file(&paths.private_store_path).await?;
-    let event_store_integrity = sqlite_integrity_result(event_store.pool()).await?;
-    let outbox_integrity = sqlite_integrity_result(outbox.pool()).await?;
+    let event_store_integrity =
+        sqlite_integrity_result(event_store.pool(), SqliteStoreRole::EventStore).await?;
+    let outbox_integrity = sqlite_integrity_result(outbox.pool(), SqliteStoreRole::Outbox).await?;
     let private_store_integrity =
-        private_store_sqlite_integrity_result(private_store.pool()).await?;
+        sqlite_integrity_result(private_store.pool(), SqliteStoreRole::PrivateStore).await?;
     let event_summary = event_store.status_summary().await?;
     let outbox_summary = outbox.status_summary(i64::MAX).await?;
     let private_summary = private_store.status_summary().await?;
