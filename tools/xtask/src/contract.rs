@@ -470,6 +470,36 @@ const ARTICLE_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
+const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/knowledge.rs",
+        required_fragments: &[
+            "pub struct RadrootsWikiArticle",
+            "pub struct RadrootsKnowledgeClaim",
+            "pub struct RadrootsKnowledgeFieldReport",
+            "pub struct RadrootsEvidenceBounty",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_WIKI_MERGE_REQUEST: u32 = 818;",
+            "pub const KIND_KNOWLEDGE_CLAIM: u32 = 3460;",
+            "pub const KIND_KNOWLEDGE_SOURCE: u32 = 30450;",
+            "pub const KIND_WIKI_ARTICLE: u32 = 30818;",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/contract.rs",
+        required_fragments: &[
+            "RadrootsReducer::KnowledgeProjection",
+            "\"radroots.wiki.article.v1\"",
+            "\"radroots.knowledge.claim.v1\"",
+            "pub fn validate_event_contract_shape",
+        ],
+    },
+];
+
 const APP_DATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/app_data.rs",
@@ -834,7 +864,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -1009,6 +1039,17 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
             "events.article.get",
         ],
         witnesses: &ARTICLE_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "knowledge",
+        kind: "818, 3460..3465, 30450..30451, 30818..30819",
+        radroots_type: "RadrootsKnowledgeEvent",
+        rpc_methods: &[
+            "events.knowledge.publish",
+            "events.knowledge.list",
+            "events.knowledge.get",
+        ],
+        witnesses: &KNOWLEDGE_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "app_data",

@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
-use crate::kinds::*;
+use crate::{RadrootsNostrEvent, kinds::*};
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 1;
 
@@ -72,6 +72,7 @@ pub enum RadrootsReducer {
     CalendarProjection,
     FarmOpsProjection,
     GroupProjection,
+    KnowledgeProjection,
     ListingInventoryAccounting,
     ListingProjection,
     MarketProjection,
@@ -105,8 +106,12 @@ pub enum RadrootsTagCardinality {
 pub enum RadrootsTagSemantic {
     AddressableCoordinate,
     Category,
+    Citation,
+    Contract,
     Counterparty,
+    Evidence,
     EventPointer,
+    Geohash,
     GroupId,
     Identifier,
     Image,
@@ -118,27 +123,34 @@ pub enum RadrootsTagSemantic {
     Price,
     PublishedAt,
     Relay,
+    ReviewTarget,
     RootEvent,
     ServiceInput,
     ServiceOutput,
+    Source,
     Status,
     Summary,
     Title,
+    Topic,
     Url,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTagValueType {
     AddressableCoordinate,
+    ContractId,
     DTag,
     EventId,
     EventPointer,
+    Geohash,
     Kind,
     PublicKey,
     RelayUrl,
+    Sha256,
     Text,
     UnixTimestamp,
     Url,
+    Uuid,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +188,97 @@ pub enum RadrootsContractMatchError {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsContractFamily {
+    Account,
+    Application,
+    Calendar,
+    Farm,
+    Group,
+    Http,
+    Job,
+    Knowledge,
+    List,
+    Market,
+    Message,
+    Profile,
+    Relay,
+    Social,
+    Trade,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RadrootsContractFamilyMetadata {
+    pub family: RadrootsContractFamily,
+    pub id: &'static str,
+    pub name: &'static str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsContractValidationError {
+    UnknownContract {
+        contract_id: String,
+    },
+    ContractMatch {
+        error: RadrootsContractMatchError,
+    },
+    KindMismatch {
+        expected: u32,
+        actual: u32,
+    },
+    ContentMustBeEmpty {
+        contract_id: &'static str,
+    },
+    InvalidJsonContent {
+        contract_id: &'static str,
+    },
+    MissingTag {
+        contract_id: &'static str,
+        name: &'static str,
+    },
+    TagCardinalityMismatch {
+        contract_id: &'static str,
+        name: &'static str,
+    },
+    TagValueMismatch {
+        contract_id: &'static str,
+        name: &'static str,
+        expected: String,
+        actual: Option<String>,
+    },
+    MissingContentField {
+        contract_id: &'static str,
+        field: &'static str,
+    },
+    ContentFieldMismatch {
+        contract_id: &'static str,
+        field: &'static str,
+        expected: String,
+    },
+    ForbiddenContentField {
+        contract_id: &'static str,
+        field: &'static str,
+    },
+}
+
+impl RadrootsContractValidationError {
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::UnknownContract { .. } => "unknown_contract",
+            Self::ContractMatch { .. } => "contract_match",
+            Self::KindMismatch { .. } => "kind_mismatch",
+            Self::ContentMustBeEmpty { .. } => "content_must_be_empty",
+            Self::InvalidJsonContent { .. } => "invalid_json_content",
+            Self::MissingTag { .. } => "missing_tag",
+            Self::TagCardinalityMismatch { .. } => "tag_cardinality_mismatch",
+            Self::TagValueMismatch { .. } => "tag_value_mismatch",
+            Self::MissingContentField { .. } => "missing_content_field",
+            Self::ContentFieldMismatch { .. } => "content_field_mismatch",
+            Self::ForbiddenContentField { .. } => "forbidden_content_field",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsKindContract {
     pub kind: u32,
     pub canonical_constant: &'static str,
@@ -200,6 +303,84 @@ pub struct RadrootsEventContract {
     pub tags: &'static [RadrootsTagContract],
     pub reducers: &'static [RadrootsReducer],
 }
+
+static CONTRACT_FAMILIES: &[RadrootsContractFamilyMetadata] = &[
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Account,
+        id: "account",
+        name: "Account",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Application,
+        id: "application",
+        name: "Application",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Calendar,
+        id: "calendar",
+        name: "Calendar",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Farm,
+        id: "farm",
+        name: "Farm",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Group,
+        id: "group",
+        name: "Group",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Http,
+        id: "http",
+        name: "HTTP",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Job,
+        id: "job",
+        name: "Job",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Knowledge,
+        id: "knowledge",
+        name: "Knowledge",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::List,
+        id: "list",
+        name: "List",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Market,
+        id: "market",
+        name: "Market",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Message,
+        id: "message",
+        name: "Message",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Profile,
+        id: "profile",
+        name: "Profile",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Relay,
+        id: "relay",
+        name: "Relay",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Social,
+        id: "social",
+        name: "Social",
+    },
+    RadrootsContractFamilyMetadata {
+        family: RadrootsContractFamily::Trade,
+        id: "trade",
+        name: "Trade",
+    },
+];
 
 const fn tag(
     name: &'static str,
@@ -245,6 +426,13 @@ const TAG_A_REQUIRED: RadrootsTagContract = tag(
     RadrootsTagValueType::AddressableCoordinate,
     true,
 );
+const TAG_A_ADDRESS_REQUIRED: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
 const TAG_A_OPTIONAL: RadrootsTagContract = tag(
     "a",
     RadrootsTagCardinality::OptionalOne,
@@ -262,6 +450,20 @@ const TAG_E_ROOT: RadrootsTagContract = tag(
 const TAG_E_PREVIOUS: RadrootsTagContract = tag(
     "e",
     RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::PreviousEvent,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_E_SOURCE_VERSION: RadrootsTagContract = tag(
+    "e",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Source,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_E_BASE_VERSION: RadrootsTagContract = tag(
+    "e",
+    RadrootsTagCardinality::OptionalOne,
     RadrootsTagSemantic::PreviousEvent,
     RadrootsTagValueType::EventId,
     true,
@@ -385,6 +587,55 @@ const TAG_URL: RadrootsTagContract = tag(
     RadrootsTagValueType::Url,
     false,
 );
+const TAG_CONTRACT_REQUIRED: RadrootsTagContract = tag(
+    "contract",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Contract,
+    RadrootsTagValueType::ContractId,
+    false,
+);
+const TAG_TOPIC_MANY: RadrootsTagContract = tag(
+    "t",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Topic,
+    RadrootsTagValueType::Text,
+    true,
+);
+const TAG_GEOHASH_OPTIONAL: RadrootsTagContract = tag(
+    "g",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Geohash,
+    RadrootsTagValueType::Geohash,
+    true,
+);
+const TAG_SOURCE_MANY: RadrootsTagContract = tag(
+    "source",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Source,
+    RadrootsTagValueType::EventPointer,
+    false,
+);
+const TAG_CITATION_MANY: RadrootsTagContract = tag(
+    "citation",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Citation,
+    RadrootsTagValueType::Sha256,
+    false,
+);
+const TAG_REVIEW_TARGET_REQUIRED: RadrootsTagContract = tag(
+    "review_target",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::ReviewTarget,
+    RadrootsTagValueType::EventPointer,
+    false,
+);
+const TAG_EVIDENCE_MANY: RadrootsTagContract = tag(
+    "evidence",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Evidence,
+    RadrootsTagValueType::EventPointer,
+    false,
+);
 
 const NO_TAGS: &[RadrootsTagContract] = &[];
 const D_TAGS: &[RadrootsTagContract] = &[TAG_D];
@@ -397,6 +648,20 @@ const GROUP_ACTION_TAGS: &[RadrootsTagContract] = &[TAG_GROUP, TAG_P_MANY, TAG_E
 const GROUP_STATE_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_P_MANY, TAG_E_MANY];
 const FILE_METADATA_TAGS: &[RadrootsTagContract] = &[TAG_URL, TAG_IMAGE];
 const ARTICLE_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_SUMMARY, TAG_PUBLISHED_AT];
+const WIKI_ARTICLE_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_TITLE,
+    TAG_SUMMARY,
+    TAG_PUBLISHED_AT,
+    TAG_TOPIC_MANY,
+];
+const WIKI_REDIRECT_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_A_ADDRESS_REQUIRED];
+const WIKI_MERGE_REQUEST_TAGS: &[RadrootsTagContract] = &[
+    TAG_A_ADDRESS_REQUIRED,
+    TAG_P_REQUIRED,
+    TAG_E_SOURCE_VERSION,
+    TAG_E_BASE_VERSION,
+];
 const CALENDAR_EVENT_TAGS: &[RadrootsTagContract] =
     &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_PUBLISHED_AT];
 const FARM_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_IMAGE];
@@ -425,6 +690,41 @@ const TRADE_VALIDATION_RESULT_TAGS: &[RadrootsTagContract] =
     &[TAG_SERVICE_REQUEST, TAG_SERVICE_OUTPUT];
 const TRADE_VALIDATION_RECEIPT_TAGS: &[RadrootsTagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
+const KNOWLEDGE_SOURCE_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_CONTRACT_REQUIRED,
+    TAG_TOPIC_MANY,
+    TAG_SOURCE_MANY,
+];
+const KNOWLEDGE_CLAIM_TAGS: &[RadrootsTagContract] = &[
+    TAG_CONTRACT_REQUIRED,
+    TAG_TOPIC_MANY,
+    TAG_SOURCE_MANY,
+    TAG_CITATION_MANY,
+];
+const KNOWLEDGE_RELATION_TAGS: &[RadrootsTagContract] =
+    &[TAG_CONTRACT_REQUIRED, TAG_TOPIC_MANY, TAG_SOURCE_MANY];
+const KNOWLEDGE_REVIEW_TAGS: &[RadrootsTagContract] = &[
+    TAG_CONTRACT_REQUIRED,
+    TAG_REVIEW_TARGET_REQUIRED,
+    TAG_EVIDENCE_MANY,
+];
+const KNOWLEDGE_FIELD_REPORT_TAGS: &[RadrootsTagContract] = &[
+    TAG_CONTRACT_REQUIRED,
+    TAG_TOPIC_MANY,
+    TAG_GEOHASH_OPTIONAL,
+    TAG_EVIDENCE_MANY,
+];
+const KNOWLEDGE_CHANGE_PROPOSAL_TAGS: &[RadrootsTagContract] =
+    &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
+const KNOWLEDGE_CONTRIBUTION_TAGS: &[RadrootsTagContract] =
+    &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
+const EVIDENCE_BOUNTY_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_CONTRACT_REQUIRED,
+    TAG_TOPIC_MANY,
+    TAG_EVIDENCE_MANY,
+];
 
 const SOCIAL_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::SocialProjection];
 const PROFILE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::ProfileProjection];
@@ -442,6 +742,7 @@ const ORDER_REDUCERS: &[RadrootsReducer] = &[
 ];
 const TRADE_VALIDATION_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::TradeValidation];
 const RELAY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::RelayPolicyProjection];
+const KNOWLEDGE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::KnowledgeProjection];
 
 const FARM_MEMBERS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
     RadrootsEventDiscriminator::DTagPrefix("farm:"),
@@ -507,87 +808,6 @@ macro_rules! event_contract {
         }
     };
 }
-
-static LIST_SET_GENERIC_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
-    event_contract!(
-        "radroots.list_set.farm.members.v1",
-        KIND_LIST_SET_GENERIC,
-        "Farm Members List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_MEMBERS_LIST_DISCRIMINATOR),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-    event_contract!(
-        "radroots.list_set.farm.members.owners.v1",
-        KIND_LIST_SET_GENERIC,
-        "Farm Owners List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_OWNERS_LIST_DISCRIMINATOR),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-    event_contract!(
-        "radroots.list_set.farm.members.workers.v1",
-        KIND_LIST_SET_GENERIC,
-        "Farm Workers List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_WORKERS_LIST_DISCRIMINATOR),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-    event_contract!(
-        "radroots.list_set.farm.plots.v1",
-        KIND_LIST_SET_GENERIC,
-        "Farm Plots List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_PLOTS_LIST_DISCRIMINATOR),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-    event_contract!(
-        "radroots.list_set.farm.listings.v1",
-        KIND_LIST_SET_GENERIC,
-        "Farm Listings List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_LISTINGS_LIST_DISCRIMINATOR),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-    event_contract!(
-        "radroots.list_set.member_of.farms.v1",
-        KIND_LIST_SET_GENERIC,
-        "Member Of Farms List Set",
-        "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Member,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::DTagExact("member_of.farms"),
-        LIST_SET_TAGS,
-        FARM_OPS_REDUCERS,
-    ),
-];
 
 static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
     kind_contract!(
@@ -1038,6 +1258,30 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.social.article.v1"]
     ),
     kind_contract!(
+        KIND_WIKI_MERGE_REQUEST,
+        "KIND_WIKI_MERGE_REQUEST",
+        "Wiki Merge Request",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Nip54,
+        ["radroots.wiki.merge_request.v1"]
+    ),
+    kind_contract!(
+        KIND_WIKI_ARTICLE,
+        "KIND_WIKI_ARTICLE",
+        "Wiki Article",
+        RadrootsEventClass::Addressable,
+        RadrootsNostrStandard::Nip54,
+        ["radroots.wiki.article.v1"]
+    ),
+    kind_contract!(
+        KIND_WIKI_REDIRECT,
+        "KIND_WIKI_REDIRECT",
+        "Wiki Redirect",
+        RadrootsEventClass::Addressable,
+        RadrootsNostrStandard::Nip54,
+        ["radroots.wiki.redirect.v1"]
+    ),
+    kind_contract!(
         KIND_CALENDAR_DATE_EVENT,
         "KIND_CALENDAR_DATE_EVENT",
         "Calendar Date Event",
@@ -1164,6 +1408,70 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         RadrootsEventClass::Addressable,
         RadrootsNostrStandard::Radroots,
         ["radroots.listing.draft.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_SOURCE,
+        "KIND_KNOWLEDGE_SOURCE",
+        "Knowledge Source",
+        RadrootsEventClass::Addressable,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.source.v1"]
+    ),
+    kind_contract!(
+        KIND_EVIDENCE_BOUNTY,
+        "KIND_EVIDENCE_BOUNTY",
+        "Evidence Bounty",
+        RadrootsEventClass::Addressable,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.evidence_bounty.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_CLAIM,
+        "KIND_KNOWLEDGE_CLAIM",
+        "Knowledge Claim",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.claim.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_RELATION,
+        "KIND_KNOWLEDGE_RELATION",
+        "Knowledge Relation",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.relation.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_REVIEW,
+        "KIND_KNOWLEDGE_REVIEW",
+        "Knowledge Review",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.review.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_FIELD_REPORT,
+        "KIND_KNOWLEDGE_FIELD_REPORT",
+        "Knowledge Field Report",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.field_report.v1"]
+    ),
+    kind_contract!(
+        KIND_KNOWLEDGE_CHANGE_PROPOSAL,
+        "KIND_KNOWLEDGE_CHANGE_PROPOSAL",
+        "Knowledge Change Proposal",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.change_proposal.v1"]
+    ),
+    kind_contract!(
+        KIND_CONTRIBUTION_ATTESTATION,
+        "KIND_CONTRIBUTION_ATTESTATION",
+        "Contribution Attestation",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.knowledge.contribution_attestation.v1"]
     ),
     kind_contract!(
         KIND_APPLICATION_HANDLER,
@@ -1848,6 +2156,84 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         SOCIAL_REDUCERS
     ),
     event_contract!(
+        "radroots.list_set.farm.members.v1",
+        KIND_LIST_SET_GENERIC,
+        "Farm Members List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Farmer,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::Composite(FARM_MEMBERS_LIST_DISCRIMINATOR),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
+        "radroots.list_set.farm.members.owners.v1",
+        KIND_LIST_SET_GENERIC,
+        "Farm Owners List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Farmer,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::Composite(FARM_OWNERS_LIST_DISCRIMINATOR),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
+        "radroots.list_set.farm.members.workers.v1",
+        KIND_LIST_SET_GENERIC,
+        "Farm Workers List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Farmer,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::Composite(FARM_WORKERS_LIST_DISCRIMINATOR),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
+        "radroots.list_set.farm.plots.v1",
+        KIND_LIST_SET_GENERIC,
+        "Farm Plots List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Farmer,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::Composite(FARM_PLOTS_LIST_DISCRIMINATOR),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
+        "radroots.list_set.farm.listings.v1",
+        KIND_LIST_SET_GENERIC,
+        "Farm Listings List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Farmer,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::Composite(FARM_LISTINGS_LIST_DISCRIMINATOR),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
+        "radroots.list_set.member_of.farms.v1",
+        KIND_LIST_SET_GENERIC,
+        "Member Of Farms List Set",
+        "RadrootsListSet",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Member,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::DTagExact("member_of.farms"),
+        LIST_SET_TAGS,
+        FARM_OPS_REDUCERS
+    ),
+    event_contract!(
         "radroots.list_set.relay.v1",
         KIND_LIST_SET_RELAY,
         "Relay Set",
@@ -1989,6 +2375,45 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventDiscriminator::KindOnly,
         ARTICLE_TAGS,
         SOCIAL_REDUCERS
+    ),
+    event_contract!(
+        "radroots.wiki.merge_request.v1",
+        KIND_WIKI_MERGE_REQUEST,
+        "Wiki Merge Request",
+        "RadrootsWikiMergeRequest",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::KindOnly,
+        WIKI_MERGE_REQUEST_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.wiki.article.v1",
+        KIND_WIKI_ARTICLE,
+        "Wiki Article",
+        "RadrootsWikiArticle",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::Djot,
+        RadrootsEventDiscriminator::KindOnly,
+        WIKI_ARTICLE_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.wiki.redirect.v1",
+        KIND_WIKI_REDIRECT,
+        "Wiki Redirect",
+        "RadrootsWikiRedirect",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::Empty,
+        RadrootsEventDiscriminator::KindOnly,
+        WIKI_REDIRECT_TAGS,
+        KNOWLEDGE_REDUCERS
     ),
     event_contract!(
         "radroots.calendar.date_event.v1",
@@ -2199,6 +2624,134 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         LISTING_REDUCERS
     ),
     event_contract!(
+        "radroots.knowledge.source.v1",
+        KIND_KNOWLEDGE_SOURCE,
+        "Knowledge Source",
+        "RadrootsKnowledgeSource",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.source.v1",
+        },
+        KNOWLEDGE_SOURCE_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.evidence_bounty.v1",
+        KIND_EVIDENCE_BOUNTY,
+        "Evidence Bounty",
+        "RadrootsEvidenceBounty",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.evidence_bounty.v1",
+        },
+        EVIDENCE_BOUNTY_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.claim.v1",
+        KIND_KNOWLEDGE_CLAIM,
+        "Knowledge Claim",
+        "RadrootsKnowledgeClaim",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.claim.v1",
+        },
+        KNOWLEDGE_CLAIM_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.relation.v1",
+        KIND_KNOWLEDGE_RELATION,
+        "Knowledge Relation",
+        "RadrootsKnowledgeRelation",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.relation.v1",
+        },
+        KNOWLEDGE_RELATION_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.review.v1",
+        KIND_KNOWLEDGE_REVIEW,
+        "Knowledge Review",
+        "RadrootsKnowledgeReview",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.review.v1",
+        },
+        KNOWLEDGE_REVIEW_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.field_report.v1",
+        KIND_KNOWLEDGE_FIELD_REPORT,
+        "Knowledge Field Report",
+        "RadrootsKnowledgeFieldReport",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.field_report.v1",
+        },
+        KNOWLEDGE_FIELD_REPORT_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.change_proposal.v1",
+        KIND_KNOWLEDGE_CHANGE_PROPOSAL,
+        "Knowledge Change Proposal",
+        "RadrootsKnowledgeChangeProposal",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.change_proposal.v1",
+        },
+        KNOWLEDGE_CHANGE_PROPOSAL_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
+        "radroots.knowledge.contribution_attestation.v1",
+        KIND_CONTRIBUTION_ATTESTATION,
+        "Contribution Attestation",
+        "RadrootsContributionAttestation",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::TagEquals {
+            name: "contract",
+            value: "radroots.knowledge.contribution_attestation.v1",
+        },
+        KNOWLEDGE_CONTRIBUTION_TAGS,
+        KNOWLEDGE_REDUCERS
+    ),
+    event_contract!(
         "radroots.application.handler.v1",
         KIND_APPLICATION_HANDLER,
         "Application Handler",
@@ -2403,6 +2956,108 @@ pub fn all_event_contracts() -> &'static [RadrootsEventContract] {
     ALL_EVENT_CONTRACTS
 }
 
+pub fn contract_families() -> &'static [RadrootsContractFamilyMetadata] {
+    CONTRACT_FAMILIES
+}
+
+pub fn event_contract_family(contract: &RadrootsEventContract) -> Option<RadrootsContractFamily> {
+    contract_family_for_id(contract.id)
+}
+
+pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsContractFamily> {
+    Some(match contract.kind {
+        KIND_PROFILE | KIND_FOLLOW | KIND_ACCOUNT_CLAIM => RadrootsContractFamily::Profile,
+        KIND_SEAL | KIND_MESSAGE | KIND_MESSAGE_FILE | KIND_GIFT_WRAP => {
+            RadrootsContractFamily::Message
+        }
+        KIND_COMMENT | KIND_GEOCHAT | KIND_POST | KIND_REACTION | KIND_REPOST
+        | KIND_GENERIC_REPOST | KIND_ARTICLE | KIND_FILE_METADATA => RadrootsContractFamily::Social,
+        KIND_RELAY_AUTH | KIND_HTTP_AUTH => RadrootsContractFamily::Relay,
+        KIND_GROUP_PUT_USER
+        | KIND_GROUP_REMOVE_USER
+        | KIND_GROUP_EDIT_METADATA
+        | KIND_GROUP_DELETE_EVENT
+        | KIND_GROUP_CREATE_GROUP
+        | KIND_GROUP_DELETE_GROUP
+        | KIND_GROUP_CREATE_INVITE
+        | KIND_GROUP_JOIN_REQUEST
+        | KIND_GROUP_LEAVE_REQUEST
+        | KIND_GROUP_METADATA
+        | KIND_GROUP_ADMINS
+        | KIND_GROUP_MEMBERS
+        | KIND_GROUP_ROLES => RadrootsContractFamily::Group,
+        KIND_LIST_MUTE
+        | KIND_LIST_PINNED_NOTES
+        | KIND_LIST_READ_WRITE_RELAYS
+        | KIND_LIST_BOOKMARKS
+        | KIND_LIST_COMMUNITIES
+        | KIND_LIST_PUBLIC_CHATS
+        | KIND_LIST_BLOCKED_RELAYS
+        | KIND_LIST_SEARCH_RELAYS
+        | KIND_LIST_SIMPLE_GROUPS
+        | KIND_LIST_RELAY_FEEDS
+        | KIND_LIST_INTERESTS
+        | KIND_LIST_MEDIA_FOLLOWS
+        | KIND_LIST_EMOJIS
+        | KIND_LIST_DM_RELAYS
+        | KIND_LIST_GOOD_WIKI_AUTHORS
+        | KIND_LIST_GOOD_WIKI_RELAYS
+        | KIND_LIST_SET_FOLLOW
+        | KIND_LIST_SET_GENERIC
+        | KIND_LIST_SET_RELAY
+        | KIND_LIST_SET_BOOKMARK
+        | KIND_LIST_SET_CURATION
+        | KIND_LIST_SET_VIDEO
+        | KIND_LIST_SET_PICTURE
+        | KIND_LIST_SET_KIND_MUTE
+        | KIND_LIST_SET_INTEREST
+        | KIND_LIST_SET_EMOJI
+        | KIND_LIST_SET_RELEASE_ARTIFACT
+        | KIND_LIST_SET_APP_CURATION
+        | KIND_LIST_SET_STARTER_PACK
+        | KIND_LIST_SET_MEDIA_STARTER_PACK => RadrootsContractFamily::List,
+        KIND_CALENDAR_DATE_EVENT
+        | KIND_CALENDAR_TIME_EVENT
+        | KIND_CALENDAR
+        | KIND_CALENDAR_EVENT_RSVP => RadrootsContractFamily::Calendar,
+        KIND_FARM
+        | KIND_PLOT
+        | KIND_COOP
+        | KIND_DOCUMENT
+        | KIND_RESOURCE_AREA
+        | KIND_RESOURCE_HARVEST_CAP
+        | KIND_FARM_WORKSPACE_MANIFEST
+        | KIND_FARM_CRDT_CHANGE => RadrootsContractFamily::Farm,
+        KIND_LISTING | KIND_LISTING_DRAFT => RadrootsContractFamily::Market,
+        KIND_TRADE_LISTING_VALIDATION_REQUEST
+        | KIND_TRADE_LISTING_VALIDATION_RESULT
+        | KIND_TRADE_TRANSITION_PROOF_REQUEST
+        | KIND_TRADE_TRANSITION_PROOF_RESULT
+        | KIND_TRADE_VALIDATION_RECEIPT
+        | KIND_ORDER_REQUEST
+        | KIND_ORDER_DECISION
+        | KIND_ORDER_REVISION_PROPOSAL
+        | KIND_ORDER_REVISION_DECISION
+        | KIND_ORDER_CANCELLATION => RadrootsContractFamily::Trade,
+        KIND_WIKI_MERGE_REQUEST
+        | KIND_WIKI_ARTICLE
+        | KIND_WIKI_REDIRECT
+        | KIND_KNOWLEDGE_SOURCE
+        | KIND_EVIDENCE_BOUNTY
+        | KIND_KNOWLEDGE_CLAIM
+        | KIND_KNOWLEDGE_RELATION
+        | KIND_KNOWLEDGE_REVIEW
+        | KIND_KNOWLEDGE_FIELD_REPORT
+        | KIND_KNOWLEDGE_CHANGE_PROPOSAL
+        | KIND_CONTRIBUTION_ATTESTATION => RadrootsContractFamily::Knowledge,
+        KIND_JOB_FEEDBACK => RadrootsContractFamily::Job,
+        _ if is_request_kind(contract.kind) || is_result_kind(contract.kind) => {
+            RadrootsContractFamily::Job
+        }
+        _ => return None,
+    })
+}
+
 pub fn kind_contract(kind: u32) -> Option<&'static RadrootsKindContract> {
     ALL_KIND_CONTRACTS
         .iter()
@@ -2413,25 +3068,13 @@ pub fn event_contract(id: &str) -> Option<&'static RadrootsEventContract> {
     ALL_EVENT_CONTRACTS
         .iter()
         .find(|contract| contract.id == id)
-        .or_else(|| {
-            LIST_SET_GENERIC_EVENT_CONTRACTS
-                .iter()
-                .find(|contract| contract.id == id)
-        })
 }
 
-pub fn event_contracts_for_kind(kind: u32) -> &'static [RadrootsEventContract] {
-    if kind == KIND_LIST_SET_GENERIC {
-        return LIST_SET_GENERIC_EVENT_CONTRACTS;
-    }
-
-    match ALL_EVENT_CONTRACTS
+pub fn event_contracts_for_kind(kind: u32) -> Vec<&'static RadrootsEventContract> {
+    ALL_EVENT_CONTRACTS
         .iter()
-        .find(|contract| contract.kind == kind)
-    {
-        Some(contract) => core::slice::from_ref(contract),
-        None => &[],
-    }
+        .filter(|contract| contract.kind == kind)
+        .collect()
 }
 
 pub fn identify_event_contract(
@@ -2446,12 +3089,45 @@ pub fn identify_event_contract(
     identify_from_contracts(event_contracts_for_kind(kind), kind, tags, content)
 }
 
-fn identify_from_contracts(
-    contracts: &'static [RadrootsEventContract],
+pub fn validate_event_contract(
+    event: &RadrootsNostrEvent,
+) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
+    let contract = identify_event_contract(event.kind, &event.tags, &event.content)
+        .map_err(|error| RadrootsContractValidationError::ContractMatch { error })?;
+    validate_event_contract_shape(event, contract.id)?;
+    Ok(contract)
+}
+
+pub fn validate_event_contract_shape(
+    event: &RadrootsNostrEvent,
+    contract_id: &str,
+) -> Result<(), RadrootsContractValidationError> {
+    let contract = event_contract(contract_id).ok_or_else(|| {
+        RadrootsContractValidationError::UnknownContract {
+            contract_id: contract_id.to_owned(),
+        }
+    })?;
+    if event.kind != contract.kind {
+        return Err(RadrootsContractValidationError::KindMismatch {
+            expected: contract.kind,
+            actual: event.kind,
+        });
+    }
+    validate_content_shape(event, contract)?;
+    validate_contract_tags(event, contract)?;
+    validate_custom_knowledge_contract(event, contract)?;
+    Ok(())
+}
+
+fn identify_from_contracts<'a, I>(
+    contracts: I,
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<&'static RadrootsEventContract, RadrootsContractMatchError> {
+) -> Result<&'a RadrootsEventContract, RadrootsContractMatchError>
+where
+    I: IntoIterator<Item = &'a RadrootsEventContract>,
+{
     let mut matched = None;
     let mut matched_count = 0;
 
@@ -2466,6 +3142,183 @@ fn identify_from_contracts(
         (Some(contract), 1) => Ok(contract),
         (None, _) => Err(RadrootsContractMatchError::UnsupportedShape(kind)),
         (Some(_), _) => Err(RadrootsContractMatchError::AmbiguousShape(kind)),
+    }
+}
+
+fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
+    if id.starts_with("radroots.account.") {
+        Some(RadrootsContractFamily::Account)
+    } else if id.starts_with("radroots.application.") {
+        Some(RadrootsContractFamily::Application)
+    } else if id.starts_with("radroots.calendar.") {
+        Some(RadrootsContractFamily::Calendar)
+    } else if id.starts_with("radroots.farm.") {
+        Some(RadrootsContractFamily::Farm)
+    } else if id.starts_with("radroots.group.") {
+        Some(RadrootsContractFamily::Group)
+    } else if id.starts_with("radroots.http.") {
+        Some(RadrootsContractFamily::Http)
+    } else if id.starts_with("radroots.job.") {
+        Some(RadrootsContractFamily::Job)
+    } else if id.starts_with("radroots.knowledge.") || id.starts_with("radroots.wiki.") {
+        Some(RadrootsContractFamily::Knowledge)
+    } else if id.starts_with("radroots.list.") || id.starts_with("radroots.list_set.") {
+        Some(RadrootsContractFamily::List)
+    } else if id.starts_with("radroots.listing.") {
+        Some(RadrootsContractFamily::Market)
+    } else if id.starts_with("radroots.message.") {
+        Some(RadrootsContractFamily::Message)
+    } else if id.starts_with("radroots.profile.") {
+        Some(RadrootsContractFamily::Profile)
+    } else if id.starts_with("radroots.relay.") {
+        Some(RadrootsContractFamily::Relay)
+    } else if id.starts_with("radroots.trade.") || id.starts_with("radroots.order.") {
+        Some(RadrootsContractFamily::Trade)
+    } else {
+        None
+    }
+}
+
+fn validate_content_shape(
+    event: &RadrootsNostrEvent,
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    match contract.content_schema {
+        RadrootsContentSchema::Empty => {
+            if event.content.is_empty() {
+                Ok(())
+            } else {
+                Err(RadrootsContractValidationError::ContentMustBeEmpty {
+                    contract_id: contract.id,
+                })
+            }
+        }
+        RadrootsContentSchema::JsonObject => parse_content_object(event, contract.id).map(|_| ()),
+        _ => Ok(()),
+    }
+}
+
+fn validate_contract_tags(
+    event: &RadrootsNostrEvent,
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    for tag_contract in contract.tags {
+        let count = tag_count(&event.tags, tag_contract.name);
+        match tag_contract.cardinality {
+            RadrootsTagCardinality::RequiredOne | RadrootsTagCardinality::RequiredMany => {
+                if count == 0 {
+                    return Err(RadrootsContractValidationError::MissingTag {
+                        contract_id: contract.id,
+                        name: tag_contract.name,
+                    });
+                }
+            }
+            RadrootsTagCardinality::OptionalOne | RadrootsTagCardinality::OptionalMany => {}
+        }
+        if tag_contract.name == "contract" {
+            let actual = tag_value(&event.tags, "contract").map(ToOwned::to_owned);
+            if actual.as_deref() != Some(contract.id) {
+                return Err(RadrootsContractValidationError::TagValueMismatch {
+                    contract_id: contract.id,
+                    name: "contract",
+                    expected: contract.id.to_owned(),
+                    actual,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_custom_knowledge_contract(
+    event: &RadrootsNostrEvent,
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    let Some(expected_schema) = custom_knowledge_schema(contract.id) else {
+        return Ok(());
+    };
+    let object = parse_content_object(event, contract.id)?;
+    reject_forbidden_knowledge_fields(&object, contract.id)?;
+
+    match object.get("schema").and_then(|value| value.as_str()) {
+        Some(actual) if actual == expected_schema => {}
+        Some(_) => {
+            return Err(RadrootsContractValidationError::ContentFieldMismatch {
+                contract_id: contract.id,
+                field: "schema",
+                expected: expected_schema.to_owned(),
+            });
+        }
+        None => {
+            return Err(RadrootsContractValidationError::MissingContentField {
+                contract_id: contract.id,
+                field: "schema",
+            });
+        }
+    }
+
+    match object
+        .get("schema_version")
+        .and_then(|value| value.as_u64())
+    {
+        Some(1) => Ok(()),
+        Some(_) => Err(RadrootsContractValidationError::ContentFieldMismatch {
+            contract_id: contract.id,
+            field: "schema_version",
+            expected: "1".to_owned(),
+        }),
+        None => Err(RadrootsContractValidationError::MissingContentField {
+            contract_id: contract.id,
+            field: "schema_version",
+        }),
+    }
+}
+
+fn parse_content_object(
+    event: &RadrootsNostrEvent,
+    contract_id: &'static str,
+) -> Result<serde_json::Map<String, serde_json::Value>, RadrootsContractValidationError> {
+    match serde_json::from_str::<serde_json::Value>(&event.content) {
+        Ok(serde_json::Value::Object(object)) => Ok(object),
+        _ => Err(RadrootsContractValidationError::InvalidJsonContent { contract_id }),
+    }
+}
+
+fn reject_forbidden_knowledge_fields(
+    object: &serde_json::Map<String, serde_json::Value>,
+    contract_id: &'static str,
+) -> Result<(), RadrootsContractValidationError> {
+    for field in [
+        "review_status",
+        "canon_status",
+        "approved_for_canon",
+        "rights_status",
+        "trust_status",
+        "trusted",
+    ] {
+        if object.contains_key(field) {
+            return Err(RadrootsContractValidationError::ForbiddenContentField {
+                contract_id,
+                field,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn custom_knowledge_schema(contract_id: &str) -> Option<&'static str> {
+    match contract_id {
+        "radroots.knowledge.source.v1" => Some("radroots.knowledge.source.v1"),
+        "radroots.knowledge.evidence_bounty.v1" => Some("radroots.knowledge.evidence_bounty.v1"),
+        "radroots.knowledge.claim.v1" => Some("radroots.knowledge.claim.v1"),
+        "radroots.knowledge.relation.v1" => Some("radroots.knowledge.relation.v1"),
+        "radroots.knowledge.review.v1" => Some("radroots.knowledge.review.v1"),
+        "radroots.knowledge.field_report.v1" => Some("radroots.knowledge.field_report.v1"),
+        "radroots.knowledge.change_proposal.v1" => Some("radroots.knowledge.change_proposal.v1"),
+        "radroots.knowledge.contribution_attestation.v1" => {
+            Some("radroots.knowledge.contribution_attestation.v1")
+        }
+        _ => None,
     }
 }
 
@@ -2506,6 +3359,12 @@ fn tag_value<'a>(tags: &'a [Vec<String>], name: &str) -> Option<&'a str> {
             None
         }
     })
+}
+
+fn tag_count(tags: &[Vec<String>], name: &str) -> usize {
+    tags.iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(name))
+        .count()
 }
 
 fn content_json_string_field_equals(content: &str, field: &str, value: &str) -> bool {
@@ -2553,6 +3412,21 @@ mod tests {
         ),
     ];
 
+    fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsNostrEvent {
+        RadrootsNostrEvent {
+            id: "0".repeat(64),
+            author: "1".repeat(64),
+            created_at: 1_700_000_000,
+            kind,
+            tags: tags
+                .into_iter()
+                .map(|tag| tag.into_iter().map(ToOwned::to_owned).collect())
+                .collect(),
+            content: content.to_owned(),
+            sig: "2".repeat(128),
+        }
+    }
+
     #[test]
     fn exposes_one_kind_contract_per_supported_kind() {
         let mut kinds = BTreeSet::new();
@@ -2569,10 +3443,7 @@ mod tests {
     #[test]
     fn exposes_unique_event_contract_ids() {
         let mut ids = BTreeSet::new();
-        for contract in all_event_contracts()
-            .iter()
-            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
-        {
+        for contract in all_event_contracts() {
             assert!(
                 ids.insert(contract.id),
                 "duplicate event contract {}",
@@ -2594,10 +3465,7 @@ mod tests {
 
     #[test]
     fn event_contract_classes_match_kind_contracts() {
-        for contract in all_event_contracts()
-            .iter()
-            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
-        {
+        for contract in all_event_contracts() {
             let kind = kind_contract(contract.kind).expect("event kind contract");
             assert_eq!(contract.class, kind.class, "{}", contract.id);
         }
@@ -2605,10 +3473,7 @@ mod tests {
 
     #[test]
     fn every_event_contract_is_listed_by_its_kind_contract() {
-        for contract in all_event_contracts()
-            .iter()
-            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
-        {
+        for contract in all_event_contracts() {
             let kind = kind_contract(contract.kind).expect("event kind contract");
             assert!(
                 kind.accepted_event_contracts.contains(&contract.id),
@@ -2639,6 +3504,7 @@ mod tests {
             .chain(PUBLIC_SOCIAL_KINDS.iter())
             .chain(PRIVATE_FARM_OPS_KINDS.iter())
             .chain(NIP29_GROUP_KINDS.iter())
+            .chain(KNOWLEDGE_EVENT_KINDS.iter())
         {
             assert!(kind_contract(*kind).is_some(), "missing kind {kind}");
         }
@@ -2658,6 +3524,65 @@ mod tests {
             Some(KIND_LIST_SET_GENERIC)
         );
         assert!(event_contracts_for_kind(999_999).is_empty());
+    }
+
+    #[test]
+    fn exposes_contract_family_metadata() {
+        assert!(
+            contract_families()
+                .iter()
+                .any(|family| family.family == RadrootsContractFamily::Knowledge
+                    && family.id == "knowledge")
+        );
+        assert_eq!(
+            event_contract_family(event_contract("radroots.wiki.article.v1").expect("wiki")),
+            Some(RadrootsContractFamily::Knowledge)
+        );
+        assert_eq!(
+            kind_contract_family(kind_contract(KIND_KNOWLEDGE_CLAIM).expect("claim kind")),
+            Some(RadrootsContractFamily::Knowledge)
+        );
+        assert_eq!(
+            kind_contract_family(kind_contract(KIND_LIST_SET_GENERIC).expect("list kind")),
+            Some(RadrootsContractFamily::List)
+        );
+    }
+
+    #[test]
+    fn exposes_knowledge_contracts() {
+        let wiki_article = event_contract("radroots.wiki.article.v1").expect("wiki article");
+        assert_eq!(wiki_article.kind, KIND_WIKI_ARTICLE);
+        assert_eq!(
+            kind_contract(KIND_WIKI_ARTICLE)
+                .expect("wiki kind")
+                .standard,
+            RadrootsNostrStandard::Nip54
+        );
+        assert_eq!(wiki_article.content_schema, RadrootsContentSchema::Djot);
+
+        let wiki_redirect = event_contract("radroots.wiki.redirect.v1").expect("wiki redirect");
+        assert_eq!(wiki_redirect.kind, KIND_WIKI_REDIRECT);
+        assert_eq!(wiki_redirect.content_schema, RadrootsContentSchema::Empty);
+
+        for id in [
+            "radroots.knowledge.source.v1",
+            "radroots.knowledge.evidence_bounty.v1",
+            "radroots.knowledge.claim.v1",
+            "radroots.knowledge.relation.v1",
+            "radroots.knowledge.review.v1",
+            "radroots.knowledge.field_report.v1",
+            "radroots.knowledge.change_proposal.v1",
+            "radroots.knowledge.contribution_attestation.v1",
+        ] {
+            let contract = event_contract(id).expect(id);
+            assert_eq!(
+                event_contract_family(contract),
+                Some(RadrootsContractFamily::Knowledge)
+            );
+            assert!(contract.tags.iter().any(|tag| tag.name == "contract"
+                && tag.semantic == RadrootsTagSemantic::Contract
+                && tag.value_type == RadrootsTagValueType::ContractId));
+        }
     }
 
     #[test]
@@ -2698,7 +3623,7 @@ mod tests {
     #[test]
     fn rejects_ambiguous_shapes() {
         assert_eq!(
-            identify_from_contracts(AMBIGUOUS_TEST_CONTRACTS, KIND_POST, &[], ""),
+            identify_from_contracts(AMBIGUOUS_TEST_CONTRACTS.iter(), KIND_POST, &[], ""),
             Err(RadrootsContractMatchError::AmbiguousShape(KIND_POST))
         );
     }
@@ -2743,6 +3668,134 @@ mod tests {
     }
 
     #[test]
+    fn validates_custom_knowledge_contract_shape() {
+        let event = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1,"text":"soil improves with cover crops"}"#,
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.knowledge.claim.v1"),
+            Ok(())
+        );
+        assert_eq!(
+            validate_event_contract(&event).expect("validated").id,
+            "radroots.knowledge.claim.v1"
+        );
+    }
+
+    #[test]
+    fn rejects_custom_knowledge_contract_tag_mismatch() {
+        let event = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.relation.v1"]],
+            r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#,
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                name: "contract",
+                expected: "radroots.knowledge.claim.v1".to_owned(),
+                actual: Some("radroots.knowledge.relation.v1".to_owned()),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_custom_knowledge_schema_mismatch() {
+        let event = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            r#"{"schema":"radroots.knowledge.relation.v1","schema_version":1}"#,
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::ContentFieldMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                field: "schema",
+                expected: "radroots.knowledge.claim.v1".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_custom_knowledge_missing_schema_version() {
+        let event = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            r#"{"schema":"radroots.knowledge.claim.v1"}"#,
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::MissingContentField {
+                contract_id: "radroots.knowledge.claim.v1",
+                field: "schema_version",
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_authoritative_knowledge_status_fields() {
+        let event = unsigned_event(
+            KIND_KNOWLEDGE_REVIEW,
+            vec![
+                vec!["contract", "radroots.knowledge.review.v1"],
+                vec!["review_target", "event:0"],
+            ],
+            r#"{"schema":"radroots.knowledge.review.v1","schema_version":1,"canon_status":"approved"}"#,
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.knowledge.review.v1"),
+            Err(RadrootsContractValidationError::ForbiddenContentField {
+                contract_id: "radroots.knowledge.review.v1",
+                field: "canon_status",
+            })
+        );
+    }
+
+    #[test]
+    fn validates_nip54_empty_redirect_content() {
+        let event = unsigned_event(
+            KIND_WIKI_REDIRECT,
+            vec![vec!["d", "soil"], vec!["a", "30818:pubkey:soil"]],
+            "",
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.wiki.redirect.v1"),
+            Ok(())
+        );
+
+        let invalid = unsigned_event(
+            KIND_WIKI_REDIRECT,
+            vec![vec!["d", "soil"], vec!["a", "30818:pubkey:soil"]],
+            "{}",
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid, "radroots.wiki.redirect.v1"),
+            Err(RadrootsContractValidationError::ContentMustBeEmpty {
+                contract_id: "radroots.wiki.redirect.v1",
+            })
+        );
+    }
+
+    #[test]
+    fn exposes_validation_error_codes() {
+        let error = RadrootsContractValidationError::MissingTag {
+            contract_id: "radroots.knowledge.claim.v1",
+            name: "contract",
+        };
+
+        assert_eq!(error.code(), "missing_tag");
+    }
+
+    #[test]
     fn tag_helpers_cover_missing_names_and_cardinality_mismatches() {
         let tags = vec![
             vec!["p".to_owned(), "counterparty".to_owned()],
@@ -2778,10 +3831,7 @@ mod tests {
 
     #[test]
     fn relay_indexed_tags_are_single_letter() {
-        for contract in all_event_contracts()
-            .iter()
-            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
-        {
+        for contract in all_event_contracts() {
             for tag in contract.tags {
                 if tag.relay_indexed {
                     assert_eq!(tag.name.len(), 1, "{}:{}", contract.id, tag.name);
@@ -2792,10 +3842,7 @@ mod tests {
 
     #[test]
     fn addressable_event_contracts_require_d_tags() {
-        for contract in all_event_contracts()
-            .iter()
-            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
-        {
+        for contract in all_event_contracts() {
             if contract.class == RadrootsEventClass::Addressable {
                 let d_tag_cardinality = contract
                     .tags
