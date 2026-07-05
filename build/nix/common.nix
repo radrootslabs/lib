@@ -75,6 +75,7 @@ let
       libsodium
       llvmPackages.llvm
       llvmPackages.libclang
+      perl
       pkg-config
       python3
     ]
@@ -107,6 +108,7 @@ let
       pkgs.pkg-config
       pkgs.clang
       pkgs.llvmPackages.libclang
+      pkgs.perl
     ];
     buildInputs = [
       pkgs.libsodium
