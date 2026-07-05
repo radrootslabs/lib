@@ -20,12 +20,29 @@ use radroots_events_codec::manifest::{
 use radroots_test_fixtures::knowledge::RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS;
 
 const MANIFEST_JSON: &str =
-    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v1.json");
+    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.json");
 const MANIFEST_SHA256: &str =
-    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v1.sha256");
+    include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.sha256");
 const REGENPROTO_COMPATIBILITY_VECTOR: &str = include_str!(
     "../../../contracts/conformance/vectors/knowledge/regenproto_compatibility.v1.json"
 );
+
+const MVP_SUPPORT_CONTRACT_IDS: &[&str] = &[
+    "radroots.wiki.article.v1",
+    "radroots.wiki.redirect.v1",
+    "radroots.wiki.merge_request.v1",
+    "radroots.knowledge.source.v1",
+    "radroots.knowledge.claim.v1",
+    "radroots.knowledge.relation.v1",
+    "radroots.knowledge.review.v1",
+    "radroots.knowledge.field_report.v1",
+];
+
+const BETA_CONTRACT_IDS: &[&str] = &[
+    "radroots.knowledge.evidence_bounty.v1",
+    "radroots.knowledge.change_proposal.v1",
+    "radroots.knowledge.contribution_attestation.v1",
+];
 
 #[test]
 fn knowledge_manifest_is_deterministic_and_matches_artifacts() {
@@ -72,7 +89,7 @@ fn knowledge_manifest_covers_required_fields_for_every_contract() {
         assert!(contract.kind > 0);
         assert!(!contract.class.trim().is_empty());
         assert!(!contract.standard.trim().is_empty());
-        assert!(!contract.stability.trim().is_empty());
+        assert_eq!(contract.stability, "experimental");
         assert!(!contract.privacy.trim().is_empty());
         assert!(!contract.content_schema.trim().is_empty());
         assert!(!contract.payload_type.trim().is_empty());
@@ -84,10 +101,40 @@ fn knowledge_manifest_covers_required_fields_for_every_contract() {
         assert!(contract.codec_support.encode);
         assert!(contract.codec_support.decode);
         assert!(contract.codec_support.contract_validation);
+        assert!(contract.wasm_verified_decode_support);
         assert!(!contract.deprecated);
         assert!(contract.replaced_by.is_none());
         assert!(!contract.introduced_at.trim().is_empty());
     }
+
+    for contract_id in MVP_SUPPORT_CONTRACT_IDS {
+        let contract = manifest
+            .contracts
+            .iter()
+            .find(|contract| contract.contract_id == *contract_id)
+            .unwrap();
+        assert!(contract.sdk_builder_support, "{contract_id}");
+        assert!(contract.sdk_draft_support, "{contract_id}");
+        assert!(contract.wasm_tag_builder_support, "{contract_id}");
+    }
+
+    for contract_id in BETA_CONTRACT_IDS {
+        let contract = manifest
+            .contracts
+            .iter()
+            .find(|contract| contract.contract_id == *contract_id)
+            .unwrap();
+        assert!(!contract.sdk_builder_support, "{contract_id}");
+        assert!(!contract.sdk_draft_support, "{contract_id}");
+        assert!(!contract.wasm_tag_builder_support, "{contract_id}");
+    }
+
+    let merge_request = manifest
+        .contracts
+        .iter()
+        .find(|contract| contract.contract_id == "radroots.wiki.merge_request.v1")
+        .unwrap();
+    assert_eq!(merge_request.content_schema, "plain_text");
 
     let manifest_contracts = manifest
         .contracts

@@ -16,7 +16,7 @@ use radroots_events::contract::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub const RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsKnowledgeContractManifest {
@@ -44,6 +44,9 @@ pub struct RadrootsKnowledgeContractManifestEntry {
     pub reducers: Vec<String>,
     pub codec_support: RadrootsKnowledgeManifestCodecSupport,
     pub sdk_builder_support: bool,
+    pub sdk_draft_support: bool,
+    pub wasm_tag_builder_support: bool,
+    pub wasm_verified_decode_support: bool,
     pub deprecated: bool,
     pub replaced_by: Option<String>,
     pub introduced_at: String,
@@ -131,6 +134,7 @@ fn manifest_entry(contract: &RadrootsEventContract) -> RadrootsKnowledgeContract
     let standard = kind_contract(contract.kind)
         .map(|contract| standard_label(contract.standard))
         .unwrap_or("unknown");
+    let mvp_support = mvp_sdk_and_wasm_tag_support(contract.id);
 
     RadrootsKnowledgeContractManifestEntry {
         contract_id: contract.id.to_string(),
@@ -158,11 +162,28 @@ fn manifest_entry(contract: &RadrootsEventContract) -> RadrootsKnowledgeContract
             verified_decode: true,
             verified_decode_requires_nostr: true,
         },
-        sdk_builder_support: false,
+        sdk_builder_support: mvp_support,
+        sdk_draft_support: mvp_support,
+        wasm_tag_builder_support: mvp_support,
+        wasm_verified_decode_support: true,
         deprecated: false,
         replaced_by: None,
         introduced_at: env!("CARGO_PKG_VERSION").to_string(),
     }
+}
+
+fn mvp_sdk_and_wasm_tag_support(contract_id: &str) -> bool {
+    matches!(
+        contract_id,
+        "radroots.wiki.article.v1"
+            | "radroots.wiki.redirect.v1"
+            | "radroots.wiki.merge_request.v1"
+            | "radroots.knowledge.source.v1"
+            | "radroots.knowledge.claim.v1"
+            | "radroots.knowledge.relation.v1"
+            | "radroots.knowledge.review.v1"
+            | "radroots.knowledge.field_report.v1"
+    )
 }
 
 fn discriminator_manifest(

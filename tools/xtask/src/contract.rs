@@ -13,11 +13,28 @@ const ROOT_RELEASE_POLICY_RELATIVE: &str =
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
-    "contracts/knowledge/knowledge_event_contract_manifest.v1.json";
+    "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
 const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
-    "contracts/knowledge/knowledge_event_contract_manifest.v1.sha256";
+    "contracts/knowledge/knowledge_event_contract_manifest.v2.sha256";
+const KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE: &str =
+    "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json";
 const KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/regenproto_compatibility.v1.json";
+const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
+    "radroots.wiki.article.v1",
+    "radroots.wiki.redirect.v1",
+    "radroots.wiki.merge_request.v1",
+    "radroots.knowledge.source.v1",
+    "radroots.knowledge.claim.v1",
+    "radroots.knowledge.relation.v1",
+    "radroots.knowledge.review.v1",
+    "radroots.knowledge.field_report.v1",
+];
+const KNOWLEDGE_BETA_CONTRACT_IDS: [&str; 3] = [
+    "radroots.knowledge.evidence_bounty.v1",
+    "radroots.knowledge.change_proposal.v1",
+    "radroots.knowledge.contribution_attestation.v1",
+];
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
@@ -2099,12 +2116,131 @@ pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(),
         ));
     }
 
+    validate_knowledge_manifest_witnesses(workspace_root, &actual_json)?;
+
     let bundle = load_contract_bundle(workspace_root)?;
+    validate_conformance_vector_file(
+        &workspace_root.join(KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE),
+        &bundle.manifest.contract.version,
+    )?;
     validate_conformance_vector_file(
         &workspace_root.join(KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE),
         &bundle.manifest.contract.version,
     )?;
     Ok(())
+}
+
+fn validate_knowledge_manifest_witnesses(
+    workspace_root: &Path,
+    actual_json: &str,
+) -> Result<(), String> {
+    for relative in legacy_knowledge_manifest_relatives() {
+        let path = workspace_root.join(&relative);
+        if path.exists() {
+            return Err(format!(
+                "stale knowledge manifest artifact remains at {}",
+                relative
+            ));
+        }
+    }
+
+    let value = serde_json::from_str::<Value>(actual_json)
+        .map_err(|error| format!("parse knowledge manifest JSON: {error}"))?;
+    if value.get("schema_version").and_then(Value::as_u64) != Some(2) {
+        return Err("knowledge manifest schema_version must be 2".to_string());
+    }
+    let contracts = value
+        .get("contracts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "knowledge manifest contracts must be an array".to_string())?;
+    let mut previous_id: Option<String> = None;
+    let mut ids = BTreeSet::new();
+
+    for contract in contracts {
+        let contract_id = contract
+            .get("contract_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "knowledge manifest entry missing contract_id".to_string())?;
+        if let Some(previous) = previous_id.as_deref() {
+            if previous > contract_id {
+                return Err(
+                    "knowledge manifest contracts must be sorted by contract_id".to_string()
+                );
+            }
+        }
+        previous_id = Some(contract_id.to_string());
+        if !ids.insert(contract_id.to_string()) {
+            return Err(format!(
+                "knowledge manifest has duplicate contract id {contract_id}"
+            ));
+        }
+
+        if contract.get("stability").and_then(Value::as_str) != Some("experimental") {
+            return Err(format!(
+                "knowledge manifest contract {contract_id} must be experimental"
+            ));
+        }
+        if contract_id == "radroots.wiki.merge_request.v1"
+            && contract.get("content_schema").and_then(Value::as_str) != Some("plain_text")
+        {
+            return Err(
+                "wiki merge request manifest content_schema must be plain_text".to_string(),
+            );
+        }
+
+        let sdk_builder_support = manifest_bool_field(contract, "sdk_builder_support")?;
+        let sdk_draft_support = manifest_bool_field(contract, "sdk_draft_support")?;
+        let wasm_tag_builder_support = manifest_bool_field(contract, "wasm_tag_builder_support")?;
+        let wasm_verified_decode_support =
+            manifest_bool_field(contract, "wasm_verified_decode_support")?;
+
+        if KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS.contains(&contract_id) {
+            if !sdk_builder_support || !sdk_draft_support || !wasm_tag_builder_support {
+                return Err(format!(
+                    "knowledge manifest MVP contract {contract_id} must report SDK and WASM tag support"
+                ));
+            }
+        }
+        if KNOWLEDGE_BETA_CONTRACT_IDS.contains(&contract_id)
+            && (sdk_builder_support || sdk_draft_support || wasm_tag_builder_support)
+        {
+            return Err(format!(
+                "knowledge manifest beta contract {contract_id} must not overclaim builder support"
+            ));
+        }
+        if !wasm_verified_decode_support {
+            return Err(format!(
+                "knowledge manifest contract {contract_id} must report WASM verified decode support"
+            ));
+        }
+    }
+
+    for contract_id in KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS
+        .iter()
+        .chain(KNOWLEDGE_BETA_CONTRACT_IDS.iter())
+    {
+        if !ids.contains(*contract_id) {
+            return Err(format!(
+                "knowledge manifest missing required contract {contract_id}"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn legacy_knowledge_manifest_relatives() -> [String; 2] {
+    [
+        KNOWLEDGE_MANIFEST_RELATIVE.replace(".v2.", ".v1."),
+        KNOWLEDGE_MANIFEST_SHA256_RELATIVE.replace(".v2.", ".v1."),
+    ]
+}
+
+fn manifest_bool_field(contract: &Value, field: &str) -> Result<bool, String> {
+    contract
+        .get(field)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| format!("knowledge manifest entry missing boolean field {field}"))
 }
 
 #[cfg(not(test))]

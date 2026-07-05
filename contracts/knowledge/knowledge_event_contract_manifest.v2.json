@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "registry_version": 1,
   "radroots_events_version": "0.1.0-alpha.2",
   "radroots_events_codec_version": "0.1.0-alpha.2",
@@ -10,7 +10,7 @@
       "kind": 3464,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -49,6 +49,9 @@
         "verified_decode_requires_nostr": true
       },
       "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -58,7 +61,7 @@
       "kind": 3460,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -110,7 +113,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -120,7 +126,7 @@
       "kind": 3465,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -159,6 +165,9 @@
         "verified_decode_requires_nostr": true
       },
       "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -168,7 +177,7 @@
       "kind": 30451,
       "class": "addressable",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -221,6 +230,9 @@
         "verified_decode_requires_nostr": true
       },
       "sdk_builder_support": false,
+      "sdk_draft_support": false,
+      "wasm_tag_builder_support": false,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -230,7 +242,7 @@
       "kind": 3463,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -282,7 +294,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -292,7 +307,7 @@
       "kind": 3461,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -337,7 +352,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -347,7 +365,7 @@
       "kind": 3462,
       "class": "regular",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -392,7 +410,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -402,7 +423,7 @@
       "kind": 30450,
       "class": "addressable",
       "standard": "radroots",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "json_object",
@@ -454,7 +475,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -464,7 +488,7 @@
       "kind": 30818,
       "class": "addressable",
       "standard": "nip54",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "djot",
@@ -521,7 +545,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -531,10 +558,10 @@
       "kind": 818,
       "class": "regular",
       "standard": "nip54",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
-      "content_schema": "json_object",
+      "content_schema": "plain_text",
       "payload_type": "RadrootsWikiMergeRequest",
       "discriminators": [
         {
@@ -581,7 +608,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"
@@ -591,7 +621,7 @@
       "kind": 30819,
       "class": "addressable",
       "standard": "nip54",
-      "stability": "stable",
+      "stability": "experimental",
       "privacy": "public",
       "author_role": "any",
       "content_schema": "empty",
@@ -627,7 +657,10 @@
         "verified_decode": true,
         "verified_decode_requires_nostr": true
       },
-      "sdk_builder_support": false,
+      "sdk_builder_support": true,
+      "sdk_draft_support": true,
+      "wasm_tag_builder_support": true,
+      "wasm_verified_decode_support": true,
       "deprecated": false,
       "replaced_by": null,
       "introduced_at": "0.1.0-alpha.2"

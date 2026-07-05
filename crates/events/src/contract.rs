@@ -778,6 +778,38 @@ macro_rules! kind_contract {
     };
 }
 
+macro_rules! event_contract_with_stability {
+    (
+        $id:literal,
+        $kind:expr,
+        $name:literal,
+        $payload_type:literal,
+        $class:expr,
+        $standard_privacy:expr,
+        $author_role:expr,
+        $content_schema:expr,
+        $discriminator:expr,
+        $tags:expr,
+        $reducers:expr,
+        $stability:expr $(,)?
+    ) => {
+        RadrootsEventContract {
+            id: $id,
+            kind: $kind,
+            name: $name,
+            payload_type: $payload_type,
+            class: $class,
+            stability: $stability,
+            privacy: $standard_privacy,
+            author_role: $author_role,
+            content_schema: $content_schema,
+            discriminator: $discriminator,
+            tags: $tags,
+            reducers: $reducers,
+        }
+    };
+}
+
 macro_rules! event_contract {
     (
         $id:literal,
@@ -792,20 +824,51 @@ macro_rules! event_contract {
         $tags:expr,
         $reducers:expr $(,)?
     ) => {
-        RadrootsEventContract {
-            id: $id,
-            kind: $kind,
-            name: $name,
-            payload_type: $payload_type,
-            class: $class,
-            stability: RadrootsEventStability::Stable,
-            privacy: $standard_privacy,
-            author_role: $author_role,
-            content_schema: $content_schema,
-            discriminator: $discriminator,
-            tags: $tags,
-            reducers: $reducers,
-        }
+        event_contract_with_stability!(
+            $id,
+            $kind,
+            $name,
+            $payload_type,
+            $class,
+            $standard_privacy,
+            $author_role,
+            $content_schema,
+            $discriminator,
+            $tags,
+            $reducers,
+            RadrootsEventStability::Stable
+        )
+    };
+}
+
+macro_rules! experimental_event_contract {
+    (
+        $id:literal,
+        $kind:expr,
+        $name:literal,
+        $payload_type:literal,
+        $class:expr,
+        $standard_privacy:expr,
+        $author_role:expr,
+        $content_schema:expr,
+        $discriminator:expr,
+        $tags:expr,
+        $reducers:expr $(,)?
+    ) => {
+        event_contract_with_stability!(
+            $id,
+            $kind,
+            $name,
+            $payload_type,
+            $class,
+            $standard_privacy,
+            $author_role,
+            $content_schema,
+            $discriminator,
+            $tags,
+            $reducers,
+            RadrootsEventStability::Experimental
+        )
     };
 }
 
@@ -2376,7 +2439,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         ARTICLE_TAGS,
         SOCIAL_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.wiki.merge_request.v1",
         KIND_WIKI_MERGE_REQUEST,
         "Wiki Merge Request",
@@ -2389,7 +2452,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         WIKI_MERGE_REQUEST_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.wiki.article.v1",
         KIND_WIKI_ARTICLE,
         "Wiki Article",
@@ -2402,7 +2465,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         WIKI_ARTICLE_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.wiki.redirect.v1",
         KIND_WIKI_REDIRECT,
         "Wiki Redirect",
@@ -2623,7 +2686,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         LISTING_TAGS,
         LISTING_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.source.v1",
         KIND_KNOWLEDGE_SOURCE,
         "Knowledge Source",
@@ -2639,7 +2702,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_SOURCE_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.evidence_bounty.v1",
         KIND_EVIDENCE_BOUNTY,
         "Evidence Bounty",
@@ -2655,7 +2718,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         EVIDENCE_BOUNTY_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.claim.v1",
         KIND_KNOWLEDGE_CLAIM,
         "Knowledge Claim",
@@ -2671,7 +2734,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_CLAIM_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.relation.v1",
         KIND_KNOWLEDGE_RELATION,
         "Knowledge Relation",
@@ -2687,7 +2750,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_RELATION_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.review.v1",
         KIND_KNOWLEDGE_REVIEW,
         "Knowledge Review",
@@ -2703,7 +2766,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_REVIEW_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.field_report.v1",
         KIND_KNOWLEDGE_FIELD_REPORT,
         "Knowledge Field Report",
@@ -2719,7 +2782,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_FIELD_REPORT_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.change_proposal.v1",
         KIND_KNOWLEDGE_CHANGE_PROPOSAL,
         "Knowledge Change Proposal",
@@ -2735,7 +2798,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KNOWLEDGE_CHANGE_PROPOSAL_TAGS,
         KNOWLEDGE_REDUCERS
     ),
-    event_contract!(
+    experimental_event_contract!(
         "radroots.knowledge.contribution_attestation.v1",
         KIND_CONTRIBUTION_ATTESTATION,
         "Contribution Attestation",
@@ -3070,11 +3133,10 @@ pub fn event_contract(id: &str) -> Option<&'static RadrootsEventContract> {
         .find(|contract| contract.id == id)
 }
 
-pub fn event_contracts_for_kind(kind: u32) -> Vec<&'static RadrootsEventContract> {
+pub fn event_contracts_for_kind(kind: u32) -> impl Iterator<Item = &'static RadrootsEventContract> {
     ALL_EVENT_CONTRACTS
         .iter()
-        .filter(|contract| contract.kind == kind)
-        .collect()
+        .filter(move |contract| contract.kind == kind)
 }
 
 pub fn identify_event_contract(
@@ -3540,7 +3602,7 @@ mod tests {
 
     #[test]
     fn event_contract_lookup_supports_many_contracts_per_kind() {
-        let contracts = event_contracts_for_kind(KIND_LIST_SET_GENERIC);
+        let contracts = event_contracts_for_kind(KIND_LIST_SET_GENERIC).collect::<Vec<_>>();
         assert_eq!(contracts.len(), 6);
         assert!(
             contracts
@@ -3551,7 +3613,20 @@ mod tests {
             event_contract("radroots.list_set.member_of.farms.v1").map(|contract| contract.kind),
             Some(KIND_LIST_SET_GENERIC)
         );
-        assert!(event_contracts_for_kind(999_999).is_empty());
+        assert!(event_contracts_for_kind(999_999).next().is_none());
+    }
+
+    #[test]
+    fn event_contract_lookup_supports_knowledge_contract_kinds() {
+        let contracts = event_contracts_for_kind(KIND_WIKI_ARTICLE).collect::<Vec<_>>();
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0].id, "radroots.wiki.article.v1");
+        assert_eq!(
+            identify_event_contract(KIND_WIKI_ARTICLE, &[], "# Soil")
+                .expect("wiki article contract")
+                .id,
+            "radroots.wiki.article.v1"
+        );
     }
 
     #[test]
@@ -3580,6 +3655,7 @@ mod tests {
     fn exposes_knowledge_contracts() {
         let wiki_article = event_contract("radroots.wiki.article.v1").expect("wiki article");
         assert_eq!(wiki_article.kind, KIND_WIKI_ARTICLE);
+        assert_eq!(wiki_article.stability, RadrootsEventStability::Experimental);
         assert_eq!(
             kind_contract(KIND_WIKI_ARTICLE)
                 .expect("wiki kind")
@@ -3588,8 +3664,23 @@ mod tests {
         );
         assert_eq!(wiki_article.content_schema, RadrootsContentSchema::Djot);
 
+        let wiki_merge_request =
+            event_contract("radroots.wiki.merge_request.v1").expect("wiki merge request");
+        assert_eq!(
+            wiki_merge_request.stability,
+            RadrootsEventStability::Experimental
+        );
+        assert_eq!(
+            wiki_merge_request.content_schema,
+            RadrootsContentSchema::PlainText
+        );
+
         let wiki_redirect = event_contract("radroots.wiki.redirect.v1").expect("wiki redirect");
         assert_eq!(wiki_redirect.kind, KIND_WIKI_REDIRECT);
+        assert_eq!(
+            wiki_redirect.stability,
+            RadrootsEventStability::Experimental
+        );
         assert_eq!(wiki_redirect.content_schema, RadrootsContentSchema::Empty);
 
         for id in [
@@ -3603,6 +3694,7 @@ mod tests {
             "radroots.knowledge.contribution_attestation.v1",
         ] {
             let contract = event_contract(id).expect(id);
+            assert_eq!(contract.stability, RadrootsEventStability::Experimental);
             assert_eq!(
                 event_contract_family(contract),
                 Some(RadrootsContractFamily::Knowledge)
