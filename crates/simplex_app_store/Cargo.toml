@@ -26,7 +26,9 @@ base64 = { workspace = true }
 getrandom = { workspace = true }
 hex = { workspace = true }
 radroots_secret_vault = { workspace = true, default-features = false }
-rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { workspace = true, optional = true, features = [
+  "bundled-sqlcipher-vendored-openssl",
+] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
