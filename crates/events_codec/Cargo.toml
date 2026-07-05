@@ -17,6 +17,8 @@ std = ["radroots_core/std", "radroots_events/std"]
 serde = ["dep:serde", "radroots_core/serde", "radroots_events/serde"]
 serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]
+knowledge = ["serde_json", "radroots_events/knowledge"]
+knowledge-nip54 = ["knowledge", "radroots_events/knowledge-nip54"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }

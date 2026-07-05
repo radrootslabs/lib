@@ -8,12 +8,16 @@ pub mod error;
 pub mod event_ref;
 mod field_helpers;
 pub mod job;
+#[cfg(feature = "knowledge")]
+pub mod knowledge;
 pub mod parsed;
 pub mod profile;
 pub mod report;
 pub mod repost;
 mod social_helpers;
 pub mod tag_builders;
+#[cfg(feature = "knowledge")]
+pub mod verification;
 pub mod wire;
 
 pub mod app_data;
@@ -54,3 +58,10 @@ mod test_fixtures;
 pub mod relay_document;
 
 pub use tag_builders::RadrootsEventTagBuilder;
+#[cfg(feature = "knowledge")]
+pub use verification::{
+    RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
+    RadrootsIdVerifiedEvent, RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent,
+    decode_validated_event, validate_event_contract, verify_and_decode_radroots_event,
+    verify_event_id, verify_event_signature,
+};

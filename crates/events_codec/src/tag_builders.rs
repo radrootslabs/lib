@@ -5,6 +5,13 @@ use alloc::{string::String, vec::Vec};
 
 use core::convert::Infallible;
 
+#[cfg(feature = "knowledge")]
+use radroots_events::knowledge::{
+    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
+    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
+    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
+    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+};
 use radroots_events::{
     app_data::RadrootsAppData, comment::RadrootsComment, coop::RadrootsCoop,
     document::RadrootsDocument, farm::RadrootsFarm, follow::RadrootsFollow,
@@ -29,6 +36,14 @@ use crate::job::encode::JobEncodeError;
 use crate::job::feedback::encode::job_feedback_build_tags;
 use crate::job::request::encode::job_request_build_tags;
 use crate::job::result::encode::job_result_build_tags;
+#[cfg(feature = "knowledge")]
+use crate::knowledge::encode::{
+    contribution_attestation_build_tags, evidence_bounty_build_tags,
+    knowledge_change_proposal_build_tags, knowledge_claim_build_tags,
+    knowledge_field_report_build_tags, knowledge_relation_build_tags, knowledge_review_build_tags,
+    knowledge_source_build_tags, wiki_article_build_tags, wiki_merge_request_build_tags,
+    wiki_redirect_build_tags,
+};
 use crate::list::encode::list_build_tags;
 use crate::list_set::encode::list_set_build_tags;
 use crate::listing::tags::listing_tags;
@@ -230,5 +245,104 @@ impl RadrootsEventTagBuilder for RadrootsPost {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         post_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsWikiArticle {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        wiki_article_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsWikiRedirect {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        wiki_redirect_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsWikiMergeRequest {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        wiki_merge_request_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeSource {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_source_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeClaim {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_claim_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeRelation {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_relation_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeReview {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_review_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeFieldReport {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_field_report_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsEvidenceBounty {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        evidence_bounty_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsKnowledgeChangeProposal {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        knowledge_change_proposal_build_tags(self)
+    }
+}
+
+#[cfg(feature = "knowledge")]
+impl RadrootsEventTagBuilder for RadrootsContributionAttestation {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        contribution_attestation_build_tags(self)
     }
 }

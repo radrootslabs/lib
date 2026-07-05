@@ -1,8 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},

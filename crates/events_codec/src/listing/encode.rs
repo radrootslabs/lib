@@ -1,9 +1,9 @@
+#[cfg(all(not(feature = "std"), test, feature = "serde_json"))]
+use alloc::vec;
+#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+use alloc::{format, string::ToString};
 #[cfg(not(feature = "std"))]
-use alloc::{
-    format,
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_events::kinds::{KIND_LISTING, is_listing_kind};

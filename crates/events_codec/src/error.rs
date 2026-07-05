@@ -9,6 +9,18 @@ pub enum EventParseError {
     InvalidJson(&'static str),
 }
 
+impl EventParseError {
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::MissingTag(_) => "missing_tag",
+            Self::InvalidTag(_) => "invalid_tag",
+            Self::InvalidKind { .. } => "invalid_kind",
+            Self::InvalidNumber(_, _) => "invalid_number",
+            Self::InvalidJson(_) => "invalid_json",
+        }
+    }
+}
+
 impl fmt::Display for EventParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -39,6 +51,19 @@ pub enum EventEncodeError {
     EmptyRequiredField(&'static str),
     InvalidField(&'static str),
     Json,
+}
+
+pub type RadrootsEncodeError = EventEncodeError;
+
+impl EventEncodeError {
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::InvalidKind(_) => "invalid_kind",
+            Self::EmptyRequiredField(_) => "empty_required_field",
+            Self::InvalidField(_) => "invalid_field",
+            Self::Json => "json",
+        }
+    }
 }
 
 impl fmt::Display for EventEncodeError {

@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEventPtr,
