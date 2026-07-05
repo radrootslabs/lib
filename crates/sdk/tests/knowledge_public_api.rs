@@ -9,26 +9,16 @@ const RELAY: &str = "wss://relay.radroots.example";
 
 #[test]
 fn knowledge_prelude_builds_mvp_wire_parts_without_codec_imports() {
-    let builder = KnowledgeEventBuilder::new();
-
-    let article = builder.wiki_article(&wiki_article()).expect("article");
-    let redirect = builder.wiki_redirect(&wiki_redirect()).expect("redirect");
-    let merge_request = builder
-        .wiki_merge_request(&wiki_merge_request())
+    let article = article_builder().build_event().expect("article");
+    let redirect = redirect_builder().build_event().expect("redirect");
+    let merge_request = merge_request_builder()
+        .build_event()
         .expect("merge request");
-    let source = builder
-        .knowledge_source(&knowledge_source())
-        .expect("source");
-    let claim = builder.knowledge_claim(&knowledge_claim()).expect("claim");
-    let relation = builder
-        .knowledge_relation(&knowledge_relation())
-        .expect("relation");
-    let review = builder
-        .knowledge_review(&knowledge_review())
-        .expect("review");
-    let field_report = builder
-        .knowledge_field_report(&knowledge_field_report())
-        .expect("field report");
+    let source = source_builder().build_event().expect("source");
+    let claim = claim_builder().build_event().expect("claim");
+    let relation = relation_builder().build_event().expect("relation");
+    let review = review_builder().build_event().expect("review");
+    let field_report = field_report_builder().build_event().expect("field report");
 
     assert_eq!(article.kind, KIND_WIKI_ARTICLE);
     assert_eq!(redirect.kind, KIND_WIKI_REDIRECT);
@@ -41,12 +31,74 @@ fn knowledge_prelude_builds_mvp_wire_parts_without_codec_imports() {
 }
 
 #[test]
+fn fluent_builders_auto_fill_schema_and_prepare_drafts() {
+    let article = article_builder().build().expect("article");
+    let redirect = redirect_builder().build().expect("redirect");
+    let merge_request = merge_request_builder().build().expect("merge request");
+    let source = source_builder().build().expect("source");
+    let claim = claim_builder().build().expect("claim");
+    let relation = relation_builder().build().expect("relation");
+    let review = review_builder().build().expect("review");
+    let field_report = field_report_builder().build().expect("field report");
+
+    assert_eq!(article.d_tag, "soil-health");
+    assert_eq!(redirect.target, address_ref());
+    assert_eq!(
+        merge_request.explanation.as_deref(),
+        Some("Merge synthetic soil article updates")
+    );
+    assert_eq!(source.schema, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA);
+    assert_eq!(claim.schema, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA);
+    assert_eq!(relation.schema, RADROOTS_KNOWLEDGE_RELATION_SCHEMA);
+    assert_eq!(review.schema, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA);
+    assert_eq!(field_report.schema, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA);
+    assert_eq!(claim.schema_version, RADROOTS_KNOWLEDGE_SCHEMA_VERSION);
+
+    let article_draft = article_builder()
+        .build_draft(public_key_hex(), CREATED_AT)
+        .expect("article draft");
+    let claim_draft = claim_builder()
+        .build_draft(public_key_hex(), CREATED_AT)
+        .expect("claim draft");
+    assert_eq!(article_draft.contract_id, WIKI_ARTICLE_CONTRACT_ID);
+    assert_eq!(claim_draft.contract_id, KNOWLEDGE_CLAIM_CONTRACT_ID);
+}
+
+#[test]
+fn fluent_builders_reject_missing_and_invalid_required_fields() {
+    let missing_text = RadrootsKnowledgeClaimBuilder::new()
+        .claim_type("practice_effect")
+        .build()
+        .expect_err("missing text");
+    assert_eq!(
+        missing_text,
+        RadrootsKnowledgeBuilderError::MissingField("text")
+    );
+
+    let invalid_d_tag = RadrootsWikiArticleBuilder::new("Soil Health")
+        .title("Soil health")
+        .content_djot("# Soil health")
+        .build()
+        .expect_err("invalid d tag");
+    assert_eq!(
+        invalid_d_tag,
+        RadrootsKnowledgeBuilderError::InvalidField("d_tag")
+    );
+}
+
+#[test]
 fn knowledge_draft_builder_freezes_mvp_drafts_without_runtime() {
     let draft_builder = KnowledgeDraftBuilder::new(public_key_hex(), CREATED_AT);
 
     let article = draft_builder
         .wiki_article(&wiki_article())
         .expect("article draft");
+    let redirect = draft_builder
+        .wiki_redirect(&wiki_redirect())
+        .expect("redirect draft");
+    let merge_request = draft_builder
+        .wiki_merge_request(&wiki_merge_request())
+        .expect("merge request draft");
     let source = draft_builder
         .knowledge_source(&knowledge_source())
         .expect("source draft");
@@ -64,6 +116,8 @@ fn knowledge_draft_builder_freezes_mvp_drafts_without_runtime() {
         .expect("field report draft");
 
     assert_eq!(article.contract_id, WIKI_ARTICLE_CONTRACT_ID);
+    assert_eq!(redirect.contract_id, WIKI_REDIRECT_CONTRACT_ID);
+    assert_eq!(merge_request.contract_id, WIKI_MERGE_REQUEST_CONTRACT_ID);
     assert_eq!(source.contract_id, KNOWLEDGE_SOURCE_CONTRACT_ID);
     assert_eq!(claim.contract_id, KNOWLEDGE_CLAIM_CONTRACT_ID);
     assert_eq!(relation.contract_id, KNOWLEDGE_RELATION_CONTRACT_ID);
@@ -90,12 +144,17 @@ fn knowledge_codec_exposes_manifest_and_verified_decode() {
             .iter()
             .any(|contract| contract.contract_id == KNOWLEDGE_CLAIM_CONTRACT_ID)
     );
+    let claim_contract = manifest
+        .contracts
+        .iter()
+        .find(|contract| contract.contract_id == KNOWLEDGE_CLAIM_CONTRACT_ID)
+        .expect("claim manifest contract");
+    assert!(claim_contract.sdk_builder_support);
+    assert!(claim_contract.sdk_draft_support);
+    assert!(claim_contract.wasm_tag_builder_support);
+    assert!(claim_contract.wasm_verified_decode_support);
 
-    let signed = sign_parts(
-        KnowledgeEventBuilder::new()
-            .knowledge_claim(&knowledge_claim())
-            .expect("claim parts"),
-    );
+    let signed = sign_parts(claim_builder().build_event().expect("claim parts"));
     let decoded = codec
         .verify_and_decode_radroots_event(signed)
         .expect("decoded claim");
@@ -172,16 +231,6 @@ fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
     }
 }
 
-fn article_ref() -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
-        id: hex_64('b'),
-        author: hex_64('a'),
-        kind: KIND_WIKI_ARTICLE,
-        d_tag: Some("soil-health".to_owned()),
-        relays: Some(vec![RELAY.to_owned()]),
-    }
-}
-
 fn address_ref() -> RadrootsAddressableRef {
     RadrootsAddressableRef {
         kind: KIND_WIKI_ARTICLE,
@@ -207,7 +256,14 @@ fn wiki_article() -> RadrootsWikiArticle {
 fn wiki_redirect() -> RadrootsWikiRedirect {
     RadrootsWikiRedirect {
         d_tag: "soil".to_owned(),
-        target: article_ref(),
+        target: address_ref(),
+    }
+}
+
+fn article_version_ref() -> RadrootsWikiArticleVersionRef {
+    RadrootsWikiArticleVersionRef {
+        event_id: hex_64('b'),
+        address_ref: address_ref(),
     }
 }
 
@@ -219,6 +275,123 @@ fn wiki_merge_request() -> RadrootsWikiMergeRequest {
         source_version_event_id: hex_64('f'),
         explanation: Some("Merge synthetic soil article updates".to_owned()),
     }
+}
+
+fn article_builder() -> RadrootsWikiArticleBuilder {
+    RadrootsWikiArticleBuilder::new("soil-health")
+        .title("Soil health")
+        .content_djot("# Soil health")
+        .summary("Living soil basics")
+        .topic("soil")
+        .topic("local-food")
+        .reference(event_ref('1', KIND_KNOWLEDGE_SOURCE))
+        .forked_from(article_version_ref())
+}
+
+fn redirect_builder() -> RadrootsWikiRedirectBuilder {
+    RadrootsWikiRedirectBuilder::new("soil").target(address_ref())
+}
+
+fn merge_request_builder() -> RadrootsWikiMergeRequestBuilder {
+    RadrootsWikiMergeRequestBuilder::new()
+        .target_article(address_ref())
+        .destination_pubkey(hex_64('a'))
+        .base_version_event_id(hex_64('e'))
+        .source_version_event_id(hex_64('f'))
+        .explanation("Merge synthetic soil article updates")
+}
+
+fn source_builder() -> RadrootsKnowledgeSourceBuilder {
+    RadrootsKnowledgeSourceBuilder::new("soil-source")
+        .title("Soil Source")
+        .source_type("book")
+        .author("A. Example")
+        .publisher("Radroots Synthetic Press")
+        .publication_year(2026)
+        .canonical_url("https://source.example.test/soil-source")
+        .artifact_ref(event_ref('3', KIND_FILE_METADATA))
+        .topic("soil")
+        .summary("Synthetic source for SDK coverage")
+}
+
+fn claim_builder() -> RadrootsKnowledgeClaimBuilder {
+    RadrootsKnowledgeClaimBuilder::new()
+        .claim_type("practice_effect")
+        .text("Cover crops improve soil structure.")
+        .citation_span(RadrootsKnowledgeCitationSpan {
+            source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
+            artifact_ref: None,
+            page_start: Some(12),
+            page_end: Some(13),
+            section_path: vec!["chapter-1".to_owned()],
+            quote_hash: Some(hex_64('5')),
+            chunk_id: Some("chunk-1".to_owned()),
+        })
+        .topic("cover-crops")
+        .applies_to("local-food")
+        .author_asserted_confidence("medium")
+}
+
+fn relation_builder() -> RadrootsKnowledgeRelationBuilder {
+    RadrootsKnowledgeRelationBuilder::new()
+        .subject(knowledge_node_ref("cover crops"))
+        .predicate("supports")
+        .object(knowledge_node_ref("soil structure"))
+        .support_ref(event_ref('7', KIND_KNOWLEDGE_CLAIM))
+        .author_asserted_confidence("medium")
+}
+
+fn review_builder() -> RadrootsKnowledgeReviewBuilder {
+    RadrootsKnowledgeReviewBuilder::new()
+        .target(RadrootsKnowledgeReviewTarget {
+            event_id: hex_64('8'),
+            author_pubkey: hex_64('a'),
+            kind: KIND_KNOWLEDGE_CLAIM,
+            address: None,
+            relays: vec![RELAY.to_owned()],
+            review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+        })
+        .reviewer_role("peer")
+        .verdict("needs_more_evidence")
+        .score(RadrootsKnowledgeReviewScore {
+            dimension: "evidence".to_owned(),
+            value: "partial".to_owned(),
+            note: None,
+        })
+        .notes("Synthetic review")
+        .evidence_ref(event_ref('9', KIND_KNOWLEDGE_SOURCE))
+}
+
+fn field_report_builder() -> RadrootsKnowledgeFieldReportBuilder {
+    RadrootsKnowledgeFieldReportBuilder::new()
+        .report_type("observation")
+        .title("Field observation")
+        .summary("Observed cover crop residue.")
+        .context(RadrootsKnowledgeFieldContext {
+            location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
+            public_location: Some(RadrootsKnowledgeLocation {
+                label: Some("watershed".to_owned()),
+                region: Some("synthetic-region".to_owned()),
+                locality: None,
+                geohash: Some("c23".to_owned()),
+            }),
+            private_location_ref: None,
+            topics: vec!["field".to_owned()],
+            context_tags: vec!["observation".to_owned()],
+        })
+        .observation(RadrootsKnowledgeObservation {
+            observation_type: "residue".to_owned(),
+            text: "Residue was visible across beds.".to_owned(),
+            observed_at: Some("2026-07-05".to_owned()),
+            values: vec![RadrootsKnowledgeObservationValue {
+                key: "coverage".to_owned(),
+                value: "medium".to_owned(),
+                unit: None,
+            }],
+        })
+        .artifact_ref(event_ref('c', KIND_FILE_METADATA))
+        .related_ref(event_ref('d', KIND_KNOWLEDGE_CLAIM))
+        .limitation("single observer")
 }
 
 fn knowledge_source() -> RadrootsKnowledgeSource {

@@ -697,6 +697,7 @@ mod tests {
         "RadrootsTradeListingValidateResult",
         "RadrootsTradeValidationListingError",
         "RadrootsWikiArticle",
+        "RadrootsWikiArticleVersionRef",
         "RadrootsWikiMergeRequest",
         "RadrootsWikiRedirect",
     ];
@@ -710,6 +711,7 @@ mod tests {
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
         "RadrootsOrderIssue",
+        "RadrootsOrderWorkflowProjection",
         "RadrootsTradeFacetCount",
         "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
@@ -736,7 +738,6 @@ mod tests {
         "RadrootsTradeOrderQuery",
         "RadrootsTradeOrderSort",
         "RadrootsTradeOrderSortField",
-        "RadrootsTradeOrderWorkflowProjection",
         "RadrootsTradeReviewPriority",
         "RadrootsTradeReviewQueueEntry",
         "RadrootsTradeReviewStatus",
@@ -1041,10 +1042,8 @@ mod tests {
         let order_query = type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsTradeOrderQuery");
         assert!(order_query.contains("status?: RadrootsTradeWorkflowState | null"));
 
-        let workflow_projection = type_declaration(
-            TRADE_BINDINGS_TYPES_TS,
-            "RadrootsTradeOrderWorkflowProjection",
-        );
+        let workflow_projection =
+            type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsOrderWorkflowProjection");
         assert!(workflow_projection.contains("status: RadrootsTradeWorkflowState"));
         assert!(workflow_projection.contains("request_event_id?: string | null"));
         assert!(workflow_projection.contains("last_event_id?: string | null"));

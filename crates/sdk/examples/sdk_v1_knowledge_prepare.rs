@@ -6,28 +6,9 @@ const CREATED_AT: u32 = 1_800_000_000;
 const RELAY: &str = "wss://relay.radroots.example";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let claim = RadrootsKnowledgeClaim {
-        schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_owned(),
-        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-        claim_type: "practice_effect".to_owned(),
-        text: "Cover crops improve soil structure.".to_owned(),
-        citation_spans: vec![RadrootsKnowledgeCitationSpan {
-            source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
-            artifact_ref: None,
-            page_start: Some(12),
-            page_end: Some(13),
-            section_path: vec!["chapter-1".to_owned()],
-            quote_hash: Some(hex_64('5')),
-            chunk_id: Some("chunk-1".to_owned()),
-        }],
-        topics: vec!["cover-crops".to_owned()],
-        applies_to: vec!["local-food".to_owned()],
-        author_asserted_confidence: Some("medium".to_owned()),
-        supersedes: Vec::new(),
-    };
-
-    let parts = KnowledgeEventBuilder::new().knowledge_claim(&claim)?;
-    let draft = KnowledgeDraftBuilder::new(public_key_hex(), CREATED_AT).knowledge_claim(&claim)?;
+    let claim = claim_builder().build()?;
+    let parts = claim_builder().build_event()?;
+    let draft = claim_builder().build_draft(public_key_hex(), CREATED_AT)?;
     let signed = sign_parts(parts)?;
     let decoded = KnowledgeCodec::new().verify_and_decode_radroots_event(signed)?;
     let manifest = contract_manifest();
@@ -98,4 +79,22 @@ fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
         d_tag: None,
         relays: Some(vec![RELAY.to_owned()]),
     }
+}
+
+fn claim_builder() -> RadrootsKnowledgeClaimBuilder {
+    RadrootsKnowledgeClaimBuilder::new()
+        .claim_type("practice_effect")
+        .text("Cover crops improve soil structure.")
+        .citation_span(RadrootsKnowledgeCitationSpan {
+            source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
+            artifact_ref: None,
+            page_start: Some(12),
+            page_end: Some(13),
+            section_path: vec!["chapter-1".to_owned()],
+            quote_hash: Some(hex_64('5')),
+            chunk_id: Some("chunk-1".to_owned()),
+        })
+        .topic("cover-crops")
+        .applies_to("local-food")
+        .author_asserted_confidence("medium")
 }

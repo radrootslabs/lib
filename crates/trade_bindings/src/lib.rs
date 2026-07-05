@@ -69,7 +69,7 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     local_shape("RadrootsTradeOrderQuery"),
     local_shape("RadrootsTradeOrderSort"),
     local_shape("RadrootsTradeOrderSortField"),
-    source_root("RadrootsTradeOrderWorkflowProjection"),
+    source_root("RadrootsOrderWorkflowProjection"),
     local_shape("RadrootsTradeReviewPriority"),
     local_shape("RadrootsTradeReviewQueueEntry"),
     local_shape("RadrootsTradeReviewStatus"),
@@ -204,7 +204,7 @@ mod tests {
                 "RadrootsTradeOrderQuery",
                 "RadrootsTradeOrderSort",
                 "RadrootsTradeOrderSortField",
-                "RadrootsTradeOrderWorkflowProjection",
+                "RadrootsOrderWorkflowProjection",
                 "RadrootsTradeReviewPriority",
                 "RadrootsTradeReviewQueueEntry",
                 "RadrootsTradeReviewStatus",
@@ -250,7 +250,7 @@ mod tests {
                 "RadrootsTradeListing",
                 "RadrootsTradeListingSubtotal",
                 "RadrootsTradeListingTotal",
-                "RadrootsTradeOrderWorkflowProjection",
+                "RadrootsOrderWorkflowProjection",
                 "RadrootsTradeWorkflowState"
             ]
         );

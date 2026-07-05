@@ -4,7 +4,7 @@ use dto_bindgen_core::{
     VariantShape, WireFieldNames,
 };
 use radroots_trade::{
-    listing::model::RadrootsTradeListingTotal, order::RadrootsTradeOrderWorkflowProjection,
+    listing::model::RadrootsTradeListingTotal, order::RadrootsOrderWorkflowProjection,
     workflow::RadrootsTradeWorkflowState,
 };
 
@@ -319,7 +319,7 @@ pub struct RadrootsTradeOrderBackofficeQuery {
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeOrderBackofficeView {
-    pub order: RadrootsTradeOrderWorkflowProjection,
+    pub order: RadrootsOrderWorkflowProjection,
     pub marketplace: RadrootsTradeMarketplaceOrderSummary,
     pub overlay: Option<RadrootsTradeOrderBackofficeOverlay>,
     pub requires_review: bool,
