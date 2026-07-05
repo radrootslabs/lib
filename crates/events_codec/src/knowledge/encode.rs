@@ -22,7 +22,8 @@ use radroots_events::knowledge::{
     RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal, RadrootsKnowledgeClaim,
     RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect, validate_wiki_d_tag,
+    RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    validate_wiki_d_tag,
 };
 use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T};
 use serde::Serialize;
@@ -36,10 +37,9 @@ const TAG_SOURCE: &str = "source";
 const TAG_CITATION: &str = "citation";
 const TAG_REVIEW_TARGET: &str = "review_target";
 const TAG_EVIDENCE: &str = "evidence";
-const TAG_FORK: &str = "fork";
-const TAG_DEFERRED_TO: &str = "deferred_to";
+const MARKER_FORK: &str = "fork";
+const MARKER_DEFER: &str = "defer";
 const E_MARKER_SOURCE: &str = "source";
-const E_MARKER_BASE: &str = "base";
 
 fn push_value(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     if !value.trim().is_empty() {
@@ -77,22 +77,42 @@ fn address_tag(tag_name: &str, address: &RadrootsAddressableRef) -> Vec<String> 
     tag
 }
 
-fn event_ref_address_tag(
-    tag_name: &str,
-    event_ref: &RadrootsNostrEventRef,
-) -> Result<Vec<String>, EventEncodeError> {
-    let d_tag = event_ref
-        .d_tag
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or(EventEncodeError::EmptyRequiredField("target.d_tag"))?;
-    let mut tag = Vec::with_capacity(2 + event_ref.relays.as_ref().map(|v| v.len()).unwrap_or(0));
-    tag.push(tag_name.to_string());
-    tag.push(format!("{}:{}:{}", event_ref.kind, event_ref.author, d_tag));
-    if let Some(relays) = &event_ref.relays {
-        tag.extend(relays.iter().cloned());
+fn marker_address_tag(address: &RadrootsAddressableRef, marker: &'static str) -> Vec<String> {
+    let mut tag = Vec::with_capacity(4 + address.relays.len());
+    tag.push(TAG_A.to_string());
+    tag.push(address_coordinate(address));
+    if address.relays.is_empty() {
+        tag.push(String::new());
+    } else {
+        tag.extend(address.relays.iter().cloned());
     }
-    Ok(tag)
+    tag.push(marker.to_string());
+    tag
+}
+
+fn marker_event_tag(
+    version_ref: &RadrootsWikiArticleVersionRef,
+    marker: &'static str,
+) -> Vec<String> {
+    let mut tag = Vec::with_capacity(4 + version_ref.address_ref.relays.len());
+    tag.push(TAG_E.to_string());
+    tag.push(version_ref.event_id.clone());
+    if version_ref.address_ref.relays.is_empty() {
+        tag.push(String::new());
+    } else {
+        tag.extend(version_ref.address_ref.relays.iter().cloned());
+    }
+    tag.push(marker.to_string());
+    tag
+}
+
+fn push_wiki_version_ref_tags(
+    tags: &mut Vec<Vec<String>>,
+    version_ref: &RadrootsWikiArticleVersionRef,
+    marker: &'static str,
+) {
+    tags.push(marker_address_tag(&version_ref.address_ref, marker));
+    tags.push(marker_event_tag(version_ref, marker));
 }
 
 fn review_target_ref(target: &RadrootsKnowledgeReviewTarget) -> RadrootsNostrEventRef {
@@ -147,9 +167,11 @@ pub fn wiki_article_build_tags(
     push_optional_value(&mut tags, TAG_SUMMARY, article.summary.as_deref());
     push_topics(&mut tags, &article.topics);
     push_event_refs(&mut tags, TAG_SOURCE, &article.references);
-    push_event_refs(&mut tags, TAG_FORK, &article.forked_from);
+    for forked_from in &article.forked_from {
+        push_wiki_version_ref_tags(&mut tags, forked_from, MARKER_FORK);
+    }
     if let Some(deferred_to) = &article.deferred_to {
-        tags.push(build_event_ref_tag(TAG_DEFERRED_TO, deferred_to));
+        push_wiki_version_ref_tags(&mut tags, deferred_to, MARKER_DEFER);
     }
     Ok(tags)
 }
@@ -170,7 +192,7 @@ pub fn wiki_redirect_build_tags(
     validate_wiki_d_tag(&redirect.d_tag).map_err(|_| EventEncodeError::InvalidField("d_tag"))?;
     let mut tags = Vec::new();
     tags.push(vec![TAG_D.to_string(), redirect.d_tag.clone()]);
-    tags.push(event_ref_address_tag(TAG_A, &redirect.target)?);
+    tags.push(address_tag(TAG_A, &redirect.target));
     Ok(tags)
 }
 
@@ -203,12 +225,7 @@ pub fn wiki_merge_request_build_tags(
         .as_ref()
         .filter(|value| !value.trim().is_empty())
     {
-        tags.push(vec![
-            TAG_E.to_string(),
-            base.clone(),
-            String::new(),
-            E_MARKER_BASE.to_string(),
-        ]);
+        tags.push(vec![TAG_E.to_string(), base.clone(), String::new()]);
     }
     tags.push(vec![
         TAG_E.to_string(),
@@ -224,7 +241,7 @@ pub fn wiki_merge_request_to_wire_parts(
 ) -> Result<WireEventParts, EventEncodeError> {
     Ok(WireEventParts {
         kind: KIND_WIKI_MERGE_REQUEST,
-        content: json_content(request)?,
+        content: request.explanation.clone().unwrap_or_default(),
         tags: wiki_merge_request_build_tags(request)?,
     })
 }

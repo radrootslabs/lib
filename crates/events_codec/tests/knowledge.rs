@@ -17,8 +17,9 @@ use radroots_events::knowledge::{
     RadrootsKnowledgeObservation, RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation,
     RadrootsKnowledgeReview, RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore,
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_events_codec::error::EventParseError;
 use radroots_events_codec::knowledge::{
     contribution_attestation_from_event, contribution_attestation_to_wire_parts,
     evidence_bounty_from_event, evidence_bounty_to_wire_parts,
@@ -50,22 +51,19 @@ fn event_ref(character: char, kind: u32) -> radroots_events::RadrootsNostrEventR
     }
 }
 
-fn article_ref() -> radroots_events::RadrootsNostrEventRef {
-    radroots_events::RadrootsNostrEventRef {
-        id: hex_64('b'),
-        author: hex_64('a'),
-        kind: KIND_WIKI_ARTICLE,
-        d_tag: Some("soil-health".to_string()),
-        relays: Some(vec!["wss://relay.radroots.example".to_string()]),
-    }
-}
-
 fn address_ref() -> RadrootsAddressableRef {
     RadrootsAddressableRef {
         kind: KIND_WIKI_ARTICLE,
         pubkey: hex_64('a'),
         d_tag: "soil-health".to_string(),
         relays: vec!["wss://relay.radroots.example".to_string()],
+    }
+}
+
+fn article_version_ref() -> RadrootsWikiArticleVersionRef {
+    RadrootsWikiArticleVersionRef {
+        event_id: hex_64('b'),
+        address_ref: address_ref(),
     }
 }
 
@@ -78,6 +76,26 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
         tags: parts.tags,
         content: parts.content,
         sig: "1".repeat(128),
+    }
+}
+
+fn assert_parse_error(actual: EventParseError, expected: EventParseError) {
+    match (actual, expected) {
+        (EventParseError::MissingTag(actual), EventParseError::MissingTag(expected))
+        | (EventParseError::InvalidTag(actual), EventParseError::InvalidTag(expected)) => {
+            assert_eq!(actual, expected);
+        }
+        (
+            EventParseError::InvalidKind {
+                expected: actual_expected,
+                got: actual_got,
+            },
+            EventParseError::InvalidKind { expected, got },
+        ) => {
+            assert_eq!(actual_expected, expected);
+            assert_eq!(actual_got, got);
+        }
+        (actual, expected) => panic!("expected {expected:?}, got {actual:?}"),
     }
 }
 
@@ -120,8 +138,8 @@ fn wiki_article() -> RadrootsWikiArticle {
         summary: Some("Living soil basics".to_string()),
         topics: vec!["soil".to_string(), "health".to_string()],
         references: vec![event_ref('2', KIND_KNOWLEDGE_SOURCE)],
-        forked_from: Vec::new(),
-        deferred_to: None,
+        forked_from: vec![article_version_ref()],
+        deferred_to: Some(article_version_ref()),
     }
 }
 
@@ -252,6 +270,34 @@ fn field_report() -> RadrootsKnowledgeFieldReport {
 fn knowledge_codecs_roundtrip_all_contracts() {
     let article_event = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     validate_event_contract_shape(&article_event, "radroots.wiki.article.v1").unwrap();
+    assert!(article_event.tags.iter().any(|tag| tag
+        == &vec![
+            "a".to_string(),
+            format!("30818:{}:soil-health", hex_64('a')),
+            "wss://relay.radroots.example".to_string(),
+            "fork".to_string()
+        ]));
+    assert!(article_event.tags.iter().any(|tag| tag
+        == &vec![
+            "e".to_string(),
+            hex_64('b'),
+            "wss://relay.radroots.example".to_string(),
+            "fork".to_string()
+        ]));
+    assert!(article_event.tags.iter().any(|tag| tag
+        == &vec![
+            "a".to_string(),
+            format!("30818:{}:soil-health", hex_64('a')),
+            "wss://relay.radroots.example".to_string(),
+            "defer".to_string()
+        ]));
+    assert!(article_event.tags.iter().any(|tag| tag
+        == &vec![
+            "e".to_string(),
+            hex_64('b'),
+            "wss://relay.radroots.example".to_string(),
+            "defer".to_string()
+        ]));
     assert_eq!(
         wiki_article_from_event(article_event)
             .unwrap()
@@ -263,10 +309,16 @@ fn knowledge_codecs_roundtrip_all_contracts() {
 
     let redirect = RadrootsWikiRedirect {
         d_tag: "soil".to_string(),
-        target: article_ref(),
+        target: address_ref(),
     };
     let redirect_event = event_from_parts(wiki_redirect_to_wire_parts(&redirect).unwrap());
     validate_event_contract_shape(&redirect_event, "radroots.wiki.redirect.v1").unwrap();
+    assert!(redirect_event.tags.iter().any(|tag| tag
+        == &vec![
+            "a".to_string(),
+            format!("30818:{}:soil-health", hex_64('a')),
+            "wss://relay.radroots.example".to_string()
+        ]));
     assert_eq!(
         wiki_redirect_from_event(redirect_event)
             .unwrap()
@@ -274,7 +326,7 @@ fn knowledge_codecs_roundtrip_all_contracts() {
             .data
             .target
             .d_tag,
-        Some("soil-health".to_string())
+        "soil-health"
     );
 
     let merge = RadrootsWikiMergeRequest {
@@ -286,6 +338,20 @@ fn knowledge_codecs_roundtrip_all_contracts() {
     };
     let merge_event = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
     validate_event_contract_shape(&merge_event, "radroots.wiki.merge_request.v1").unwrap();
+    assert_eq!(merge_event.content, "Merge synthetic source");
+    assert!(
+        merge_event
+            .tags
+            .iter()
+            .any(|tag| tag == &vec!["e".to_string(), hex_64('e'), String::new()])
+    );
+    assert!(merge_event.tags.iter().any(|tag| tag
+        == &vec![
+            "e".to_string(),
+            hex_64('f'),
+            String::new(),
+            "source".to_string()
+        ]));
     assert_eq!(
         wiki_merge_request_from_event(merge_event)
             .unwrap()
@@ -456,4 +522,123 @@ fn malformed_knowledge_events_return_stable_decode_codes() {
     report.content = serde_json::to_string(&value).unwrap();
     let parsed_error = knowledge_field_report_from_event(report).unwrap_err();
     assert_eq!(parsed_error.code(), "invalid_json");
+}
+
+#[test]
+fn malformed_nip54_wiki_shapes_are_rejected() {
+    let mut redirect = event_from_parts(
+        wiki_redirect_to_wire_parts(&RadrootsWikiRedirect {
+            d_tag: "soil".to_string(),
+            target: address_ref(),
+        })
+        .unwrap(),
+    );
+    for tag in &mut redirect.tags {
+        if tag.first().map(|value| value.as_str()) == Some("a") {
+            tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+        }
+    }
+    assert_parse_error(
+        wiki_redirect_from_event(redirect).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let merge = RadrootsWikiMergeRequest {
+        target_article: address_ref(),
+        destination_pubkey: hex_64('a'),
+        base_version_event_id: Some(hex_64('e')),
+        source_version_event_id: hex_64('f'),
+        explanation: Some("Merge synthetic source".to_string()),
+    };
+    let mut missing_target = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
+    missing_target
+        .tags
+        .retain(|tag| tag.first().map(|value| value.as_str()) != Some("a"));
+    assert_parse_error(
+        wiki_merge_request_from_event(missing_target).unwrap_err(),
+        EventParseError::MissingTag("a"),
+    );
+
+    let mut missing_destination =
+        event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
+    missing_destination
+        .tags
+        .retain(|tag| tag.first().map(|value| value.as_str()) != Some("p"));
+    assert_parse_error(
+        wiki_merge_request_from_event(missing_destination).unwrap_err(),
+        EventParseError::MissingTag("p"),
+    );
+
+    let mut missing_source = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
+    missing_source.tags.retain(|tag| {
+        !(tag.first().map(|value| value.as_str()) == Some("e")
+            && tag.last().map(|value| value.as_str()) == Some("source"))
+    });
+    assert_parse_error(
+        wiki_merge_request_from_event(missing_source).unwrap_err(),
+        EventParseError::InvalidTag("e"),
+    );
+
+    let mut duplicate_source = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
+    duplicate_source.tags.push(vec![
+        "e".to_string(),
+        hex_64('a'),
+        String::new(),
+        "source".to_string(),
+    ]);
+    assert_parse_error(
+        wiki_merge_request_from_event(duplicate_source).unwrap_err(),
+        EventParseError::InvalidTag("e"),
+    );
+
+    let mut wrong_merge_target =
+        event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
+    for tag in &mut wrong_merge_target.tags {
+        if tag.first().map(|value| value.as_str()) == Some("a") {
+            tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+        }
+    }
+    assert_parse_error(
+        wiki_merge_request_from_event(wrong_merge_target).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut orphan_fork = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let mut removed_fork_event = false;
+    orphan_fork.tags.retain(|tag| {
+        if !removed_fork_event
+            && tag.first().map(|value| value.as_str()) == Some("e")
+            && tag.last().map(|value| value.as_str()) == Some("fork")
+        {
+            removed_fork_event = true;
+            false
+        } else {
+            true
+        }
+    });
+    assert_parse_error(
+        wiki_article_from_event(orphan_fork).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut duplicate_defer =
+        event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    duplicate_defer.tags.extend([
+        vec![
+            "a".to_string(),
+            format!("30818:{}:compost", hex_64('a')),
+            String::new(),
+            "defer".to_string(),
+        ],
+        vec![
+            "e".to_string(),
+            hex_64('c'),
+            String::new(),
+            "defer".to_string(),
+        ],
+    ]);
+    assert_parse_error(
+        wiki_article_from_event(duplicate_defer).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
 }

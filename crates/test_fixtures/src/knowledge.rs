@@ -17,7 +17,7 @@ use radroots_events::knowledge::{
     RadrootsKnowledgeObservation, RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation,
     RadrootsKnowledgeReview, RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore,
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
 
 use crate::RELAY_PRIMARY_WSS;
@@ -144,6 +144,13 @@ pub fn address_ref() -> RadrootsAddressableRef {
     }
 }
 
+pub fn wiki_article_version_ref() -> RadrootsWikiArticleVersionRef {
+    RadrootsWikiArticleVersionRef {
+        event_id: hex_64('b'),
+        address_ref: address_ref(),
+    }
+}
+
 pub fn wiki_article() -> RadrootsWikiArticle {
     RadrootsWikiArticle {
         d_tag: "soil-health".to_string(),
@@ -161,7 +168,7 @@ pub fn wiki_article() -> RadrootsWikiArticle {
 pub fn wiki_redirect() -> RadrootsWikiRedirect {
     RadrootsWikiRedirect {
         d_tag: "soil".to_string(),
-        target: wiki_article_ref(),
+        target: address_ref(),
     }
 }
 

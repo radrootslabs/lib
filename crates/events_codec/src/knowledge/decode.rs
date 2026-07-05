@@ -18,10 +18,10 @@ use radroots_events::knowledge::{
     RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef, RadrootsContributionAttestation,
     RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal, RadrootsKnowledgeClaim,
     RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
-    RadrootsKnowledgeSource, RadrootsWikiArticle, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
-    validate_wiki_d_tag,
+    RadrootsKnowledgeSource, RadrootsWikiArticle, RadrootsWikiArticleVersionRef,
+    RadrootsWikiMergeRequest, RadrootsWikiRedirect, validate_wiki_d_tag,
 };
-use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_SUMMARY, TAG_T};
+use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_P, TAG_SUMMARY, TAG_T};
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventRef};
 use serde::de::DeserializeOwned;
 
@@ -32,8 +32,8 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 const TAG_TITLE: &str = "title";
 const TAG_SOURCE: &str = "source";
 const TAG_REVIEW_TARGET: &str = "review_target";
-const TAG_FORK: &str = "fork";
-const TAG_DEFERRED_TO: &str = "deferred_to";
+const MARKER_FORK: &str = "fork";
+const MARKER_DEFER: &str = "defer";
 const E_MARKER_SOURCE: &str = "source";
 
 fn ensure_kind(kind: u32, expected: u32, name: &'static str) -> Result<(), EventParseError> {
@@ -102,28 +102,23 @@ fn event_refs(
         .collect()
 }
 
-fn first_event_ref(
-    tags: &[Vec<String>],
-    name: &'static str,
-) -> Result<Option<RadrootsNostrEventRef>, EventParseError> {
-    let matches = matching_tags(tags, name);
-    if matches.len() > 1 {
-        return Err(EventParseError::InvalidTag(name));
-    }
-    matches
-        .first()
-        .map(|tag| parse_event_ref_tag(tag, name))
-        .transpose()
+fn marker(tag: &[String]) -> Option<&str> {
+    tag.last()
+        .map(|value| value.as_str())
+        .filter(|value| matches!(*value, MARKER_FORK | MARKER_DEFER | E_MARKER_SOURCE))
 }
 
-fn address_from_a_tag(
-    tags: &[Vec<String>],
+fn unmarked_tags<'a>(tags: &'a [Vec<String>], name: &'static str) -> Vec<&'a Vec<String>> {
+    matching_tags(tags, name)
+        .into_iter()
+        .filter(|tag| marker(tag).is_none())
+        .collect()
+}
+
+fn address_from_tag(
+    tag: &[String],
     name: &'static str,
 ) -> Result<RadrootsAddressableRef, EventParseError> {
-    let tag = matching_tags(tags, name)
-        .into_iter()
-        .next()
-        .ok_or(EventParseError::MissingTag(name))?;
     let value = tag.get(1).ok_or(EventParseError::InvalidTag(name))?;
     let mut parts = value.splitn(3, ':');
     let kind = parts
@@ -139,33 +134,107 @@ fn address_from_a_tag(
         .next()
         .filter(|value| !value.trim().is_empty())
         .ok_or(EventParseError::InvalidTag(name))?;
+    let relays_end = if marker(tag).is_some() {
+        tag.len().saturating_sub(1)
+    } else {
+        tag.len()
+    };
     Ok(RadrootsAddressableRef {
         kind,
         pubkey: pubkey.to_string(),
         d_tag: d_tag.to_string(),
         relays: tag
-            .get(2..)
-            .map(|values| values.to_vec())
+            .get(2..relays_end)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter(|value| !value.is_empty())
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default(),
     })
 }
 
-fn event_ref_from_a_tag(
+fn address_from_a_tag(
     tags: &[Vec<String>],
     name: &'static str,
-) -> Result<RadrootsNostrEventRef, EventParseError> {
-    let address = address_from_a_tag(tags, name)?;
-    Ok(RadrootsNostrEventRef {
-        id: String::new(),
-        author: address.pubkey,
-        kind: address.kind,
-        d_tag: Some(address.d_tag),
-        relays: if address.relays.is_empty() {
-            None
-        } else {
-            Some(address.relays)
-        },
-    })
+) -> Result<RadrootsAddressableRef, EventParseError> {
+    let matches = unmarked_tags(tags, name);
+    if matches.is_empty() {
+        return Err(EventParseError::MissingTag(name));
+    }
+    if matches.len() > 1 {
+        return Err(EventParseError::InvalidTag(name));
+    }
+    address_from_tag(matches[0], name)
+}
+
+fn wiki_version_refs(
+    tags: &[Vec<String>],
+    marker_name: &'static str,
+) -> Result<Vec<RadrootsWikiArticleVersionRef>, EventParseError> {
+    let address_tags = matching_tags(tags, TAG_A)
+        .into_iter()
+        .filter(|tag| marker(tag) == Some(marker_name))
+        .collect::<Vec<_>>();
+    let event_tags = matching_tags(tags, TAG_E)
+        .into_iter()
+        .filter(|tag| marker(tag) == Some(marker_name))
+        .collect::<Vec<_>>();
+    if address_tags.len() != event_tags.len() {
+        return Err(EventParseError::InvalidTag(TAG_A));
+    }
+    address_tags
+        .into_iter()
+        .zip(event_tags)
+        .map(|(address_tag, event_tag)| {
+            let address_ref = address_from_tag(address_tag, TAG_A)?;
+            if address_ref.kind != KIND_WIKI_ARTICLE {
+                return Err(EventParseError::InvalidTag(TAG_A));
+            }
+            let event_id = event_tag
+                .get(1)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or(EventParseError::InvalidTag(TAG_E))?
+                .clone();
+            Ok(RadrootsWikiArticleVersionRef {
+                event_id,
+                address_ref,
+            })
+        })
+        .collect()
+}
+
+fn wiki_merge_source_event_id(tags: &[Vec<String>]) -> Result<String, EventParseError> {
+    let source_tags = matching_tags(tags, TAG_E)
+        .into_iter()
+        .filter(|tag| marker(tag) == Some(E_MARKER_SOURCE))
+        .collect::<Vec<_>>();
+    if source_tags.len() != 1 {
+        return Err(EventParseError::InvalidTag(TAG_E));
+    }
+    source_tags[0]
+        .get(1)
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .ok_or(EventParseError::InvalidTag(TAG_E))
+}
+
+fn wiki_merge_base_event_id(tags: &[Vec<String>]) -> Result<Option<String>, EventParseError> {
+    let base_tags = unmarked_tags(tags, TAG_E);
+    if base_tags.len() > 1 {
+        return Err(EventParseError::InvalidTag(TAG_E));
+    }
+    base_tags
+        .first()
+        .map(|tag| {
+            tag.get(1)
+                .filter(|value| !value.trim().is_empty())
+                .cloned()
+                .ok_or(EventParseError::InvalidTag(TAG_E))
+        })
+        .transpose()
 }
 
 fn json_content<T: DeserializeOwned>(content: &str) -> Result<T, EventParseError> {
@@ -209,22 +278,6 @@ fn require_schema(
     Ok(())
 }
 
-fn require_source_marker(
-    tags: &[Vec<String>],
-    source_event_id: &str,
-) -> Result<(), EventParseError> {
-    let has_source = tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_E)
-            && tag.get(1).map(|value| value.as_str()) == Some(source_event_id)
-            && tag.iter().skip(2).any(|value| value == E_MARKER_SOURCE)
-    });
-    if has_source {
-        Ok(())
-    } else {
-        Err(EventParseError::InvalidTag(TAG_E))
-    }
-}
-
 fn reject_private_coordinate_keys(content: &str) -> Result<(), EventParseError> {
     let value: serde_json::Value =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
@@ -265,8 +318,12 @@ pub fn wiki_article_from_event(
     let summary = optional_one_value(&event.tags, TAG_SUMMARY)?;
     let topics = values(&event.tags, TAG_T);
     let references = event_refs(&event.tags, TAG_SOURCE)?;
-    let forked_from = event_refs(&event.tags, TAG_FORK)?;
-    let deferred_to = first_event_ref(&event.tags, TAG_DEFERRED_TO)?;
+    let forked_from = wiki_version_refs(&event.tags, MARKER_FORK)?;
+    let mut deferred_refs = wiki_version_refs(&event.tags, MARKER_DEFER)?;
+    if deferred_refs.len() > 1 {
+        return Err(EventParseError::InvalidTag(TAG_A));
+    }
+    let deferred_to = deferred_refs.pop();
     let article = RadrootsWikiArticle {
         d_tag,
         title,
@@ -289,7 +346,10 @@ pub fn wiki_redirect_from_event(
     }
     let d_tag = required_one_value(&event.tags, TAG_D)?;
     validate_wiki_d_tag(&d_tag).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
-    let target = event_ref_from_a_tag(&event.tags, TAG_A)?;
+    let target = address_from_a_tag(&event.tags, TAG_A)?;
+    if target.kind != KIND_WIKI_ARTICLE {
+        return Err(EventParseError::InvalidTag(TAG_A));
+    }
     Ok(parsed(event, RadrootsWikiRedirect { d_tag, target }))
 }
 
@@ -297,10 +357,25 @@ pub fn wiki_merge_request_from_event(
     event: RadrootsNostrEvent,
 ) -> Result<RadrootsParsedEvent<RadrootsWikiMergeRequest>, EventParseError> {
     ensure_kind(event.kind, KIND_WIKI_MERGE_REQUEST, "wiki merge request")?;
-    let request: RadrootsWikiMergeRequest = json_content(&event.content)?;
-    address_from_a_tag(&event.tags, TAG_A)?;
-    required_one_value(&event.tags, "p")?;
-    require_source_marker(&event.tags, &request.source_version_event_id)?;
+    let target_article = address_from_a_tag(&event.tags, TAG_A)?;
+    if target_article.kind != KIND_WIKI_ARTICLE {
+        return Err(EventParseError::InvalidTag(TAG_A));
+    }
+    let destination_pubkey = required_one_value(&event.tags, TAG_P)?;
+    let base_version_event_id = wiki_merge_base_event_id(&event.tags)?;
+    let source_version_event_id = wiki_merge_source_event_id(&event.tags)?;
+    let explanation = if event.content.is_empty() {
+        None
+    } else {
+        Some(event.content.clone())
+    };
+    let request = RadrootsWikiMergeRequest {
+        target_article,
+        destination_pubkey,
+        base_version_event_id,
+        source_version_event_id,
+        explanation,
+    };
     Ok(parsed(event, request))
 }
 

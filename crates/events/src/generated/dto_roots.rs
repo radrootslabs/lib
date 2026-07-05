@@ -69,6 +69,8 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeSource>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsRightsAssertion>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiArticle>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiArticleVersionRef>(
+        ),
         ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiMergeRequest>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiRedirect>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list::RadrootsList>(),

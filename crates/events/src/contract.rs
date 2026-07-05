@@ -2384,7 +2384,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
-        RadrootsContentSchema::JsonObject,
+        RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
         WIKI_MERGE_REQUEST_TAGS,
         KNOWLEDGE_REDUCERS

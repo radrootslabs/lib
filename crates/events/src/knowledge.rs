@@ -134,8 +134,17 @@ pub struct RadrootsWikiArticle {
     pub summary: Option<String>,
     pub topics: Vec<String>,
     pub references: Vec<RadrootsNostrEventRef>,
-    pub forked_from: Vec<RadrootsNostrEventRef>,
-    pub deferred_to: Option<RadrootsNostrEventRef>,
+    pub forked_from: Vec<RadrootsWikiArticleVersionRef>,
+    pub deferred_to: Option<RadrootsWikiArticleVersionRef>,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsWikiArticleVersionRef {
+    pub event_id: String,
+    pub address_ref: RadrootsAddressableRef,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -144,7 +153,7 @@ pub struct RadrootsWikiArticle {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiRedirect {
     pub d_tag: String,
-    pub target: RadrootsNostrEventRef,
+    pub target: RadrootsAddressableRef,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
