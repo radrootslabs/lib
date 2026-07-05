@@ -13,7 +13,15 @@ readme = "README"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = ["std", "serde", "dep:dto_bindgen", "radroots_core/dto-bindgen"]
+dto-bindgen = [
+  "std",
+  "serde",
+  "knowledge-nip54",
+  "dep:dto_bindgen",
+  "radroots_core/dto-bindgen",
+]
+knowledge = []
+knowledge-nip54 = ["knowledge"]
 std = ["radroots_core/std"]
 serde = ["dep:serde", "radroots_core/serde"]
 

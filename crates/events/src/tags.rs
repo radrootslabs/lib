@@ -38,6 +38,7 @@ pub const TAG_MAGNET: &str = "magnet";
 pub const TAG_SERVICE: &str = "service";
 pub const TAG_RELAY: &str = "relay";
 pub const TAG_CHALLENGE: &str = "challenge";
+pub const TAG_CONTRACT: &str = "contract";
 pub const TAG_TITLE: &str = "title";
 pub const TAG_PUBLISHED_AT: &str = "published_at";
 pub const TAG_START: &str = "start";
@@ -103,6 +104,7 @@ mod tests {
         assert_eq!(TAG_SERVICE, "service");
         assert_eq!(TAG_RELAY, "relay");
         assert_eq!(TAG_CHALLENGE, "challenge");
+        assert_eq!(TAG_CONTRACT, "contract");
     }
 
     #[test]

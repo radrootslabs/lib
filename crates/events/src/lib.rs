@@ -35,6 +35,8 @@ pub mod job_feedback;
 pub mod job_request;
 pub mod job_result;
 pub mod kinds;
+#[cfg(feature = "knowledge")]
+pub mod knowledge;
 pub mod list;
 pub mod list_set;
 pub mod listing;
@@ -75,7 +77,7 @@ pub struct RadrootsNostrEvent {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNostrEventRef {
     pub id: String,
     pub author: String,

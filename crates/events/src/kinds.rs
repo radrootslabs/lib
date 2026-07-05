@@ -43,6 +43,9 @@ pub const KIND_LIST_EMOJIS: u32 = 10030;
 pub const KIND_LIST_DM_RELAYS: u32 = 10050;
 pub const KIND_LIST_GOOD_WIKI_AUTHORS: u32 = 10101;
 pub const KIND_LIST_GOOD_WIKI_RELAYS: u32 = 10102;
+pub const KIND_WIKI_MERGE_REQUEST: u32 = 818;
+pub const KIND_WIKI_ARTICLE: u32 = 30818;
+pub const KIND_WIKI_REDIRECT: u32 = 30819;
 pub const KIND_LIST_SET_FOLLOW: u32 = 30000;
 pub const KIND_LIST_SET_GENERIC: u32 = 30001;
 pub const KIND_LIST_SET_RELAY: u32 = 30002;
@@ -98,8 +101,70 @@ pub const KIND_TRADE_FORBIDDEN_3431: u32 = 3431;
 pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
 pub const KIND_TRADE_RECEIPT: u32 = 3434;
 pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;
+pub const KIND_KNOWLEDGE_CLAIM: u32 = 3460;
+pub const KIND_KNOWLEDGE_RELATION: u32 = 3461;
+pub const KIND_KNOWLEDGE_REVIEW: u32 = 3462;
+pub const KIND_KNOWLEDGE_FIELD_REPORT: u32 = 3463;
+pub const KIND_KNOWLEDGE_CHANGE_PROPOSAL: u32 = 3464;
+pub const KIND_CONTRIBUTION_ATTESTATION: u32 = 3465;
+pub const KIND_KNOWLEDGE_SOURCE: u32 = 30450;
+pub const KIND_EVIDENCE_BOUNTY: u32 = 30451;
 
 pub const LISTING_EVENT_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
+
+pub const WIKI_EVENT_KINDS: [u32; 3] = [
+    KIND_WIKI_MERGE_REQUEST,
+    KIND_WIKI_ARTICLE,
+    KIND_WIKI_REDIRECT,
+];
+
+pub const KNOWLEDGE_MVP_EVENT_KINDS: [u32; 8] = [
+    KIND_WIKI_MERGE_REQUEST,
+    KIND_WIKI_ARTICLE,
+    KIND_WIKI_REDIRECT,
+    KIND_KNOWLEDGE_SOURCE,
+    KIND_KNOWLEDGE_CLAIM,
+    KIND_KNOWLEDGE_RELATION,
+    KIND_KNOWLEDGE_REVIEW,
+    KIND_KNOWLEDGE_FIELD_REPORT,
+];
+
+pub const KNOWLEDGE_BETA_EVENT_KINDS: [u32; 3] = [
+    KIND_EVIDENCE_BOUNTY,
+    KIND_KNOWLEDGE_CHANGE_PROPOSAL,
+    KIND_CONTRIBUTION_ATTESTATION,
+];
+
+pub const KNOWLEDGE_EVENT_KINDS: [u32; 11] = [
+    KIND_WIKI_MERGE_REQUEST,
+    KIND_WIKI_ARTICLE,
+    KIND_WIKI_REDIRECT,
+    KIND_KNOWLEDGE_SOURCE,
+    KIND_KNOWLEDGE_CLAIM,
+    KIND_KNOWLEDGE_RELATION,
+    KIND_KNOWLEDGE_REVIEW,
+    KIND_KNOWLEDGE_FIELD_REPORT,
+    KIND_EVIDENCE_BOUNTY,
+    KIND_KNOWLEDGE_CHANGE_PROPOSAL,
+    KIND_CONTRIBUTION_ATTESTATION,
+];
+
+pub const KNOWLEDGE_ADDRESSABLE_EVENT_KINDS: [u32; 4] = [
+    KIND_WIKI_ARTICLE,
+    KIND_WIKI_REDIRECT,
+    KIND_KNOWLEDGE_SOURCE,
+    KIND_EVIDENCE_BOUNTY,
+];
+
+pub const KNOWLEDGE_REGULAR_EVENT_KINDS: [u32; 7] = [
+    KIND_WIKI_MERGE_REQUEST,
+    KIND_KNOWLEDGE_CLAIM,
+    KIND_KNOWLEDGE_RELATION,
+    KIND_KNOWLEDGE_REVIEW,
+    KIND_KNOWLEDGE_FIELD_REPORT,
+    KIND_KNOWLEDGE_CHANGE_PROPOSAL,
+    KIND_CONTRIBUTION_ATTESTATION,
+];
 
 pub const ORDER_EVENT_KINDS: [u32; 5] = [
     KIND_ORDER_REQUEST,
@@ -327,6 +392,64 @@ pub const fn is_production_social_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_REPOST | KIND_GENERIC_REPOST | KIND_CALENDAR | KIND_CALENDAR_EVENT_RSVP
+    )
+}
+
+#[inline]
+pub const fn is_wiki_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_WIKI_MERGE_REQUEST | KIND_WIKI_ARTICLE | KIND_WIKI_REDIRECT
+    )
+}
+
+#[inline]
+pub const fn is_knowledge_mvp_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_WIKI_MERGE_REQUEST
+            | KIND_WIKI_ARTICLE
+            | KIND_WIKI_REDIRECT
+            | KIND_KNOWLEDGE_SOURCE
+            | KIND_KNOWLEDGE_CLAIM
+            | KIND_KNOWLEDGE_RELATION
+            | KIND_KNOWLEDGE_REVIEW
+            | KIND_KNOWLEDGE_FIELD_REPORT
+    )
+}
+
+#[inline]
+pub const fn is_knowledge_beta_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_EVIDENCE_BOUNTY | KIND_KNOWLEDGE_CHANGE_PROPOSAL | KIND_CONTRIBUTION_ATTESTATION
+    )
+}
+
+#[inline]
+pub const fn is_knowledge_event_kind(kind: u32) -> bool {
+    is_knowledge_mvp_event_kind(kind) || is_knowledge_beta_event_kind(kind)
+}
+
+#[inline]
+pub const fn is_knowledge_addressable_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_WIKI_ARTICLE | KIND_WIKI_REDIRECT | KIND_KNOWLEDGE_SOURCE | KIND_EVIDENCE_BOUNTY
+    )
+}
+
+#[inline]
+pub const fn is_knowledge_regular_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_WIKI_MERGE_REQUEST
+            | KIND_KNOWLEDGE_CLAIM
+            | KIND_KNOWLEDGE_RELATION
+            | KIND_KNOWLEDGE_REVIEW
+            | KIND_KNOWLEDGE_FIELD_REPORT
+            | KIND_KNOWLEDGE_CHANGE_PROPOSAL
+            | KIND_CONTRIBUTION_ATTESTATION
     )
 }
 
@@ -666,6 +789,50 @@ mod tests {
             KIND_PUBLIC_FILE_METADATA
         ));
         assert!(is_unambiguous_public_social_kind(KIND_ARTICLE));
+    }
+
+    #[test]
+    fn classifies_knowledge_event_kinds() {
+        assert_eq!(
+            WIKI_EVENT_KINDS,
+            [
+                KIND_WIKI_MERGE_REQUEST,
+                KIND_WIKI_ARTICLE,
+                KIND_WIKI_REDIRECT
+            ]
+        );
+        assert_eq!(KNOWLEDGE_MVP_EVENT_KINDS.len(), 8);
+        assert_eq!(KNOWLEDGE_BETA_EVENT_KINDS.len(), 3);
+        assert_eq!(KNOWLEDGE_EVENT_KINDS.len(), 11);
+        assert_eq!(KNOWLEDGE_ADDRESSABLE_EVENT_KINDS.len(), 4);
+        assert_eq!(KNOWLEDGE_REGULAR_EVENT_KINDS.len(), 7);
+
+        assert_eq!(KIND_WIKI_MERGE_REQUEST, 818);
+        assert_eq!(KIND_WIKI_ARTICLE, 30818);
+        assert_eq!(KIND_WIKI_REDIRECT, 30819);
+        assert_eq!(KIND_KNOWLEDGE_SOURCE, 30450);
+        assert_eq!(KIND_EVIDENCE_BOUNTY, 30451);
+        assert_eq!(KIND_KNOWLEDGE_CLAIM, 3460);
+        assert_eq!(KIND_KNOWLEDGE_RELATION, 3461);
+        assert_eq!(KIND_KNOWLEDGE_REVIEW, 3462);
+        assert_eq!(KIND_KNOWLEDGE_FIELD_REPORT, 3463);
+        assert_eq!(KIND_KNOWLEDGE_CHANGE_PROPOSAL, 3464);
+        assert_eq!(KIND_CONTRIBUTION_ATTESTATION, 3465);
+
+        assert!(is_wiki_event_kind(KIND_WIKI_ARTICLE));
+        assert!(is_knowledge_event_kind(KIND_WIKI_ARTICLE));
+        assert!(is_knowledge_event_kind(KIND_KNOWLEDGE_CLAIM));
+        assert!(is_knowledge_mvp_event_kind(KIND_KNOWLEDGE_FIELD_REPORT));
+        assert!(is_knowledge_beta_event_kind(KIND_EVIDENCE_BOUNTY));
+        assert!(is_knowledge_addressable_event_kind(KIND_KNOWLEDGE_SOURCE));
+        assert!(is_knowledge_addressable_event_kind(KIND_EVIDENCE_BOUNTY));
+        assert!(is_knowledge_regular_event_kind(KIND_WIKI_MERGE_REQUEST));
+        assert!(is_knowledge_regular_event_kind(
+            KIND_CONTRIBUTION_ATTESTATION
+        ));
+        assert!(!is_knowledge_regular_event_kind(KIND_KNOWLEDGE_SOURCE));
+        assert!(!is_knowledge_addressable_event_kind(KIND_KNOWLEDGE_CLAIM));
+        assert!(!is_knowledge_event_kind(KIND_ARTICLE));
     }
 
     #[test]

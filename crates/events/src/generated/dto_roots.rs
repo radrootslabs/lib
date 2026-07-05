@@ -33,6 +33,44 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::job_request::RadrootsJobParam>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::job_request::RadrootsJobRequest>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::job_result::RadrootsJobResult>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsAddressableRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::knowledge::RadrootsContributionAttestation,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsEvidenceBounty>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::knowledge::RadrootsKnowledgeChangeProposal,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeCitationSpan>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeClaim>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeFieldContext>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeFieldReport>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::knowledge::RadrootsKnowledgeLocationPrecision,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeNodeRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeObservation>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::knowledge::RadrootsKnowledgeObservationValue,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeRelation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReview>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewScope>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewScore>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewTarget>(
+        ),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeSource>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsRightsAssertion>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiArticle>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiMergeRequest>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiRedirect>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list::RadrootsList>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list::RadrootsListEntry>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list_set::RadrootsListSet>(),

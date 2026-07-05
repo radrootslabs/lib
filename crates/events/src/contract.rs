@@ -30,6 +30,7 @@ pub enum RadrootsNostrStandard {
     Nip51,
     Nip52,
     Nip53,
+    Nip54,
     Nip56,
     Nip57,
     Nip78,
@@ -87,6 +88,7 @@ pub enum RadrootsContentSchema {
     JsonObject,
     PlainText,
     Markdown,
+    Djot,
     Encrypted,
     BinaryReference,
 }

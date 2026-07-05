@@ -69,6 +69,7 @@ source_files = [
   "crates/events/src/job_feedback.rs",
   "crates/events/src/job_request.rs",
   "crates/events/src/job_result.rs",
+  "crates/events/src/knowledge.rs",
   "crates/events/src/lib.rs",
   "crates/events/src/list.rs",
   "crates/events/src/list_set.rs",
