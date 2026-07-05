@@ -14,12 +14,16 @@ use radroots_events::knowledge::{
     RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
     RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
     RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
-    RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-    RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef, RadrootsContributionAttestation,
-    RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal, RadrootsKnowledgeClaim,
-    RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
-    RadrootsKnowledgeSource, RadrootsWikiArticle, RadrootsWikiArticleVersionRef,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect, validate_wiki_d_tag,
+    RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef,
+    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
+    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
+    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsKnowledgeValidationError,
+    RadrootsWikiArticle, RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest,
+    RadrootsWikiRedirect, validate_contribution_attestation, validate_evidence_bounty,
+    validate_knowledge_change_proposal, validate_knowledge_claim, validate_knowledge_field_report,
+    validate_knowledge_relation, validate_knowledge_review, validate_knowledge_source,
+    validate_wiki_article, validate_wiki_d_tag, validate_wiki_merge_request,
+    validate_wiki_redirect,
 };
 use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_P, TAG_SUMMARY, TAG_T};
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventRef};
@@ -264,18 +268,17 @@ fn require_contract_tag(
     }
 }
 
-fn require_schema(
-    schema: &str,
-    schema_version: u16,
-    expected: &'static str,
-) -> Result<(), EventParseError> {
-    if schema != expected {
-        return Err(EventParseError::InvalidJson("schema"));
+fn parse_validation_error(error: RadrootsKnowledgeValidationError) -> EventParseError {
+    match error.field() {
+        "d_tag" => EventParseError::InvalidTag(TAG_D),
+        "references" => EventParseError::InvalidTag(TAG_SOURCE),
+        "forked_from" | "deferred_to" | "wiki_redirect.target" | "target_article" => {
+            EventParseError::InvalidTag(TAG_A)
+        }
+        "destination_pubkey" => EventParseError::InvalidTag(TAG_P),
+        "base_version_event_id" | "source_version_event_id" => EventParseError::InvalidTag(TAG_E),
+        field => EventParseError::InvalidJson(field),
     }
-    if schema_version != RADROOTS_KNOWLEDGE_SCHEMA_VERSION {
-        return Err(EventParseError::InvalidJson("schema_version"));
-    }
-    Ok(())
 }
 
 fn reject_private_coordinate_keys(content: &str) -> Result<(), EventParseError> {
@@ -334,6 +337,7 @@ pub fn wiki_article_from_event(
         forked_from,
         deferred_to,
     };
+    validate_wiki_article(&article).map_err(parse_validation_error)?;
     Ok(parsed(event, article))
 }
 
@@ -350,7 +354,9 @@ pub fn wiki_redirect_from_event(
     if target.kind != KIND_WIKI_ARTICLE {
         return Err(EventParseError::InvalidTag(TAG_A));
     }
-    Ok(parsed(event, RadrootsWikiRedirect { d_tag, target }))
+    let redirect = RadrootsWikiRedirect { d_tag, target };
+    validate_wiki_redirect(&redirect).map_err(parse_validation_error)?;
+    Ok(parsed(event, redirect))
 }
 
 pub fn wiki_merge_request_from_event(
@@ -376,6 +382,7 @@ pub fn wiki_merge_request_from_event(
         source_version_event_id,
         explanation,
     };
+    validate_wiki_merge_request(&request).map_err(parse_validation_error)?;
     Ok(parsed(event, request))
 }
 
@@ -385,15 +392,11 @@ pub fn knowledge_source_from_event(
     ensure_kind(event.kind, KIND_KNOWLEDGE_SOURCE, "knowledge source")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA)?;
     let source: RadrootsKnowledgeSource = json_content(&event.content)?;
-    require_schema(
-        &source.schema,
-        source.schema_version,
-        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA,
-    )?;
     let d_tag = required_one_value(&event.tags, TAG_D)?;
     if d_tag != source.d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    validate_knowledge_source(&source).map_err(parse_validation_error)?;
     Ok(parsed(event, source))
 }
 
@@ -403,15 +406,11 @@ pub fn evidence_bounty_from_event(
     ensure_kind(event.kind, KIND_EVIDENCE_BOUNTY, "evidence bounty")?;
     require_contract_tag(&event.tags, RADROOTS_EVIDENCE_BOUNTY_SCHEMA)?;
     let bounty: RadrootsEvidenceBounty = json_content(&event.content)?;
-    require_schema(
-        &bounty.schema,
-        bounty.schema_version,
-        RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
-    )?;
     let d_tag = required_one_value(&event.tags, TAG_D)?;
     if d_tag != bounty.d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    validate_evidence_bounty(&bounty).map_err(parse_validation_error)?;
     Ok(parsed(event, bounty))
 }
 
@@ -421,11 +420,7 @@ pub fn knowledge_claim_from_event(
     ensure_kind(event.kind, KIND_KNOWLEDGE_CLAIM, "knowledge claim")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA)?;
     let claim: RadrootsKnowledgeClaim = json_content(&event.content)?;
-    require_schema(
-        &claim.schema,
-        claim.schema_version,
-        RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
-    )?;
+    validate_knowledge_claim(&claim).map_err(parse_validation_error)?;
     Ok(parsed(event, claim))
 }
 
@@ -435,11 +430,7 @@ pub fn knowledge_relation_from_event(
     ensure_kind(event.kind, KIND_KNOWLEDGE_RELATION, "knowledge relation")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_RELATION_SCHEMA)?;
     let relation: RadrootsKnowledgeRelation = json_content(&event.content)?;
-    require_schema(
-        &relation.schema,
-        relation.schema_version,
-        RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
-    )?;
+    validate_knowledge_relation(&relation).map_err(parse_validation_error)?;
     Ok(parsed(event, relation))
 }
 
@@ -450,11 +441,7 @@ pub fn knowledge_review_from_event(
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA)?;
     required_one_value(&event.tags, TAG_REVIEW_TARGET)?;
     let review: RadrootsKnowledgeReview = json_content(&event.content)?;
-    require_schema(
-        &review.schema,
-        review.schema_version,
-        RADROOTS_KNOWLEDGE_REVIEW_SCHEMA,
-    )?;
+    validate_knowledge_review(&review).map_err(parse_validation_error)?;
     Ok(parsed(event, review))
 }
 
@@ -469,11 +456,7 @@ pub fn knowledge_field_report_from_event(
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA)?;
     reject_private_coordinate_keys(&event.content)?;
     let report: RadrootsKnowledgeFieldReport = json_content(&event.content)?;
-    require_schema(
-        &report.schema,
-        report.schema_version,
-        RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
-    )?;
+    validate_knowledge_field_report(&report).map_err(parse_validation_error)?;
     Ok(parsed(event, report))
 }
 
@@ -487,11 +470,7 @@ pub fn knowledge_change_proposal_from_event(
     )?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA)?;
     let proposal: RadrootsKnowledgeChangeProposal = json_content(&event.content)?;
-    require_schema(
-        &proposal.schema,
-        proposal.schema_version,
-        RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA,
-    )?;
+    validate_knowledge_change_proposal(&proposal).map_err(parse_validation_error)?;
     Ok(parsed(event, proposal))
 }
 
@@ -505,10 +484,6 @@ pub fn contribution_attestation_from_event(
     )?;
     require_contract_tag(&event.tags, RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA)?;
     let attestation: RadrootsContributionAttestation = json_content(&event.content)?;
-    require_schema(
-        &attestation.schema,
-        attestation.schema_version,
-        RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
-    )?;
+    validate_contribution_attestation(&attestation).map_err(parse_validation_error)?;
     Ok(parsed(event, attestation))
 }

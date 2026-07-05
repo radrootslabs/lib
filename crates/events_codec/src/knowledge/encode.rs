@@ -17,13 +17,16 @@ use radroots_events::knowledge::{
     RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
     RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
     RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
-    RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-    RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef, RadrootsContributionAttestation,
-    RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal, RadrootsKnowledgeClaim,
-    RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
-    RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
-    validate_wiki_d_tag,
+    RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef,
+    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
+    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
+    RadrootsKnowledgeReview, RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource,
+    RadrootsKnowledgeValidationError, RadrootsWikiArticle, RadrootsWikiArticleVersionRef,
+    RadrootsWikiMergeRequest, RadrootsWikiRedirect, validate_contribution_attestation,
+    validate_evidence_bounty, validate_knowledge_change_proposal, validate_knowledge_claim,
+    validate_knowledge_field_report, validate_knowledge_relation, validate_knowledge_review,
+    validate_knowledge_source, validate_wiki_article, validate_wiki_merge_request,
+    validate_wiki_redirect,
 };
 use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T};
 use serde::Serialize;
@@ -136,18 +139,15 @@ fn json_content<T: Serialize>(value: &T) -> Result<String, EventEncodeError> {
     serde_json::to_string(value).map_err(|_| EventEncodeError::Json)
 }
 
-fn require_schema(
-    actual_schema: &str,
-    actual_version: u16,
-    expected_schema: &'static str,
-) -> Result<(), EventEncodeError> {
-    if actual_schema != expected_schema {
-        return Err(EventEncodeError::InvalidField("schema"));
+fn encode_validation_error(error: RadrootsKnowledgeValidationError) -> EventEncodeError {
+    match error {
+        RadrootsKnowledgeValidationError::EmptyField(field) => {
+            EventEncodeError::EmptyRequiredField(field)
+        }
+        RadrootsKnowledgeValidationError::InvalidField(field) => {
+            EventEncodeError::InvalidField(field)
+        }
     }
-    if actual_version != RADROOTS_KNOWLEDGE_SCHEMA_VERSION {
-        return Err(EventEncodeError::InvalidField("schema_version"));
-    }
-    Ok(())
 }
 
 fn custom_tags(contract_id: &'static str) -> Vec<Vec<String>> {
@@ -157,10 +157,7 @@ fn custom_tags(contract_id: &'static str) -> Vec<Vec<String>> {
 pub fn wiki_article_build_tags(
     article: &RadrootsWikiArticle,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_wiki_d_tag(&article.d_tag).map_err(|_| EventEncodeError::InvalidField("d_tag"))?;
-    if article.title.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("title"));
-    }
+    validate_wiki_article(article).map_err(encode_validation_error)?;
     let mut tags = Vec::new();
     tags.push(vec![TAG_D.to_string(), article.d_tag.clone()]);
     push_value(&mut tags, TAG_TITLE, &article.title);
@@ -189,7 +186,7 @@ pub fn wiki_article_to_wire_parts(
 pub fn wiki_redirect_build_tags(
     redirect: &RadrootsWikiRedirect,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_wiki_d_tag(&redirect.d_tag).map_err(|_| EventEncodeError::InvalidField("d_tag"))?;
+    validate_wiki_redirect(redirect).map_err(encode_validation_error)?;
     let mut tags = Vec::new();
     tags.push(vec![TAG_D.to_string(), redirect.d_tag.clone()]);
     tags.push(address_tag(TAG_A, &redirect.target));
@@ -209,14 +206,7 @@ pub fn wiki_redirect_to_wire_parts(
 pub fn wiki_merge_request_build_tags(
     request: &RadrootsWikiMergeRequest,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    if request.destination_pubkey.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("destination_pubkey"));
-    }
-    if request.source_version_event_id.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField(
-            "source_version_event_id",
-        ));
-    }
+    validate_wiki_merge_request(request).map_err(encode_validation_error)?;
     let mut tags = Vec::new();
     tags.push(address_tag(TAG_A, &request.target_article));
     tags.push(vec![TAG_P.to_string(), request.destination_pubkey.clone()]);
@@ -249,14 +239,7 @@ pub fn wiki_merge_request_to_wire_parts(
 pub fn knowledge_source_build_tags(
     source: &RadrootsKnowledgeSource,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &source.schema,
-        source.schema_version,
-        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA,
-    )?;
-    if source.d_tag.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("d_tag"));
-    }
+    validate_knowledge_source(source).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_SOURCE_SCHEMA);
     tags.push(vec![TAG_D.to_string(), source.d_tag.clone()]);
     push_topics(&mut tags, &source.topics);
@@ -277,14 +260,7 @@ pub fn knowledge_source_to_wire_parts(
 pub fn evidence_bounty_build_tags(
     bounty: &RadrootsEvidenceBounty,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &bounty.schema,
-        bounty.schema_version,
-        RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
-    )?;
-    if bounty.d_tag.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("d_tag"));
-    }
+    validate_evidence_bounty(bounty).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_EVIDENCE_BOUNTY_SCHEMA);
     tags.push(vec![TAG_D.to_string(), bounty.d_tag.clone()]);
     push_topics(&mut tags, &bounty.topics);
@@ -305,11 +281,7 @@ pub fn evidence_bounty_to_wire_parts(
 pub fn knowledge_claim_build_tags(
     claim: &RadrootsKnowledgeClaim,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &claim.schema,
-        claim.schema_version,
-        RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
-    )?;
+    validate_knowledge_claim(claim).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_CLAIM_SCHEMA);
     push_topics(&mut tags, &claim.topics);
     for citation in &claim.citation_spans {
@@ -334,11 +306,7 @@ pub fn knowledge_claim_to_wire_parts(
 pub fn knowledge_relation_build_tags(
     relation: &RadrootsKnowledgeRelation,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &relation.schema,
-        relation.schema_version,
-        RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
-    )?;
+    validate_knowledge_relation(relation).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_RELATION_SCHEMA);
     push_event_refs(&mut tags, TAG_SOURCE, &relation.support_refs);
     Ok(tags)
@@ -357,11 +325,7 @@ pub fn knowledge_relation_to_wire_parts(
 pub fn knowledge_review_build_tags(
     review: &RadrootsKnowledgeReview,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &review.schema,
-        review.schema_version,
-        RADROOTS_KNOWLEDGE_REVIEW_SCHEMA,
-    )?;
+    validate_knowledge_review(review).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_REVIEW_SCHEMA);
     tags.push(build_event_ref_tag(
         TAG_REVIEW_TARGET,
@@ -384,11 +348,7 @@ pub fn knowledge_review_to_wire_parts(
 pub fn knowledge_field_report_build_tags(
     report: &RadrootsKnowledgeFieldReport,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &report.schema,
-        report.schema_version,
-        RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
-    )?;
+    validate_knowledge_field_report(report).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA);
     push_topics(&mut tags, &report.context.topics);
     if let Some(location) = &report.context.public_location
@@ -414,11 +374,7 @@ pub fn knowledge_field_report_to_wire_parts(
 pub fn knowledge_change_proposal_build_tags(
     proposal: &RadrootsKnowledgeChangeProposal,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &proposal.schema,
-        proposal.schema_version,
-        RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA,
-    )?;
+    validate_knowledge_change_proposal(proposal).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA);
     push_event_refs(&mut tags, TAG_EVIDENCE, &proposal.evidence_refs);
     Ok(tags)
@@ -437,11 +393,7 @@ pub fn knowledge_change_proposal_to_wire_parts(
 pub fn contribution_attestation_build_tags(
     attestation: &RadrootsContributionAttestation,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    require_schema(
-        &attestation.schema,
-        attestation.schema_version,
-        RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
-    )?;
+    validate_contribution_attestation(attestation).map_err(encode_validation_error)?;
     let mut tags = custom_tags(RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA);
     push_event_refs(&mut tags, TAG_EVIDENCE, &attestation.evidence_refs);
     Ok(tags)

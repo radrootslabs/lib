@@ -19,7 +19,7 @@ use radroots_events::knowledge::{
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
-use radroots_events_codec::error::EventParseError;
+use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::knowledge::{
     contribution_attestation_from_event, contribution_attestation_to_wire_parts,
     evidence_bounty_from_event, evidence_bounty_to_wire_parts,
@@ -82,7 +82,8 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
 fn assert_parse_error(actual: EventParseError, expected: EventParseError) {
     match (actual, expected) {
         (EventParseError::MissingTag(actual), EventParseError::MissingTag(expected))
-        | (EventParseError::InvalidTag(actual), EventParseError::InvalidTag(expected)) => {
+        | (EventParseError::InvalidTag(actual), EventParseError::InvalidTag(expected))
+        | (EventParseError::InvalidJson(actual), EventParseError::InvalidJson(expected)) => {
             assert_eq!(actual, expected);
         }
         (
@@ -94,6 +95,19 @@ fn assert_parse_error(actual: EventParseError, expected: EventParseError) {
         ) => {
             assert_eq!(actual_expected, expected);
             assert_eq!(actual_got, got);
+        }
+        (actual, expected) => panic!("expected {expected:?}, got {actual:?}"),
+    }
+}
+
+fn assert_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
+    match (actual, expected) {
+        (
+            EventEncodeError::EmptyRequiredField(actual),
+            EventEncodeError::EmptyRequiredField(expected),
+        )
+        | (EventEncodeError::InvalidField(actual), EventEncodeError::InvalidField(expected)) => {
+            assert_eq!(actual, expected);
         }
         (actual, expected) => panic!("expected {expected:?}, got {actual:?}"),
     }
@@ -640,5 +654,239 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
     assert_parse_error(
         wiki_article_from_event(duplicate_defer).unwrap_err(),
         EventParseError::InvalidTag("a"),
+    );
+}
+
+#[test]
+fn semantic_validation_rejects_invalid_encode_models() {
+    let mut article = wiki_article();
+    article.content_djot = String::new();
+    assert_encode_error(
+        wiki_article_to_wire_parts(&article).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("content_djot"),
+    );
+
+    let mut redirect = RadrootsWikiRedirect {
+        d_tag: "soil".to_string(),
+        target: address_ref(),
+    };
+    redirect.target.kind = 30023;
+    assert_encode_error(
+        wiki_redirect_to_wire_parts(&redirect).unwrap_err(),
+        EventEncodeError::InvalidField("wiki_redirect.target"),
+    );
+
+    let mut merge = RadrootsWikiMergeRequest {
+        target_article: address_ref(),
+        destination_pubkey: "bad".to_string(),
+        base_version_event_id: Some(hex_64('e')),
+        source_version_event_id: hex_64('f'),
+        explanation: None,
+    };
+    assert_encode_error(
+        wiki_merge_request_to_wire_parts(&merge).unwrap_err(),
+        EventEncodeError::InvalidField("destination_pubkey"),
+    );
+    merge.destination_pubkey = hex_64('a');
+    merge.base_version_event_id = Some("bad".to_string());
+    assert_encode_error(
+        wiki_merge_request_to_wire_parts(&merge).unwrap_err(),
+        EventEncodeError::InvalidField("base_version_event_id"),
+    );
+
+    let mut source = source();
+    source.title = " ".to_string();
+    assert_encode_error(
+        knowledge_source_to_wire_parts(&source).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("title"),
+    );
+
+    let mut claim = claim();
+    claim.citation_spans[0].quote_hash = Some("bad".to_string());
+    assert_encode_error(
+        knowledge_claim_to_wire_parts(&claim).unwrap_err(),
+        EventEncodeError::InvalidField("citation_spans"),
+    );
+
+    let mut relation = relation();
+    relation.subject.external_id = Some("cover-crops".to_string());
+    assert_encode_error(
+        knowledge_relation_to_wire_parts(&relation).unwrap_err(),
+        EventEncodeError::InvalidField("subject"),
+    );
+
+    let mut review = review();
+    review.scores[0].value = String::new();
+    assert_encode_error(
+        knowledge_review_to_wire_parts(&review).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("scores"),
+    );
+
+    let mut report = field_report();
+    report.observations.clear();
+    assert_encode_error(
+        knowledge_field_report_to_wire_parts(&report).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("observations"),
+    );
+
+    let bounty = RadrootsEvidenceBounty {
+        schema: RADROOTS_EVIDENCE_BOUNTY_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        d_tag: "soil-bounty".to_string(),
+        title: "Soil bounty".to_string(),
+        summary: None,
+        topics: vec!["soil".to_string()],
+        target_refs: Vec::new(),
+        reward_note: None,
+        closes_at: None,
+    };
+    assert_encode_error(
+        evidence_bounty_to_wire_parts(&bounty).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("target_refs"),
+    );
+
+    let proposal = RadrootsKnowledgeChangeProposal {
+        schema: RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        target: event_ref('b', KIND_KNOWLEDGE_CLAIM),
+        proposal_type: "amend".to_string(),
+        summary: String::new(),
+        rationale: None,
+        evidence_refs: vec![event_ref('c', KIND_KNOWLEDGE_SOURCE)],
+        supersedes: Vec::new(),
+    };
+    assert_encode_error(
+        knowledge_change_proposal_to_wire_parts(&proposal).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("summary"),
+    );
+
+    let attestation = RadrootsContributionAttestation {
+        schema: RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        contributor_pubkey: hex_64('a'),
+        contribution_type: "review".to_string(),
+        subject_refs: Vec::new(),
+        summary: "Reviewed synthetic claim".to_string(),
+        evidence_refs: vec![event_ref('e', KIND_KNOWLEDGE_REVIEW)],
+    };
+    assert_encode_error(
+        contribution_attestation_to_wire_parts(&attestation).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("subject_refs"),
+    );
+}
+
+#[test]
+fn semantic_validation_rejects_invalid_decoded_content() {
+    let mut article = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    article.content = String::new();
+    assert_parse_error(
+        wiki_article_from_event(article).unwrap_err(),
+        EventParseError::InvalidJson("content_djot"),
+    );
+
+    let mut source_event = event_from_parts(knowledge_source_to_wire_parts(&source()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&source_event.content).unwrap();
+    value["title"] = serde_json::Value::String(String::new());
+    source_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_source_from_event(source_event).unwrap_err(),
+        EventParseError::InvalidJson("title"),
+    );
+
+    let mut claim_event = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&claim_event.content).unwrap();
+    value["citation_spans"][0]["quote_hash"] = serde_json::Value::String("bad".to_string());
+    claim_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_claim_from_event(claim_event).unwrap_err(),
+        EventParseError::InvalidJson("citation_spans"),
+    );
+
+    let mut relation_event =
+        event_from_parts(knowledge_relation_to_wire_parts(&relation()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&relation_event.content).unwrap();
+    value["subject"]["external_id"] = serde_json::Value::String("cover-crops".to_string());
+    relation_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_relation_from_event(relation_event).unwrap_err(),
+        EventParseError::InvalidJson("subject"),
+    );
+
+    let mut review_event = event_from_parts(knowledge_review_to_wire_parts(&review()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&review_event.content).unwrap();
+    value["target"]["kind"] = serde_json::Value::from(0);
+    review_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_review_from_event(review_event).unwrap_err(),
+        EventParseError::InvalidJson("review_target"),
+    );
+
+    let mut report_event =
+        event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&report_event.content).unwrap();
+    value["observations"] = serde_json::Value::Array(Vec::new());
+    report_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_field_report_from_event(report_event).unwrap_err(),
+        EventParseError::InvalidJson("observations"),
+    );
+
+    let bounty = RadrootsEvidenceBounty {
+        schema: RADROOTS_EVIDENCE_BOUNTY_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        d_tag: "soil-bounty".to_string(),
+        title: "Soil bounty".to_string(),
+        summary: None,
+        topics: vec!["soil".to_string()],
+        target_refs: vec![event_ref('a', KIND_KNOWLEDGE_CLAIM)],
+        reward_note: None,
+        closes_at: None,
+    };
+    let mut bounty_event = event_from_parts(evidence_bounty_to_wire_parts(&bounty).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&bounty_event.content).unwrap();
+    value["target_refs"] = serde_json::Value::Array(Vec::new());
+    bounty_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        evidence_bounty_from_event(bounty_event).unwrap_err(),
+        EventParseError::InvalidJson("target_refs"),
+    );
+
+    let proposal = RadrootsKnowledgeChangeProposal {
+        schema: RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        target: event_ref('b', KIND_KNOWLEDGE_CLAIM),
+        proposal_type: "amend".to_string(),
+        summary: "Clarify scope".to_string(),
+        rationale: None,
+        evidence_refs: vec![event_ref('c', KIND_KNOWLEDGE_SOURCE)],
+        supersedes: Vec::new(),
+    };
+    let mut proposal_event =
+        event_from_parts(knowledge_change_proposal_to_wire_parts(&proposal).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&proposal_event.content).unwrap();
+    value["summary"] = serde_json::Value::String(String::new());
+    proposal_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_change_proposal_from_event(proposal_event).unwrap_err(),
+        EventParseError::InvalidJson("summary"),
+    );
+
+    let attestation = RadrootsContributionAttestation {
+        schema: RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        contributor_pubkey: hex_64('a'),
+        contribution_type: "review".to_string(),
+        subject_refs: vec![event_ref('d', KIND_KNOWLEDGE_REVIEW)],
+        summary: "Reviewed synthetic claim".to_string(),
+        evidence_refs: vec![event_ref('e', KIND_KNOWLEDGE_REVIEW)],
+    };
+    let mut attestation_event =
+        event_from_parts(contribution_attestation_to_wire_parts(&attestation).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&attestation_event.content).unwrap();
+    value["subject_refs"] = serde_json::Value::Array(Vec::new());
+    attestation_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        contribution_attestation_from_event(attestation_event).unwrap_err(),
+        EventParseError::InvalidJson("subject_refs"),
     );
 }
