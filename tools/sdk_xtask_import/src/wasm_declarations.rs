@@ -393,6 +393,23 @@ const EVENTS_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("job_feedback_tags", Some("job_json"), String, 2, 4),
     public_function!("job_request_tags", Some("job_json"), String, 2, 4),
     public_function!("job_result_tags", Some("job_json"), String, 2, 4),
+    public_function!("knowledge_claim_tags", Some("claim_json"), String, 2, 4),
+    public_function!(
+        "knowledge_field_report_tags",
+        Some("report_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "knowledge_relation_tags",
+        Some("relation_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!("knowledge_review_tags", Some("review_json"), String, 2, 4),
+    public_function!("knowledge_source_tags", Some("source_json"), String, 2, 4),
     public_function!("list_set_tags", Some("list_json"), String, 2, 4),
     public_function!("list_tags", Some("list_json"), String, 2, 4),
     public_function!("listing_tags", Some("listing_json"), String, 2, 4),
@@ -406,6 +423,23 @@ const EVENTS_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("report_tags", Some("report_json"), String, 2, 4),
     public_function!("repost_tags", Some("repost_json"), String, 2, 4),
     public_function!("seal_tags", Some("seal_json"), String, 2, 4),
+    public_function!("wiki_article_tags", Some("article_json"), String, 2, 4),
+    public_function!(
+        "wiki_merge_request_tags",
+        Some("request_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!("wiki_redirect_tags", Some("redirect_json"), String, 2, 4),
+    public_function!(
+        "verify_and_decode_event_json",
+        Some("event_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!("contract_manifest_json", None, String, 0, 4),
 ];
 
 const EVENTS_CODEC_SUPPORT_EXPORTS: &[WasmSupportExport] = &[
