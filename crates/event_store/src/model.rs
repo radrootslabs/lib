@@ -303,8 +303,12 @@ pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
     match value {
         RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
         RadrootsTagSemantic::Category => "category",
+        RadrootsTagSemantic::Citation => "citation",
+        RadrootsTagSemantic::Contract => "contract",
         RadrootsTagSemantic::Counterparty => "counterparty",
+        RadrootsTagSemantic::Evidence => "evidence",
         RadrootsTagSemantic::EventPointer => "event_pointer",
+        RadrootsTagSemantic::Geohash => "geohash",
         RadrootsTagSemantic::GroupId => "group_id",
         RadrootsTagSemantic::Identifier => "identifier",
         RadrootsTagSemantic::Image => "image",
@@ -316,12 +320,15 @@ pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::Price => "price",
         RadrootsTagSemantic::PublishedAt => "published_at",
         RadrootsTagSemantic::Relay => "relay",
+        RadrootsTagSemantic::ReviewTarget => "review_target",
         RadrootsTagSemantic::RootEvent => "root_event",
         RadrootsTagSemantic::ServiceInput => "service_input",
         RadrootsTagSemantic::ServiceOutput => "service_output",
+        RadrootsTagSemantic::Source => "source",
         RadrootsTagSemantic::Status => "status",
         RadrootsTagSemantic::Summary => "summary",
         RadrootsTagSemantic::Title => "title",
+        RadrootsTagSemantic::Topic => "topic",
         RadrootsTagSemantic::Url => "url",
     }
 }
@@ -329,15 +336,19 @@ pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
 pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
     match value {
         RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagValueType::ContractId => "contract_id",
         RadrootsTagValueType::DTag => "d_tag",
         RadrootsTagValueType::EventId => "event_id",
         RadrootsTagValueType::EventPointer => "event_pointer",
+        RadrootsTagValueType::Geohash => "geohash",
         RadrootsTagValueType::Kind => "kind",
         RadrootsTagValueType::PublicKey => "public_key",
         RadrootsTagValueType::RelayUrl => "relay_url",
+        RadrootsTagValueType::Sha256 => "sha256",
         RadrootsTagValueType::Text => "text",
         RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
         RadrootsTagValueType::Url => "url",
+        RadrootsTagValueType::Uuid => "uuid",
     }
 }
 
@@ -505,8 +516,12 @@ mod tests {
                 "addressable_coordinate",
             ),
             (RadrootsTagSemantic::Category, "category"),
+            (RadrootsTagSemantic::Citation, "citation"),
+            (RadrootsTagSemantic::Contract, "contract"),
             (RadrootsTagSemantic::Counterparty, "counterparty"),
+            (RadrootsTagSemantic::Evidence, "evidence"),
             (RadrootsTagSemantic::EventPointer, "event_pointer"),
+            (RadrootsTagSemantic::Geohash, "geohash"),
             (RadrootsTagSemantic::GroupId, "group_id"),
             (RadrootsTagSemantic::Identifier, "identifier"),
             (RadrootsTagSemantic::Image, "image"),
@@ -518,12 +533,15 @@ mod tests {
             (RadrootsTagSemantic::Price, "price"),
             (RadrootsTagSemantic::PublishedAt, "published_at"),
             (RadrootsTagSemantic::Relay, "relay"),
+            (RadrootsTagSemantic::ReviewTarget, "review_target"),
             (RadrootsTagSemantic::RootEvent, "root_event"),
             (RadrootsTagSemantic::ServiceInput, "service_input"),
             (RadrootsTagSemantic::ServiceOutput, "service_output"),
+            (RadrootsTagSemantic::Source, "source"),
             (RadrootsTagSemantic::Status, "status"),
             (RadrootsTagSemantic::Summary, "summary"),
             (RadrootsTagSemantic::Title, "title"),
+            (RadrootsTagSemantic::Topic, "topic"),
             (RadrootsTagSemantic::Url, "url"),
         ] {
             assert_eq!(tag_semantic_name(semantic), expected);
@@ -534,15 +552,19 @@ mod tests {
                 RadrootsTagValueType::AddressableCoordinate,
                 "addressable_coordinate",
             ),
+            (RadrootsTagValueType::ContractId, "contract_id"),
             (RadrootsTagValueType::DTag, "d_tag"),
             (RadrootsTagValueType::EventId, "event_id"),
             (RadrootsTagValueType::EventPointer, "event_pointer"),
+            (RadrootsTagValueType::Geohash, "geohash"),
             (RadrootsTagValueType::Kind, "kind"),
             (RadrootsTagValueType::PublicKey, "public_key"),
             (RadrootsTagValueType::RelayUrl, "relay_url"),
+            (RadrootsTagValueType::Sha256, "sha256"),
             (RadrootsTagValueType::Text, "text"),
             (RadrootsTagValueType::UnixTimestamp, "unix_timestamp"),
             (RadrootsTagValueType::Url, "url"),
+            (RadrootsTagValueType::Uuid, "uuid"),
         ] {
             assert_eq!(tag_value_type_name(value_type), expected);
         }
