@@ -627,7 +627,7 @@ impl RadrootsOrderProjection {
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeOrderWorkflowProjection {
+pub struct RadrootsOrderWorkflowProjection {
     pub order_id: RadrootsOrderId,
     pub status: RadrootsTradeWorkflowState,
     pub request_event_id: Option<RadrootsEventId>,
@@ -647,7 +647,7 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub issues: Vec<RadrootsOrderIssue>,
 }
 
-impl From<RadrootsOrderProjection> for RadrootsTradeOrderWorkflowProjection {
+impl From<RadrootsOrderProjection> for RadrootsOrderWorkflowProjection {
     fn from(projection: RadrootsOrderProjection) -> Self {
         Self {
             order_id: projection.order_id,
@@ -671,7 +671,7 @@ impl From<RadrootsOrderProjection> for RadrootsTradeOrderWorkflowProjection {
     }
 }
 
-impl From<&RadrootsOrderProjection> for RadrootsTradeOrderWorkflowProjection {
+impl From<&RadrootsOrderProjection> for RadrootsOrderWorkflowProjection {
     fn from(projection: &RadrootsOrderProjection) -> Self {
         projection.clone().into()
     }
@@ -2641,7 +2641,7 @@ mod tests {
         RadrootsOrderDecisionRecord, RadrootsOrderEventRecord, RadrootsOrderIssue,
         RadrootsOrderReductionInputs, RadrootsOrderRequestRecord,
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
-        RadrootsTradeLocatorProjectionResolution, RadrootsTradeOrderWorkflowProjection,
+        RadrootsOrderWorkflowProjection, RadrootsTradeLocatorProjectionResolution,
         RadrootsTradeWorkflowState, reduce_listing_inventory_accounting,
         reduce_order_event_records, reduce_order_event_records_for_trade_locator,
         reduce_order_events,
@@ -4894,7 +4894,7 @@ mod tests {
                 cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
             },
         );
-        let missing_dto = RadrootsTradeOrderWorkflowProjection::from(&missing);
+        let missing_dto = RadrootsOrderWorkflowProjection::from(&missing);
 
         assert_eq!(missing_dto.status, RadrootsTradeWorkflowState::Missing);
         assert!(missing_dto.request_event_id.is_none());
@@ -4917,7 +4917,7 @@ mod tests {
         }
 
         let requested = reduce(Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        let requested_dto = RadrootsTradeOrderWorkflowProjection::from(&requested);
+        let requested_dto = RadrootsOrderWorkflowProjection::from(&requested);
 
         assert_eq!(requested_dto.status, RadrootsTradeWorkflowState::Requested);
         assert_eq!(requested_dto.request_event_id, Some(event_id(1)));

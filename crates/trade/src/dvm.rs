@@ -199,7 +199,7 @@ pub struct RadrootsTradeInventoryBinWitnessDto {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeOrderItemWitnessDto {
+pub struct RadrootsOrderItemWitnessDto {
     pub bin_id: RadrootsInventoryBinId,
     pub bin_count: u32,
 }
@@ -209,19 +209,19 @@ pub struct RadrootsTradeOrderItemWitnessDto {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeOrderRequestWitnessDto {
+pub struct RadrootsOrderRequestWitnessDto {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
-    pub items: Vec<RadrootsTradeOrderItemWitnessDto>,
+    pub items: Vec<RadrootsOrderItemWitnessDto>,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTradeOrderDecisionWitnessDto {
+pub enum RadrootsOrderDecisionWitnessDto {
     Accepted {
         inventory_commitments: Vec<RadrootsTradeInventoryCommitmentWitnessDto>,
     },
@@ -245,12 +245,12 @@ pub struct RadrootsTradeInventoryCommitmentWitnessDto {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeOrderDecisionEventWitnessDto {
+pub struct RadrootsOrderDecisionEventWitnessDto {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
-    pub decision: RadrootsTradeOrderDecisionWitnessDto,
+    pub decision: RadrootsOrderDecisionWitnessDto,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -265,8 +265,8 @@ pub struct RadrootsTradeTransitionProofRequestV1 {
     pub request_event_id: RadrootsEventId,
     pub decision_event_id: RadrootsEventId,
     pub event_evidence: Vec<RadrootsTradeCanonicalEventEvidenceDto>,
-    pub request: RadrootsTradeOrderRequestWitnessDto,
-    pub decision: RadrootsTradeOrderDecisionEventWitnessDto,
+    pub request: RadrootsOrderRequestWitnessDto,
+    pub decision: RadrootsOrderDecisionEventWitnessDto,
     pub inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
     pub inventory_sequence: u128,
     pub previous_state_root: Option<String>,
@@ -806,22 +806,22 @@ mod tests {
             request_event_id: event_id(2),
             decision_event_id: event_id(3),
             event_evidence: Vec::new(),
-            request: RadrootsTradeOrderRequestWitnessDto {
+            request: RadrootsOrderRequestWitnessDto {
                 order_id: RadrootsOrderId::parse("order-1").expect("order id"),
                 listing_addr: listing_addr(),
                 buyer_pubkey: public_key(BUYER),
                 seller_pubkey: public_key(SELLER),
-                items: vec![RadrootsTradeOrderItemWitnessDto {
+                items: vec![RadrootsOrderItemWitnessDto {
                     bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
                     bin_count: 2,
                 }],
             },
-            decision: RadrootsTradeOrderDecisionEventWitnessDto {
+            decision: RadrootsOrderDecisionEventWitnessDto {
                 order_id: RadrootsOrderId::parse("order-1").expect("order id"),
                 listing_addr: listing_addr(),
                 buyer_pubkey: public_key(BUYER),
                 seller_pubkey: public_key(SELLER),
-                decision: RadrootsTradeOrderDecisionWitnessDto::Accepted {
+                decision: RadrootsOrderDecisionWitnessDto::Accepted {
                     inventory_commitments: vec![RadrootsTradeInventoryCommitmentWitnessDto {
                         bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
                         bin_count: 2,

@@ -7,7 +7,7 @@ use crate::listing::{
     model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal},
     validation::RadrootsTradeListing,
 };
-use crate::order::RadrootsTradeOrderWorkflowProjection;
+use crate::order::RadrootsOrderWorkflowProjection;
 use crate::workflow::RadrootsTradeWorkflowState;
 
 pub fn dto_roots() -> [RootDescriptor; 5] {
@@ -16,7 +16,7 @@ pub fn dto_roots() -> [RootDescriptor; 5] {
         RootDescriptor::new::<RadrootsTradeListingSubtotal>(),
         RootDescriptor::new::<RadrootsTradeListingTotal>(),
         RootDescriptor::new::<RadrootsTradeWorkflowState>(),
-        RootDescriptor::new::<RadrootsTradeOrderWorkflowProjection>(),
+        RootDescriptor::new::<RadrootsOrderWorkflowProjection>(),
     ]
 }
 
@@ -234,7 +234,7 @@ mod tests {
         "RadrootsTradeListingSubtotal",
         "RadrootsTradeListingTotal",
         "RadrootsTradeWorkflowState",
-        "RadrootsTradeOrderWorkflowProjection",
+        "RadrootsOrderWorkflowProjection",
     ];
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn trade_order_workflow_projection_models_missing_state_with_optional_evidence() {
         let registry = build_registry(dto_roots());
-        let projection = find_struct(&registry, "RadrootsTradeOrderWorkflowProjection");
+        let projection = find_struct(&registry, "RadrootsOrderWorkflowProjection");
 
         assert!(field_names(projection).contains(&"status"));
         for optional_field in [
@@ -316,7 +316,7 @@ mod tests {
             "last_event_id",
         ] {
             let presence = registry
-                .struct_field_presence("RadrootsTradeOrderWorkflowProjection", optional_field)
+                .struct_field_presence("RadrootsOrderWorkflowProjection", optional_field)
                 .expect("projection field presence");
             assert!(
                 !presence.required_on_deserialize,
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn trade_order_workflow_projection_omits_binding_only_discount_fields() {
         let registry = build_registry(dto_roots());
-        let projection = find_struct(&registry, "RadrootsTradeOrderWorkflowProjection");
+        let projection = find_struct(&registry, "RadrootsOrderWorkflowProjection");
         let fields = field_names(projection);
 
         for stale_field in [
