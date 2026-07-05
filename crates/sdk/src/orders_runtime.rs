@@ -109,13 +109,29 @@ use serde::Deserialize;
 #[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
 #[cfg(feature = "runtime")]
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
+#[cfg(feature = "runtime")]
+use tokio::{
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_DEFAULT_LIMIT: u32 = 500;
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_MAX_LIMIT: u32 = 1_000;
 #[cfg(feature = "runtime")]
 pub const TRADE_STATUS_ROOT_SELECTOR_SEPARATOR: char = '@';
+#[cfg(feature = "runtime")]
+pub const TRADE_STATUS_WATCH_DEFAULT_CAPACITY: usize = 8;
+#[cfg(feature = "runtime")]
+pub const TRADE_STATUS_WATCH_MAX_CAPACITY: usize = 128;
+#[cfg(feature = "runtime")]
+pub const TRADE_STATUS_WATCH_DEFAULT_REFRESH_INTERVAL_MS: u64 = 1_000;
+#[cfg(feature = "runtime")]
+pub const TRADE_STATUS_WATCH_MAX_REFRESH_INTERVAL_MS: u64 = 60_000;
 #[cfg(any(feature = "signer-adapters", test))]
 pub const TRADE_SUBMIT_OPERATION_KIND: &str = "trade.submit.v1";
 #[cfg(any(feature = "signer-adapters", test))]
@@ -2041,6 +2057,177 @@ impl TradeStatusRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct TradeStatusWatchRequest {
+    pub status: TradeStatusRequest,
+    pub capacity: usize,
+    pub refresh_interval_ms: u64,
+    pub refresh_limit: Option<u32>,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeStatusWatchRequest {
+    pub fn new(status: TradeStatusRequest) -> Self {
+        Self {
+            status,
+            capacity: TRADE_STATUS_WATCH_DEFAULT_CAPACITY,
+            refresh_interval_ms: TRADE_STATUS_WATCH_DEFAULT_REFRESH_INTERVAL_MS,
+            refresh_limit: None,
+        }
+    }
+
+    pub fn parse(selector: &str) -> Result<Self, RadrootsSdkError> {
+        TradeStatusRequest::parse(selector).map(Self::new)
+    }
+
+    pub fn with_capacity(mut self, capacity: usize) -> Self {
+        self.capacity = capacity;
+        self
+    }
+
+    pub fn with_refresh_interval_ms(mut self, refresh_interval_ms: u64) -> Self {
+        self.refresh_interval_ms = refresh_interval_ms;
+        self
+    }
+
+    pub fn with_refresh_limit(mut self, refresh_limit: u32) -> Self {
+        self.refresh_limit = Some(refresh_limit);
+        self
+    }
+
+    pub fn without_refresh_limit(mut self) -> Self {
+        self.refresh_limit = None;
+        self
+    }
+
+    fn validate(&self) -> Result<(), RadrootsSdkError> {
+        self.status.validate()?;
+        if self.capacity == 0 || self.capacity > TRADE_STATUS_WATCH_MAX_CAPACITY {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "trade status watch capacity must be between 1 and {TRADE_STATUS_WATCH_MAX_CAPACITY}"
+                ),
+            });
+        }
+        if self.refresh_interval_ms == 0
+            || self.refresh_interval_ms > TRADE_STATUS_WATCH_MAX_REFRESH_INTERVAL_MS
+        {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "trade status watch refresh interval must be between 1 and {TRADE_STATUS_WATCH_MAX_REFRESH_INTERVAL_MS} milliseconds"
+                ),
+            });
+        }
+        if self.refresh_limit == Some(0) {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "trade status watch refresh limit must be greater than zero".to_owned(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeStatusWatchUpdate {
+    pub sequence: u64,
+    pub status: TradeStatusReceipt,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TradeStatusWatchCancelReceipt {
+    pub state: TradeStatusWatchCancelState,
+    pub buffered_updates_dropped: usize,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TradeStatusWatchCancelState {
+    Cancelled,
+    AlreadyFinished,
+}
+
+#[cfg(feature = "runtime")]
+pub struct TradeStatusWatch {
+    receiver: mpsc::Receiver<Result<TradeStatusWatchUpdate, RadrootsSdkError>>,
+    cancel: Option<oneshot::Sender<()>>,
+    producer: Option<JoinHandle<()>>,
+    capacity: usize,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeStatusWatch {
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn buffered_len(&self) -> usize {
+        self.receiver.len()
+    }
+
+    pub async fn next(&mut self) -> Result<Option<TradeStatusWatchUpdate>, RadrootsSdkError> {
+        match self.receiver.recv().await {
+            Some(Ok(update)) => Ok(Some(update)),
+            Some(Err(error)) => Err(error),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn cancel(&mut self) -> TradeStatusWatchCancelReceipt {
+        let producer_active = self
+            .producer
+            .as_ref()
+            .map(|producer| !producer.is_finished())
+            .unwrap_or(false);
+        let buffered_updates_dropped = self.drain_buffered_updates();
+        let cancel_sent = self
+            .cancel
+            .take()
+            .map(|sender| sender.send(()).is_ok())
+            .unwrap_or(false);
+        let producer_finished = match self.producer.take() {
+            Some(producer) => producer.await.is_ok(),
+            None => true,
+        };
+        let state = if producer_active || cancel_sent || !producer_finished {
+            TradeStatusWatchCancelState::Cancelled
+        } else {
+            TradeStatusWatchCancelState::AlreadyFinished
+        };
+        TradeStatusWatchCancelReceipt {
+            state,
+            buffered_updates_dropped,
+        }
+    }
+
+    fn drain_buffered_updates(&mut self) -> usize {
+        self.receiver.close();
+        let mut dropped = 0;
+        while self.receiver.try_recv().is_ok() {
+            dropped += 1;
+        }
+        dropped
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl Drop for TradeStatusWatch {
+    fn drop(&mut self) {
+        self.drain_buffered_updates();
+        if let Some(cancel) = self.cancel.take() {
+            let _ = cancel.send(());
+        }
+        if let Some(producer) = self.producer.take() {
+            producer.abort();
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 fn trade_status_selector_parts(selector: &str) -> Result<(&str, Option<&str>), RadrootsSdkError> {
     let selector = selector.trim();
     if selector.is_empty() {
@@ -3124,6 +3311,34 @@ impl<'sdk> TradesClient<'sdk> {
         }
     }
 
+    pub async fn watch(
+        &self,
+        request: TradeStatusWatchRequest,
+    ) -> Result<TradeStatusWatch, RadrootsSdkError> {
+        request.validate()?;
+        let handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            RadrootsSdkError::InvalidRequest {
+                message: "trade status watch requires an active Tokio runtime".to_owned(),
+            }
+        })?;
+        let (updates, receiver) = mpsc::channel(request.capacity);
+        let (cancel, cancel_receiver) = oneshot::channel();
+        let sdk = self.sdk.clone();
+        let capacity = request.capacity;
+        let producer = handle.spawn(run_trade_status_watch(
+            sdk,
+            request,
+            updates,
+            cancel_receiver,
+        ));
+        Ok(TradeStatusWatch {
+            receiver,
+            cancel: Some(cancel),
+            producer: Some(producer),
+            capacity,
+        })
+    }
+
     #[cfg(all(feature = "signer-adapters", feature = "relay-runtime"))]
     pub async fn status_with_fetch_adapter<A>(
         &self,
@@ -3256,6 +3471,44 @@ impl<'sdk> TradesClient<'sdk> {
             .map_err(|error| RadrootsSdkError::EventStore {
                 message: error.to_string(),
             })
+    }
+}
+
+#[cfg(feature = "runtime")]
+async fn run_trade_status_watch(
+    sdk: crate::RadrootsClient,
+    request: TradeStatusWatchRequest,
+    updates: mpsc::Sender<Result<TradeStatusWatchUpdate, RadrootsSdkError>>,
+    mut cancel: oneshot::Receiver<()>,
+) {
+    let refresh_interval = Duration::from_millis(request.refresh_interval_ms);
+    let mut sequence = 0_u64;
+    loop {
+        let status_result = sdk.trades().status(request.status.clone()).await;
+        let stop_after_update = status_result
+            .as_ref()
+            .map(|status| status.lifecycle_terminal)
+            .unwrap_or(true);
+        sequence += 1;
+        let update_result = status_result.map(|status| TradeStatusWatchUpdate { sequence, status });
+        let send_result = tokio::select! {
+            _ = &mut cancel => break,
+            send_result = updates.send(update_result) => send_result,
+        };
+        if send_result.is_err() || stop_after_update {
+            break;
+        }
+        if request
+            .refresh_limit
+            .map(|refresh_limit| sequence >= u64::from(refresh_limit))
+            .unwrap_or(false)
+        {
+            break;
+        }
+        tokio::select! {
+            _ = &mut cancel => break,
+            _ = tokio::time::sleep(refresh_interval) => {}
+        }
     }
 }
 

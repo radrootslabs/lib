@@ -55,6 +55,7 @@ signer-adapters = [
 runtime = [
   "std",
   "serde_json",
+  "dep:tokio",
   "dep:hex",
   "dep:radroots_authority",
   "dep:radroots_event_store",
@@ -138,7 +139,7 @@ sqlx = { workspace = true, optional = true, default-features = false, features =
   "runtime-tokio",
   "sqlite",
 ] }
-tokio = { workspace = true, optional = true, features = ["time"] }
+tokio = { workspace = true, optional = true, features = ["macros", "rt", "sync", "time"] }
 uuid = { workspace = true, optional = true }
 
 [[example]]

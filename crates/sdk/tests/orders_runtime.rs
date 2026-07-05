@@ -48,13 +48,14 @@ use radroots_sdk::{
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy,
     RadrootsTradeValidationTrustState, RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet,
     SdkRelayUrlPolicy, SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource,
-    TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT, TRADE_SUBMIT_OPERATION_KIND,
-    TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest, TradeEvidenceIngestRequest,
-    TradeEvidenceMode, TradeEvidenceQueryBranchKind, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeResyncRelayOutcomeKind,
-    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeRevisionDecisionRequest,
-    TradeRevisionProposalRequest, TradeSellerInboxRequest, TradeStatusKind,
-    TradeStatusNextActionKind, TradeStatusRequest, TradeValidationReceiptInspectRequest,
+    TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY,
+    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
+    TradeEvidenceIngestRequest, TradeEvidenceMode, TradeEvidenceQueryBranchKind,
+    TradeMutationOutcome, TradeProposeRequest, TradeRequestEvidenceIngestRequest,
+    TradeResyncRelayOutcomeKind, TradeResyncRelayTransportOutcomeKind, TradeResyncRequest,
+    TradeRevisionDecisionRequest, TradeRevisionProposalRequest, TradeSellerInboxRequest,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest, TradeStatusWatchCancelState,
+    TradeStatusWatchRequest, TradeValidationReceiptInspectRequest,
     TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
@@ -6830,6 +6831,136 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     assert!(!message.contains(request_event.sig.as_str()));
     assert!(!message.contains("\"tags\""));
     assert!(!message.contains("\"content\""));
+}
+
+#[tokio::test]
+async fn trade_status_watch_emits_finite_refresh_window() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let order_id = "watch-finite-refresh-window";
+    let request_event = signed_order_request_event(order_id, 820);
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event, 1_700_400_000_000))
+        .await
+        .expect("request ingest");
+
+    let mut watch = sdk
+        .trades()
+        .watch(
+            TradeStatusWatchRequest::new(status_request(order_id))
+                .with_capacity(2)
+                .with_refresh_interval_ms(1)
+                .with_refresh_limit(2),
+        )
+        .await
+        .expect("watch");
+
+    let first = watch.next().await.expect("first").expect("first update");
+    let second = watch.next().await.expect("second").expect("second update");
+    let closed = watch.next().await.expect("closed");
+    let cancel = watch.cancel().await;
+
+    assert_eq!(watch.capacity(), 2);
+    assert_eq!(first.sequence, 1);
+    assert_eq!(second.sequence, 2);
+    assert_eq!(first.status.status, TradeStatusKind::Requested);
+    assert_eq!(second.status.status, TradeStatusKind::Requested);
+    assert!(closed.is_none());
+    assert_eq!(cancel.state, TradeStatusWatchCancelState::AlreadyFinished);
+}
+
+#[tokio::test]
+async fn trade_status_watch_backpressures_slow_consumer_with_bounded_buffer() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let mut watch = sdk
+        .trades()
+        .watch(
+            TradeStatusWatchRequest::parse("watch-slow-consumer")
+                .expect("watch request")
+                .with_capacity(1)
+                .with_refresh_interval_ms(1)
+                .with_refresh_limit(50),
+        )
+        .await
+        .expect("watch");
+
+    tokio::time::sleep(Duration::from_millis(25)).await;
+    let buffered_len = watch.buffered_len();
+    let cancel = watch.cancel().await;
+    let post_cancel = watch.next().await.expect("post cancel");
+
+    assert_eq!(buffered_len, 1);
+    assert_eq!(cancel.state, TradeStatusWatchCancelState::Cancelled);
+    assert_eq!(cancel.buffered_updates_dropped, 1);
+    assert!(post_cancel.is_none());
+}
+
+#[tokio::test]
+async fn trade_status_watch_cancel_drains_buffer_and_closes_stream() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let mut watch = sdk
+        .trades()
+        .watch(
+            TradeStatusWatchRequest::parse("watch-cancel-close")
+                .expect("watch request")
+                .with_capacity(4)
+                .with_refresh_interval_ms(1),
+        )
+        .await
+        .expect("watch");
+    let first = watch.next().await.expect("first").expect("first update");
+
+    let cancel = watch.cancel().await;
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    let post_cancel = watch.next().await.expect("post cancel");
+
+    assert_eq!(first.sequence, 1);
+    assert_eq!(first.status.status, TradeStatusKind::Missing);
+    assert_eq!(cancel.state, TradeStatusWatchCancelState::Cancelled);
+    assert!(post_cancel.is_none());
+}
+
+#[tokio::test]
+async fn trade_status_watch_closes_after_producer_error() {
+    let sdk = RadrootsClient::builder().build().await.expect("sdk");
+    let mut watch = sdk
+        .trades()
+        .watch(
+            TradeStatusWatchRequest::new(
+                TradeStatusRequest::parse("watch-producer-error")
+                    .expect("status request")
+                    .with_source(SdkTradeStatusSource::ResyncThenLocal),
+            )
+            .with_refresh_interval_ms(1)
+            .with_refresh_limit(2)
+            .with_capacity(2),
+        )
+        .await
+        .expect("watch");
+
+    let error = watch.next().await.expect_err("producer error");
+    let closed = watch.next().await.expect("closed");
+
+    assert!(!error.to_string().is_empty());
+    assert!(closed.is_none());
+}
+
+#[tokio::test]
+async fn trade_status_watch_rejects_unbounded_capacity() {
+    let sdk = RadrootsClient::builder().build().await.expect("sdk");
+    let result = sdk
+        .trades()
+        .watch(
+            TradeStatusWatchRequest::parse("watch-invalid-capacity")
+                .expect("watch request")
+                .with_capacity(TRADE_STATUS_WATCH_MAX_CAPACITY + 1),
+        )
+        .await;
+    let Err(error) = result else {
+        panic!("expected capacity error");
+    };
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(error.to_string().contains("capacity"));
 }
 
 #[tokio::test]
