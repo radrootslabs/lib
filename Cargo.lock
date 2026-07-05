@@ -4311,11 +4311,14 @@ dependencies = [
 name = "radroots_events_codec"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "hex",
  "nostr",
  "radroots_core",
  "radroots_events",
+ "radroots_test_fixtures",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -4819,6 +4822,9 @@ dependencies = [
 [[package]]
 name = "radroots_test_fixtures"
 version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_events",
+]
 
 [[package]]
 name = "radroots_trade"
@@ -8591,6 +8597,7 @@ name = "xtask"
 version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
+ "radroots_events_codec",
  "serde",
  "serde_json",
  "sha2",

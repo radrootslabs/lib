@@ -4,7 +4,15 @@ version = "0.1.0-alpha.2"
 source = "rust"
 
 [public]
-domains = ["profile", "farm", "listing", "order", "trade_validation", "social"]
+domains = [
+  "profile",
+  "farm",
+  "listing",
+  "order",
+  "trade_validation",
+  "social",
+  "knowledge",
+]
 
 [shared_types]
 public = [
@@ -40,10 +48,29 @@ public = [
   "RadrootsOrderInventoryCommitment",
   "RadrootsOrderDecisionOutcome",
   "RadrootsOrderDecision",
+  "RadrootsWikiArticle",
+  "RadrootsWikiRedirect",
+  "RadrootsWikiMergeRequest",
+  "RadrootsKnowledgeSource",
+  "RadrootsKnowledgeClaim",
+  "RadrootsKnowledgeRelation",
+  "RadrootsKnowledgeReview",
+  "RadrootsKnowledgeFieldReport",
+  "RadrootsEvidenceBounty",
+  "RadrootsKnowledgeChangeProposal",
+  "RadrootsContributionAttestation",
+  "RadrootsKnowledgeContractManifest",
+  "RadrootsDecodedEvent",
 ]
 
 [errors]
-classes = ["encode_error", "parse_error", "validation_error", "address_error"]
+classes = [
+  "encode_error",
+  "parse_error",
+  "validation_error",
+  "address_error",
+  "decode_error",
+]
 
 [implementation_provenance]
 model_crates = [
@@ -400,3 +427,47 @@ rust_types = [
 
 [operations.trade_validation_validate_listing_event.conformance]
 vector = "contracts/conformance/vectors/trade_validation/validate_listing_event.v1.json"
+
+[operations.knowledge_contract_manifest_json]
+domain = "knowledge"
+id = "knowledge.contract_manifest_json"
+stability = "beta"
+inputs = ["RadrootsEventContractRegistry"]
+outputs = ["RadrootsKnowledgeContractManifest", "ManifestSha256"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.knowledge_contract_manifest_json.implementation]
+rust_modules = ["crates/events_codec/src/manifest.rs"]
+rust_types = [
+  "radroots_events_codec::manifest::RadrootsKnowledgeContractManifest",
+]
+
+[operations.knowledge_contract_manifest_json.conformance]
+vector = "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json"
+
+[operations.knowledge_verify_and_decode_event]
+domain = "knowledge"
+id = "knowledge.verify_and_decode_event"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["RadrootsDecodedEvent"]
+error_class = "decode_error"
+deterministic = true
+signing = "nip01"
+transport = "native"
+
+[operations.knowledge_verify_and_decode_event.implementation]
+rust_modules = [
+  "crates/events_codec/src/verification.rs",
+  "crates/events_codec/src/knowledge/decode.rs",
+]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_events_codec::verification::RadrootsDecodedEvent",
+]
+
+[operations.knowledge_verify_and_decode_event.conformance]
+vector = "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json"

@@ -10,6 +10,8 @@ mod field_helpers;
 pub mod job;
 #[cfg(feature = "knowledge")]
 pub mod knowledge;
+#[cfg(feature = "contract-manifest")]
+pub mod manifest;
 pub mod parsed;
 pub mod profile;
 pub mod report;
@@ -57,6 +59,11 @@ mod test_fixtures;
 #[cfg(feature = "serde_json")]
 pub mod relay_document;
 
+#[cfg(feature = "contract-manifest")]
+pub use manifest::{
+    RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, contract_manifest_json,
+    contract_manifest_sha256, knowledge_contract_manifest,
+};
 pub use tag_builders::RadrootsEventTagBuilder;
 #[cfg(feature = "knowledge")]
 pub use verification::{

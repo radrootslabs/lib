@@ -1,0 +1,61 @@
+{
+  "suite": "knowledge_downstream_compatibility",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "knowledge_source_downstream_valid_001",
+      "kind": "knowledge.downstream_compatibility.valid",
+      "input": {
+        "fixture": "knowledge_source_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.source.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_claim_downstream_valid_002",
+      "kind": "knowledge.downstream_compatibility.valid",
+      "input": {
+        "fixture": "knowledge_claim_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.claim.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_review_downstream_valid_003",
+      "kind": "knowledge.downstream_compatibility.valid",
+      "input": {
+        "fixture": "knowledge_review_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.review.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "knowledge_field_report_downstream_valid_004",
+      "kind": "knowledge.downstream_compatibility.valid",
+      "input": {
+        "fixture": "knowledge_field_report_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.field_report.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    },
+    {
+      "id": "wiki_article_downstream_valid_005",
+      "kind": "knowledge.downstream_compatibility.valid",
+      "input": {
+        "fixture": "wiki_article_valid"
+      },
+      "expected": {
+        "contract_id": "radroots.wiki.article.v1",
+        "operation": "build_validate_decode_expose"
+      }
+    }
+  ]
+}

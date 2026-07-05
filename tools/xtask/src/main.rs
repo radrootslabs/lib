@@ -14,6 +14,7 @@ use std::process::ExitCode;
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask contract validate");
+    eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
@@ -53,6 +54,7 @@ fn validate_contract() -> Result<(), String> {
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
+        .and_then(|_| contract::validate_knowledge_contract_manifest(&root))
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -70,6 +72,13 @@ fn run_release(args: &[String]) -> Result<(), String> {
 fn run_contract(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("validate") => validate_contract(),
+        Some("knowledge-manifest") => {
+            if args.get(1).map(String::as_str) == Some("--write") {
+                contract::write_knowledge_contract_manifest(&workspace_root())
+            } else {
+                contract::validate_knowledge_contract_manifest(&workspace_root())
+            }
+        }
         _ => Err("unknown contract subcommand".to_string()),
     }
 }
@@ -235,5 +244,6 @@ mod tests {
     fn run_contract_dispatches_validate_command() {
         let _guard = lock_workspace();
         run_contract(&["validate".to_string()]).expect("contract validate");
+        run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

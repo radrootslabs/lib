@@ -1,6 +1,8 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+pub mod knowledge;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ApprovedFixtureIdentity {
     pub label: &'static str,

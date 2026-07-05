@@ -3204,8 +3204,28 @@ fn validate_contract_tags(
 ) -> Result<(), RadrootsContractValidationError> {
     for tag_contract in contract.tags {
         let count = tag_count(&event.tags, tag_contract.name);
+        let has_multiple_contracts_for_name = contract
+            .tags
+            .iter()
+            .filter(|candidate| candidate.name == tag_contract.name)
+            .count()
+            > 1;
         match tag_contract.cardinality {
-            RadrootsTagCardinality::RequiredOne | RadrootsTagCardinality::RequiredMany => {
+            RadrootsTagCardinality::RequiredOne => {
+                if count == 0 {
+                    return Err(RadrootsContractValidationError::MissingTag {
+                        contract_id: contract.id,
+                        name: tag_contract.name,
+                    });
+                }
+                if count != 1 && !has_multiple_contracts_for_name {
+                    return Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                        contract_id: contract.id,
+                        name: tag_contract.name,
+                    });
+                }
+            }
+            RadrootsTagCardinality::RequiredMany => {
                 if count == 0 {
                     return Err(RadrootsContractValidationError::MissingTag {
                         contract_id: contract.id,
@@ -3213,7 +3233,15 @@ fn validate_contract_tags(
                     });
                 }
             }
-            RadrootsTagCardinality::OptionalOne | RadrootsTagCardinality::OptionalMany => {}
+            RadrootsTagCardinality::OptionalOne => {
+                if count > 1 && !has_multiple_contracts_for_name {
+                    return Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                        contract_id: contract.id,
+                        name: tag_contract.name,
+                    });
+                }
+            }
+            RadrootsTagCardinality::OptionalMany => {}
         }
         if tag_contract.name == "contract" {
             let actual = tag_value(&event.tags, "contract").map(ToOwned::to_owned);

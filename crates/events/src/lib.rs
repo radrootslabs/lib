@@ -6,6 +6,8 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+pub const RADROOTS_EVENTS_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod account;
 pub mod app_data;
 pub mod article;

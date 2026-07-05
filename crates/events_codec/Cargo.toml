@@ -19,6 +19,7 @@ serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]
 knowledge = ["serde_json", "radroots_events/knowledge"]
 knowledge-nip54 = ["knowledge", "radroots_events/knowledge-nip54"]
+contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
@@ -30,5 +31,8 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 nostr = { workspace = true, optional = true }
+hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
+sha2 = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
+radroots_test_fixtures = { workspace = true }

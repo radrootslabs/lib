@@ -1,5 +1,5 @@
 #[cfg(all(not(feature = "std"), feature = "serde_json"))]
-use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_events::{

@@ -12,6 +12,12 @@ const ROOT_RELEASE_POLICY_RELATIVE: &str =
     "foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml";
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
+const KNOWLEDGE_MANIFEST_RELATIVE: &str =
+    "contracts/knowledge/knowledge_event_contract_manifest.v1.json";
+const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
+    "contracts/knowledge/knowledge_event_contract_manifest.v1.sha256";
+const KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE: &str =
+    "contracts/conformance/vectors/knowledge/regenproto_compatibility.v1.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
@@ -2047,6 +2053,57 @@ fn validate_all_conformance_vectors(
     for path in paths {
         validate_conformance_vector_file(&path, contract_version)?;
     }
+    Ok(())
+}
+
+pub fn write_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
+    let manifest_json = radroots_events_codec::contract_manifest_json()
+        .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
+    let manifest_sha256 = radroots_events_codec::contract_manifest_sha256()
+        .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
+    let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
+    let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
+    if let Some(parent) = manifest_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create {}: {error}", parent.display()))?;
+    }
+    fs::write(&manifest_path, manifest_json)
+        .map_err(|error| format!("write {}: {error}", manifest_path.display()))?;
+    fs::write(&hash_path, format!("{manifest_sha256}\n"))
+        .map_err(|error| format!("write {}: {error}", hash_path.display()))?;
+    validate_knowledge_contract_manifest(workspace_root)
+}
+
+pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
+    let expected_json = radroots_events_codec::contract_manifest_json()
+        .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
+    let expected_sha256 = radroots_events_codec::contract_manifest_sha256()
+        .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
+    let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
+    let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
+    let actual_json = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
+    let actual_hash = fs::read_to_string(&hash_path)
+        .map_err(|error| format!("read {}: {error}", hash_path.display()))?;
+
+    if actual_json != expected_json {
+        return Err(format!(
+            "knowledge manifest {} is stale; run cargo xtask contract knowledge-manifest --write",
+            KNOWLEDGE_MANIFEST_RELATIVE
+        ));
+    }
+    if actual_hash != format!("{expected_sha256}\n") {
+        return Err(format!(
+            "knowledge manifest hash {} is stale; run cargo xtask contract knowledge-manifest --write",
+            KNOWLEDGE_MANIFEST_SHA256_RELATIVE
+        ));
+    }
+
+    let bundle = load_contract_bundle(workspace_root)?;
+    validate_conformance_vector_file(
+        &workspace_root.join(KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE),
+        &bundle.manifest.contract.version,
+    )?;
     Ok(())
 }
 
