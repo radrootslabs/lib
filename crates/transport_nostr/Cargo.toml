@@ -1,12 +1,12 @@
 [package]
-name = "radroots_relay_transport"
+name = "radroots_transport_nostr"
 publish = false
 version = "0.1.0-alpha.2"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
-description = "Relay transport layer for Radroots"
+description = "Nostr transport layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
 readme = "README"

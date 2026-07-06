@@ -41,6 +41,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay fetch {field} must be greater than zero")]
     InvalidFetchLimit { field: &'static str },
 
+    #[error("Transport contract error: {0}")]
+    TransportContract(String),
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
@@ -61,4 +64,10 @@ pub enum RadrootsRelayTransportError {
 
     #[error("Relay transport error: {0}")]
     Transport(String),
+}
+
+impl From<radroots_transport::RadrootsTransportError> for RadrootsRelayTransportError {
+    fn from(value: radroots_transport::RadrootsTransportError) -> Self {
+        Self::TransportContract(value.to_string())
+    }
 }

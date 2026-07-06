@@ -19,7 +19,7 @@ members = [
   "crates/nostr_runtime",
   "crates/outbox",
   "crates/publish_proxy_protocol",
-  "crates/relay_transport",
+  "crates/transport_nostr",
   "crates/runtime",
   "crates/secret_vault",
   "crates/simplex_app_store",
@@ -86,7 +86,7 @@ radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-feature
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_outbox = { path = "crates/outbox", version = "0.1.0-alpha.2", default-features = false }
 radroots_publish_proxy_protocol = { path = "crates/publish_proxy_protocol", version = "0.1.0-alpha.2", default-features = false }
-radroots_relay_transport = { path = "crates/relay_transport", version = "0.1.0-alpha.2", default-features = false }
+radroots_transport_nostr = { path = "crates/transport_nostr", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_runtime = { path = "crates/simplex_agent_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_store = { path = "crates/simplex_agent_store", version = "0.1.0-alpha.2", default-features = false }

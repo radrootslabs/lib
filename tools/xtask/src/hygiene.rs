@@ -24,7 +24,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
     let mut failures = Vec::new();
     reject_substrings(
         root,
-        &[PathBuf::from("crates/relay_transport/src")],
+        &[PathBuf::from("crates/transport_nostr/src")],
         &["RadrootsEventIngest::verified"],
         "relay fetch must not bypass event-store verification",
         &[],
@@ -408,7 +408,7 @@ mod tests {
         let root = unique_temp_dir("clean");
         write_file(
             &root,
-            "crates/relay_transport/src/fetch.rs",
+            "crates/transport_nostr/src/fetch.rs",
             "fn fetch() { let _ = RadrootsEventIngest::new; }\n",
         );
         write_file(
@@ -430,7 +430,7 @@ mod tests {
         let root = unique_temp_dir("dirty");
         write_file(
             &root,
-            "crates/relay_transport/src/fetch.rs",
+            "crates/transport_nostr/src/fetch.rs",
             "fn fetch() { let _ = RadrootsEventIngest::verified; }\n",
         );
         write_file(
@@ -476,7 +476,7 @@ mod tests {
         let root = unique_temp_dir("run");
         write_file(
             &root,
-            "crates/relay_transport/src/fetch.rs",
+            "crates/transport_nostr/src/fetch.rs",
             "fn fetch() { let _ = RadrootsEventIngest::new; }\n",
         );
         run(&["forbidden-identifiers".to_string()], &root).expect("hygiene run");

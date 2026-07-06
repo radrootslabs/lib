@@ -5,6 +5,7 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 use core::time::Duration;
 use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_transport::RadrootsTransportSatisfactionPolicy;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -23,7 +24,7 @@ const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct RadrootsRelayPublishRequest {
     pub signed_event: RadrootsSignedNostrEvent,
     pub targets: RadrootsRelayTargetSet,
-    pub accepted_quorum: usize,
+    pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     pub now_ms: i64,
 }
 
@@ -33,17 +34,19 @@ impl RadrootsRelayPublishRequest {
         targets: RadrootsRelayTargetSet,
         now_ms: i64,
     ) -> Self {
-        let accepted_quorum = targets.len();
         Self {
             signed_event,
             targets,
-            accepted_quorum,
+            satisfaction_policy: RadrootsTransportSatisfactionPolicy::AllTargets,
             now_ms,
         }
     }
 
-    pub fn with_accepted_quorum(mut self, accepted_quorum: usize) -> Self {
-        self.accepted_quorum = accepted_quorum;
+    pub fn with_satisfaction_policy(
+        mut self,
+        satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    ) -> Self {
+        self.satisfaction_policy = satisfaction_policy;
         self
     }
 }
@@ -100,7 +103,9 @@ where
     A: RadrootsRelayPublishAdapter,
 {
     let event_id = request.signed_event.id.clone();
-    let quorum = request.accepted_quorum;
+    let quorum = request
+        .satisfaction_policy
+        .required_target_count(request.targets.len())?;
     let relays = adapter.publish(request).await?;
     let attempted_count = relays.iter().filter(|receipt| receipt.attempted).count();
     let accepted_count = relays
