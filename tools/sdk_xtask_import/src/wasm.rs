@@ -1,8 +1,10 @@
 use std::{
     collections::BTreeSet,
-    env, fs, io,
+    env,
+    ffi::OsStr,
+    fs, io,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use crate::{
@@ -12,13 +14,37 @@ use crate::{
     wasm_declarations::write_declaration_files,
 };
 
-const WASM_TARGET: &str = "wasm32-unknown-unknown";
+pub(crate) const WASM_TARGET: &str = "wasm32-unknown-unknown";
+const WASM_C_COMPILER_ENV: &str = "CC_wasm32_unknown_unknown";
+const WASM_CFLAGS_ENV: &str = "CFLAGS_wasm32_unknown_unknown";
+const WASM_C_TARGET_ARG: &str = "--target=wasm32-unknown-unknown";
 
 pub fn generate(args: &[String]) -> Result<(), String> {
     validate_package_matrix()?;
     let specs = selected_specs(args)?;
     let root = workspace_root()?;
-    let toolchain = resolve_wasm_toolchain()?;
+    let toolchain = resolve_wasm_toolchain(&root)?;
+    println!(
+        "using Rust toolchain {} for {}: rustc={}, cargo={}",
+        toolchain.channel(),
+        WASM_TARGET,
+        toolchain.rustc().display(),
+        toolchain.cargo().display()
+    );
+    let wasm_c_compiler = if specs
+        .iter()
+        .any(|spec| wasm_package_requires_c_compiler(*spec))
+    {
+        let compiler = resolve_wasm_c_compiler()?;
+        println!(
+            "using WASM C compiler for {}: {}",
+            WASM_TARGET,
+            compiler.path.display()
+        );
+        Some(compiler)
+    } else {
+        None
+    };
     for spec in specs {
         let dist_dir = root.join(spec.package_dir).join("dist");
         if dist_dir.exists() {
@@ -30,11 +56,12 @@ pub fn generate(args: &[String]) -> Result<(), String> {
         for arg in wasm_pack_args(spec) {
             command.arg(arg);
         }
-        if let Some(parent) = toolchain.rustc.parent() {
-            prepend_path(&mut command, parent);
+        toolchain.apply_to_command(&mut command);
+        if let Some(compiler) = wasm_c_compiler.as_ref()
+            && wasm_package_requires_c_compiler(spec)
+        {
+            compiler.apply_to_command(&mut command);
         }
-        command.env("RUSTC", &toolchain.rustc);
-        command.env("CARGO", &toolchain.cargo);
         let status = command.status().map_err(|error| {
             format!(
                 "failed to start wasm-pack for {} while generating {}: {error}",
@@ -57,19 +84,80 @@ pub fn generate(args: &[String]) -> Result<(), String> {
 
 struct WasmToolchain {
     wasm_pack: PathBuf,
-    rustc: PathBuf,
-    cargo: PathBuf,
+    rust: ResolvedRustToolchain,
 }
 
-fn resolve_wasm_toolchain() -> Result<WasmToolchain, String> {
+impl WasmToolchain {
+    fn apply_to_command(&self, command: &mut Command) {
+        self.rust.apply_to_command(command);
+    }
+
+    fn rustc(&self) -> &Path {
+        &self.rust.rustc
+    }
+
+    fn cargo(&self) -> &Path {
+        &self.rust.cargo
+    }
+
+    fn channel(&self) -> &str {
+        &self.rust.channel
+    }
+}
+
+pub(crate) struct ResolvedRustToolchain {
+    pub(crate) channel: String,
+    pub(crate) rustc: PathBuf,
+    pub(crate) cargo: PathBuf,
+    pub(crate) bin_dir: PathBuf,
+}
+
+impl ResolvedRustToolchain {
+    pub(crate) fn apply_to_command(&self, command: &mut Command) {
+        prepend_path(command, &self.bin_dir);
+        command.env("RUSTC", &self.rustc);
+        command.env("CARGO", &self.cargo);
+        command.env("RUSTUP_TOOLCHAIN", &self.channel);
+    }
+}
+
+fn resolve_wasm_toolchain(root: &Path) -> Result<WasmToolchain, String> {
     let wasm_pack = resolve_required_path_tool("wasm-pack")?;
-    let rustc = resolve_required_rust_tool("rustc", "RUSTC")?;
-    let cargo = resolve_required_rust_tool("cargo", "CARGO")?;
-    ensure_wasm_target_installed()?;
-    Ok(WasmToolchain {
-        wasm_pack,
+    let rust = resolve_rust_toolchain(root)?;
+    Ok(WasmToolchain { wasm_pack, rust })
+}
+
+pub(crate) fn resolve_rust_toolchain(root: &Path) -> Result<ResolvedRustToolchain, String> {
+    let toolchain_path = root.join("rust-toolchain.toml");
+    let channel = read_rust_toolchain_channel(&toolchain_path)?;
+    let rustc = rustup_tool_for_channel("rustc", &channel)?;
+    let cargo = rustup_tool_for_channel("cargo", &channel)?;
+    let rustc_bin = rustc.parent().ok_or_else(|| {
+        format!(
+            "rustup resolved rustc for toolchain {channel} without a parent path: {}",
+            rustc.display()
+        )
+    })?;
+    let cargo_bin = cargo.parent().ok_or_else(|| {
+        format!(
+            "rustup resolved cargo for toolchain {channel} without a parent path: {}",
+            cargo.display()
+        )
+    })?;
+    if rustc_bin != cargo_bin {
+        return Err(format!(
+            "rustup resolved mismatched Rust tool paths for toolchain {channel}: rustc={}, cargo={}",
+            rustc.display(),
+            cargo.display()
+        ));
+    }
+    let bin_dir = rustc_bin.to_path_buf();
+    ensure_wasm_target_installed(&channel)?;
+    Ok(ResolvedRustToolchain {
+        channel,
         rustc,
         cargo,
+        bin_dir,
     })
 }
 
@@ -130,6 +218,10 @@ fn selected_specs(args: &[String]) -> Result<Vec<WasmPackageSpec>, String> {
     }
 }
 
+fn wasm_package_requires_c_compiler(spec: WasmPackageSpec) -> bool {
+    spec.key == "events_codec"
+}
+
 fn resolve_required_path_tool(name: &str) -> Result<PathBuf, String> {
     let path = env::var_os("PATH").ok_or_else(|| {
         format!("missing {name}: PATH is not set; install {name} and expose it on PATH")
@@ -188,66 +280,243 @@ fn is_executable_file(path: &Path) -> bool {
     }
 }
 
-fn resolve_required_rust_tool(name: &str, env_var: &str) -> Result<PathBuf, String> {
-    if let Some(path) = explicit_tool_path(env_var) {
-        return Ok(PathBuf::from(path));
+fn read_rust_toolchain_channel(path: &Path) -> Result<String, String> {
+    let contents = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    rust_toolchain_channel_from(&contents)
+}
+
+fn rust_toolchain_channel_from(contents: &str) -> Result<String, String> {
+    let value = contents
+        .parse::<toml::Value>()
+        .map_err(|error| format!("failed to parse rust-toolchain.toml: {error}"))?;
+    let channel = value
+        .get("toolchain")
+        .and_then(|toolchain| toolchain.get("channel"))
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| "rust-toolchain.toml must define toolchain.channel".to_owned())?
+        .trim();
+    if channel.is_empty() {
+        return Err("rust-toolchain.toml toolchain.channel must not be empty".to_owned());
     }
-    rustup_tool(name).ok_or_else(|| {
-        format!(
-            "missing rustup resolution for {name}: set {env_var} explicitly or install rustup with the {WASM_TARGET} target"
-        )
-    })
+    Ok(channel.to_owned())
 }
 
-fn explicit_tool_path(env_var: &str) -> Option<String> {
-    let value = env::var(env_var).ok()?;
-    let trimmed = value.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_owned())
-}
-
-fn rustup_tool(name: &str) -> Option<PathBuf> {
+fn rustup_tool_for_channel(name: &str, channel: &str) -> Result<PathBuf, String> {
     let output = Command::new("rustup")
         .arg("which")
+        .arg("--toolchain")
+        .arg(channel)
         .arg(name)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8(output.stdout).ok()?;
-    let trimmed = path.trim();
-    (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
-}
-
-fn ensure_wasm_target_installed() -> Result<(), String> {
-    let output = Command::new("rustup")
-        .arg("target")
-        .arg("list")
-        .arg("--installed")
         .output()
         .map_err(|error| {
             format!(
-                "failed to verify {WASM_TARGET} target with rustup: {error}; install rustup or set RUSTC/CARGO from a toolchain that supports {WASM_TARGET}"
+                "failed to resolve {name} for Rust toolchain {channel} with rustup: {error}; install rustup toolchain {channel}"
             )
         })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "failed to verify {WASM_TARGET} target with rustup: {}; run `rustup target add {WASM_TARGET}`",
+            "failed to resolve {name} for Rust toolchain {channel}: {}; run `rustup toolchain install {channel}`",
+            stderr.trim()
+        ));
+    }
+    let path = String::from_utf8(output.stdout)
+        .map_err(|error| format!("rustup emitted non-UTF-8 {name} path: {error}"))?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err(format!(
+            "rustup returned an empty {name} path for Rust toolchain {channel}"
+        ));
+    }
+    Ok(PathBuf::from(trimmed))
+}
+
+fn ensure_wasm_target_installed(channel: &str) -> Result<(), String> {
+    let output = Command::new("rustup")
+        .args(rustup_target_list_args(channel))
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to verify {WASM_TARGET} target for Rust toolchain {channel} with rustup: {error}; install rustup toolchain {channel}"
+            )
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "failed to verify {WASM_TARGET} target for Rust toolchain {channel}: {}; run `rustup target add {WASM_TARGET} --toolchain {channel}`",
             stderr.trim()
         ));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if !target_list_contains(&stdout, WASM_TARGET) {
-        return Err(format!(
-            "missing Rust target {WASM_TARGET}: run `rustup target add {WASM_TARGET}`"
-        ));
+    validate_target_list(&stdout, WASM_TARGET, channel)
+}
+
+fn rustup_target_list_args(channel: &str) -> [&str; 5] {
+    ["target", "list", "--installed", "--toolchain", channel]
+}
+
+fn validate_target_list(output: &str, target: &str, channel: &str) -> Result<(), String> {
+    if target_list_contains(output, target) {
+        Ok(())
+    } else {
+        Err(format!(
+            "missing Rust target {target} for Rust toolchain {channel}: run `rustup target add {target} --toolchain {channel}`"
+        ))
     }
-    Ok(())
 }
 
 fn target_list_contains(output: &str, target: &str) -> bool {
     output.lines().any(|line| line.trim() == target)
+}
+
+#[derive(Debug)]
+struct WasmCCompiler {
+    path: PathBuf,
+}
+
+impl WasmCCompiler {
+    fn apply_to_command(&self, command: &mut Command) {
+        command.env(WASM_C_COMPILER_ENV, &self.path);
+        if env::var_os(WASM_CFLAGS_ENV).is_none() {
+            command.env(WASM_CFLAGS_ENV, WASM_C_TARGET_ARG);
+        }
+    }
+}
+
+fn resolve_wasm_c_compiler() -> Result<WasmCCompiler, String> {
+    let path = env::var_os("PATH").unwrap_or_default();
+    let explicit = env::var_os(WASM_C_COMPILER_ENV);
+    let candidates = wasm_c_compiler_candidates(&path);
+    resolve_wasm_c_compiler_with(
+        explicit.as_deref(),
+        &path,
+        candidates,
+        verify_wasm_c_compiler,
+    )
+}
+
+fn resolve_wasm_c_compiler_with<F>(
+    explicit: Option<&OsStr>,
+    path: &OsStr,
+    candidates: Vec<PathBuf>,
+    verify: F,
+) -> Result<WasmCCompiler, String>
+where
+    F: Fn(&Path) -> Result<(), String>,
+{
+    if let Some(explicit) = explicit {
+        let compiler = resolve_explicit_wasm_c_compiler(explicit, path)?;
+        verify(&compiler).map_err(|error| {
+            format!(
+                "{WASM_C_COMPILER_ENV} does not name a WASM-capable C compiler: {}; {error}",
+                compiler.display()
+            )
+        })?;
+        return Ok(WasmCCompiler { path: compiler });
+    }
+
+    let mut checked = Vec::new();
+    for candidate in candidates {
+        if !is_executable_file(&candidate) {
+            continue;
+        }
+        checked.push(candidate.display().to_string());
+        if verify(&candidate).is_ok() {
+            return Ok(WasmCCompiler { path: candidate });
+        }
+    }
+    let checked = if checked.is_empty() {
+        "none".to_owned()
+    } else {
+        checked.join(", ")
+    };
+    Err(format!(
+        "missing suitable WASM C compiler for {WASM_TARGET}: set {WASM_C_COMPILER_ENV} to a clang-style compiler that accepts `{WASM_C_TARGET_ARG}`; checked candidates: {checked}"
+    ))
+}
+
+fn resolve_explicit_wasm_c_compiler(value: &OsStr, path: &OsStr) -> Result<PathBuf, String> {
+    if value.is_empty() {
+        return Err(format!(
+            "{WASM_C_COMPILER_ENV} is set but empty; set it to a compiler path that accepts `{WASM_C_TARGET_ARG}`"
+        ));
+    }
+    let candidate = PathBuf::from(value);
+    if candidate.components().count() > 1 {
+        if is_executable_file(&candidate) {
+            Ok(candidate)
+        } else {
+            Err(format!(
+                "{WASM_C_COMPILER_ENV} is not executable: {}",
+                candidate.display()
+            ))
+        }
+    } else {
+        first_executable_match(value, path).ok_or_else(|| {
+            format!(
+                "{WASM_C_COMPILER_ENV} command was not found on PATH: {}",
+                value.to_string_lossy()
+            )
+        })
+    }
+}
+
+fn first_executable_match(name: &OsStr, path: &OsStr) -> Option<PathBuf> {
+    for dir in env::split_paths(path) {
+        let candidate = dir.join(name);
+        if is_executable_file(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn wasm_c_compiler_candidates(path: &OsStr) -> Vec<PathBuf> {
+    let mut seen = BTreeSet::new();
+    let mut candidates = Vec::new();
+    for name in ["wasm32-unknown-unknown-clang", "clang"] {
+        for candidate in executable_matches(name, path) {
+            let key = fs::canonicalize(&candidate).unwrap_or_else(|_| candidate.clone());
+            if seen.insert(key) {
+                candidates.push(candidate);
+            }
+        }
+    }
+    candidates
+}
+
+fn verify_wasm_c_compiler(path: &Path) -> Result<(), String> {
+    let tempdir = tempfile::tempdir()
+        .map_err(|error| format!("failed to create C probe tempdir: {error}"))?;
+    let source_path = tempdir.path().join("wasm_probe.c");
+    let object_path = tempdir.path().join("wasm_probe.o");
+    fs::write(
+        &source_path,
+        "int radroots_wasm_probe(void) { return 0; }\n",
+    )
+    .map_err(|error| format!("failed to write C compiler probe: {error}"))?;
+    let output = Command::new(path)
+        .arg(WASM_C_TARGET_ARG)
+        .arg("-c")
+        .arg(&source_path)
+        .arg("-o")
+        .arg(&object_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", path.display()))?;
+    if output.status.success() && object_path.is_file() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(format!(
+        "{} rejected `{}` for {}: {}",
+        path.display(),
+        WASM_C_TARGET_ARG,
+        WASM_TARGET,
+        stderr.trim()
+    ))
 }
 
 fn prepend_path(command: &mut Command, prefix: &Path) {
@@ -262,16 +531,20 @@ fn prepend_path(command: &mut Command, prefix: &Path) {
 #[cfg(test)]
 mod tests {
     use std::{
-        env, fs,
-        path::PathBuf,
+        env,
+        ffi::OsStr,
+        fs,
+        path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use crate::package_matrix::wasm_package_specs;
 
     use super::{
-        remove_wasm_pack_gitignore, resolve_path_tool_from_path, rustup_tool, selected_specs,
-        target_list_contains, wasm_pack_args,
+        WASM_C_COMPILER_ENV, WASM_C_TARGET_ARG, WASM_TARGET, remove_wasm_pack_gitignore,
+        resolve_path_tool_from_path, resolve_wasm_c_compiler_with, rust_toolchain_channel_from,
+        rustup_target_list_args, selected_specs, target_list_contains, validate_target_list,
+        wasm_pack_args, wasm_package_requires_c_compiler,
     };
 
     #[test]
@@ -362,8 +635,86 @@ mod tests {
     }
 
     #[test]
-    fn rustup_tool_resolution_is_non_panicking() {
-        let _ = rustup_tool("rustc");
+    fn rustup_target_list_args_are_bound_to_selected_toolchain() {
+        assert_eq!(
+            rustup_target_list_args("1.92.0"),
+            ["target", "list", "--installed", "--toolchain", "1.92.0"]
+        );
+    }
+
+    #[test]
+    fn missing_wasm_target_error_names_selected_toolchain() {
+        let error = validate_target_list("aarch64-apple-darwin\n", WASM_TARGET, "1.92.0")
+            .expect_err("missing target");
+
+        assert!(error.contains("wasm32-unknown-unknown"));
+        assert!(error.contains("--toolchain 1.92.0"));
+    }
+
+    #[test]
+    fn parses_rust_toolchain_channel() {
+        let channel = rust_toolchain_channel_from(
+            r#"[toolchain]
+channel = "1.92.0"
+"#,
+        )
+        .expect("channel");
+
+        assert_eq!(channel, "1.92.0");
+    }
+
+    #[test]
+    fn rejects_missing_wasm_c_compiler() {
+        let error = resolve_wasm_c_compiler_with(None, OsStr::new(""), Vec::new(), |_| Ok(()))
+            .expect_err("missing compiler");
+
+        assert!(error.contains(WASM_C_COMPILER_ENV));
+        assert!(error.contains(WASM_C_TARGET_ARG));
+    }
+
+    #[test]
+    fn rejects_unsuitable_wasm_c_compiler_candidates() {
+        let root = test_root("unsuitable_wasm_c_compiler");
+        fs::create_dir_all(&root).expect("create root");
+        let compiler = root.join("clang");
+        write_executable(compiler.clone());
+
+        let error = resolve_wasm_c_compiler_with(None, OsStr::new(""), vec![compiler], |_| {
+            Err("target unsupported".to_owned())
+        })
+        .expect_err("unsuitable compiler");
+
+        assert!(error.contains("missing suitable WASM C compiler"));
+        assert!(error.contains(WASM_C_COMPILER_ENV));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn accepts_verified_wasm_c_compiler_candidate() {
+        let root = test_root("verified_wasm_c_compiler");
+        fs::create_dir_all(&root).expect("create root");
+        let compiler = root.join("clang");
+        write_executable(compiler.clone());
+
+        let resolved = resolve_wasm_c_compiler_with(
+            None,
+            OsStr::new(""),
+            vec![compiler.clone()],
+            |path: &Path| {
+                assert_eq!(path, compiler);
+                Ok(())
+            },
+        )
+        .expect("compiler");
+
+        assert_eq!(resolved.path, compiler);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn events_codec_wasm_requires_c_compiler() {
+        assert!(wasm_package_requires_c_compiler(wasm_package_specs()[0]));
+        assert!(!wasm_package_requires_c_compiler(wasm_package_specs()[1]));
     }
 
     fn write_executable(path: PathBuf) {
