@@ -568,18 +568,6 @@ fn dvm_trade_transition_proof_plan(
         vec!["p".to_owned(), request.worker_pubkey.as_str().to_owned()],
         vec![
             "i".to_owned(),
-            request.listing_event_id.as_str().to_owned(),
-            "event".to_owned(),
-            "radroots:listing_event".to_owned(),
-        ],
-        vec![
-            "i".to_owned(),
-            request.request_event_id.as_str().to_owned(),
-            "event".to_owned(),
-            "radroots:order_request_event".to_owned(),
-        ],
-        vec![
-            "i".to_owned(),
             request.decision_event_id.as_str().to_owned(),
             "event".to_owned(),
             "radroots:order_decision_event".to_owned(),

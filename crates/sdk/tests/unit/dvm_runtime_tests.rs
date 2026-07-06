@@ -62,30 +62,12 @@ fn trade_transition_proof_plan_builds_microstandard_wire_payload() {
         plan.frozen_draft.tags[1],
         vec![
             "i",
-            event_id('1').as_str(),
-            "event",
-            "radroots:listing_event"
-        ]
-    );
-    assert_eq!(
-        plan.frozen_draft.tags[2],
-        vec![
-            "i",
-            event_id('2').as_str(),
-            "event",
-            "radroots:order_request_event"
-        ]
-    );
-    assert_eq!(
-        plan.frozen_draft.tags[3],
-        vec![
-            "i",
             event_id('3').as_str(),
             "event",
             "radroots:order_decision_event"
         ]
     );
-    assert_eq!(plan.frozen_draft.tags[4], vec!["p", WORKER]);
+    assert_eq!(plan.frozen_draft.tags[2], vec!["p", WORKER]);
 }
 
 #[test]

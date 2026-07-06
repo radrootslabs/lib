@@ -996,12 +996,13 @@ fn workflow_plan_builders_cover_success_and_actor_mismatch_paths() {
     .expect("validation error");
     assert!(invalid_request_message(validation_error).contains("payload is invalid"));
 
+    let valid_submit_draft = order::build_order_request_draft(
+        &ptr(event_id('d').as_str().to_owned()),
+        &order_request_payload(),
+    )
+    .expect("valid submit draft");
     let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
-        WireEventParts {
-            kind: KIND_ORDER_REQUEST,
-            content: "{}".to_owned(),
-            tags: vec![vec!["p".to_owned(), pubkey('c').as_str().to_owned()]],
-        },
+        valid_submit_draft.into_wire_parts(),
         TRADE_SUBMIT_CONTRACT_ID,
         pubkey('c').as_str(),
         1_700_000_000,
