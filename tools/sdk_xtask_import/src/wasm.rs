@@ -373,25 +373,32 @@ fn target_list_contains(output: &str, target: &str) -> bool {
 #[derive(Debug)]
 struct WasmCCompiler {
     path: PathBuf,
+    cflags: ResolvedWasmCFlags,
 }
 
 impl WasmCCompiler {
     fn apply_to_command(&self, command: &mut Command) {
         command.env(WASM_C_COMPILER_ENV, &self.path);
-        if env::var_os(WASM_CFLAGS_ENV).is_none() {
-            command.env(WASM_CFLAGS_ENV, WASM_C_TARGET_ARG);
-        }
+        command.env(WASM_CFLAGS_ENV, &self.cflags.value);
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedWasmCFlags {
+    value: String,
+    args: Vec<String>,
 }
 
 fn resolve_wasm_c_compiler() -> Result<WasmCCompiler, String> {
     let path = env::var_os("PATH").unwrap_or_default();
     let explicit = env::var_os(WASM_C_COMPILER_ENV);
+    let cflags = resolve_wasm_cflags(env::var_os(WASM_CFLAGS_ENV).as_deref())?;
     let candidates = wasm_c_compiler_candidates(&path);
     resolve_wasm_c_compiler_with(
         explicit.as_deref(),
         &path,
         candidates,
+        cflags,
         verify_wasm_c_compiler,
     )
 }
@@ -400,20 +407,24 @@ fn resolve_wasm_c_compiler_with<F>(
     explicit: Option<&OsStr>,
     path: &OsStr,
     candidates: Vec<PathBuf>,
+    cflags: ResolvedWasmCFlags,
     verify: F,
 ) -> Result<WasmCCompiler, String>
 where
-    F: Fn(&Path) -> Result<(), String>,
+    F: Fn(&Path, &ResolvedWasmCFlags) -> Result<(), String>,
 {
     if let Some(explicit) = explicit {
         let compiler = resolve_explicit_wasm_c_compiler(explicit, path)?;
-        verify(&compiler).map_err(|error| {
+        verify(&compiler, &cflags).map_err(|error| {
             format!(
                 "{WASM_C_COMPILER_ENV} does not name a WASM-capable C compiler: {}; {error}",
                 compiler.display()
             )
         })?;
-        return Ok(WasmCCompiler { path: compiler });
+        return Ok(WasmCCompiler {
+            path: compiler,
+            cflags,
+        });
     }
 
     let mut checked = Vec::new();
@@ -422,8 +433,11 @@ where
             continue;
         }
         checked.push(candidate.display().to_string());
-        if verify(&candidate).is_ok() {
-            return Ok(WasmCCompiler { path: candidate });
+        if verify(&candidate, &cflags).is_ok() {
+            return Ok(WasmCCompiler {
+                path: candidate,
+                cflags,
+            });
         }
     }
     let checked = if checked.is_empty() {
@@ -434,6 +448,144 @@ where
     Err(format!(
         "missing suitable WASM C compiler for {WASM_TARGET}: set {WASM_C_COMPILER_ENV} to a clang-style compiler that accepts `{WASM_C_TARGET_ARG}`; checked candidates: {checked}"
     ))
+}
+
+fn resolve_wasm_cflags(value: Option<&OsStr>) -> Result<ResolvedWasmCFlags, String> {
+    let raw = match value {
+        Some(value) => Some(
+            value
+                .to_str()
+                .ok_or_else(|| format!("{WASM_CFLAGS_ENV} must be valid UTF-8 compiler flags"))?,
+        ),
+        None => None,
+    };
+    resolve_wasm_cflags_from_str(raw)
+}
+
+fn resolve_wasm_cflags_from_str(value: Option<&str>) -> Result<ResolvedWasmCFlags, String> {
+    let raw = value.unwrap_or("");
+    let words = parse_cflags_words(raw)?;
+    let mut has_required_target = false;
+    for index in 0..words.len() {
+        let word = &words[index];
+        if word == WASM_C_TARGET_ARG {
+            has_required_target = true;
+        } else if wasm_cflags_target_conflict(index, &words) {
+            return Err(format!(
+                "{WASM_CFLAGS_ENV} contains unsupported target flag `{}`; use `{WASM_C_TARGET_ARG}` or omit the target so xtask can prepend it",
+                wasm_cflags_target_display(index, &words)
+            ));
+        }
+    }
+    let value = if has_required_target {
+        raw.to_owned()
+    } else {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            WASM_C_TARGET_ARG.to_owned()
+        } else {
+            format!("{WASM_C_TARGET_ARG} {trimmed}")
+        }
+    };
+    let args = parse_cflags_words(&value)?;
+    Ok(ResolvedWasmCFlags { value, args })
+}
+
+fn wasm_cflags_target_conflict(index: usize, words: &[String]) -> bool {
+    let word = &words[index];
+    word == "--target"
+        || word == "-target"
+        || word.starts_with("--target=")
+        || word.starts_with("-target=")
+}
+
+fn wasm_cflags_target_display(index: usize, words: &[String]) -> String {
+    let word = &words[index];
+    if matches!(word.as_str(), "--target" | "-target")
+        && let Some(target) = words.get(index + 1)
+    {
+        return format!("{word} {target}");
+    }
+    word.clone()
+}
+
+fn parse_cflags_words(value: &str) -> Result<Vec<String>, String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut quote = CFlagsQuote::None;
+    let mut in_word = false;
+    let mut chars = value.chars();
+    while let Some(character) = chars.next() {
+        match quote {
+            CFlagsQuote::None => match character {
+                character if character.is_whitespace() => {
+                    if in_word {
+                        words.push(std::mem::take(&mut current));
+                        in_word = false;
+                    }
+                }
+                '\'' => {
+                    in_word = true;
+                    quote = CFlagsQuote::Single;
+                }
+                '"' => {
+                    in_word = true;
+                    quote = CFlagsQuote::Double;
+                }
+                '\\' => {
+                    in_word = true;
+                    let Some(escaped) = chars.next() else {
+                        return Err(format!("{WASM_CFLAGS_ENV} ends with an unfinished escape"));
+                    };
+                    current.push(escaped);
+                }
+                character => {
+                    in_word = true;
+                    current.push(character);
+                }
+            },
+            CFlagsQuote::Single => {
+                if character == '\'' {
+                    quote = CFlagsQuote::None;
+                } else {
+                    current.push(character);
+                }
+            }
+            CFlagsQuote::Double => {
+                if character == '"' {
+                    quote = CFlagsQuote::None;
+                } else if character == '\\' {
+                    let Some(escaped) = chars.next() else {
+                        return Err(format!("{WASM_CFLAGS_ENV} ends with an unfinished escape"));
+                    };
+                    current.push(escaped);
+                } else {
+                    current.push(character);
+                }
+            }
+        }
+    }
+    match quote {
+        CFlagsQuote::None => {
+            if in_word {
+                words.push(current);
+            }
+            Ok(words)
+        }
+        CFlagsQuote::Single => Err(format!(
+            "{WASM_CFLAGS_ENV} contains an unterminated ' quote"
+        )),
+        CFlagsQuote::Double => Err(format!(
+            "{WASM_CFLAGS_ENV} contains an unterminated \" quote"
+        )),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CFlagsQuote {
+    None,
+    Single,
+    Double,
 }
 
 fn resolve_explicit_wasm_c_compiler(value: &OsStr, path: &OsStr) -> Result<PathBuf, String> {
@@ -486,7 +638,7 @@ fn wasm_c_compiler_candidates(path: &OsStr) -> Vec<PathBuf> {
     candidates
 }
 
-fn verify_wasm_c_compiler(path: &Path) -> Result<(), String> {
+fn verify_wasm_c_compiler(path: &Path, cflags: &ResolvedWasmCFlags) -> Result<(), String> {
     let tempdir = tempfile::tempdir()
         .map_err(|error| format!("failed to create C probe tempdir: {error}"))?;
     let source_path = tempdir.path().join("wasm_probe.c");
@@ -497,7 +649,7 @@ fn verify_wasm_c_compiler(path: &Path) -> Result<(), String> {
     )
     .map_err(|error| format!("failed to write C compiler probe: {error}"))?;
     let output = Command::new(path)
-        .arg(WASM_C_TARGET_ARG)
+        .args(&cflags.args)
         .arg("-c")
         .arg(&source_path)
         .arg("-o")
@@ -511,9 +663,9 @@ fn verify_wasm_c_compiler(path: &Path) -> Result<(), String> {
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     Err(format!(
-        "{} rejected `{}` for {}: {}",
+        "{} rejected `{WASM_CFLAGS_ENV}={}` for {}: {}",
         path.display(),
-        WASM_C_TARGET_ARG,
+        cflags.value,
         WASM_TARGET,
         stderr.trim()
     ))
@@ -535,14 +687,16 @@ mod tests {
         ffi::OsStr,
         fs,
         path::{Path, PathBuf},
+        process::Command,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use crate::package_matrix::wasm_package_specs;
 
     use super::{
-        WASM_C_COMPILER_ENV, WASM_C_TARGET_ARG, WASM_TARGET, remove_wasm_pack_gitignore,
-        resolve_path_tool_from_path, resolve_wasm_c_compiler_with, rust_toolchain_channel_from,
+        ResolvedWasmCFlags, WASM_C_COMPILER_ENV, WASM_C_TARGET_ARG, WASM_CFLAGS_ENV, WASM_TARGET,
+        WasmCCompiler, remove_wasm_pack_gitignore, resolve_path_tool_from_path,
+        resolve_wasm_c_compiler_with, resolve_wasm_cflags_from_str, rust_toolchain_channel_from,
         rustup_target_list_args, selected_specs, target_list_contains, validate_target_list,
         wasm_pack_args, wasm_package_requires_c_compiler,
     };
@@ -665,8 +819,14 @@ channel = "1.92.0"
 
     #[test]
     fn rejects_missing_wasm_c_compiler() {
-        let error = resolve_wasm_c_compiler_with(None, OsStr::new(""), Vec::new(), |_| Ok(()))
-            .expect_err("missing compiler");
+        let error = resolve_wasm_c_compiler_with(
+            None,
+            OsStr::new(""),
+            Vec::new(),
+            wasm_cflags(None),
+            |_, _| Ok(()),
+        )
+        .expect_err("missing compiler");
 
         assert!(error.contains(WASM_C_COMPILER_ENV));
         assert!(error.contains(WASM_C_TARGET_ARG));
@@ -679,9 +839,13 @@ channel = "1.92.0"
         let compiler = root.join("clang");
         write_executable(compiler.clone());
 
-        let error = resolve_wasm_c_compiler_with(None, OsStr::new(""), vec![compiler], |_| {
-            Err("target unsupported".to_owned())
-        })
+        let error = resolve_wasm_c_compiler_with(
+            None,
+            OsStr::new(""),
+            vec![compiler],
+            wasm_cflags(None),
+            |_, _| Err("target unsupported".to_owned()),
+        )
         .expect_err("unsuitable compiler");
 
         assert!(error.contains("missing suitable WASM C compiler"));
@@ -700,21 +864,116 @@ channel = "1.92.0"
             None,
             OsStr::new(""),
             vec![compiler.clone()],
-            |path: &Path| {
+            wasm_cflags(Some("-O2")),
+            |path: &Path, cflags: &ResolvedWasmCFlags| {
                 assert_eq!(path, compiler);
+                assert_eq!(cflags.value, format!("{WASM_C_TARGET_ARG} -O2"));
                 Ok(())
             },
         )
         .expect("compiler");
 
         assert_eq!(resolved.path, compiler);
+        assert_eq!(resolved.cflags.value, format!("{WASM_C_TARGET_ARG} -O2"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn absent_wasm_cflags_resolve_to_required_target() {
+        let resolved = resolve_wasm_cflags_from_str(None).expect("cflags");
+
+        assert_eq!(resolved.value, WASM_C_TARGET_ARG);
+        assert_eq!(resolved.args, [WASM_C_TARGET_ARG.to_owned()]);
+    }
+
+    #[test]
+    fn present_valid_wasm_cflags_preserve_additional_flags() {
+        let value = "-O2 --target=wasm32-unknown-unknown -fvisibility=hidden";
+        let resolved = resolve_wasm_cflags_from_str(Some(value)).expect("cflags");
+
+        assert_eq!(resolved.value, value);
+        assert_eq!(
+            resolved.args,
+            [
+                "-O2".to_owned(),
+                WASM_C_TARGET_ARG.to_owned(),
+                "-fvisibility=hidden".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_target_wasm_cflags_prepend_required_target() {
+        let resolved = resolve_wasm_cflags_from_str(Some(" -O2 -fPIC ")).expect("target prepended");
+
+        assert_eq!(resolved.value, format!("{WASM_C_TARGET_ARG} -O2 -fPIC"));
+        assert_eq!(
+            resolved.args,
+            [
+                WASM_C_TARGET_ARG.to_owned(),
+                "-O2".to_owned(),
+                "-fPIC".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn conflicting_target_wasm_cflags_are_rejected() {
+        let error = resolve_wasm_cflags_from_str(Some("--target=wasm32-wasip1 -O2"))
+            .expect_err("conflicting target");
+
+        assert!(error.contains(WASM_CFLAGS_ENV));
+        assert!(error.contains("--target=wasm32-wasip1"));
+        assert!(error.contains(WASM_C_TARGET_ARG));
+    }
+
+    #[test]
+    fn separated_target_wasm_cflags_are_rejected() {
+        let error = resolve_wasm_cflags_from_str(Some("--target wasm32-unknown-unknown"))
+            .expect_err("separated target");
+
+        assert!(error.contains("--target wasm32-unknown-unknown"));
+        assert!(error.contains(WASM_C_TARGET_ARG));
+    }
+
+    #[test]
+    fn wasm_c_compiler_command_uses_resolved_cflags() {
+        let compiler = WasmCCompiler {
+            path: PathBuf::from("clang"),
+            cflags: wasm_cflags(Some("-O2")),
+        };
+        let mut command = Command::new("wasm-pack");
+
+        compiler.apply_to_command(&mut command);
+
+        assert_eq!(
+            command_env(&command, WASM_C_COMPILER_ENV),
+            Some(std::ffi::OsString::from("clang"))
+        );
+        assert_eq!(
+            command_env(&command, WASM_CFLAGS_ENV),
+            Some(std::ffi::OsString::from(format!("{WASM_C_TARGET_ARG} -O2")))
+        );
     }
 
     #[test]
     fn events_codec_wasm_requires_c_compiler() {
         assert!(wasm_package_requires_c_compiler(wasm_package_specs()[0]));
         assert!(!wasm_package_requires_c_compiler(wasm_package_specs()[1]));
+    }
+
+    fn wasm_cflags(value: Option<&str>) -> ResolvedWasmCFlags {
+        resolve_wasm_cflags_from_str(value).expect("resolved cflags")
+    }
+
+    fn command_env(command: &Command, name: &str) -> Option<std::ffi::OsString> {
+        command.get_envs().find_map(|(key, value)| {
+            if key == OsStr::new(name) {
+                value.map(std::ffi::OsStr::to_os_string)
+            } else {
+                None
+            }
+        })
     }
 
     fn write_executable(path: PathBuf) {
