@@ -5,7 +5,10 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::{
     RadrootsNostrEvent,
-    ids::{RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey},
+    ids::{
+        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
+        relay_url_is_valid,
+    },
     kinds::*,
 };
 
@@ -3406,13 +3409,6 @@ fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
 
 fn visible_text_is_valid(value: &str) -> bool {
     !value.trim().is_empty() && !value.chars().any(char::is_control)
-}
-
-fn relay_url_is_valid(value: &str) -> bool {
-    (value.starts_with("ws://") || value.starts_with("wss://"))
-        && value.len() > "ws://".len()
-        && value.trim() == value
-        && !value.chars().any(char::is_control)
 }
 
 fn url_is_valid(value: &str) -> bool {

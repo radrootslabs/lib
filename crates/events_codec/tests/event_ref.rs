@@ -10,11 +10,15 @@ use radroots_events_codec::event_ref::{
 };
 use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS};
 
+fn hex_64(character: char) -> String {
+    core::iter::repeat_n(character, 64).collect()
+}
+
 #[test]
 fn build_and_parse_roundtrip_with_d_tag_and_relays() {
     let event = common::event_ref_with_d(
-        "id",
-        "author",
+        &hex_64('1'),
+        &hex_64('2'),
         42,
         "d-tag",
         Some(vec!["wss://relay".to_string()]),
@@ -32,7 +36,7 @@ fn build_and_parse_roundtrip_with_d_tag_and_relays() {
 
 #[test]
 fn build_and_parse_roundtrip_without_d_tag_or_relays() {
-    let event = common::event_ref("id", "author", KIND_POST);
+    let event = common::event_ref(&hex_64('3'), &hex_64('4'), KIND_POST);
     let tag = build_event_ref_tag("e", &event);
 
     assert_eq!(tag.len(), 5);
@@ -47,38 +51,76 @@ fn build_and_parse_roundtrip_without_d_tag_or_relays() {
 }
 
 #[test]
-fn parse_event_ref_tag_allows_relay_only_fifth_entry() {
+fn parse_event_ref_tag_rejects_noncanonical_event_pointer_shapes() {
     let tag = vec![
         "e".to_string(),
-        "id".to_string(),
-        "author".to_string(),
+        hex_64('5'),
+        hex_64('6'),
         KIND_POST.to_string(),
         "wss://relay".to_string(),
     ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
 
-    let parsed = parse_event_ref_tag(&tag, "e").unwrap();
-    assert!(parsed.d_tag.is_none());
-    assert_eq!(parsed.relays, Some(vec!["wss://relay".to_string()]));
-
-    let ws_tag = vec![
+    let tag = vec![
         "e".to_string(),
-        "id".to_string(),
-        "author".to_string(),
+        hex_64('5'),
+        hex_64('6'),
         KIND_POST.to_string(),
-        "ws://relay".to_string(),
     ];
-    let parsed = parse_event_ref_tag(&ws_tag, "e").unwrap();
-    assert!(parsed.d_tag.is_none());
-    assert_eq!(parsed.relays, Some(vec!["ws://relay".to_string()]));
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        "not-hex".to_string(),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        String::new(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        "not-hex".to_string(),
+        KIND_POST.to_string(),
+        String::new(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        "bad d-tag".to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        String::new(),
+        "https://relay".to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
 }
 
 #[test]
 fn parse_event_ref_tag_rejects_invalid_kind() {
     let tag = vec![
         "e".to_string(),
-        "id".to_string(),
-        "author".to_string(),
+        hex_64('7'),
+        hex_64('8'),
         "bad".to_string(),
+        String::new(),
     ];
 
     let err = parse_event_ref_tag(&tag, "e").unwrap_err();
@@ -93,13 +135,12 @@ fn parse_event_ref_tag_rejects_wrong_tag_name_and_missing_fields() {
 
     let tag = vec![
         "e".to_string(),
-        "id".to_string(),
-        "author".to_string(),
+        hex_64('9'),
+        hex_64('a'),
         KIND_POST.to_string(),
     ];
-    let parsed = parse_event_ref_tag(&tag, "e").unwrap();
-    assert!(parsed.d_tag.is_none());
-    assert!(parsed.relays.is_none());
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
 }
 
 #[test]
@@ -120,7 +161,8 @@ fn parse_event_ref_tag_rejects_missing_required_values() {
 
 #[test]
 fn find_event_ref_tag_locates_first_match() {
-    let event = common::event_ref("id", "author", KIND_POST);
+    let id = hex_64('b');
+    let event = common::event_ref(&id, &hex_64('c'), KIND_POST);
     let tags = vec![
         vec!["p".to_string(), "pubkey".to_string()],
         build_event_ref_tag("e", &event),
@@ -128,7 +170,7 @@ fn find_event_ref_tag_locates_first_match() {
 
     let found = find_event_ref_tag(&tags, "e").unwrap();
     assert_eq!(found[0], "e");
-    assert_eq!(found[1], "id");
+    assert_eq!(found[1], id);
 }
 
 #[test]

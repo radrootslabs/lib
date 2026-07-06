@@ -188,6 +188,7 @@ validated_string_id!(RadrootsOrderQuoteId, validate_commercial_id);
 validated_string_id!(RadrootsInventoryBinId, validate_commercial_id);
 validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
 validated_string_id!(RadrootsEventPointer, validate_hex_64);
+validated_string_id!(RadrootsRelayUrl, validate_relay_url);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsAddressableCoordinateParts {
@@ -217,12 +218,7 @@ impl RadrootsNostrEventPointer {
         let mut canonical_relays = Vec::new();
         for relay in relays {
             let relay = relay.into();
-            if relay.is_empty()
-                || relay.trim() != relay
-                || relay.chars().any(|character| character.is_control())
-            {
-                return Err(RadrootsIdParseError::InvalidCharacter);
-            }
+            RadrootsRelayUrl::parse(relay.as_str())?;
             canonical_relays.push(relay);
         }
         Ok(Self {
@@ -318,6 +314,29 @@ fn validate_visible_token(value: &str, max_len: usize) -> Result<String, Radroot
             .any(|character| character.is_control() || character.is_whitespace())
     {
         return Err(RadrootsIdParseError::InvalidCharacter);
+    }
+    Ok(value.to_string())
+}
+
+pub fn relay_url_is_valid(value: &str) -> bool {
+    validate_relay_url(value).is_ok()
+}
+
+fn validate_relay_url(value: &str) -> Result<String, RadrootsIdParseError> {
+    if value.is_empty() {
+        return Err(RadrootsIdParseError::Empty);
+    }
+    if value.trim() != value || value.chars().any(char::is_control) {
+        return Err(RadrootsIdParseError::InvalidCharacter);
+    }
+    if !(value.starts_with("ws://") || value.starts_with("wss://")) {
+        return Err(RadrootsIdParseError::InvalidFormat);
+    }
+    if value.len() <= "ws://".len() {
+        return Err(RadrootsIdParseError::InvalidLength {
+            expected: "ws://".len() + 1,
+            actual: value.len(),
+        });
     }
     Ok(value.to_string())
 }
@@ -564,6 +583,47 @@ mod tests {
         assert_identifier_impls!(RadrootsInventoryBinId, "bin-1");
         assert_identifier_impls!(RadrootsEconomicsDigest, "digest-1");
         assert_identifier_impls!(RadrootsEventPointer, hex_64('d').as_str());
+        assert_identifier_impls!(RadrootsRelayUrl, "wss://relay.example.com");
+    }
+
+    #[test]
+    fn relay_urls_require_websocket_scheme_and_visible_boundaries() {
+        assert_eq!(
+            RadrootsRelayUrl::parse("ws://relay.example.com")
+                .expect("relay url")
+                .as_str(),
+            "ws://relay.example.com"
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://relay.example.com")
+                .expect("relay url")
+                .as_str(),
+            "wss://relay.example.com"
+        );
+        assert!(relay_url_is_valid("wss://relay.example.com"));
+        assert_eq!(
+            RadrootsRelayUrl::parse("").unwrap_err(),
+            RadrootsIdParseError::Empty
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("http://relay.example.com").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("ws://").unwrap_err(),
+            RadrootsIdParseError::InvalidLength {
+                expected: 6,
+                actual: 5
+            }
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse(" wss://relay.example.com").unwrap_err(),
+            RadrootsIdParseError::InvalidCharacter
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://relay.example.com\nmiddle").unwrap_err(),
+            RadrootsIdParseError::InvalidCharacter
+        );
     }
 
     #[test]
@@ -584,21 +644,38 @@ mod tests {
             ]
         );
 
-        for relay in [
-            "",
-            " wss://relay.example",
-            "wss://relay.example\n",
-            "wss://relay.example/\u{7}",
-        ] {
-            assert_eq!(
-                RadrootsNostrEventPointer::new(
-                    RadrootsEventId::parse(hex_64('e')).expect("event id"),
-                    [relay],
-                )
-                .unwrap_err(),
-                RadrootsIdParseError::InvalidCharacter
-            );
-        }
+        assert_eq!(
+            RadrootsNostrEventPointer::new(
+                RadrootsEventId::parse(hex_64('e')).expect("event id"),
+                [""],
+            )
+            .unwrap_err(),
+            RadrootsIdParseError::Empty
+        );
+        assert_eq!(
+            RadrootsNostrEventPointer::new(
+                RadrootsEventId::parse(hex_64('e')).expect("event id"),
+                ["http://relay.example"],
+            )
+            .unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsNostrEventPointer::new(
+                RadrootsEventId::parse(hex_64('e')).expect("event id"),
+                [" wss://relay.example"],
+            )
+            .unwrap_err(),
+            RadrootsIdParseError::InvalidCharacter
+        );
+        assert_eq!(
+            RadrootsNostrEventPointer::new(
+                RadrootsEventId::parse(hex_64('e')).expect("event id"),
+                ["wss://relay.example\n"],
+            )
+            .unwrap_err(),
+            RadrootsIdParseError::InvalidCharacter
+        );
     }
 
     #[cfg(feature = "serde")]

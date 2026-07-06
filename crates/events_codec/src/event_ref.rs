@@ -5,13 +5,12 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::RadrootsNostrEventRef;
+use radroots_events::{
+    RadrootsNostrEventRef,
+    ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl},
+};
 
 use crate::error::EventParseError;
-
-fn looks_like_relay_url(s: &str) -> bool {
-    s.starts_with("ws://") || s.starts_with("wss://")
-}
 
 pub fn build_event_ref_tag(tag: &str, event: &RadrootsNostrEventRef) -> Vec<String> {
     let relays_len = event.relays.as_ref().map(|r| r.len()).unwrap_or(0);
@@ -34,22 +33,35 @@ pub fn parse_event_ref_tag(
     if tag.first().map(|s| s.as_str()) != Some(tag_name) {
         return Err(EventParseError::InvalidTag(tag_name));
     }
+    if tag.len() < 5 {
+        return Err(EventParseError::InvalidTag(tag_name));
+    }
     let id = tag.get(1).ok_or(EventParseError::InvalidTag(tag_name))?;
+    RadrootsEventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let author = tag.get(2).ok_or(EventParseError::InvalidTag(tag_name))?;
+    RadrootsPublicKey::parse(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let kind_s = tag.get(3).ok_or(EventParseError::InvalidTag(tag_name))?;
     let kind: u32 = kind_s
         .parse()
         .map_err(|e| EventParseError::InvalidNumber(tag_name, e))?;
 
-    let (d_tag, relays_start) = match tag.get(4) {
-        Some(v) if tag.len() == 5 && looks_like_relay_url(v) => (None, 4),
-        Some(v) if v.is_empty() => (None, 5),
-        Some(v) => (Some(v.clone()), 5),
-        None => (None, 4),
+    let d_tag = match tag.get(4) {
+        Some(value) if value.is_empty() => None,
+        Some(value) => {
+            if RadrootsRelayUrl::parse(value).is_ok() {
+                return Err(EventParseError::InvalidTag(tag_name));
+            }
+            RadrootsDTag::parse(value).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+            Some(value.clone())
+        }
+        None => return Err(EventParseError::InvalidTag(tag_name)),
     };
 
-    let relays = if tag.len() > relays_start {
-        Some(tag[relays_start..].to_vec())
+    let relays = if tag.len() > 5 {
+        for relay in &tag[5..] {
+            RadrootsRelayUrl::parse(relay).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+        }
+        Some(tag[5..].to_vec())
     } else {
         None
     };
