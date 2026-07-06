@@ -54,6 +54,7 @@ crates = [
   "radroots_protected_store",
   "radroots_publish_proxy_protocol",
   "radroots_transport_nostr",
+  "radroots_transport_reticulum",
   "radroots_replica_db",
   "radroots_replica_db_schema",
   "radroots_replica_sync",

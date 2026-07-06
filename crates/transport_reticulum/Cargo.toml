@@ -1,0 +1,26 @@
+[package]
+name = "radroots_transport_reticulum"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Reticulum preview transport layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "radroots_transport/serde"]
+
+[dependencies]
+radroots_transport = { workspace = true, default-features = false }
+serde = { workspace = true, optional = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

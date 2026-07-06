@@ -1,7 +1,9 @@
 use radroots_transport::{
-    RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -87,6 +89,28 @@ fn satisfaction_policy_counts_target_statuses() {
             .is_satisfied_by(3, 0)
             .expect_err("zero required targets"),
         RadrootsTransportError::InvalidSatisfactionPolicy
+    );
+}
+
+#[test]
+fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
+    let target =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:preview")
+            .expect("target");
+    let receipt = RadrootsTransportDeliveryReceipt {
+        request_id: "reticulum-preview".to_owned(),
+        target_receipts: vec![RadrootsTransportTargetReceipt::new(
+            target,
+            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::Deferred),
+        )],
+    };
+
+    assert!(RadrootsTransportDeliveryTargetStatus::Deferred.is_terminal());
+    assert_eq!(receipt.satisfied_target_count(), 0);
+    assert!(
+        !RadrootsTransportSatisfactionPolicy::AnyTarget
+            .is_satisfied_by(1, receipt.satisfied_target_count())
+            .expect("satisfaction check")
     );
 }
 

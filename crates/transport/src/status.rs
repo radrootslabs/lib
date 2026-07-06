@@ -17,7 +17,7 @@ impl RadrootsTransportDeliveryTargetStatus {
     }
 
     pub fn counts_as_satisfied(self) -> bool {
-        matches!(self, Self::Accepted | Self::Deferred)
+        matches!(self, Self::Accepted)
     }
 }
 

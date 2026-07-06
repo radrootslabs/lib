@@ -4876,6 +4876,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_transport_reticulum"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_transport",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots_types"
 version = "0.1.0-alpha.2"
 dependencies = [
