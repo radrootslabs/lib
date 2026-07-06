@@ -15,7 +15,10 @@ use std::{
 };
 
 use crate::RadrootsNostrEvent;
-use crate::contract::{RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, event_contract};
+use crate::contract::{
+    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError, event_contract,
+    validate_event_contract_parts,
+};
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
@@ -29,6 +32,10 @@ pub enum RadrootsDraftError {
         contract_id: String,
         expected_kind: u32,
         actual_kind: u32,
+    },
+    ContractShape {
+        contract_id: String,
+        error: RadrootsContractValidationError,
     },
     SignedEventPubkeyMismatch {
         expected_pubkey: String,
@@ -75,6 +82,11 @@ impl fmt::Display for RadrootsDraftError {
             } => write!(
                 f,
                 "event contract `{contract_id}` expects kind {expected_kind}, got {actual_kind}"
+            ),
+            Self::ContractShape { contract_id, error } => write!(
+                f,
+                "event contract `{contract_id}` shape validation failed with code {}",
+                error.code()
             ),
             Self::SignedEventPubkeyMismatch {
                 expected_pubkey,
@@ -182,6 +194,12 @@ impl RadrootsFrozenEventDraft {
         }
         let expected_pubkey = RadrootsPublicKey::parse(expected_pubkey.as_ref())?.into_string();
         let content = content.into();
+        validate_event_contract_parts(kind, &tags, content.as_str(), contract.id).map_err(
+            |error| RadrootsDraftError::ContractShape {
+                contract_id: contract.id.to_owned(),
+                error,
+            },
+        )?;
         let expected_event_id =
             compute_nip01_event_id(expected_pubkey.as_str(), created_at, kind, &tags, &content)?
                 .into_string();
@@ -381,7 +399,7 @@ fn push_json_string(target: &mut String, value: &str) -> Result<(), RadrootsDraf
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinds::{KIND_POST, KIND_PROFILE};
+    use crate::kinds::{KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE, KIND_POST, KIND_PROFILE};
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -411,6 +429,10 @@ mod tests {
             "a".repeat(64),
         )
         .expect("draft")
+    }
+
+    fn claim_content() -> &'static str {
+        r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#
     }
 
     #[test]
@@ -516,6 +538,108 @@ mod tests {
         )
         .expect_err("invalid pubkey");
         assert!(matches!(invalid_pubkey, RadrootsDraftError::IdParse(_)));
+    }
+
+    #[test]
+    fn draft_constructor_rejects_contract_shape_errors() {
+        let missing_contract = RadrootsFrozenEventDraft::new(
+            "radroots.knowledge.claim.v1",
+            KIND_KNOWLEDGE_CLAIM,
+            1,
+            Vec::new(),
+            claim_content(),
+            hex_64('a'),
+        )
+        .expect_err("missing contract tag");
+        assert!(matches!(
+            missing_contract,
+            RadrootsDraftError::ContractShape {
+                error: RadrootsContractValidationError::MissingTag {
+                    name: "contract",
+                    ..
+                },
+                ..
+            }
+        ));
+
+        let invalid_event_pointer = RadrootsFrozenEventDraft::new(
+            "radroots.knowledge.claim.v1",
+            KIND_KNOWLEDGE_CLAIM,
+            1,
+            vec![
+                vec![
+                    "contract".to_owned(),
+                    "radroots.knowledge.claim.v1".to_owned(),
+                ],
+                vec![
+                    "source".to_owned(),
+                    "not-hex".to_owned(),
+                    hex_64('a'),
+                    KIND_KNOWLEDGE_SOURCE.to_string(),
+                    String::new(),
+                ],
+            ],
+            claim_content(),
+            hex_64('a'),
+        )
+        .expect_err("invalid event pointer");
+        assert!(matches!(
+            invalid_event_pointer,
+            RadrootsDraftError::ContractShape {
+                error: RadrootsContractValidationError::TagValueMismatch { name: "source", .. },
+                ..
+            }
+        ));
+
+        let invalid_relay = RadrootsFrozenEventDraft::new(
+            "radroots.knowledge.claim.v1",
+            KIND_KNOWLEDGE_CLAIM,
+            1,
+            vec![
+                vec![
+                    "contract".to_owned(),
+                    "radroots.knowledge.claim.v1".to_owned(),
+                ],
+                vec![
+                    "source".to_owned(),
+                    hex_64('b'),
+                    hex_64('a'),
+                    KIND_KNOWLEDGE_SOURCE.to_string(),
+                    String::new(),
+                    "http://relay.radroots.example".to_owned(),
+                ],
+            ],
+            claim_content(),
+            hex_64('a'),
+        )
+        .expect_err("invalid event pointer relay");
+        assert!(matches!(
+            invalid_relay,
+            RadrootsDraftError::ContractShape {
+                error: RadrootsContractValidationError::TagValueMismatch { name: "source", .. },
+                ..
+            }
+        ));
+
+        let invalid_json = RadrootsFrozenEventDraft::new(
+            "radroots.knowledge.claim.v1",
+            KIND_KNOWLEDGE_CLAIM,
+            1,
+            vec![vec![
+                "contract".to_owned(),
+                "radroots.knowledge.claim.v1".to_owned(),
+            ]],
+            "not-json",
+            hex_64('a'),
+        )
+        .expect_err("invalid json");
+        assert!(matches!(
+            invalid_json,
+            RadrootsDraftError::ContractShape {
+                error: RadrootsContractValidationError::InvalidJsonContent { .. },
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -690,6 +814,13 @@ mod tests {
                 contract_id: "radroots.social.post.v1".to_owned(),
                 expected_kind: KIND_POST,
                 actual_kind: KIND_PROFILE,
+            },
+            RadrootsDraftError::ContractShape {
+                contract_id: "radroots.knowledge.claim.v1".to_owned(),
+                error: RadrootsContractValidationError::MissingTag {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    name: "contract",
+                },
             },
             RadrootsDraftError::SignedEventPubkeyMismatch {
                 expected_pubkey: hex_64('a'),

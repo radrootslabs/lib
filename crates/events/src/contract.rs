@@ -3183,20 +3183,29 @@ pub fn validate_event_contract_shape(
     event: &RadrootsNostrEvent,
     contract_id: &str,
 ) -> Result<(), RadrootsContractValidationError> {
+    validate_event_contract_parts(event.kind, &event.tags, event.content.as_str(), contract_id)
+}
+
+pub fn validate_event_contract_parts(
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+    contract_id: &str,
+) -> Result<(), RadrootsContractValidationError> {
     let contract = event_contract(contract_id).ok_or_else(|| {
         RadrootsContractValidationError::UnknownContract {
             contract_id: contract_id.to_owned(),
         }
     })?;
-    if event.kind != contract.kind {
+    if kind != contract.kind {
         return Err(RadrootsContractValidationError::KindMismatch {
             expected: contract.kind,
-            actual: event.kind,
+            actual: kind,
         });
     }
-    validate_content_shape(event, contract)?;
-    validate_contract_tags(event, contract)?;
-    validate_custom_knowledge_contract(event, contract)?;
+    validate_content_shape_parts(content, contract)?;
+    validate_contract_tags_parts(tags, contract)?;
+    validate_custom_knowledge_contract_parts(content, contract)?;
     Ok(())
 }
 
@@ -3260,13 +3269,13 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
     }
 }
 
-fn validate_content_shape(
-    event: &RadrootsNostrEvent,
+fn validate_content_shape_parts(
+    content: &str,
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
     match contract.content_schema {
         RadrootsContentSchema::Empty => {
-            if event.content.is_empty() {
+            if content.is_empty() {
                 Ok(())
             } else {
                 Err(RadrootsContractValidationError::ContentMustBeEmpty {
@@ -3274,17 +3283,17 @@ fn validate_content_shape(
                 })
             }
         }
-        RadrootsContentSchema::JsonObject => parse_content_object(event, contract.id).map(|_| ()),
+        RadrootsContentSchema::JsonObject => parse_content_object(content, contract.id).map(|_| ()),
         _ => Ok(()),
     }
 }
 
-fn validate_contract_tags(
-    event: &RadrootsNostrEvent,
+fn validate_contract_tags_parts(
+    tags: &[Vec<String>],
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
     for tag_contract in contract.tags {
-        let count = tag_count(&event.tags, tag_contract.name);
+        let count = tag_count(tags, tag_contract.name);
         let has_multiple_contracts_for_name = contract
             .tags
             .iter()
@@ -3325,7 +3334,7 @@ fn validate_contract_tags(
             RadrootsTagCardinality::OptionalMany => {}
         }
         if tag_contract.name == "contract" {
-            let actual = tag_value(&event.tags, "contract").map(ToOwned::to_owned);
+            let actual = tag_value(tags, "contract").map(ToOwned::to_owned);
             if actual.as_deref() != Some(contract.id) {
                 return Err(RadrootsContractValidationError::TagValueMismatch {
                     contract_id: contract.id,
@@ -3335,18 +3344,17 @@ fn validate_contract_tags(
                 });
             }
         }
-        validate_contract_tag_values(event, contract, tag_contract)?;
+        validate_contract_tag_values(tags, contract, tag_contract)?;
     }
     Ok(())
 }
 
 fn validate_contract_tag_values(
-    event: &RadrootsNostrEvent,
+    tags: &[Vec<String>],
     contract: &RadrootsEventContract,
     tag_contract: &RadrootsTagContract,
 ) -> Result<(), RadrootsContractValidationError> {
-    for tag in event
-        .tags
+    for tag in tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(tag_contract.name))
     {
@@ -3456,14 +3464,14 @@ fn tag_value_type_expectation(value_type: RadrootsTagValueType) -> &'static str 
     }
 }
 
-fn validate_custom_knowledge_contract(
-    event: &RadrootsNostrEvent,
+fn validate_custom_knowledge_contract_parts(
+    content: &str,
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
     let Some(expected_schema) = custom_knowledge_schema(contract.id) else {
         return Ok(());
     };
-    let object = parse_content_object(event, contract.id)?;
+    let object = parse_content_object(content, contract.id)?;
     reject_forbidden_knowledge_fields(&object, contract.id)?;
 
     match object.get("schema").and_then(|value| value.as_str()) {
@@ -3501,10 +3509,10 @@ fn validate_custom_knowledge_contract(
 }
 
 fn parse_content_object(
-    event: &RadrootsNostrEvent,
+    content: &str,
     contract_id: &'static str,
 ) -> Result<serde_json::Map<String, serde_json::Value>, RadrootsContractValidationError> {
-    match serde_json::from_str::<serde_json::Value>(&event.content) {
+    match serde_json::from_str::<serde_json::Value>(content) {
         Ok(serde_json::Value::Object(object)) => Ok(object),
         _ => Err(RadrootsContractValidationError::InvalidJsonContent { contract_id }),
     }
@@ -4328,33 +4336,29 @@ mod tests {
         let required_many =
             synthetic_event_contract("radroots.test.required_many.v1", REQUIRED_MANY_TEST_TAGS);
         assert_eq!(
-            validate_contract_tags(&unsigned_event(KIND_POST, Vec::new(), ""), &required_many),
+            validate_contract_tags_parts(&[], &required_many),
             Err(RadrootsContractValidationError::MissingTag {
                 contract_id: "radroots.test.required_many.v1",
                 name: "test_many",
             })
         );
         assert_eq!(
-            validate_contract_tags(
-                &unsigned_event(KIND_POST, vec![vec!["test_many", "one"]], ""),
-                &required_many,
+            validate_contract_tags_parts(
+                &vec![vec!["test_many".to_owned(), "one".to_owned()]],
+                &required_many
             ),
             Ok(())
         );
 
         let optional_one =
             synthetic_event_contract("radroots.test.optional_one.v1", OPTIONAL_ONE_TEST_TAGS);
+        assert_eq!(validate_contract_tags_parts(&[], &optional_one), Ok(()));
         assert_eq!(
-            validate_contract_tags(&unsigned_event(KIND_POST, Vec::new(), ""), &optional_one),
-            Ok(())
-        );
-        assert_eq!(
-            validate_contract_tags(
-                &unsigned_event(
-                    KIND_POST,
-                    vec![vec!["test_optional", "one"], vec!["test_optional", "two"],],
-                    "",
-                ),
+            validate_contract_tags_parts(
+                &vec![
+                    vec!["test_optional".to_owned(), "one".to_owned()],
+                    vec!["test_optional".to_owned(), "two".to_owned()],
+                ],
                 &optional_one,
             ),
             Err(RadrootsContractValidationError::TagCardinalityMismatch {
@@ -4368,12 +4372,11 @@ mod tests {
             DUPLICATE_REQUIRED_TEST_TAGS,
         );
         assert_eq!(
-            validate_contract_tags(
-                &unsigned_event(
-                    KIND_POST,
-                    vec![vec!["test_required", "one"], vec!["test_required", "two"],],
-                    "",
-                ),
+            validate_contract_tags_parts(
+                &vec![
+                    vec!["test_required".to_owned(), "one".to_owned()],
+                    vec!["test_required".to_owned(), "two".to_owned()],
+                ],
                 &duplicate_required,
             ),
             Ok(())
@@ -4384,12 +4387,11 @@ mod tests {
             DUPLICATE_OPTIONAL_TEST_TAGS,
         );
         assert_eq!(
-            validate_contract_tags(
-                &unsigned_event(
-                    KIND_POST,
-                    vec![vec!["test_optional", "one"], vec!["test_optional", "two"],],
-                    "",
-                ),
+            validate_contract_tags_parts(
+                &vec![
+                    vec!["test_optional".to_owned(), "one".to_owned()],
+                    vec!["test_optional".to_owned(), "two".to_owned()],
+                ],
                 &duplicate_optional,
             ),
             Ok(())
