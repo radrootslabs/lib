@@ -1,6 +1,6 @@
 use radroots_local_events::{
     LocalEventRecordInput, LocalEventRecordUpdate, LocalEventsStore, LocalRecordFamily,
-    LocalRecordStatus, MIGRATIONS, PublishOutboxStatus, RelayDeliveryEvidence, SourceRuntime,
+    LocalRecordStatus, MIGRATIONS, PublishOutboxStatus, SourceRuntime,
 };
 use radroots_sql_core::migrations::migrations_run_all_up;
 use radroots_sql_core::{SqlExecutor, SqliteExecutor};
@@ -35,8 +35,6 @@ fn local_work(record_id: &str) -> LocalEventRecordInput {
         event_sig: None,
         raw_event_json: None,
         outbox_status: PublishOutboxStatus::None,
-        relay_set_fingerprint: None,
-        relay_delivery_json: None,
     }
 }
 
@@ -62,13 +60,6 @@ fn signed_event(record_id: &str) -> LocalEventRecordInput {
         event_sig: Some("sig-a".to_owned()),
         raw_event_json: Some(json!({"id":"event-a","kind":3421})),
         outbox_status: PublishOutboxStatus::Pending,
-        relay_set_fingerprint: Some("relay-set-a".to_owned()),
-        relay_delivery_json: Some(
-            RelayDeliveryEvidence::pending(["ws://127.0.0.1:8080"])
-                .expect("pending delivery")
-                .to_json_value()
-                .expect("pending delivery json"),
-        ),
     }
 }
 
@@ -149,34 +140,12 @@ fn outbox_status_updates_signed_event_records() {
             record_id: "event-a".to_owned(),
             status: LocalRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
-            relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(
-                RelayDeliveryEvidence::acknowledged(
-                    ["ws://127.0.0.1:8080"],
-                    ["ws://127.0.0.1:8080"],
-                    ["ws://127.0.0.1:8080"],
-                    Vec::new(),
-                )
-                .expect("acknowledged delivery")
-                .to_json_value()
-                .expect("acknowledged delivery json"),
-            ),
             updated_at_ms: 3000,
         })
         .expect("update outbox");
 
     assert_eq!(updated.status, LocalRecordStatus::Published);
     assert_eq!(updated.outbox_status, PublishOutboxStatus::Acknowledged);
-    assert_eq!(
-        updated.relay_delivery_json,
-        Some(json!({
-            "state": "acknowledged",
-            "target_relays": ["ws://127.0.0.1:8080"],
-            "connected_relays": ["ws://127.0.0.1:8080"],
-            "acknowledged_relays": ["ws://127.0.0.1:8080"],
-            "failed_relays": []
-        }))
-    );
 }
 
 #[test]
@@ -198,18 +167,6 @@ fn changed_after_uses_change_seq_for_appends_and_outbox_updates() {
             record_id: "event-a".to_owned(),
             status: LocalRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
-            relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(
-                RelayDeliveryEvidence::acknowledged(
-                    ["ws://127.0.0.1:8080"],
-                    ["ws://127.0.0.1:8080"],
-                    ["ws://127.0.0.1:8080"],
-                    Vec::new(),
-                )
-                .expect("acknowledged delivery")
-                .to_json_value()
-                .expect("acknowledged delivery json"),
-            ),
             updated_at_ms: 3000,
         })
         .expect("update outbox");
@@ -384,10 +341,6 @@ fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str)
             .raw_event_json
             .map(|value| serde_json::to_string(&value).expect("encode raw event")),
         input.outbox_status.as_str(),
-        input.relay_set_fingerprint,
-        input
-            .relay_delivery_json
-            .map(|value| serde_json::to_string(&value).expect("encode relay delivery")),
     ])
     .to_string();
     let outcome = executor
@@ -413,10 +366,8 @@ fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str)
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status,
-                relay_set_fingerprint,
-                relay_delivery_json
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                outbox_status
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             &params,
         )
         .expect("insert old local event record");
@@ -450,8 +401,6 @@ fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
             event_sig text,
             raw_event_json text,
             outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
-            relay_set_fingerprint text,
-            relay_delivery_json text,
             check (change_seq >= 1),
             check (trim(record_id) <> ''),
             check (family <> 'local_work' or local_work_json is not null),
@@ -515,10 +464,6 @@ fn insert_pre_network_change_tracking_record(
             .raw_event_json
             .map(|value| serde_json::to_string(&value).expect("encode raw event")),
         input.outbox_status.as_str(),
-        input.relay_set_fingerprint,
-        input
-            .relay_delivery_json
-            .map(|value| serde_json::to_string(&value).expect("encode relay delivery")),
     ])
     .to_string();
     let outcome = executor
@@ -545,10 +490,8 @@ fn insert_pre_network_change_tracking_record(
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status,
-                relay_set_fingerprint,
-                relay_delivery_json
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                outbox_status
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             &params,
         )
         .expect("insert pre-network local event record");

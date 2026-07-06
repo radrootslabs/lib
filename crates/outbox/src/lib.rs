@@ -9,11 +9,13 @@ mod store;
 pub use error::RadrootsOutboxError;
 pub use migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 pub use model::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
+    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
+    RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
+    RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetRecord,
+    RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
-    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
-    RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
 pub use store::RadrootsOutbox;

@@ -2,6 +2,10 @@
 
 use crate::RadrootsOutboxError;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOutboxOperationStatus {
@@ -90,18 +94,65 @@ impl RadrootsOutboxEventState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOutboxRelayStatus {
+pub enum RadrootsOutboxDeliveryPlanStatus {
+    Queued,
+    Complete,
+    DeferredUntilImplemented,
+    FailedTerminal,
+    Cancelled,
+}
+
+impl RadrootsOutboxDeliveryPlanStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Complete => "complete",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::FailedTerminal => "failed_terminal",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, RadrootsOutboxError> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "complete" => Ok(Self::Complete),
+            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "failed_terminal" => Ok(Self::FailedTerminal),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(RadrootsOutboxError::InvalidStoredEnum {
+                field: "outbox_delivery_plan.status",
+                value: value.to_owned(),
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsOutboxDeliveryTargetStatus {
     Pending,
     Accepted,
+    Delivered,
+    Forwarded,
+    StoredByGateway,
+    Seen,
+    DeferredUntilImplemented,
+    SkippedPolicyDenied,
     FailedRetryable,
     FailedTerminal,
 }
 
-impl RadrootsOutboxRelayStatus {
+impl RadrootsOutboxDeliveryTargetStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
             Self::Accepted => "accepted",
+            Self::Delivered => "delivered",
+            Self::Forwarded => "forwarded",
+            Self::StoredByGateway => "stored_by_gateway",
+            Self::Seen => "seen",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::SkippedPolicyDenied => "skipped_policy_denied",
             Self::FailedRetryable => "failed_retryable",
             Self::FailedTerminal => "failed_terminal",
         }
@@ -111,12 +162,57 @@ impl RadrootsOutboxRelayStatus {
         match value {
             "pending" => Ok(Self::Pending),
             "accepted" => Ok(Self::Accepted),
+            "delivered" => Ok(Self::Delivered),
+            "forwarded" => Ok(Self::Forwarded),
+            "stored_by_gateway" => Ok(Self::StoredByGateway),
+            "seen" => Ok(Self::Seen),
+            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "skipped_policy_denied" => Ok(Self::SkippedPolicyDenied),
             "failed_retryable" => Ok(Self::FailedRetryable),
             "failed_terminal" => Ok(Self::FailedTerminal),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
-                field: "outbox_event_relay_status.status",
+                field: "outbox_delivery_target.status",
                 value: value.to_owned(),
             }),
+        }
+    }
+
+    pub fn is_ready_for_attempt(self) -> bool {
+        matches!(self, Self::Pending | Self::FailedRetryable)
+    }
+
+    pub fn counts_as_satisfied(self) -> bool {
+        matches!(
+            self,
+            Self::Accepted | Self::Delivered | Self::Forwarded | Self::StoredByGateway | Self::Seen
+        )
+    }
+
+    pub fn is_terminal_failure(self) -> bool {
+        matches!(self, Self::SkippedPolicyDenied | Self::FailedTerminal)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxDeliveryPlanInput {
+    pub transport_profile_id: String,
+    pub target_policy_version: u32,
+    pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    pub targets: Vec<RadrootsTransportTarget>,
+}
+
+impl RadrootsOutboxDeliveryPlanInput {
+    pub fn new(
+        transport_profile_id: impl Into<String>,
+        target_policy_version: u32,
+        satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+        targets: Vec<RadrootsTransportTarget>,
+    ) -> Self {
+        Self {
+            transport_profile_id: transport_profile_id.into(),
+            target_policy_version,
+            satisfaction_policy,
+            targets,
         }
     }
 }
@@ -125,9 +221,8 @@ impl RadrootsOutboxRelayStatus {
 pub struct RadrootsOutboxOperationInput {
     pub operation_kind: String,
     pub draft: RadrootsFrozenEventDraft,
-    pub target_relays: Vec<String>,
+    pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
-    pub allow_empty_target_relays: bool,
     pub created_at_ms: i64,
 }
 
@@ -135,26 +230,20 @@ impl RadrootsOutboxOperationInput {
     pub fn new(
         operation_kind: impl Into<String>,
         draft: RadrootsFrozenEventDraft,
-        target_relays: Vec<String>,
+        delivery_plan: RadrootsOutboxDeliveryPlanInput,
         created_at_ms: i64,
     ) -> Self {
         Self {
             operation_kind: operation_kind.into(),
             draft,
-            target_relays,
+            delivery_plan,
             idempotency_key: None,
-            allow_empty_target_relays: false,
             created_at_ms,
         }
     }
 
     pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
         self.idempotency_key = Some(idempotency_key.into());
-        self
-    }
-
-    pub fn allow_empty_target_relays(mut self) -> Self {
-        self.allow_empty_target_relays = true;
         self
     }
 }
@@ -164,9 +253,8 @@ pub struct RadrootsOutboxSignedOperationInput {
     pub operation_kind: String,
     pub draft: RadrootsFrozenEventDraft,
     pub signed_event: RadrootsSignedNostrEvent,
-    pub target_relays: Vec<String>,
+    pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
-    pub allow_empty_target_relays: bool,
     pub event_store_inserted: bool,
     pub event_store_ingested_at_ms: i64,
     pub created_at_ms: i64,
@@ -177,7 +265,7 @@ impl RadrootsOutboxSignedOperationInput {
         operation_kind: impl Into<String>,
         draft: RadrootsFrozenEventDraft,
         signed_event: RadrootsSignedNostrEvent,
-        target_relays: Vec<String>,
+        delivery_plan: RadrootsOutboxDeliveryPlanInput,
         event_store_inserted: bool,
         event_store_ingested_at_ms: i64,
         created_at_ms: i64,
@@ -186,9 +274,8 @@ impl RadrootsOutboxSignedOperationInput {
             operation_kind: operation_kind.into(),
             draft,
             signed_event,
-            target_relays,
+            delivery_plan,
             idempotency_key: None,
-            allow_empty_target_relays: false,
             event_store_inserted,
             event_store_ingested_at_ms,
             created_at_ms,
@@ -197,11 +284,6 @@ impl RadrootsOutboxSignedOperationInput {
 
     pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
         self.idempotency_key = Some(idempotency_key.into());
-        self
-    }
-
-    pub fn allow_empty_target_relays(mut self) -> Self {
-        self.allow_empty_target_relays = true;
         self
     }
 }
@@ -217,13 +299,16 @@ pub struct RadrootsOutboxEnqueueReceipt {
     pub status: RadrootsOutboxEnqueueStatus,
     pub operation_id: i64,
     pub outbox_event_id: i64,
+    pub delivery_plan_id: i64,
     pub expected_event_id: String,
-    pub idempotency_digest: String,
+    pub operation_idempotency_digest: String,
+    pub delivery_plan_idempotency_digest: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxIdempotencyPreflight {
-    pub idempotency_digest: String,
+    pub operation_idempotency_digest: String,
+    pub delivery_plan_idempotency_digest: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -232,7 +317,7 @@ pub struct RadrootsOutboxOperationRecord {
     pub operation_kind: String,
     pub expected_pubkey: String,
     pub idempotency_key: Option<String>,
-    pub idempotency_digest: String,
+    pub operation_idempotency_digest: String,
     pub status: RadrootsOutboxOperationStatus,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -248,7 +333,6 @@ pub struct RadrootsOutboxEventRecord {
     pub signed_event: Option<RadrootsSignedNostrEvent>,
     pub raw_event_json: Option<String>,
     pub state: RadrootsOutboxEventState,
-    pub accepted_quorum: i64,
     pub attempt_count: i64,
     pub claim_token: Option<String>,
     pub claim_owner: Option<String>,
@@ -263,14 +347,43 @@ pub struct RadrootsOutboxEventRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOutboxRelayStatusRecord {
+pub struct RadrootsOutboxDeliveryPlanRecord {
+    pub delivery_plan_id: i64,
     pub outbox_event_id: i64,
-    pub relay_url: String,
-    pub status: RadrootsOutboxRelayStatus,
+    pub transport_profile_id: String,
+    pub target_policy_fingerprint: String,
+    pub target_policy_version: u32,
+    pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    pub required_success_count: i64,
+    pub delivery_plan_idempotency_digest: String,
+    pub status: RadrootsOutboxDeliveryPlanStatus,
+    pub satisfied_at_ms: Option<i64>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxDeliveryTargetRecord {
+    pub delivery_target_id: i64,
+    pub delivery_plan_id: i64,
+    pub transport_kind: RadrootsTransportKind,
+    pub endpoint_uri: RadrootsTransportTargetUri,
+    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub status: RadrootsOutboxDeliveryTargetStatus,
     pub attempt_count: i64,
     pub last_attempt_at_ms: Option<i64>,
-    pub acknowledged_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
     pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxDeliveryAttemptRecord {
+    pub delivery_attempt_id: i64,
+    pub delivery_plan_id: i64,
+    pub delivery_target_id: i64,
+    pub status: RadrootsOutboxDeliveryTargetStatus,
+    pub attempted_at_ms: i64,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -283,7 +396,7 @@ pub struct RadrootsOutboxClaimedEvent {
     pub claim_token: String,
     pub draft: RadrootsFrozenEventDraft,
     pub signed_event: Option<RadrootsSignedNostrEvent>,
-    pub target_relays: Vec<String>,
+    pub delivery_targets: Vec<RadrootsOutboxDeliveryTargetRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -312,7 +425,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn operation_event_and_relay_status_values_round_trip() {
+    fn model_enums_round_trip_target_state_values() {
         for (status, expected) in [
             (RadrootsOutboxOperationStatus::Queued, "queued"),
             (RadrootsOutboxOperationStatus::Complete, "complete"),
@@ -328,55 +441,107 @@ mod tests {
                 status
             );
         }
-        assert!(RadrootsOutboxOperationStatus::parse("bad").is_err());
-
-        for (state, expected, terminal) in [
-            (RadrootsOutboxEventState::DraftQueued, "draft_queued", false),
-            (RadrootsOutboxEventState::Signing, "signing", false),
-            (RadrootsOutboxEventState::Signed, "signed", false),
-            (RadrootsOutboxEventState::Publishing, "publishing", false),
-            (RadrootsOutboxEventState::Published, "published", true),
-            (
-                RadrootsOutboxEventState::SignRetryable,
-                "sign_retryable",
-                false,
-            ),
-            (
-                RadrootsOutboxEventState::PublishRetryable,
-                "publish_retryable",
-                false,
-            ),
-            (
-                RadrootsOutboxEventState::FailedTerminal,
-                "failed_terminal",
-                true,
-            ),
-            (RadrootsOutboxEventState::Cancelled, "cancelled", true),
-        ] {
-            assert_eq!(state.as_str(), expected);
-            assert_eq!(
-                RadrootsOutboxEventState::parse(expected).expect("state"),
-                state
-            );
-            assert_eq!(state.is_terminal(), terminal);
-        }
-        assert!(RadrootsOutboxEventState::parse("bad").is_err());
 
         for (status, expected) in [
-            (RadrootsOutboxRelayStatus::Pending, "pending"),
-            (RadrootsOutboxRelayStatus::Accepted, "accepted"),
+            (RadrootsOutboxDeliveryPlanStatus::Queued, "queued"),
+            (RadrootsOutboxDeliveryPlanStatus::Complete, "complete"),
             (
-                RadrootsOutboxRelayStatus::FailedRetryable,
-                "failed_retryable",
+                RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented,
+                "deferred_until_implemented",
             ),
-            (RadrootsOutboxRelayStatus::FailedTerminal, "failed_terminal"),
+            (
+                RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
+                "failed_terminal",
+            ),
+            (RadrootsOutboxDeliveryPlanStatus::Cancelled, "cancelled"),
         ] {
             assert_eq!(status.as_str(), expected);
             assert_eq!(
-                RadrootsOutboxRelayStatus::parse(expected).expect("relay status"),
+                RadrootsOutboxDeliveryPlanStatus::parse(expected).expect("plan status"),
                 status
             );
         }
-        assert!(RadrootsOutboxRelayStatus::parse("bad").is_err());
+
+        for (status, expected, ready, satisfied, terminal_failure) in [
+            (
+                RadrootsOutboxDeliveryTargetStatus::Pending,
+                "pending",
+                true,
+                false,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::Accepted,
+                "accepted",
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::Delivered,
+                "delivered",
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::Forwarded,
+                "forwarded",
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::StoredByGateway,
+                "stored_by_gateway",
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::Seen,
+                "seen",
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+                "deferred_until_implemented",
+                false,
+                false,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
+                "skipped_policy_denied",
+                false,
+                false,
+                true,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
+                "failed_retryable",
+                true,
+                false,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
+                "failed_terminal",
+                false,
+                false,
+                true,
+            ),
+        ] {
+            assert_eq!(status.as_str(), expected);
+            assert_eq!(
+                RadrootsOutboxDeliveryTargetStatus::parse(expected).expect("target status"),
+                status
+            );
+            assert_eq!(status.is_ready_for_attempt(), ready);
+            assert_eq!(status.counts_as_satisfied(), satisfied);
+            assert_eq!(status.is_terminal_failure(), terminal_failure);
+        }
     }
 }

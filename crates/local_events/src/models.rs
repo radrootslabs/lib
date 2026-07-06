@@ -161,8 +161,6 @@ pub struct LocalEventRecordInput {
     pub event_sig: Option<String>,
     pub raw_event_json: Option<Value>,
     pub outbox_status: PublishOutboxStatus,
-    pub relay_set_fingerprint: Option<String>,
-    pub relay_delivery_json: Option<Value>,
 }
 
 impl LocalEventRecordInput {
@@ -238,8 +236,6 @@ pub struct LocalEventRecord {
     pub event_sig: Option<String>,
     pub raw_event_json: Option<Value>,
     pub outbox_status: PublishOutboxStatus,
-    pub relay_set_fingerprint: Option<String>,
-    pub relay_delivery_json: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -247,8 +243,6 @@ pub struct LocalEventRecordUpdate {
     pub record_id: String,
     pub status: LocalRecordStatus,
     pub outbox_status: PublishOutboxStatus,
-    pub relay_set_fingerprint: Option<String>,
-    pub relay_delivery_json: Option<Value>,
     pub updated_at_ms: i64,
 }
 
@@ -455,8 +449,6 @@ mod tests {
             event_sig: None,
             raw_event_json: None,
             outbox_status: PublishOutboxStatus::None,
-            relay_set_fingerprint: None,
-            relay_delivery_json: None,
         }
     }
 
@@ -482,8 +474,6 @@ mod tests {
             event_sig: Some("sig-a".to_owned()),
             raw_event_json: Some(json!({"id":"event-a"})),
             outbox_status: PublishOutboxStatus::Pending,
-            relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(json!({"state":"pending"})),
         }
     }
 

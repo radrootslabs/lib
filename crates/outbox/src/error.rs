@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use radroots_transport::RadrootsTransportError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,11 +17,20 @@ pub enum RadrootsOutboxError {
     #[error("Signed event does not match frozen draft: {0}")]
     SignedEventDraftMismatch(#[from] radroots_events::draft::RadrootsDraftError),
 
-    #[error("target relays cannot be empty")]
-    EmptyTargetRelays,
+    #[error("delivery targets cannot be empty")]
+    EmptyDeliveryTargets,
+
+    #[error("transport profile id cannot be empty")]
+    EmptyTransportProfileId,
+
+    #[error("transport contract error: {0}")]
+    Transport(RadrootsTransportError),
 
     #[error("Invalid stored enum for {field}: {value}")]
     InvalidStoredEnum { field: &'static str, value: String },
+
+    #[error("stored integer for {field} is outside the supported range: {value}")]
+    IntegerRange { field: &'static str, value: i64 },
 
     #[error("Idempotency conflict for {operation_kind}/{expected_pubkey}/{idempotency_key}")]
     IdempotencyConflict {
@@ -34,6 +44,9 @@ pub enum RadrootsOutboxError {
     #[error("Outbox event not found: {0}")]
     EventNotFound(i64),
 
+    #[error("Outbox delivery target not found: {0}")]
+    DeliveryTargetNotFound(i64),
+
     #[error("Claim token mismatch for outbox event {outbox_event_id}")]
     ClaimTokenMismatch { outbox_event_id: i64 },
 
@@ -45,4 +58,10 @@ pub enum RadrootsOutboxError {
         expected_event_id: String,
         actual_event_id: String,
     },
+}
+
+impl From<RadrootsTransportError> for RadrootsOutboxError {
+    fn from(value: RadrootsTransportError) -> Self {
+        Self::Transport(value)
+    }
 }

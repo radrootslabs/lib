@@ -43,8 +43,6 @@ create table local_event_record_previous (
   event_sig text,
   raw_event_json text,
   outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
-  relay_set_fingerprint text,
-  relay_delivery_json text,
   check (trim(record_id) <> ''),
   check (family <> 'local_work' or local_work_json is not null),
   check (family <> 'local_work' or outbox_status = 'none'),
@@ -73,9 +71,7 @@ insert into local_event_record_previous(
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status,
-  relay_set_fingerprint,
-  relay_delivery_json
+  outbox_status
 )
 select
   seq,
@@ -99,9 +95,7 @@ select
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status,
-  relay_set_fingerprint,
-  relay_delivery_json
+  outbox_status
 from local_event_record
 order by seq asc;
 

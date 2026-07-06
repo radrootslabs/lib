@@ -3,17 +3,23 @@
 use crate::RadrootsOutboxError;
 use crate::migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 use crate::model::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
+    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
+    RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
+    RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetRecord,
+    RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
-    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
-    RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::draft::{
     RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
+};
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -82,7 +88,7 @@ impl RadrootsOutbox {
         .fetch_one(&self.pool)
         .await?;
         let ready_signed_events = sqlx::query(
-            "SELECT COUNT(*) FROM outbox_event WHERE state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+            "SELECT COUNT(*) FROM outbox_event AS event WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.status IN ('pending', 'failed_retryable'))",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -90,7 +96,7 @@ impl RadrootsOutbox {
         .await?
         .try_get(0)?;
         let last_attempt_at_ms =
-            sqlx::query("SELECT MAX(last_attempt_at_ms) FROM outbox_event_relay_status")
+            sqlx::query("SELECT MAX(attempted_at_ms) FROM outbox_delivery_attempt")
                 .fetch_one(&self.pool)
                 .await?
                 .try_get(0)?;
@@ -119,16 +125,11 @@ impl RadrootsOutbox {
         input: &RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
-        let target_relays = ordered_unique_relays(input.target_relays.clone());
-        if target_relays.is_empty() && !input.allow_empty_target_relays {
-            return Err(RadrootsOutboxError::EmptyTargetRelays);
-        }
-        let digest_relays = digest_relays(target_relays.as_slice());
-        let digest = idempotency_digest(
+        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             input.draft.expected_pubkey.as_str(),
             &input.draft,
-            &digest_relays,
         );
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref()
@@ -139,19 +140,20 @@ impl RadrootsOutbox {
                 idempotency_key,
             )
             .await?
-            && existing.idempotency_digest != digest
+            && existing.operation_idempotency_digest != operation_digest
         {
             return Err(RadrootsOutboxError::IdempotencyConflict {
                 operation_kind: input.operation_kind.clone(),
                 expected_pubkey: input.draft.expected_pubkey.clone(),
                 idempotency_key: idempotency_key.to_owned(),
-                existing_digest: existing.idempotency_digest,
-                new_digest: digest,
+                existing_digest: existing.operation_idempotency_digest,
+                new_digest: operation_digest,
             });
         }
 
         Ok(RadrootsOutboxIdempotencyPreflight {
-            idempotency_digest: digest,
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
     }
 
@@ -159,18 +161,12 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        let target_relays = ordered_unique_relays(input.target_relays);
-        if target_relays.is_empty() && !input.allow_empty_target_relays {
-            return Err(RadrootsOutboxError::EmptyTargetRelays);
-        }
-        let digest_relays = digest_relays(target_relays.as_slice());
-        let digest = idempotency_digest(
+        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             input.draft.expected_pubkey.as_str(),
             &input.draft,
-            &digest_relays,
         );
-        let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref()
@@ -182,32 +178,49 @@ impl RadrootsOutbox {
             )
             .await?
         {
-            if existing.idempotency_digest != digest {
+            if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
                     expected_pubkey: input.draft.expected_pubkey,
                     idempotency_key: idempotency_key.to_owned(),
-                    existing_digest: existing.idempotency_digest,
-                    new_digest: digest,
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
                 });
+            }
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            if plan.status == RadrootsOutboxEnqueueStatus::Inserted {
+                reactivate_event_for_new_plan(
+                    &mut tx,
+                    existing.outbox_event_id,
+                    input.created_at_ms,
+                )
+                .await?;
             }
             tx.commit().await?;
             return Ok(RadrootsOutboxEnqueueReceipt {
-                status: RadrootsOutboxEnqueueStatus::Existing,
+                status: plan.status,
                 operation_id: existing.operation_id,
                 outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
                 expected_event_id: existing.event_id,
-                idempotency_digest: digest,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
             });
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey.as_str())
         .bind(input.idempotency_key.as_deref())
-        .bind(digest.as_str())
+        .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
@@ -216,39 +229,31 @@ impl RadrootsOutbox {
         let operation_id = operation.last_insert_rowid();
         let draft_json = serde_json::to_string(&input.draft)?;
         let event = sqlx::query(
-            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, accepted_quorum, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id.as_str())
         .bind(input.draft.expected_pubkey.as_str())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
-        .bind(accepted_quorum)
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
         .execute(&mut *tx)
         .await?;
         let outbox_event_id = event.last_insert_rowid();
-
-        for relay_url in target_relays {
-            sqlx::query(
-                "INSERT INTO outbox_event_relay_status(outbox_event_id, relay_url, status, attempt_count) VALUES (?, ?, ?, 0)",
-            )
-            .bind(outbox_event_id)
-            .bind(relay_url.as_str())
-            .bind(RadrootsOutboxRelayStatus::Pending.as_str())
-            .execute(&mut *tx)
-            .await?;
-        }
-
+        let plan =
+            insert_or_get_delivery_plan(&mut tx, outbox_event_id, &prepared, input.created_at_ms)
+                .await?;
         tx.commit().await?;
         Ok(RadrootsOutboxEnqueueReceipt {
             status: RadrootsOutboxEnqueueStatus::Inserted,
             operation_id,
             outbox_event_id,
+            delivery_plan_id: plan.delivery_plan_id,
             expected_event_id: input.draft.expected_event_id,
-            idempotency_digest: digest,
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
     }
 
@@ -257,18 +262,12 @@ impl RadrootsOutbox {
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
-        let target_relays = ordered_unique_relays(input.target_relays);
-        if target_relays.is_empty() && !input.allow_empty_target_relays {
-            return Err(RadrootsOutboxError::EmptyTargetRelays);
-        }
-        let digest_relays = digest_relays(target_relays.as_slice());
-        let digest = idempotency_digest(
+        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             input.draft.expected_pubkey.as_str(),
             &input.draft,
-            &digest_relays,
         );
-        let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref()
@@ -280,32 +279,57 @@ impl RadrootsOutbox {
             )
             .await?
         {
-            if existing.idempotency_digest != digest {
+            if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
                     expected_pubkey: input.draft.expected_pubkey,
                     idempotency_key: idempotency_key.to_owned(),
-                    existing_digest: existing.idempotency_digest,
-                    new_digest: digest,
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
                 });
+            }
+            ensure_event_signed(
+                &mut tx,
+                existing.outbox_event_id,
+                &input.signed_event,
+                input.event_store_inserted,
+                input.event_store_ingested_at_ms,
+            )
+            .await?;
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            if plan.status == RadrootsOutboxEnqueueStatus::Inserted {
+                reactivate_event_for_new_plan(
+                    &mut tx,
+                    existing.outbox_event_id,
+                    input.created_at_ms,
+                )
+                .await?;
             }
             tx.commit().await?;
             return Ok(RadrootsOutboxEnqueueReceipt {
-                status: RadrootsOutboxEnqueueStatus::Existing,
+                status: plan.status,
                 operation_id: existing.operation_id,
                 outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
                 expected_event_id: existing.event_id,
-                idempotency_digest: digest,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
             });
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey.as_str())
         .bind(input.idempotency_key.as_deref())
-        .bind(digest.as_str())
+        .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
@@ -315,7 +339,7 @@ impl RadrootsOutbox {
         let draft_json = serde_json::to_string(&input.draft)?;
         let signed_event_json = serde_json::to_string(&input.signed_event)?;
         let event = sqlx::query(
-            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id.as_str())
@@ -324,7 +348,6 @@ impl RadrootsOutbox {
         .bind(signed_event_json.as_str())
         .bind(input.signed_event.raw_json.as_str())
         .bind(RadrootsOutboxEventState::Signed.as_str())
-        .bind(accepted_quorum)
         .bind(input.created_at_ms)
         .bind(bool_i64(input.event_store_inserted))
         .bind(input.event_store_ingested_at_ms)
@@ -333,25 +356,18 @@ impl RadrootsOutbox {
         .execute(&mut *tx)
         .await?;
         let outbox_event_id = event.last_insert_rowid();
-
-        for relay_url in target_relays {
-            sqlx::query(
-                "INSERT INTO outbox_event_relay_status(outbox_event_id, relay_url, status, attempt_count) VALUES (?, ?, ?, 0)",
-            )
-            .bind(outbox_event_id)
-            .bind(relay_url.as_str())
-            .bind(RadrootsOutboxRelayStatus::Pending.as_str())
-            .execute(&mut *tx)
-            .await?;
-        }
-
+        let plan =
+            insert_or_get_delivery_plan(&mut tx, outbox_event_id, &prepared, input.created_at_ms)
+                .await?;
         tx.commit().await?;
         Ok(RadrootsOutboxEnqueueReceipt {
             status: RadrootsOutboxEnqueueStatus::Inserted,
             operation_id,
             outbox_event_id,
+            delivery_plan_id: plan.delivery_plan_id,
             expected_event_id: input.draft.expected_event_id,
-            idempotency_digest: digest,
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
     }
 
@@ -360,7 +376,7 @@ impl RadrootsOutbox {
         operation_id: i64,
     ) -> Result<Option<RadrootsOutboxOperationRecord>, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT operation_id, operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operations WHERE operation_id = ?",
+            "SELECT operation_id, operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operations WHERE operation_id = ?",
         )
         .bind(operation_id)
         .fetch_optional(&self.pool)
@@ -373,7 +389,7 @@ impl RadrootsOutbox {
         outbox_event_id: i64,
     ) -> Result<Option<RadrootsOutboxEventRecord>, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
+            "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
         )
         .bind(outbox_event_id)
         .fetch_optional(&self.pool)
@@ -381,11 +397,25 @@ impl RadrootsOutbox {
         row.map(event_from_row).transpose()
     }
 
-    pub async fn relay_statuses(
+    pub async fn delivery_plans(
         &self,
         outbox_event_id: i64,
-    ) -> Result<Vec<RadrootsOutboxRelayStatusRecord>, RadrootsOutboxError> {
-        relay_statuses_for(&self.pool, outbox_event_id).await
+    ) -> Result<Vec<RadrootsOutboxDeliveryPlanRecord>, RadrootsOutboxError> {
+        delivery_plans_for_pool(&self.pool, outbox_event_id).await
+    }
+
+    pub async fn delivery_targets(
+        &self,
+        outbox_event_id: i64,
+    ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+        delivery_targets_for_event_pool(&self.pool, outbox_event_id).await
+    }
+
+    pub async fn delivery_attempts(
+        &self,
+        delivery_target_id: i64,
+    ) -> Result<Vec<RadrootsOutboxDeliveryAttemptRecord>, RadrootsOutboxError> {
+        delivery_attempts_for_pool(&self.pool, delivery_target_id).await
     }
 
     pub async fn claim_next_ready_event(
@@ -397,7 +427,7 @@ impl RadrootsOutbox {
     ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = sqlx::query(
-            "SELECT outbox_event_id, state, signed_event_json FROM outbox_event WHERE state IN ('draft_queued', 'sign_retryable', 'signed', 'publish_retryable') AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?) ORDER BY created_at_ms, outbox_event_id LIMIT 1",
+            "SELECT outbox_event_id, state, signed_event_json FROM outbox_event AS event WHERE ((event.state IN ('draft_queued', 'sign_retryable')) OR (event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.status IN ('pending', 'failed_retryable')))) AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) ORDER BY event.created_at_ms, event.outbox_event_id LIMIT 1",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -417,36 +447,30 @@ impl RadrootsOutbox {
             ) => RadrootsOutboxEventState::Signing,
             _ => RadrootsOutboxEventState::Publishing,
         };
-        let changed = sqlx::query(
-            "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+        let changed = claim_event(
+            &mut tx,
+            outbox_event_id,
+            claimed_state,
+            claim_owner.as_ref(),
+            claim_token.as_ref(),
+            claim_expires_at_ms,
+            now_ms,
+            "AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
         )
-        .bind(claimed_state.as_str())
-        .bind(claim_token.as_ref())
-        .bind(claim_owner.as_ref())
-        .bind(claim_expires_at_ms)
-        .bind(now_ms)
-        .bind(outbox_event_id)
-        .bind(now_ms)
-        .execute(&mut *tx)
         .await?;
         if changed.rows_affected() == 0 {
             tx.commit().await?;
             return Ok(None);
         }
-        let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
-        let target_relays = relay_urls_for_tx(&mut tx, outbox_event_id).await?;
+        let claimed = claimed_event_from_tx(
+            &mut tx,
+            outbox_event_id,
+            claimed_state,
+            claim_token.as_ref(),
+        )
+        .await?;
         tx.commit().await?;
-        Ok(Some(RadrootsOutboxClaimedEvent {
-            outbox_event_id: record.outbox_event_id,
-            operation_id: record.operation_id,
-            expected_event_id: record.event_id,
-            attempt_count: record.attempt_count,
-            state: claimed_state,
-            claim_token: claim_token.as_ref().to_owned(),
-            draft: record.draft,
-            signed_event: record.signed_event,
-            target_relays,
-        }))
+        Ok(Some(claimed))
     }
 
     pub async fn claim_next_ready_signed_event(
@@ -458,7 +482,7 @@ impl RadrootsOutbox {
     ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = sqlx::query(
-            "SELECT outbox_event_id FROM outbox_event WHERE state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?) ORDER BY created_at_ms, outbox_event_id LIMIT 1",
+            "SELECT outbox_event_id FROM outbox_event AS event WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.status IN ('pending', 'failed_retryable')) ORDER BY event.created_at_ms, event.outbox_event_id LIMIT 1",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -469,36 +493,30 @@ impl RadrootsOutbox {
             return Ok(None);
         };
         let outbox_event_id: i64 = row.try_get("outbox_event_id")?;
-        let changed = sqlx::query(
-            "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+        let changed = claim_event(
+            &mut tx,
+            outbox_event_id,
+            RadrootsOutboxEventState::Publishing,
+            claim_owner.as_ref(),
+            claim_token.as_ref(),
+            claim_expires_at_ms,
+            now_ms,
+            "AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
         )
-        .bind(RadrootsOutboxEventState::Publishing.as_str())
-        .bind(claim_token.as_ref())
-        .bind(claim_owner.as_ref())
-        .bind(claim_expires_at_ms)
-        .bind(now_ms)
-        .bind(outbox_event_id)
-        .bind(now_ms)
-        .execute(&mut *tx)
         .await?;
         if changed.rows_affected() == 0 {
             tx.commit().await?;
             return Ok(None);
         }
-        let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
-        let target_relays = relay_urls_for_tx(&mut tx, outbox_event_id).await?;
+        let claimed = claimed_event_from_tx(
+            &mut tx,
+            outbox_event_id,
+            RadrootsOutboxEventState::Publishing,
+            claim_token.as_ref(),
+        )
+        .await?;
         tx.commit().await?;
-        Ok(Some(RadrootsOutboxClaimedEvent {
-            outbox_event_id: record.outbox_event_id,
-            operation_id: record.operation_id,
-            expected_event_id: record.event_id,
-            attempt_count: record.attempt_count,
-            state: RadrootsOutboxEventState::Publishing,
-            claim_token: claim_token.as_ref().to_owned(),
-            draft: record.draft,
-            signed_event: record.signed_event,
-            target_relays,
-        }))
+        Ok(Some(claimed))
     }
 
     pub async fn claim_ready_signed_event(
@@ -511,7 +529,7 @@ impl RadrootsOutbox {
     ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let changed = sqlx::query(
-            "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+            "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = outbox_event.outbox_event_id AND target.status IN ('pending', 'failed_retryable'))",
         )
         .bind(RadrootsOutboxEventState::Publishing.as_str())
         .bind(claim_token.as_ref())
@@ -527,20 +545,15 @@ impl RadrootsOutbox {
             tx.commit().await?;
             return Ok(None);
         }
-        let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
-        let target_relays = relay_urls_for_tx(&mut tx, outbox_event_id).await?;
+        let claimed = claimed_event_from_tx(
+            &mut tx,
+            outbox_event_id,
+            RadrootsOutboxEventState::Publishing,
+            claim_token.as_ref(),
+        )
+        .await?;
         tx.commit().await?;
-        Ok(Some(RadrootsOutboxClaimedEvent {
-            outbox_event_id: record.outbox_event_id,
-            operation_id: record.operation_id,
-            expected_event_id: record.event_id,
-            attempt_count: record.attempt_count,
-            state: RadrootsOutboxEventState::Publishing,
-            claim_token: claim_token.as_ref().to_owned(),
-            draft: record.draft,
-            signed_event: record.signed_event,
-            target_relays,
-        }))
+        Ok(Some(claimed))
     }
 
     pub async fn complete_signing(
@@ -594,8 +607,7 @@ impl RadrootsOutbox {
         .execute(&self.pool)
         .await?;
         self.ensure_claimed_update(outbox_event_id, claim_token, changed)
-            .await?;
-        Ok(())
+            .await
     }
 
     pub async fn mark_publish_retryable(
@@ -618,8 +630,7 @@ impl RadrootsOutbox {
         .execute(&self.pool)
         .await?;
         self.ensure_claimed_update(outbox_event_id, claim_token, changed)
-            .await?;
-        Ok(())
+            .await
     }
 
     pub async fn recover_expired_claims(&self, now_ms: i64) -> Result<u64, RadrootsOutboxError> {
@@ -677,84 +688,76 @@ impl RadrootsOutbox {
         })
     }
 
-    pub async fn mark_relay_accepted(
+    pub async fn mark_delivery_target_accepted(
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        relay_url: &str,
-        acknowledged_at_ms: i64,
-    ) -> Result<(), RadrootsOutboxError> {
-        let changed = sqlx::query(
-            "UPDATE outbox_event_relay_status SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, acknowledged_at_ms = ?, last_error = NULL WHERE outbox_event_id = ? AND relay_url = ? AND EXISTS (SELECT 1 FROM outbox_event WHERE outbox_event_id = ? AND claim_token = ?)",
-        )
-        .bind(RadrootsOutboxRelayStatus::Accepted.as_str())
-        .bind(acknowledged_at_ms)
-        .bind(acknowledged_at_ms)
-        .bind(outbox_event_id)
-        .bind(relay_url)
-        .bind(outbox_event_id)
-        .bind(claim_token)
-        .execute(&self.pool)
-        .await?;
-        self.ensure_claimed_update(outbox_event_id, claim_token, changed)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn set_publish_quorum(
-        &self,
-        outbox_event_id: i64,
-        claim_token: &str,
-        accepted_quorum: i64,
-        now_ms: i64,
-    ) -> Result<(), RadrootsOutboxError> {
-        let changed = sqlx::query(
-            "UPDATE outbox_event SET accepted_quorum = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
-        )
-        .bind(accepted_quorum)
-        .bind(now_ms)
-        .bind(outbox_event_id)
-        .bind(claim_token)
-        .execute(&self.pool)
-        .await?;
-        self.ensure_claimed_update(outbox_event_id, claim_token, changed)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn mark_relay_failed_retryable(
-        &self,
-        outbox_event_id: i64,
-        claim_token: &str,
-        relay_url: &str,
-        error: &str,
+        delivery_target_id: i64,
         attempted_at_ms: i64,
     ) -> Result<(), RadrootsOutboxError> {
-        self.mark_relay_failed(
+        self.mark_delivery_target_status(
             outbox_event_id,
             claim_token,
-            relay_url,
-            RadrootsOutboxRelayStatus::FailedRetryable,
-            error,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            None,
             attempted_at_ms,
         )
         .await
     }
 
-    pub async fn mark_relay_failed_terminal(
+    pub async fn mark_delivery_target_failed_retryable(
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        relay_url: &str,
+        delivery_target_id: i64,
         error: &str,
         attempted_at_ms: i64,
     ) -> Result<(), RadrootsOutboxError> {
-        self.mark_relay_failed(
+        self.mark_delivery_target_status(
             outbox_event_id,
             claim_token,
-            relay_url,
-            RadrootsOutboxRelayStatus::FailedTerminal,
-            error,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
+            Some(error),
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_failed_terminal(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        error: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
+            Some(error),
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_skipped_policy_denied(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        message: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
+            Some(message),
             attempted_at_ms,
         )
         .await
@@ -771,42 +774,23 @@ impl RadrootsOutbox {
     ) -> Result<RadrootsOutboxEventState, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = claimed_event_identity_tx(&mut tx, outbox_event_id, claim_token).await?;
-        let operation_id = row.operation_id;
-        let accepted_quorum = row.accepted_quorum;
-        let accepted_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM outbox_event_relay_status WHERE outbox_event_id = ? AND status = ?",
-        )
-        .bind(outbox_event_id)
-        .bind(RadrootsOutboxRelayStatus::Accepted.as_str())
-        .fetch_one(&mut *tx)
-        .await?
-        .try_get(0)?;
-        let retryable_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM outbox_event_relay_status WHERE outbox_event_id = ? AND status = ?",
-        )
-        .bind(outbox_event_id)
-        .bind(RadrootsOutboxRelayStatus::FailedRetryable.as_str())
-        .fetch_one(&mut *tx)
-        .await?
-        .try_get(0)?;
-        let pending_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM outbox_event_relay_status WHERE outbox_event_id = ? AND status = ?",
-        )
-        .bind(outbox_event_id)
-        .bind(RadrootsOutboxRelayStatus::Pending.as_str())
-        .fetch_one(&mut *tx)
-        .await?
-        .try_get(0)?;
-
+        let evaluation = evaluate_delivery_plans(&mut tx, outbox_event_id, now_ms).await?;
         let (event_state, operation_status, last_error, next_attempt_after_ms) =
-            if accepted_count >= accepted_quorum {
+            if evaluation.all_complete {
                 (
                     RadrootsOutboxEventState::Published,
                     Some(RadrootsOutboxOperationStatus::Complete),
                     None,
                     now_ms,
                 )
-            } else if retryable_count > 0 || pending_count > 0 {
+            } else if evaluation.any_failed_terminal {
+                (
+                    RadrootsOutboxEventState::FailedTerminal,
+                    Some(RadrootsOutboxOperationStatus::FailedTerminal),
+                    Some(terminal_error.as_ref()),
+                    now_ms,
+                )
+            } else if evaluation.any_ready {
                 (
                     RadrootsOutboxEventState::PublishRetryable,
                     None,
@@ -815,9 +799,9 @@ impl RadrootsOutbox {
                 )
             } else {
                 (
-                    RadrootsOutboxEventState::FailedTerminal,
-                    Some(RadrootsOutboxOperationStatus::FailedTerminal),
-                    Some(terminal_error.as_ref()),
+                    RadrootsOutboxEventState::Signed,
+                    None,
+                    Some("delivery deferred until implemented"),
                     now_ms,
                 )
             };
@@ -843,7 +827,7 @@ impl RadrootsOutbox {
             )
             .bind(operation_status.as_str())
             .bind(now_ms)
-            .bind(operation_id)
+            .bind(row.operation_id)
             .execute(&mut *tx)
             .await?;
         }
@@ -943,6 +927,25 @@ impl RadrootsOutbox {
     ) -> Result<(), RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = claimed_event_identity_tx(&mut tx, outbox_event_id, claim_token).await?;
+        let plan_status = match event_state {
+            RadrootsOutboxEventState::Cancelled => {
+                Some(RadrootsOutboxDeliveryPlanStatus::Cancelled)
+            }
+            RadrootsOutboxEventState::FailedTerminal => {
+                Some(RadrootsOutboxDeliveryPlanStatus::FailedTerminal)
+            }
+            _ => None,
+        };
+        if let Some(plan_status) = plan_status {
+            sqlx::query(
+                "UPDATE outbox_delivery_plan SET status = ?, updated_at_ms = ? WHERE outbox_event_id = ?",
+            )
+            .bind(plan_status.as_str())
+            .bind(now_ms)
+            .bind(outbox_event_id)
+            .execute(&mut *tx)
+            .await?;
+        }
         let changed = sqlx::query(
             "UPDATE outbox_event SET state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, last_error = ?, next_attempt_after_ms = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
@@ -971,29 +974,55 @@ impl RadrootsOutbox {
         Ok(())
     }
 
-    async fn mark_relay_failed(
+    async fn mark_delivery_target_status(
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        relay_url: &str,
-        status: RadrootsOutboxRelayStatus,
-        error: &str,
+        delivery_target_id: i64,
+        status: RadrootsOutboxDeliveryTargetStatus,
+        message: Option<&str>,
         attempted_at_ms: i64,
     ) -> Result<(), RadrootsOutboxError> {
+        let mut tx = self.pool.begin().await?;
+        claimed_event_identity_tx(&mut tx, outbox_event_id, claim_token).await?;
+        let completed_at_ms = (status.counts_as_satisfied()
+            || status.is_terminal_failure()
+            || status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented)
+            .then_some(attempted_at_ms);
         let changed = sqlx::query(
-            "UPDATE outbox_event_relay_status SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, acknowledged_at_ms = NULL, last_error = ? WHERE outbox_event_id = ? AND relay_url = ? AND EXISTS (SELECT 1 FROM outbox_event WHERE outbox_event_id = ? AND claim_token = ?)",
+            "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id IN (SELECT delivery_plan_id FROM outbox_delivery_plan WHERE outbox_event_id = ?)",
         )
         .bind(status.as_str())
         .bind(attempted_at_ms)
-        .bind(error)
+        .bind(completed_at_ms)
+        .bind(message)
+        .bind(delivery_target_id)
         .bind(outbox_event_id)
-        .bind(relay_url)
-        .bind(outbox_event_id)
-        .bind(claim_token)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
-        self.ensure_claimed_update(outbox_event_id, claim_token, changed)
-            .await?;
+        if changed.rows_affected() == 0 {
+            return Err(RadrootsOutboxError::DeliveryTargetNotFound(
+                delivery_target_id,
+            ));
+        }
+        let delivery_plan_id: i64 = sqlx::query(
+            "SELECT delivery_plan_id FROM outbox_delivery_target WHERE delivery_target_id = ?",
+        )
+        .bind(delivery_target_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .try_get("delivery_plan_id")?;
+        sqlx::query(
+            "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(delivery_plan_id)
+        .bind(delivery_target_id)
+        .bind(status.as_str())
+        .bind(attempted_at_ms)
+        .bind(message)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 }
@@ -1002,12 +1031,38 @@ struct ExistingOperation {
     operation_id: i64,
     outbox_event_id: i64,
     event_id: String,
-    idempotency_digest: String,
+    operation_idempotency_digest: String,
 }
 
 struct ClaimedEventIdentity {
     operation_id: i64,
-    accepted_quorum: i64,
+}
+
+struct PreparedDeliveryPlan {
+    transport_profile_id: String,
+    target_policy_fingerprint: String,
+    target_policy_version: u32,
+    satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    required_success_count: i64,
+    delivery_plan_idempotency_digest: String,
+    initial_status: RadrootsOutboxDeliveryPlanStatus,
+    targets: Vec<PreparedDeliveryTarget>,
+}
+
+struct PreparedDeliveryTarget {
+    target: RadrootsTransportTarget,
+    initial_status: RadrootsOutboxDeliveryTargetStatus,
+}
+
+struct PlanInsertResult {
+    status: RadrootsOutboxEnqueueStatus,
+    delivery_plan_id: i64,
+}
+
+struct PlanEvaluation {
+    all_complete: bool,
+    any_failed_terminal: bool,
+    any_ready: bool,
 }
 
 async fn configure_connection(
@@ -1052,7 +1107,61 @@ async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsOu
     Ok(row.try_get(0)?)
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
+fn prepare_delivery_plan(
+    event_id: &str,
+    input: &RadrootsOutboxDeliveryPlanInput,
+) -> Result<PreparedDeliveryPlan, RadrootsOutboxError> {
+    if input.transport_profile_id.trim().is_empty() {
+        return Err(RadrootsOutboxError::EmptyTransportProfileId);
+    }
+    let targets = ordered_unique_targets(input.targets.clone());
+    if targets.is_empty() {
+        return Err(RadrootsOutboxError::EmptyDeliveryTargets);
+    }
+    let required_success_count = input
+        .satisfaction_policy
+        .required_target_count(targets.len())? as i64;
+    let prepared_targets = targets
+        .into_iter()
+        .map(|target| {
+            let initial_status = if target.kind == RadrootsTransportKind::Reticulum {
+                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+            } else {
+                RadrootsOutboxDeliveryTargetStatus::Pending
+            };
+            PreparedDeliveryTarget {
+                target,
+                initial_status,
+            }
+        })
+        .collect::<Vec<_>>();
+    let initial_status = if prepared_targets.iter().all(|target| {
+        target.initial_status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+    }) {
+        RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
+    } else {
+        RadrootsOutboxDeliveryPlanStatus::Queued
+    };
+    let target_policy_fingerprint =
+        target_policy_fingerprint(&input.satisfaction_policy, &prepared_targets);
+    let delivery_plan_idempotency_digest = delivery_plan_idempotency_digest(
+        event_id,
+        input.transport_profile_id.as_str(),
+        target_policy_fingerprint.as_str(),
+        input.target_policy_version,
+    );
+    Ok(PreparedDeliveryPlan {
+        transport_profile_id: input.transport_profile_id.trim().to_owned(),
+        target_policy_fingerprint,
+        target_policy_version: input.target_policy_version,
+        satisfaction_policy: input.satisfaction_policy.clone(),
+        required_success_count,
+        delivery_plan_idempotency_digest,
+        initial_status,
+        targets: prepared_targets,
+    })
+}
+
 async fn existing_idempotent_operation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     operation_kind: &str,
@@ -1060,7 +1169,7 @@ async fn existing_idempotent_operation(
     idempotency_key: &str,
 ) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT o.operation_id, o.idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
+        "SELECT o.operation_id, o.operation_idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
     )
     .bind(operation_kind)
     .bind(expected_pubkey)
@@ -1070,7 +1179,6 @@ async fn existing_idempotent_operation(
     row.map(existing_operation_from_row).transpose()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 async fn existing_idempotent_operation_for_pool(
     pool: &SqlitePool,
     operation_kind: &str,
@@ -1078,7 +1186,7 @@ async fn existing_idempotent_operation_for_pool(
     idempotency_key: &str,
 ) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT o.operation_id, o.idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
+        "SELECT o.operation_id, o.operation_idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.idempotency_key = ? ORDER BY e.outbox_event_id LIMIT 1",
     )
     .bind(operation_kind)
     .bind(expected_pubkey)
@@ -1095,17 +1203,169 @@ fn existing_operation_from_row(
         operation_id: row.try_get("operation_id")?,
         outbox_event_id: row.try_get("outbox_event_id")?,
         event_id: row.try_get("event_id")?,
-        idempotency_digest: row.try_get("idempotency_digest")?,
+        operation_idempotency_digest: row.try_get("operation_idempotency_digest")?,
     })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
+async fn insert_or_get_delivery_plan(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    plan: &PreparedDeliveryPlan,
+    created_at_ms: i64,
+) -> Result<PlanInsertResult, RadrootsOutboxError> {
+    if let Some(row) = sqlx::query(
+        "SELECT delivery_plan_id FROM outbox_delivery_plan WHERE outbox_event_id = ? AND delivery_plan_idempotency_digest = ?",
+    )
+    .bind(outbox_event_id)
+    .bind(plan.delivery_plan_idempotency_digest.as_str())
+    .fetch_optional(&mut **tx)
+    .await?
+    {
+        return Ok(PlanInsertResult {
+            status: RadrootsOutboxEnqueueStatus::Existing,
+            delivery_plan_id: row.try_get("delivery_plan_id")?,
+        });
+    }
+
+    let inserted = sqlx::query(
+        "INSERT INTO outbox_delivery_plan(outbox_event_id, transport_profile_id, target_policy_fingerprint, target_policy_version, satisfaction_policy, required_success_count, delivery_plan_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(outbox_event_id)
+    .bind(plan.transport_profile_id.as_str())
+    .bind(plan.target_policy_fingerprint.as_str())
+    .bind(i64::from(plan.target_policy_version))
+    .bind(satisfaction_policy_storage_value(&plan.satisfaction_policy))
+    .bind(plan.required_success_count)
+    .bind(plan.delivery_plan_idempotency_digest.as_str())
+    .bind(plan.initial_status.as_str())
+    .bind(created_at_ms)
+    .bind(created_at_ms)
+    .execute(&mut **tx)
+    .await?;
+    let delivery_plan_id = inserted.last_insert_rowid();
+    for prepared_target in &plan.targets {
+        sqlx::query(
+            "INSERT INTO outbox_delivery_target(delivery_plan_id, transport_kind, endpoint_uri, endpoint_fingerprint, status, attempt_count) VALUES (?, ?, ?, ?, ?, 0)",
+        )
+        .bind(delivery_plan_id)
+        .bind(prepared_target.target.kind.canonical_label())
+        .bind(prepared_target.target.uri.as_str())
+        .bind(prepared_target.target.fingerprint.as_str())
+        .bind(prepared_target.initial_status.as_str())
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(PlanInsertResult {
+        status: RadrootsOutboxEnqueueStatus::Inserted,
+        delivery_plan_id,
+    })
+}
+
+async fn reactivate_event_for_new_plan(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    now_ms: i64,
+) -> Result<(), RadrootsOutboxError> {
+    sqlx::query(
+        "UPDATE outbox_operations SET status = ?, updated_at_ms = ? WHERE operation_id = (SELECT operation_id FROM outbox_event WHERE outbox_event_id = ?)",
+    )
+    .bind(RadrootsOutboxOperationStatus::Queued.as_str())
+    .bind(now_ms)
+    .bind(outbox_event_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "UPDATE outbox_event SET state = CASE WHEN signed_event_json IS NULL THEN ? ELSE ? END, last_error = NULL, next_attempt_after_ms = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('published', 'failed_terminal')",
+    )
+    .bind(RadrootsOutboxEventState::DraftQueued.as_str())
+    .bind(RadrootsOutboxEventState::Signed.as_str())
+    .bind(now_ms)
+    .bind(now_ms)
+    .bind(outbox_event_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn ensure_event_signed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    signed_event: &RadrootsSignedNostrEvent,
+    event_store_inserted: bool,
+    event_store_ingested_at_ms: i64,
+) -> Result<(), RadrootsOutboxError> {
+    let signed_event_json = serde_json::to_string(signed_event)?;
+    sqlx::query(
+        "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = CASE WHEN state IN ('draft_queued', 'sign_retryable', 'signing') THEN ? ELSE state END, event_store_ingested = 1, event_store_inserted = ?, event_store_ingested_at_ms = ? WHERE outbox_event_id = ? AND signed_event_json IS NULL",
+    )
+    .bind(signed_event_json.as_str())
+    .bind(signed_event.raw_json.as_str())
+    .bind(RadrootsOutboxEventState::Signed.as_str())
+    .bind(bool_i64(event_store_inserted))
+    .bind(event_store_ingested_at_ms)
+    .bind(outbox_event_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn claim_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    claimed_state: RadrootsOutboxEventState,
+    claim_owner: &str,
+    claim_token: &str,
+    claim_expires_at_ms: i64,
+    now_ms: i64,
+    suffix: &str,
+) -> Result<SqliteQueryResult, RadrootsOutboxError> {
+    let sql = format!(
+        "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? {suffix}"
+    );
+    let changed = sqlx::query(sql.as_str())
+        .bind(claimed_state.as_str())
+        .bind(claim_token)
+        .bind(claim_owner)
+        .bind(claim_expires_at_ms)
+        .bind(now_ms)
+        .bind(outbox_event_id)
+        .bind(now_ms)
+        .execute(&mut **tx)
+        .await?;
+    Ok(changed)
+}
+
+async fn claimed_event_from_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    claimed_state: RadrootsOutboxEventState,
+    claim_token: &str,
+) -> Result<RadrootsOutboxClaimedEvent, RadrootsOutboxError> {
+    let record = event_by_id_tx(tx, outbox_event_id).await?;
+    let delivery_targets = if claimed_state == RadrootsOutboxEventState::Publishing {
+        ready_delivery_targets_for_event_tx(tx, outbox_event_id).await?
+    } else {
+        delivery_targets_for_event_tx(tx, outbox_event_id).await?
+    };
+    Ok(RadrootsOutboxClaimedEvent {
+        outbox_event_id: record.outbox_event_id,
+        operation_id: record.operation_id,
+        expected_event_id: record.event_id,
+        attempt_count: record.attempt_count,
+        state: claimed_state,
+        claim_token: claim_token.to_owned(),
+        draft: record.draft,
+        signed_event: record.signed_event,
+        delivery_targets,
+    })
+}
+
 async fn event_by_id_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     outbox_event_id: i64,
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
+        "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
     )
     .bind(outbox_event_id)
     .fetch_one(&mut **tx)
@@ -1119,7 +1379,7 @@ async fn claimed_event_identity_tx(
     claim_token: &str,
 ) -> Result<ClaimedEventIdentity, RadrootsOutboxError> {
     let row =
-        sqlx::query("SELECT operation_id, accepted_quorum, claim_token FROM outbox_event WHERE outbox_event_id = ?")
+        sqlx::query("SELECT operation_id, claim_token FROM outbox_event WHERE outbox_event_id = ?")
             .bind(outbox_event_id)
             .fetch_optional(&mut **tx)
             .await?;
@@ -1132,41 +1392,165 @@ async fn claimed_event_identity_tx(
     }
     Ok(ClaimedEventIdentity {
         operation_id: row.try_get("operation_id")?,
-        accepted_quorum: row.try_get("accepted_quorum")?,
     })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn relay_urls_for_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    outbox_event_id: i64,
-) -> Result<Vec<String>, RadrootsOutboxError> {
-    let rows = sqlx::query(
-        "SELECT relay_url FROM outbox_event_relay_status WHERE outbox_event_id = ? ORDER BY rowid",
-    )
-    .bind(outbox_event_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    rows.into_iter()
-        .map(|row| row.try_get("relay_url").map_err(Into::into))
-        .collect()
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn relay_statuses_for(
+async fn delivery_plans_for_pool(
     pool: &SqlitePool,
     outbox_event_id: i64,
-) -> Result<Vec<RadrootsOutboxRelayStatusRecord>, RadrootsOutboxError> {
+) -> Result<Vec<RadrootsOutboxDeliveryPlanRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT outbox_event_id, relay_url, status, attempt_count, last_attempt_at_ms, acknowledged_at_ms, last_error FROM outbox_event_relay_status WHERE outbox_event_id = ? ORDER BY rowid",
+        "SELECT delivery_plan_id, outbox_event_id, transport_profile_id, target_policy_fingerprint, target_policy_version, satisfaction_policy, required_success_count, delivery_plan_idempotency_digest, status, satisfied_at_ms, created_at_ms, updated_at_ms FROM outbox_delivery_plan WHERE outbox_event_id = ? ORDER BY delivery_plan_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(relay_status_from_row).collect()
+    rows.into_iter().map(delivery_plan_from_row).collect()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
+async fn delivery_plans_for_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryPlanRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT delivery_plan_id, outbox_event_id, transport_profile_id, target_policy_fingerprint, target_policy_version, satisfaction_policy, required_success_count, delivery_plan_idempotency_digest, status, satisfied_at_ms, created_at_ms, updated_at_ms FROM outbox_delivery_plan WHERE outbox_event_id = ? ORDER BY delivery_plan_id",
+    )
+    .bind(outbox_event_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    rows.into_iter().map(delivery_plan_from_row).collect()
+}
+
+async fn delivery_targets_for_event_pool(
+    pool: &SqlitePool,
+    outbox_event_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
+    )
+    .bind(outbox_event_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(delivery_target_from_row).collect()
+}
+
+async fn delivery_targets_for_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
+    )
+    .bind(outbox_event_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    rows.into_iter().map(delivery_target_from_row).collect()
+}
+
+async fn ready_delivery_targets_for_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND target.status IN ('pending', 'failed_retryable') ORDER BY target.delivery_plan_id, target.delivery_target_id",
+    )
+    .bind(outbox_event_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    rows.into_iter().map(delivery_target_from_row).collect()
+}
+
+async fn delivery_targets_for_plan_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    delivery_plan_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT delivery_target_id, delivery_plan_id, transport_kind, endpoint_uri, endpoint_fingerprint, status, attempt_count, last_attempt_at_ms, completed_at_ms, last_error FROM outbox_delivery_target WHERE delivery_plan_id = ? ORDER BY delivery_target_id",
+    )
+    .bind(delivery_plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    rows.into_iter().map(delivery_target_from_row).collect()
+}
+
+async fn delivery_attempts_for_pool(
+    pool: &SqlitePool,
+    delivery_target_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryAttemptRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT delivery_attempt_id, delivery_plan_id, delivery_target_id, status, attempted_at_ms, message FROM outbox_delivery_attempt WHERE delivery_target_id = ? ORDER BY delivery_attempt_id",
+    )
+    .bind(delivery_target_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(delivery_attempt_from_row).collect()
+}
+
+async fn evaluate_delivery_plans(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    outbox_event_id: i64,
+    now_ms: i64,
+) -> Result<PlanEvaluation, RadrootsOutboxError> {
+    let plans = delivery_plans_for_tx(tx, outbox_event_id).await?;
+    let mut all_complete = !plans.is_empty();
+    let mut any_failed_terminal = false;
+    let mut any_ready = false;
+    for plan in plans {
+        let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
+        let satisfied_count = targets
+            .iter()
+            .filter(|target| target.status.counts_as_satisfied())
+            .count() as i64;
+        let ready_count = targets
+            .iter()
+            .filter(|target| target.status.is_ready_for_attempt())
+            .count();
+        let deferred_count = targets
+            .iter()
+            .filter(|target| {
+                target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+            })
+            .count();
+        let terminal_failure_count = targets
+            .iter()
+            .filter(|target| target.status.is_terminal_failure())
+            .count();
+        let plan_status = if satisfied_count >= plan.required_success_count {
+            RadrootsOutboxDeliveryPlanStatus::Complete
+        } else if ready_count > 0 {
+            RadrootsOutboxDeliveryPlanStatus::Queued
+        } else if deferred_count > 0 && terminal_failure_count == 0 {
+            RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
+        } else {
+            RadrootsOutboxDeliveryPlanStatus::FailedTerminal
+        };
+        if plan_status != RadrootsOutboxDeliveryPlanStatus::Complete {
+            all_complete = false;
+        }
+        if plan_status == RadrootsOutboxDeliveryPlanStatus::FailedTerminal {
+            any_failed_terminal = true;
+        }
+        if ready_count > 0 {
+            any_ready = true;
+        }
+        sqlx::query(
+            "UPDATE outbox_delivery_plan SET status = ?, satisfied_at_ms = CASE WHEN ? = 'complete' THEN ? ELSE satisfied_at_ms END, updated_at_ms = ? WHERE delivery_plan_id = ?",
+        )
+        .bind(plan_status.as_str())
+        .bind(plan_status.as_str())
+        .bind(now_ms)
+        .bind(now_ms)
+        .bind(plan.delivery_plan_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(PlanEvaluation {
+        all_complete,
+        any_failed_terminal,
+        any_ready,
+    })
+}
+
 fn operation_from_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsOutboxOperationRecord, RadrootsOutboxError> {
@@ -1177,14 +1561,13 @@ fn operation_from_row(
         operation_kind: row.try_get("operation_kind")?,
         expected_pubkey: row.try_get("expected_pubkey")?,
         idempotency_key: row.try_get("idempotency_key")?,
-        idempotency_digest: row.try_get("idempotency_digest")?,
+        operation_idempotency_digest: row.try_get("operation_idempotency_digest")?,
         status,
         created_at_ms: row.try_get("created_at_ms")?,
         updated_at_ms: row.try_get("updated_at_ms")?,
     })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn event_from_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
@@ -1204,7 +1587,6 @@ fn event_from_row(
         signed_event,
         raw_event_json: row.try_get("raw_event_json")?,
         state,
-        accepted_quorum: row.try_get("accepted_quorum")?,
         attempt_count: row.try_get("attempt_count")?,
         claim_token: row.try_get("claim_token")?,
         claim_owner: row.try_get("claim_owner")?,
@@ -1219,19 +1601,72 @@ fn event_from_row(
     })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn relay_status_from_row(
+fn delivery_plan_from_row(
     row: sqlx::sqlite::SqliteRow,
-) -> Result<RadrootsOutboxRelayStatusRecord, RadrootsOutboxError> {
-    let status = RadrootsOutboxRelayStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
-    Ok(RadrootsOutboxRelayStatusRecord {
+) -> Result<RadrootsOutboxDeliveryPlanRecord, RadrootsOutboxError> {
+    let required_success_count: i64 = row.try_get("required_success_count")?;
+    let satisfaction_policy = parse_satisfaction_policy(
+        row.try_get::<String, _>("satisfaction_policy")?.as_str(),
+        required_success_count,
+    )?;
+    let status =
+        RadrootsOutboxDeliveryPlanStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
+    Ok(RadrootsOutboxDeliveryPlanRecord {
+        delivery_plan_id: row.try_get("delivery_plan_id")?,
         outbox_event_id: row.try_get("outbox_event_id")?,
-        relay_url: row.try_get("relay_url")?,
+        transport_profile_id: row.try_get("transport_profile_id")?,
+        target_policy_fingerprint: row.try_get("target_policy_fingerprint")?,
+        target_policy_version: u32_from_i64(
+            "target_policy_version",
+            row.try_get("target_policy_version")?,
+        )?,
+        satisfaction_policy,
+        required_success_count,
+        delivery_plan_idempotency_digest: row.try_get("delivery_plan_idempotency_digest")?,
+        status,
+        satisfied_at_ms: row.try_get("satisfied_at_ms")?,
+        created_at_ms: row.try_get("created_at_ms")?,
+        updated_at_ms: row.try_get("updated_at_ms")?,
+    })
+}
+
+fn delivery_target_from_row(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxError> {
+    let transport_kind = RadrootsTransportKind::parse(row.try_get::<String, _>("transport_kind")?)?;
+    let endpoint_uri =
+        RadrootsTransportTargetUri::parse(row.try_get::<String, _>("endpoint_uri")?)?;
+    let endpoint_fingerprint = RadrootsTransportTargetFingerprint::parse(
+        row.try_get::<String, _>("endpoint_fingerprint")?,
+    )?;
+    let status =
+        RadrootsOutboxDeliveryTargetStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
+    Ok(RadrootsOutboxDeliveryTargetRecord {
+        delivery_target_id: row.try_get("delivery_target_id")?,
+        delivery_plan_id: row.try_get("delivery_plan_id")?,
+        transport_kind,
+        endpoint_uri,
+        endpoint_fingerprint,
         status,
         attempt_count: row.try_get("attempt_count")?,
         last_attempt_at_ms: row.try_get("last_attempt_at_ms")?,
-        acknowledged_at_ms: row.try_get("acknowledged_at_ms")?,
+        completed_at_ms: row.try_get("completed_at_ms")?,
         last_error: row.try_get("last_error")?,
+    })
+}
+
+fn delivery_attempt_from_row(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<RadrootsOutboxDeliveryAttemptRecord, RadrootsOutboxError> {
+    let status =
+        RadrootsOutboxDeliveryTargetStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
+    Ok(RadrootsOutboxDeliveryAttemptRecord {
+        delivery_attempt_id: row.try_get("delivery_attempt_id")?,
+        delivery_plan_id: row.try_get("delivery_plan_id")?,
+        delivery_target_id: row.try_get("delivery_target_id")?,
+        status,
+        attempted_at_ms: row.try_get("attempted_at_ms")?,
+        message: row.try_get("message")?,
     })
 }
 
@@ -1247,49 +1682,140 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
     }
 }
 
-fn ordered_unique_relays(relays: Vec<String>) -> Vec<String> {
+fn ordered_unique_targets(targets: Vec<RadrootsTransportTarget>) -> Vec<RadrootsTransportTarget> {
     let mut out = Vec::new();
-    for relay in relays {
-        if !out.iter().any(|existing| existing == &relay) {
-            out.push(relay);
+    for target in targets {
+        if !out
+            .iter()
+            .any(|existing: &RadrootsTransportTarget| existing.fingerprint == target.fingerprint)
+        {
+            out.push(target);
         }
     }
     out
 }
 
-fn digest_relays(relays: &[String]) -> Vec<String> {
-    let mut out = relays.to_vec();
-    out.sort();
-    out.dedup();
-    out
-}
-
 #[derive(Serialize)]
-struct DigestInput<'a> {
+struct OperationDigestInput<'a> {
     operation_kind: &'a str,
     expected_pubkey: &'a str,
     draft: &'a RadrootsFrozenEventDraft,
-    target_relays: &'a [String],
 }
 
-fn idempotency_digest(
+fn operation_idempotency_digest(
     operation_kind: &str,
     expected_pubkey: &str,
     draft: &RadrootsFrozenEventDraft,
-    target_relays: &[String],
 ) -> String {
-    let input = DigestInput {
+    let input = OperationDigestInput {
         operation_kind,
         expected_pubkey,
         draft,
-        target_relays,
     };
-    let bytes = serde_json::to_vec(&input).expect("outbox digest input is serializable");
+    sha256_json(&input)
+}
+
+#[derive(Serialize)]
+struct TargetPolicyDigestInput<'a> {
+    satisfaction_policy: String,
+    targets: Vec<TargetPolicyDigestTarget<'a>>,
+}
+
+#[derive(Serialize)]
+struct TargetPolicyDigestTarget<'a> {
+    transport_kind: String,
+    endpoint_uri: &'a str,
+    endpoint_fingerprint: &'a str,
+}
+
+fn target_policy_fingerprint(
+    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
+    targets: &[PreparedDeliveryTarget],
+) -> String {
+    let mut target_inputs = targets
+        .iter()
+        .map(|target| TargetPolicyDigestTarget {
+            transport_kind: target.target.kind.canonical_label(),
+            endpoint_uri: target.target.uri.as_str(),
+            endpoint_fingerprint: target.target.fingerprint.as_str(),
+        })
+        .collect::<Vec<_>>();
+    target_inputs.sort_by(|left, right| {
+        left.endpoint_fingerprint
+            .cmp(right.endpoint_fingerprint)
+            .then_with(|| left.transport_kind.cmp(&right.transport_kind))
+            .then_with(|| left.endpoint_uri.cmp(right.endpoint_uri))
+    });
+    sha256_json(&TargetPolicyDigestInput {
+        satisfaction_policy: satisfaction_policy_storage_value(satisfaction_policy),
+        targets: target_inputs,
+    })
+}
+
+#[derive(Serialize)]
+struct DeliveryPlanDigestInput<'a> {
+    event_id: &'a str,
+    transport_profile_id: &'a str,
+    target_policy_fingerprint: &'a str,
+    target_policy_version: u32,
+}
+
+fn delivery_plan_idempotency_digest(
+    event_id: &str,
+    transport_profile_id: &str,
+    target_policy_fingerprint: &str,
+    target_policy_version: u32,
+) -> String {
+    sha256_json(&DeliveryPlanDigestInput {
+        event_id,
+        transport_profile_id,
+        target_policy_fingerprint,
+        target_policy_version,
+    })
+}
+
+fn sha256_json<T: Serialize>(value: &T) -> String {
+    let bytes = serde_json::to_vec(value).expect("outbox digest input is serializable");
     hex::encode(Sha256::digest(bytes))
+}
+
+fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolicy) -> String {
+    match policy {
+        RadrootsTransportSatisfactionPolicy::AllTargets => "all_targets".to_owned(),
+        RadrootsTransportSatisfactionPolicy::AnyTarget => "any_target".to_owned(),
+        RadrootsTransportSatisfactionPolicy::AtLeast(count) => format!("at_least:{count}"),
+    }
+}
+
+fn parse_satisfaction_policy(
+    value: &str,
+    required_success_count: i64,
+) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
+    match value {
+        "all_targets" => Ok(RadrootsTransportSatisfactionPolicy::AllTargets),
+        "any_target" => Ok(RadrootsTransportSatisfactionPolicy::AnyTarget),
+        stored if stored == format!("at_least:{required_success_count}") => {
+            let count = u16::try_from(required_success_count).map_err(|_| {
+                RadrootsOutboxError::IntegerRange {
+                    field: "required_success_count",
+                    value: required_success_count,
+                }
+            })?;
+            Ok(RadrootsTransportSatisfactionPolicy::AtLeast(count))
+        }
+        _ => Err(RadrootsOutboxError::InvalidStoredEnum {
+            field: "outbox_delivery_plan.satisfaction_policy",
+            value: value.to_owned(),
+        }),
+    }
 }
 
 fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
+}
+
+fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxError> {
+    u32::try_from(value).map_err(|_| RadrootsOutboxError::IntegerRange { field, value })
 }
 
 #[cfg(test)]
@@ -1304,8 +1830,8 @@ mod tests {
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
     const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
         "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
-    const RELAY_PRIMARY_WSS: &str = "wss://relay.example.com";
-    const RELAY_SECONDARY_WSS: &str = "wss://relay-2.example.com";
+    const NOSTR_PRIMARY_WSS: &str = "wss://relay.example.com";
+    const NOSTR_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()
@@ -1323,6 +1849,24 @@ mod tests {
         .expect("post draft")
     }
 
+    fn nostr_target(uri: &str) -> RadrootsTransportTarget {
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, uri).expect("nostr target")
+    }
+
+    fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
+        RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, uri)
+            .expect("reticulum target")
+    }
+
+    fn delivery_plan(targets: Vec<RadrootsTransportTarget>) -> RadrootsOutboxDeliveryPlanInput {
+        RadrootsOutboxDeliveryPlanInput::new(
+            "transport.nostr.local",
+            1,
+            RadrootsTransportSatisfactionPolicy::AllTargets,
+            targets,
+        )
+    }
+
     fn operation_input(
         draft: RadrootsFrozenEventDraft,
         created_at_ms: i64,
@@ -1330,11 +1874,11 @@ mod tests {
         RadrootsOutboxOperationInput::new(
             "publish_post",
             draft,
-            vec![
-                RELAY_PRIMARY_WSS.to_owned(),
-                RELAY_SECONDARY_WSS.to_owned(),
-                RELAY_PRIMARY_WSS.to_owned(),
-            ],
+            delivery_plan(vec![
+                nostr_target(NOSTR_PRIMARY_WSS),
+                nostr_target(NOSTR_SECONDARY_WSS),
+                nostr_target(NOSTR_PRIMARY_WSS),
+            ]),
             created_at_ms,
         )
     }
@@ -1348,11 +1892,10 @@ mod tests {
             "publish_post",
             draft,
             signed_event,
-            vec![
-                RELAY_PRIMARY_WSS.to_owned(),
-                RELAY_SECONDARY_WSS.to_owned(),
-                RELAY_PRIMARY_WSS.to_owned(),
-            ],
+            delivery_plan(vec![
+                nostr_target(NOSTR_PRIMARY_WSS),
+                nostr_target(NOSTR_SECONDARY_WSS),
+            ]),
             true,
             created_at_ms + 7,
             created_at_ms,
@@ -1365,44 +1908,6 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    async fn enqueue_signed_fixture(
-        outbox: &RadrootsOutbox,
-    ) -> (RadrootsOutboxEnqueueReceipt, RadrootsOutboxClaimedEvent) {
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "hello");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-        let claimed = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claimed event");
-        (receipt, claimed)
-    }
-
-    async fn complete_claimed_signing(
-        outbox: &RadrootsOutbox,
-        claimed: &RadrootsOutboxClaimedEvent,
-        keys: &RadrootsNostrKeys,
-        now_ms: i64,
-    ) -> RadrootsSignedNostrEvent {
-        if let Some(signed_event) = claimed.signed_event.clone() {
-            return signed_event;
-        }
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(keys, &claimed.draft).expect("signed event");
-        outbox
-            .complete_signing(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                signed_event,
-                now_ms,
-            )
-            .await
-            .expect("complete signing")
-    }
-
     async fn table_count(outbox: &RadrootsOutbox, table_name: &str) -> i64 {
         let sql = format!("SELECT COUNT(*) FROM {table_name}");
         sqlx::query_scalar(sql.as_str())
@@ -1412,7 +1917,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_applies_pragmas_and_migrates_down() {
+    async fn migration_applies_delivery_plan_schema_and_migrates_down() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
 
         assert_eq!(outbox.pragma_foreign_keys().await.expect("foreign keys"), 1);
@@ -1425,13 +1930,28 @@ mod tests {
             "memory"
         );
 
-        let row = sqlx::query(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'outbox_event'",
+        for table in [
+            "outbox_operations",
+            "outbox_event",
+            "outbox_delivery_plan",
+            "outbox_delivery_target",
+            "outbox_delivery_attempt",
+        ] {
+            let row =
+                sqlx::query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+                    .bind(table)
+                    .fetch_optional(outbox.pool())
+                    .await
+                    .expect("table query");
+            assert!(row.is_some(), "{table}");
+        }
+        let old = sqlx::query(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'outbox_event_relay_status'",
         )
         .fetch_optional(outbox.pool())
         .await
-        .expect("table query");
-        assert!(row.is_some());
+        .expect("old table query");
+        assert!(old.is_none());
 
         outbox.migrate_down().await.expect("migrate down");
         let row = sqlx::query(
@@ -1444,181 +1964,51 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_outbox_reopens_existing_schema() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let path = tempdir.path().join("outbox.sqlite");
-
-        let first = RadrootsOutbox::open_file(&path).await.expect("first");
-        assert_eq!(first.pragma_foreign_keys().await.expect("foreign keys"), 1);
-        drop(first);
-
-        let second = RadrootsOutbox::open_file(&path).await.expect("second");
-        assert_eq!(second.pragma_foreign_keys().await.expect("foreign keys"), 1);
-    }
-
-    #[tokio::test]
-    async fn status_summary_counts_ready_publishing_retryable_and_terminal_work() {
+    async fn operation_and_delivery_plan_idempotency_are_split() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
-
-        let empty = outbox.status_summary(1_000).await.expect("empty status");
-        assert_eq!(empty.total_events, 0);
-        assert_eq!(empty.pending_events, 0);
-        assert_eq!(empty.retryable_events, 0);
-        assert_eq!(empty.terminal_events, 0);
-        assert_eq!(empty.failed_terminal_events, 0);
-        assert_eq!(empty.ready_signed_events, 0);
-        assert_eq!(empty.publishing_events, 0);
-        assert_eq!(empty.last_attempt_at_ms, None);
-        assert_eq!(empty.last_error, None);
-
-        let keys = fixture_keys();
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ready");
-        let signed_event = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
-        let receipt = outbox
-            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
-            .await
-            .expect("signed enqueue");
-        let ready = outbox.status_summary(1_000).await.expect("ready status");
-        assert_eq!(ready.total_events, 1);
-        assert_eq!(ready.pending_events, 1);
-        assert_eq!(ready.retryable_events, 0);
-        assert_eq!(ready.terminal_events, 0);
-        assert_eq!(ready.ready_signed_events, 1);
-
-        let claimed = outbox
-            .claim_next_ready_signed_event("publisher", "claim-a", 2_500, 2_000)
-            .await
-            .expect("claim")
-            .expect("claimed");
-        let publishing = outbox
-            .status_summary(2_000)
-            .await
-            .expect("publishing status");
-        assert_eq!(publishing.pending_events, 1);
-        assert_eq!(publishing.publishing_events, 1);
-        assert_eq!(publishing.ready_signed_events, 0);
-
-        outbox
-            .mark_relay_failed_retryable(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                RELAY_PRIMARY_WSS,
-                "timeout: relay unavailable",
-                2_100,
-            )
-            .await
-            .expect("relay failed");
-        outbox
-            .mark_publish_retryable(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                "relay publish incomplete",
-                3_000,
-                2_200,
-            )
-            .await
-            .expect("retryable");
-
-        let retry_wait = outbox
-            .status_summary(2_900)
-            .await
-            .expect("retry wait status");
-        assert_eq!(retry_wait.pending_events, 0);
-        assert_eq!(retry_wait.retryable_events, 1);
-        assert_eq!(retry_wait.terminal_events, 0);
-        assert_eq!(retry_wait.failed_terminal_events, 0);
-        assert_eq!(retry_wait.ready_signed_events, 0);
-        assert_eq!(retry_wait.last_attempt_at_ms, Some(2_100));
-        assert_eq!(
-            retry_wait.last_error.as_deref(),
-            Some("relay publish incomplete")
-        );
-
-        let retry_ready = outbox
-            .status_summary(3_000)
-            .await
-            .expect("retry ready status");
-        assert_eq!(retry_ready.ready_signed_events, 1);
-    }
-
-    #[test]
-    fn terminal_and_cancelled_event_states_round_trip() {
-        assert_eq!(bool_i64(true), 1);
-        assert_eq!(bool_i64(false), 0);
-        assert_eq!(
-            RadrootsOutboxOperationStatus::parse("failed_terminal").expect("operation status"),
-            RadrootsOutboxOperationStatus::FailedTerminal
-        );
-        assert_eq!(
-            RadrootsOutboxOperationStatus::FailedTerminal.as_str(),
-            "failed_terminal"
-        );
-        assert_eq!(
-            RadrootsOutboxOperationStatus::parse("cancelled").expect("operation status"),
-            RadrootsOutboxOperationStatus::Cancelled
-        );
-        assert_eq!(
-            RadrootsOutboxOperationStatus::Cancelled.as_str(),
-            "cancelled"
-        );
-        assert_eq!(
-            RadrootsOutboxEventState::parse("failed_terminal").expect("event state"),
-            RadrootsOutboxEventState::FailedTerminal
-        );
-        assert!(RadrootsOutboxEventState::FailedTerminal.is_terminal());
-        assert_eq!(
-            RadrootsOutboxEventState::parse("cancelled").expect("event state"),
-            RadrootsOutboxEventState::Cancelled
-        );
-        assert!(RadrootsOutboxEventState::Cancelled.is_terminal());
-        assert!(RadrootsOutboxEventState::Published.is_terminal());
-        assert!(!RadrootsOutboxEventState::PublishRetryable.is_terminal());
-    }
-
-    #[tokio::test]
-    async fn enqueue_idempotency_is_scoped_by_kind_pubkey_and_digest() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let first_draft = post_draft(hex_64('a').as_str(), "hello");
-
+        let draft = post_draft(hex_64('a').as_str(), "hello");
         let first = outbox
-            .enqueue_operation(operation_input(first_draft.clone(), 1_000))
+            .enqueue_operation(operation_input(draft.clone(), 1_000).with_idempotency_key("idem-a"))
             .await
-            .expect("first enqueue");
-        let second = outbox
-            .enqueue_operation(operation_input(first_draft.clone(), 1_001))
+            .expect("first");
+        let same_plan = outbox
+            .enqueue_operation(operation_input(draft.clone(), 1_100).with_idempotency_key("idem-a"))
             .await
-            .expect("second enqueue");
+            .expect("same");
+        let new_plan = outbox
+            .enqueue_operation(
+                RadrootsOutboxOperationInput::new(
+                    "publish_post",
+                    draft.clone(),
+                    delivery_plan(vec![nostr_target("wss://relay-3.example.com")]),
+                    1_200,
+                )
+                .with_idempotency_key("idem-a"),
+            )
+            .await
+            .expect("new plan");
 
         assert_eq!(first.status, RadrootsOutboxEnqueueStatus::Inserted);
-        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Inserted);
-        assert_ne!(first.operation_id, second.operation_id);
-        assert_ne!(first.outbox_event_id, second.outbox_event_id);
-
-        let keyed_first = outbox
-            .enqueue_operation(
-                operation_input(first_draft.clone(), 1_002).with_idempotency_key("idem-a"),
-            )
-            .await
-            .expect("keyed first");
-        let keyed_second = outbox
-            .enqueue_operation(
-                operation_input(first_draft.clone(), 1_003).with_idempotency_key("idem-a"),
-            )
-            .await
-            .expect("keyed second");
-
-        assert_eq!(keyed_first.status, RadrootsOutboxEnqueueStatus::Inserted);
-        assert_eq!(keyed_second.status, RadrootsOutboxEnqueueStatus::Existing);
-        assert_eq!(keyed_first.operation_id, keyed_second.operation_id);
-        assert_eq!(keyed_first.outbox_event_id, keyed_second.outbox_event_id);
+        assert_eq!(same_plan.status, RadrootsOutboxEnqueueStatus::Existing);
+        assert_eq!(new_plan.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(first.operation_id, same_plan.operation_id);
+        assert_eq!(first.operation_id, new_plan.operation_id);
+        assert_eq!(first.outbox_event_id, new_plan.outbox_event_id);
         assert_eq!(
-            keyed_first.idempotency_digest,
-            keyed_second.idempotency_digest
+            first.operation_idempotency_digest,
+            new_plan.operation_idempotency_digest
         );
+        assert_ne!(
+            first.delivery_plan_idempotency_digest,
+            new_plan.delivery_plan_idempotency_digest
+        );
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 2);
 
         let conflict = outbox
             .enqueue_operation(
-                operation_input(post_draft(hex_64('a').as_str(), "changed"), 1_004)
+                operation_input(post_draft(hex_64('a').as_str(), "changed"), 1_300)
                     .with_idempotency_key("idem-a"),
             )
             .await
@@ -1627,309 +2017,39 @@ mod tests {
             conflict,
             RadrootsOutboxError::IdempotencyConflict { .. }
         ));
-
-        let other_kind = outbox
-            .enqueue_operation(
-                RadrootsOutboxOperationInput::new(
-                    "publish_post_reply",
-                    first_draft.clone(),
-                    vec![RELAY_PRIMARY_WSS.to_owned()],
-                    1_005,
-                )
-                .with_idempotency_key("idem-a"),
-            )
-            .await
-            .expect("other kind");
-        assert_eq!(other_kind.status, RadrootsOutboxEnqueueStatus::Inserted);
-
-        let other_pubkey = outbox
-            .enqueue_operation(
-                operation_input(post_draft(hex_64('b').as_str(), "hello"), 1_006)
-                    .with_idempotency_key("idem-a"),
-            )
-            .await
-            .expect("other pubkey");
-        assert_eq!(other_pubkey.status, RadrootsOutboxEnqueueStatus::Inserted);
     }
 
     #[tokio::test]
-    async fn enqueue_idempotency_digest_sorts_relays_but_publish_order_is_preserved() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(hex_64('a').as_str(), "hello");
-        let first = outbox
-            .enqueue_operation(
-                RadrootsOutboxOperationInput::new(
-                    "publish_post",
-                    draft.clone(),
-                    vec![
-                        RELAY_SECONDARY_WSS.to_owned(),
-                        RELAY_PRIMARY_WSS.to_owned(),
-                        RELAY_SECONDARY_WSS.to_owned(),
-                    ],
-                    1_000,
-                )
-                .with_idempotency_key("idem-relay-order"),
-            )
-            .await
-            .expect("first enqueue");
-        let second = outbox
-            .enqueue_operation(
-                RadrootsOutboxOperationInput::new(
-                    "publish_post",
-                    draft,
-                    vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
-                    1_001,
-                )
-                .with_idempotency_key("idem-relay-order"),
-            )
-            .await
-            .expect("second enqueue");
-
-        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Existing);
-        assert_eq!(first.idempotency_digest, second.idempotency_digest);
-
-        let claimed = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claimed event");
-        assert_eq!(
-            claimed.target_relays,
-            vec![RELAY_SECONDARY_WSS.to_owned(), RELAY_PRIMARY_WSS.to_owned()]
-        );
-    }
-
-    #[tokio::test]
-    async fn enqueue_rejects_empty_target_relays_before_persistence() {
+    async fn enqueue_rejects_empty_delivery_targets_before_persistence() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(hex_64('a').as_str(), "hello");
 
         let err = outbox
-            .enqueue_operation(
-                RadrootsOutboxOperationInput::new("publish_post", draft, Vec::new(), 1_000)
-                    .with_idempotency_key("empty-relays"),
-            )
-            .await
-            .expect_err("empty relays");
-
-        assert!(matches!(err, RadrootsOutboxError::EmptyTargetRelays));
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_rejects_empty_target_relays_before_persistence() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed empty");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-
-        let err = outbox
-            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
-                Vec::new(),
-                false,
-                1_007,
+                delivery_plan(Vec::new()),
                 1_000,
             ))
             .await
-            .expect_err("empty relays");
+            .expect_err("empty targets");
 
-        assert!(matches!(err, RadrootsOutboxError::EmptyTargetRelays));
+        assert!(matches!(err, RadrootsOutboxError::EmptyDeliveryTargets));
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
     }
 
     #[tokio::test]
-    async fn enqueue_allows_explicitly_delegated_empty_target_relays() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(hex_64('a').as_str(), "delegated empty");
-
-        let receipt = outbox
-            .enqueue_operation(
-                RadrootsOutboxOperationInput::new("publish_post", draft, Vec::new(), 1_000)
-                    .allow_empty_target_relays(),
-            )
-            .await
-            .expect("delegated empty relays");
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.accepted_quorum, 0);
-        assert_eq!(
-            outbox
-                .relay_statuses(receipt.outbox_event_id)
-                .await
-                .expect("relay statuses"),
-            Vec::new()
-        );
-
-        let claimed = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        assert_eq!(claimed.target_relays, Vec::<String>::new());
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_allows_explicitly_delegated_empty_target_relays() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed delegated empty");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-
-        let receipt = outbox
-            .enqueue_signed_operation(
-                RadrootsOutboxSignedOperationInput::new(
-                    "publish_post",
-                    draft,
-                    signed_event.clone(),
-                    Vec::new(),
-                    false,
-                    1_007,
-                    1_000,
-                )
-                .allow_empty_target_relays(),
-            )
-            .await
-            .expect("delegated signed empty relays");
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.accepted_quorum, 0);
-        assert_eq!(event.signed_event, Some(signed_event.clone()));
-        assert_eq!(
-            outbox
-                .relay_statuses(receipt.outbox_event_id)
-                .await
-                .expect("relay statuses"),
-            Vec::new()
-        );
-
-        let claimed = outbox
-            .claim_next_ready_signed_event("publisher-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        assert_eq!(claimed.signed_event, Some(signed_event));
-        assert_eq!(claimed.target_relays, Vec::<String>::new());
-    }
-
-    #[tokio::test]
-    async fn claim_next_ready_event_returns_none_when_no_work_is_ready() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-
-        assert!(
-            outbox
-                .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-                .await
-                .expect("claim")
-                .is_none()
-        );
-        assert!(
-            outbox
-                .claim_next_ready_signed_event("publisher-a", "claim-b", 2_000, 1_000)
-                .await
-                .expect("claim signed")
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn enqueue_accepts_single_and_multiple_target_relays() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let single_draft = post_draft(hex_64('a').as_str(), "single");
-
-        let single = outbox
-            .enqueue_operation(RadrootsOutboxOperationInput::new(
-                "publish_post",
-                single_draft,
-                vec![RELAY_PRIMARY_WSS.to_owned()],
-                1_000,
-            ))
-            .await
-            .expect("single relay");
-        let single_event = outbox
-            .get_event(single.outbox_event_id)
-            .await
-            .expect("single event")
-            .expect("single event");
-        assert_eq!(single_event.accepted_quorum, 1);
-        assert_eq!(
-            outbox
-                .relay_statuses(single.outbox_event_id)
-                .await
-                .expect("single relay statuses")
-                .len(),
-            1
-        );
-
-        let multi_draft = post_draft(hex_64('b').as_str(), "multi");
-        let multi = outbox
-            .enqueue_operation(RadrootsOutboxOperationInput::new(
-                "publish_post",
-                multi_draft,
-                vec![
-                    RELAY_PRIMARY_WSS.to_owned(),
-                    RELAY_SECONDARY_WSS.to_owned(),
-                    RELAY_PRIMARY_WSS.to_owned(),
-                ],
-                1_100,
-            ))
-            .await
-            .expect("multiple relays");
-        let multi_event = outbox
-            .get_event(multi.outbox_event_id)
-            .await
-            .expect("multi event")
-            .expect("multi event");
-        assert_eq!(multi_event.accepted_quorum, 2);
-        assert_eq!(
-            outbox
-                .relay_statuses(multi.outbox_event_id)
-                .await
-                .expect("multi relay statuses")
-                .len(),
-            2
-        );
-
-        let zero_quorum_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM outbox_event WHERE accepted_quorum = 0")
-                .fetch_one(outbox.pool())
-                .await
-                .expect("zero quorum count");
-        assert_eq!(zero_quorum_count, 0);
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_operation_stores_pushable_signed_event_without_claim() {
+    async fn signed_enqueue_claims_ready_delivery_targets_and_records_attempts() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed");
         let signed_event =
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-        let expected_raw_json = signed_event.raw_json.clone();
-
         let receipt = outbox
-            .enqueue_signed_operation(
-                signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
-                    .with_idempotency_key("signed-a"),
-            )
+            .enqueue_signed_operation(signed_operation_input(draft, signed_event.clone(), 1_000))
             .await
-            .expect("signed enqueue");
-
-        assert_eq!(receipt.status, RadrootsOutboxEnqueueStatus::Inserted);
-        assert_eq!(receipt.expected_event_id, draft.expected_event_id);
+            .expect("enqueue");
 
         let event = outbox
             .get_event(receipt.outbox_event_id)
@@ -1937,1093 +2057,136 @@ mod tests {
             .expect("event")
             .expect("event");
         assert_eq!(event.state, RadrootsOutboxEventState::Signed);
-        assert_eq!(event.signed_event, Some(signed_event.clone()));
-        assert_eq!(event.raw_event_json, Some(expected_raw_json));
-        assert!(event.event_store_ingested);
-        assert!(event.event_store_inserted);
-        assert_eq!(event.event_store_ingested_at_ms, Some(1_007));
-        assert_eq!(event.claim_token, None);
-        assert_eq!(event.claim_owner, None);
-        assert_eq!(event.claim_expires_at_ms, None);
-
-        let statuses = outbox
-            .relay_statuses(receipt.outbox_event_id)
-            .await
-            .expect("statuses");
-        assert_eq!(statuses.len(), 2);
-        assert!(
-            statuses
-                .iter()
-                .all(|status| status.status == RadrootsOutboxRelayStatus::Pending)
-        );
+        assert_eq!(event.signed_event, Some(signed_event));
 
         let claimed = outbox
-            .claim_next_ready_event("publisher-a", "claim-a", 2_000, 1_000)
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
             .await
             .expect("claim")
             .expect("claimed");
         assert_eq!(claimed.state, RadrootsOutboxEventState::Publishing);
-        assert_eq!(claimed.signed_event, Some(signed_event));
-        assert_eq!(
-            claimed.target_relays,
-            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
-        );
-    }
+        assert_eq!(claimed.delivery_targets.len(), 2);
 
-    #[tokio::test]
-    async fn claim_next_ready_signed_event_skips_unsigned_work() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let unsigned = outbox
-            .enqueue_operation(operation_input(
-                post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "unsigned"),
-                900,
-            ))
-            .await
-            .expect("unsigned enqueue");
-        let signed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed-only");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &signed_draft).expect("signed event");
-        let signed = outbox
-            .enqueue_signed_operation(signed_operation_input(signed_draft, signed_event, 1_000))
-            .await
-            .expect("signed enqueue");
-
-        let claimed = outbox
-            .claim_next_ready_signed_event("publisher-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claimed");
-        assert_eq!(claimed.outbox_event_id, signed.outbox_event_id);
-        assert_eq!(claimed.state, RadrootsOutboxEventState::Publishing);
-        assert!(claimed.signed_event.is_some());
-
-        let unsigned_event = outbox
-            .get_event(unsigned.outbox_event_id)
-            .await
-            .expect("unsigned event")
-            .expect("unsigned event");
-        assert_eq!(unsigned_event.state, RadrootsOutboxEventState::DraftQueued);
-        assert!(unsigned_event.claim_token.is_none());
-
-        let signing_claim = outbox
-            .claim_next_ready_event("signer-a", "sign-a", 2_100, 1_100)
-            .await
-            .expect("sign claim")
-            .expect("sign claim");
-        assert_eq!(signing_claim.outbox_event_id, unsigned.outbox_event_id);
-        assert_eq!(signing_claim.state, RadrootsOutboxEventState::Signing);
-        assert!(signing_claim.signed_event.is_none());
-    }
-
-    #[tokio::test]
-    async fn claim_ready_signed_event_targets_requested_record() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let older_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "older-ready");
-        let older_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &older_draft).expect("older event");
-        let older = outbox
-            .enqueue_signed_operation(signed_operation_input(older_draft, older_signed, 1_000))
-            .await
-            .expect("older enqueue");
-        let targeted_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "targeted-ready");
-        let targeted_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &targeted_draft)
-            .expect("targeted event");
-        let targeted = outbox
-            .enqueue_signed_operation(signed_operation_input(
-                targeted_draft,
-                targeted_signed,
-                1_100,
-            ))
-            .await
-            .expect("targeted enqueue");
-
-        let claimed = outbox
-            .claim_ready_signed_event(
-                targeted.outbox_event_id,
-                "publisher-a",
-                "claim-a",
-                2_000,
-                1_200,
-            )
-            .await
-            .expect("claim")
-            .expect("targeted claim");
-        assert_eq!(claimed.outbox_event_id, targeted.outbox_event_id);
-        assert_eq!(claimed.state, RadrootsOutboxEventState::Publishing);
-        assert!(claimed.signed_event.is_some());
-
-        let older_event = outbox
-            .get_event(older.outbox_event_id)
-            .await
-            .expect("older event")
-            .expect("older event");
-        assert_eq!(older_event.state, RadrootsOutboxEventState::Signed);
-        assert!(older_event.claim_token.is_none());
-
-        assert!(
-            outbox
-                .claim_ready_signed_event(
-                    targeted.outbox_event_id,
-                    "publisher-b",
-                    "claim-b",
-                    2_100,
-                    1_300
-                )
-                .await
-                .expect("second claim")
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_operation_idempotency_reuses_existing_signed_record() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "idem-signed");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-
-        let first = outbox
-            .enqueue_signed_operation(
-                signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
-                    .with_idempotency_key("signed-idem"),
-            )
-            .await
-            .expect("first");
-        let second = outbox
-            .enqueue_signed_operation(
-                signed_operation_input(draft.clone(), signed_event, 1_100)
-                    .with_idempotency_key("signed-idem"),
-            )
-            .await
-            .expect("second");
-
-        assert_eq!(first.status, RadrootsOutboxEnqueueStatus::Inserted);
-        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Existing);
-        assert_eq!(first.operation_id, second.operation_id);
-        assert_eq!(first.outbox_event_id, second.outbox_event_id);
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
-
-        let changed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "changed");
-        let changed_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft).expect("signed");
-        let conflict = outbox
-            .enqueue_signed_operation(
-                signed_operation_input(changed_draft, changed_signed, 1_200)
-                    .with_idempotency_key("signed-idem"),
-            )
-            .await
-            .expect_err("conflict");
-        assert!(matches!(
-            conflict,
-            RadrootsOutboxError::IdempotencyConflict { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn preflight_signed_operation_idempotency_rejects_conflict_without_insert() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-signed");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-        let first_input = signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
-            .with_idempotency_key("signed-preflight");
-        let first = outbox
-            .enqueue_signed_operation(first_input.clone())
-            .await
-            .expect("first");
-
-        let same = outbox
-            .preflight_signed_operation_idempotency(&first_input)
-            .await
-            .expect("same preflight");
-        assert_eq!(same.idempotency_digest, first.idempotency_digest);
-
-        let changed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-changed");
-        let changed_signed =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft).expect("signed");
-        let conflict = outbox
-            .preflight_signed_operation_idempotency(
-                &signed_operation_input(changed_draft, changed_signed, 1_100)
-                    .with_idempotency_key("signed-preflight"),
-            )
-            .await
-            .expect_err("conflict");
-        assert!(matches!(
-            conflict,
-            RadrootsOutboxError::IdempotencyConflict { .. }
-        ));
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
-    }
-
-    #[tokio::test]
-    async fn preflight_signed_operation_idempotency_covers_new_key_and_empty_relays() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-new");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-
-        let without_key = outbox
-            .preflight_signed_operation_idempotency(&signed_operation_input(
-                draft.clone(),
-                signed_event.clone(),
-                1_000,
-            ))
-            .await
-            .expect("preflight without key");
-        let with_new_key = outbox
-            .preflight_signed_operation_idempotency(
-                &signed_operation_input(draft.clone(), signed_event.clone(), 1_001)
-                    .with_idempotency_key("new-preflight-key"),
-            )
-            .await
-            .expect("preflight with new key");
-        assert_eq!(
-            without_key.idempotency_digest,
-            with_new_key.idempotency_digest
-        );
-
-        let empty_relays = outbox
-            .preflight_signed_operation_idempotency(&RadrootsOutboxSignedOperationInput::new(
-                "publish_post",
-                draft.clone(),
-                signed_event.clone(),
-                Vec::new(),
-                false,
-                1_007,
-                1_002,
-            ))
-            .await
-            .expect_err("empty relays");
-        assert!(matches!(
-            empty_relays,
-            RadrootsOutboxError::EmptyTargetRelays
-        ));
-        let delegated_empty_relays = outbox
-            .preflight_signed_operation_idempotency(
-                &RadrootsOutboxSignedOperationInput::new(
-                    "publish_post",
-                    draft.clone(),
-                    signed_event.clone(),
-                    Vec::new(),
-                    false,
-                    1_008,
-                    1_003,
-                )
-                .allow_empty_target_relays(),
-            )
-            .await
-            .expect("delegated empty relays");
-        assert_ne!(
-            without_key.idempotency_digest,
-            delegated_empty_relays.idempotency_digest
-        );
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_operation_rejects_mismatched_signed_event() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "trusted");
-        let other_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "other");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &other_draft).expect("signed event");
-
-        let error = outbox
-            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
-            .await
-            .expect_err("mismatch");
-
-        assert!(matches!(
-            error,
-            RadrootsOutboxError::SignedEventDraftMismatch(_)
-        ));
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
-    }
-
-    #[tokio::test]
-    async fn enqueue_signed_operation_rejects_event_id_mismatch() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "bad-id");
-        let mut signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-        signed_event.id = hex_64('f');
-
-        let error = outbox
-            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
-            .await
-            .expect_err("mismatch");
-
-        assert!(matches!(
-            error,
-            RadrootsOutboxError::SignedEventDraftMismatch(_)
-        ));
-        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
-        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
-    }
-
-    #[tokio::test]
-    async fn complete_signing_rejects_signed_event_id_mismatch() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "claimed draft");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-        let claimed = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        let other_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "other draft");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &other_draft).expect("signed event");
-
-        let err = outbox
-            .complete_signing(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                signed_event.clone(),
-                1_100,
-            )
-            .await
-            .expect_err("event id mismatch");
-
-        assert_eq!(
-            err.to_string(),
-            format!(
-                "Signed event ID mismatch: expected {}, got {}",
-                receipt.expected_event_id, signed_event.id
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn claim_token_guards_updates_and_expired_signing_claim_recovers() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(hex_64('a').as_str(), "hello");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-
-        let claimed = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 1_100, 1_000)
-            .await
-            .expect("claim")
-            .expect("claimed event");
-        assert_eq!(claimed.state, RadrootsOutboxEventState::Signing);
-        assert_eq!(claimed.attempt_count, 1);
-        assert_eq!(
-            claimed.target_relays,
-            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
-        );
-
-        let unavailable = outbox
-            .claim_next_ready_event("worker-b", "claim-b", 1_100, 1_050)
-            .await
-            .expect("claim");
-        assert!(unavailable.is_none());
-
-        let wrong_token = outbox
-            .mark_sign_retryable(
-                receipt.outbox_event_id,
-                "claim-b",
-                "sign failed",
-                1_200,
-                1_100,
-            )
-            .await
-            .expect_err("wrong token");
-        assert!(matches!(
-            wrong_token,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-
-        let recovered = outbox.recover_expired_claims(1_101).await.expect("recover");
-        assert_eq!(recovered, 1);
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::SignRetryable);
-        assert_eq!(event.attempt_count, 1);
-        assert!(event.claim_token.is_none());
-
-        let reclaimed = outbox
-            .claim_next_ready_event("worker-b", "claim-b", 1_400, 1_200)
-            .await
-            .expect("claim")
-            .expect("reclaimed");
-        assert_eq!(reclaimed.state, RadrootsOutboxEventState::Signing);
-        assert_eq!(reclaimed.attempt_count, 2);
-    }
-
-    #[tokio::test]
-    async fn claimed_mutations_reject_stale_tokens_without_state_changes() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let event_store = RadrootsEventStore::open_memory()
-            .await
-            .expect("event store");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "hello");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-
-        let first_claim = outbox
-            .claim_next_ready_event("worker-a", "claim-a", 1_100, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        let signed = complete_claimed_signing(&outbox, &first_claim, &fixture_keys(), 1_050).await;
-        outbox.recover_expired_claims(1_101).await.expect("recover");
-        let second_claim = outbox
-            .claim_next_ready_event("worker-b", "claim-b", 1_500, 1_200)
-            .await
-            .expect("claim")
-            .expect("claim");
-        assert_eq!(second_claim.state, RadrootsOutboxEventState::Publishing);
-
-        let retry_with_stale_token = outbox
-            .mark_publish_retryable(
+        outbox
+            .mark_delivery_target_accepted(
                 receipt.outbox_event_id,
                 "claim-a",
-                "stale retry",
-                1_600,
-                1_300,
+                claimed.delivery_targets[0].delivery_target_id,
+                1_100,
             )
             .await
-            .expect_err("stale retry token");
-        assert!(matches!(
-            retry_with_stale_token,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-
-        let relay_with_stale_token = outbox
-            .mark_relay_accepted(receipt.outbox_event_id, "claim-a", RELAY_PRIMARY_WSS, 1_300)
-            .await
-            .expect_err("stale relay token");
-        assert!(matches!(
-            relay_with_stale_token,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-
-        let ingest_with_current_token = outbox
-            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 1_350)
-            .await
-            .expect("current ingest");
-        assert_eq!(ingest_with_current_token.event_id, signed.id);
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
-        assert_eq!(event.claim_token.as_deref(), Some("claim-b"));
-
-        let statuses = outbox
-            .relay_statuses(receipt.outbox_event_id)
-            .await
-            .expect("statuses");
-        assert!(
-            statuses
-                .iter()
-                .all(|status| status.status == RadrootsOutboxRelayStatus::Pending)
-        );
-    }
-
-    #[tokio::test]
-    async fn claimed_update_paths_report_missing_events_and_wrong_tokens() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-
-        let missing = outbox
-            .mark_sign_retryable(999, "missing-claim", "missing", 1_200, 1_100)
-            .await
-            .expect_err("missing event");
-        assert!(matches!(missing, RadrootsOutboxError::EventNotFound(999)));
-        let missing_publish = outbox
-            .complete_publish_attempt(999, "missing-claim", "retryable", "terminal", 1_300, 1_200)
-            .await
-            .expect_err("missing publish event");
-        assert!(matches!(
-            missing_publish,
-            RadrootsOutboxError::EventNotFound(999)
-        ));
-
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "wrong token");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
+            .expect("first accepted");
         outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-
-        let wrong_token = outbox
-            .complete_publish_attempt(
+            .mark_delivery_target_accepted(
                 receipt.outbox_event_id,
-                "claim-b",
-                "retryable",
-                "terminal",
-                2_500,
-                2_100,
-            )
-            .await
-            .expect_err("wrong token");
-        assert!(matches!(
-            wrong_token,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn sign_retryable_update_succeeds_and_reports_ignored_update_with_current_token() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "retryable success");
-        let receipt = outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-        outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-
-        outbox
-            .mark_sign_retryable(receipt.outbox_event_id, "claim-a", "retry", 1_500, 1_100)
-            .await
-            .expect("mark retryable");
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::SignRetryable);
-
-        let ignored_outbox = RadrootsOutbox::open_memory().await.expect("ignored open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored retryable");
-        let ignored_receipt = ignored_outbox
-            .enqueue_operation(operation_input(draft, 2_000))
-            .await
-            .expect("enqueue ignored");
-        ignored_outbox
-            .claim_next_ready_event("worker-b", "claim-b", 3_000, 2_000)
-            .await
-            .expect("claim ignored")
-            .expect("claim ignored");
-        sqlx::query(
-            "CREATE TEMP TRIGGER ignore_sign_retry_update BEFORE UPDATE OF state ON outbox_event WHEN NEW.state = 'sign_retryable' BEGIN SELECT RAISE(IGNORE); END",
-        )
-        .execute(ignored_outbox.pool())
-        .await
-        .expect("retry trigger");
-        let ignored = ignored_outbox
-            .mark_sign_retryable(
-                ignored_receipt.outbox_event_id,
-                "claim-b",
-                "ignored retry",
-                2_500,
-                2_100,
-            )
-            .await
-            .expect_err("ignored retryable update");
-        assert!(matches!(
-            ignored,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn ignored_sqlite_updates_preserve_race_guards() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored claim");
-        outbox
-            .enqueue_operation(operation_input(draft, 1_000))
-            .await
-            .expect("enqueue");
-        let signed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored signed claim");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &signed_draft).expect("signed event");
-        outbox
-            .enqueue_signed_operation(signed_operation_input(signed_draft, signed_event, 1_001))
-            .await
-            .expect("signed enqueue");
-        sqlx::query(
-            "CREATE TEMP TRIGGER ignore_claim_update BEFORE UPDATE OF claim_token ON outbox_event WHEN NEW.claim_token IN ('blocked-claim', 'blocked-signed') BEGIN SELECT RAISE(IGNORE); END",
-        )
-        .execute(outbox.pool())
-        .await
-        .expect("claim trigger");
-
-        assert!(
-            outbox
-                .claim_next_ready_event("worker-a", "blocked-claim", 2_000, 1_000)
-                .await
-                .expect("claim")
-                .is_none()
-        );
-        assert!(
-            outbox
-                .claim_next_ready_signed_event("publisher-a", "blocked-signed", 2_000, 1_001)
-                .await
-                .expect("claim signed")
-                .is_none()
-        );
-
-        let publish_outbox = RadrootsOutbox::open_memory().await.expect("publish open");
-        let publish_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored publish");
-        let publish_signed = radroots_nostr_sign_frozen_draft(&fixture_keys(), &publish_draft)
-            .expect("signed event");
-        let publish_receipt = publish_outbox
-            .enqueue_signed_operation(signed_operation_input(publish_draft, publish_signed, 1_100))
-            .await
-            .expect("publish enqueue");
-        let publish_claim = publish_outbox
-            .claim_next_ready_signed_event("publisher-b", "publish-claim", 3_000, 1_100)
-            .await
-            .expect("claim publish")
-            .expect("claim publish");
-        publish_outbox
-            .mark_relay_accepted(
-                publish_receipt.outbox_event_id,
-                publish_claim.claim_token.as_str(),
-                RELAY_PRIMARY_WSS,
-                1_150,
-            )
-            .await
-            .expect("primary accepted");
-        publish_outbox
-            .mark_relay_accepted(
-                publish_receipt.outbox_event_id,
-                publish_claim.claim_token.as_str(),
-                RELAY_SECONDARY_WSS,
-                1_160,
-            )
-            .await
-            .expect("secondary accepted");
-        sqlx::query(
-            "CREATE TEMP TRIGGER ignore_published_update BEFORE UPDATE OF state ON outbox_event WHEN NEW.state = 'published' BEGIN SELECT RAISE(IGNORE); END",
-        )
-        .execute(publish_outbox.pool())
-        .await
-        .expect("publish trigger");
-        let ignored_publish = publish_outbox
-            .complete_publish_attempt(
-                publish_receipt.outbox_event_id,
-                publish_claim.claim_token.as_str(),
-                "retryable",
-                "terminal",
-                2_500,
-                1_200,
-            )
-            .await
-            .expect_err("ignored publish update");
-        assert!(matches!(
-            ignored_publish,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-
-        let cancel_outbox = RadrootsOutbox::open_memory().await.expect("cancel open");
-        let cancel_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored cancel");
-        let cancel_receipt = cancel_outbox
-            .enqueue_operation(operation_input(cancel_draft, 1_200))
-            .await
-            .expect("cancel enqueue");
-        let cancel_claim = cancel_outbox
-            .claim_next_ready_event("worker-b", "cancel-claim", 3_000, 1_200)
-            .await
-            .expect("cancel claim")
-            .expect("cancel claim");
-        sqlx::query(
-            "CREATE TEMP TRIGGER ignore_cancel_update BEFORE UPDATE OF state ON outbox_event WHEN NEW.state = 'cancelled' BEGIN SELECT RAISE(IGNORE); END",
-        )
-        .execute(cancel_outbox.pool())
-        .await
-        .expect("cancel trigger");
-        let ignored_cancel = cancel_outbox
-            .cancel_claimed_event(
-                cancel_receipt.outbox_event_id,
-                cancel_claim.claim_token.as_str(),
-                1_300,
-            )
-            .await
-            .expect_err("ignored cancel update");
-        assert!(matches!(
-            ignored_cancel,
-            RadrootsOutboxError::ClaimTokenMismatch { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn signed_events_are_reused_after_claim_recovery() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let (receipt, claimed) = enqueue_signed_fixture(&outbox).await;
-        let keys = fixture_keys();
-
-        let signed = complete_claimed_signing(&outbox, &claimed, &keys, 1_100).await;
-        assert_eq!(signed.id, receipt.expected_event_id);
-
-        let recovered = outbox.recover_expired_claims(2_001).await.expect("recover");
-        assert_eq!(recovered, 1);
-
-        let publish_claim = outbox
-            .claim_next_ready_event("publisher-a", "claim-b", 3_000, 2_100)
-            .await
-            .expect("claim")
-            .expect("publish claim");
-        assert_eq!(publish_claim.state, RadrootsOutboxEventState::Publishing);
-        assert_eq!(publish_claim.signed_event.as_ref(), Some(&signed));
-
-        let reused = complete_claimed_signing(&outbox, &publish_claim, &keys, 2_200).await;
-        assert_eq!(reused, signed);
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
-        assert_eq!(event.signed_event.as_ref(), Some(&signed));
-    }
-
-    #[tokio::test]
-    async fn local_signed_event_ingest_is_idempotent_without_transport_observation() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let event_store = RadrootsEventStore::open_memory()
-            .await
-            .expect("event store");
-        let (receipt, claimed) = enqueue_signed_fixture(&outbox).await;
-        let keys = fixture_keys();
-        let signed = complete_claimed_signing(&outbox, &claimed, &keys, 1_100).await;
-
-        let first = outbox
-            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-a", 1_200)
-            .await
-            .expect("first ingest");
-        assert_eq!(first.outbox_event_id, receipt.outbox_event_id);
-        assert_eq!(first.event_id, signed.id);
-        assert!(!first.already_ingested);
-        assert!(first.event_store_inserted);
-
-        let stored = event_store
-            .get_event(signed.id.as_str())
-            .await
-            .expect("stored event");
-        assert!(stored.is_some());
-
-        let observations = event_store
-            .observations_for_event(signed.id.as_str())
-            .await
-            .expect("observations");
-        assert!(observations.is_empty());
-
-        let second = outbox
-            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-a", 1_300)
-            .await
-            .expect("second ingest");
-        assert!(second.already_ingested);
-        assert!(!second.event_store_inserted);
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
-        assert!(event.event_store_ingested);
-        assert!(event.event_store_inserted);
-        assert_eq!(event.event_store_ingested_at_ms, Some(1_200));
-
-        let recovered = outbox.recover_expired_claims(2_001).await.expect("recover");
-        assert_eq!(recovered, 1);
-
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
-        assert!(event.claim_token.is_none());
-
-        let reclaimed = outbox
-            .claim_next_ready_event("publisher-a", "claim-b", 3_000, 2_100)
-            .await
-            .expect("claim")
-            .expect("publish claim");
-        assert_eq!(reclaimed.state, RadrootsOutboxEventState::Publishing);
-        assert_eq!(reclaimed.signed_event.as_ref(), Some(&signed));
-    }
-
-    #[tokio::test]
-    async fn terminal_and_cancelled_claimed_events_are_not_reclaimable() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let terminal_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "terminal");
-        let terminal_receipt = outbox
-            .enqueue_operation(operation_input(terminal_draft, 1_000))
-            .await
-            .expect("enqueue");
-        outbox
-            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        outbox
-            .mark_publish_failed_terminal(
-                terminal_receipt.outbox_event_id,
                 "claim-a",
-                "terminal failure",
-                1_100,
-            )
-            .await
-            .expect("terminal");
-
-        let terminal_event = outbox
-            .get_event(terminal_receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(
-            terminal_event.state,
-            RadrootsOutboxEventState::FailedTerminal
-        );
-        assert!(terminal_event.state.is_terminal());
-        assert!(terminal_event.claim_token.is_none());
-        let terminal_operation = outbox
-            .get_operation(terminal_receipt.operation_id)
-            .await
-            .expect("operation")
-            .expect("operation");
-        assert_eq!(
-            terminal_operation.status,
-            RadrootsOutboxOperationStatus::FailedTerminal
-        );
-        assert!(
-            outbox
-                .claim_next_ready_event("worker-b", "claim-b", 2_000, 1_200)
-                .await
-                .expect("claim")
-                .is_none()
-        );
-
-        let cancelled_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "cancelled");
-        let cancelled_receipt = outbox
-            .enqueue_operation(operation_input(cancelled_draft, 2_000))
-            .await
-            .expect("enqueue");
-        outbox
-            .claim_next_ready_event("worker-c", "claim-c", 3_000, 2_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        outbox
-            .cancel_claimed_event(cancelled_receipt.outbox_event_id, "claim-c", 2_100)
-            .await
-            .expect("cancel");
-        let cancelled_event = outbox
-            .get_event(cancelled_receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(cancelled_event.state, RadrootsOutboxEventState::Cancelled);
-        assert!(cancelled_event.state.is_terminal());
-        assert!(cancelled_event.claim_token.is_none());
-        let cancelled_operation = outbox
-            .get_operation(cancelled_receipt.operation_id)
-            .await
-            .expect("operation")
-            .expect("operation");
-        assert_eq!(
-            cancelled_operation.status,
-            RadrootsOutboxOperationStatus::Cancelled
-        );
-        assert!(
-            outbox
-                .claim_next_ready_event("worker-d", "claim-d", 3_000, 2_200)
-                .await
-                .expect("claim")
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn terminal_publish_attempt_fails_operation_when_quorum_cannot_be_met() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "terminal quorum");
-        let receipt = outbox
-            .enqueue_operation(RadrootsOutboxOperationInput::new(
-                "publish_post",
-                draft,
-                vec![
-                    RELAY_PRIMARY_WSS.to_owned(),
-                    RELAY_SECONDARY_WSS.to_owned(),
-                    "wss://relay-3.example.com".to_owned(),
-                ],
-                1_000,
-            ))
-            .await
-            .expect("enqueue");
-        let sign_claim = outbox
-            .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-        complete_claimed_signing(&outbox, &sign_claim, &fixture_keys(), 1_100).await;
-        outbox.recover_expired_claims(2_001).await.expect("recover");
-        outbox
-            .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
-            .await
-            .expect("claim")
-            .expect("claim");
-        outbox
-            .set_publish_quorum(receipt.outbox_event_id, "publish-a", 3, 2_200)
-            .await
-            .expect("quorum");
-        outbox
-            .mark_relay_accepted(
-                receipt.outbox_event_id,
-                "publish-a",
-                RELAY_PRIMARY_WSS,
-                2_250,
-            )
-            .await
-            .expect("accepted");
-        outbox
-            .mark_relay_failed_terminal(
-                receipt.outbox_event_id,
-                "publish-a",
-                RELAY_SECONDARY_WSS,
-                "restricted: denied",
-                2_260,
-            )
-            .await
-            .expect("terminal");
-        outbox
-            .mark_relay_failed_terminal(
-                receipt.outbox_event_id,
-                "publish-a",
-                "wss://relay-3.example.com",
-                "blocked: denied",
-                2_270,
-            )
-            .await
-            .expect("terminal");
-
-        let state = outbox
-            .complete_publish_attempt(
-                receipt.outbox_event_id,
-                "publish-a",
-                "retryable",
-                "terminal",
-                2_500,
-                2_300,
-            )
-            .await
-            .expect("complete attempt");
-        assert_eq!(state, RadrootsOutboxEventState::FailedTerminal);
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(event.state, RadrootsOutboxEventState::FailedTerminal);
-        assert!(event.claim_token.is_none());
-        assert_eq!(event.last_error.as_deref(), Some("terminal"));
-        let operation = outbox
-            .get_operation(receipt.operation_id)
-            .await
-            .expect("operation")
-            .expect("operation");
-        assert_eq!(
-            operation.status,
-            RadrootsOutboxOperationStatus::FailedTerminal
-        );
-        assert!(
-            outbox
-                .claim_next_ready_event("publisher", "publish-b", 4_000, 2_400)
-                .await
-                .expect("claim")
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn publish_attempt_marks_event_published_after_acceptance_quorum() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "published quorum");
-        let signed_event =
-            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
-        let receipt = outbox
-            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
-            .await
-            .expect("enqueue");
-        let claimed = outbox
-            .claim_next_ready_signed_event("publisher", "publish-a", 3_000, 1_000)
-            .await
-            .expect("claim")
-            .expect("claim");
-
-        outbox
-            .mark_relay_accepted(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                RELAY_PRIMARY_WSS,
-                1_100,
-            )
-            .await
-            .expect("primary accepted");
-        outbox
-            .mark_relay_accepted(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                RELAY_SECONDARY_WSS,
+                claimed.delivery_targets[1].delivery_target_id,
                 1_110,
             )
             .await
-            .expect("secondary accepted");
+            .expect("second accepted");
 
         let state = outbox
             .complete_publish_attempt(
                 receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
+                "claim-a",
                 "retryable",
                 "terminal",
                 2_500,
                 1_200,
             )
             .await
-            .expect("complete attempt");
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
+            .expect("complete");
+        assert_eq!(state, RadrootsOutboxEventState::Published);
         let operation = outbox
             .get_operation(receipt.operation_id)
             .await
             .expect("operation")
             .expect("operation");
-
-        assert_eq!(state, RadrootsOutboxEventState::Published);
-        assert_eq!(event.state, RadrootsOutboxEventState::Published);
-        assert_eq!(event.next_attempt_after_ms, 1_200);
         assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
+        let attempts = outbox
+            .delivery_attempts(claimed.delivery_targets[0].delivery_target_id)
+            .await
+            .expect("attempts");
+        assert_eq!(attempts.len(), 1);
+        assert_eq!(
+            attempts[0].status,
+            RadrootsOutboxDeliveryTargetStatus::Accepted
+        );
     }
 
     #[tokio::test]
-    async fn publish_attempt_remains_retryable_when_relay_work_remains() {
+    async fn at_least_delivery_plan_round_trips_and_completes_after_required_target() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "retryable quorum");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "at least");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    7,
+                    RadrootsTransportSatisfactionPolicy::AtLeast(1),
+                    vec![
+                        nostr_target(NOSTR_PRIMARY_WSS),
+                        nostr_target(NOSTR_SECONDARY_WSS),
+                    ],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+
+        assert_eq!(plans.len(), 1);
+        assert_eq!(
+            plans[0].satisfaction_policy,
+            RadrootsTransportSatisfactionPolicy::AtLeast(1)
+        );
+        assert_eq!(plans[0].required_success_count, 1);
+        assert_eq!(plans[0].target_policy_version, 7);
+
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        outbox
+            .mark_delivery_target_accepted(
+                receipt.outbox_event_id,
+                "claim-a",
+                claimed.delivery_targets[0].delivery_target_id,
+                1_100,
+            )
+            .await
+            .expect("accepted");
+        let state = outbox
+            .complete_publish_attempt(
+                receipt.outbox_event_id,
+                "claim-a",
+                "retryable",
+                "terminal",
+                2_500,
+                1_200,
+            )
+            .await
+            .expect("complete");
+
+        assert_eq!(state, RadrootsOutboxEventState::Published);
+    }
+
+    #[tokio::test]
+    async fn publish_attempt_stays_retryable_while_delivery_targets_remain_ready() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "retryable");
         let signed_event =
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
@@ -3031,156 +2194,138 @@ mod tests {
             .await
             .expect("enqueue");
         let claimed = outbox
-            .claim_next_ready_signed_event("publisher", "publish-a", 3_000, 1_000)
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
             .await
             .expect("claim")
-            .expect("claim");
-
+            .expect("claimed");
         outbox
-            .mark_relay_failed_retryable(
+            .mark_delivery_target_failed_retryable(
                 receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                RELAY_PRIMARY_WSS,
+                "claim-a",
+                claimed.delivery_targets[0].delivery_target_id,
                 "timeout",
                 1_100,
             )
             .await
-            .expect("retryable relay");
-
+            .expect("failed retryable");
         let state = outbox
             .complete_publish_attempt(
                 receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
+                "claim-a",
                 "retryable error",
                 "terminal",
                 2_500,
                 1_200,
             )
             .await
-            .expect("complete attempt");
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        let operation = outbox
-            .get_operation(receipt.operation_id)
-            .await
-            .expect("operation")
-            .expect("operation");
-
+            .expect("complete");
         assert_eq!(state, RadrootsOutboxEventState::PublishRetryable);
-        assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
-        assert_eq!(event.last_error.as_deref(), Some("retryable error"));
-        assert_eq!(event.next_attempt_after_ms, 2_500);
-        assert_eq!(operation.status, RadrootsOutboxOperationStatus::Queued);
+        let summary = outbox.status_summary(2_500).await.expect("summary");
+        assert_eq!(summary.ready_signed_events, 1);
+        assert_eq!(summary.last_attempt_at_ms, Some(1_100));
     }
 
     #[tokio::test]
-    async fn publish_attempt_remains_retryable_when_pending_relay_work_remains() {
+    async fn reticulum_deferred_targets_do_not_retry_or_satisfy_delivery() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "pending quorum");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred");
         let signed_event =
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
         let receipt = outbox
-            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.reticulum.preview",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::AllTargets,
+                    vec![reticulum_target("reticulum:preview-target")],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
             .await
             .expect("enqueue");
-        let claimed = outbox
-            .claim_next_ready_signed_event("publisher", "publish-a", 3_000, 1_000)
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
             .await
-            .expect("claim")
-            .expect("claim");
-
-        outbox
-            .mark_relay_accepted(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                RELAY_PRIMARY_WSS,
-                1_100,
-            )
+            .expect("targets");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].status,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+        );
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
             .await
-            .expect("accepted relay");
-
-        let state = outbox
-            .complete_publish_attempt(
-                receipt.outbox_event_id,
-                claimed.claim_token.as_str(),
-                "pending relay",
-                "terminal",
-                2_500,
-                1_200,
-            )
-            .await
-            .expect("complete attempt");
-        let event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-
-        assert_eq!(state, RadrootsOutboxEventState::PublishRetryable);
-        assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
-        assert_eq!(event.last_error.as_deref(), Some("pending relay"));
-        assert_eq!(event.next_attempt_after_ms, 2_500);
-    }
-
-    #[tokio::test]
-    async fn smoke_outbox_claim_cancel_cycles_complete_one_thousand_events() {
-        let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let mut receipts = Vec::new();
-        for index in 0..1_000 {
-            let draft = post_draft(
-                FIXTURE_ALICE_PUBLIC_KEY_HEX,
-                format!("claim-cycle-{index}").as_str(),
-            );
-            let receipt = outbox
-                .enqueue_operation(operation_input(draft, 1_000 + index))
-                .await
-                .expect("enqueue");
-            receipts.push(receipt);
-        }
-
-        for index in 0..1_000 {
-            let claim_token = format!("claim-{index}");
-            let claimed = outbox
-                .claim_next_ready_event(
-                    "smoke-worker",
-                    claim_token.as_str(),
-                    10_000 + index,
-                    2_000 + index,
-                )
-                .await
-                .expect("claim")
-                .expect("claimed");
-            outbox
-                .cancel_claimed_event(claimed.outbox_event_id, claim_token.as_str(), 3_000 + index)
-                .await
-                .expect("cancel");
-        }
-
-        for receipt in receipts {
-            let event = outbox
-                .get_event(receipt.outbox_event_id)
-                .await
-                .expect("event")
-                .expect("event");
-            assert_eq!(event.state, RadrootsOutboxEventState::Cancelled);
-            assert!(event.claim_token.is_none());
-            let operation = outbox
-                .get_operation(receipt.operation_id)
-                .await
-                .expect("operation")
-                .expect("operation");
-            assert_eq!(operation.status, RadrootsOutboxOperationStatus::Cancelled);
-        }
-
+            .expect("plans");
+        assert_eq!(
+            plans[0].status,
+            RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
+        );
+        let summary = outbox.status_summary(1_000).await.expect("summary");
+        assert_eq!(summary.ready_signed_events, 0);
         assert!(
             outbox
-                .claim_next_ready_event("smoke-worker", "claim-final", 20_000, 20_000)
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
                 .await
                 .expect("claim")
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn local_signed_event_ingest_remains_idempotent_without_transport_observation() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let event_store = RadrootsEventStore::open_memory()
+            .await
+            .expect("event store");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "local ingest");
+        let receipt = outbox
+            .enqueue_operation(operation_input(draft, 1_000))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_event("signer", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let signed =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        outbox
+            .complete_signing(
+                receipt.outbox_event_id,
+                claimed.claim_token.as_str(),
+                signed.clone(),
+                1_100,
+            )
+            .await
+            .expect("complete signing");
+        outbox.recover_expired_claims(2_001).await.expect("recover");
+        outbox
+            .claim_next_ready_event("publisher", "claim-b", 3_000, 2_100)
+            .await
+            .expect("claim")
+            .expect("publish claim");
+
+        let first = outbox
+            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_200)
+            .await
+            .expect("first ingest");
+        assert_eq!(first.event_id, signed.id);
+        assert!(!first.already_ingested);
+
+        let second = outbox
+            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_300)
+            .await
+            .expect("second ingest");
+        assert!(second.already_ingested);
+        let observations = event_store
+            .observations_for_event(signed.id.as_str())
+            .await
+            .expect("observations");
+        assert!(observations.is_empty());
     }
 }

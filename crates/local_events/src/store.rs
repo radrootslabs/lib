@@ -63,9 +63,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                 input.event_content,
                 input.event_sig,
                 encode_json(input.raw_event_json.as_ref()),
-                input.outbox_status.as_str(),
-                input.relay_set_fingerprint,
-                encode_json(input.relay_delivery_json.as_ref())
+                input.outbox_status.as_str()
             ])
             .to_string();
             let sql = "insert or ignore into local_event_record(
@@ -90,10 +88,8 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status,
-                relay_set_fingerprint,
-                relay_delivery_json
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                outbox_status
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             let _ = self.executor.exec(sql, &params)?;
             Ok(())
         })();
@@ -190,8 +186,6 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                 change_seq,
                 update.status.as_str(),
                 update.outbox_status.as_str(),
-                update.relay_set_fingerprint,
-                encode_json(update.relay_delivery_json.as_ref()),
                 update.updated_at_ms,
                 update.record_id
             ])
@@ -201,8 +195,6 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                  set change_seq = ?,
                      status = ?,
                      outbox_status = ?,
-                     relay_set_fingerprint = ?,
-                     relay_delivery_json = ?,
                      updated_at_ms = ?
                  where record_id = ?",
                 &params,
@@ -312,8 +304,6 @@ struct RecordRow {
     event_sig: Option<String>,
     raw_event_json: Option<String>,
     outbox_status: String,
-    relay_set_fingerprint: Option<String>,
-    relay_delivery_json: Option<String>,
 }
 
 impl TryFrom<RecordRow> for LocalEventRecord {
@@ -344,8 +334,6 @@ impl TryFrom<RecordRow> for LocalEventRecord {
             event_sig: row.event_sig,
             raw_event_json: decode_json(row.raw_event_json)?,
             outbox_status: PublishOutboxStatus::parse(&row.outbox_status)?,
-            relay_set_fingerprint: row.relay_set_fingerprint,
-            relay_delivery_json: decode_json(row.relay_delivery_json)?,
         })
     }
 }
@@ -423,8 +411,6 @@ mod tests {
             event_sig: None,
             raw_event_json: None,
             outbox_status: PublishOutboxStatus::None,
-            relay_set_fingerprint: None,
-            relay_delivery_json: None,
         }
     }
 
@@ -450,14 +436,6 @@ mod tests {
             event_sig: Some("sig-a".to_owned()),
             raw_event_json: Some(json!({"id":record_id,"kind":3421})),
             outbox_status: PublishOutboxStatus::Pending,
-            relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(json!({
-                "state": "pending",
-                "target_relays": ["ws://127.0.0.1:8080"],
-                "connected_relays": [],
-                "acknowledged_relays": [],
-                "failed_relays": []
-            })),
         }
     }
 
@@ -561,9 +539,7 @@ mod tests {
             "event_content": "{}",
             "event_sig": "sig-a",
             "raw_event_json": "{\"id\":\"event-a\",\"kind\":3421}",
-            "outbox_status": "pending",
-            "relay_set_fingerprint": "relay-set-a",
-            "relay_delivery_json": "{\"state\":\"pending\",\"target_relays\":[\"ws://127.0.0.1:8080\"],\"connected_relays\":[],\"acknowledged_relays\":[],\"failed_relays\":[]}"
+            "outbox_status": "pending"
         });
         row[field] = value;
         json!([row]).to_string()
@@ -641,14 +617,6 @@ mod tests {
                 record_id: "event-a".to_owned(),
                 status: LocalRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
-                relay_set_fingerprint: Some("relay-set-a".to_owned()),
-                relay_delivery_json: Some(json!({
-                    "state": "acknowledged",
-                    "target_relays": ["ws://127.0.0.1:8080"],
-                    "connected_relays": ["ws://127.0.0.1:8080"],
-                    "acknowledged_relays": ["ws://127.0.0.1:8080"],
-                    "failed_relays": []
-                })),
                 updated_at_ms: 4000,
             })
             .expect("update outbox");
@@ -688,8 +656,6 @@ mod tests {
                     record_id: " ".to_owned(),
                     status: LocalRecordStatus::Published,
                     outbox_status: PublishOutboxStatus::Acknowledged,
-                    relay_set_fingerprint: None,
-                    relay_delivery_json: None,
                     updated_at_ms: 4000,
                 })
                 .expect_err("empty update record id")
@@ -702,8 +668,6 @@ mod tests {
                 record_id: "missing-event".to_owned(),
                 status: LocalRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
-                relay_set_fingerprint: None,
-                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect_err("missing record update");
@@ -744,8 +708,6 @@ mod tests {
                 record_id: "event-a".to_owned(),
                 status: LocalRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
-                relay_set_fingerprint: None,
-                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect_err("update error");
@@ -873,8 +835,6 @@ mod tests {
                     record_id: "event-a".to_owned(),
                     status: LocalRecordStatus::Published,
                     outbox_status: PublishOutboxStatus::Acknowledged,
-                    relay_set_fingerprint: None,
-                    relay_delivery_json: None,
                     updated_at_ms: 4000,
                 })
                 .expect_err("update lookup failure")
@@ -937,7 +897,6 @@ mod tests {
             ("event_tags_json", json!("{"), "EOF"),
             ("raw_event_json", json!("{"), "EOF"),
             ("outbox_status", json!("bad_outbox"), "outbox"),
-            ("relay_delivery_json", json!("{"), "EOF"),
         ] {
             let store = LocalEventsStore::new(ScriptedExecutor::new(
                 Vec::new(),
@@ -966,8 +925,6 @@ mod tests {
                 record_id: "record-a".to_owned(),
                 status: LocalRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
-                relay_set_fingerprint: None,
-                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect("scripted update");

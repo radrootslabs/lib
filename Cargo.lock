@@ -4523,6 +4523,7 @@ dependencies = [
  "radroots_event_store",
  "radroots_events",
  "radroots_nostr",
+ "radroots_transport",
  "serde",
  "serde_json",
  "sha2",

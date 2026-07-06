@@ -25,6 +25,7 @@ radroots_event_store = { workspace = true, default-features = false, features = 
   "sqlite",
   "runtime-tokio",
 ] }
+radroots_transport = { workspace = true, default-features = false }
 hex = { workspace = true }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true, features = ["std"] }
