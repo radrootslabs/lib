@@ -239,9 +239,9 @@ const REQUIRED_IDENTITY_STORAGE_EXPORTS: &[&str] = &[
 ];
 
 const REQUIRED_TRADE_POLICY_EXPORTS: &[&str] = &[
-    "AckPolicy",
+    "SatisfactionPolicy",
     "PublishMode",
-    "RelayResolutionPolicy",
+    "TargetPolicy",
     "SdkTradeIdempotencyRecord",
     "PrivacyPreflightConfirmation",
     "PrivacyPreflightReceipt",

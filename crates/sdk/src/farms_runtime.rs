@@ -2,8 +2,8 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    FarmsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy, farm,
+    FarmsClient, NostrRelayUrlPolicy, RadrootsSdkError, RadrootsSdkTimestamp, SatisfactionPolicy,
+    SdkIdempotencyKey, SdkMutationState, TargetPolicy, farm,
     geonames::{
         Geocoder, GeocoderLocalityCandidate, GeocoderLocalityLookup, GeocoderLocalityQuery,
         GeocoderPoint, GeocoderReverseOptions, GeocoderReverseResult,
@@ -69,7 +69,7 @@ pub struct FarmEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub farm: RadrootsFarm,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -79,7 +79,7 @@ impl FarmEnqueuePublishRequest {
     pub fn new(
         actor: RadrootsActorContext,
         farm: RadrootsFarm,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
     ) -> Self {
         Self {
             actor,
@@ -93,13 +93,13 @@ impl FarmEnqueuePublishRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -471,7 +471,7 @@ impl<'sdk> FarmsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: FarmPublishPlan,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
         let enqueue = enqueue_configured_signed_workflow(
@@ -481,6 +481,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
         )
@@ -492,7 +493,7 @@ impl<'sdk> FarmsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: FarmPublishPlan,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
@@ -503,6 +504,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
             signer,

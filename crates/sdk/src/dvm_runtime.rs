@@ -2,9 +2,9 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    DvmClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy, SyncProjectionRefreshReceipt,
-    SyncProjectionRefreshRequest,
+    DvmClient, NostrRelayUrlPolicy, RadrootsSdkError, RadrootsSdkTimestamp, SatisfactionPolicy,
+    SdkIdempotencyKey, SdkMutationState, SyncProjectionRefreshReceipt,
+    SyncProjectionRefreshRequest, TargetPolicy,
     runtime::sdk_now_ms,
     sync_runtime::refresh_product_projections_for_sdk,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
@@ -174,7 +174,7 @@ impl DvmTradeTransitionProofPrepareRequest {
 pub struct DvmTradeTransitionProofEnqueueRequest {
     #[serde(flatten)]
     pub prepare: DvmTradeTransitionProofPrepareRequest,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
 }
 
@@ -188,7 +188,7 @@ impl DvmTradeTransitionProofEnqueueRequest {
         request_event_id: RadrootsEventId,
         decision_event_id: RadrootsEventId,
         inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
     ) -> Self {
         Self::from_prepare(
             DvmTradeTransitionProofPrepareRequest::new(
@@ -206,7 +206,7 @@ impl DvmTradeTransitionProofEnqueueRequest {
 
     pub fn from_prepare(
         prepare: DvmTradeTransitionProofPrepareRequest,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
     ) -> Self {
         Self {
             prepare,
@@ -218,13 +218,13 @@ impl DvmTradeTransitionProofEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -430,6 +430,7 @@ impl<'sdk> DvmClient<'sdk> {
                 actor: &actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
         )
@@ -453,6 +454,7 @@ impl<'sdk> DvmClient<'sdk> {
                 actor: &actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
             signer,

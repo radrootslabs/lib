@@ -2,8 +2,8 @@
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
-    ListingsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    ListingsClient, NostrRelayUrlPolicy, RadrootsSdkError, RadrootsSdkTimestamp,
+    SatisfactionPolicy, SdkIdempotencyKey, TargetPolicy,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -68,7 +68,7 @@ pub struct ListingEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
-    pub target_relays: SdkRelayTargetPolicy,
+    pub target_relays: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -78,7 +78,7 @@ impl ListingEnqueuePublishRequest {
     pub fn new(
         actor: RadrootsActorContext,
         listing: RadrootsListing,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
     ) -> Self {
         Self::from_document(
             actor,
@@ -90,7 +90,7 @@ impl ListingEnqueuePublishRequest {
     pub fn from_document(
         actor: RadrootsActorContext,
         document: RadrootsListingDraftDocumentV1,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
     ) -> Self {
         Self {
             actor,
@@ -104,13 +104,13 @@ impl ListingEnqueuePublishRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -241,7 +241,7 @@ impl<'sdk> ListingsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let enqueue = enqueue_configured_signed_workflow(
@@ -251,6 +251,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
         )
@@ -262,7 +263,7 @@ impl<'sdk> ListingsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
-        target_relays: SdkRelayTargetPolicy,
+        target_relays: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
@@ -273,6 +274,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
+                satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
             signer,

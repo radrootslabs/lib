@@ -104,9 +104,9 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
     let enqueue = ListingEnqueuePublishRequest::from_document(
         actor(),
         RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_A, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("listing-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -119,7 +119,7 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
     let try_key = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Try Key Greens"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("listing-unit-try-key")
     .expect("try key");
@@ -134,7 +134,7 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let invalid_key = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Invalid Key Greens"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("");
     assert!(invalid_key.is_err());
@@ -235,7 +235,7 @@ async fn listing_enqueue_publish_reports_prepare_errors_before_signing() {
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Future Enqueue Greens"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             )
             .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
@@ -264,7 +264,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
             ListingEnqueuePublishRequest::new(
                 actor.clone(),
                 listing(LISTING_A_D_TAG, "Enqueued Greens"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             )
             .try_with_idempotency_key("listing-source-attached-enqueue")
@@ -288,7 +288,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY_B], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("prepared target relays"),
             None,
             &signer,
@@ -320,7 +320,7 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
             ListingEnqueuePublishRequest::new(
                 actor,
                 listing_for_seller(seller.as_str(), LISTING_C_D_TAG, "Configured Greens"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             )
             .try_with_idempotency_key("listing-configured-local")
@@ -347,7 +347,7 @@ async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
                 ListingEnqueuePublishRequest::new(
                     actor.clone(),
                     listing(LISTING_A_D_TAG, "Configured Prepare Error Greens"),
-                    SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                    TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                         .expect("target relays"),
                 )
                 .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
@@ -368,7 +368,7 @@ async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
             .enqueue_prepared_publish(
                 &actor,
                 plan,
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
                 None,
             )

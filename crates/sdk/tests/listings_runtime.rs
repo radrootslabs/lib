@@ -19,9 +19,9 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
-    RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy,
+    NostrProfile, NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState, TargetPolicy, TargetSet,
+    TransportProfile,
 };
 use radroots_trade::listing::RadrootsListingDraftDocumentV1;
 
@@ -171,8 +171,11 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
     let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     let sdk = builder.build().await.expect("sdk");
     (tempdir, sdk)
@@ -238,7 +241,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_B_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("idem-b")
     .expect("idempotency key");
@@ -290,24 +293,24 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
 }
 
 #[tokio::test]
-async fn enqueue_publish_use_configured_relays_rejects_empty_builder_relays() {
+async fn enqueue_publish_use_configured_profile_rejects_empty_transport_targets() {
     let (_tempdir, sdk) = directory_sdk_with_relays(&[]).await;
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
 
     let error = sdk
         .listings()
         .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
-        .expect_err("empty configured relays");
+        .expect_err("empty configured profile");
 
     assert!(matches!(
         error,
         RadrootsSdkError::EmptyTargetRelays { operation }
-            if operation == "sdk relay target set"
+            if operation == "sdk transport target set"
     ));
 }
 
@@ -327,7 +330,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared.clone(),
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -366,7 +369,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("debug-secret-idempotency")
     .expect("idempotency key");
@@ -425,9 +428,9 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let enqueue_request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_B_D_TAG, "Queued Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("serialized-idempotency").expect("idempotency"))
     .with_created_at(created_at);
@@ -436,12 +439,26 @@ async fn listing_runtime_dtos_serialize_deterministically() {
 
     assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
     assert_eq!(
-        enqueue_json["target_relays"]["relays"],
-        serde_json::json!([RELAY, RELAY_B])
+        enqueue_json["target_relays"]["targets"],
+        serde_json::json!([
+            {
+                "kind": "Nostr",
+                "uri": RELAY,
+                "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+            },
+            {
+                "kind": "Nostr",
+                "uri": RELAY_B,
+                "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+            }
+        ])
     );
     assert_eq!(
-        enqueue_json["target_relays"]["canonical_relays"],
-        serde_json::json!([RELAY_B, RELAY])
+        enqueue_json["target_relays"]["canonical_targets"],
+        serde_json::json!([
+            "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+            "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+        ])
     );
     assert_eq!(
         enqueue_json["idempotency_key"],
@@ -452,7 +469,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let try_key_request = ListingEnqueuePublishRequest::from_document(
         actor(),
         RadrootsListingDraftDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("listing-serialized-try-key")
     .expect("try idempotency key");
@@ -489,7 +506,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
         .enqueue_prepared_publish_with_explicit_signer(
             &prepared_actor,
             prepared_plan,
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -500,7 +517,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     let convenience_request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_H_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
     let convenience_receipt = convenience_sdk
         .listings()
@@ -526,7 +543,7 @@ async fn enqueue_prepared_publish_returns_structured_actor_errors() {
         .enqueue_prepared_publish_with_explicit_signer(
             &non_seller_actor(),
             prepared,
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -552,7 +569,7 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared,
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
             None,
             &FixtureSigner::new(OTHER),
         )
@@ -576,7 +593,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_K_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .with_created_at(created_at);
 
@@ -622,7 +639,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
     let error = sdk
         .listings()
@@ -645,7 +662,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     let first = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_D_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("idem-d")
     .expect("idempotency key");
@@ -680,7 +697,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     let second = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_E_D_TAG, "Changed"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("idem-d")
     .expect("idempotency key");
@@ -724,15 +741,15 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
     let first = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first target relays");
     let second = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
-        SdkRelayTargetPolicy::explicit(
-            SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+        TargetPolicy::explicit(
+            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second target relays"),
         ),
     );
@@ -763,11 +780,11 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         .await
         .expect("outbox");
     let relay_urls = outbox
-        .relay_statuses(first_receipt.outbox_event_id)
+        .delivery_targets(first_receipt.outbox_event_id)
         .await
-        .expect("relay statuses")
+        .expect("delivery targets")
         .into_iter()
-        .map(|status| status.relay_url)
+        .map(|target| target.endpoint_uri.to_string())
         .collect::<Vec<_>>();
     assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
 }

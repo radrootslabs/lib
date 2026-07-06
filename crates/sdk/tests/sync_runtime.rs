@@ -17,21 +17,22 @@ use radroots_events::{
     listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput};
-use radroots_relay_transport::{
-    RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
-};
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_sdk::ProxyProfile;
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest,
-    ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
+    ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy,
+    PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
     PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
-    SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
-    SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
+    SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState, StorageStatusRequest,
+    SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_sdk::{SdkPublishTransport, adapters::radrootsd::RadrootsdProxyConfig};
+use radroots_transport_nostr::{
+    RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
+};
 #[cfg(feature = "radrootsd-proxy")]
 use std::io::{Read, Write};
 #[cfg(feature = "radrootsd-proxy")]
@@ -436,8 +437,11 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     let sdk = builder.build().await.expect("sdk");
     (tempdir, sdk)
@@ -446,15 +450,35 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
 async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let mut builder = RadrootsClient::builder().directory_storage(tempdir.path().join("sdk"));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     let sdk = builder.build().await.expect("sdk");
     (tempdir, sdk)
 }
 
 async fn enqueue_listing(sdk: &RadrootsClient, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
-    enqueue_listing_with_policy(sdk, d_tag, title, relays, SdkRelayUrlPolicy::Public).await
+    enqueue_listing_with_policy(sdk, d_tag, title, relays, NostrRelayUrlPolicy::Public).await
+}
+
+fn delivery_plan_for_relays<I, S>(
+    relays: I,
+    policy: NostrRelayUrlPolicy,
+) -> radroots_outbox::RadrootsOutboxDeliveryPlanInput
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let target_set = radroots_sdk::TargetSet::nostr_relays(relays, policy).expect("target set");
+    radroots_outbox::RadrootsOutboxDeliveryPlanInput::new(
+        "explicit",
+        1,
+        radroots_transport::RadrootsTransportSatisfactionPolicy::AllTargets,
+        target_set.into_targets(),
+    )
 }
 
 async fn backup_source(sdk: &RadrootsClient, root: &Path, name: &str) -> PathBuf {
@@ -483,14 +507,14 @@ async fn enqueue_listing_with_policy(
     d_tag: &str,
     title: &str,
     relays: &[&str],
-    url_policy: SdkRelayUrlPolicy,
+    url_policy: NostrRelayUrlPolicy,
 ) -> i64 {
     sdk.listings()
         .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(d_tag, title),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
             )
             .try_with_target_relays(relays, url_policy)
             .expect("relay targets"),
@@ -1425,9 +1449,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .publish_transport(SdkPublishTransport::RadrootsdProxy(
-            RadrootsdProxyConfig::new(endpoint),
-        ))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
         .build()
         .await
         .expect("sdk");
@@ -1438,7 +1460,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Coffee"),
-                SdkRelayTargetPolicy::use_publish_transport(),
+                TargetPolicy::use_transport_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1499,11 +1521,11 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     ]);
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
-    let transport = SdkPublishTransport::RadrootsdProxy(RadrootsdProxyConfig::new(endpoint));
+    let transport = TransportProfile::proxy(ProxyProfile::new(endpoint));
     let sdk = RadrootsClient::builder()
         .directory_storage(storage.clone())
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .publish_transport(transport.clone())
+        .transport_profile(transport.clone())
         .build()
         .await
         .expect("sdk");
@@ -1514,7 +1536,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Retry Coffee"),
-                SdkRelayTargetPolicy::use_publish_transport(),
+                TargetPolicy::use_transport_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1543,7 +1565,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     let sdk = RadrootsClient::builder()
         .directory_storage(storage)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
-        .publish_transport(transport)
+        .transport_profile(transport)
         .build()
         .await
         .expect("reopened sdk");
@@ -1598,9 +1620,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
     let retryable_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("retryable-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .publish_transport(SdkPublishTransport::RadrootsdProxy(
-            RadrootsdProxyConfig::new(closed_endpoint).with_timeout(Duration::from_millis(50)),
-        ))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(closed_endpoint)))
         .build()
         .await
         .expect("retryable sdk");
@@ -1610,7 +1630,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Error Coffee"),
-                SdkRelayTargetPolicy::use_publish_transport(),
+                TargetPolicy::use_transport_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1651,9 +1671,9 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
     let terminal_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("terminal-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .publish_transport(SdkPublishTransport::RadrootsdProxy(
-            RadrootsdProxyConfig::new(terminal_endpoint),
-        ))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(
+            terminal_endpoint,
+        )))
         .build()
         .await
         .expect("terminal sdk");
@@ -1663,7 +1683,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_B_D_TAG, "Terminal Coffee"),
-                SdkRelayTargetPolicy::use_publish_transport(),
+                TargetPolicy::use_transport_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1702,7 +1722,7 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
         .with_outbox_event_id(7)
         .republish_accepted_relays(true)
         .with_accepted_quorum(1)
-        .with_relay_url_policy(SdkRelayUrlPolicy::Localhost)
+        .with_relay_url_policy(NostrRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(1_000)
         .with_next_attempt_delay_ms(2_000);
@@ -1939,7 +1959,7 @@ async fn push_outbox_default_public_policy_rejects_queued_localhost_ws_targets()
         LISTING_A_D_TAG,
         "Local Coffee",
         &[LOCAL_RELAY_A],
-        SdkRelayUrlPolicy::Localhost,
+        NostrRelayUrlPolicy::Localhost,
     )
     .await;
     let adapter = RadrootsMockRelayPublishAdapter::new();
@@ -1962,7 +1982,7 @@ async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets()
         LISTING_A_D_TAG,
         "Local Coffee",
         &[LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C],
-        SdkRelayUrlPolicy::Localhost,
+        NostrRelayUrlPolicy::Localhost,
     )
     .await;
     let adapter = RadrootsMockRelayPublishAdapter::new();
@@ -1973,7 +1993,7 @@ async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets()
             &adapter,
             PushOutboxRequest::new()
                 .with_limit(1)
-                .with_relay_url_policy(SdkRelayUrlPolicy::Localhost),
+                .with_relay_url_policy(NostrRelayUrlPolicy::Localhost),
         )
         .await
         .expect("push");
@@ -2016,9 +2036,9 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Nonlocal Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([NONLOCAL_WS_RELAY], SdkRelayUrlPolicy::Localhost)
+    .try_with_target_relays([NONLOCAL_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("nonlocal ws relay target");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
@@ -2026,9 +2046,9 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Private LAN Coffee"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([PRIVATE_LAN_WS_RELAY], SdkRelayUrlPolicy::Localhost)
+    .try_with_target_relays([PRIVATE_LAN_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("private LAN ws relay target");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
@@ -2260,7 +2280,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
         .enqueue_operation(RadrootsOutboxOperationInput::new(
             LISTING_PUBLISH_OPERATION_KIND,
             prepared.frozen_draft,
-            vec![RELAY_A.to_owned()],
+            delivery_plan_for_relays([RELAY_A], NostrRelayUrlPolicy::Public),
             1_700_000_000_000,
         ))
         .await

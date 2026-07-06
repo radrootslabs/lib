@@ -12,18 +12,18 @@ use radroots_events::{
     kinds::{KIND_FARM, KIND_PROFILE},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
-use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
     FarmPrivateLocationClearRequest, FarmPrivateLocationInput, FarmPrivateLocationLookupCandidate,
     FarmPrivateLocationLookupReceipt, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
-    GeocoderLocalityQuery, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
-    RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey,
-    SdkMutationState, SdkPublicLocality, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy, StorageStatusRequest,
+    GeocoderLocalityQuery, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
+    PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsClient, RadrootsSdkError,
+    RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkPublicLocality,
+    StorageStatusRequest, TargetPolicy, TargetSet, TransportProfile,
 };
+use radroots_transport_nostr::RadrootsMockRelayPublishAdapter;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 #[path = "support/serializer_failure.rs"]
@@ -138,8 +138,11 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
     let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     let sdk = builder.build().await.expect("sdk");
     (tempdir, sdk)
@@ -606,7 +609,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "North Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("farm-idem-b")
     .expect("idempotency key");
@@ -672,7 +675,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "North Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
     let error = sdk
         .farms()
@@ -718,15 +721,15 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first target relays");
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
-        SdkRelayTargetPolicy::explicit(
-            SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+        TargetPolicy::explicit(
+            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second target relays"),
         ),
     );
@@ -757,11 +760,11 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         .await
         .expect("outbox");
     let relay_urls = outbox
-        .relay_statuses(first_receipt.outbox_event_id)
+        .delivery_targets(first_receipt.outbox_event_id)
         .await
-        .expect("relay statuses")
+        .expect("delivery targets")
         .into_iter()
-        .map(|status| status.relay_url)
+        .map(|target| target.endpoint_uri.to_string())
         .collect::<Vec<_>>();
     assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
 }
@@ -772,9 +775,9 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "Sync Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
     let enqueue_receipt = sdk
         .farms()
@@ -829,7 +832,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_E_D_TAG, "North Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -864,7 +867,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_F_D_TAG, "Changed Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -938,9 +941,9 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Queued Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(
         SdkIdempotencyKey::new("farm-serialized-idempotency").expect("idempotency"),
@@ -970,8 +973,22 @@ async fn farm_runtime_dtos_serialize_deterministically() {
             },
             "target_relays": {
                 "kind": "explicit",
-                "relays": [RELAY, RELAY_B],
-                "canonical_relays": [RELAY_B, RELAY]
+                "targets": [
+                    {
+                        "kind": "Nostr",
+                        "uri": RELAY,
+                        "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+                    },
+                    {
+                        "kind": "Nostr",
+                        "uri": RELAY_B,
+                        "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                    }
+                ],
+                "canonical_targets": [
+                    "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+                    "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+                ]
             },
             "idempotency_key": { "value": "<redacted>", "len": 27 },
             "created_at": 1_700_000_123
@@ -986,7 +1003,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let try_key_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Queued Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("farm-serialized-try-key")
     .expect("try idempotency key");

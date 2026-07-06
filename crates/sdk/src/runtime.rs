@@ -3,7 +3,7 @@ use crate::private_store::{SDK_PRIVATE_STORE_SCHEMA_VERSION, SdkPrivateStore};
 #[cfg(feature = "runtime")]
 use crate::{
     DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, RadrootsGeoNamesConfig,
-    RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy, SyncClient, TradesClient,
+    RadrootsSdkError, SyncClient, TradesClient, transport::TransportProfile,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 use crate::{
@@ -23,9 +23,6 @@ use std::{
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
-
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-use crate::adapters::radrootsd::RadrootsdProxyConfig;
 
 #[cfg(feature = "runtime")]
 const SDK_STORAGE_MANIFEST_VERSION: u16 = 1;
@@ -395,33 +392,6 @@ pub enum SdkRestoreState {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum SdkPublishTransport {
-    DirectNostrRelay,
-    #[cfg(feature = "radrootsd-proxy")]
-    RadrootsdProxy(RadrootsdProxyConfig),
-}
-
-#[cfg(feature = "runtime")]
-impl Default for SdkPublishTransport {
-    fn default() -> Self {
-        Self::DirectNostrRelay
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl SdkPublishTransport {
-    pub(crate) fn supports_delegated_relay_resolution(&self) -> bool {
-        match self {
-            Self::DirectNostrRelay => false,
-            #[cfg(feature = "radrootsd-proxy")]
-            Self::RadrootsdProxy(_) => true,
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct RestoreArchive {
     pub source: PathBuf,
@@ -455,9 +425,7 @@ pub struct RadrootsClientBuilder {
     storage: RadrootsSdkStorageConfig,
     geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
-    relay_urls: Vec<String>,
-    relay_url_policy: SdkRelayUrlPolicy,
-    publish_transport: SdkPublishTransport,
+    transport_profile: TransportProfile,
     #[cfg(feature = "signer-adapters")]
     signer_provider: Option<RadrootsSdkSignerProvider>,
 }
@@ -469,9 +437,7 @@ impl Default for RadrootsClientBuilder {
             storage: RadrootsSdkStorageConfig::Memory,
             geonames: None,
             clock: RadrootsSdkClock::System,
-            relay_urls: Vec::new(),
-            relay_url_policy: SdkRelayUrlPolicy::Public,
-            publish_transport: SdkPublishTransport::DirectNostrRelay,
+            transport_profile: TransportProfile::default(),
             #[cfg(feature = "signer-adapters")]
             signer_provider: None,
         }
@@ -510,18 +476,8 @@ impl RadrootsClientBuilder {
         self
     }
 
-    pub fn relay_url(mut self, relay_url: impl Into<String>) -> Self {
-        self.relay_urls.push(relay_url.into());
-        self
-    }
-
-    pub fn relay_url_policy(mut self, policy: SdkRelayUrlPolicy) -> Self {
-        self.relay_url_policy = policy;
-        self
-    }
-
-    pub fn publish_transport(mut self, transport: SdkPublishTransport) -> Self {
-        self.publish_transport = transport;
+    pub fn transport_profile(mut self, profile: TransportProfile) -> Self {
+        self.transport_profile = profile;
         self
     }
 
@@ -533,8 +489,6 @@ impl RadrootsClientBuilder {
 
     pub async fn build(self) -> Result<RadrootsClient, RadrootsSdkError> {
         let storage = open_storage(&self.storage).await?;
-        let relay_urls =
-            SdkRelayTargetSet::from_configured_relays(&self.relay_urls, self.relay_url_policy)?;
         Ok(RadrootsClient {
             _event_store: storage.event_store,
             _outbox: storage.outbox,
@@ -542,8 +496,7 @@ impl RadrootsClientBuilder {
             storage_paths: storage.paths,
             geonames: self.geonames,
             clock: self.clock,
-            relay_urls,
-            publish_transport: self.publish_transport,
+            transport_profile: self.transport_profile,
             #[cfg(feature = "signer-adapters")]
             signer_provider: self.signer_provider,
         })
@@ -559,8 +512,7 @@ pub struct RadrootsClient {
     storage_paths: Option<RadrootsSdkStoragePaths>,
     geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
-    relay_urls: Vec<String>,
-    publish_transport: SdkPublishTransport,
+    transport_profile: TransportProfile,
     #[cfg(feature = "signer-adapters")]
     signer_provider: Option<RadrootsSdkSignerProvider>,
 }
@@ -603,12 +555,12 @@ impl RadrootsClient {
         self.clock.now()
     }
 
-    pub fn relay_urls(&self) -> &[String] {
-        &self.relay_urls
+    pub fn transport_profile(&self) -> &TransportProfile {
+        &self.transport_profile
     }
 
-    pub fn publish_transport(&self) -> &SdkPublishTransport {
-        &self.publish_transport
+    pub fn configured_nostr_relay_urls(&self) -> Vec<String> {
+        self.transport_profile.configured_nostr_relay_urls()
     }
 
     #[cfg(feature = "signer-adapters")]
@@ -664,7 +616,7 @@ impl RadrootsClient {
                 store: event_store_status,
                 total_events: event_summary.total_events,
                 projection_eligible_events: event_summary.projection_eligible_events,
-                relay_observations: event_summary.relay_observations,
+                relay_observations: event_summary.transport_observations,
                 last_event_seq: event_summary.last_event_seq,
                 last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
             },

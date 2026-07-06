@@ -131,7 +131,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 #[test]
 fn outbox_error_conversion_handles_empty_targets_and_fallbacks() {
     assert!(matches!(
-        RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::EmptyTargetRelays),
+        RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets),
         RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "outbox enqueue"
     ));
 
@@ -162,7 +162,7 @@ fn outbox_error_conversion_handles_empty_targets_and_fallbacks() {
 #[test]
 fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     let unsupported = RadrootsSdkError::from(
-        radroots_relay_transport::RadrootsRelayTransportError::UnsupportedRelayScheme {
+        radroots_transport_nostr::RadrootsRelayTransportError::UnsupportedRelayScheme {
             url: "ftp://user:secret@relay.example.com/path?token=secret".to_owned(),
             scheme: "ftp".to_owned(),
         },
@@ -176,7 +176,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
 
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::EmptyRelayHost {
+            radroots_transport_nostr::RadrootsRelayTransportError::EmptyRelayHost {
                 url: "wss://".to_owned(),
             },
         ),
@@ -185,7 +185,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlQueryOrFragment {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlQueryOrFragment {
                 url: "wss://relay.example.com?token=secret".to_owned(),
             },
         ),
@@ -194,7 +194,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlUserinfo {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlUserinfo {
                 url: "wss://user:secret@relay.example.com".to_owned(),
             },
         ),
@@ -204,7 +204,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
+            radroots_transport_nostr::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
                 url: "ws://relay.example.com".to_owned(),
             },
         ),
@@ -213,7 +213,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
                 url: "ws://127.0.0.1:9000".to_owned(),
                 reason: "localhost disabled".to_owned(),
             },
@@ -223,7 +223,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
                 url: "ws://relay.example.com".to_owned(),
                 address: "127.0.0.1".to_owned(),
                 reason: "loopback disabled".to_owned(),
@@ -234,13 +234,13 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::EmptyTargetSet
+            radroots_transport_nostr::RadrootsRelayTransportError::EmptyTargetSet
         ),
         RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "relay publish"
     ));
     assert!(matches!(
         RadrootsSdkError::from(
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlParse {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlParse {
                 url: "wss://user:secret@relay.example.com/path?token=secret".to_owned(),
                 reason: "bad relay URL".to_owned(),
             },
@@ -250,13 +250,13 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
                 && reason == "bad relay URL"
     ));
     assert!(matches!(
-        RadrootsSdkError::from(radroots_relay_transport::RadrootsRelayTransportError::Outbox(
-            radroots_outbox::RadrootsOutboxError::EmptyTargetRelays,
+        RadrootsSdkError::from(radroots_transport_nostr::RadrootsRelayTransportError::Outbox(
+            radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets,
         )),
         RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "outbox enqueue"
     ));
     assert!(matches!(
-        RadrootsSdkError::from(radroots_relay_transport::RadrootsRelayTransportError::Transport(
+        RadrootsSdkError::from(radroots_transport_nostr::RadrootsRelayTransportError::Transport(
             "offline".to_owned(),
         )),
         RadrootsSdkError::RelayTransport { ref message } if message == "Relay transport error: offline"

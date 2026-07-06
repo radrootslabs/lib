@@ -6,7 +6,8 @@ use radroots_publish_proxy_protocol::{
     METHOD_EVENT, PublishDeliveryPolicy, PublishEventRequest, PublishEventResponse,
     PublishProxyProtocolError, PublishRelayOutcomeKind, PublishRelayPolicy, SignedNostrEventWire,
 };
-use radroots_relay_transport::{
+use radroots_transport::RadrootsTransportSatisfactionPolicy;
+use radroots_transport_nostr::{
     RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
     RadrootsRelayTransportError,
@@ -120,8 +121,8 @@ impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
             let request = RadrootsdProxyPublishRequest {
                 delivery_policy: delivery_policy_from_relay_request(
                     request.targets.len(),
-                    request.accepted_quorum,
-                ),
+                    &request.satisfaction_policy,
+                )?,
                 signed_event: request.signed_event,
                 relays: request.targets.relay_strings(),
                 idempotency_key: None,
@@ -353,17 +354,17 @@ fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
 
 fn delivery_policy_from_relay_request(
     target_count: usize,
-    accepted_quorum: usize,
-) -> PublishDeliveryPolicy {
-    if accepted_quorum >= target_count {
+    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
+) -> Result<PublishDeliveryPolicy, RadrootsRelayTransportError> {
+    let required = satisfaction_policy.required_target_count(target_count)?;
+    let delivery_policy = if required >= target_count {
         PublishDeliveryPolicy::All
-    } else if accepted_quorum <= 1 {
+    } else if required <= 1 {
         PublishDeliveryPolicy::Any
     } else {
-        PublishDeliveryPolicy::Quorum {
-            quorum: accepted_quorum,
-        }
-    }
+        PublishDeliveryPolicy::Quorum { quorum: required }
+    };
+    Ok(delivery_policy)
 }
 
 fn proxy_receipt_from_response(

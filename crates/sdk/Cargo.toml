@@ -43,11 +43,11 @@ radrootsd-proxy = [
   "serde_json",
   "dep:futures",
   "dep:radroots_publish_proxy_protocol",
-  "dep:radroots_relay_transport",
+  "dep:radroots_transport_nostr",
   "dep:reqwest",
   "radroots_publish_proxy_protocol/serde",
   "radroots_publish_proxy_protocol/std",
-  "radroots_relay_transport/std",
+  "radroots_transport_nostr/std",
 ]
 signer-adapters = [
   "identity-models",
@@ -68,7 +68,9 @@ runtime = [
   "dep:radroots_event_store",
   "dep:radroots_geocoder",
   "dep:radroots_outbox",
-  "dep:radroots_relay_transport",
+  "dep:radroots_transport",
+  "dep:radroots_transport_nostr",
+  "dep:radroots_transport_reticulum",
   "dep:radroots_runtime_paths",
   "dep:sha2",
   "dep:sqlx",
@@ -78,9 +80,10 @@ runtime = [
   "radroots_event_store/runtime-tokio",
   "radroots_outbox/sqlite",
   "radroots_outbox/runtime-tokio",
-  "radroots_relay_transport/std",
-  "radroots_relay_transport/storage",
-  "radroots_relay_transport/runtime-tokio",
+  "radroots_transport/serde",
+  "radroots_transport_nostr/std",
+  "radroots_transport_nostr/storage",
+  "radroots_transport_nostr/runtime-tokio",
   "radroots_trade/event_store",
 ]
 local-signer = ["runtime", "radroots_authority/local_signer"]
@@ -88,7 +91,7 @@ relay-runtime = [
   "runtime",
   "dep:radroots_nostr",
   "radroots_nostr/client",
-  "radroots_relay_transport/client",
+  "radroots_transport_nostr/client",
 ]
 local-runtime = [
   "std",
@@ -121,7 +124,9 @@ radroots_events_codec = { workspace = true, default-features = false }
 radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
 radroots_publish_proxy_protocol = { workspace = true, optional = true, default-features = false }
-radroots_relay_transport = { workspace = true, optional = true, default-features = false }
+radroots_transport = { workspace = true, optional = true, default-features = false }
+radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
+radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }

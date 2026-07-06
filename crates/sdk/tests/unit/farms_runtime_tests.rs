@@ -167,9 +167,9 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     let enqueue = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Queued Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_A, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("farm-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -182,7 +182,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     let try_key = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Try Key Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("farm-unit-try-key")
     .expect("try key");
@@ -357,15 +357,15 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let invalid_relays = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_A_D_TAG, "Invalid Relay Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays(["http://relay.radroots.test"], SdkRelayUrlPolicy::Public);
+    .try_with_target_relays(["http://relay.radroots.test"], NostrRelayUrlPolicy::Public);
     assert!(invalid_relays.is_err());
 
     let invalid_key = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Invalid Key Farm"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("");
     assert!(invalid_key.is_err());
@@ -531,7 +531,7 @@ async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
             FarmEnqueuePublishRequest::new(
                 farmer_actor(),
                 farm("AAAAAAAAAAAAAAAAAAAAA!", "Invalid Enqueue Farm"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             ),
             &FixtureSigner::new(FARMER),
@@ -556,7 +556,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
             FarmEnqueuePublishRequest::new(
                 actor.clone(),
                 farm(FARM_A_D_TAG, "Enqueued Farm"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             )
             .try_with_idempotency_key("farm-source-attached-enqueue")
@@ -580,7 +580,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             plan,
-            SdkRelayTargetPolicy::try_explicit([RELAY_B], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("prepared target relays"),
             None,
             &signer,
@@ -612,7 +612,7 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
             FarmEnqueuePublishRequest::new(
                 actor,
                 farm(FARM_C_D_TAG, "Configured Farm"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             )
             .try_with_idempotency_key("farm-configured-local")
@@ -646,7 +646,7 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
             .enqueue_publish(FarmEnqueuePublishRequest::new(
                 actor.clone(),
                 farm("AAAAAAAAAAAAAAAAAAAAA!", "Invalid Configured Farm"),
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
             ))
             .await,
@@ -671,7 +671,7 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
             .enqueue_prepared_publish(
                 &actor,
                 plan,
-                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("target relays"),
                 None,
             )

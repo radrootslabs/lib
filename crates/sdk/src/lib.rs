@@ -44,8 +44,6 @@ mod private_store;
 #[cfg(feature = "runtime")]
 mod product_clients;
 #[cfg(feature = "runtime")]
-mod relay_targets;
-#[cfg(feature = "runtime")]
 mod runtime;
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 mod signer_provider;
@@ -53,6 +51,8 @@ mod signer_provider;
 mod sync_runtime;
 #[cfg(feature = "runtime")]
 mod trade_storage;
+#[cfg(feature = "runtime")]
+pub mod transport;
 #[cfg(feature = "runtime")]
 mod workflow_runtime;
 
@@ -193,19 +193,14 @@ pub use crate::product_clients::{
     TradeResyncClient, TradeSellerClient, TradeValidationReceiptsClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
-pub use crate::relay_targets::{
-    AckPolicy, PublishMode, RelayResolutionPolicy, SDK_RELAY_TARGET_MAX_COUNT,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-};
-#[cfg(feature = "runtime")]
 pub use crate::runtime::{
     BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsClient,
     RadrootsClientBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
     RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkPublishTransport, SdkRestoreState,
-    SdkSqliteStoreStatus, SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind,
-    StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
+    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
+    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, StorageCheckpointReceipt,
+    StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::signer_provider::{
@@ -232,6 +227,14 @@ pub use crate::sync_runtime::{
 pub use crate::trade_storage::{
     SDK_TRADE_PROJECTION_CACHE_VERSION, SdkTradeProjectionCache, SdkTradeProjectionCacheKey,
     SdkTradeProjectionCacheRecord,
+};
+#[cfg(feature = "runtime")]
+pub use crate::transport::{
+    HybridProfile, NostrProfile, NostrRelayUrlPolicy, ProxyProfile, PublishMode,
+    ReticulumPreviewBehavior, ReticulumPreviewProfile, SDK_TRANSPORT_TARGET_MAX_COUNT,
+    SatisfactionPolicy, TargetPolicy, TargetSet, TransportDeliveryReceipt,
+    TransportDeliveryTargetStatus, TransportKind, TransportOutcome, TransportProfile,
+    TransportReceipt, TransportTargetReceipt,
 };
 #[cfg(feature = "runtime")]
 pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;

@@ -5,10 +5,11 @@ Curated Radroots Rust SDK for local-first Radroots product workflows.
 The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
 `sdk.farms()`, `sdk.listings()`, `sdk.trades()`, `sdk.market()`, and `sdk.sync()`.
 
-`RadrootsClient::builder()` defaults to memory storage, the system clock, no relay URLs, and no
-production network publishing. Directory storage is opt-in and creates `event_store.sqlite` and
-`outbox.sqlite` in the selected directory. Configured relay URLs are opt-in enqueue defaults used
-when a publish request chooses `SdkRelayTargetPolicy::UseConfiguredRelays`.
+`RadrootsClient::builder()` defaults to memory storage, the system clock, the `LocalOnly` transport
+profile, and no production network publishing. Directory storage is opt-in and creates
+`event_store.sqlite` and `outbox.sqlite` in the selected directory. Configured Nostr relay URLs live
+inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::Hybrid`, and product
+enqueue requests choose them through `TargetPolicy::UseConfiguredProfile`.
 
 When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
 `RadrootsSdkSignerProvider`. The production signing modes are `local_key` and `myc_nip46`. Product
@@ -21,8 +22,8 @@ farm, listing, or trade write call. `signer_status()`, `configured_signer()`, an
 that prepared plan, ingests it into the local event store, queues signed outbox work, and returns a
 typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)` is the convenience path that
 prepares once and delegates to `enqueue_prepared_publish(...)`. Farm and trade write methods follow
-the same configured signer pattern. The enqueue path uses typed relay target and idempotency inputs;
-omitted idempotency keys are derived deterministically.
+the same configured signer pattern. The enqueue path uses typed transport target and idempotency
+inputs; omitted idempotency keys are derived deterministically.
 
 Explicit signer injection remains available under `*_with_explicit_signer` method names for
 controlled adapter-level tests and advanced integration checks. Those methods are not the primary
@@ -34,8 +35,8 @@ clock at enqueue time. Listing enqueue receipts report mutation state with the p
 `StoredAndQueued` and `AlreadyQueued`.
 
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued signed outbox work
-when `relay-runtime` is enabled. Push time uses the relay targets already stored on each queued
-outbox event, so already queued work does not require configured builder relays. Direct relay
+when `relay-runtime` is enabled. Push time uses the delivery targets already stored on each queued
+outbox event, so already queued work does not require a configured builder profile. Nostr transport
 publishing and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither
 transport owns signing. `push_outbox_with_adapter(...)` remains available for tests and controlled
 adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
@@ -59,8 +60,8 @@ DTOs. DVM proof requests and validation receipt ingestion use `sdk.dvm()`.
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `relay-runtime`, and
 `relay-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
-`relay-client` supplies the relay WebSocket publish adapter used when signed outbox work targets
-configured relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publishing through
+`relay-client` supplies the Nostr relay WebSocket publish adapter used when signed outbox work
+targets Nostr relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publishing through
 `publish.event` and the same configured signer provider API.
 
 `radroots_sdk_myc_nip46_product_permissions()` and
@@ -69,7 +70,7 @@ configured relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publ
 listing, and trade event kinds the SDK can write.
 
 Relay URL policy is explicit. Public relay URLs must use `wss://`. Local development `ws://` relay
-URLs are accepted only under `SdkRelayUrlPolicy::Localhost` and only for `localhost`, `127.0.0.1`,
+URLs are accepted only under `NostrRelayUrlPolicy::Localhost` and only for `localhost`, `127.0.0.1`,
 or `[::1]`. Non-local insecure `ws://` targets, including private LAN addresses, are rejected.
 
 Low-level event-contract, wire-codec, reducer, and DVM contract ownership lives in the shared
@@ -92,7 +93,7 @@ cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features r
 `sdk_v1_knowledge_prepare` shows `radroots_sdk::knowledge`, typed event builders, frozen draft
 preparation, signed-event verification, decoded event matching, and manifest hash access without
 local runtime storage.
-`sdk_v1_local_enqueue_and_mock_sync` shows localhost relay target selection, configured local-key
+`sdk_v1_local_enqueue_and_mock_sync` shows localhost Nostr target selection, configured local-key
 signing, prepared listing enqueue, `push_outbox_with_adapter(...)` with a mock relay adapter, and
 `TradeStatusRequest`. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
 product permission derivation at the SDK boundary. The examples stay on product APIs and do not use
@@ -126,8 +127,8 @@ Runtime request DTOs are constructor-led and marked non-exhaustive where they ca
 `parse`, `default`, and `with_*` methods rather than struct literals.
 
 Runtime enums that may gain variants are non-exhaustive. This includes storage, clock,
-relay-target, mutation-state, trade-status, sync-status, relay-auth, and push-outbox state or
-outcome enums.
+target-policy, transport-profile, mutation-state, trade-status, sync-status, relay-auth, and
+push-outbox state or outcome enums.
 
 Runtime receipts and status records expose stable serialized public fields for CLI and local-runtime
 reporting. Future additive reporting must add fields without changing existing serialized field

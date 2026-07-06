@@ -823,7 +823,7 @@ impl From<radroots_trade::projection::RadrootsTradeProjectionError> for Radroots
 impl From<radroots_outbox::RadrootsOutboxError> for RadrootsSdkError {
     fn from(error: radroots_outbox::RadrootsOutboxError) -> Self {
         match error {
-            radroots_outbox::RadrootsOutboxError::EmptyTargetRelays => {
+            radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets => {
                 Self::empty_target_relays("outbox enqueue")
             }
             radroots_outbox::RadrootsOutboxError::IdempotencyConflict {
@@ -846,34 +846,48 @@ impl From<radroots_outbox::RadrootsOutboxError> for RadrootsSdkError {
 }
 
 #[cfg(feature = "runtime")]
-impl From<radroots_relay_transport::RadrootsRelayTransportError> for RadrootsSdkError {
-    fn from(error: radroots_relay_transport::RadrootsRelayTransportError) -> Self {
+impl From<radroots_transport::RadrootsTransportError> for RadrootsSdkError {
+    fn from(error: radroots_transport::RadrootsTransportError) -> Self {
         match error {
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlParse {
+            radroots_transport::RadrootsTransportError::EmptyTargetSet => {
+                Self::empty_target_relays("transport target set")
+            }
+            error => Self::RelayTransport {
+                message: error.to_string(),
+            },
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<radroots_transport_nostr::RadrootsRelayTransportError> for RadrootsSdkError {
+    fn from(error: radroots_transport_nostr::RadrootsRelayTransportError) -> Self {
+        match error {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlParse {
                 url,
                 reason,
             } => Self::invalid_relay_url(url, reason),
-            radroots_relay_transport::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
+            radroots_transport_nostr::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
                 url,
             } => Self::invalid_relay_url(url, "ws relay URL requires localhost policy"),
-            radroots_relay_transport::RadrootsRelayTransportError::UnsupportedRelayScheme {
+            radroots_transport_nostr::RadrootsRelayTransportError::UnsupportedRelayScheme {
                 url,
                 scheme,
             } => Self::invalid_relay_url(url, format!("unsupported scheme `{scheme}`")),
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlUserinfo { url } => {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlUserinfo { url } => {
                 Self::invalid_relay_url(url, "relay URL must not include userinfo")
             }
-            radroots_relay_transport::RadrootsRelayTransportError::EmptyRelayHost { url } => {
+            radroots_transport_nostr::RadrootsRelayTransportError::EmptyRelayHost { url } => {
                 Self::invalid_relay_url(url, "relay URL must include a host")
             }
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlQueryOrFragment {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlQueryOrFragment {
                 url,
             } => Self::invalid_relay_url(url, "relay URL must not include query or fragment"),
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
                 url,
                 reason,
             } => Self::invalid_relay_url(url, reason),
-            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+            radroots_transport_nostr::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
                 url,
                 address,
                 reason,
@@ -881,11 +895,11 @@ impl From<radroots_relay_transport::RadrootsRelayTransportError> for RadrootsSdk
                 url,
                 format!("relay URL resolved to forbidden address `{address}`: {reason}"),
             ),
-            radroots_relay_transport::RadrootsRelayTransportError::EmptyTargetSet => {
+            radroots_transport_nostr::RadrootsRelayTransportError::EmptyTargetSet => {
                 Self::empty_target_relays("relay publish")
             }
             #[cfg(feature = "runtime")]
-            radroots_relay_transport::RadrootsRelayTransportError::Outbox(error) => error.into(),
+            radroots_transport_nostr::RadrootsRelayTransportError::Outbox(error) => error.into(),
             error => Self::RelayTransport {
                 message: error.to_string(),
             },

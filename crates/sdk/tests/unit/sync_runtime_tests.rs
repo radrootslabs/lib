@@ -1,7 +1,8 @@
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
-    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy, proxy_error_message,
-    proxy_outbox_idempotency_key, proxy_transport_error_receipt, push_proxy_claimed_outbox_event,
+    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_satisfaction,
+    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_receipt,
+    push_proxy_claimed_outbox_event,
 };
 use super::{
     PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind,
@@ -39,7 +40,9 @@ use radroots_outbox::RadrootsOutboxClaimedEvent;
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_publish_proxy_protocol::PublishDeliveryPolicy;
-use radroots_relay_transport::{
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_transport::RadrootsTransportSatisfactionPolicy;
+use radroots_transport_nostr::{
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
@@ -139,11 +142,12 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
             operation_kind: "sync.proxy.unit.v1",
             actor: &actor,
             frozen_draft: &draft,
-            target_relays: crate::SdkRelayTargetPolicy::try_explicit(
+            target_relays: crate::TargetPolicy::try_nostr_relays(
                 ["wss://relay.example.com"],
-                crate::SdkRelayUrlPolicy::Public,
+                crate::NostrRelayUrlPolicy::Public,
             )
             .expect("target relays"),
+            satisfaction_policy: crate::SatisfactionPolicy::AllTargets,
             idempotency_key: None,
         },
         &ProxyFixtureSigner::new(),
@@ -308,7 +312,7 @@ fn sync_status_summary_conversions_preserve_all_fields() {
     let event_summary = RadrootsEventStoreStatusSummary {
         total_events: 11,
         projection_eligible_events: 7,
-        relay_observations: 3,
+        transport_observations: 3,
         last_event_seq: Some(9),
         last_event_updated_at_ms: Some(1_700_000_000_000),
     };
@@ -352,7 +356,7 @@ fn push_outbox_request_builders_validate_all_bounds() {
         .with_outbox_event_id(9)
         .republish_accepted_relays(true)
         .with_accepted_quorum(2)
-        .with_relay_url_policy(crate::SdkRelayUrlPolicy::Localhost)
+        .with_relay_url_policy(crate::NostrRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(7)
         .with_next_attempt_delay_ms(11);
@@ -506,11 +510,26 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         .expect("empty proxy push");
 
     assert_eq!(receipt.attempted_events, 0);
-    assert_eq!(proxy_delivery_policy(0, None), PublishDeliveryPolicy::Any);
-    assert_eq!(proxy_delivery_policy(2, None), PublishDeliveryPolicy::All);
     assert_eq!(
-        proxy_delivery_policy(3, Some(2)),
-        PublishDeliveryPolicy::Quorum { quorum: 2 }
+        proxy_delivery_policy_from_satisfaction(
+            0,
+            &RadrootsTransportSatisfactionPolicy::AllTargets
+        )
+        .expect("zero-target proxy policy"),
+        PublishDeliveryPolicy::Any
+    );
+    assert_eq!(
+        proxy_delivery_policy_from_satisfaction(
+            2,
+            &RadrootsTransportSatisfactionPolicy::AllTargets
+        )
+        .expect("all-target proxy policy"),
+        PublishDeliveryPolicy::All
+    );
+    assert_eq!(
+        proxy_delivery_policy_from_satisfaction(2, &RadrootsTransportSatisfactionPolicy::AnyTarget)
+            .expect("any-target proxy policy"),
+        PublishDeliveryPolicy::Any
     );
     assert_eq!(
         proxy_outbox_idempotency_key(7, 3, "event-id"),
@@ -594,11 +613,11 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
             expected_event_id: "b".repeat(64),
         },
         signed_event: None,
-        target_relays: vec!["wss://relay.example.com".to_owned()],
+        delivery_targets: Vec::new(),
     };
 
     assert!(matches!(
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, None, 60_000, 1_700_000_000_000)
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await,
         Err(RadrootsSdkError::RelayTransport { message })
             if message.contains("Outbox claim 41 does not contain a signed event")
@@ -613,7 +632,7 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
     let adapter =
         RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
     let receipt =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, None, 60_000, 1_700_000_000_000)
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
             .expect("transport error receipt");
 
@@ -706,9 +725,9 @@ trait RelayReceiptFixture {
 impl RelayReceiptFixture for RadrootsRelayPublishReceipt {
     fn with_relay(mut self) -> Self {
         self.relays.push(
-            radroots_relay_transport::RadrootsRelayPublishRelayReceipt::attempted(
+            radroots_transport_nostr::RadrootsRelayPublishRelayReceipt::attempted(
                 "wss://relay.example.com",
-                radroots_relay_transport::RadrootsRelayOutcome::accepted(),
+                radroots_transport_nostr::RadrootsRelayOutcome::accepted(),
             ),
         );
         self

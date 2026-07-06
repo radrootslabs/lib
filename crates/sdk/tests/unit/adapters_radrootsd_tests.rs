@@ -3,7 +3,7 @@ use radroots_publish_proxy_protocol::{
     PublishJobStatus, PublishJobView, PublishRelayOutcome, PublishRelayOutcomeKind,
     PublishRelaySource,
 };
-use radroots_relay_transport::{
+use radroots_transport_nostr::{
     RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayUrlPolicy,
 };
 use std::io::{Read, Write};
@@ -508,10 +508,22 @@ async fn publish_event_empty_http_error_reports_empty_body() {
 
 #[tokio::test]
 async fn relay_publish_adapter_derives_delivery_policy_and_timeout() {
-    for (target_count, quorum, expected_policy) in [
-        (2, 2, PublishDeliveryPolicy::All),
-        (2, 1, PublishDeliveryPolicy::Any),
-        (3, 2, PublishDeliveryPolicy::Quorum { quorum: 2 }),
+    for (target_count, satisfaction_policy, expected_policy) in [
+        (
+            2,
+            radroots_transport::RadrootsTransportSatisfactionPolicy::AllTargets,
+            PublishDeliveryPolicy::All,
+        ),
+        (
+            2,
+            radroots_transport::RadrootsTransportSatisfactionPolicy::AnyTarget,
+            PublishDeliveryPolicy::Any,
+        ),
+        (
+            3,
+            radroots_transport::RadrootsTransportSatisfactionPolicy::AtLeast(2),
+            PublishDeliveryPolicy::Quorum { quorum: 2 },
+        ),
     ] {
         let response_body = publish_response_json();
         let (endpoint, handle) = spawn_http_server("200 OK", response_body.as_str());
@@ -527,7 +539,7 @@ async fn relay_publish_adapter_derives_delivery_policy_and_timeout() {
         let receipts = adapter
             .publish(
                 RadrootsRelayPublishRequest::new(signed_event(), targets, 10)
-                    .with_accepted_quorum(quorum),
+                    .with_satisfaction_policy(satisfaction_policy),
             )
             .await
             .expect("adapter publish");
@@ -569,7 +581,7 @@ async fn relay_publish_adapter_maps_proxy_errors_to_transport_errors() {
 
     assert!(matches!(
         error,
-        radroots_relay_transport::RadrootsRelayTransportError::Transport(message)
+        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
             if message.contains("radrootsd")
     ));
 }

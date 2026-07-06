@@ -2,26 +2,38 @@
 
 use radroots_events::ids::RadrootsOrderId;
 use radroots_sdk::{
-    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsClient,
-    RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RestoreRequest,
-    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
+    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, NostrProfile,
+    NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass,
+    RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
+    RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN,
+    SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
     SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
-    SdkPrivateStoreStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkRestoreState, SdkSqliteStoreStatus, SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus,
-    SdkStorageKind, StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt,
-    StorageStatusRequest,
+    SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
+    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, StorageCheckpointReceipt,
+    StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest, TargetPolicy, TargetSet,
+    TransportProfile,
 };
 use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::{Path, PathBuf};
 
+fn nostr_profile<I, S>(
+    relays: I,
+    policy: NostrRelayUrlPolicy,
+) -> Result<TransportProfile, RadrootsSdkError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    Ok(TransportProfile::nostr(NostrProfile::new(relays, policy)?))
+}
+
 #[tokio::test]
 async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
     let sdk = RadrootsClient::builder().build().await.expect("sdk");
 
-    assert!(sdk.relay_urls().is_empty());
+    assert!(sdk.configured_nostr_relay_urls().is_empty());
     assert!(sdk.storage_paths().is_none());
     let _listings = sdk.listings();
     let _market = sdk.market();
@@ -34,15 +46,23 @@ async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
 #[tokio::test]
 async fn sdk_builder_validates_configured_relay_targets() {
     let sdk = RadrootsClient::builder()
-        .relay_url(" wss://relay-b.example.com/ ")
-        .relay_url("wss://relay-a.example.com")
-        .relay_url("wss://relay-a.example.com")
+        .transport_profile(
+            nostr_profile(
+                [
+                    " wss://relay-b.example.com/ ",
+                    "wss://relay-a.example.com",
+                    "wss://relay-a.example.com",
+                ],
+                NostrRelayUrlPolicy::Public,
+            )
+            .expect("profile"),
+        )
         .build()
         .await
         .expect("sdk");
 
     assert_eq!(
-        sdk.relay_urls(),
+        sdk.configured_nostr_relay_urls(),
         &[
             "wss://relay-b.example.com".to_owned(),
             "wss://relay-a.example.com".to_owned()
@@ -52,23 +72,20 @@ async fn sdk_builder_validates_configured_relay_targets() {
 
 #[tokio::test]
 async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
-    let result = RadrootsClient::builder()
-        .relay_url("ws://127.0.0.1:8080")
-        .build()
-        .await;
+    let result = nostr_profile(["ws://127.0.0.1:8080"], NostrRelayUrlPolicy::Public);
 
     match result {
         Err(RadrootsSdkError::InvalidRelayUrl { .. }) => {}
-        Err(error) => panic!("unexpected builder error: {error}"),
-        Ok(_) => panic!("builder accepted ws relay without localhost policy"),
+        Err(error) => panic!("unexpected profile error: {error}"),
+        Ok(_) => panic!("profile accepted ws relay without localhost policy"),
     }
 }
 
 #[test]
 fn invalid_relay_url_errors_redact_userinfo() {
-    let error = SdkRelayTargetSet::new(
+    let error = TargetSet::new(
         ["wss://user:password@relay.example.com/path?token=secret#frag"],
-        SdkRelayUrlPolicy::Public,
+        NostrRelayUrlPolicy::Public,
     )
     .expect_err("invalid relay");
     let message = error.to_string();
@@ -98,32 +115,31 @@ fn invalid_relay_url_errors_redact_userinfo() {
 #[tokio::test]
 async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
     let sdk = RadrootsClient::builder()
-        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
-        .relay_url("ws://localhost:8080")
-        .relay_url("ws://127.0.0.1:8081")
-        .relay_url("ws://[::1]:8082")
+        .transport_profile(
+            nostr_profile(
+                [
+                    "ws://localhost:8080",
+                    "ws://127.0.0.1:8081",
+                    "ws://[::1]:8082",
+                ],
+                NostrRelayUrlPolicy::Localhost,
+            )
+            .expect("profile"),
+        )
         .build()
         .await
         .expect("sdk");
 
-    assert_eq!(sdk.relay_urls().len(), 3);
+    assert_eq!(sdk.configured_nostr_relay_urls().len(), 3);
 
-    let result = RadrootsClient::builder()
-        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
-        .relay_url("ws://relay.example.com")
-        .build()
-        .await;
+    let result = nostr_profile(["ws://relay.example.com"], NostrRelayUrlPolicy::Localhost);
 
     assert!(matches!(
         result,
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
 
-    let result = RadrootsClient::builder()
-        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
-        .relay_url("ws://192.168.1.10:8080")
-        .build()
-        .await;
+    let result = nostr_profile(["ws://192.168.1.10:8080"], NostrRelayUrlPolicy::Localhost);
 
     assert!(matches!(
         result,
@@ -396,7 +412,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
         ),
         (
-            SdkRelayTargetSet::new(["wss://u:p@relay.example.com"], SdkRelayUrlPolicy::Public)
+            TargetSet::new(["wss://u:p@relay.example.com"], NostrRelayUrlPolicy::Public)
                 .expect_err("invalid relay"),
             "invalid_relay_url",
             RadrootsSdkErrorClass::Configuration,
@@ -588,54 +604,68 @@ fn sdk_error_contract_methods_cover_all_variants() {
 
 #[test]
 fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
-    let targets = SdkRelayTargetSet::new(
+    let targets = TargetSet::new(
         [
             " wss://relay-b.example.com/ ",
             "wss://relay-a.example.com",
             "wss://relay-a.example.com",
         ],
-        SdkRelayUrlPolicy::Public,
+        NostrRelayUrlPolicy::Public,
     )
     .expect("targets");
 
     assert_eq!(
-        targets.relays(),
+        targets.nostr_relay_urls(),
         &[
             "wss://relay-b.example.com".to_owned(),
             "wss://relay-a.example.com".to_owned()
         ]
     );
     assert_eq!(
-        targets.canonical_relays(),
+        targets.canonical_targets(),
         &[
-            "wss://relay-a.example.com".to_owned(),
-            "wss://relay-b.example.com".to_owned()
+            "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05".to_owned(),
+            "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa".to_owned()
         ]
     );
     assert_eq!(
-        serde_json::to_value(SdkRelayTargetPolicy::explicit(targets.clone()))
+        serde_json::to_value(TargetPolicy::explicit(targets.clone()))
             .expect("relay target policy json"),
         serde_json::json!({
             "kind": "explicit",
-            "relays": ["wss://relay-b.example.com", "wss://relay-a.example.com"],
-            "canonical_relays": ["wss://relay-a.example.com", "wss://relay-b.example.com"]
+            "targets": [
+                {
+                    "kind": "Nostr",
+                    "uri": "wss://relay-b.example.com",
+                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                },
+                {
+                    "kind": "Nostr",
+                    "uri": "wss://relay-a.example.com",
+                    "fingerprint": "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa"
+                }
+            ],
+            "canonical_targets": [
+                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+                "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa"
+            ]
         })
     );
 
     assert!(matches!(
-        SdkRelayTargetSet::new(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::EmptyTargetRelays { .. })
     ));
 
-    let too_many = (0..=SDK_RELAY_TARGET_MAX_COUNT)
+    let too_many = (0..=SDK_TRANSPORT_TARGET_MAX_COUNT)
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     assert!(matches!(
-        SdkRelayTargetSet::new(too_many, SdkRelayUrlPolicy::Public),
+        TargetSet::new(too_many, NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::RelayTargetLimitExceeded {
-            max: SDK_RELAY_TARGET_MAX_COUNT,
+            max: SDK_TRANSPORT_TARGET_MAX_COUNT,
             actual
-        }) if actual == SDK_RELAY_TARGET_MAX_COUNT + 1
+        }) if actual == SDK_TRANSPORT_TARGET_MAX_COUNT + 1
     ));
 }
 
@@ -995,9 +1025,9 @@ fn sdk_examples_stay_on_product_api_boundary() {
     let local_enqueue = include_str!("../examples/sdk_v1_local_enqueue_and_mock_sync.rs");
     assert!(local_enqueue.contains("RadrootsClient::builder()"));
     assert!(local_enqueue.contains("ListingPreparePublishRequest"));
-    assert!(local_enqueue.contains("SdkRelayTargetPolicy"));
-    assert!(local_enqueue.contains("SdkRelayTargetSet"));
-    assert!(local_enqueue.contains("SdkRelayUrlPolicy::Localhost"));
+    assert!(local_enqueue.contains("TargetPolicy"));
+    assert!(local_enqueue.contains("TargetSet"));
+    assert!(local_enqueue.contains("NostrRelayUrlPolicy::Localhost"));
     assert!(local_enqueue.contains("RadrootsSdkLocalKeySigner"));
     assert!(local_enqueue.contains("RadrootsSdkSignerProvider::LocalKey"));
     assert!(local_enqueue.contains("enqueue_prepared_publish"));

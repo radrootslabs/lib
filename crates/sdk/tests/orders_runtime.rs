@@ -39,28 +39,23 @@ use radroots_nostr::prelude::{
 };
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "relay-runtime")]
-use radroots_relay_transport::{
-    RadrootsMockRelayFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchItem,
-    RadrootsRelayFetchRequest, RadrootsRelayTransportError,
-};
-use radroots_sdk::{
-    AckPolicy, PublishMode, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy, RadrootsTradeValidationTrustState,
-    RelayResolutionPolicy, SdkMutationState, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SdkTradeStatusIssue, SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY, TRADE_SUBMIT_OPERATION_KIND,
-    TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest, TradeEvidenceIngestRequest,
-    TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionRequest, TradeRevisionProposalRequest,
-    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest, TradeStatusWatchCancelState,
-    TradeStatusWatchRequest,
-};
-#[cfg(feature = "relay-runtime")]
 use radroots_sdk::{
     DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind, TradeResyncRelayOutcomeKind,
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxRequest,
     TradeValidationReceiptInspectRequest, TradeValidationReceiptListRequest,
     TradeValidationReceiptVerifyRequest,
+};
+use radroots_sdk::{
+    NostrProfile, NostrRelayUrlPolicy, PublishMode, RadrootsClient, RadrootsSdkError,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy,
+    RadrootsTradeValidationTrustState, SatisfactionPolicy, SdkMutationState, SdkTradeStatusIssue,
+    SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
+    TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY, TRADE_SUBMIT_OPERATION_KIND,
+    TargetPolicy, TargetSet, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
+    TradeEvidenceIngestRequest, TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest,
+    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionRequest, TradeRevisionProposalRequest,
+    TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest, TradeStatusWatchCancelState,
+    TradeStatusWatchRequest, TransportProfile,
 };
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
@@ -73,6 +68,11 @@ use radroots_trade::validation_receipt::{
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
     RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
     validation_receipt_event_build, validation_receipt_public_values_hash_hex,
+};
+#[cfg(feature = "relay-runtime")]
+use radroots_transport_nostr::{
+    RadrootsMockRelayFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchItem,
+    RadrootsRelayFetchRequest, RadrootsRelayTransportError,
 };
 use serde::Serialize;
 use serde::ser::{self, SerializeStruct};
@@ -470,8 +470,11 @@ async fn directory_sdk_and_store_with_relays(
     let mut builder = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     let sdk = builder.build().await.expect("sdk");
     let store =
@@ -500,8 +503,11 @@ async fn directory_sdk_with_signer_and_relays(
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
             RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
         ));
-    for relay in relays {
-        builder = builder.relay_url(*relay);
+    if !relays.is_empty() {
+        builder = builder.transport_profile(TransportProfile::nostr(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+        ));
     }
     builder.build().await.expect("sdk")
 }
@@ -556,9 +562,9 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
     }
 }
 
-fn explicit_trade_relays() -> RelayResolutionPolicy {
-    RelayResolutionPolicy::explicit(
-        SdkRelayTargetSet::new([RELAY], SdkRelayUrlPolicy::Public).expect("target relays"),
+fn explicit_trade_relays() -> TargetPolicy {
+    TargetPolicy::explicit(
+        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("target relays"),
     )
 }
 
@@ -641,7 +647,7 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
 fn trade_propose_request(
     raw_order_id: &str,
     publish_mode: PublishMode,
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
 ) -> TradeProposeRequest {
     let order = order_request(raw_order_id);
     TradeProposeRequest::new(
@@ -843,11 +849,11 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         buyer_actor(),
         listing_event_ptr(),
         order,
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays")
     .try_with_idempotency_key("order-submit-enqueue-idempotency")
     .expect("idempotency key");
@@ -978,7 +984,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
                 trade_propose_request(
                     "trade-product-facade-flow",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-facade-propose")
                 .expect("propose idempotency"),
@@ -1049,7 +1055,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
                     }],
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-facade-accept")
@@ -1136,7 +1142,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
                 trade_propose_request(
                     "trade-product-committed-resync",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-committed-resync-propose")
                 .expect("propose idempotency"),
@@ -1185,7 +1191,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
                     }],
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-committed-resync-accept")
@@ -1444,7 +1450,7 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
                 trade_propose_request(
                     "trade-product-resync-before-accept",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-resync-before-accept-propose")
                 .expect("propose idempotency"),
@@ -1479,7 +1485,7 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
                     }],
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::ResyncBeforeMutation,
                 )
                 .try_with_idempotency_key("trade-product-resync-before-accept")
@@ -1566,7 +1572,7 @@ async fn trade_product_revision_status_resync_imports_pending_revision_proposal(
                 trade_propose_request(
                     "trade-product-resync-before-revision-decision",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-resync-before-revision-decision-propose")
                 .expect("propose idempotency"),
@@ -1612,7 +1618,7 @@ async fn trade_product_revision_status_resync_imports_pending_revision_proposal(
                     "increase quantity",
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
@@ -1694,7 +1700,7 @@ async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
                 trade_propose_request(
                     "trade-product-local-only-no-fetch",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-local-only-no-fetch-propose")
                 .expect("propose idempotency"),
@@ -1716,7 +1722,7 @@ async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
                 }],
                 explicit_trade_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 TradeEvidenceMode::LocalOnly,
             ),
             &adapter,
@@ -1763,7 +1769,7 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
                 trade_propose_request(
                     "trade-product-explicit-accept",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-explicit-accept-propose")
                 .expect("propose idempotency"),
@@ -1786,7 +1792,7 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
                     }],
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::require_explicit_evidence([
                         TradeEvidenceIngestRequest::new(request_event),
                     ]),
@@ -1839,7 +1845,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
                 trade_propose_request(
                     "trade-product-empty-explicit-accept",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-empty-explicit-accept-propose")
                 .expect("propose idempotency"),
@@ -1859,7 +1865,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
             }],
             explicit_trade_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             TradeEvidenceMode::require_explicit_evidence(Vec::<TradeEvidenceIngestRequest>::new()),
         ))
         .await
@@ -2707,7 +2713,7 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
     let request = trade_propose_request(
         "trade-product-idempotent",
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("trade-product-idempotent-key")
     .expect("idempotency");
@@ -2762,7 +2768,7 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
             trade_propose_request(
                 "trade-product-idempotent-conflict",
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
             .try_with_idempotency_key("trade-product-idempotent-key")
             .expect("conflict idempotency"),
@@ -2810,7 +2816,7 @@ async fn trade_product_propose_requires_public_note_privacy_confirmation() {
             trade_propose_request(
                 "trade-product-propose-public-note",
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
             .with_public_note("please leave at the community table"),
         )
@@ -2866,7 +2872,7 @@ async fn trade_product_propose_publishes_public_note_after_confirmation() {
                 trade_propose_request(
                     "trade-product-propose-public-note-confirmed",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_public_note("please leave at the community table")
                 .with_privacy_confirmation(public_note_confirmation())
@@ -2909,7 +2915,7 @@ async fn trade_product_propose_blocks_sensitive_fulfillment_note_even_when_confi
             trade_propose_request(
                 "trade-product-propose-sensitive-note",
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
             .with_public_note("pickup address is 123 Farm Lane")
             .with_privacy_confirmation(public_note_confirmation()),
@@ -2956,7 +2962,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
                 trade_propose_request(
                     "trade-product-privacy-decline",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-privacy-decline-propose")
                 .expect("propose idempotency"),
@@ -2975,7 +2981,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
             "sold elsewhere",
             explicit_trade_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             TradeEvidenceMode::LocalOnly,
         ))
         .await
@@ -3024,7 +3030,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
                     "sold elsewhere",
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
@@ -3060,7 +3066,7 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
                 trade_propose_request(
                     "trade-product-privacy-cancel",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-privacy-cancel-propose")
                 .expect("propose idempotency"),
@@ -3079,7 +3085,7 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
                 "pickup address is 123 Farm Lane",
                 explicit_trade_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 TradeEvidenceMode::LocalOnly,
             )
             .with_privacy_confirmation(public_note_confirmation()),
@@ -3126,7 +3132,7 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
                 trade_propose_request(
                     "trade-product-cancel",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-cancel-propose")
                 .expect("propose idempotency"),
@@ -3146,7 +3152,7 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
                     "changed plan",
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
@@ -3191,7 +3197,7 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
                 trade_propose_request(
                     "trade-product-revision",
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .try_with_idempotency_key("trade-product-revision-propose")
                 .expect("propose idempotency"),
@@ -3218,7 +3224,7 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
                     "increase quantity",
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
@@ -3252,7 +3258,7 @@ async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
                     RadrootsOrderRevisionOutcome::Accepted,
                     explicit_trade_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
                 .try_with_idempotency_key("trade-product-revision-decision")
@@ -3285,7 +3291,7 @@ async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects()
         .propose_trade(trade_propose_request(
             "trade-product-dry-run",
             PublishMode::DryRun,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("dry-run proposal");
@@ -3326,11 +3332,11 @@ async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() 
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-wrong-signer"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
 
     let error = sdk
@@ -3376,22 +3382,22 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first target relays");
     let second = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
-        RelayResolutionPolicy::explicit(
-            SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+        TargetPolicy::explicit(
+            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second target relays"),
         ),
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     );
 
     let first_receipt = sdk
@@ -3446,11 +3452,11 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         .await
         .expect("outbox");
     let relay_urls = outbox
-        .relay_statuses(first_receipt.outbox_event_id)
+        .delivery_targets(first_receipt.outbox_event_id)
         .await
-        .expect("relay statuses")
+        .expect("delivery targets")
         .into_iter()
-        .map(|status| status.relay_url)
+        .map(|target| target.endpoint_uri.to_string())
         .collect::<Vec<_>>();
     assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
 }
@@ -3463,11 +3469,11 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-sync"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
     let enqueue_receipt = sdk
         .trades()
@@ -3527,11 +3533,11 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-a"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("first target relays")
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("first idempotency key");
@@ -3544,11 +3550,11 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-b"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("second target relays")
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("second idempotency key");
@@ -3636,11 +3642,11 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-serialized-enqueue"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-serialized-idempotency").expect("idempotency"),
@@ -3653,8 +3659,22 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         enqueue_json["target_relays"],
         serde_json::json!({
             "kind": "explicit",
-            "relays": [RELAY, RELAY_B],
-            "canonical_relays": [RELAY_B, RELAY]
+            "targets": [
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY,
+                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+                },
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY_B,
+                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                }
+            ],
+            "canonical_targets": [
+                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+            ]
         })
     );
     assert_eq!(
@@ -3672,9 +3692,9 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-try-idempotency"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("order-submit-try-key")
     .expect("try idempotency key");
@@ -4300,10 +4320,10 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
         .enqueue_prepared_decision_with_explicit_signer(
             &actor,
             plan,
-            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
                 .expect("target relays"),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -4643,11 +4663,11 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-serialized-enqueue"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("target relays")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-decision-serialized-idempotency").expect("idempotency"),
@@ -4660,8 +4680,22 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         enqueue_json["target_relays"],
         serde_json::json!({
             "kind": "explicit",
-            "relays": [RELAY, RELAY_B],
-            "canonical_relays": [RELAY_B, RELAY]
+            "targets": [
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY,
+                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+                },
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY_B,
+                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                }
+            ],
+            "canonical_targets": [
+                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+            ]
         })
     );
     assert_eq!(
@@ -4679,9 +4713,9 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-try-idempotency"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("order-decision-try-key")
     .expect("try idempotency key");
@@ -4832,11 +4866,11 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("proposal relays")
     .with_idempotency_key(SdkIdempotencyKey::new("order-revision-proposal-dto").expect("key"))
     .with_created_at(created_at);
@@ -4847,8 +4881,22 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         proposal_enqueue_json["target_relays"],
         serde_json::json!({
             "kind": "explicit",
-            "relays": [RELAY, RELAY_B],
-            "canonical_relays": [RELAY_B, RELAY]
+            "targets": [
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY,
+                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+                },
+                {
+                    "kind": "Nostr",
+                    "uri": RELAY_B,
+                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                }
+            ],
+            "canonical_targets": [
+                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
+                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
+            ]
         })
     );
     assert_eq!(
@@ -4862,9 +4910,9 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("order-revision-proposal-try")
     .expect("proposal try key");
@@ -4905,11 +4953,11 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         revision_decision,
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("decision relays")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-revision-decision-dto").expect("decision idempotency"),
@@ -4934,9 +4982,9 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             &previous_event_id,
             RadrootsOrderRevisionOutcome::Accepted,
         ),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("order-revision-decision-try")
     .expect("decision try key");
@@ -4966,11 +5014,11 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         cancellation,
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("cancellation relays")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-cancellation-dto").expect("cancellation idempotency"),
@@ -4995,9 +5043,9 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         order_cancellation("order-revision-dto"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
     .try_with_idempotency_key("order-cancellation-try")
     .expect("cancellation try key");
@@ -5037,11 +5085,11 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-accept"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays")
     .try_with_idempotency_key("order-decision-accept-idempotency")
     .expect("idempotency");
@@ -5144,11 +5192,11 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
         seller_actor(),
         request_event_ptr(&request_event),
         decision,
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
 
     let receipt = sdk
@@ -5188,11 +5236,11 @@ async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation
         seller_actor(),
         missing_request,
         order_decision("order-decision-missing-request"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
 
     let error = sdk
@@ -5236,11 +5284,11 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-wrong-signer"),
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
 
     let error = sdk
@@ -5291,11 +5339,11 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         seller_actor(),
         request_event_ptr(&request_event),
         decline,
-        RelayResolutionPolicy::ConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
 
     let error = sdk
@@ -5359,10 +5407,10 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &proposal_actor,
             proposal_plan,
-            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
                 .expect("proposal target relays"),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             Some(
                 SdkIdempotencyKey::new("order-lifecycle-revision-proposal")
                     .expect("proposal idempotency"),
@@ -5410,10 +5458,10 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &revision_decision_actor,
             revision_decision_plan,
-            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
                 .expect("revision decision target relays"),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -5501,11 +5549,11 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal,
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("proposal target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5544,11 +5592,11 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-pending-revision"),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("decision target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5572,11 +5620,11 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 blocked_proposal,
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("blocked proposal target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5619,11 +5667,11 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal.clone(),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("proposal target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5644,11 +5692,11 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 declined_revision,
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("declined revision target relays"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -5694,11 +5742,11 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 second_decision,
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("second decision target relays"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -5743,10 +5791,10 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         .enqueue_prepared_cancellation_with_explicit_signer(
             &cancellation_actor,
             cancellation_plan,
-            RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
                 .expect("cancellation target relays"),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             Some(
                 SdkIdempotencyKey::new("order-lifecycle-cancel").expect("cancellation idempotency"),
             ),
@@ -5778,11 +5826,11 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 order_cancellation("order-lifecycle-cancel"),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("replay target relays")
             .try_with_idempotency_key("order-lifecycle-cancel")
             .expect("replay idempotency"),
@@ -5834,11 +5882,11 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                     &request_event_id,
                     &request_event_id,
                 ),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("missing target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5865,11 +5913,11 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-invalid"),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("decision target relays"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -5892,11 +5940,11 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 revision_without_proposal,
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("revision decision target relays"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -5915,11 +5963,11 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 order_cancellation("order-lifecycle-invalid"),
-                RelayResolutionPolicy::ConfiguredRelays,
+                TargetPolicy::UseConfiguredProfile,
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
             .expect("cancellation target relays"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -6771,7 +6819,7 @@ async fn trade_product_mutation_returns_structured_ambiguity() {
             }],
             explicit_trade_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             TradeEvidenceMode::LocalOnly,
         ))
         .await

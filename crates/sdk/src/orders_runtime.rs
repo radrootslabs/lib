@@ -8,20 +8,19 @@ use crate::sync_runtime::SyncProjectionRefreshReceipt;
 use crate::sync_runtime::{SyncProjectionRefreshRequest, refresh_product_projections_for_sdk};
 #[cfg(feature = "signer-adapters")]
 use crate::workflow_runtime::enqueue_configured_signed_workflow;
+#[cfg(all(feature = "runtime", test))]
+use crate::{NostrRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
 #[cfg(any(feature = "signer-adapters", test))]
 use crate::{
-    AckPolicy, PrivacyPreflightConfirmation, PrivacyPreflightReceipt, ProductSensitivityField,
-    PublishMode, PushOutboxReceipt, PushOutboxRequest, RadrootsSdkRecoveryAction,
-    RelayResolutionPolicy, SdkIdempotencyKey, SdkMutationState,
-    workflow_runtime::SdkWorkflowEnqueueRequest,
+    PrivacyPreflightConfirmation, PrivacyPreflightReceipt, ProductSensitivityField, PublishMode,
+    PushOutboxReceipt, PushOutboxRequest, RadrootsSdkRecoveryAction, SatisfactionPolicy,
+    SdkIdempotencyKey, SdkMutationState, TargetPolicy, workflow_runtime::SdkWorkflowEnqueueRequest,
 };
 #[cfg(feature = "runtime")]
 use crate::{
     RadrootsSdkError, RadrootsSdkTimestamp, TradeResyncClient, TradeSellerClient,
     TradeValidationReceiptsClient, TradesClient, order,
 };
-#[cfg(all(feature = "runtime", test))]
-use crate::{SdkRelayUrlPolicy, workflow_runtime::enqueue_signed_workflow};
 #[cfg(feature = "runtime")]
 use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
@@ -75,12 +74,6 @@ use radroots_nostr::prelude::{
     RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKey,
     radroots_nostr_filter_tag,
 };
-#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
-use radroots_relay_transport::{
-    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
-    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome,
-    RadrootsRelayFetchRequest, RadrootsRelayOutcomeKind, fetch_and_ingest_relay_events,
-};
 #[cfg(feature = "runtime")]
 use radroots_trade::dvm::RADROOTS_DVM_TAG_VALIDATION_RECEIPT;
 #[cfg(feature = "runtime")]
@@ -112,6 +105,12 @@ use radroots_trade::validation_receipt::{
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::RadrootsTradeWorkflowState;
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_transport_nostr::{
+    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
+    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome,
+    RadrootsRelayFetchRequest, RadrootsRelayOutcomeKind, fetch_and_ingest_relay_events,
+};
 #[cfg(feature = "runtime")]
 use serde::Deserialize;
 #[cfg(feature = "runtime")]
@@ -281,9 +280,9 @@ pub struct TradeSubmitEnqueueRequest {
     pub actor: RadrootsActorContext,
     pub listing_event: RadrootsNostrEventPtr,
     pub order: RadrootsOrderRequest,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -295,9 +294,9 @@ impl TradeSubmitEnqueueRequest {
         actor: RadrootsActorContext,
         listing_event: RadrootsNostrEventPtr,
         order: RadrootsOrderRequest,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -314,13 +313,13 @@ impl TradeSubmitEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -487,9 +486,9 @@ pub struct TradeDecisionEnqueueRequest {
     pub actor: RadrootsActorContext,
     pub request_event: RadrootsNostrEventPtr,
     pub decision: RadrootsOrderDecision,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -501,9 +500,9 @@ impl TradeDecisionEnqueueRequest {
         actor: RadrootsActorContext,
         request_event: RadrootsNostrEventPtr,
         decision: RadrootsOrderDecision,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -520,13 +519,13 @@ impl TradeDecisionEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -628,9 +627,9 @@ pub struct TradeRevisionProposalEnqueueRequest {
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub proposal: RadrootsOrderRevisionProposal,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -643,9 +642,9 @@ impl TradeRevisionProposalEnqueueRequest {
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         proposal: RadrootsOrderRevisionProposal,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -663,13 +662,13 @@ impl TradeRevisionProposalEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -773,9 +772,9 @@ pub struct TradeRevisionDecisionEnqueueRequest {
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub decision: RadrootsOrderRevisionDecision,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -788,9 +787,9 @@ impl TradeRevisionDecisionEnqueueRequest {
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         decision: RadrootsOrderRevisionDecision,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -808,13 +807,13 @@ impl TradeRevisionDecisionEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -918,9 +917,9 @@ pub struct TradeCancellationEnqueueRequest {
     pub root_event: RadrootsNostrEventPtr,
     pub previous_event: RadrootsNostrEventPtr,
     pub cancellation: RadrootsOrderCancellation,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -933,9 +932,9 @@ impl TradeCancellationEnqueueRequest {
         root_event: RadrootsNostrEventPtr,
         previous_event: RadrootsNostrEventPtr,
         cancellation: RadrootsOrderCancellation,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -953,13 +952,13 @@ impl TradeCancellationEnqueueRequest {
     pub fn try_with_target_relays<I, S>(
         mut self,
         target_relays: I,
-        policy: SdkRelayUrlPolicy,
+        policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = RelayResolutionPolicy::try_explicit(target_relays, policy)?;
+        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
         Ok(self)
     }
 
@@ -1069,9 +1068,9 @@ pub struct TradeProposeRequest {
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
     pub public_note: Option<String>,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -1087,9 +1086,9 @@ impl TradeProposeRequest {
         seller_pubkey: RadrootsPublicKey,
         items: Vec<RadrootsOrderItem>,
         economics: RadrootsOrderEconomics,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
     ) -> Self {
         Self {
             actor,
@@ -1149,9 +1148,9 @@ pub struct TradeAcceptRequest {
     pub actor: RadrootsActorContext,
     pub locator: RadrootsTradeLocator,
     pub inventory_commitments: Vec<RadrootsOrderInventoryCommitment>,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -1164,9 +1163,9 @@ impl TradeAcceptRequest {
         actor: RadrootsActorContext,
         locator: RadrootsTradeLocator,
         inventory_commitments: Vec<RadrootsOrderInventoryCommitment>,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
@@ -1213,9 +1212,9 @@ pub struct TradeDeclineRequest {
     pub actor: RadrootsActorContext,
     pub locator: RadrootsTradeLocator,
     pub reason: String,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -1228,9 +1227,9 @@ impl TradeDeclineRequest {
         actor: RadrootsActorContext,
         locator: RadrootsTradeLocator,
         reason: impl Into<String>,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
@@ -1277,9 +1276,9 @@ pub struct TradeCancelRequest {
     pub actor: RadrootsActorContext,
     pub locator: RadrootsTradeLocator,
     pub reason: String,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -1292,9 +1291,9 @@ impl TradeCancelRequest {
         actor: RadrootsActorContext,
         locator: RadrootsTradeLocator,
         reason: impl Into<String>,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
@@ -1344,9 +1343,9 @@ pub struct TradeRevisionProposalRequest {
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
     pub reason: String,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -1362,9 +1361,9 @@ impl TradeRevisionProposalRequest {
         items: Vec<RadrootsOrderItem>,
         economics: RadrootsOrderEconomics,
         reason: impl Into<String>,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
@@ -1415,9 +1414,9 @@ pub struct TradeRevisionDecisionRequest {
     pub locator: RadrootsTradeLocator,
     pub revision_id: RadrootsOrderRevisionId,
     pub decision: RadrootsOrderRevisionOutcome,
-    pub target_relays: RelayResolutionPolicy,
+    pub target_relays: TargetPolicy,
     pub publish_mode: PublishMode,
-    pub ack_policy: AckPolicy,
+    pub ack_policy: SatisfactionPolicy,
     pub evidence_mode: TradeEvidenceMode,
     pub privacy_confirmation: PrivacyPreflightConfirmation,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -1431,9 +1430,9 @@ impl TradeRevisionDecisionRequest {
         locator: RadrootsTradeLocator,
         revision_id: RadrootsOrderRevisionId,
         decision: RadrootsOrderRevisionOutcome,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         evidence_mode: TradeEvidenceMode,
     ) -> Self {
         Self {
@@ -2639,9 +2638,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeSubmitPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
         validate_trade_enqueue_policy(publish_mode, ack_policy)?;
@@ -2652,6 +2651,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
         )
@@ -2664,9 +2664,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeSubmitPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
@@ -2678,6 +2678,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
             signer,
@@ -2776,9 +2777,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeDecisionPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
         validate_trade_enqueue_policy(publish_mode, ack_policy)?;
@@ -2795,6 +2796,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
         )
@@ -2807,9 +2809,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeDecisionPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
@@ -2827,6 +2829,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
             signer,
@@ -2930,9 +2933,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionProposalPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
         validate_trade_enqueue_policy(publish_mode, ack_policy)?;
@@ -2949,6 +2952,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
         )
@@ -2961,9 +2965,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionProposalPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
@@ -2981,6 +2985,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
             signer,
@@ -3084,9 +3089,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionDecisionPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
         validate_trade_enqueue_policy(publish_mode, ack_policy)?;
@@ -3103,6 +3108,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
         )
@@ -3115,9 +3121,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeRevisionDecisionPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
@@ -3135,6 +3141,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
             signer,
@@ -3238,9 +3245,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeCancellationPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
         validate_trade_enqueue_policy(publish_mode, ack_policy)?;
@@ -3257,6 +3264,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
         )
@@ -3269,9 +3277,9 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: TradeCancellationPlan,
-        target_relays: RelayResolutionPolicy,
+        target_relays: TargetPolicy,
         publish_mode: PublishMode,
-        ack_policy: AckPolicy,
+        ack_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
@@ -3289,6 +3297,7 @@ impl<'sdk> TradesClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays: target_relays.workflow_target_policy(),
+                satisfaction_policy: ack_policy,
                 idempotency_key,
             },
             signer,
@@ -3607,7 +3616,7 @@ async fn execute_trade_resync_with_fetch_adapter<A>(
 where
     A: RadrootsRelayFetchAdapter,
 {
-    let relay_targets = sdk.relay_urls().to_vec();
+    let relay_targets = sdk.configured_nostr_relay_urls().to_vec();
     if relay_targets.is_empty() {
         return Err(RadrootsSdkError::empty_target_relays(operation));
     }
@@ -4289,7 +4298,7 @@ fn validation_receipt_relay_targets(
     sdk: &crate::RadrootsClient,
     operation: impl Into<String>,
 ) -> Result<Vec<String>, RadrootsSdkError> {
-    let relay_targets = sdk.relay_urls().to_vec();
+    let relay_targets = sdk.configured_nostr_relay_urls().to_vec();
     if relay_targets.is_empty() {
         return Err(RadrootsSdkError::empty_target_relays(operation));
     }
@@ -6111,7 +6120,7 @@ fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
 async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
     sdk: &crate::RadrootsClient,
     publish_mode: PublishMode,
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
     outbox_event_id: i64,
     receipt: Receipt,
 ) -> Result<TradeMutationOutcome<Plan, Receipt>, RadrootsSdkError> {
@@ -6132,33 +6141,37 @@ async fn trade_product_post_enqueue_outcome<Plan, Receipt>(
 
 #[cfg(feature = "signer-adapters")]
 fn push_request_for_ack_policy(
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
     outbox_event_id: i64,
 ) -> Result<PushOutboxRequest, RadrootsSdkError> {
     let request = PushOutboxRequest::new().with_outbox_event_id(outbox_event_id);
     match ack_policy {
-        AckPolicy::NoWait => Err(RadrootsSdkError::InvalidRequest {
+        SatisfactionPolicy::NoWait => Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-and-publish requires a relay acknowledgement policy".to_owned(),
         }),
-        AckPolicy::AtLeastOneRelay => Ok(request.with_accepted_quorum(1)),
-        AckPolicy::AllRelays => Ok(request),
-        AckPolicy::Quorum { required } => Ok(request.with_accepted_quorum(usize::from(required))),
+        SatisfactionPolicy::AtLeastOneTarget => Ok(request.with_accepted_quorum(1)),
+        SatisfactionPolicy::AllTargets => Ok(request),
+        SatisfactionPolicy::AtLeast { required } => {
+            Ok(request.with_accepted_quorum(usize::from(required)))
+        }
     }
 }
 
 #[cfg(feature = "signer-adapters")]
 fn validate_trade_product_publish_policy(
     publish_mode: PublishMode,
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
     match publish_mode {
-        PublishMode::DryRun | PublishMode::EnqueueOnly if ack_policy != AckPolicy::NoWait => {
+        PublishMode::DryRun | PublishMode::EnqueueOnly
+            if ack_policy != SatisfactionPolicy::NoWait =>
+        {
             Err(RadrootsSdkError::InvalidRequest {
                 message: "trade dry-run and enqueue-only modes require no-wait acknowledgement"
                     .to_owned(),
             })
         }
-        PublishMode::EnqueueAndPublish if ack_policy == AckPolicy::NoWait => {
+        PublishMode::EnqueueAndPublish if ack_policy == SatisfactionPolicy::NoWait => {
             Err(RadrootsSdkError::InvalidRequest {
                 message: "trade enqueue-and-publish requires a relay acknowledgement policy"
                     .to_owned(),
@@ -6264,20 +6277,20 @@ fn trade_reason_contains_private_coordination(reason: &str) -> bool {
 #[cfg(any(feature = "signer-adapters", test))]
 fn validate_trade_enqueue_policy(
     publish_mode: PublishMode,
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
     if publish_mode == PublishMode::DryRun {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade dry-run publish mode must use a prepare request".to_owned(),
         });
     }
-    if publish_mode == PublishMode::EnqueueOnly && ack_policy != AckPolicy::NoWait {
+    if publish_mode == PublishMode::EnqueueOnly && ack_policy != SatisfactionPolicy::NoWait {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-only publish mode only supports no-wait acknowledgement"
                 .to_owned(),
         });
     }
-    if publish_mode == PublishMode::EnqueueAndPublish && ack_policy == AckPolicy::NoWait {
+    if publish_mode == PublishMode::EnqueueAndPublish && ack_policy == SatisfactionPolicy::NoWait {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-and-publish requires a relay acknowledgement policy".to_owned(),
         });

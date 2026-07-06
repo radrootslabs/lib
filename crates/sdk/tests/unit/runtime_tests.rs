@@ -71,6 +71,13 @@ fn assert_wal_checkpoint_complete(receipt: &SdkSqliteWalCheckpointReceipt) {
     assert!(receipt.checkpoint_complete);
 }
 
+fn nostr_profile(
+    relays: impl IntoIterator<Item = &'static str>,
+    policy: crate::NostrRelayUrlPolicy,
+) -> crate::TransportProfile {
+    crate::TransportProfile::nostr(crate::NostrProfile::new(relays, policy).expect("Nostr profile"))
+}
+
 fn storage_status() -> StorageStatusReceipt {
     StorageStatusReceipt {
         storage: SdkStorageKind::Memory,
@@ -258,16 +265,20 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
 
 #[test]
 fn publish_transport_defaults_and_delegated_resolution_are_explicit() {
-    let direct = SdkPublishTransport::default();
-    assert_eq!(direct, SdkPublishTransport::DirectNostrRelay);
-    assert!(!direct.supports_delegated_relay_resolution());
+    let local = TransportProfile::default();
+    assert_eq!(local, TransportProfile::LocalOnly);
+    assert!(!local.supports_delegated_target_resolution());
+
+    let nostr = nostr_profile(
+        ["wss://relay.example.com"],
+        crate::NostrRelayUrlPolicy::Public,
+    );
+    assert!(!nostr.supports_delegated_target_resolution());
 
     #[cfg(feature = "radrootsd-proxy")]
     {
-        let proxy = SdkPublishTransport::RadrootsdProxy(RadrootsdProxyConfig::new(
-            "http://127.0.0.1:9/rpc",
-        ));
-        assert!(proxy.supports_delegated_relay_resolution());
+        let proxy = TransportProfile::proxy(crate::ProxyProfile::new("http://127.0.0.1:9/rpc"));
+        assert!(proxy.supports_delegated_target_resolution());
     }
 }
 
@@ -284,8 +295,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         storage_paths: None,
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
-        relay_urls: Vec::new(),
-        publish_transport: SdkPublishTransport::DirectNostrRelay,
+        transport_profile: TransportProfile::local_only(),
         #[cfg(feature = "signer-adapters")]
         signer_provider: None,
     };
@@ -307,8 +317,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         storage_paths: Some(directory_paths),
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
-        relay_urls: Vec::new(),
-        publish_transport: SdkPublishTransport::DirectNostrRelay,
+        transport_profile: TransportProfile::local_only(),
         #[cfg(feature = "signer-adapters")]
         signer_provider: None,
     };
@@ -354,8 +363,10 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .clock(RadrootsSdkClock::Fixed(
             RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
         ))
-        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
-        .relay_url("ws://127.0.0.1:7777")
+        .transport_profile(nostr_profile(
+            ["ws://127.0.0.1:7777"],
+            crate::NostrRelayUrlPolicy::Localhost,
+        ))
         .build()
         .await
         .expect("memory sdk");
@@ -363,7 +374,10 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         memory_sdk.now().expect("fixed now").unix_seconds(),
         1_700_000_000
     );
-    assert_eq!(memory_sdk.relay_urls(), ["ws://127.0.0.1:7777"]);
+    assert_eq!(
+        memory_sdk.configured_nostr_relay_urls(),
+        ["ws://127.0.0.1:7777"]
+    );
     assert!(memory_sdk.storage_paths().is_none());
     let _ = memory_sdk.farms();
     let _ = memory_sdk.listings();

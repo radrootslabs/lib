@@ -411,8 +411,8 @@ fn fixture_cancellation(raw_order_id: &str) -> RadrootsOrderCancellation {
     }
 }
 
-fn fixture_target_relays() -> RelayResolutionPolicy {
-    RelayResolutionPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public).expect("target relays")
+fn fixture_target_relays() -> TargetPolicy {
+    TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("target relays")
 }
 
 async fn prepared_order_sdk() -> RadrootsClient {
@@ -446,7 +446,7 @@ async fn order_configured_local_signer_enqueues_submit_without_explicit_signer()
             fixture_order_request("order-configured-local-1"),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("enqueue submit");
@@ -467,7 +467,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_order_decision("order-configured-decision"),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("configured decision");
@@ -489,7 +489,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             proposal_payload,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("configured revision proposal");
@@ -514,7 +514,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
                 revision_proposal_payload.clone(),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -533,7 +533,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             revision_decision_payload,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("configured revision decision");
@@ -557,7 +557,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_cancellation("order-configured-cancel"),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         ))
         .await
         .expect("configured cancellation");
@@ -585,7 +585,7 @@ async fn enqueue_fixture_submit(sdk: &RadrootsClient, raw_order_id: &str) -> Tra
             plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2075,7 +2075,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
         RadrootsOrderRevisionOutcome::Accepted,
     );
     let cancellation_payload = cancellation_payload();
-    let policy = RelayResolutionPolicy::ConfiguredRelays;
+    let policy = TargetPolicy::UseConfiguredProfile;
 
     assert_error_display(
         TradeSubmitEnqueueRequest::new(
@@ -2084,9 +2084,9 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             submit_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         "target relays",
     );
     assert_error_display(
@@ -2096,7 +2096,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             submit_payload,
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
         .try_with_idempotency_key(""),
         "idempotency key",
@@ -2109,9 +2109,9 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             decision_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         "target relays",
     );
     assert_error_display(
@@ -2121,7 +2121,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             decision_payload,
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
         .try_with_idempotency_key(" leading"),
         "idempotency key",
@@ -2135,9 +2135,9 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             proposal_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         "target relays",
     );
     assert_error_display(
@@ -2148,7 +2148,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             proposal_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
         .try_with_idempotency_key("trailing "),
         "idempotency key",
@@ -2162,9 +2162,9 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             revision_decision_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         "target relays",
     );
     assert_error_display(
@@ -2175,7 +2175,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             revision_decision_payload,
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
         .try_with_idempotency_key("invalid\nkey"),
         "idempotency key",
@@ -2189,9 +2189,9 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             cancellation_payload.clone(),
             policy.clone(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         "target relays",
     );
     assert_error_display(
@@ -2202,7 +2202,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             cancellation_payload,
             policy,
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
         )
         .try_with_idempotency_key(""),
         "idempotency key",
@@ -2212,24 +2212,29 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
 #[test]
 fn trade_enqueue_policy_rejects_publish_modes_without_matching_side_effects() {
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::DryRun, AckPolicy::NoWait),
+        validate_trade_enqueue_policy(PublishMode::DryRun, SatisfactionPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade dry-run publish mode must use a prepare request"
     ));
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, AckPolicy::AtLeastOneRelay),
+        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::AtLeastOneTarget),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade enqueue-only publish mode only supports no-wait acknowledgement"
     ));
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, AckPolicy::NoWait),
+        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, SatisfactionPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade enqueue-and-publish requires a relay acknowledgement policy"
     ));
-    assert!(validate_trade_enqueue_policy(PublishMode::EnqueueOnly, AckPolicy::NoWait).is_ok());
     assert!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, AckPolicy::AtLeastOneRelay)
-            .is_ok()
+        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::NoWait).is_ok()
+    );
+    assert!(
+        validate_trade_enqueue_policy(
+            PublishMode::EnqueueAndPublish,
+            SatisfactionPolicy::AtLeastOneTarget
+        )
+        .is_ok()
     );
 }
 
@@ -2347,7 +2352,7 @@ async fn prepared_submit_and_decision_enqueue_cover_source_attached_success_path
             decision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-decision").expect("idempotency")),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2385,7 +2390,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
             proposal_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-proposal").expect("idempotency")),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2415,7 +2420,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
             revision_decision_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2449,7 +2454,7 @@ async fn prepared_cancellation_enqueue_covers_source_attached_success_path() {
             cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-cancellation").expect("idempotency")),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2474,7 +2479,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_request("order-wrapper-decision"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2489,7 +2494,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_decision("order-wrapper-decision"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2506,7 +2511,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_request("order-wrapper-revision"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2527,7 +2532,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 proposal_payload.clone(),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2543,7 +2548,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_revision_decision(&proposal_payload, &proposal.signed_event_id),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2560,7 +2565,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_request("order-wrapper-cancellation"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2576,7 +2581,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_cancellation("order-wrapper-cancellation"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ),
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2615,7 +2620,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             decision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2642,7 +2647,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             proposal_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2669,7 +2674,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             revision_decision_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2696,7 +2701,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2760,7 +2765,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             closed_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2774,7 +2779,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             closed_proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -2791,7 +2796,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             closed_revision_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2808,7 +2813,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
             closed_cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -2850,7 +2855,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
             decision_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -2876,7 +2881,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
             proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -2903,7 +2908,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
             revision_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -2929,7 +2934,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
             cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -2981,7 +2986,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
                 decision_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -2995,7 +3000,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
                 proposal_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None,
             )
             .await,
@@ -3030,7 +3035,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
                 revision_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3044,7 +3049,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
                 cancellation_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3073,7 +3078,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_order_request("order-configured-prepare-submit"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ))
             .await,
         Err(RadrootsSdkError::UnauthorizedActor { .. })
@@ -3087,7 +3092,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_order_decision("order-configured-prepare-decision"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ))
             .await,
         Err(RadrootsSdkError::UnauthorizedActor { .. })
@@ -3102,7 +3107,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 proposal.clone(),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ))
             .await,
         Err(RadrootsSdkError::UnauthorizedActor { .. })
@@ -3117,7 +3122,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_revision_decision(&proposal, &previous_event_id),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ))
             .await,
         Err(RadrootsSdkError::UnauthorizedActor { .. })
@@ -3132,7 +3137,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_cancellation("order-configured-prepare-cancel"),
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
             ))
             .await,
         Err(RadrootsSdkError::UnauthorizedActor { .. })
@@ -3160,7 +3165,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
                 submit_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3183,7 +3188,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
                 decision_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3212,7 +3217,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
                 proposal_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3241,7 +3246,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             revision_proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3266,7 +3271,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
                 revision_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3290,7 +3295,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
                 cancellation_plan,
                 fixture_target_relays(),
                 PublishMode::EnqueueOnly,
-                AckPolicy::NoWait,
+                SatisfactionPolicy::NoWait,
                 None
             )
             .await,
@@ -3400,7 +3405,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3436,7 +3441,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3461,7 +3466,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             revision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -3494,7 +3499,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
             cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -3527,7 +3532,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             decision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3540,7 +3545,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             decision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3563,7 +3568,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             decision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -3602,7 +3607,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             proposal_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3615,7 +3620,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             proposal_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3638,7 +3643,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             proposal_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -3677,7 +3682,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             proposal_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
@@ -3700,7 +3705,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             revision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -3713,7 +3718,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             revision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -3736,7 +3741,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             revision_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -3771,7 +3776,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             cancellation_plan.clone(),
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
             &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
@@ -3784,7 +3789,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
             cancellation_plan,
             fixture_target_relays(),
             PublishMode::EnqueueOnly,
-            AckPolicy::NoWait,
+            SatisfactionPolicy::NoWait,
             None,
         )
         .await
@@ -3834,7 +3839,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     fixture_order_request("order-wrapper-submit-error"),
                     fixture_target_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_created_at(out_of_range),
                 &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -3851,7 +3856,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     fixture_order_decision("order-wrapper-decision-error"),
                     fixture_target_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_created_at(out_of_range),
                 &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -3877,7 +3882,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     proposal_payload.clone(),
                     fixture_target_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_created_at(out_of_range),
                 &OrderFixtureSigner::new(SELLER_SECRET_KEY_HEX),
@@ -3895,7 +3900,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     fixture_revision_decision(&proposal_payload, &previous_event_id),
                     fixture_target_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_created_at(out_of_range),
                 &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -3913,7 +3918,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     fixture_cancellation("order-wrapper-cancellation-error"),
                     fixture_target_relays(),
                     PublishMode::EnqueueOnly,
-                    AckPolicy::NoWait,
+                    SatisfactionPolicy::NoWait,
                 )
                 .with_created_at(out_of_range),
                 &OrderFixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -4024,7 +4029,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
             reason: "not workable".to_owned(),
         },
     );
-    let policy = RelayResolutionPolicy::ConfiguredRelays;
+    let policy = TargetPolicy::UseConfiguredProfile;
 
     let submit_prepare =
         TradeSubmitPrepareRequest::new(buyer_actor(), root_event.clone(), order_request_payload())
@@ -4041,9 +4046,9 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         order_request_payload(),
         policy.clone(),
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-a.radroots.test"], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays(["wss://relay-a.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("submit relays")
     .with_idempotency_key(SdkIdempotencyKey::new("submit-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4070,9 +4075,9 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         order_decision_payload(),
         policy.clone(),
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-b.radroots.test"], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays(["wss://relay-b.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("decision relays")
     .with_idempotency_key(SdkIdempotencyKey::new("decision-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4094,9 +4099,9 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         proposal.clone(),
         policy.clone(),
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-c.radroots.test"], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays(["wss://relay-c.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("proposal relays")
     .with_idempotency_key(SdkIdempotencyKey::new("proposal-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4118,9 +4123,9 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         revision_decision,
         policy.clone(),
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-d.radroots.test"], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays(["wss://relay-d.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("revision decision relays")
     .with_idempotency_key(SdkIdempotencyKey::new("revision-decision-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4142,9 +4147,9 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         cancellation_payload(),
         policy,
         PublishMode::EnqueueOnly,
-        AckPolicy::NoWait,
+        SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-e.radroots.test"], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays(["wss://relay-e.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("cancellation relays")
     .with_idempotency_key(SdkIdempotencyKey::new("cancellation-unit-key").expect("key"))
     .with_created_at(created_at);

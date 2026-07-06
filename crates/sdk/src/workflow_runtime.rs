@@ -1,8 +1,8 @@
 #[cfg(feature = "signer-adapters")]
 use crate::RadrootsSdkSignRequest;
 use crate::{
-    RadrootsClient, RadrootsSdkError, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    runtime::sdk_now_ms,
+    RadrootsClient, RadrootsSdkError, SatisfactionPolicy, SdkIdempotencyKey, TargetPolicy,
+    TargetSet, runtime::sdk_now_ms,
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event_store::RadrootsEventIngest;
@@ -11,7 +11,11 @@ use radroots_events::{
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::RadrootsEventId,
 };
-use radroots_outbox::{RadrootsOutboxEnqueueStatus, RadrootsOutboxSignedOperationInput};
+use radroots_outbox::{
+    RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus,
+    RadrootsOutboxSignedOperationInput,
+};
+use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(test)]
 use sha2::{Digest, Sha256};
 
@@ -19,7 +23,8 @@ pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
     pub(crate) actor: &'a RadrootsActorContext,
     pub(crate) frozen_draft: &'a RadrootsFrozenEventDraft,
-    pub(crate) target_relays: SdkRelayTargetPolicy,
+    pub(crate) target_relays: TargetPolicy,
+    pub(crate) satisfaction_policy: SatisfactionPolicy,
     pub(crate) idempotency_key: Option<SdkIdempotencyKey>,
 }
 
@@ -37,9 +42,10 @@ pub(crate) async fn enqueue_signed_workflow(
     request: SdkWorkflowEnqueueRequest<'_>,
     signer: &dyn RadrootsEventSigner,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
-    let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
+    let delivery_plan =
+        resolved_delivery_plan(sdk, &request.target_relays, request.satisfaction_policy)?;
     let signed_event = sign_authorized_draft(request.actor, signer, request.frozen_draft)?;
-    enqueue_signed_workflow_event(sdk, request, signed_event, target_relays).await
+    enqueue_signed_workflow_event(sdk, request, signed_event, delivery_plan).await
 }
 
 #[cfg(feature = "signer-adapters")]
@@ -47,7 +53,8 @@ pub(crate) async fn enqueue_configured_signed_workflow(
     sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
-    let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
+    let delivery_plan =
+        resolved_delivery_plan(sdk, &request.target_relays, request.satisfaction_policy)?;
     let signed_event = sdk
         .sign_with_configured_signer(RadrootsSdkSignRequest::new(
             request.operation_kind,
@@ -56,14 +63,14 @@ pub(crate) async fn enqueue_configured_signed_workflow(
         ))
         .await?
         .signed_event;
-    enqueue_signed_workflow_event(sdk, request, signed_event, target_relays).await
+    enqueue_signed_workflow_event(sdk, request, signed_event, delivery_plan).await
 }
 
 async fn enqueue_signed_workflow_event(
     sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
     signed_event: RadrootsSignedNostrEvent,
-    target_relays: SdkResolvedRelayTargets,
+    delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let idempotency_key = match request.idempotency_key {
         Some(idempotency_key) => idempotency_key,
@@ -71,22 +78,20 @@ async fn enqueue_signed_workflow_event(
             request.operation_kind,
             request.frozen_draft.expected_event_id.as_str(),
             request.frozen_draft.expected_pubkey.as_str(),
-            target_relays.canonical_relays.as_slice(),
+            delivery_plan.canonical_targets.as_slice(),
         ),
     };
     let observed_at_ms = sdk_now_ms(sdk)?;
     let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id.as_str())
         .expect("frozen workflow draft has a valid expected event id");
-    let allow_empty_target_relays = target_relays.allow_empty_target_relays;
-    let target_relay_values = target_relays.relays;
+    let delivery_plan_value = delivery_plan.delivery_plan;
     let idempotency_key_for_enqueue = idempotency_key.clone();
     let preflight_input = signed_outbox_input(
         request.operation_kind,
         request.frozen_draft,
         signed_event.clone(),
-        target_relay_values.clone(),
+        delivery_plan_value.clone(),
         idempotency_key,
-        allow_empty_target_relays,
         false,
         observed_at_ms,
     );
@@ -94,7 +99,8 @@ async fn enqueue_signed_workflow_event(
         ._outbox
         .preflight_signed_operation_idempotency(&preflight_input)
         .await?;
-    let partial_failure_digest_prefix = digest_prefix(preflight.idempotency_digest.as_str());
+    let partial_failure_digest_prefix =
+        digest_prefix(preflight.operation_idempotency_digest.as_str());
     let event = event_from_signed(&signed_event);
     let ingest = RadrootsEventIngest::new(event, observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone());
@@ -103,9 +109,8 @@ async fn enqueue_signed_workflow_event(
         request.operation_kind,
         request.frozen_draft,
         signed_event,
-        target_relay_values,
+        delivery_plan_value,
         idempotency_key_for_enqueue,
-        allow_empty_target_relays,
         ingest_receipt.inserted,
         observed_at_ms,
     );
@@ -131,7 +136,8 @@ async fn enqueue_signed_workflow_event(
                 )
             }
         })?;
-    let idempotency_digest_prefix = digest_prefix(outbox_receipt.idempotency_digest.as_str());
+    let idempotency_digest_prefix =
+        digest_prefix(outbox_receipt.operation_idempotency_digest.as_str());
     Ok(SdkWorkflowEnqueueReceipt {
         signed_event_id,
         local_event_seq: ingest_receipt.seq,
@@ -142,46 +148,66 @@ async fn enqueue_signed_workflow_event(
     })
 }
 
-struct SdkResolvedRelayTargets {
-    relays: Vec<String>,
-    canonical_relays: Vec<String>,
-    allow_empty_target_relays: bool,
+struct SdkResolvedDeliveryPlan {
+    delivery_plan: RadrootsOutboxDeliveryPlanInput,
+    canonical_targets: Vec<String>,
 }
 
-fn resolved_target_relays(
+fn resolved_delivery_plan(
     sdk: &RadrootsClient,
-    target_relays: &SdkRelayTargetPolicy,
-) -> Result<SdkResolvedRelayTargets, RadrootsSdkError> {
+    target_relays: &TargetPolicy,
+    satisfaction_policy: SatisfactionPolicy,
+) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     match target_relays {
-        SdkRelayTargetPolicy::Explicit(target_relays) => Ok(SdkResolvedRelayTargets {
-            relays: target_relays.relays().to_vec(),
-            canonical_relays: target_relays.canonical_relays().to_vec(),
-            allow_empty_target_relays: false,
-        }),
-        SdkRelayTargetPolicy::UseConfiguredRelays => {
-            let target_relays =
-                SdkRelayTargetSet::from_normalized_relays(sdk.relay_urls().to_vec())?;
-            Ok(SdkResolvedRelayTargets {
-                relays: target_relays.relays().to_vec(),
-                canonical_relays: target_relays.canonical_relays().to_vec(),
-                allow_empty_target_relays: false,
-            })
+        TargetPolicy::Explicit(target_relays) => {
+            delivery_plan_from_target_set("explicit", target_relays.clone(), satisfaction_policy)
         }
-        SdkRelayTargetPolicy::UsePublishTransport => {
-            if sdk
-                .publish_transport()
-                .supports_delegated_relay_resolution()
-            {
-                Ok(SdkResolvedRelayTargets {
-                    relays: Vec::new(),
-                    canonical_relays: Vec::new(),
-                    allow_empty_target_relays: true,
-                })
-            } else {
-                Err(RadrootsSdkError::empty_target_relays(
-                    "publish transport relay resolution",
-                ))
-            }
+        TargetPolicy::UseConfiguredProfile => {
+            let target_relays =
+                TargetSet::from_normalized_nostr_relays(sdk.configured_nostr_relay_urls())?;
+            delivery_plan_from_target_set("configured_profile", target_relays, satisfaction_policy)
+        }
+        TargetPolicy::UseTransportProfile => {
+            let target_set = sdk.transport_profile().target_set()?.ok_or_else(|| {
+                RadrootsSdkError::empty_target_relays("publish transport profile")
+            })?;
+            delivery_plan_from_target_set(
+                sdk.transport_profile().transport_profile_id(),
+                target_set,
+                satisfaction_policy,
+            )
+        }
+    }
+}
+
+fn delivery_plan_from_target_set(
+    transport_profile_id: impl Into<String>,
+    target_set: TargetSet,
+    satisfaction_policy: SatisfactionPolicy,
+) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
+    let canonical_targets = target_set.canonical_targets().to_vec();
+    let delivery_plan = RadrootsOutboxDeliveryPlanInput::new(
+        transport_profile_id,
+        1,
+        transport_satisfaction_policy(satisfaction_policy),
+        target_set.into_targets(),
+    );
+    Ok(SdkResolvedDeliveryPlan {
+        delivery_plan,
+        canonical_targets,
+    })
+}
+
+fn transport_satisfaction_policy(
+    satisfaction_policy: SatisfactionPolicy,
+) -> RadrootsTransportSatisfactionPolicy {
+    match satisfaction_policy {
+        SatisfactionPolicy::NoWait | SatisfactionPolicy::AllTargets => {
+            RadrootsTransportSatisfactionPolicy::AllTargets
+        }
+        SatisfactionPolicy::AtLeastOneTarget => RadrootsTransportSatisfactionPolicy::AnyTarget,
+        SatisfactionPolicy::AtLeast { required } => {
+            RadrootsTransportSatisfactionPolicy::AtLeast(required)
         }
     }
 }
@@ -226,27 +252,21 @@ fn signed_outbox_input(
     operation_kind: &'static str,
     frozen_draft: &RadrootsFrozenEventDraft,
     signed_event: RadrootsSignedNostrEvent,
-    target_relays: Vec<String>,
+    delivery_plan: RadrootsOutboxDeliveryPlanInput,
     idempotency_key: SdkIdempotencyKey,
-    allow_empty_target_relays: bool,
     event_store_inserted: bool,
     observed_at_ms: i64,
 ) -> RadrootsOutboxSignedOperationInput {
-    let input = RadrootsOutboxSignedOperationInput::new(
+    RadrootsOutboxSignedOperationInput::new(
         operation_kind,
         frozen_draft.clone(),
         signed_event,
-        target_relays,
+        delivery_plan,
         event_store_inserted,
         observed_at_ms,
         observed_at_ms,
     )
-    .with_idempotency_key(idempotency_key.into_string());
-    if allow_empty_target_relays {
-        input.allow_empty_target_relays()
-    } else {
-        input
-    }
+    .with_idempotency_key(idempotency_key.into_string())
 }
 
 fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {

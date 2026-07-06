@@ -8,12 +8,12 @@ use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_nostr::prelude::RadrootsNostrKeys;
-use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
-    ListingPreparePublishRequest, PushOutboxRequest, RadrootsClient, RadrootsSdkLocalKeySigner,
-    RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy, TradeStatusRequest,
+    ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
+    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    TargetPolicy, TargetSet, TradeStatusRequest,
 };
+use radroots_transport_nostr::RadrootsMockRelayPublishAdapter;
 
 const LOCAL_RELAY: &str = "ws://localhost:7777";
 
@@ -28,8 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
     let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
-    let targets = SdkRelayTargetSet::new([LOCAL_RELAY], SdkRelayUrlPolicy::Localhost)?;
-    let target_policy = SdkRelayTargetPolicy::explicit(targets);
+    let targets = TargetSet::new([LOCAL_RELAY], NostrRelayUrlPolicy::Localhost)?;
+    let target_policy = TargetPolicy::explicit(targets);
 
     let prepared = sdk
         .listings()

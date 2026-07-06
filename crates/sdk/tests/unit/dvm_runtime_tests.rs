@@ -4,8 +4,8 @@ use super::{
     dvm_trade_transition_proof_plan, sdk_timestamp_ms,
 };
 use crate::{
-    RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
-    SdkRelayUrlPolicy, SyncProjectionRefreshRequest,
+    NostrRelayUrlPolicy, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    SyncProjectionRefreshRequest, TargetPolicy,
 };
 use radroots_authority::RadrootsActorContext;
 use radroots_events::{
@@ -230,9 +230,9 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     let idempotency_len = idempotency.as_str().len();
     let request = DvmTradeTransitionProofEnqueueRequest::from_prepare(
         prepare.clone(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("relays")
     .with_idempotency_key(idempotency)
     .with_inventory_sequence(11)
@@ -254,7 +254,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
         event_id('2'),
         event_id('3'),
         inventory_bins(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
     .try_with_idempotency_key("dvm-proof-request-2")
     .expect("idempotency")
@@ -267,15 +267,15 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     assert!(matches!(
         DvmTradeTransitionProofEnqueueRequest::from_prepare(
             prepare,
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
         )
-        .try_with_target_relays(["ws://relay.example.com"], SdkRelayUrlPolicy::Public),
+        .try_with_target_relays(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
         DvmTradeTransitionProofEnqueueRequest::from_prepare(
             proof_request(service_actor()),
-            SdkRelayTargetPolicy::UseConfiguredRelays,
+            TargetPolicy::UseConfiguredProfile,
         )
         .try_with_idempotency_key(""),
         Err(RadrootsSdkError::InvalidRequest { .. })

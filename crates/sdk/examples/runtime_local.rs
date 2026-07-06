@@ -9,9 +9,9 @@ use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::{
-    ListingPreparePublishRequest, PushOutboxRequest, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradeStatusRequest,
+    ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
+    RadrootsSdkError, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
+    SdkIdempotencyKey, TargetPolicy, TradeStatusRequest,
 };
 
 const RELAY: &str = "wss://relay.example.com";
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
     let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
-    let target_relays = SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)?;
+    let target_relays = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;
     let idempotency_key = SdkIdempotencyKey::new("example-1")?;
 
     let prepared = sdk.listings().prepare_publish(prepare_request)?;

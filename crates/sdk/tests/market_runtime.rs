@@ -22,8 +22,9 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
 use radroots_sdk::{
-    ListingEnqueuePublishRequest, MarketSearchRequest, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy, SyncProjectionRefreshRequest,
+    ListingEnqueuePublishRequest, MarketSearchRequest, NostrProfile, NostrRelayUrlPolicy,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, SyncProjectionRefreshRequest,
+    TargetPolicy, TransportProfile,
 };
 
 const SELLER_SECRET_KEY_HEX: &str =
@@ -134,7 +135,9 @@ async fn directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .relay_url(RELAY)
+        .transport_profile(TransportProfile::nostr(
+            NostrProfile::new([RELAY], NostrRelayUrlPolicy::Public).expect("Nostr profile"),
+        ))
         .build()
         .await
         .expect("sdk");
@@ -147,9 +150,9 @@ async fn market_search_refreshes_local_projection_and_reads_fts() {
     let publish = ListingEnqueuePublishRequest::new(
         seller_actor(),
         listing("Blueberries"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
     let receipt = sdk
         .listings()

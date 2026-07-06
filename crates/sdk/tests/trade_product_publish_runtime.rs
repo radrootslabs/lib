@@ -21,10 +21,9 @@ use radroots_events::{
 };
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
 use radroots_sdk::{
-    AckPolicy, PublishMode, PushOutboxRelayOutcomeKind, RadrootsClient, RadrootsSdkLocalKeySigner,
-    RadrootsSdkSignerProvider, RadrootsSdkTimestamp, RelayResolutionPolicy, SdkPublishTransport,
-    SdkRelayTargetSet, SdkRelayUrlPolicy, TradeMutationOutcome, TradeProposeRequest,
-    adapters::radrootsd::RadrootsdProxyConfig,
+    NostrRelayUrlPolicy, ProxyProfile, PublishMode, PushOutboxRelayOutcomeKind, RadrootsClient,
+    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SatisfactionPolicy,
+    TargetPolicy, TargetSet, TradeMutationOutcome, TradeProposeRequest, TransportProfile,
 };
 use std::{
     io::{Read, Write},
@@ -207,7 +206,7 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
 fn trade_propose_request(
     raw_order_id: &str,
     publish_mode: PublishMode,
-    ack_policy: AckPolicy,
+    ack_policy: SatisfactionPolicy,
 ) -> TradeProposeRequest {
     let order = order_request(raw_order_id);
     TradeProposeRequest::new(
@@ -224,9 +223,9 @@ fn trade_propose_request(
     )
 }
 
-fn explicit_trade_relays() -> RelayResolutionPolicy {
-    RelayResolutionPolicy::explicit(
-        SdkRelayTargetSet::new([RELAY], SdkRelayUrlPolicy::Public).expect("target relays"),
+fn explicit_trade_relays() -> TargetPolicy {
+    TargetPolicy::explicit(
+        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("target relays"),
     )
 }
 
@@ -242,9 +241,7 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
             RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
         ))
-        .publish_transport(SdkPublishTransport::RadrootsdProxy(
-            RadrootsdProxyConfig::new(endpoint),
-        ))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
         .build()
         .await
         .expect("sdk");
@@ -256,7 +253,7 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
             trade_propose_request(
                 "trade-product-publish",
                 PublishMode::EnqueueAndPublish,
-                AckPolicy::AtLeastOneRelay,
+                SatisfactionPolicy::AtLeastOneTarget,
             )
             .try_with_idempotency_key("trade-product-publish")
             .expect("idempotency"),
@@ -284,7 +281,6 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
     let recorded = handle.join().expect("proxy request");
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
     assert_eq!(body["method"], "publish.event");
-    assert_eq!(body["params"]["delivery_policy"]["mode"], "quorum");
-    assert_eq!(body["params"]["delivery_policy"]["quorum"], 1);
+    assert_eq!(body["params"]["delivery_policy"]["mode"], "any");
     assert_eq!(body["params"]["relays"], serde_json::json!([RELAY]));
 }

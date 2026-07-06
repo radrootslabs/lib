@@ -84,6 +84,27 @@ fn signed_event() -> RadrootsSignedNostrEvent {
     }
 }
 
+fn nostr_profile(relay: &'static str) -> crate::TransportProfile {
+    crate::TransportProfile::nostr(
+        crate::NostrProfile::new([relay], crate::NostrRelayUrlPolicy::Public)
+            .expect("Nostr profile"),
+    )
+}
+
+fn workflow_delivery_plan() -> radroots_outbox::RadrootsOutboxDeliveryPlanInput {
+    let target_set = TargetSet::nostr_relays(
+        ["wss://relay.example.com"],
+        crate::NostrRelayUrlPolicy::Public,
+    )
+    .expect("target set");
+    radroots_outbox::RadrootsOutboxDeliveryPlanInput::new(
+        "explicit",
+        1,
+        radroots_transport::RadrootsTransportSatisfactionPolicy::AllTargets,
+        target_set.into_targets(),
+    )
+}
+
 #[test]
 fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     assert_eq!(digest_prefix("abcdef1234567890"), "abcdef123456");
@@ -115,16 +136,15 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         "workflow.test.v1",
         &draft,
         signed_event(),
-        vec!["wss://relay.example.com".to_owned()],
+        workflow_delivery_plan(),
         idempotency_key,
-        false,
         true,
         1_700_000_000_000,
     );
     assert_eq!(input.operation_kind, "workflow.test.v1");
     assert_eq!(
-        input.target_relays,
-        vec!["wss://relay.example.com".to_owned()]
+        input.delivery_plan.targets[0].uri.as_str(),
+        "wss://relay.example.com"
     );
     assert!(input.event_store_inserted);
 }
@@ -132,7 +152,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
 #[tokio::test]
 async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_conflicts() {
     let sdk = crate::RadrootsClient::builder()
-        .relay_url("wss://relay.example.com")
+        .transport_profile(nostr_profile("wss://relay.example.com"))
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_010,
         ))
@@ -150,7 +170,8 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &first_draft,
-            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            target_relays: TargetPolicy::UseConfiguredProfile,
+            satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: Some(idempotency_key.clone()),
         },
         &signer,
@@ -190,7 +211,8 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &second_draft,
-            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            target_relays: TargetPolicy::UseConfiguredProfile,
+            satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: Some(idempotency_key),
         },
         &signer,
@@ -232,7 +254,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
     let secret_key = RadrootsNostrSecretKey::from_hex(FARMER_SECRET_KEY_HEX).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);
     let sdk = crate::RadrootsClient::builder()
-        .relay_url("wss://relay.example.com")
+        .transport_profile(nostr_profile("wss://relay.example.com"))
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_011,
         ))
@@ -252,7 +274,8 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &draft,
-            target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+            target_relays: TargetPolicy::UseConfiguredProfile,
+            satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: None,
         },
     )
@@ -266,7 +289,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutation() {
     let sdk = crate::RadrootsClient::builder()
-        .relay_url("wss://relay.example.com")
+        .transport_profile(nostr_profile("wss://relay.example.com"))
         .build()
         .await
         .expect("sdk");
@@ -286,7 +309,8 @@ async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutati
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+        target_relays: TargetPolicy::UseConfiguredProfile,
+        satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
 
@@ -312,7 +336,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         .expect("actor");
     let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
     let closed_store_sdk = crate::RadrootsClient::builder()
-        .relay_url("wss://relay.example.com")
+        .transport_profile(nostr_profile("wss://relay.example.com"))
         .build()
         .await
         .expect("sdk");
@@ -321,7 +345,8 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+        target_relays: TargetPolicy::UseConfiguredProfile,
+        satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
     assert!(matches!(
@@ -339,7 +364,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
 async fn enqueue_signed_workflow_reports_clock_failures() {
     let sdk = crate::RadrootsClient::builder()
         .clock(crate::RadrootsSdkClock::BeforeUnixEpoch)
-        .relay_url("wss://relay.example.com")
+        .transport_profile(nostr_profile("wss://relay.example.com"))
         .build()
         .await
         .expect("sdk");
@@ -350,7 +375,8 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: SdkRelayTargetPolicy::UseConfiguredRelays,
+        target_relays: TargetPolicy::UseConfiguredProfile,
+        satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
     assert!(matches!(
@@ -369,13 +395,14 @@ async fn enqueue_signed_workflow_rejects_publish_transport_targets_without_proxy
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: SdkRelayTargetPolicy::UsePublishTransport,
+        target_relays: TargetPolicy::UseTransportProfile,
+        satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
 
     assert!(matches!(
         enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await,
         Err(RadrootsSdkError::EmptyTargetRelays { operation })
-            if operation == "publish transport relay resolution"
+            if operation == "publish transport profile"
     ));
 }

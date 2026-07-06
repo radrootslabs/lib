@@ -29,11 +29,10 @@ use radroots_nostr::prelude::{
 use radroots_outbox::RadrootsOutbox;
 use radroots_sdk::{
     DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmTradeTransitionProofEnqueueRequest,
-    DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, RadrootsClient,
-    RadrootsSdkError, RadrootsSdkStorageConfig, RadrootsSdkTimestamp,
+    DvmTradeTransitionProofPrepareRequest, DvmValidationReceiptIngestRequest, NostrRelayUrlPolicy,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkStorageConfig, RadrootsSdkTimestamp,
     RadrootsTradeInventoryBinWitnessDto, RadrootsTradeValidationTrustState, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy, TradeStatusKind, TradeStatusNextActionKind,
-    TradeStatusRequest,
+    TargetPolicy, TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest,
 };
 #[cfg(feature = "signer-adapters")]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
@@ -235,7 +234,7 @@ async fn dvm_configured_enqueue_reports_prepare_and_target_errors_without_mutati
         deterministic_event_id("request-event"),
         deterministic_event_id("decision-event"),
         inventory_bins(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
     let error = sdk
         .dvm()
@@ -412,7 +411,7 @@ async fn dvm_trade_transition_proof_request_reports_prepare_and_target_errors_wi
         deterministic_event_id("request-event"),
         deterministic_event_id("decision-event"),
         inventory_bins(),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
+        TargetPolicy::UseConfiguredProfile,
     );
     let error = sdk
         .dvm()
@@ -664,8 +663,8 @@ fn service_actor(signer: &FixtureSigner) -> RadrootsActorContext {
         .expect("service actor")
 }
 
-fn explicit_relays() -> SdkRelayTargetPolicy {
-    SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public).expect("relay targets")
+fn explicit_relays() -> TargetPolicy {
+    TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("relay targets")
 }
 
 fn inventory_bins() -> Vec<RadrootsTradeInventoryBinWitnessDto> {
