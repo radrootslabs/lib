@@ -59,6 +59,12 @@ impl RadrootsSignatureVerifiedEvent {
     }
 }
 
+/// A NIP-01 verified event whose Radroots contract shape has been validated.
+///
+/// This stage has checked contract-level kind, discriminator, content schema,
+/// schema/schema_version markers where required, and tag cardinality/value
+/// shape. It has not yet returned the typed payload semantics; those are
+/// checked by `decode_validated_event`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsContractValidatedEvent {
     event: RadrootsNostrEvent,
@@ -259,6 +265,12 @@ pub fn verify_event_signature(
     Err(RadrootsNip01VerificationError::SignatureVerificationUnavailable)
 }
 
+/// Validate the Radroots event contract after NIP-01 id and signature checks.
+///
+/// The successful result is `RadrootsContractValidatedEvent`, which preserves
+/// the raw event plus the matched contract metadata. It means the event matched
+/// a known Radroots contract shape, not that a typed domain payload has already
+/// been returned.
 pub fn validate_event_contract(
     event: RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
@@ -269,6 +281,12 @@ pub fn validate_event_contract(
     })
 }
 
+/// Decode a contract-validated event into its typed Radroots event variant.
+///
+/// This is the stage that turns `RadrootsContractValidatedEvent` into
+/// `RadrootsDecodedEvent` and runs the typed decoder/semantic validation for
+/// the matched contract. Unsupported contract ids still fail here, even after
+/// the generic contract shape was valid.
 pub fn decode_validated_event(
     event: RadrootsContractValidatedEvent,
 ) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
@@ -316,6 +334,13 @@ pub fn decode_validated_event(
     }
 }
 
+/// Verify NIP-01 identity, validate the Radroots contract, and decode the event.
+///
+/// The pipeline is:
+/// `RadrootsNostrEvent -> verify_event_id -> RadrootsIdVerifiedEvent ->
+/// verify_event_signature -> RadrootsSignatureVerifiedEvent ->
+/// validate_event_contract -> RadrootsContractValidatedEvent ->
+/// decode_validated_event -> RadrootsDecodedEvent`.
 pub fn verify_and_decode_radroots_event(
     event: RadrootsNostrEvent,
 ) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
