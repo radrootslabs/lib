@@ -1,0 +1,20 @@
+# radroots_mesh
+
+This is the README for `radroots_mesh`, which provides mesh synchronization
+models for the `radroots` core libraries.
+
+## Overview
+
+ * mesh scope and payload policy model types;
+ * event-head synchronization metadata for mesh-aware peers;
+ * deterministic CBOR frame encode and decode helpers;
+ * MVP defaults that prevent mesh payload transmission.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_mesh` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_mesh` distribution.

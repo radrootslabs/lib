@@ -41,6 +41,8 @@ crates = [
   "radroots_identity",
   "radroots_local_events",
   "radroots_log",
+  "radroots_mesh",
+  "radroots_mesh_agent_proto",
   "radroots_net",
   "radroots_nostr",
   "radroots_nostr_accounts",
@@ -65,6 +67,7 @@ crates = [
   "radroots_sql_core",
   "radroots_test_fixtures",
   "radroots_trade",
+  "radroots_transport",
   "radroots_types",
   "xtask",
 ]

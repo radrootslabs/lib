@@ -1,0 +1,23 @@
+# radroots_mesh_agent_proto
+
+This is the README for `radroots_mesh_agent_proto`, which provides the mesh
+agent protocol schema surface for the `radroots` core libraries.
+
+## Overview
+
+ * Cap'n Proto schema text for the future `radroots.mesh_agent.v1` IPC surface;
+ * schema id and deterministic SHA-256 digest helpers;
+ * narrow validation helpers for required request, response, event, and error
+   schema declarations;
+ * schema-only protocol posture without an agent runtime or IPC client.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_mesh_agent_proto`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_mesh_agent_proto`
+distribution.

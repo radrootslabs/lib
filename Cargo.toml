@@ -42,7 +42,10 @@ members = [
   "crates/sp1_guest_trade",
   "crates/sp1_host_trade",
   "crates/trade",
+  "crates/transport",
   "crates/types",
+  "crates/mesh",
+  "crates/mesh_agent_proto",
   "crates/protected_store",
   "tools/xtask",
 ]
@@ -98,7 +101,10 @@ radroots_replica_db_schema = { path = "crates/replica_db_schema", version = "0.1
 radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.2", default-features = false }
 radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.2", default-features = false }
 radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-features = false }
+radroots_transport = { path = "crates/transport", version = "0.1.0-alpha.2", default-features = false }
 radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
+radroots_mesh = { path = "crates/mesh", version = "0.1.0-alpha.2", default-features = false }
+radroots_mesh_agent_proto = { path = "crates/mesh_agent_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_app_store = { path = "crates/simplex_app_store", version = "0.1.0-alpha.2", default-features = false }

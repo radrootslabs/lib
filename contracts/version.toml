@@ -17,6 +17,7 @@ minor_on = [
   "add_enum_variant",
   "add_conformance_vector",
   "add_replica_transport_adapter",
+  "add_transport_foundation_crate",
 ]
 patch_on = [
   "fix_docs",
