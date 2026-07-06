@@ -3390,18 +3390,10 @@ fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
     if tag.len() < 5 {
         return false;
     }
-    let Some(id) = tag.get(1).map(String::as_str) else {
-        return false;
-    };
-    let Some(author) = tag.get(2).map(String::as_str) else {
-        return false;
-    };
-    let Some(kind) = tag.get(3).map(String::as_str) else {
-        return false;
-    };
-    let Some(d_tag) = tag.get(4).map(String::as_str) else {
-        return false;
-    };
+    let id = tag[1].as_str();
+    let author = tag[2].as_str();
+    let kind = tag[3].as_str();
+    let d_tag = tag[4].as_str();
     RadrootsEventId::parse(id).is_ok()
         && RadrootsPublicKey::parse(author).is_ok()
         && kind.parse::<u32>().is_ok()
@@ -3774,6 +3766,10 @@ mod tests {
             kind.to_string(),
             String::new(),
         ]
+    }
+
+    fn owned_tag(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
     }
 
     #[test]
@@ -4543,6 +4539,245 @@ mod tests {
             validate_event_contract_shape(&valid_source, "radroots.knowledge.claim.v1"),
             Ok(())
         );
+    }
+
+    #[test]
+    fn tag_value_shape_helpers_cover_contract_registry_value_types() {
+        let event_id = hex_64('a');
+        let public_key = hex_64('b');
+        let coordinate = format!("{KIND_WIKI_ARTICLE}:{public_key}:soil");
+        let valid_pointer = vec![
+            "source".to_owned(),
+            event_id.clone(),
+            public_key.clone(),
+            KIND_KNOWLEDGE_SOURCE.to_string(),
+            "soil".to_owned(),
+            "ws://relay.example.com".to_owned(),
+            "wss://relay.example.net".to_owned(),
+        ];
+        let empty_d_pointer = vec![
+            "source".to_owned(),
+            event_id.clone(),
+            public_key.clone(),
+            KIND_KNOWLEDGE_SOURCE.to_string(),
+            String::new(),
+        ];
+
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["source"]),
+            RadrootsTagValueType::EventPointer
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["a", coordinate.as_str()]),
+            RadrootsTagValueType::AddressableCoordinate
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["a", "30818:not-hex:soil"]),
+            RadrootsTagValueType::AddressableCoordinate
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["contract", "radroots.knowledge.claim.v1"]),
+            RadrootsTagValueType::ContractId
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["contract", "radroots.unknown.v1"]),
+            RadrootsTagValueType::ContractId
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["d", "soil"]),
+            RadrootsTagValueType::DTag
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["d", ""]),
+            RadrootsTagValueType::DTag
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["e", event_id.as_str()]),
+            RadrootsTagValueType::EventId
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["citation", event_id.as_str()]),
+            RadrootsTagValueType::Sha256
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["e", "not-hex"]),
+            RadrootsTagValueType::EventId
+        ));
+        assert!(tag_value_is_valid(
+            &valid_pointer,
+            RadrootsTagValueType::EventPointer
+        ));
+        assert!(tag_value_is_valid(
+            &empty_d_pointer,
+            RadrootsTagValueType::EventPointer
+        ));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            "not-hex",
+            public_key.as_str(),
+            "1",
+            ""
+        ])));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            event_id.as_str(),
+            "not-hex",
+            "1",
+            ""
+        ])));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            event_id.as_str(),
+            public_key.as_str(),
+            "not-a-kind",
+            ""
+        ])));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            event_id.as_str(),
+            public_key.as_str(),
+            "1"
+        ])));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            event_id.as_str(),
+            public_key.as_str(),
+            "1",
+            "bad tag"
+        ])));
+        assert!(!event_pointer_tag_is_valid(&owned_tag(&[
+            "source",
+            event_id.as_str(),
+            public_key.as_str(),
+            "1",
+            "",
+            "https://relay.example.com"
+        ])));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["g", "9q8yy"]),
+            RadrootsTagValueType::Geohash
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["g", "9Q8YY"]),
+            RadrootsTagValueType::Geohash
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["g", ""]),
+            RadrootsTagValueType::Geohash
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["g", "1234567890123"]),
+            RadrootsTagValueType::Geohash
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["g", "aaaaa"]),
+            RadrootsTagValueType::Geohash
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["k", "30818"]),
+            RadrootsTagValueType::Kind
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["k", "not-a-kind"]),
+            RadrootsTagValueType::Kind
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["p", public_key.as_str()]),
+            RadrootsTagValueType::PublicKey
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["p", "not-hex"]),
+            RadrootsTagValueType::PublicKey
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["relay", "ws://relay.example.com"]),
+            RadrootsTagValueType::RelayUrl
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["relay", "wss://relay.example.com"]),
+            RadrootsTagValueType::RelayUrl
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["relay", "http://relay.example.com"]),
+            RadrootsTagValueType::RelayUrl
+        ));
+        assert!(relay_url_is_valid("ws://relay.example.com"));
+        assert!(relay_url_is_valid("wss://relay.example.com"));
+        assert!(!relay_url_is_valid("ws://"));
+        assert!(!relay_url_is_valid("http://relay.example.com"));
+        assert!(!relay_url_is_valid(" wss://relay.example.com"));
+        assert!(!relay_url_is_valid("wss://relay.example.com "));
+        assert!(!relay_url_is_valid("wss://relay.example.com\nmiddle"));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["title", "Soil Guide"]),
+            RadrootsTagValueType::Text
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["title", "   "]),
+            RadrootsTagValueType::Text
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["title", "Soil\nGuide"]),
+            RadrootsTagValueType::Text
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["expiration", "1700000000"]),
+            RadrootsTagValueType::UnixTimestamp
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["expiration", "not-time"]),
+            RadrootsTagValueType::UnixTimestamp
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["image", "https://example.com"]),
+            RadrootsTagValueType::Url
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["image", "wss://example.com"]),
+            RadrootsTagValueType::Url
+        ));
+        assert!(url_is_valid("http://example.com"));
+        assert!(url_is_valid("https://example.com"));
+        assert!(!url_is_valid("http://"));
+        assert!(!url_is_valid("wss://example.com"));
+        assert!(!url_is_valid(" https://example.com"));
+        assert!(!url_is_valid("https://example.com "));
+        assert!(!url_is_valid("https://example.com\nmiddle"));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["uuid", "123e4567-e89b-12d3-a456-426614174000"]),
+            RadrootsTagValueType::Uuid
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["uuid", "123e4567-e89b-12d3-a456-42661417400"]),
+            RadrootsTagValueType::Uuid
+        ));
+        assert!(uuid_is_valid("123e4567-e89b-12d3-a456-426614174000"));
+        assert!(!uuid_is_valid("123e4567-e89b-12d3-a456-42661417400"));
+        assert!(!uuid_is_valid("123e4567xe89b-12d3-a456-426614174000"));
+        assert!(!uuid_is_valid("123e4567-e89b-12d3-a456-42661417400x"));
+
+        let expectations = [
+            (
+                RadrootsTagValueType::AddressableCoordinate,
+                "addressable_coordinate",
+            ),
+            (RadrootsTagValueType::ContractId, "contract_id"),
+            (RadrootsTagValueType::DTag, "d_tag"),
+            (RadrootsTagValueType::EventId, "event_id"),
+            (RadrootsTagValueType::EventPointer, "event_pointer"),
+            (RadrootsTagValueType::Geohash, "geohash"),
+            (RadrootsTagValueType::Kind, "kind"),
+            (RadrootsTagValueType::PublicKey, "public_key"),
+            (RadrootsTagValueType::RelayUrl, "relay_url"),
+            (RadrootsTagValueType::Sha256, "sha256"),
+            (RadrootsTagValueType::Text, "text"),
+            (RadrootsTagValueType::UnixTimestamp, "unix_timestamp"),
+            (RadrootsTagValueType::Url, "url"),
+            (RadrootsTagValueType::Uuid, "uuid"),
+        ];
+        for (value_type, expected) in expectations {
+            assert_eq!(tag_value_type_expectation(value_type), expected);
+        }
     }
 
     #[test]

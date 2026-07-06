@@ -131,12 +131,12 @@ fn first_mirrored_difference(
             if let Some(name) = tag_name(actual_tag)
                 && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
             {
-                return *expected_name;
+                return expected_name;
             }
             if let Some(name) = tag_name(expected_tag)
                 && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
             {
-                return *expected_name;
+                return expected_name;
             }
         }
     }
@@ -144,13 +144,13 @@ fn first_mirrored_difference(
         && let Some(name) = tag_name(actual[expected.len()])
         && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
     {
-        return *expected_name;
+        return expected_name;
     }
     if expected.len() > actual.len()
         && let Some(name) = tag_name(expected[actual.len()])
         && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
     {
-        return *expected_name;
+        return expected_name;
     }
     names[0]
 }

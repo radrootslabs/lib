@@ -380,7 +380,7 @@ fn nip54_and_signature_adversarial_fixtures_are_rejected() {
     let error = wiki_article_from_event(orphan_defer_event).unwrap_err();
     assert_eq!(orphan_defer.pipeline_stage, "event_parse");
     assert_eq!(orphan_defer.expected_error_code, error.code());
-    assert!(matches!(error, EventParseError::InvalidTag("a")));
+    assert!(matches!(error, EventParseError::InvalidTag("e")));
 
     let id_mismatch = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
         .iter()

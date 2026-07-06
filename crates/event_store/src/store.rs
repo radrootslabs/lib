@@ -1724,7 +1724,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn listing_event_tag_persists_event_pointer_contract_metadata() {
+    async fn listing_event_tag_persists_event_id_contract_metadata() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let listing_event_id = event_id('f');
         let event = signed_event(
@@ -1767,10 +1767,7 @@ mod tests {
             listing_tag.contract_semantic.as_deref(),
             Some("listing_snapshot")
         );
-        assert_eq!(
-            listing_tag.contract_value_type.as_deref(),
-            Some("event_pointer")
-        );
+        assert_eq!(listing_tag.contract_value_type.as_deref(), Some("event_id"));
         assert!(!listing_tag.relay_indexed);
     }
 
