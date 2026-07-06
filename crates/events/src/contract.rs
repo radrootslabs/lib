@@ -4344,7 +4344,7 @@ mod tests {
         );
         assert_eq!(
             validate_contract_tags_parts(
-                &vec![vec!["test_many".to_owned(), "one".to_owned()]],
+                &[vec!["test_many".to_owned(), "one".to_owned()]],
                 &required_many
             ),
             Ok(())
@@ -4355,7 +4355,7 @@ mod tests {
         assert_eq!(validate_contract_tags_parts(&[], &optional_one), Ok(()));
         assert_eq!(
             validate_contract_tags_parts(
-                &vec![
+                &[
                     vec!["test_optional".to_owned(), "one".to_owned()],
                     vec!["test_optional".to_owned(), "two".to_owned()],
                 ],
@@ -4373,7 +4373,7 @@ mod tests {
         );
         assert_eq!(
             validate_contract_tags_parts(
-                &vec![
+                &[
                     vec!["test_required".to_owned(), "one".to_owned()],
                     vec!["test_required".to_owned(), "two".to_owned()],
                 ],
@@ -4388,7 +4388,7 @@ mod tests {
         );
         assert_eq!(
             validate_contract_tags_parts(
-                &vec![
+                &[
                     vec!["test_optional".to_owned(), "one".to_owned()],
                     vec!["test_optional".to_owned(), "two".to_owned()],
                 ],

@@ -27,7 +27,7 @@ use radroots_events_codec::listing::decode::{
     parsed_from_nostr_event,
 };
 use radroots_events_codec::listing::encode::{
-    listing_build_tags, to_wire_parts, to_wire_parts_with_kind,
+    listing_build_tags, to_json_wire_parts_with_kind, to_wire_parts, to_wire_parts_with_kind,
 };
 use radroots_events_codec::listing::tags::{
     ListingTagOptions, listing_tags_full, listing_tags_with_options,
@@ -216,6 +216,40 @@ fn listing_roundtrip_from_event() {
     assert_eq!(decoded.product.title, listing.product.title);
     assert_eq!(decoded.primary_bin_id, listing.primary_bin_id);
     assert_eq!(decoded.bins.len(), listing.bins.len());
+}
+
+#[test]
+fn listing_json_wire_parts_with_kind_serializes_listing_object() {
+    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    let parts = to_json_wire_parts_with_kind(&listing, KIND_LISTING_DRAFT).unwrap();
+
+    assert_eq!(parts.kind, KIND_LISTING_DRAFT);
+    let decoded: RadrootsListing = serde_json::from_str(&parts.content).unwrap();
+    assert_eq!(decoded.d_tag, listing.d_tag);
+    assert_eq!(decoded.product.title, listing.product.title);
+    assert_eq!(decoded.primary_bin_id, listing.primary_bin_id);
+}
+
+#[test]
+fn listing_json_wire_parts_with_kind_rejects_wrong_kind() {
+    let err = to_json_wire_parts_with_kind(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg"), KIND_POST)
+        .unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_POST)));
+}
+
+#[test]
+fn listing_json_wire_parts_with_kind_reports_tag_errors() {
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    listing.resource_area = Some(RadrootsResourceAreaRef {
+        pubkey: "resource_pubkey".to_string(),
+        d_tag: "bad d".to_string(),
+    });
+
+    let err = to_json_wire_parts_with_kind(&listing, KIND_LISTING).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::InvalidField("resource_area.d_tag")
+    ));
 }
 
 #[test]

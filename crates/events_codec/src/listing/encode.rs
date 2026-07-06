@@ -46,6 +46,23 @@ pub fn to_wire_parts_with_kind(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn to_json_wire_parts_with_kind(
+    listing: &RadrootsListing,
+    kind: u32,
+) -> Result<WireEventParts, EventEncodeError> {
+    if !is_listing_kind(kind) {
+        return Err(EventEncodeError::InvalidKind(kind));
+    }
+    let tags = listing_tags_full(listing)?;
+    let content = serde_json::to_string(listing).map_err(|_| EventEncodeError::Json)?;
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
+}
+
+#[cfg(feature = "serde_json")]
 fn listing_markdown_content(listing: &RadrootsListing) -> String {
     let title = listing.product.title.trim();
     let summary = listing

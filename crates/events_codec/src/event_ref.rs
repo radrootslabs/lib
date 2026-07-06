@@ -36,25 +36,24 @@ pub fn parse_event_ref_tag(
     if tag.len() < 5 {
         return Err(EventParseError::InvalidTag(tag_name));
     }
-    let id = tag.get(1).ok_or(EventParseError::InvalidTag(tag_name))?;
+    let id = &tag[1];
     RadrootsEventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
-    let author = tag.get(2).ok_or(EventParseError::InvalidTag(tag_name))?;
+    let author = &tag[2];
     RadrootsPublicKey::parse(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
-    let kind_s = tag.get(3).ok_or(EventParseError::InvalidTag(tag_name))?;
+    let kind_s = &tag[3];
     let kind: u32 = kind_s
         .parse()
         .map_err(|e| EventParseError::InvalidNumber(tag_name, e))?;
 
-    let d_tag = match tag.get(4) {
-        Some(value) if value.is_empty() => None,
-        Some(value) => {
-            if RadrootsRelayUrl::parse(value).is_ok() {
-                return Err(EventParseError::InvalidTag(tag_name));
-            }
-            RadrootsDTag::parse(value).map_err(|_| EventParseError::InvalidTag(tag_name))?;
-            Some(value.clone())
+    let d_tag_value = &tag[4];
+    let d_tag = if d_tag_value.is_empty() {
+        None
+    } else {
+        if RadrootsRelayUrl::parse(d_tag_value).is_ok() {
+            return Err(EventParseError::InvalidTag(tag_name));
         }
-        None => return Err(EventParseError::InvalidTag(tag_name)),
+        RadrootsDTag::parse(d_tag_value).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+        Some(d_tag_value.clone())
     };
 
     let relays = if tag.len() > 5 {

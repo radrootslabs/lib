@@ -21,7 +21,7 @@ use radroots_events::{
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
 };
 #[cfg(feature = "serde_json")]
-use radroots_events_codec::{listing::encode::to_wire_parts_with_kind, wire::to_frozen_draft};
+use radroots_events_codec::{listing::encode::to_json_wire_parts_with_kind, wire::to_frozen_draft};
 use thiserror::Error;
 
 use crate::listing::draft::RadrootsCanonicalListingDraft;
@@ -133,7 +133,7 @@ pub fn build_listing_mutation_draft(
             return Err(RadrootsListingMutationError::UnsupportedMutation);
         }
     };
-    let parts = to_wire_parts_with_kind(draft.listing(), kind)
+    let parts = to_json_wire_parts_with_kind(draft.listing(), kind)
         .map_err(|error| RadrootsListingMutationError::EncodeListing(error.to_string()))?;
     to_frozen_draft(
         parts,
@@ -368,6 +368,9 @@ mod tests {
         assert_eq!(publish_draft.contract_id, LISTING_PUBLISHED_CONTRACT_ID);
         assert_eq!(publish_draft.expected_pubkey, SELLER);
         assert_eq!(publish_draft.created_at, 1_700_000_000);
+        let published_content: RadrootsListing =
+            serde_json::from_str(&publish_draft.content).expect("listing json");
+        assert_eq!(published_content.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
         assert_eq!(update_draft.kind, KIND_LISTING);
         assert_eq!(update_draft.contract_id, LISTING_PUBLISHED_CONTRACT_ID);
         assert_eq!(update_draft.expected_pubkey, SELLER);
@@ -383,6 +386,9 @@ mod tests {
         assert_eq!(draft.contract_id, LISTING_DRAFT_CONTRACT_ID);
         assert_eq!(draft.expected_pubkey, SELLER);
         assert_eq!(draft.created_at, 1_700_000_000);
+        let draft_content: RadrootsListing =
+            serde_json::from_str(&draft.content).expect("listing json");
+        assert_eq!(draft_content.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
     }
 
     #[test]

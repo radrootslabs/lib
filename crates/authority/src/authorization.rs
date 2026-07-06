@@ -607,7 +607,15 @@ mod tests {
             "radroots.order.request.v1",
             KIND_ORDER_REQUEST,
             1_700_000_000,
-            Vec::new(),
+            vec![
+                vec!["d".to_owned(), "order-1".to_owned()],
+                vec!["p".to_owned(), pubkey.clone()],
+                vec![
+                    "a".to_owned(),
+                    format!("30402:{}:listing-a", pubkey.as_str()),
+                ],
+                vec!["listing_event".to_owned(), hex_64('b')],
+            ],
             "{}",
             pubkey.as_str(),
         )
