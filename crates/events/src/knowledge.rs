@@ -6,7 +6,10 @@ use alloc::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::RadrootsNostrEventRef;
-use crate::ids::{RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey};
+use crate::ids::{
+    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
+    RadrootsRelayUrl,
+};
 use crate::kinds::KIND_WIKI_ARTICLE;
 
 pub const RADROOTS_KNOWLEDGE_SCHEMA_VERSION: u16 = 1;
@@ -192,12 +195,9 @@ fn validate_relays(
     field: &'static str,
 ) -> Result<(), RadrootsKnowledgeValidationError> {
     for relay in relays {
-        if relay.is_empty()
-            || relay.trim() != relay
-            || relay.chars().any(|character| character.is_control())
-        {
-            return Err(RadrootsKnowledgeValidationError::InvalidField(field));
-        }
+        RadrootsRelayUrl::parse(relay)
+            .map(|_| ())
+            .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))?;
     }
     Ok(())
 }
@@ -876,6 +876,23 @@ mod tests {
         }
     }
 
+    fn wiki_article() -> RadrootsWikiArticle {
+        RadrootsWikiArticle {
+            d_tag: "soil-health".to_string(),
+            title: Some("Soil health".to_string()),
+            content_djot: "# Soil health".to_string(),
+            summary: None,
+            topics: Vec::new(),
+            references: vec![event_ref()],
+            forked_from: vec![article_version_ref()],
+            deferred_to: Some(article_version_ref()),
+        }
+    }
+
+    fn invalid_relay() -> String {
+        "http://relay.radroots.example".to_string()
+    }
+
     fn knowledge_source() -> RadrootsKnowledgeSource {
         RadrootsKnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
@@ -1217,17 +1234,7 @@ mod tests {
 
     #[test]
     fn knowledge_validators_accept_valid_models() {
-        let article = RadrootsWikiArticle {
-            d_tag: "soil-health".to_string(),
-            title: Some("Soil health".to_string()),
-            content_djot: "# Soil health".to_string(),
-            summary: None,
-            topics: Vec::new(),
-            references: vec![event_ref()],
-            forked_from: vec![article_version_ref()],
-            deferred_to: Some(article_version_ref()),
-        };
-        assert_eq!(validate_wiki_article(&article), Ok(()));
+        assert_eq!(validate_wiki_article(&wiki_article()), Ok(()));
         assert_eq!(
             validate_wiki_redirect(&RadrootsWikiRedirect {
                 d_tag: "soil".to_string(),
@@ -1258,6 +1265,118 @@ mod tests {
         assert_eq!(
             validate_contribution_attestation(&contribution_attestation()),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn knowledge_validators_reject_noncanonical_relay_values() {
+        let mut article = wiki_article();
+        article.references[0].relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_wiki_article(&article),
+            RadrootsKnowledgeValidationError::InvalidField("references"),
+        );
+
+        let mut article = wiki_article();
+        article.forked_from[0].address_ref.relays = vec![invalid_relay()];
+        assert_validation_error(
+            validate_wiki_article(&article),
+            RadrootsKnowledgeValidationError::InvalidField("forked_from"),
+        );
+
+        let mut article = wiki_article();
+        article
+            .deferred_to
+            .as_mut()
+            .expect("deferred")
+            .address_ref
+            .relays = vec![invalid_relay()];
+        assert_validation_error(
+            validate_wiki_article(&article),
+            RadrootsKnowledgeValidationError::InvalidField("deferred_to"),
+        );
+
+        let mut redirect = RadrootsWikiRedirect {
+            d_tag: "soil".to_string(),
+            target: article_address_ref(),
+        };
+        redirect.target.relays = vec![invalid_relay()];
+        assert_validation_error(
+            validate_wiki_redirect(&redirect),
+            RadrootsKnowledgeValidationError::InvalidField("wiki_redirect.target"),
+        );
+
+        let mut merge = RadrootsWikiMergeRequest {
+            target_article: article_address_ref(),
+            destination_pubkey: hex_64('a'),
+            base_version_event_id: Some(hex_64('e')),
+            source_version_event_id: hex_64('f'),
+            explanation: None,
+        };
+        merge.target_article.relays = vec![invalid_relay()];
+        assert_validation_error(
+            validate_wiki_merge_request(&merge),
+            RadrootsKnowledgeValidationError::InvalidField("target_article"),
+        );
+
+        let mut source = knowledge_source();
+        source.artifact_refs[0].relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_knowledge_source(&source),
+            RadrootsKnowledgeValidationError::InvalidField("artifact_refs"),
+        );
+
+        let mut claim = knowledge_claim();
+        claim.citation_spans[0].source_ref.relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_knowledge_claim(&claim),
+            RadrootsKnowledgeValidationError::InvalidField("citation_spans"),
+        );
+
+        let mut relation = knowledge_relation();
+        relation.support_refs[0].relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_knowledge_relation(&relation),
+            RadrootsKnowledgeValidationError::InvalidField("support_refs"),
+        );
+
+        let mut review = knowledge_review();
+        review.target.relays = vec![invalid_relay()];
+        assert_validation_error(
+            validate_knowledge_review(&review),
+            RadrootsKnowledgeValidationError::InvalidField("review_target"),
+        );
+
+        let mut report = field_report();
+        report.context.location_precision =
+            RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
+        let mut private_location_ref = event_ref();
+        private_location_ref.relays = Some(vec![invalid_relay()]);
+        report.context.private_location_ref = Some(private_location_ref);
+        assert_validation_error(
+            validate_knowledge_field_report(&report),
+            RadrootsKnowledgeValidationError::InvalidField("private_location_ref"),
+        );
+
+        let mut bounty = evidence_bounty();
+        bounty.target_refs[0].relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_evidence_bounty(&bounty),
+            RadrootsKnowledgeValidationError::InvalidField("target_refs"),
+        );
+
+        let mut proposal = knowledge_change_proposal();
+        proposal.target.relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_knowledge_change_proposal(&proposal),
+            RadrootsKnowledgeValidationError::InvalidField("target"),
+        );
+
+        let mut attestation = contribution_attestation();
+        attestation.subject_refs[0].relays = Some(vec![invalid_relay()]);
+        assert_validation_error(
+            validate_contribution_attestation(&attestation),
+            RadrootsKnowledgeValidationError::InvalidField("subject_refs"),
         );
     }
 

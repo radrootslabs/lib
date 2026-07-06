@@ -141,6 +141,10 @@ fn assert_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
     }
 }
 
+fn invalid_relay() -> String {
+    "http://relay.radroots.example".to_string()
+}
+
 fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
     let tags = parts
         .tags
@@ -1036,6 +1040,43 @@ fn semantic_validation_rejects_invalid_encode_models() {
 }
 
 #[test]
+fn semantic_validation_rejects_invalid_relay_models() {
+    let mut source = source();
+    source.artifact_refs[0].relays = Some(vec![invalid_relay()]);
+    assert_encode_error(
+        knowledge_source_to_wire_parts(&source).unwrap_err(),
+        EventEncodeError::InvalidField("artifact_refs"),
+    );
+
+    let mut redirect = RadrootsWikiRedirect {
+        d_tag: "soil".to_string(),
+        target: address_ref(),
+    };
+    redirect.target.relays = vec![invalid_relay()];
+    assert_encode_error(
+        wiki_redirect_to_wire_parts(&redirect).unwrap_err(),
+        EventEncodeError::InvalidField("wiki_redirect.target"),
+    );
+
+    let mut review = review();
+    review.target.relays = vec![invalid_relay()];
+    assert_encode_error(
+        knowledge_review_to_wire_parts(&review).unwrap_err(),
+        EventEncodeError::InvalidField("review_target"),
+    );
+
+    let mut report = field_report();
+    report.context.location_precision = RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
+    let mut private_location_ref = event_ref('f', KIND_KNOWLEDGE_SOURCE);
+    private_location_ref.relays = Some(vec![invalid_relay()]);
+    report.context.private_location_ref = Some(private_location_ref);
+    assert_encode_error(
+        knowledge_field_report_to_wire_parts(&report).unwrap_err(),
+        EventEncodeError::InvalidField("private_location_ref"),
+    );
+}
+
+#[test]
 fn knowledge_claim_encode_enforces_citation_rules() {
     let mut model = claim();
     model.citation_spans.clear();
@@ -1175,6 +1216,72 @@ fn semantic_validation_rejects_invalid_decoded_content() {
     assert_parse_error(
         contribution_attestation_from_event(attestation_event).unwrap_err(),
         EventParseError::InvalidJson("subject_refs"),
+    );
+}
+
+#[test]
+fn knowledge_decode_rejects_invalid_relay_values() {
+    let mut article_event = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let source_tag = article_event
+        .tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some("source"))
+        .expect("source tag");
+    source_tag[5] = invalid_relay();
+    assert_parse_error(
+        wiki_article_from_event(article_event).unwrap_err(),
+        EventParseError::InvalidTag("source"),
+    );
+
+    let mut redirect_event = event_from_parts(
+        wiki_redirect_to_wire_parts(&RadrootsWikiRedirect {
+            d_tag: "soil".to_string(),
+            target: address_ref(),
+        })
+        .unwrap(),
+    );
+    let target_tag = redirect_event
+        .tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some("a"))
+        .expect("target tag");
+    target_tag[2] = invalid_relay();
+    assert_parse_error(
+        wiki_redirect_from_event(redirect_event).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut source_event = event_from_parts(knowledge_source_to_wire_parts(&source()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&source_event.content).unwrap();
+    value["artifact_refs"][0]["relays"] =
+        serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
+    source_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_source_from_event(source_event).unwrap_err(),
+        EventParseError::InvalidJson("artifact_refs"),
+    );
+
+    let mut review_event = event_from_parts(knowledge_review_to_wire_parts(&review()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&review_event.content).unwrap();
+    value["target"]["relays"] =
+        serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
+    review_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_review_from_event(review_event).unwrap_err(),
+        EventParseError::InvalidJson("review_target"),
+    );
+
+    let mut report = field_report();
+    report.context.location_precision = RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
+    report.context.private_location_ref = Some(event_ref('f', KIND_KNOWLEDGE_SOURCE));
+    let mut report_event = event_from_parts(knowledge_field_report_to_wire_parts(&report).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&report_event.content).unwrap();
+    value["context"]["private_location_ref"]["relays"] =
+        serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
+    report_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_field_report_from_event(report_event).unwrap_err(),
+        EventParseError::InvalidJson("private_location_ref"),
     );
 }
 
