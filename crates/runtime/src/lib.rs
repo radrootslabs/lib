@@ -8,6 +8,8 @@ pub mod secret_file;
 pub mod service;
 pub mod signals;
 pub mod tracing;
+#[cfg(feature = "transport")]
+pub mod transport;
 
 #[cfg(feature = "cli")]
 pub use cli::{parse_and_load_path, parse_and_load_path_with_env_overrides};
@@ -39,4 +41,21 @@ pub use service::{DEFAULT_SERVICE_IDENTITY_PATH, service_bootstrap_paths_for};
 pub use signals::shutdown_signal;
 pub use tracing::{
     default_shared_runtime_logs_dir, default_shared_runtime_logs_dir_for, init, init_with_logs_dir,
+};
+#[cfg(feature = "transport-reticulum")]
+pub use transport::RadrootsRuntimeReticulumPreviewTransport;
+#[cfg(feature = "transport")]
+pub use transport::{
+    RadrootsRuntimeBoundedQueue, RadrootsRuntimeQueueStatus, RadrootsRuntimeQueueTask,
+    RadrootsRuntimeTransportAdapter, RadrootsRuntimeTransportDispatchRequest,
+    RadrootsRuntimeTransportError, RadrootsRuntimeTransportFuture, RadrootsRuntimeTransportPayload,
+    RadrootsRuntimeTransportRegistry,
+};
+#[cfg(feature = "transport-workers")]
+pub use transport::{
+    RadrootsRuntimeDeliveryJob, RadrootsRuntimeDeliveryJobReceipt, RadrootsRuntimeDeliveryPlan,
+    RadrootsRuntimeDeliveryTarget, RadrootsRuntimeDeliveryWorker,
+    RadrootsRuntimeDeliveryWorkerConfig, RadrootsRuntimeInboundObservation,
+    RadrootsRuntimeInboundObservationSink, RadrootsRuntimeLeaseRecord,
+    record_verified_inbound_observation, recover_expired_leases,
 };
