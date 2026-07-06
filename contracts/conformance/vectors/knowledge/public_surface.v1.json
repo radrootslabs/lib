@@ -1,10 +1,10 @@
 {
-  "suite": "knowledge_downstream_compatibility",
+  "suite": "knowledge_public_surface",
   "contract_version": "0.1.0",
   "vectors": [
     {
-      "id": "knowledge_source_downstream_valid_001",
-      "kind": "knowledge.downstream_compatibility.valid",
+      "id": "knowledge_source_public_surface_valid_001",
+      "kind": "knowledge.public_surface.valid",
       "input": {
         "fixture": "knowledge_source_valid"
       },
@@ -14,8 +14,8 @@
       }
     },
     {
-      "id": "knowledge_claim_downstream_valid_002",
-      "kind": "knowledge.downstream_compatibility.valid",
+      "id": "knowledge_claim_public_surface_valid_002",
+      "kind": "knowledge.public_surface.valid",
       "input": {
         "fixture": "knowledge_claim_valid"
       },
@@ -25,8 +25,8 @@
       }
     },
     {
-      "id": "knowledge_review_downstream_valid_003",
-      "kind": "knowledge.downstream_compatibility.valid",
+      "id": "knowledge_review_public_surface_valid_003",
+      "kind": "knowledge.public_surface.valid",
       "input": {
         "fixture": "knowledge_review_valid"
       },
@@ -36,8 +36,8 @@
       }
     },
     {
-      "id": "knowledge_field_report_downstream_valid_004",
-      "kind": "knowledge.downstream_compatibility.valid",
+      "id": "knowledge_field_report_public_surface_valid_004",
+      "kind": "knowledge.public_surface.valid",
       "input": {
         "fixture": "knowledge_field_report_valid"
       },
@@ -47,8 +47,8 @@
       }
     },
     {
-      "id": "wiki_article_downstream_valid_005",
-      "kind": "knowledge.downstream_compatibility.valid",
+      "id": "wiki_article_public_surface_valid_005",
+      "kind": "knowledge.public_surface.valid",
       "input": {
         "fixture": "wiki_article_valid"
       },
@@ -58,7 +58,7 @@
       }
     },
     {
-      "id": "knowledge_claim_sdk_builder_downstream_valid_006",
+      "id": "knowledge_claim_sdk_builder_public_surface_valid_006",
       "kind": "knowledge.sdk_builder_event.valid",
       "input": {
         "sdk": "radroots_sdk",

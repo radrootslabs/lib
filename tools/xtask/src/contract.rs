@@ -18,8 +18,8 @@ const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.sha256";
 const KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json";
-const KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE: &str =
-    "contracts/conformance/vectors/knowledge/regenproto_compatibility.v1.json";
+const KNOWLEDGE_PUBLIC_SURFACE_RELATIVE: &str =
+    "contracts/conformance/vectors/knowledge/public_surface.v1.json";
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
     "radroots.wiki.article.v1",
     "radroots.wiki.redirect.v1",
@@ -173,7 +173,7 @@ pub struct PublicOperationConformance {
 pub struct VersionPolicy {
     pub contract: VersionContract,
     pub semver: SemverRules,
-    pub compatibility: CompatibilityRules,
+    pub release_integrity: ReleaseIntegrityRules,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,7 +193,7 @@ pub struct SemverRules {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CompatibilityRules {
+pub struct ReleaseIntegrityRules {
     pub requires_conformance_pass: bool,
     pub requires_contract_manifest_diff: bool,
     pub requires_release_notes: bool,
@@ -2117,6 +2117,7 @@ pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(),
     }
 
     validate_knowledge_manifest_witnesses(workspace_root, &actual_json)?;
+    validate_knowledge_conformance_vector_inventory(workspace_root)?;
 
     let bundle = load_contract_bundle(workspace_root)?;
     validate_conformance_vector_file(
@@ -2124,9 +2125,39 @@ pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(),
         &bundle.manifest.contract.version,
     )?;
     validate_conformance_vector_file(
-        &workspace_root.join(KNOWLEDGE_REGENPROTO_COMPATIBILITY_RELATIVE),
+        &workspace_root.join(KNOWLEDGE_PUBLIC_SURFACE_RELATIVE),
         &bundle.manifest.contract.version,
     )?;
+    Ok(())
+}
+
+fn validate_knowledge_conformance_vector_inventory(workspace_root: &Path) -> Result<(), String> {
+    let expected = BTreeSet::from([
+        KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE.to_owned(),
+        KNOWLEDGE_PUBLIC_SURFACE_RELATIVE.to_owned(),
+    ]);
+    let mut paths = Vec::new();
+    collect_conformance_vector_paths(
+        &workspace_root.join("contracts/conformance/vectors/knowledge"),
+        &mut paths,
+    )?;
+    let mut actual = BTreeSet::new();
+    for path in paths {
+        let relative = path.strip_prefix(workspace_root).map_err(|error| {
+            format!(
+                "knowledge conformance vector {} is outside workspace root {}: {error}",
+                path.display(),
+                workspace_root.display()
+            )
+        })?;
+        actual.insert(relative.to_string_lossy().replace('\\', "/"));
+    }
+    if actual != expected {
+        return Err(format!(
+            "knowledge conformance vector inventory mismatch: expected {:?}, found {:?}",
+            expected, actual
+        ));
+    }
     Ok(())
 }
 
@@ -3570,14 +3601,18 @@ fn validate_contract_bundle_with_release_policy_override(
     {
         return Err("version.semver rules must all be non-empty".to_string());
     }
-    if !bundle.version.compatibility.requires_conformance_pass {
-        return Err("compatibility.requires_conformance_pass must be true".to_string());
+    if !bundle.version.release_integrity.requires_conformance_pass {
+        return Err("release_integrity.requires_conformance_pass must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_contract_manifest_diff {
-        return Err("compatibility.requires_contract_manifest_diff must be true".to_string());
+    if !bundle
+        .version
+        .release_integrity
+        .requires_contract_manifest_diff
+    {
+        return Err("release_integrity.requires_contract_manifest_diff must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_release_notes {
-        return Err("compatibility.requires_release_notes must be true".to_string());
+    if !bundle.version.release_integrity.requires_release_notes {
+        return Err("release_integrity.requires_release_notes must be true".to_string());
     }
     validate_policy_metadata(&bundle.manifest.policy)?;
     let workspace_root = bundle
@@ -3909,14 +3944,18 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     {
         return Err("version.semver rules must all be non-empty".to_string());
     }
-    if !bundle.version.compatibility.requires_conformance_pass {
-        return Err("compatibility.requires_conformance_pass must be true".to_string());
+    if !bundle.version.release_integrity.requires_conformance_pass {
+        return Err("release_integrity.requires_conformance_pass must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_contract_manifest_diff {
-        return Err("compatibility.requires_contract_manifest_diff must be true".to_string());
+    if !bundle
+        .version
+        .release_integrity
+        .requires_contract_manifest_diff
+    {
+        return Err("release_integrity.requires_contract_manifest_diff must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_release_notes {
-        return Err("compatibility.requires_release_notes must be true".to_string());
+    if !bundle.version.release_integrity.requires_release_notes {
+        return Err("release_integrity.requires_release_notes must be true".to_string());
     }
     validate_policy_metadata(&bundle.manifest.policy)?;
     let workspace_root = bundle
@@ -4164,7 +4203,7 @@ major_on = ["breaking"]
 minor_on = ["feature"]
 patch_on = ["fix"]
 
-[compatibility]
+[release_integrity]
 requires_conformance_pass = true
 requires_contract_manifest_diff = true
 requires_release_notes = true
@@ -5647,21 +5686,24 @@ edition = "2024"
             bundle.version.semver.patch_on.clear();
         });
         assert_bundle_error(
-            "compatibility.requires_conformance_pass must be true",
+            "release_integrity.requires_conformance_pass must be true",
             |bundle| {
-                bundle.version.compatibility.requires_conformance_pass = false;
+                bundle.version.release_integrity.requires_conformance_pass = false;
             },
         );
         assert_bundle_error(
-            "compatibility.requires_contract_manifest_diff must be true",
+            "release_integrity.requires_contract_manifest_diff must be true",
             |bundle| {
-                bundle.version.compatibility.requires_contract_manifest_diff = false;
+                bundle
+                    .version
+                    .release_integrity
+                    .requires_contract_manifest_diff = false;
             },
         );
         assert_bundle_error(
-            "compatibility.requires_release_notes must be true",
+            "release_integrity.requires_release_notes must be true",
             |bundle| {
-                bundle.version.compatibility.requires_release_notes = false;
+                bundle.version.release_integrity.requires_release_notes = false;
             },
         );
         assert_bundle_error("contract policy flags must all be true", |bundle| {
@@ -6423,7 +6465,7 @@ major_on = ["breaking"]
 minor_on = ["feature"]
 patch_on = ["fix"]
 
-[compatibility]
+[release_integrity]
 requires_conformance_pass = true
 requires_contract_manifest_diff = true
 requires_release_notes = true

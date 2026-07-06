@@ -24,7 +24,7 @@ patch_on = [
   "fix_packaging_metadata",
 ]
 
-[compatibility]
+[release_integrity]
 requires_conformance_pass = true
 requires_contract_manifest_diff = true
 requires_release_notes = true

@@ -471,7 +471,7 @@ fn immutable_knowledge_contracts_are_regular_events() {
 }
 
 #[test]
-fn verified_decode_exposes_representative_downstream_compatibility_events() {
+fn verified_decode_exposes_representative_public_surface_events() {
     let fixture_ids = [
         "wiki_article_valid",
         "wiki_redirect_valid",

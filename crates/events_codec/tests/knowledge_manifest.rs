@@ -23,9 +23,8 @@ const MANIFEST_JSON: &str =
     include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.json");
 const MANIFEST_SHA256: &str =
     include_str!("../../../contracts/knowledge/knowledge_event_contract_manifest.v2.sha256");
-const REGENPROTO_COMPATIBILITY_VECTOR: &str = include_str!(
-    "../../../contracts/conformance/vectors/knowledge/regenproto_compatibility.v1.json"
-);
+const KNOWLEDGE_PUBLIC_SURFACE_VECTOR: &str =
+    include_str!("../../../contracts/conformance/vectors/knowledge/public_surface.v1.json");
 
 const MVP_SUPPORT_CONTRACT_IDS: &[&str] = &[
     "radroots.wiki.article.v1",
@@ -230,9 +229,9 @@ fn knowledge_manifest_preserves_regular_immutable_classification() {
 }
 
 #[test]
-fn regenproto_compatibility_vector_stays_generalized() {
-    let value: serde_json::Value = serde_json::from_str(REGENPROTO_COMPATIBILITY_VECTOR).unwrap();
-    assert_eq!(value["suite"], "knowledge_downstream_compatibility");
+fn knowledge_manifest_public_surface_vector_stays_generalized() {
+    let value: serde_json::Value = serde_json::from_str(KNOWLEDGE_PUBLIC_SURFACE_VECTOR).unwrap();
+    assert_eq!(value["suite"], "knowledge_public_surface");
     let ids = value["vectors"]
         .as_array()
         .unwrap()
@@ -242,17 +241,17 @@ fn regenproto_compatibility_vector_stays_generalized() {
     assert_eq!(
         ids,
         [
-            "knowledge_claim_downstream_valid_002",
-            "knowledge_field_report_downstream_valid_004",
-            "knowledge_review_downstream_valid_003",
-            "knowledge_source_downstream_valid_001",
-            "knowledge_claim_sdk_builder_downstream_valid_006",
-            "wiki_article_downstream_valid_005",
+            "knowledge_claim_public_surface_valid_002",
+            "knowledge_field_report_public_surface_valid_004",
+            "knowledge_review_public_surface_valid_003",
+            "knowledge_source_public_surface_valid_001",
+            "knowledge_claim_sdk_builder_public_surface_valid_006",
+            "wiki_article_public_surface_valid_005",
         ]
         .into_iter()
         .collect()
     );
     for forbidden in ["dao", "token", "reputation", "score", "canon_synthesis"] {
-        assert!(!REGENPROTO_COMPATIBILITY_VECTOR.contains(forbidden));
+        assert!(!KNOWLEDGE_PUBLIC_SURFACE_VECTOR.contains(forbidden));
     }
 }
