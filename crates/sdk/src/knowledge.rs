@@ -1251,6 +1251,7 @@ fn draft_error_code(error: &RadrootsDraftError) -> &'static str {
     match error {
         RadrootsDraftError::UnknownContract(_) => "unknown_contract",
         RadrootsDraftError::ContractKindMismatch { .. } => "contract_kind_mismatch",
+        RadrootsDraftError::ContractShape { error, .. } => error.code(),
         RadrootsDraftError::SignedEventPubkeyMismatch { .. } => "signed_event_pubkey_mismatch",
         RadrootsDraftError::SignedEventIdMismatch { .. } => "signed_event_id_mismatch",
         RadrootsDraftError::SignedEventCreatedAtMismatch { .. } => {

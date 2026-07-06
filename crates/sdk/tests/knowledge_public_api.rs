@@ -393,6 +393,19 @@ fn knowledge_errors_expose_stable_codes() {
     assert_eq!(error.code(), "knowledge_encode");
     assert_eq!(error.inner_code(), "invalid_field");
     assert!(!error.to_string().contains(article.content_djot.as_str()));
+
+    let draft_error: RadrootsSdkKnowledgeError = RadrootsFrozenEventDraft::new(
+        KNOWLEDGE_CLAIM_CONTRACT_ID,
+        KIND_KNOWLEDGE_CLAIM,
+        CREATED_AT,
+        Vec::new(),
+        r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#,
+        public_key_hex(),
+    )
+    .expect_err("contract shape")
+    .into();
+    assert_eq!(draft_error.code(), "knowledge_draft");
+    assert_eq!(draft_error.inner_code(), "missing_tag");
 }
 
 fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
