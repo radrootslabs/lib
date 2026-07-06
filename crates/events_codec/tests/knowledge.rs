@@ -61,9 +61,15 @@ fn address_ref() -> RadrootsAddressableRef {
 }
 
 fn article_version_ref() -> RadrootsWikiArticleVersionRef {
+    article_version_ref_for('b', "soil-health")
+}
+
+fn article_version_ref_for(event_id_character: char, d_tag: &str) -> RadrootsWikiArticleVersionRef {
+    let mut address_ref = address_ref();
+    address_ref.d_tag = d_tag.to_string();
     RadrootsWikiArticleVersionRef {
-        event_id: hex_64('b'),
-        address_ref: address_ref(),
+        event_id: hex_64(event_id_character),
+        address_ref,
     }
 }
 
@@ -87,6 +93,18 @@ fn replace_first_tag_value(event: &mut RadrootsNostrEvent, name: &str, value: St
         .expect("tag");
     let tag_value = tag.get_mut(1).expect("tag value");
     *tag_value = value;
+}
+
+fn marked_tag(tag: &[String], name: &str, marker: &str) -> bool {
+    tag.first().map(String::as_str) == Some(name) && tag.last().map(String::as_str) == Some(marker)
+}
+
+fn marked_tag_index(event: &RadrootsNostrEvent, name: &str, marker: &str) -> usize {
+    event
+        .tags
+        .iter()
+        .position(|tag| marked_tag(tag, name, marker))
+        .expect("marked tag")
 }
 
 fn assert_parse_error(actual: EventParseError, expected: EventParseError) {
@@ -790,6 +808,96 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
     ]);
     assert_parse_error(
         wiki_article_from_event(duplicate_defer).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+}
+
+#[test]
+fn wiki_article_version_refs_require_adjacent_marked_pairs() {
+    let article_event = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let decoded = wiki_article_from_event(article_event).unwrap();
+    assert_eq!(decoded.data.data.forked_from[0], article_version_ref());
+    assert_eq!(decoded.data.data.deferred_to, Some(article_version_ref()));
+
+    let mut two_forks = wiki_article();
+    two_forks.forked_from = vec![
+        article_version_ref_for('b', "soil-health"),
+        article_version_ref_for('c', "compost"),
+    ];
+    two_forks.deferred_to = None;
+    let two_forks_event = event_from_parts(wiki_article_to_wire_parts(&two_forks).unwrap());
+    let decoded = wiki_article_from_event(two_forks_event.clone()).unwrap();
+    assert_eq!(
+        decoded.data.data.forked_from,
+        vec![
+            article_version_ref_for('b', "soil-health"),
+            article_version_ref_for('c', "compost")
+        ]
+    );
+
+    let mut grouped = two_forks_event;
+    let fork_addresses = grouped
+        .tags
+        .iter()
+        .filter(|tag| marked_tag(tag, "a", "fork"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let fork_events = grouped
+        .tags
+        .iter()
+        .filter(|tag| marked_tag(tag, "e", "fork"))
+        .cloned()
+        .collect::<Vec<_>>();
+    grouped
+        .tags
+        .retain(|tag| !marked_tag(tag, "a", "fork") && !marked_tag(tag, "e", "fork"));
+    grouped.tags.extend(fork_addresses);
+    grouped.tags.extend(fork_events);
+    assert_parse_error(
+        wiki_article_from_event(grouped).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut reversed = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let fork_address_index = marked_tag_index(&reversed, "a", "fork");
+    let fork_event_index = marked_tag_index(&reversed, "e", "fork");
+    reversed.tags.swap(fork_address_index, fork_event_index);
+    assert_parse_error(
+        wiki_article_from_event(reversed).unwrap_err(),
+        EventParseError::InvalidTag("e"),
+    );
+
+    let mut relay_mismatch = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let fork_event_index = marked_tag_index(&relay_mismatch, "e", "fork");
+    relay_mismatch.tags[fork_event_index][2] = "wss://other.radroots.example".to_string();
+    assert_parse_error(
+        wiki_article_from_event(relay_mismatch).unwrap_err(),
+        EventParseError::InvalidTag("e"),
+    );
+
+    let mut missing_partner =
+        event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let fork_event_index = marked_tag_index(&missing_partner, "e", "fork");
+    missing_partner.tags.remove(fork_event_index);
+    assert_parse_error(
+        wiki_article_from_event(missing_partner).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut misplaced_marker =
+        event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let fork_address_index = marked_tag_index(&misplaced_marker, "a", "fork");
+    misplaced_marker.tags[fork_address_index].insert(2, "fork".to_string());
+    assert_parse_error(
+        wiki_article_from_event(misplaced_marker).unwrap_err(),
+        EventParseError::InvalidTag("a"),
+    );
+
+    let mut wrong_kind = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let fork_address_index = marked_tag_index(&wrong_kind, "a", "fork");
+    wrong_kind.tags[fork_address_index][1] = format!("30023:{}:soil-health", hex_64('a'));
+    assert_parse_error(
+        wiki_article_from_event(wrong_kind).unwrap_err(),
         EventParseError::InvalidTag("a"),
     );
 }

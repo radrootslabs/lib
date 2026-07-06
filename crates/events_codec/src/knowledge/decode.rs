@@ -187,6 +187,43 @@ fn marker(tag: &[String]) -> Option<&str> {
         .filter(|value| matches!(*value, MARKER_FORK | MARKER_DEFER | E_MARKER_SOURCE))
 }
 
+fn wiki_version_marker(value: &str) -> bool {
+    matches!(value, MARKER_FORK | MARKER_DEFER)
+}
+
+fn validate_wiki_version_marker_position(
+    tag: &[String],
+    name: &'static str,
+) -> Result<(), EventParseError> {
+    if tag.len() > 2
+        && tag[2..tag.len().saturating_sub(1)]
+            .iter()
+            .any(|value| wiki_version_marker(value.as_str()))
+    {
+        Err(EventParseError::InvalidTag(name))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_wiki_version_marker_position_for_tag(tag: &[String]) -> Result<(), EventParseError> {
+    match tag.first().map(String::as_str) {
+        Some(TAG_A) => validate_wiki_version_marker_position(tag, TAG_A),
+        Some(TAG_E) => validate_wiki_version_marker_position(tag, TAG_E),
+        _ => Ok(()),
+    }
+}
+
+fn marked_wiki_version_relay_entries<'a>(
+    tag: &'a [String],
+    name: &'static str,
+) -> Result<&'a [String], EventParseError> {
+    if tag.len() < 4 {
+        return Err(EventParseError::InvalidTag(name));
+    }
+    Ok(&tag[2..tag.len() - 1])
+}
+
 fn unmarked_tags<'a>(tags: &'a [Vec<String>], name: &'static str) -> Vec<&'a Vec<String>> {
     matching_tags(tags, name)
         .into_iter()
@@ -253,36 +290,54 @@ fn wiki_version_refs(
     tags: &[Vec<String>],
     marker_name: &'static str,
 ) -> Result<Vec<RadrootsWikiArticleVersionRef>, EventParseError> {
-    let address_tags = matching_tags(tags, TAG_A)
-        .into_iter()
-        .filter(|tag| marker(tag) == Some(marker_name))
-        .collect::<Vec<_>>();
-    let event_tags = matching_tags(tags, TAG_E)
-        .into_iter()
-        .filter(|tag| marker(tag) == Some(marker_name))
-        .collect::<Vec<_>>();
-    if address_tags.len() != event_tags.len() {
-        return Err(EventParseError::InvalidTag(TAG_A));
-    }
-    address_tags
-        .into_iter()
-        .zip(event_tags)
-        .map(|(address_tag, event_tag)| {
-            let address_ref = address_from_tag(address_tag, TAG_A)?;
-            if address_ref.kind != KIND_WIKI_ARTICLE {
-                return Err(EventParseError::InvalidTag(TAG_A));
+    let mut refs = Vec::new();
+    let mut index = 0;
+    while let Some(tag) = tags.get(index) {
+        validate_wiki_version_marker_position_for_tag(tag)?;
+
+        if marker(tag) != Some(marker_name) {
+            index += 1;
+            continue;
+        }
+
+        match tag.first().map(String::as_str) {
+            Some(TAG_A) => {
+                let event_tag = tags
+                    .get(index + 1)
+                    .ok_or(EventParseError::InvalidTag(TAG_A))?;
+                validate_wiki_version_marker_position_for_tag(event_tag)?;
+                if event_tag.first().map(String::as_str) != Some(TAG_E)
+                    || marker(event_tag) != Some(marker_name)
+                {
+                    return Err(EventParseError::InvalidTag(TAG_A));
+                }
+                let address_ref = address_from_tag(tag, TAG_A)?;
+                if address_ref.kind != KIND_WIKI_ARTICLE {
+                    return Err(EventParseError::InvalidTag(TAG_A));
+                }
+                if marked_wiki_version_relay_entries(tag, TAG_A)?
+                    != marked_wiki_version_relay_entries(event_tag, TAG_E)?
+                {
+                    return Err(EventParseError::InvalidTag(TAG_E));
+                }
+                let event_id = event_tag
+                    .get(1)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or(EventParseError::InvalidTag(TAG_E))?
+                    .clone();
+                refs.push(RadrootsWikiArticleVersionRef {
+                    event_id,
+                    address_ref,
+                });
+                index += 2;
             }
-            let event_id = event_tag
-                .get(1)
-                .filter(|value| !value.trim().is_empty())
-                .ok_or(EventParseError::InvalidTag(TAG_E))?
-                .clone();
-            Ok(RadrootsWikiArticleVersionRef {
-                event_id,
-                address_ref,
-            })
-        })
-        .collect()
+            Some(TAG_E) => return Err(EventParseError::InvalidTag(TAG_E)),
+            _ => {
+                index += 1;
+            }
+        }
+    }
+    Ok(refs)
 }
 
 fn wiki_merge_source_event_id(tags: &[Vec<String>]) -> Result<String, EventParseError> {
