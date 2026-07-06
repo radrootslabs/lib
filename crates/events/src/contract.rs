@@ -3,7 +3,11 @@
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
-use crate::{RadrootsNostrEvent, kinds::*};
+use crate::{
+    RadrootsNostrEvent,
+    ids::{RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey},
+    kinds::*,
+};
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 1;
 
@@ -563,7 +567,7 @@ const TAG_LISTING_EVENT: RadrootsTagContract = tag(
     "listing_event",
     RadrootsTagCardinality::RequiredOne,
     RadrootsTagSemantic::ListingSnapshot,
-    RadrootsTagValueType::EventPointer,
+    RadrootsTagValueType::EventId,
     false,
 );
 const TAG_SERVICE_INPUT: RadrootsTagContract = tag(
@@ -3328,8 +3332,140 @@ fn validate_contract_tags(
                 });
             }
         }
+        validate_contract_tag_values(event, contract, tag_contract)?;
     }
     Ok(())
+}
+
+fn validate_contract_tag_values(
+    event: &RadrootsNostrEvent,
+    contract: &RadrootsEventContract,
+    tag_contract: &RadrootsTagContract,
+) -> Result<(), RadrootsContractValidationError> {
+    for tag in event
+        .tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(tag_contract.name))
+    {
+        if !tag_value_is_valid(tag, tag_contract.value_type) {
+            return Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: contract.id,
+                name: tag_contract.name,
+                expected: tag_value_type_expectation(tag_contract.value_type).to_owned(),
+                actual: tag.get(1).cloned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn tag_value_is_valid(tag: &[String], value_type: RadrootsTagValueType) -> bool {
+    let Some(value) = tag.get(1).map(String::as_str) else {
+        return false;
+    };
+    match value_type {
+        RadrootsTagValueType::AddressableCoordinate => {
+            RadrootsAddressableCoordinate::parse(value).is_ok()
+        }
+        RadrootsTagValueType::ContractId => all_event_contracts()
+            .iter()
+            .any(|contract| contract.id == value),
+        RadrootsTagValueType::DTag => RadrootsDTag::parse(value).is_ok(),
+        RadrootsTagValueType::EventId | RadrootsTagValueType::Sha256 => {
+            RadrootsEventId::parse(value).is_ok()
+        }
+        RadrootsTagValueType::EventPointer => event_pointer_tag_is_valid(tag),
+        RadrootsTagValueType::Geohash => geohash_is_valid(value),
+        RadrootsTagValueType::Kind => value.parse::<u32>().is_ok(),
+        RadrootsTagValueType::PublicKey => RadrootsPublicKey::parse(value).is_ok(),
+        RadrootsTagValueType::RelayUrl => relay_url_is_valid(value),
+        RadrootsTagValueType::Text => visible_text_is_valid(value),
+        RadrootsTagValueType::UnixTimestamp => value.parse::<u64>().is_ok(),
+        RadrootsTagValueType::Url => url_is_valid(value),
+        RadrootsTagValueType::Uuid => uuid_is_valid(value),
+    }
+}
+
+fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
+    if tag.len() < 5 {
+        return false;
+    }
+    let Some(id) = tag.get(1).map(String::as_str) else {
+        return false;
+    };
+    let Some(author) = tag.get(2).map(String::as_str) else {
+        return false;
+    };
+    let Some(kind) = tag.get(3).map(String::as_str) else {
+        return false;
+    };
+    let Some(d_tag) = tag.get(4).map(String::as_str) else {
+        return false;
+    };
+    RadrootsEventId::parse(id).is_ok()
+        && RadrootsPublicKey::parse(author).is_ok()
+        && kind.parse::<u32>().is_ok()
+        && (d_tag.is_empty() || RadrootsDTag::parse(d_tag).is_ok())
+        && tag
+            .iter()
+            .skip(5)
+            .all(|relay| relay_url_is_valid(relay.as_str()))
+}
+
+fn visible_text_is_valid(value: &str) -> bool {
+    !value.trim().is_empty() && !value.chars().any(char::is_control)
+}
+
+fn relay_url_is_valid(value: &str) -> bool {
+    (value.starts_with("ws://") || value.starts_with("wss://"))
+        && value.len() > "ws://".len()
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+}
+
+fn url_is_valid(value: &str) -> bool {
+    (value.starts_with("http://") || value.starts_with("https://"))
+        && value.len() > "http://".len()
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+}
+
+fn geohash_is_valid(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 12
+        && value
+            .bytes()
+            .all(|byte| matches!(byte.to_ascii_lowercase(), b'0'..=b'9' | b'b'..=b'h' | b'j'..=b'k' | b'm'..=b'n' | b'p'..=b'z'))
+}
+
+fn uuid_is_valid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+    bytes.iter().enumerate().all(|(index, byte)| match index {
+        8 | 13 | 18 | 23 => *byte == b'-',
+        _ => byte.is_ascii_hexdigit(),
+    })
+}
+
+fn tag_value_type_expectation(value_type: RadrootsTagValueType) -> &'static str {
+    match value_type {
+        RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagValueType::ContractId => "contract_id",
+        RadrootsTagValueType::DTag => "d_tag",
+        RadrootsTagValueType::EventId => "event_id",
+        RadrootsTagValueType::EventPointer => "event_pointer",
+        RadrootsTagValueType::Geohash => "geohash",
+        RadrootsTagValueType::Kind => "kind",
+        RadrootsTagValueType::PublicKey => "public_key",
+        RadrootsTagValueType::RelayUrl => "relay_url",
+        RadrootsTagValueType::Sha256 => "sha256",
+        RadrootsTagValueType::Text => "text",
+        RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
+        RadrootsTagValueType::Url => "url",
+        RadrootsTagValueType::Uuid => "uuid",
+    }
 }
 
 fn validate_custom_knowledge_contract(
@@ -3610,6 +3746,36 @@ mod tests {
         }
     }
 
+    fn unsigned_event_owned(
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: &str,
+    ) -> RadrootsNostrEvent {
+        RadrootsNostrEvent {
+            id: "0".repeat(64),
+            author: "1".repeat(64),
+            created_at: 1_700_000_000,
+            kind,
+            tags,
+            content: content.to_owned(),
+            sig: "2".repeat(128),
+        }
+    }
+
+    fn hex_64(character: char) -> String {
+        core::iter::repeat_n(character, 64).collect()
+    }
+
+    fn event_ref_tag(name: &str, event_id: &str, author: &str, kind: u32) -> Vec<String> {
+        vec![
+            name.to_owned(),
+            event_id.to_owned(),
+            author.to_owned(),
+            kind.to_string(),
+            String::new(),
+        ]
+    }
+
     #[test]
     fn exposes_one_kind_contract_per_supported_kind() {
         let mut kinds = BTreeSet::new();
@@ -3667,7 +3833,7 @@ mod tests {
     }
 
     #[test]
-    fn order_request_listing_event_contract_is_event_pointer() {
+    fn order_request_listing_event_contract_is_event_id() {
         let contract = event_contract("radroots.order.request.v1").expect("order request");
         let tag = contract
             .tags
@@ -3676,7 +3842,7 @@ mod tests {
             .expect("listing event tag");
 
         assert_eq!(tag.semantic, RadrootsTagSemantic::ListingSnapshot);
-        assert_eq!(tag.value_type, RadrootsTagValueType::EventPointer);
+        assert_eq!(tag.value_type, RadrootsTagValueType::EventId);
         assert!(!tag.relay_indexed);
     }
 
@@ -4078,7 +4244,13 @@ mod tests {
             KIND_KNOWLEDGE_REVIEW,
             vec![
                 vec!["contract", "radroots.knowledge.review.v1"],
-                vec!["review_target", "event:0"],
+                vec![
+                    "review_target",
+                    "0000000000000000000000000000000000000000000000000000000000000000",
+                    "1111111111111111111111111111111111111111111111111111111111111111",
+                    "30818",
+                    "soil",
+                ],
             ],
             r#"{"schema":"radroots.knowledge.review.v1","schema_version":1,"canon_status":"approved"}"#,
         );
@@ -4233,6 +4405,147 @@ mod tests {
     }
 
     #[test]
+    fn validate_contract_tags_enforces_declared_value_types() {
+        let claim_content = r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#;
+        let invalid_source = unsigned_event_owned(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![
+                vec![
+                    "contract".to_owned(),
+                    "radroots.knowledge.claim.v1".to_owned(),
+                ],
+                vec!["source".to_owned(), "not-an-event-id".to_owned()],
+            ],
+            claim_content,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_source, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                name: "source",
+                expected: "event_pointer".to_owned(),
+                actual: Some("not-an-event-id".to_owned()),
+            })
+        );
+
+        let invalid_citation = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![
+                vec!["contract", "radroots.knowledge.claim.v1"],
+                vec!["citation", "not-hex"],
+            ],
+            claim_content,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_citation, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                name: "citation",
+                expected: "sha256".to_owned(),
+                actual: Some("not-hex".to_owned()),
+            })
+        );
+
+        let invalid_review = unsigned_event(
+            KIND_KNOWLEDGE_REVIEW,
+            vec![
+                vec!["contract", "radroots.knowledge.review.v1"],
+                vec!["review_target", "not-an-event-id"],
+            ],
+            r#"{"schema":"radroots.knowledge.review.v1","schema_version":1}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_review, "radroots.knowledge.review.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.knowledge.review.v1",
+                name: "review_target",
+                expected: "event_pointer".to_owned(),
+                actual: Some("not-an-event-id".to_owned()),
+            })
+        );
+
+        let invalid_geohash = unsigned_event(
+            KIND_KNOWLEDGE_FIELD_REPORT,
+            vec![
+                vec!["contract", "radroots.knowledge.field_report.v1"],
+                vec!["g", "invalid-a"],
+            ],
+            r#"{"schema":"radroots.knowledge.field_report.v1","schema_version":1}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_geohash, "radroots.knowledge.field_report.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.knowledge.field_report.v1",
+                name: "g",
+                expected: "geohash".to_owned(),
+                actual: Some("invalid-a".to_owned()),
+            })
+        );
+
+        let invalid_address = unsigned_event(
+            KIND_WIKI_REDIRECT,
+            vec![vec!["d", "soil"], vec!["a", "30818:not-hex:soil"]],
+            "",
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_address, "radroots.wiki.redirect.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.wiki.redirect.v1",
+                name: "a",
+                expected: "addressable_coordinate".to_owned(),
+                actual: Some("30818:not-hex:soil".to_owned()),
+            })
+        );
+
+        let invalid_event_id = unsigned_event(
+            KIND_WIKI_MERGE_REQUEST,
+            vec![
+                vec![
+                    "a",
+                    "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                ],
+                vec![
+                    "p",
+                    "1111111111111111111111111111111111111111111111111111111111111111",
+                ],
+                vec!["e", "not-hex"],
+            ],
+            "",
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_event_id, "radroots.wiki.merge_request.v1"),
+            Err(RadrootsContractValidationError::TagValueMismatch {
+                contract_id: "radroots.wiki.merge_request.v1",
+                name: "e",
+                expected: "event_id".to_owned(),
+                actual: Some("not-hex".to_owned()),
+            })
+        );
+
+        let valid_source = unsigned_event_owned(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![
+                vec![
+                    "contract".to_owned(),
+                    "radroots.knowledge.claim.v1".to_owned(),
+                ],
+                event_ref_tag(
+                    "source",
+                    hex_64('a').as_str(),
+                    hex_64('b').as_str(),
+                    KIND_KNOWLEDGE_SOURCE,
+                ),
+                vec!["citation".to_owned(), hex_64('c')],
+            ],
+            claim_content,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&valid_source, "radroots.knowledge.claim.v1"),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn validate_custom_knowledge_contract_rejects_missing_schema_and_bad_version() {
         let missing_schema = unsigned_event(
             KIND_KNOWLEDGE_CLAIM,
@@ -4266,7 +4579,13 @@ mod tests {
     fn validates_nip54_empty_redirect_content() {
         let event = unsigned_event(
             KIND_WIKI_REDIRECT,
-            vec![vec!["d", "soil"], vec!["a", "30818:pubkey:soil"]],
+            vec![
+                vec!["d", "soil"],
+                vec![
+                    "a",
+                    "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                ],
+            ],
             "",
         );
 
@@ -4277,7 +4596,13 @@ mod tests {
 
         let invalid = unsigned_event(
             KIND_WIKI_REDIRECT,
-            vec![vec!["d", "soil"], vec!["a", "30818:pubkey:soil"]],
+            vec![
+                vec!["d", "soil"],
+                vec![
+                    "a",
+                    "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                ],
+            ],
             "{}",
         );
         assert_eq!(
