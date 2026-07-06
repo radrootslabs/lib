@@ -32,7 +32,7 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
         .await
         .expect_err("resync requires configured relays");
 
-    assert_eq!(resync_error.code(), "empty_target_relays");
+    assert_eq!(resync_error.code(), "empty_transport_targets");
 
     let validation_receipt_error = validation_receipts
         .list(
@@ -42,7 +42,7 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
         .await
         .expect_err("validation receipt list requires configured relays");
 
-    assert_eq!(validation_receipt_error.code(), "empty_target_relays");
+    assert_eq!(validation_receipt_error.code(), "empty_transport_targets");
 
     let seller_actor =
         RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller])

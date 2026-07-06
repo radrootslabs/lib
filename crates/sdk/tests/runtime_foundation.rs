@@ -97,7 +97,7 @@ fn invalid_relay_url_errors_redact_userinfo() {
     assert!(!error.retryable());
     assert_eq!(
         error.recovery_actions(),
-        vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets]
+        vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
     );
     assert!(message.contains("<redacted>@relay.example.com/path?<redacted>"));
     assert!(!message.contains("password"));
@@ -106,7 +106,7 @@ fn invalid_relay_url_errors_redact_userinfo() {
     assert_eq!(detail["code"], "invalid_relay_url");
     assert_eq!(detail["class"], "configuration");
     assert_eq!(detail["retryable"], false);
-    assert_eq!(detail["recovery_actions"][0], "configure_relay_targets");
+    assert_eq!(detail["recovery_actions"][0], "configure_transport_targets");
     assert!(!detail.to_string().contains("password"));
     assert!(!detail.to_string().contains("token=secret"));
     assert!(!detail.to_string().contains("frag"));
@@ -393,23 +393,23 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
         ),
         (
-            RadrootsSdkError::EmptyTargetRelays {
+            RadrootsSdkError::EmptyTransportTargets {
                 operation: "listing.publish".to_owned(),
             },
-            "empty_target_relays",
+            "empty_transport_targets",
             RadrootsSdkErrorClass::Configuration,
             false,
-            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
         ),
         (
-            RadrootsSdkError::RelayTargetLimitExceeded {
+            RadrootsSdkError::TransportTargetLimitExceeded {
                 max: 20,
                 actual: 21,
             },
-            "relay_target_limit_exceeded",
+            "transport_target_limit_exceeded",
             RadrootsSdkErrorClass::Configuration,
             false,
-            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
         ),
         (
             TargetSet::new(["wss://u:p@relay.example.com"], NostrRelayUrlPolicy::Public)
@@ -417,7 +417,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
             "invalid_relay_url",
             RadrootsSdkErrorClass::Configuration,
             false,
-            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
         ),
         (
             RadrootsSdkError::IdempotencyConflict {
@@ -478,10 +478,10 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::EnableRequiredFeature],
         ),
         (
-            RadrootsSdkError::ProductSyncRelaySetupFailure {
+            RadrootsSdkError::ProductSyncTransportSetupFailure {
                 message: "relay setup".to_owned(),
             },
-            "product_sync_relay_setup_failure",
+            "product_sync_transport_setup_failure",
             RadrootsSdkErrorClass::Transport,
             true,
             vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure],
@@ -551,10 +551,10 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::RetryGeoNamesDownload],
         ),
         (
-            RadrootsSdkError::RelayTransport {
+            RadrootsSdkError::Transport {
                 message: "relay".to_owned(),
             },
-            "relay_transport",
+            "transport",
             RadrootsSdkErrorClass::Transport,
             true,
             vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure],
@@ -654,7 +654,7 @@ fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
 
     assert!(matches!(
         TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        Err(RadrootsSdkError::EmptyTargetRelays { .. })
+        Err(RadrootsSdkError::EmptyTransportTargets { .. })
     ));
 
     let too_many = (0..=SDK_TRANSPORT_TARGET_MAX_COUNT)
@@ -662,7 +662,7 @@ fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
         .collect::<Vec<_>>();
     assert!(matches!(
         TargetSet::new(too_many, NostrRelayUrlPolicy::Public),
-        Err(RadrootsSdkError::RelayTargetLimitExceeded {
+        Err(RadrootsSdkError::TransportTargetLimitExceeded {
             max: SDK_TRANSPORT_TARGET_MAX_COUNT,
             actual
         }) if actual == SDK_TRANSPORT_TARGET_MAX_COUNT + 1
@@ -736,7 +736,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 store: store.clone(),
                 total_events: 2,
                 projection_eligible_events: 1,
-                relay_observations: 1,
+                transport_observations: 1,
                 last_event_seq: Some(2),
                 last_event_updated_at_ms: Some(1_700_000_000_000),
             },
@@ -775,7 +775,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 },
                 "total_events": 2,
                 "projection_eligible_events": 1,
-                "relay_observations": 1,
+                "transport_observations": 1,
                 "last_event_seq": 2,
                 "last_event_updated_at_ms": 1700000000000i64
             },

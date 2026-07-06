@@ -241,7 +241,10 @@ async fn dvm_configured_enqueue_reports_prepare_and_target_errors_without_mutati
         .enqueue_trade_transition_proof_request(missing_relays)
         .await
         .expect_err("missing configured relays");
-    assert!(matches!(error, RadrootsSdkError::EmptyTargetRelays { .. }));
+    assert!(matches!(
+        error,
+        RadrootsSdkError::EmptyTransportTargets { .. }
+    ));
     assert_eq!(
         store
             .status_summary()
@@ -418,7 +421,10 @@ async fn dvm_trade_transition_proof_request_reports_prepare_and_target_errors_wi
         .enqueue_trade_transition_proof_request_with_explicit_signer(missing_relays, &signer)
         .await
         .expect_err("missing configured relays");
-    assert!(matches!(error, RadrootsSdkError::EmptyTargetRelays { .. }));
+    assert!(matches!(
+        error,
+        RadrootsSdkError::EmptyTransportTargets { .. }
+    ));
     assert_eq!(
         store
             .status_summary()

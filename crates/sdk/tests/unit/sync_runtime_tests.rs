@@ -5,7 +5,7 @@ use super::{
     push_proxy_claimed_outbox_event,
 };
 use super::{
-    PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind,
+    PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxTargetOutcomeKind,
     SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus, push_event_final_state,
     push_event_receipt, push_outbox_claim_token,
 };
@@ -142,7 +142,7 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
             operation_kind: "sync.proxy.unit.v1",
             actor: &actor,
             frozen_draft: &draft,
-            target_relays: crate::TargetPolicy::try_nostr_relays(
+            target_policy: crate::TargetPolicy::try_nostr_relays(
                 ["wss://relay.example.com"],
                 crate::NostrRelayUrlPolicy::Public,
             )
@@ -191,8 +191,10 @@ fn push_event_receipt_parses_typed_event_id() {
         receipt.event_id,
         RadrootsEventId::parse(event_id).expect("event id")
     );
-    assert_eq!(receipt.relays.len(), 1);
-    assert!(receipt.relays[0].attempted);
+    assert_eq!(receipt.targets.len(), 1);
+    assert_eq!(receipt.targets[0].transport_kind, "nostr");
+    assert_eq!(receipt.targets[0].endpoint_uri, "wss://relay.example.com");
+    assert!(receipt.targets[0].attempted);
 }
 
 #[test]
@@ -231,24 +233,24 @@ fn push_event_final_state_follows_publish_quorum_and_retryability() {
 #[test]
 fn push_relay_outcome_mapping_covers_daemon_proxy_results() {
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Muted),
-        PushOutboxRelayOutcomeKind::Muted
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Muted),
+        PushOutboxTargetOutcomeKind::Muted
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Unsupported),
-        PushOutboxRelayOutcomeKind::Unsupported
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Unsupported),
+        PushOutboxTargetOutcomeKind::Unsupported
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::PaymentRequired),
-        PushOutboxRelayOutcomeKind::PaymentRequired
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::PaymentRequired),
+        PushOutboxTargetOutcomeKind::PaymentRequired
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::RelayUrlRejected),
-        PushOutboxRelayOutcomeKind::RelayUrlRejected
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::RelayUrlRejected),
+        PushOutboxTargetOutcomeKind::TargetUriRejected
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::SkippedAlreadyAccepted),
-        PushOutboxRelayOutcomeKind::SkippedAlreadyAccepted
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::SkippedAlreadyAccepted),
+        PushOutboxTargetOutcomeKind::SkippedAlreadyAccepted
     );
 }
 
@@ -319,7 +321,7 @@ fn sync_status_summary_conversions_preserve_all_fields() {
     let event_status = SyncEventStoreStatus::from(event_summary);
     assert_eq!(event_status.total_events, 11);
     assert_eq!(event_status.projection_eligible_events, 7);
-    assert_eq!(event_status.relay_observations, 3);
+    assert_eq!(event_status.transport_observations, 3);
     assert_eq!(event_status.last_event_seq, Some(9));
     assert_eq!(
         event_status.last_event_updated_at_ms,
@@ -354,16 +356,14 @@ fn push_outbox_request_builders_validate_all_bounds() {
     let request = super::PushOutboxRequest::new()
         .with_limit(2)
         .with_outbox_event_id(9)
-        .republish_accepted_relays(true)
-        .with_accepted_quorum(2)
-        .with_relay_url_policy(crate::NostrRelayUrlPolicy::Localhost)
+        .republish_accepted_targets(true)
+        .with_nostr_relay_url_policy(crate::NostrRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(7)
         .with_next_attempt_delay_ms(11);
     assert_eq!(request.limit, 1);
     assert_eq!(request.outbox_event_id, Some(9));
-    assert!(request.republish_accepted_relays);
-    assert_eq!(request.accepted_quorum, Some(2));
+    assert!(request.republish_accepted_targets);
     request.validate().expect("valid request");
 
     assert!(matches!(
@@ -375,12 +375,6 @@ fn push_outbox_request_builders_validate_all_bounds() {
             .with_limit(super::PUSH_OUTBOX_MAX_LIMIT + 1)
             .validate(),
         Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("limit")
-    ));
-    assert!(matches!(
-        super::PushOutboxRequest::new()
-            .with_accepted_quorum(0)
-            .validate(),
-        Err(RadrootsSdkError::InvalidRequest { message }) if message.contains("accepted quorum")
     ));
     assert!(matches!(
         super::PushOutboxRequest::new()
@@ -405,52 +399,52 @@ fn push_outbox_request_builders_validate_all_bounds() {
 #[test]
 fn relay_outcome_kind_mapping_covers_all_transport_outcomes() {
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Accepted),
-        PushOutboxRelayOutcomeKind::Accepted
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Accepted),
+        PushOutboxTargetOutcomeKind::Accepted
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::DuplicateAccepted),
-        PushOutboxRelayOutcomeKind::DuplicateAccepted
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::DuplicateAccepted),
+        PushOutboxTargetOutcomeKind::DuplicateAccepted
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Blocked),
-        PushOutboxRelayOutcomeKind::Blocked
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Blocked),
+        PushOutboxTargetOutcomeKind::Blocked
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::RateLimited),
-        PushOutboxRelayOutcomeKind::RateLimited
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::RateLimited),
+        PushOutboxTargetOutcomeKind::RateLimited
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Invalid),
-        PushOutboxRelayOutcomeKind::Invalid
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Invalid),
+        PushOutboxTargetOutcomeKind::Invalid
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::PowRequired),
-        PushOutboxRelayOutcomeKind::PowRequired
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::PowRequired),
+        PushOutboxTargetOutcomeKind::PowRequired
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Restricted),
-        PushOutboxRelayOutcomeKind::Restricted
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Restricted),
+        PushOutboxTargetOutcomeKind::Restricted
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::AuthRequired),
-        PushOutboxRelayOutcomeKind::AuthRequired
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::AuthRequired),
+        PushOutboxTargetOutcomeKind::AuthRequired
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Error),
-        PushOutboxRelayOutcomeKind::Error
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Error),
+        PushOutboxTargetOutcomeKind::Error
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Timeout),
-        PushOutboxRelayOutcomeKind::Timeout
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Timeout),
+        PushOutboxTargetOutcomeKind::Timeout
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::ConnectionFailed),
-        PushOutboxRelayOutcomeKind::ConnectionFailed
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::ConnectionFailed),
+        PushOutboxTargetOutcomeKind::ConnectionFailed
     );
     assert_eq!(
-        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Unknown),
-        PushOutboxRelayOutcomeKind::Unknown
+        PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Unknown),
+        PushOutboxTargetOutcomeKind::Unknown
     );
 }
 
@@ -619,7 +613,7 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
     assert!(matches!(
         push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await,
-        Err(RadrootsSdkError::RelayTransport { message })
+        Err(RadrootsSdkError::Transport { message })
             if message.contains("Outbox claim 41 does not contain a signed event")
     ));
 }
@@ -755,6 +749,6 @@ fn push_receipt(final_state: PushOutboxEventState) -> PushOutboxEventReceipt {
         terminal_count: 0,
         quorum: 0,
         quorum_met: false,
-        relays: Vec::new(),
+        targets: Vec::new(),
     }
 }

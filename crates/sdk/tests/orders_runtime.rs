@@ -564,7 +564,7 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
 
 fn explicit_trade_relays() -> TargetPolicy {
     TargetPolicy::explicit(
-        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("target relays"),
+        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("transport targets"),
     )
 }
 
@@ -647,7 +647,7 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
 fn trade_propose_request(
     raw_order_id: &str,
     publish_mode: PublishMode,
-    ack_policy: SatisfactionPolicy,
+    satisfaction_policy: SatisfactionPolicy,
 ) -> TradeProposeRequest {
     let order = order_request(raw_order_id);
     TradeProposeRequest::new(
@@ -660,7 +660,7 @@ fn trade_propose_request(
         order.economics,
         explicit_trade_relays(),
         publish_mode,
-        ack_policy,
+        satisfaction_policy,
     )
 }
 
@@ -853,8 +853,8 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays")
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets")
     .try_with_idempotency_key("order-submit-enqueue-idempotency")
     .expect("idempotency key");
 
@@ -2588,7 +2588,7 @@ async fn trade_resync_errors_on_total_relay_failure() {
         .await
         .expect_err("total relay failure");
 
-    assert_eq!(error.code(), "product_sync_relay_setup_failure");
+    assert_eq!(error.code(), "product_sync_transport_setup_failure");
 }
 
 #[cfg(feature = "relay-runtime")]
@@ -3336,8 +3336,8 @@ async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
 
     let error = sdk
         .trades()
@@ -3386,15 +3386,15 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first target relays");
+    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .expect("first transport targets");
     let second = TradeSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
         TargetPolicy::explicit(
             TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("second target relays"),
+                .expect("second transport targets"),
         ),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
@@ -3473,8 +3473,8 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
     let enqueue_receipt = sdk
         .trades()
         .enqueue_submit_with_explicit_signer(
@@ -3506,11 +3506,11 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
     assert_eq!(event.terminal_count, 0);
     assert_eq!(event.quorum, 1);
     assert!(event.quorum_met);
-    assert_eq!(event.relays.len(), 1);
-    assert_eq!(event.relays[0].relay_url, RELAY);
+    assert_eq!(event.targets.len(), 1);
+    assert_eq!(event.targets[0].endpoint_uri, RELAY);
     assert_eq!(
-        event.relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Accepted
+        event.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
@@ -3537,8 +3537,8 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first target relays")
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("first transport targets")
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("first idempotency key");
     sdk.trades()
@@ -3554,8 +3554,8 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("second target relays")
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("second transport targets")
     .try_with_idempotency_key("order-submit-conflict-idempotency")
     .expect("second idempotency key");
     let error = sdk
@@ -3646,7 +3646,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-serialized-idempotency").expect("idempotency"),
@@ -3656,7 +3656,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     assert_struct_serialize_error_paths(&enqueue_request, 6);
 
     assert_eq!(
-        enqueue_json["target_relays"],
+        enqueue_json["target_policy"],
         serde_json::json!({
             "kind": "explicit",
             "targets": [
@@ -4321,7 +4321,7 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
             &actor,
             plan,
             TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("target relays"),
+                .expect("transport targets"),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -4667,8 +4667,8 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("target relays")
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .expect("transport targets")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-decision-serialized-idempotency").expect("idempotency"),
     )
@@ -4677,7 +4677,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     assert_struct_serialize_error_paths(&enqueue_request, 6);
 
     assert_eq!(
-        enqueue_json["target_relays"],
+        enqueue_json["target_policy"],
         serde_json::json!({
             "kind": "explicit",
             "targets": [
@@ -4870,7 +4870,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("proposal relays")
     .with_idempotency_key(SdkIdempotencyKey::new("order-revision-proposal-dto").expect("key"))
     .with_created_at(created_at);
@@ -4878,7 +4878,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         serde_json::to_value(&proposal_enqueue).expect("proposal enqueue json");
     assert_struct_serialize_error_paths(&proposal_enqueue, 7);
     assert_eq!(
-        proposal_enqueue_json["target_relays"],
+        proposal_enqueue_json["target_policy"],
         serde_json::json!({
             "kind": "explicit",
             "targets": [
@@ -4957,7 +4957,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("decision relays")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-revision-decision-dto").expect("decision idempotency"),
@@ -5018,7 +5018,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("cancellation relays")
     .with_idempotency_key(
         SdkIdempotencyKey::new("order-cancellation-dto").expect("cancellation idempotency"),
@@ -5089,8 +5089,8 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays")
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets")
     .try_with_idempotency_key("order-decision-accept-idempotency")
     .expect("idempotency");
 
@@ -5196,8 +5196,8 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
 
     let receipt = sdk
         .trades()
@@ -5240,8 +5240,8 @@ async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
 
     let error = sdk
         .trades()
@@ -5288,8 +5288,8 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
 
     let error = sdk
         .trades()
@@ -5343,8 +5343,8 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
 
     let error = sdk
         .trades()
@@ -5408,7 +5408,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
             &proposal_actor,
             proposal_plan,
             TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("proposal target relays"),
+                .expect("proposal transport targets"),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             Some(
@@ -5459,7 +5459,7 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
             &revision_decision_actor,
             revision_decision_plan,
             TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("revision decision target relays"),
+                .expect("revision decision transport targets"),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -5553,8 +5553,8 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("proposal target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("proposal transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5596,8 +5596,8 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("decision target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("decision transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5624,8 +5624,8 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("blocked proposal target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("blocked proposal transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5671,8 +5671,8 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("proposal target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("proposal transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5696,8 +5696,8 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("declined revision target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("declined revision transport targets"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await
@@ -5746,8 +5746,8 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("second decision target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("second decision transport targets"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await
@@ -5792,7 +5792,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
             &cancellation_actor,
             cancellation_plan,
             TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("cancellation target relays"),
+                .expect("cancellation transport targets"),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             Some(
@@ -5830,8 +5830,8 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("replay target relays")
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("replay transport targets")
             .try_with_idempotency_key("order-lifecycle-cancel")
             .expect("replay idempotency"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
@@ -5886,8 +5886,8 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("missing target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("missing transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5917,8 +5917,8 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("decision target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("decision transport targets"),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -5944,8 +5944,8 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("revision decision target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("revision decision transport targets"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await
@@ -5967,8 +5967,8 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("cancellation target relays"),
+            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+            .expect("cancellation transport targets"),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await

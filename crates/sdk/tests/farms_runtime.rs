@@ -18,7 +18,7 @@ use radroots_sdk::{
     FarmPrivateLocationLookupReceipt, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
     GeocoderLocalityQuery, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
-    PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsClient, RadrootsSdkError,
+    PushOutboxRequest, PushOutboxTargetOutcomeKind, RadrootsClient, RadrootsSdkError,
     RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkPublicLocality,
     StorageStatusRequest, TargetPolicy, TargetSet, TransportProfile,
@@ -723,14 +723,14 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         farm(FARM_D_D_TAG, "North Farm"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first target relays");
+    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .expect("first transport targets");
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
         TargetPolicy::explicit(
             TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("second target relays"),
+                .expect("second transport targets"),
         ),
     );
 
@@ -777,8 +777,8 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
         farm(FARM_D_D_TAG, "Sync Farm"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
+    .expect("transport targets");
     let enqueue_receipt = sdk
         .farms()
         .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
@@ -807,11 +807,11 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     assert_eq!(event.terminal_count, 0);
     assert_eq!(event.quorum, 1);
     assert!(event.quorum_met);
-    assert_eq!(event.relays.len(), 1);
-    assert_eq!(event.relays[0].relay_url, RELAY);
+    assert_eq!(event.targets.len(), 1);
+    assert_eq!(event.targets[0].endpoint_uri, RELAY);
     assert_eq!(
-        event.relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Accepted
+        event.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
@@ -943,7 +943,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         farm(FARM_B_D_TAG, "Queued Farm"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(
         SdkIdempotencyKey::new("farm-serialized-idempotency").expect("idempotency"),
@@ -971,7 +971,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "location": null,
                 "tags": ["vegetables", "local"]
             },
-            "target_relays": {
+            "target_policy": {
                 "kind": "explicit",
                 "targets": [
                     {

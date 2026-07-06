@@ -21,7 +21,7 @@ use radroots_events::{
 };
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
 use radroots_sdk::{
-    NostrRelayUrlPolicy, ProxyProfile, PublishMode, PushOutboxRelayOutcomeKind, RadrootsClient,
+    NostrRelayUrlPolicy, ProxyProfile, PublishMode, PushOutboxTargetOutcomeKind, RadrootsClient,
     RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SatisfactionPolicy,
     TargetPolicy, TargetSet, TradeMutationOutcome, TradeProposeRequest, TransportProfile,
 };
@@ -206,7 +206,7 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
 fn trade_propose_request(
     raw_order_id: &str,
     publish_mode: PublishMode,
-    ack_policy: SatisfactionPolicy,
+    satisfaction_policy: SatisfactionPolicy,
 ) -> TradeProposeRequest {
     let order = order_request(raw_order_id);
     TradeProposeRequest::new(
@@ -219,7 +219,7 @@ fn trade_propose_request(
         order.economics,
         explicit_trade_relays(),
         publish_mode,
-        ack_policy,
+        satisfaction_policy,
     )
 }
 
@@ -274,8 +274,8 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
     assert_eq!(publish.events[0].quorum, 1);
     assert!(publish.events[0].quorum_met);
     assert_eq!(
-        publish.events[0].relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Accepted
+        publish.events[0].targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
     );
 
     let recorded = handle.join().expect("proxy request");

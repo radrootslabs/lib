@@ -217,11 +217,11 @@ pub use crate::signer_provider::{
 pub use crate::sync_runtime::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
-    PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT, SYNC_PROJECTION_REFRESH_MAX_LIMIT,
-    SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus, SyncProjectionRefreshReceipt,
-    SyncProjectionRefreshRequest, SyncRelayTargetSummary, SyncStatusReceipt, SyncStatusRequest,
-    SyncStatusSource,
+    PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
+    PushOutboxTargetReceipt, SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT,
+    SYNC_PROJECTION_REFRESH_MAX_LIMIT, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
+    SyncProjectionRefreshReceipt, SyncProjectionRefreshRequest, SyncStatusReceipt,
+    SyncStatusRequest, SyncStatusSource, SyncTransportProfileSummary,
 };
 #[cfg(feature = "runtime")]
 pub use crate::trade_storage::{

@@ -32,7 +32,7 @@ pub enum RadrootsSdkRecoveryAction {
     InspectLocalStores,
     InspectGeoNamesAsset,
     RetryOperationWithSameIdempotencyKey,
-    ConfigureRelayTargets,
+    ConfigureTransportTargets,
     ConfigureGeoNamesCache,
     ConfigureSigner,
     FixRequest,
@@ -126,10 +126,10 @@ pub enum RadrootsSdkError {
         operation: String,
         reason: String,
     },
-    EmptyTargetRelays {
+    EmptyTransportTargets {
         operation: String,
     },
-    RelayTargetLimitExceeded {
+    TransportTargetLimitExceeded {
         max: usize,
         actual: usize,
     },
@@ -166,7 +166,7 @@ pub enum RadrootsSdkError {
         operation: &'static str,
         required_feature: &'static str,
     },
-    ProductSyncRelaySetupFailure {
+    ProductSyncTransportSetupFailure {
         message: String,
     },
     Authority {
@@ -194,7 +194,7 @@ pub enum RadrootsSdkError {
         kind: RadrootsSdkGeoNamesErrorKind,
         message: String,
     },
-    RelayTransport {
+    Transport {
         message: String,
     },
     Projection {
@@ -219,8 +219,8 @@ impl RadrootsSdkError {
             Self::SignerTransport { .. } => "signer_transport",
             Self::SignerProtocol { .. } => "signer_protocol",
             Self::SignerReturnedEventDrift { .. } => "signer_returned_event_drift",
-            Self::EmptyTargetRelays { .. } => "empty_target_relays",
-            Self::RelayTargetLimitExceeded { .. } => "relay_target_limit_exceeded",
+            Self::EmptyTransportTargets { .. } => "empty_transport_targets",
+            Self::TransportTargetLimitExceeded { .. } => "transport_target_limit_exceeded",
             Self::InvalidRelayUrl { .. } => "invalid_relay_url",
             Self::IdempotencyConflict { .. } => "idempotency_conflict",
             Self::TradeStatusLimitInvalid { .. } => "trade_status_limit_invalid",
@@ -228,7 +228,7 @@ impl RadrootsSdkError {
             Self::TradeAmbiguous { .. } => "trade_ambiguous",
             Self::PrivacyPreflight { .. } => "privacy_preflight",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
-            Self::ProductSyncRelaySetupFailure { .. } => "product_sync_relay_setup_failure",
+            Self::ProductSyncTransportSetupFailure { .. } => "product_sync_transport_setup_failure",
             Self::Authority { .. } => "authority",
             Self::EventStore { .. } => "event_store",
             Self::InvalidRequest { .. } => "invalid_request",
@@ -244,7 +244,7 @@ impl RadrootsSdkError {
                 RadrootsSdkGeoNamesErrorKind::Schema => "geonames_schema",
                 RadrootsSdkGeoNamesErrorKind::Lookup => "geonames_lookup",
             },
-            Self::RelayTransport { .. } => "relay_transport",
+            Self::Transport { .. } => "transport",
             Self::Projection { .. } => "projection",
             Self::PartialLocalMutation(_) => "partial_local_mutation",
         }
@@ -274,8 +274,8 @@ impl RadrootsSdkError {
             | Self::SignerReturnedEventDrift { .. }
             | Self::Authority { .. } => RadrootsSdkErrorClass::Authorization,
             Self::SignerUnavailable { .. } => RadrootsSdkErrorClass::Configuration,
-            Self::EmptyTargetRelays { .. }
-            | Self::RelayTargetLimitExceeded { .. }
+            Self::EmptyTransportTargets { .. }
+            | Self::TransportTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => RadrootsSdkErrorClass::Configuration,
             Self::IdempotencyConflict { .. }
             | Self::TradeStatusLimitInvalid { .. }
@@ -288,8 +288,8 @@ impl RadrootsSdkError {
             | Self::ListingDraft { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
             Self::ProductSyncUnsupported { .. } => RadrootsSdkErrorClass::Unsupported,
-            Self::ProductSyncRelaySetupFailure { .. }
-            | Self::RelayTransport { .. }
+            Self::ProductSyncTransportSetupFailure { .. }
+            | Self::Transport { .. }
             | Self::SignerRequestTimedOut { .. }
             | Self::SignerTransport { .. } => RadrootsSdkErrorClass::Transport,
             Self::PartialLocalMutation(_) => RadrootsSdkErrorClass::LocalMutation,
@@ -300,7 +300,7 @@ impl RadrootsSdkError {
         matches!(
             self,
             Self::Io { .. }
-                | Self::ProductSyncRelaySetupFailure { .. }
+                | Self::ProductSyncTransportSetupFailure { .. }
                 | Self::EventStore { .. }
                 | Self::Outbox { .. }
                 | Self::PrivateStore { .. }
@@ -309,7 +309,7 @@ impl RadrootsSdkError {
                         | RadrootsSdkGeoNamesErrorKind::Download,
                     ..
                 }
-                | Self::RelayTransport { .. }
+                | Self::Transport { .. }
                 | Self::SignerRequestTimedOut { .. }
                 | Self::SignerTransport { .. }
                 | Self::Projection { .. }
@@ -344,10 +344,10 @@ impl RadrootsSdkError {
             | Self::SignerReturnedEventDrift { .. }
             | Self::Authority { .. } => vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
             Self::SignerUnavailable { .. } => vec![RadrootsSdkRecoveryAction::ConfigureSigner],
-            Self::EmptyTargetRelays { .. }
-            | Self::RelayTargetLimitExceeded { .. }
+            Self::EmptyTransportTargets { .. }
+            | Self::TransportTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => {
-                vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets]
+                vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
             }
             Self::IdempotencyConflict { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
@@ -357,7 +357,7 @@ impl RadrootsSdkError {
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
             }
-            Self::ProductSyncRelaySetupFailure { .. } | Self::RelayTransport { .. } => {
+            Self::ProductSyncTransportSetupFailure { .. } | Self::Transport { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure]
             }
             Self::SignerRequestTimedOut { .. } | Self::SignerTransport { .. } => {
@@ -410,8 +410,8 @@ impl RadrootsSdkError {
             Self::SignerReturnedEventDrift { operation, reason } => {
                 json!({ "operation": operation, "reason": reason })
             }
-            Self::EmptyTargetRelays { operation } => json!({ "operation": operation }),
-            Self::RelayTargetLimitExceeded { max, actual } => {
+            Self::EmptyTransportTargets { operation } => json!({ "operation": operation }),
+            Self::TransportTargetLimitExceeded { max, actual } => {
                 json!({ "max": max, "actual": actual })
             }
             Self::InvalidRelayUrl { url, reason } => json!({ "url": url, "reason": reason }),
@@ -454,7 +454,7 @@ impl RadrootsSdkError {
                 operation,
                 required_feature,
             } => json!({ "operation": operation, "required_feature": required_feature }),
-            Self::ProductSyncRelaySetupFailure { message }
+            Self::ProductSyncTransportSetupFailure { message }
             | Self::Authority { message }
             | Self::EventStore { message }
             | Self::InvalidRequest { message }
@@ -462,7 +462,7 @@ impl RadrootsSdkError {
             | Self::ListingMutation { message }
             | Self::Outbox { message }
             | Self::PrivateStore { message }
-            | Self::RelayTransport { message }
+            | Self::Transport { message }
             | Self::Projection { message } => json!({ "message": message }),
             Self::GeoNames { kind, message } => json!({ "kind": kind, "message": message }),
             Self::PartialLocalMutation(error) => json!(error),
@@ -513,14 +513,14 @@ impl RadrootsSdkError {
         })
     }
 
-    pub(crate) fn empty_target_relays(operation: impl Into<String>) -> Self {
-        Self::EmptyTargetRelays {
+    pub(crate) fn empty_transport_targets(operation: impl Into<String>) -> Self {
+        Self::EmptyTransportTargets {
             operation: operation.into(),
         }
     }
 
-    pub(crate) fn relay_target_limit_exceeded(max: usize, actual: usize) -> Self {
-        Self::RelayTargetLimitExceeded { max, actual }
+    pub(crate) fn transport_target_limit_exceeded(max: usize, actual: usize) -> Self {
+        Self::TransportTargetLimitExceeded { max, actual }
     }
 
     pub(crate) fn invalid_relay_url(url: impl Into<String>, reason: impl Into<String>) -> Self {
@@ -601,13 +601,13 @@ impl fmt::Display for RadrootsSdkError {
                     "sdk signer returned event drift for {operation}: {reason}"
                 )
             }
-            Self::EmptyTargetRelays { operation } => {
-                write!(f, "sdk empty target relays for {operation}")
+            Self::EmptyTransportTargets { operation } => {
+                write!(f, "sdk empty transport targets for {operation}")
             }
-            Self::RelayTargetLimitExceeded { max, actual } => {
+            Self::TransportTargetLimitExceeded { max, actual } => {
                 write!(
                     f,
-                    "sdk relay target limit exceeded: max={max}, actual={actual}"
+                    "sdk transport target limit exceeded: max={max}, actual={actual}"
                 )
             }
             Self::InvalidRelayUrl { url, reason } => {
@@ -655,8 +655,8 @@ impl fmt::Display for RadrootsSdkError {
                 f,
                 "sdk product sync operation {operation} requires feature `{required_feature}`"
             ),
-            Self::ProductSyncRelaySetupFailure { message } => {
-                write!(f, "sdk product sync relay setup failed: {message}")
+            Self::ProductSyncTransportSetupFailure { message } => {
+                write!(f, "sdk product sync transport setup failed: {message}")
             }
             Self::Authority { message } => write!(f, "sdk authority error: {message}"),
             Self::EventStore { message } => write!(f, "sdk event store error: {message}"),
@@ -670,8 +670,8 @@ impl fmt::Display for RadrootsSdkError {
             Self::GeoNames { kind, message } => {
                 write!(f, "sdk GeoNames {kind:?} error: {message}")
             }
-            Self::RelayTransport { message } => {
-                write!(f, "sdk relay transport error: {message}")
+            Self::Transport { message } => {
+                write!(f, "sdk transport error: {message}")
             }
             Self::Projection { message } => write!(f, "sdk projection error: {message}"),
             Self::PartialLocalMutation(error) => write!(
@@ -824,7 +824,7 @@ impl From<radroots_outbox::RadrootsOutboxError> for RadrootsSdkError {
     fn from(error: radroots_outbox::RadrootsOutboxError) -> Self {
         match error {
             radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets => {
-                Self::empty_target_relays("outbox enqueue")
+                Self::empty_transport_targets("outbox enqueue")
             }
             radroots_outbox::RadrootsOutboxError::IdempotencyConflict {
                 operation_kind,
@@ -850,9 +850,9 @@ impl From<radroots_transport::RadrootsTransportError> for RadrootsSdkError {
     fn from(error: radroots_transport::RadrootsTransportError) -> Self {
         match error {
             radroots_transport::RadrootsTransportError::EmptyTargetSet => {
-                Self::empty_target_relays("transport target set")
+                Self::empty_transport_targets("transport target set")
             }
-            error => Self::RelayTransport {
+            error => Self::Transport {
                 message: error.to_string(),
             },
         }
@@ -896,11 +896,11 @@ impl From<radroots_transport_nostr::RadrootsRelayTransportError> for RadrootsSdk
                 format!("relay URL resolved to forbidden address `{address}`: {reason}"),
             ),
             radroots_transport_nostr::RadrootsRelayTransportError::EmptyTargetSet => {
-                Self::empty_target_relays("relay publish")
+                Self::empty_transport_targets("nostr relay publish")
             }
             #[cfg(feature = "runtime")]
             radroots_transport_nostr::RadrootsRelayTransportError::Outbox(error) => error.into(),
-            error => Self::RelayTransport {
+            error => Self::Transport {
                 message: error.to_string(),
             },
         }

@@ -223,12 +223,12 @@ impl TargetSet {
         targets: Vec<RadrootsTransportTarget>,
     ) -> Result<Self, RadrootsSdkError> {
         if targets.is_empty() {
-            return Err(RadrootsSdkError::empty_target_relays(
+            return Err(RadrootsSdkError::empty_transport_targets(
                 "sdk transport target set",
             ));
         }
         if targets.len() > SDK_TRANSPORT_TARGET_MAX_COUNT {
-            return Err(RadrootsSdkError::relay_target_limit_exceeded(
+            return Err(RadrootsSdkError::transport_target_limit_exceeded(
                 SDK_TRANSPORT_TARGET_MAX_COUNT,
                 targets.len(),
             ));

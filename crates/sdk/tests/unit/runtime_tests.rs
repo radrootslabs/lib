@@ -86,7 +86,7 @@ fn storage_status() -> StorageStatusReceipt {
             store: sqlite_status(),
             total_events: 0,
             projection_eligible_events: 0,
-            relay_observations: 0,
+            transport_observations: 0,
             last_event_seq: None,
             last_event_updated_at_ms: None,
         },
@@ -264,7 +264,7 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
 }
 
 #[test]
-fn publish_transport_defaults_and_delegated_resolution_are_explicit() {
+fn transport_profile_defaults_and_delegated_resolution_are_explicit() {
     let local = TransportProfile::default();
     assert_eq!(local, TransportProfile::LocalOnly);
     assert!(!local.supports_delegated_target_resolution());

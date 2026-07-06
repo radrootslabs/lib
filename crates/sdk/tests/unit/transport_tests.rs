@@ -82,12 +82,12 @@ fn use_configured_policy_serializes_as_kind_only() {
     );
     assert_struct_serialize_error_paths(&policy, 1);
 
-    let publish_transport_policy = TargetPolicy::use_transport_profile();
+    let transport_profile_policy = TargetPolicy::use_transport_profile();
     assert_eq!(
-        serde_json::to_value(&publish_transport_policy).expect("json"),
+        serde_json::to_value(&transport_profile_policy).expect("json"),
         serde_json::json!({ "kind": "use_transport_profile" })
     );
-    assert_struct_serialize_error_paths(&publish_transport_policy, 1);
+    assert_struct_serialize_error_paths(&transport_profile_policy, 1);
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
 fn normalized_relays_reject_empty_and_over_limit_sets() {
     assert!(matches!(
         TargetSet::from_normalized_nostr_relays(Vec::new()),
-        Err(RadrootsSdkError::EmptyTargetRelays { .. })
+        Err(RadrootsSdkError::EmptyTransportTargets { .. })
     ));
 
     let too_many = (0..=SDK_TRANSPORT_TARGET_MAX_COUNT)
@@ -182,7 +182,7 @@ fn normalized_relays_reject_empty_and_over_limit_sets() {
         .collect::<Vec<_>>();
     assert!(matches!(
         TargetSet::from_normalized_nostr_relays(too_many),
-        Err(RadrootsSdkError::RelayTargetLimitExceeded { actual, .. })
+        Err(RadrootsSdkError::TransportTargetLimitExceeded { actual, .. })
             if actual == SDK_TRANSPORT_TARGET_MAX_COUNT + 1
     ));
 }

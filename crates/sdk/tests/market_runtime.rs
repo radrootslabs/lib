@@ -152,7 +152,7 @@ async fn market_search_refreshes_local_projection_and_reads_fts() {
         listing("Blueberries"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");
     let receipt = sdk
         .listings()

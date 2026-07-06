@@ -23,7 +23,7 @@ pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
     pub(crate) actor: &'a RadrootsActorContext,
     pub(crate) frozen_draft: &'a RadrootsFrozenEventDraft,
-    pub(crate) target_relays: TargetPolicy,
+    pub(crate) target_policy: TargetPolicy,
     pub(crate) satisfaction_policy: SatisfactionPolicy,
     pub(crate) idempotency_key: Option<SdkIdempotencyKey>,
 }
@@ -43,7 +43,7 @@ pub(crate) async fn enqueue_signed_workflow(
     signer: &dyn RadrootsEventSigner,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let delivery_plan =
-        resolved_delivery_plan(sdk, &request.target_relays, request.satisfaction_policy)?;
+        resolved_delivery_plan(sdk, &request.target_policy, request.satisfaction_policy)?;
     let signed_event = sign_authorized_draft(request.actor, signer, request.frozen_draft)?;
     enqueue_signed_workflow_event(sdk, request, signed_event, delivery_plan).await
 }
@@ -54,7 +54,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
     request: SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let delivery_plan =
-        resolved_delivery_plan(sdk, &request.target_relays, request.satisfaction_policy)?;
+        resolved_delivery_plan(sdk, &request.target_policy, request.satisfaction_policy)?;
     let signed_event = sdk
         .sign_with_configured_signer(RadrootsSdkSignRequest::new(
             request.operation_kind,
@@ -155,21 +155,21 @@ struct SdkResolvedDeliveryPlan {
 
 fn resolved_delivery_plan(
     sdk: &RadrootsClient,
-    target_relays: &TargetPolicy,
+    target_policy: &TargetPolicy,
     satisfaction_policy: SatisfactionPolicy,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
-    match target_relays {
-        TargetPolicy::Explicit(target_relays) => {
-            delivery_plan_from_target_set("explicit", target_relays.clone(), satisfaction_policy)
+    match target_policy {
+        TargetPolicy::Explicit(target_policy) => {
+            delivery_plan_from_target_set("explicit", target_policy.clone(), satisfaction_policy)
         }
         TargetPolicy::UseConfiguredProfile => {
-            let target_relays =
+            let target_policy =
                 TargetSet::from_normalized_nostr_relays(sdk.configured_nostr_relay_urls())?;
-            delivery_plan_from_target_set("configured_profile", target_relays, satisfaction_policy)
+            delivery_plan_from_target_set("configured_profile", target_policy, satisfaction_policy)
         }
         TargetPolicy::UseTransportProfile => {
             let target_set = sdk.transport_profile().target_set()?.ok_or_else(|| {
-                RadrootsSdkError::empty_target_relays("publish transport profile")
+                RadrootsSdkError::empty_transport_targets("publish transport profile")
             })?;
             delivery_plan_from_target_set(
                 sdk.transport_profile().transport_profile_id(),
@@ -218,20 +218,20 @@ struct SdkWorkflowOutboxDigestInput<'a> {
     operation_kind: &'static str,
     expected_pubkey: &'a str,
     draft: &'a RadrootsFrozenEventDraft,
-    target_relays: &'a [String],
+    target_policy: &'a [String],
 }
 
 #[cfg(test)]
 fn outbox_idempotency_digest_prefix(
     operation_kind: &'static str,
     frozen_draft: &RadrootsFrozenEventDraft,
-    target_relays: &[String],
+    target_policy: &[String],
 ) -> String {
     let input = SdkWorkflowOutboxDigestInput {
         operation_kind,
         expected_pubkey: frozen_draft.expected_pubkey.as_str(),
         draft: frozen_draft,
-        target_relays,
+        target_policy,
     };
     let bytes = serde_json::to_vec(&input).expect("workflow digest input serializes");
     digest_prefix(hex::encode(Sha256::digest(bytes)).as_str())

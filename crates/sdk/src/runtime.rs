@@ -212,7 +212,7 @@ pub struct SdkEventStoreStorageStatus {
     pub store: SdkSqliteStoreStatus,
     pub total_events: i64,
     pub projection_eligible_events: i64,
-    pub relay_observations: i64,
+    pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
 }
@@ -616,7 +616,7 @@ impl RadrootsClient {
                 store: event_store_status,
                 total_events: event_summary.total_events,
                 projection_eligible_events: event_summary.projection_eligible_events,
-                relay_observations: event_summary.transport_observations,
+                transport_observations: event_summary.transport_observations,
                 last_event_seq: event_summary.last_event_seq,
                 last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
             },

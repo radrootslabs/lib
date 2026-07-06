@@ -106,13 +106,13 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
         RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("listing-unit-key").expect("key"))
     .with_created_at(created_at);
     assert_struct_serialize_error_paths(&enqueue, 5);
     let enqueue_json = serde_json::to_value(&enqueue).expect("enqueue json");
-    assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
+    assert_eq!(enqueue_json["target_policy"]["kind"], "explicit");
     assert_eq!(enqueue_json["created_at"], 1_700_000_321);
     assert!(!enqueue_json.to_string().contains("listing-unit-key"));
 
@@ -236,7 +236,7 @@ async fn listing_enqueue_publish_reports_prepare_errors_before_signing() {
                 actor(),
                 listing(LISTING_A_D_TAG, "Future Enqueue Greens"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             )
             .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
             &FixtureSigner::new(SELLER),
@@ -265,7 +265,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
                 actor.clone(),
                 listing(LISTING_A_D_TAG, "Enqueued Greens"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             )
             .try_with_idempotency_key("listing-source-attached-enqueue")
             .expect("idempotency"),
@@ -289,7 +289,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
             &actor,
             plan,
             TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("prepared target relays"),
+                .expect("prepared transport targets"),
             None,
             &signer,
         )
@@ -321,7 +321,7 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
                 actor,
                 listing_for_seller(seller.as_str(), LISTING_C_D_TAG, "Configured Greens"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             )
             .try_with_idempotency_key("listing-configured-local")
             .expect("idempotency"),
@@ -348,7 +348,7 @@ async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
                     actor.clone(),
                     listing(LISTING_A_D_TAG, "Configured Prepare Error Greens"),
                     TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                        .expect("target relays"),
+                        .expect("transport targets"),
                 )
                 .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
             )
@@ -369,7 +369,7 @@ async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
                 &actor,
                 plan,
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
                 None,
             )
             .await,

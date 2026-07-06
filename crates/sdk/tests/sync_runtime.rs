@@ -24,10 +24,10 @@ use radroots_sdk::{
     ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy,
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
-    PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
-    SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState, StorageStatusRequest,
-    SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
+    PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
+    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp,
+    RestoreRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
+    StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
 use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
@@ -516,7 +516,7 @@ async fn enqueue_listing_with_policy(
                 listing(d_tag, title),
                 TargetPolicy::UseConfiguredProfile,
             )
-            .try_with_target_relays(relays, url_policy)
+            .try_with_nostr_targets(relays, url_policy)
             .expect("relay targets"),
             &FixtureSigner::new(SELLER),
         )
@@ -539,7 +539,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
     assert_eq!(receipt.observed_at_ms, 1_700_000_000_000);
     assert_eq!(receipt.event_store.total_events, 0);
     assert_eq!(receipt.event_store.projection_eligible_events, 0);
-    assert_eq!(receipt.event_store.relay_observations, 0);
+    assert_eq!(receipt.event_store.transport_observations, 0);
     assert_eq!(receipt.event_store.last_event_seq, None);
     assert_eq!(receipt.outbox.total_events, 0);
     assert_eq!(receipt.outbox.pending_events, 0);
@@ -547,9 +547,10 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
     assert_eq!(receipt.outbox.terminal_events, 0);
     assert_eq!(receipt.outbox.failed_terminal_events, 0);
     assert_eq!(receipt.outbox.ready_signed_events, 0);
-    assert_eq!(receipt.relay_targets.configured_count, 2);
+    assert_eq!(receipt.transport_profile.transport_profile_id, "nostr");
+    assert_eq!(receipt.transport_profile.configured_nostr_relay_count, 2);
     assert_eq!(
-        receipt.relay_targets.configured_relays,
+        receipt.transport_profile.configured_nostr_relays,
         vec![RELAY_B.to_owned(), RELAY_A.to_owned()]
     );
     assert_eq!(
@@ -560,7 +561,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
             "event_store": {
                 "total_events": 0,
                 "projection_eligible_events": 0,
-                "relay_observations": 0,
+                "transport_observations": 0,
                 "last_event_seq": null,
                 "last_event_updated_at_ms": null
             },
@@ -575,9 +576,10 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
                 "last_attempt_at_ms": null,
                 "last_error": null
             },
-            "relay_targets": {
-                "configured_count": 2,
-                "configured_relays": [RELAY_B, RELAY_A]
+            "transport_profile": {
+                "transport_profile_id": "nostr",
+                "configured_nostr_relay_count": 2,
+                "configured_nostr_relays": [RELAY_B, RELAY_A]
             }
         })
     );
@@ -1480,14 +1482,14 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         receipt.events[0].final_state,
         PushOutboxEventState::Published
     );
-    assert_eq!(receipt.events[0].relays.len(), 1);
+    assert_eq!(receipt.events[0].targets.len(), 1);
     assert_eq!(
-        receipt.events[0].relays[0].relay_url,
+        receipt.events[0].targets[0].endpoint_uri,
         "wss://daemon-resolved.example.com"
     );
     assert_eq!(
-        receipt.events[0].relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Accepted
+        receipt.events[0].targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
     );
 
     let recorded = handle.join().expect("proxy request");
@@ -1651,7 +1653,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         retryable.events[0].final_state,
         PushOutboxEventState::PublishRetryable
     );
-    assert!(retryable.events[0].relays.is_empty());
+    assert!(retryable.events[0].targets.is_empty());
     let retryable_status = retryable_sdk
         .sync()
         .status(SyncStatusRequest::new())
@@ -1702,8 +1704,8 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         PushOutboxEventState::FailedTerminal
     );
     assert_eq!(
-        terminal.events[0].relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Invalid
+        terminal.events[0].targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Invalid
     );
     let terminal_status = terminal_sdk
         .sync()
@@ -1720,9 +1722,8 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
     let request = PushOutboxRequest::new()
         .with_limit(2)
         .with_outbox_event_id(7)
-        .republish_accepted_relays(true)
-        .with_accepted_quorum(1)
-        .with_relay_url_policy(NostrRelayUrlPolicy::Localhost)
+        .republish_accepted_targets(true)
+        .with_nostr_relay_url_policy(NostrRelayUrlPolicy::Localhost)
         .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
         .with_claim_ttl_ms(1_000)
         .with_next_attempt_delay_ms(2_000);
@@ -1731,9 +1732,8 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
         serde_json::json!({
             "limit": 1,
             "outbox_event_id": 7,
-            "republish_accepted_relays": true,
-            "accepted_quorum": 1,
-            "relay_url_policy": "localhost",
+            "republish_accepted_targets": true,
+            "nostr_relay_url_policy": "localhost",
             "auth_policy": "detect_only",
             "claim_ttl_ms": 1000,
             "next_attempt_delay_ms": 2000
@@ -1757,9 +1757,10 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
             terminal_count: 0,
             quorum: 1,
             quorum_met: true,
-            relays: vec![PushOutboxRelayReceipt {
-                relay_url: RELAY_A.to_owned(),
-                outcome_kind: PushOutboxRelayOutcomeKind::DuplicateAccepted,
+            targets: vec![PushOutboxTargetReceipt {
+                transport_kind: "nostr".to_owned(),
+                endpoint_uri: RELAY_A.to_owned(),
+                outcome_kind: PushOutboxTargetOutcomeKind::DuplicateAccepted,
                 attempted: true,
                 message: Some("duplicate".to_owned()),
             }],
@@ -1782,8 +1783,9 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
                 "terminal_count": 0,
                 "quorum": 1,
                 "quorum_met": true,
-                "relays": [{
-                    "relay_url": RELAY_A,
+                "targets": [{
+                    "transport_kind": "nostr",
+                    "endpoint_uri": RELAY_A,
                     "outcome_kind": "duplicate_accepted",
                     "attempted": true,
                     "message": "duplicate"
@@ -1893,10 +1895,10 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
     assert_eq!(event.terminal_count, 0);
     assert_eq!(event.quorum, 1);
     assert!(event.quorum_met);
-    assert_eq!(event.relays.len(), 1);
+    assert_eq!(event.targets.len(), 1);
     assert_eq!(
-        event.relays[0].outcome_kind,
-        PushOutboxRelayOutcomeKind::Accepted
+        event.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
@@ -1993,7 +1995,7 @@ async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets()
             &adapter,
             PushOutboxRequest::new()
                 .with_limit(1)
-                .with_relay_url_policy(NostrRelayUrlPolicy::Localhost),
+                .with_nostr_relay_url_policy(NostrRelayUrlPolicy::Localhost),
         )
         .await
         .expect("push");
@@ -2012,20 +2014,20 @@ async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets()
     assert_eq!(event.terminal_count, 0);
     assert_eq!(event.quorum, 3);
     assert!(event.quorum_met);
-    assert_eq!(event.relays.len(), 3);
+    assert_eq!(event.targets.len(), 3);
     assert!(
         event
-            .relays
+            .targets
             .iter()
-            .all(|relay| relay.outcome_kind == PushOutboxRelayOutcomeKind::Accepted)
+            .all(|target| target.outcome_kind == PushOutboxTargetOutcomeKind::Accepted)
     );
-    let relay_urls = event
-        .relays
+    let endpoint_uris = event
+        .targets
         .iter()
-        .map(|relay| relay.relay_url.as_str())
+        .map(|target| target.endpoint_uri.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
-        relay_urls,
+        endpoint_uris,
         vec![LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C]
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
@@ -2038,7 +2040,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
         listing(LISTING_C_D_TAG, "Nonlocal Coffee"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([NONLOCAL_WS_RELAY], NostrRelayUrlPolicy::Localhost)
+    .try_with_nostr_targets([NONLOCAL_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("nonlocal ws relay target");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
@@ -2048,7 +2050,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
         listing(LISTING_C_D_TAG, "Private LAN Coffee"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([PRIVATE_LAN_WS_RELAY], NostrRelayUrlPolicy::Localhost)
+    .try_with_nostr_targets([PRIVATE_LAN_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("private LAN ws relay target");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
@@ -2095,32 +2097,35 @@ async fn push_outbox_preserves_retryable_and_terminal_relay_outcomes() {
     assert_eq!(event.terminal_count, 1);
     assert!(!event.quorum_met);
 
-    let relay_a = event
-        .relays
+    let target_a = event
+        .targets
         .iter()
-        .find(|relay| relay.relay_url == RELAY_A)
-        .expect("relay a");
-    let relay_b = event
-        .relays
+        .find(|target| target.endpoint_uri == RELAY_A)
+        .expect("target a");
+    let target_b = event
+        .targets
         .iter()
-        .find(|relay| relay.relay_url == RELAY_B)
-        .expect("relay b");
-    let relay_c = event
-        .relays
+        .find(|target| target.endpoint_uri == RELAY_B)
+        .expect("target b");
+    let target_c = event
+        .targets
         .iter()
-        .find(|relay| relay.relay_url == RELAY_C)
-        .expect("relay c");
+        .find(|target| target.endpoint_uri == RELAY_C)
+        .expect("target c");
 
     assert_eq!(
-        relay_a.outcome_kind,
-        PushOutboxRelayOutcomeKind::DuplicateAccepted
+        target_a.outcome_kind,
+        PushOutboxTargetOutcomeKind::DuplicateAccepted
     );
     assert_eq!(
-        relay_b.outcome_kind,
-        PushOutboxRelayOutcomeKind::AuthRequired
+        target_b.outcome_kind,
+        PushOutboxTargetOutcomeKind::AuthRequired
     );
-    assert_eq!(relay_c.outcome_kind, PushOutboxRelayOutcomeKind::Restricted);
-    assert_eq!(relay_b.message.as_deref(), Some("auth-required: login"));
+    assert_eq!(
+        target_c.outcome_kind,
+        PushOutboxTargetOutcomeKind::Restricted
+    );
+    assert_eq!(target_b.message.as_deref(), Some("auth-required: login"));
 }
 
 #[tokio::test]
@@ -2162,11 +2167,11 @@ async fn push_outbox_continues_after_adapter_transport_failure_and_releases_clai
         receipt
             .events
             .iter()
-            .flat_map(|event| event.relays.iter())
-            .all(|relay| {
-                relay.attempted
-                    && relay.outcome_kind == PushOutboxRelayOutcomeKind::ConnectionFailed
-                    && relay.message.as_deref() == Some("adapter boundary unavailable")
+            .flat_map(|event| event.targets.iter())
+            .all(|target| {
+                target.attempted
+                    && target.outcome_kind == PushOutboxTargetOutcomeKind::ConnectionFailed
+                    && target.message.as_deref() == Some("adapter boundary unavailable")
             })
     );
 

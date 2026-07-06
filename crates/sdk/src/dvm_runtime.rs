@@ -174,7 +174,7 @@ impl DvmTradeTransitionProofPrepareRequest {
 pub struct DvmTradeTransitionProofEnqueueRequest {
     #[serde(flatten)]
     pub prepare: DvmTradeTransitionProofPrepareRequest,
-    pub target_relays: TargetPolicy,
+    pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
 }
 
@@ -188,7 +188,7 @@ impl DvmTradeTransitionProofEnqueueRequest {
         request_event_id: RadrootsEventId,
         decision_event_id: RadrootsEventId,
         inventory_bins: Vec<RadrootsTradeInventoryBinWitnessDto>,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
     ) -> Self {
         Self::from_prepare(
             DvmTradeTransitionProofPrepareRequest::new(
@@ -200,31 +200,31 @@ impl DvmTradeTransitionProofEnqueueRequest {
                 decision_event_id,
                 inventory_bins,
             ),
-            target_relays,
+            target_policy,
         )
     }
 
     pub fn from_prepare(
         prepare: DvmTradeTransitionProofPrepareRequest,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
     ) -> Self {
         Self {
             prepare,
-            target_relays,
+            target_policy,
             idempotency_key: None,
         }
     }
 
-    pub fn try_with_target_relays<I, S>(
+    pub fn try_with_nostr_targets<I, S>(
         mut self,
-        target_relays: I,
+        target_policy: I,
         policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
+        self.target_policy = TargetPolicy::try_nostr_relays(target_policy, policy)?;
         Ok(self)
     }
 
@@ -420,7 +420,7 @@ impl<'sdk> DvmClient<'sdk> {
         request: DvmTradeTransitionProofEnqueueRequest,
     ) -> Result<DvmTradeTransitionProofReceipt, RadrootsSdkError> {
         let actor = request.prepare.actor.clone();
-        let target_relays = request.target_relays.clone();
+        let target_policy = request.target_policy.clone();
         let idempotency_key = request.idempotency_key.clone();
         let plan = self.prepare_trade_transition_proof_request(request.prepare)?;
         let enqueue = enqueue_configured_signed_workflow(
@@ -429,7 +429,7 @@ impl<'sdk> DvmClient<'sdk> {
                 operation_kind: DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND,
                 actor: &actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_policy,
                 satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
@@ -444,7 +444,7 @@ impl<'sdk> DvmClient<'sdk> {
         signer: &dyn RadrootsEventSigner,
     ) -> Result<DvmTradeTransitionProofReceipt, RadrootsSdkError> {
         let actor = request.prepare.actor.clone();
-        let target_relays = request.target_relays.clone();
+        let target_policy = request.target_policy.clone();
         let idempotency_key = request.idempotency_key.clone();
         let plan = self.prepare_trade_transition_proof_request(request.prepare)?;
         let enqueue = enqueue_signed_workflow(
@@ -453,7 +453,7 @@ impl<'sdk> DvmClient<'sdk> {
                 operation_kind: DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND,
                 actor: &actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_policy,
                 satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },

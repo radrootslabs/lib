@@ -309,7 +309,7 @@ async fn enqueue_publish_use_configured_profile_rejects_empty_transport_targets(
 
     assert!(matches!(
         error,
-        RadrootsSdkError::EmptyTargetRelays { operation }
+        RadrootsSdkError::EmptyTransportTargets { operation }
             if operation == "sdk transport target set"
     ));
 }
@@ -430,16 +430,16 @@ async fn listing_runtime_dtos_serialize_deterministically() {
         listing(LISTING_B_D_TAG, "Queued Coffee"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("serialized-idempotency").expect("idempotency"))
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
     assert_struct_serialize_error_paths(&enqueue_request, 5);
 
-    assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
+    assert_eq!(enqueue_json["target_policy"]["kind"], "explicit");
     assert_eq!(
-        enqueue_json["target_relays"]["targets"],
+        enqueue_json["target_policy"]["targets"],
         serde_json::json!([
             {
                 "kind": "Nostr",
@@ -454,7 +454,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
         ])
     );
     assert_eq!(
-        enqueue_json["target_relays"]["canonical_targets"],
+        enqueue_json["target_policy"]["canonical_targets"],
         serde_json::json!([
             "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
             "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
@@ -743,14 +743,14 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         listing(LISTING_F_D_TAG, "Coffee"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first target relays");
+    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .expect("first transport targets");
     let second = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
         TargetPolicy::explicit(
             TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("second target relays"),
+                .expect("second transport targets"),
         ),
     );
 

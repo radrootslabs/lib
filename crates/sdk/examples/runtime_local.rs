@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
     let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
-    let target_relays = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;
+    let target_policy = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;
     let idempotency_key = SdkIdempotencyKey::new("example-1")?;
 
     let prepared = sdk.listings().prepare_publish(prepare_request)?;
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enqueue_prepared_publish(
             &actor,
             prepared.clone(),
-            target_relays,
+            target_policy,
             Some(idempotency_key),
         )
         .await?;
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "relay-runtime")]
     assert!(matches!(
         push,
-        Err(RadrootsSdkError::ProductSyncRelaySetupFailure { .. })
+        Err(RadrootsSdkError::ProductSyncTransportSetupFailure { .. })
     ));
     #[cfg(not(feature = "relay-runtime"))]
     assert!(matches!(

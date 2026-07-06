@@ -411,8 +411,8 @@ fn fixture_cancellation(raw_order_id: &str) -> RadrootsOrderCancellation {
     }
 }
 
-fn fixture_target_relays() -> TargetPolicy {
-    TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("target relays")
+fn fixture_target_policy() -> TargetPolicy {
+    TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("transport targets")
 }
 
 async fn prepared_order_sdk() -> RadrootsClient {
@@ -444,7 +444,7 @@ async fn order_configured_local_signer_enqueues_submit_without_explicit_signer()
             fixture_buyer_actor(),
             fixture_event_ptr('a'),
             fixture_order_request("order-configured-local-1"),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         ))
@@ -465,7 +465,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_seller_actor(),
             fixture_order_event_ptr(&decision_submit.signed_event_id),
             fixture_order_decision("order-configured-decision"),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         ))
@@ -487,7 +487,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_order_event_ptr(&proposal_submit.signed_event_id),
             fixture_order_event_ptr(&proposal_submit.signed_event_id),
             proposal_payload,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         ))
@@ -512,7 +512,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
                 revision_proposal_payload.clone(),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -531,7 +531,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_order_event_ptr(&revision_submit.signed_event_id),
             fixture_order_event_ptr(&revision_proposal.signed_event_id),
             revision_decision_payload,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         ))
@@ -555,7 +555,7 @@ async fn order_configured_local_signer_enqueues_lifecycle_wrappers_without_expli
             fixture_order_event_ptr(&cancel_submit.signed_event_id),
             fixture_order_event_ptr(&cancel_submit.signed_event_id),
             fixture_cancellation("order-configured-cancel"),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         ))
@@ -583,7 +583,7 @@ async fn enqueue_fixture_submit(sdk: &RadrootsClient, raw_order_id: &str) -> Tra
         .enqueue_prepared_submit_with_explicit_signer(
             &buyer,
             plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2086,8 +2086,8 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        "target relays",
+        .try_with_nostr_targets(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        "transport targets",
     );
     assert_error_display(
         TradeSubmitEnqueueRequest::new(
@@ -2111,8 +2111,8 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        "target relays",
+        .try_with_nostr_targets(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        "transport targets",
     );
     assert_error_display(
         TradeDecisionEnqueueRequest::new(
@@ -2137,8 +2137,8 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        "target relays",
+        .try_with_nostr_targets(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        "transport targets",
     );
     assert_error_display(
         TradeRevisionProposalEnqueueRequest::new(
@@ -2164,8 +2164,8 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        "target relays",
+        .try_with_nostr_targets(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        "transport targets",
     );
     assert_error_display(
         TradeRevisionDecisionEnqueueRequest::new(
@@ -2191,8 +2191,8 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
         )
-        .try_with_target_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
-        "target relays",
+        .try_with_nostr_targets(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        "transport targets",
     );
     assert_error_display(
         TradeCancellationEnqueueRequest::new(
@@ -2219,12 +2219,12 @@ fn trade_enqueue_policy_rejects_publish_modes_without_matching_side_effects() {
     assert!(matches!(
         validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::AtLeastOneTarget),
         Err(RadrootsSdkError::InvalidRequest { ref message })
-            if message == "trade enqueue-only publish mode only supports no-wait acknowledgement"
+            if message == "trade enqueue-only publish mode only supports no-wait satisfaction"
     ));
     assert!(matches!(
         validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, SatisfactionPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
-            if message == "trade enqueue-and-publish requires a relay acknowledgement policy"
+            if message == "trade enqueue-and-publish requires a transport satisfaction policy"
     ));
     assert!(
         validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::NoWait).is_ok()
@@ -2350,7 +2350,7 @@ async fn prepared_submit_and_decision_enqueue_cover_source_attached_success_path
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-decision").expect("idempotency")),
@@ -2388,7 +2388,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-proposal").expect("idempotency")),
@@ -2418,7 +2418,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_decision_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2452,7 +2452,7 @@ async fn prepared_cancellation_enqueue_covers_source_attached_success_path() {
         .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             Some(SdkIdempotencyKey::new("prepared-cancellation").expect("idempotency")),
@@ -2477,7 +2477,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_buyer_actor(),
                 fixture_event_ptr('b'),
                 fixture_order_request("order-wrapper-decision"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2492,7 +2492,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_seller_actor(),
                 fixture_order_event_ptr(&decision_submit.signed_event_id),
                 fixture_order_decision("order-wrapper-decision"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2509,7 +2509,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_buyer_actor(),
                 fixture_event_ptr('c'),
                 fixture_order_request("order-wrapper-revision"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2530,7 +2530,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
                 proposal_payload.clone(),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2546,7 +2546,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
                 fixture_order_event_ptr(&proposal.signed_event_id),
                 fixture_revision_decision(&proposal_payload, &proposal.signed_event_id),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2563,7 +2563,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_buyer_actor(),
                 fixture_event_ptr('d'),
                 fixture_order_request("order-wrapper-cancellation"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2579,7 +2579,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
                 fixture_order_event_ptr(&cancellation_submit.signed_event_id),
                 fixture_order_event_ptr(&cancellation_submit.signed_event_id),
                 fixture_cancellation("order-wrapper-cancellation"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ),
@@ -2618,7 +2618,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2645,7 +2645,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2672,7 +2672,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_decision_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2699,7 +2699,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2763,7 +2763,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             closed_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2777,7 +2777,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             closed_proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2794,7 +2794,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             closed_revision_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2811,7 +2811,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             closed_cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2853,7 +2853,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
         .enqueue_prepared_decision(
             &seller,
             decision_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2879,7 +2879,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
         .enqueue_prepared_revision_proposal(
             &seller,
             proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2906,7 +2906,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
         .enqueue_prepared_revision_decision(
             &buyer,
             revision_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2932,7 +2932,7 @@ async fn configured_prepared_lifecycle_enqueues_run_preflight_guards() {
         .enqueue_prepared_cancellation(
             &buyer,
             cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -2984,7 +2984,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
             .enqueue_prepared_decision(
                 &seller,
                 decision_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -2998,7 +2998,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
             .enqueue_prepared_revision_proposal(
                 &seller,
                 proposal_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None,
@@ -3033,7 +3033,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
             .enqueue_prepared_revision_decision(
                 &buyer,
                 revision_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3047,7 +3047,7 @@ async fn configured_prepared_lifecycle_enqueues_report_existing_event_lookup_err
             .enqueue_prepared_cancellation(
                 &buyer,
                 cancellation_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3076,7 +3076,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_seller_actor(),
                 fixture_event_ptr('a'),
                 fixture_order_request("order-configured-prepare-submit"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ))
@@ -3090,7 +3090,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_buyer_actor(),
                 fixture_event_ptr('a'),
                 fixture_order_decision("order-configured-prepare-decision"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ))
@@ -3105,7 +3105,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_order_event_ptr(&root_event_id),
                 fixture_order_event_ptr(&previous_event_id),
                 proposal.clone(),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ))
@@ -3120,7 +3120,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_order_event_ptr(&root_event_id),
                 fixture_order_event_ptr(&previous_event_id),
                 fixture_revision_decision(&proposal, &previous_event_id),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ))
@@ -3135,7 +3135,7 @@ async fn configured_enqueue_wrappers_report_prepare_errors_before_signing() {
                 fixture_order_event_ptr(&root_event_id),
                 fixture_order_event_ptr(&previous_event_id),
                 fixture_cancellation("order-configured-prepare-cancel"),
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             ))
@@ -3163,7 +3163,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             .enqueue_prepared_submit(
                 &buyer,
                 submit_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3186,7 +3186,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             .enqueue_prepared_decision(
                 &seller,
                 decision_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3215,7 +3215,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             .enqueue_prepared_revision_proposal(
                 &seller,
                 proposal_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3244,7 +3244,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             revision_proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3269,7 +3269,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             .enqueue_prepared_revision_decision(
                 &buyer,
                 revision_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3293,7 +3293,7 @@ async fn configured_prepared_methods_report_missing_configured_signer_after_pref
             .enqueue_prepared_cancellation(
                 &buyer,
                 cancellation_plan,
-                fixture_target_relays(),
+                fixture_target_policy(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
                 None
@@ -3403,7 +3403,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3439,7 +3439,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3464,7 +3464,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3497,7 +3497,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3530,7 +3530,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3543,7 +3543,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3566,7 +3566,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_decision(
             &seller,
             decision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3605,7 +3605,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3618,7 +3618,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3641,7 +3641,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_proposal(
             &seller,
             proposal_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3680,7 +3680,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3703,7 +3703,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3716,7 +3716,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3739,7 +3739,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_revision_decision(
             &buyer,
             revision_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3774,7 +3774,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan.clone(),
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3787,7 +3787,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .enqueue_prepared_cancellation(
             &buyer,
             cancellation_plan,
-            fixture_target_relays(),
+            fixture_target_policy(),
             PublishMode::EnqueueOnly,
             SatisfactionPolicy::NoWait,
             None,
@@ -3837,7 +3837,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     buyer.clone(),
                     fixture_event_ptr('a'),
                     fixture_order_request("order-wrapper-submit-error"),
-                    fixture_target_relays(),
+                    fixture_target_policy(),
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
@@ -3854,7 +3854,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     seller.clone(),
                     fixture_event_ptr('b'),
                     fixture_order_decision("order-wrapper-decision-error"),
-                    fixture_target_relays(),
+                    fixture_target_policy(),
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
@@ -3880,7 +3880,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     ptr(root_event_id.as_str().to_owned()),
                     ptr(previous_event_id.as_str().to_owned()),
                     proposal_payload.clone(),
-                    fixture_target_relays(),
+                    fixture_target_policy(),
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
@@ -3898,7 +3898,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     ptr(root_event_id.as_str().to_owned()),
                     ptr(previous_event_id.as_str().to_owned()),
                     fixture_revision_decision(&proposal_payload, &previous_event_id),
-                    fixture_target_relays(),
+                    fixture_target_policy(),
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
@@ -3916,7 +3916,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
                     ptr(root_event_id.as_str().to_owned()),
                     ptr(previous_event_id.as_str().to_owned()),
                     fixture_cancellation("order-wrapper-cancellation-error"),
-                    fixture_target_relays(),
+                    fixture_target_policy(),
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
@@ -4048,7 +4048,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-a.radroots.test"], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets(["wss://relay-a.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("submit relays")
     .with_idempotency_key(SdkIdempotencyKey::new("submit-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4077,7 +4077,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-b.radroots.test"], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets(["wss://relay-b.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("decision relays")
     .with_idempotency_key(SdkIdempotencyKey::new("decision-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4101,7 +4101,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-c.radroots.test"], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets(["wss://relay-c.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("proposal relays")
     .with_idempotency_key(SdkIdempotencyKey::new("proposal-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4125,7 +4125,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-d.radroots.test"], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets(["wss://relay-d.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("revision decision relays")
     .with_idempotency_key(SdkIdempotencyKey::new("revision-decision-unit-key").expect("key"))
     .with_created_at(created_at);
@@ -4149,7 +4149,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_target_relays(["wss://relay-e.radroots.test"], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets(["wss://relay-e.radroots.test"], NostrRelayUrlPolicy::Public)
     .expect("cancellation relays")
     .with_idempotency_key(SdkIdempotencyKey::new("cancellation-unit-key").expect("key"))
     .with_created_at(created_at);

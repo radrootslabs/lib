@@ -169,13 +169,13 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
         farm(FARM_B_D_TAG, "Queued Farm"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(SdkIdempotencyKey::new("farm-unit-key").expect("key"))
     .with_created_at(created_at);
     assert_struct_serialize_error_paths(&enqueue, 5);
     let enqueue_json = serde_json::to_value(&enqueue).expect("enqueue json");
-    assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
+    assert_eq!(enqueue_json["target_policy"]["kind"], "explicit");
     assert_eq!(enqueue_json["created_at"], 1_700_000_321);
     assert!(!enqueue_json.to_string().contains("farm-unit-key"));
 
@@ -359,7 +359,7 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
         farm(FARM_A_D_TAG, "Invalid Relay Farm"),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays(["http://relay.radroots.test"], NostrRelayUrlPolicy::Public);
+    .try_with_nostr_targets(["http://relay.radroots.test"], NostrRelayUrlPolicy::Public);
     assert!(invalid_relays.is_err());
 
     let invalid_key = FarmEnqueuePublishRequest::new(
@@ -532,7 +532,7 @@ async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
                 farmer_actor(),
                 farm("AAAAAAAAAAAAAAAAAAAAA!", "Invalid Enqueue Farm"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             ),
             &FixtureSigner::new(FARMER),
         )
@@ -557,7 +557,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
                 actor.clone(),
                 farm(FARM_A_D_TAG, "Enqueued Farm"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             )
             .try_with_idempotency_key("farm-source-attached-enqueue")
             .expect("idempotency"),
@@ -581,7 +581,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
             &actor,
             plan,
             TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("prepared target relays"),
+                .expect("prepared transport targets"),
             None,
             &signer,
         )
@@ -613,7 +613,7 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
                 actor,
                 farm(FARM_C_D_TAG, "Configured Farm"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             )
             .try_with_idempotency_key("farm-configured-local")
             .expect("idempotency"),
@@ -647,7 +647,7 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
                 actor.clone(),
                 farm("AAAAAAAAAAAAAAAAAAAAA!", "Invalid Configured Farm"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
             ))
             .await,
         Err(RadrootsSdkError::InvalidRequest { .. })
@@ -672,7 +672,7 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
                 &actor,
                 plan,
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
-                    .expect("target relays"),
+                    .expect("transport targets"),
                 None,
             )
             .await,

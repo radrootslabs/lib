@@ -132,7 +132,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 fn outbox_error_conversion_handles_empty_targets_and_fallbacks() {
     assert!(matches!(
         RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets),
-        RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "outbox enqueue"
+        RadrootsSdkError::EmptyTransportTargets { ref operation } if operation == "outbox enqueue"
     ));
 
     assert!(matches!(
@@ -236,7 +236,7 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
         RadrootsSdkError::from(
             radroots_transport_nostr::RadrootsRelayTransportError::EmptyTargetSet
         ),
-        RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "relay publish"
+        RadrootsSdkError::EmptyTransportTargets { ref operation } if operation == "nostr relay publish"
     ));
     assert!(matches!(
         RadrootsSdkError::from(
@@ -253,13 +253,13 @@ fn relay_transport_error_conversion_redacts_and_classifies_url_errors() {
         RadrootsSdkError::from(radroots_transport_nostr::RadrootsRelayTransportError::Outbox(
             radroots_outbox::RadrootsOutboxError::EmptyDeliveryTargets,
         )),
-        RadrootsSdkError::EmptyTargetRelays { ref operation } if operation == "outbox enqueue"
+        RadrootsSdkError::EmptyTransportTargets { ref operation } if operation == "outbox enqueue"
     ));
     assert!(matches!(
         RadrootsSdkError::from(radroots_transport_nostr::RadrootsRelayTransportError::Transport(
             "offline".to_owned(),
         )),
-        RadrootsSdkError::RelayTransport { ref message } if message == "Relay transport error: offline"
+        RadrootsSdkError::Transport { ref message } if message == "Relay transport error: offline"
     ));
 }
 
@@ -341,10 +341,10 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             operation: "listing.publish".to_owned(),
             reason: "id changed".to_owned(),
         },
-        RadrootsSdkError::EmptyTargetRelays {
-            operation: "relay publish".to_owned(),
+        RadrootsSdkError::EmptyTransportTargets {
+            operation: "nostr relay publish".to_owned(),
         },
-        RadrootsSdkError::RelayTargetLimitExceeded { max: 2, actual: 3 },
+        RadrootsSdkError::TransportTargetLimitExceeded { max: 2, actual: 3 },
         RadrootsSdkError::invalid_relay_url(
             "wss://user:secret@relay.example.com/path?token=secret",
             "userinfo",
@@ -366,7 +366,7 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             operation: "sync.push_outbox",
             required_feature: "relay-runtime",
         },
-        RadrootsSdkError::ProductSyncRelaySetupFailure {
+        RadrootsSdkError::ProductSyncTransportSetupFailure {
             message: "offline".to_owned(),
         },
         RadrootsSdkError::Authority {
@@ -414,7 +414,7 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             kind: RadrootsSdkGeoNamesErrorKind::Lookup,
             message: "lookup".to_owned(),
         },
-        RadrootsSdkError::RelayTransport {
+        RadrootsSdkError::Transport {
             message: "transport".to_owned(),
         },
         RadrootsSdkError::Projection {

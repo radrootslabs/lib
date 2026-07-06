@@ -68,7 +68,7 @@ pub struct ListingEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
-    pub target_relays: TargetPolicy,
+    pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -78,39 +78,39 @@ impl ListingEnqueuePublishRequest {
     pub fn new(
         actor: RadrootsActorContext,
         listing: RadrootsListing,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
     ) -> Self {
         Self::from_document(
             actor,
             RadrootsListingDraftDocumentV1::new(listing),
-            target_relays,
+            target_policy,
         )
     }
 
     pub fn from_document(
         actor: RadrootsActorContext,
         document: RadrootsListingDraftDocumentV1,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
     ) -> Self {
         Self {
             actor,
             document,
-            target_relays,
+            target_policy,
             idempotency_key: None,
             created_at: None,
         }
     }
 
-    pub fn try_with_target_relays<I, S>(
+    pub fn try_with_nostr_targets<I, S>(
         mut self,
-        target_relays: I,
+        target_policy: I,
         policy: NostrRelayUrlPolicy,
     ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.target_relays = TargetPolicy::try_nostr_relays(target_relays, policy)?;
+        self.target_policy = TargetPolicy::try_nostr_relays(target_policy, policy)?;
         Ok(self)
     }
 
@@ -194,7 +194,7 @@ impl<'sdk> ListingsClient<'sdk> {
         let ListingEnqueuePublishRequest {
             actor,
             document,
-            target_relays,
+            target_policy,
             idempotency_key,
             created_at,
         } = request;
@@ -204,7 +204,7 @@ impl<'sdk> ListingsClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_publish(prepare_request)?;
-        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key)
+        self.enqueue_prepared_publish(&actor, plan, target_policy, idempotency_key)
             .await
     }
 
@@ -216,7 +216,7 @@ impl<'sdk> ListingsClient<'sdk> {
         let ListingEnqueuePublishRequest {
             actor,
             document,
-            target_relays,
+            target_policy,
             idempotency_key,
             created_at,
         } = request;
@@ -229,7 +229,7 @@ impl<'sdk> ListingsClient<'sdk> {
         self.enqueue_prepared_publish_with_explicit_signer(
             &actor,
             plan,
-            target_relays,
+            target_policy,
             idempotency_key,
             signer,
         )
@@ -241,7 +241,7 @@ impl<'sdk> ListingsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let enqueue = enqueue_configured_signed_workflow(
@@ -250,7 +250,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 operation_kind: LISTING_PUBLISH_OPERATION_KIND,
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_policy,
                 satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },
@@ -263,7 +263,7 @@ impl<'sdk> ListingsClient<'sdk> {
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
-        target_relays: TargetPolicy,
+        target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
@@ -273,7 +273,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 operation_kind: LISTING_PUBLISH_OPERATION_KIND,
                 actor,
                 frozen_draft: &plan.frozen_draft,
-                target_relays,
+                target_policy,
                 satisfaction_policy: SatisfactionPolicy::AllTargets,
                 idempotency_key,
             },

@@ -30,8 +30,10 @@ use radroots_trade::projection::{
     RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
     refresh_product_projections,
 };
+#[cfg(feature = "runtime")]
+use radroots_transport::RadrootsTransportKind;
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportSatisfactionPolicy};
+use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
@@ -75,7 +77,7 @@ pub struct SyncStatusReceipt {
     pub observed_at_ms: i64,
     pub event_store: SyncEventStoreStatus,
     pub outbox: SyncOutboxStatus,
-    pub relay_targets: SyncRelayTargetSummary,
+    pub transport_profile: SyncTransportProfileSummary,
 }
 
 #[cfg(feature = "runtime")]
@@ -91,7 +93,7 @@ pub enum SyncStatusSource {
 pub struct SyncEventStoreStatus {
     pub total_events: i64,
     pub projection_eligible_events: i64,
-    pub relay_observations: i64,
+    pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
 }
@@ -102,7 +104,7 @@ impl From<RadrootsEventStoreStatusSummary> for SyncEventStoreStatus {
         Self {
             total_events: summary.total_events,
             projection_eligible_events: summary.projection_eligible_events,
-            relay_observations: summary.transport_observations,
+            transport_observations: summary.transport_observations,
             last_event_seq: summary.last_event_seq,
             last_event_updated_at_ms: summary.last_event_updated_at_ms,
         }
@@ -142,9 +144,10 @@ impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct SyncRelayTargetSummary {
-    pub configured_count: usize,
-    pub configured_relays: Vec<String>,
+pub struct SyncTransportProfileSummary {
+    pub transport_profile_id: String,
+    pub configured_nostr_relay_count: usize,
+    pub configured_nostr_relays: Vec<String>,
 }
 
 #[cfg(feature = "runtime")]
@@ -185,7 +188,7 @@ pub struct SyncProjectionRefreshReceipt {
     pub listing_upserts: usize,
     pub trade_upserts: usize,
     pub validation_receipts: usize,
-    pub relay_observations: i64,
+    pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
 }
 
@@ -200,7 +203,7 @@ impl SyncProjectionRefreshReceipt {
             listing_upserts: receipt.listing_upserts,
             trade_upserts: receipt.trade_upserts,
             validation_receipts: receipt.validation_receipts,
-            relay_observations: receipt.transport_observations,
+            transport_observations: receipt.transport_observations,
             last_event_seq: receipt.last_event_seq,
         }
     }
@@ -227,9 +230,8 @@ impl Default for SdkRelayAuthPolicy {
 pub struct PushOutboxRequest {
     pub limit: usize,
     pub outbox_event_id: Option<i64>,
-    pub republish_accepted_relays: bool,
-    pub accepted_quorum: Option<usize>,
-    pub relay_url_policy: NostrRelayUrlPolicy,
+    pub republish_accepted_targets: bool,
+    pub nostr_relay_url_policy: NostrRelayUrlPolicy,
     pub auth_policy: SdkRelayAuthPolicy,
     pub claim_ttl_ms: i64,
     pub next_attempt_delay_ms: i64,
@@ -241,9 +243,8 @@ impl Default for PushOutboxRequest {
         Self {
             limit: PUSH_OUTBOX_DEFAULT_LIMIT,
             outbox_event_id: None,
-            republish_accepted_relays: false,
-            accepted_quorum: None,
-            relay_url_policy: NostrRelayUrlPolicy::Public,
+            republish_accepted_targets: false,
+            nostr_relay_url_policy: NostrRelayUrlPolicy::Public,
             auth_policy: SdkRelayAuthPolicy::DetectOnly,
             claim_ttl_ms: PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS,
             next_attempt_delay_ms: PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS,
@@ -268,18 +269,13 @@ impl PushOutboxRequest {
         self
     }
 
-    pub fn republish_accepted_relays(mut self, enabled: bool) -> Self {
-        self.republish_accepted_relays = enabled;
+    pub fn republish_accepted_targets(mut self, enabled: bool) -> Self {
+        self.republish_accepted_targets = enabled;
         self
     }
 
-    pub fn with_accepted_quorum(mut self, accepted_quorum: usize) -> Self {
-        self.accepted_quorum = Some(accepted_quorum);
-        self
-    }
-
-    pub fn with_relay_url_policy(mut self, policy: NostrRelayUrlPolicy) -> Self {
-        self.relay_url_policy = policy;
+    pub fn with_nostr_relay_url_policy(mut self, policy: NostrRelayUrlPolicy) -> Self {
+        self.nostr_relay_url_policy = policy;
         self
     }
 
@@ -326,11 +322,6 @@ impl PushOutboxRequest {
                 message: "push_outbox next attempt delay must be positive".to_owned(),
             });
         }
-        if self.accepted_quorum == Some(0) {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "push_outbox accepted quorum must be positive".to_owned(),
-            });
-        }
         Ok(())
     }
 }
@@ -371,14 +362,15 @@ pub struct PushOutboxEventReceipt {
     pub terminal_count: usize,
     pub quorum: usize,
     pub quorum_met: bool,
-    pub relays: Vec<PushOutboxRelayReceipt>,
+    pub targets: Vec<PushOutboxTargetReceipt>,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct PushOutboxRelayReceipt {
-    pub relay_url: String,
-    pub outcome_kind: PushOutboxRelayOutcomeKind,
+pub struct PushOutboxTargetReceipt {
+    pub transport_kind: String,
+    pub endpoint_uri: String,
+    pub outcome_kind: PushOutboxTargetOutcomeKind,
     pub attempted: bool,
     pub message: Option<String>,
 }
@@ -420,7 +412,7 @@ impl From<RadrootsOutboxEventState> for PushOutboxEventState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum PushOutboxRelayOutcomeKind {
+pub enum PushOutboxTargetOutcomeKind {
     Accepted,
     DuplicateAccepted,
     Blocked,
@@ -435,13 +427,13 @@ pub enum PushOutboxRelayOutcomeKind {
     Error,
     Timeout,
     ConnectionFailed,
-    RelayUrlRejected,
+    TargetUriRejected,
     SkippedAlreadyAccepted,
     Unknown,
 }
 
 #[cfg(feature = "runtime")]
-impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
+impl From<RadrootsRelayOutcomeKind> for PushOutboxTargetOutcomeKind {
     fn from(kind: RadrootsRelayOutcomeKind) -> Self {
         match kind {
             RadrootsRelayOutcomeKind::Accepted => Self::Accepted,
@@ -458,7 +450,7 @@ impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
             RadrootsRelayOutcomeKind::Error => Self::Error,
             RadrootsRelayOutcomeKind::Timeout => Self::Timeout,
             RadrootsRelayOutcomeKind::ConnectionFailed => Self::ConnectionFailed,
-            RadrootsRelayOutcomeKind::RelayUrlRejected => Self::RelayUrlRejected,
+            RadrootsRelayOutcomeKind::RelayUrlRejected => Self::TargetUriRejected,
             RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => Self::SkippedAlreadyAccepted,
             RadrootsRelayOutcomeKind::Unknown => Self::Unknown,
         }
@@ -486,9 +478,14 @@ impl<'sdk> SyncClient<'sdk> {
             observed_at_ms,
             event_store: event_store.into(),
             outbox: outbox.into(),
-            relay_targets: SyncRelayTargetSummary {
-                configured_count: self.sdk.configured_nostr_relay_urls().len(),
-                configured_relays: self.sdk.configured_nostr_relay_urls(),
+            transport_profile: SyncTransportProfileSummary {
+                transport_profile_id: self
+                    .sdk
+                    .transport_profile()
+                    .transport_profile_id()
+                    .to_owned(),
+                configured_nostr_relay_count: self.sdk.configured_nostr_relay_urls().len(),
+                configured_nostr_relays: self.sdk.configured_nostr_relay_urls(),
             },
         })
     }
@@ -572,8 +569,8 @@ impl<'sdk> SyncClient<'sdk> {
             let policy = RadrootsOutboxPublishPolicy::new(
                 publish_now_ms.saturating_add(request.next_attempt_delay_ms),
             )
-            .republish_accepted_relays(request.republish_accepted_relays)
-            .relay_url_policy(request.relay_url_policy.nostr_transport_policy());
+            .republish_accepted_relays(request.republish_accepted_targets)
+            .relay_url_policy(request.nostr_relay_url_policy.nostr_transport_policy());
             let publish = publish_claimed_outbox_event(
                 &self.sdk._outbox,
                 &self.sdk._event_store,
@@ -998,14 +995,19 @@ fn push_event_receipt(
         terminal_count: publish.terminal_count,
         quorum: publish.quorum,
         quorum_met: publish.quorum_met,
-        relays: publish.relays.into_iter().map(push_relay_receipt).collect(),
+        targets: publish
+            .relays
+            .into_iter()
+            .map(push_target_receipt)
+            .collect(),
     }
 }
 
 #[cfg(feature = "runtime")]
-fn push_relay_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxRelayReceipt {
-    PushOutboxRelayReceipt {
-        relay_url: relay.relay_url,
+fn push_target_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxTargetReceipt {
+    PushOutboxTargetReceipt {
+        transport_kind: RadrootsTransportKind::Nostr.canonical_label(),
+        endpoint_uri: relay.relay_url,
         outcome_kind: relay.outcome.kind.into(),
         attempted: relay.attempted,
         message: relay.outcome.message,

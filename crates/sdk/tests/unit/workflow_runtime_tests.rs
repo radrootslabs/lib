@@ -170,7 +170,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &first_draft,
-            target_relays: TargetPolicy::UseConfiguredProfile,
+            target_policy: TargetPolicy::UseConfiguredProfile,
             satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: Some(idempotency_key.clone()),
         },
@@ -211,7 +211,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &second_draft,
-            target_relays: TargetPolicy::UseConfiguredProfile,
+            target_policy: TargetPolicy::UseConfiguredProfile,
             satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: Some(idempotency_key),
         },
@@ -274,7 +274,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &draft,
-            target_relays: TargetPolicy::UseConfiguredProfile,
+            target_policy: TargetPolicy::UseConfiguredProfile,
             satisfaction_policy: SatisfactionPolicy::AllTargets,
             idempotency_key: None,
         },
@@ -309,7 +309,7 @@ async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutati
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: TargetPolicy::UseConfiguredProfile,
+        target_policy: TargetPolicy::UseConfiguredProfile,
         satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
@@ -345,7 +345,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: TargetPolicy::UseConfiguredProfile,
+        target_policy: TargetPolicy::UseConfiguredProfile,
         satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
@@ -375,7 +375,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: TargetPolicy::UseConfiguredProfile,
+        target_policy: TargetPolicy::UseConfiguredProfile,
         satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
@@ -386,7 +386,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 }
 
 #[tokio::test]
-async fn enqueue_signed_workflow_rejects_publish_transport_targets_without_proxy_transport() {
+async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_proxy_transport() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
         .expect("actor");
@@ -395,14 +395,14 @@ async fn enqueue_signed_workflow_rejects_publish_transport_targets_without_proxy
         operation_kind: "workflow.test.v1",
         actor: &actor,
         frozen_draft: &draft,
-        target_relays: TargetPolicy::UseTransportProfile,
+        target_policy: TargetPolicy::UseTransportProfile,
         satisfaction_policy: SatisfactionPolicy::AllTargets,
         idempotency_key: None,
     };
 
     assert!(matches!(
         enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await,
-        Err(RadrootsSdkError::EmptyTargetRelays { operation })
+        Err(RadrootsSdkError::EmptyTransportTargets { operation })
             if operation == "publish transport profile"
     ));
 }

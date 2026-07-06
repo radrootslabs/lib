@@ -232,7 +232,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
         prepare.clone(),
         TargetPolicy::UseConfiguredProfile,
     )
-    .try_with_target_relays([RELAY], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("relays")
     .with_idempotency_key(idempotency)
     .with_inventory_sequence(11)
@@ -242,7 +242,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     assert_eq!(request.prepare.inventory_sequence, 11);
     assert_eq!(request.prepare.previous_state_root, Some(hash32('1')));
     assert_eq!(serialized["proof_mode"], "none");
-    assert_eq!(serialized["target_relays"]["kind"], "explicit");
+    assert_eq!(serialized["target_policy"]["kind"], "explicit");
     assert_eq!(serialized["idempotency_key"]["value"], "<redacted>");
     assert_eq!(serialized["idempotency_key"]["len"], idempotency_len);
 
@@ -269,7 +269,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
             prepare,
             TargetPolicy::UseConfiguredProfile,
         )
-        .try_with_target_relays(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
+        .try_with_nostr_targets(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
