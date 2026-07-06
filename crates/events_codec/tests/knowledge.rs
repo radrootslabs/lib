@@ -776,6 +776,33 @@ fn semantic_validation_rejects_invalid_encode_models() {
 }
 
 #[test]
+fn knowledge_claim_encode_enforces_citation_rules() {
+    let mut model = claim();
+    model.citation_spans.clear();
+    assert_encode_error(
+        knowledge_claim_to_wire_parts(&model).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("citation_spans"),
+    );
+
+    assert!(knowledge_claim_to_wire_parts(&claim()).is_ok());
+
+    for claim_type in ["hypothesis", "observation", "question"] {
+        let mut uncited = claim();
+        uncited.claim_type = claim_type.to_string();
+        uncited.citation_spans.clear();
+        assert!(knowledge_claim_to_wire_parts(&uncited).is_ok());
+    }
+
+    let mut capitalized = claim();
+    capitalized.claim_type = "Hypothesis".to_string();
+    capitalized.citation_spans.clear();
+    assert_encode_error(
+        knowledge_claim_to_wire_parts(&capitalized).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("citation_spans"),
+    );
+}
+
+#[test]
 fn semantic_validation_rejects_invalid_decoded_content() {
     let mut article = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     article.content = String::new();
@@ -889,4 +916,28 @@ fn semantic_validation_rejects_invalid_decoded_content() {
         contribution_attestation_from_event(attestation_event).unwrap_err(),
         EventParseError::InvalidJson("subject_refs"),
     );
+}
+
+#[test]
+fn knowledge_claim_decode_enforces_citation_rules() {
+    let mut claim_event = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
+    let mut value: serde_json::Value = serde_json::from_str(&claim_event.content).unwrap();
+    value["citation_spans"] = serde_json::Value::Array(Vec::new());
+    claim_event.content = serde_json::to_string(&value).unwrap();
+    assert_parse_error(
+        knowledge_claim_from_event(claim_event).unwrap_err(),
+        EventParseError::InvalidJson("citation_spans"),
+    );
+
+    for claim_type in ["hypothesis", "observation", "question"] {
+        let mut uncited = claim();
+        uncited.claim_type = claim_type.to_string();
+        uncited.citation_spans.clear();
+        let decoded = knowledge_claim_from_event(event_from_parts(
+            knowledge_claim_to_wire_parts(&uncited).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(decoded.data.data.claim_type, claim_type);
+        assert!(decoded.data.data.citation_spans.is_empty());
+    }
 }

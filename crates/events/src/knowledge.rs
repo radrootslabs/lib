@@ -349,6 +349,10 @@ pub fn validate_knowledge_source(
     validate_event_refs(&source.artifact_refs, "artifact_refs")
 }
 
+pub fn is_uncited_knowledge_claim_type(claim_type: &str) -> bool {
+    matches!(claim_type, "hypothesis" | "observation" | "question")
+}
+
 pub fn validate_knowledge_claim(
     claim: &RadrootsKnowledgeClaim,
 ) -> Result<(), RadrootsKnowledgeValidationError> {
@@ -359,6 +363,13 @@ pub fn validate_knowledge_claim(
     )?;
     require_non_empty(claim.claim_type.as_str(), "claim_type")?;
     require_non_empty(claim.text.as_str(), "text")?;
+    if claim.citation_spans.is_empty()
+        && !is_uncited_knowledge_claim_type(claim.claim_type.as_str())
+    {
+        return Err(RadrootsKnowledgeValidationError::EmptyField(
+            "citation_spans",
+        ));
+    }
     for citation in &claim.citation_spans {
         if citation.source_ref.kind != crate::kinds::KIND_KNOWLEDGE_SOURCE {
             return Err(RadrootsKnowledgeValidationError::InvalidField(
@@ -1246,6 +1257,36 @@ mod tests {
             validate_contribution_attestation(&contribution_attestation()),
             Ok(())
         );
+    }
+
+    #[test]
+    fn knowledge_claims_require_citations_except_exact_uncited_types() {
+        let mut claim = knowledge_claim();
+        claim.citation_spans.clear();
+        assert_validation_error(
+            validate_knowledge_claim(&claim),
+            RadrootsKnowledgeValidationError::EmptyField("citation_spans"),
+        );
+
+        claim.citation_spans.push(citation_span());
+        assert_eq!(validate_knowledge_claim(&claim), Ok(()));
+
+        for claim_type in ["hypothesis", "observation", "question"] {
+            let mut uncited = knowledge_claim();
+            uncited.claim_type = claim_type.to_string();
+            uncited.citation_spans.clear();
+            assert_eq!(validate_knowledge_claim(&uncited), Ok(()));
+            assert!(is_uncited_knowledge_claim_type(claim_type));
+        }
+
+        let mut capitalized = knowledge_claim();
+        capitalized.claim_type = "Hypothesis".to_string();
+        capitalized.citation_spans.clear();
+        assert_validation_error(
+            validate_knowledge_claim(&capitalized),
+            RadrootsKnowledgeValidationError::EmptyField("citation_spans"),
+        );
+        assert!(!is_uncited_knowledge_claim_type("Hypothesis"));
     }
 
     #[test]
