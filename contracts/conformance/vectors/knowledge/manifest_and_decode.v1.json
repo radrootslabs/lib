@@ -56,6 +56,100 @@
         "error_class": "decode_error",
         "stage": "contract_validation"
       }
+    },
+    {
+      "id": "knowledge_nip54_wiki_article_fork_defer_valid_004",
+      "kind": "knowledge.nip54.wiki_article_tags.valid",
+      "input": {
+        "fixture": "wiki_article_valid"
+      },
+      "expected": {
+        "fork_address_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com",
+          "fork"
+        ],
+        "fork_event_tag": [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "wss://relay.example.com",
+          "fork"
+        ],
+        "defer_address_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health-v2",
+          "wss://relay.example.com",
+          "defer"
+        ],
+        "defer_event_tag": [
+          "e",
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "wss://relay.example.com",
+          "defer"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_redirect_valid_005",
+      "kind": "knowledge.nip54.wiki_redirect_tags.valid",
+      "input": {
+        "fixture": "wiki_redirect_valid"
+      },
+      "expected": {
+        "target_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_merge_request_valid_006",
+      "kind": "knowledge.nip54.wiki_merge_request.valid",
+      "input": {
+        "fixture": "wiki_merge_request_valid"
+      },
+      "expected": {
+        "content": "Merge synthetic soil article updates",
+        "target_tag": [
+          "a",
+          "30818:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:soil-health",
+          "wss://relay.example.com"
+        ],
+        "destination_tag": [
+          "p",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "base_event_tag": [
+          "e",
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          ""
+        ],
+        "source_event_tag": [
+          "e",
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "",
+          "source"
+        ]
+      }
+    },
+    {
+      "id": "knowledge_nip54_merge_request_without_base_valid_007",
+      "kind": "knowledge.nip54.wiki_merge_request.valid",
+      "input": {
+        "fixture": "wiki_merge_request_without_base_valid"
+      },
+      "expected": {
+        "content": "Merge synthetic soil article updates",
+        "base_version_event_id": null,
+        "source_event_tag": [
+          "e",
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "",
+          "source"
+        ]
+      }
     }
   ]
 }

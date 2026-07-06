@@ -45,7 +45,7 @@ pub struct RadrootsKnowledgeAdversarialFixture {
     pub expected_error_code: &'static str,
 }
 
-pub const RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES: [RadrootsKnowledgeAdversarialFixture; 8] = [
+pub const RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES: [RadrootsKnowledgeAdversarialFixture; 13] = [
     RadrootsKnowledgeAdversarialFixture {
         id: "malformed_tags",
         pipeline_stage: "contract_validation",
@@ -75,6 +75,31 @@ pub const RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES: [RadrootsKnowledgeAdversarial
         id: "invalid_nip54_d_tag",
         pipeline_stage: "encode",
         expected_error_code: "invalid_field",
+    },
+    RadrootsKnowledgeAdversarialFixture {
+        id: "invalid_redirect_target_kind",
+        pipeline_stage: "encode",
+        expected_error_code: "invalid_field",
+    },
+    RadrootsKnowledgeAdversarialFixture {
+        id: "merge_request_missing_source_marker",
+        pipeline_stage: "event_parse",
+        expected_error_code: "invalid_tag",
+    },
+    RadrootsKnowledgeAdversarialFixture {
+        id: "merge_request_json_content_guard",
+        pipeline_stage: "wire_shape",
+        expected_error_code: "plain_text_content",
+    },
+    RadrootsKnowledgeAdversarialFixture {
+        id: "orphan_fork_marker",
+        pipeline_stage: "event_parse",
+        expected_error_code: "invalid_tag",
+    },
+    RadrootsKnowledgeAdversarialFixture {
+        id: "orphan_defer_marker",
+        pipeline_stage: "event_parse",
+        expected_error_code: "invalid_tag",
     },
     RadrootsKnowledgeAdversarialFixture {
         id: "id_mismatch",
@@ -125,16 +150,6 @@ pub fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
     }
 }
 
-pub fn wiki_article_ref() -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
-        id: hex_64('b'),
-        author: hex_64('a'),
-        kind: KIND_WIKI_ARTICLE,
-        d_tag: Some("soil-health".to_string()),
-        relays: Some(vec![RELAY_PRIMARY_WSS.to_string()]),
-    }
-}
-
 pub fn address_ref() -> RadrootsAddressableRef {
     RadrootsAddressableRef {
         kind: KIND_WIKI_ARTICLE,
@@ -144,10 +159,26 @@ pub fn address_ref() -> RadrootsAddressableRef {
     }
 }
 
+pub fn deferred_address_ref() -> RadrootsAddressableRef {
+    RadrootsAddressableRef {
+        kind: KIND_WIKI_ARTICLE,
+        pubkey: hex_64('a'),
+        d_tag: "soil-health-v2".to_string(),
+        relays: vec![RELAY_PRIMARY_WSS.to_string()],
+    }
+}
+
 pub fn wiki_article_version_ref() -> RadrootsWikiArticleVersionRef {
     RadrootsWikiArticleVersionRef {
         event_id: hex_64('b'),
         address_ref: address_ref(),
+    }
+}
+
+pub fn wiki_article_deferred_version_ref() -> RadrootsWikiArticleVersionRef {
+    RadrootsWikiArticleVersionRef {
+        event_id: hex_64('c'),
+        address_ref: deferred_address_ref(),
     }
 }
 
@@ -160,8 +191,8 @@ pub fn wiki_article() -> RadrootsWikiArticle {
         summary: Some("Living soil basics".to_string()),
         topics: vec!["soil".to_string(), "local-food".to_string()],
         references: vec![event_ref('2', KIND_KNOWLEDGE_SOURCE)],
-        forked_from: Vec::new(),
-        deferred_to: None,
+        forked_from: vec![wiki_article_version_ref()],
+        deferred_to: Some(wiki_article_deferred_version_ref()),
     }
 }
 
@@ -179,6 +210,13 @@ pub fn wiki_merge_request() -> RadrootsWikiMergeRequest {
         base_version_event_id: Some(hex_64('e')),
         source_version_event_id: hex_64('f'),
         explanation: Some("Merge synthetic soil article updates".to_string()),
+    }
+}
+
+pub fn wiki_merge_request_without_base_version() -> RadrootsWikiMergeRequest {
+    RadrootsWikiMergeRequest {
+        base_version_event_id: None,
+        ..wiki_merge_request()
     }
 }
 
@@ -365,6 +403,14 @@ pub fn knowledge_valid_fixtures() -> Vec<RadrootsKnowledgeFixtureCase> {
             data: RadrootsKnowledgeFixture::WikiMergeRequest(wiki_merge_request()),
         },
         RadrootsKnowledgeFixtureCase {
+            id: "wiki_merge_request_without_base_valid",
+            contract_id: "radroots.wiki.merge_request.v1",
+            kind: KIND_WIKI_MERGE_REQUEST,
+            data: RadrootsKnowledgeFixture::WikiMergeRequest(
+                wiki_merge_request_without_base_version(),
+            ),
+        },
+        RadrootsKnowledgeFixtureCase {
             id: "knowledge_source_valid",
             contract_id: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA,
             kind: KIND_KNOWLEDGE_SOURCE,
@@ -426,7 +472,7 @@ mod tests {
     #[test]
     fn valid_fixture_catalog_covers_all_contract_ids() {
         let fixtures = knowledge_valid_fixtures();
-        assert_eq!(fixtures.len(), RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS.len());
+        assert!(fixtures.len() >= RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS.len());
         for contract_id in RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS {
             assert!(
                 fixtures
@@ -450,6 +496,11 @@ mod tests {
             "private_coordinate_leakage",
             "unsupported_contract_shape",
             "invalid_nip54_d_tag",
+            "invalid_redirect_target_kind",
+            "merge_request_missing_source_marker",
+            "merge_request_json_content_guard",
+            "orphan_fork_marker",
+            "orphan_defer_marker",
             "id_mismatch",
             "signature_invalidity",
         ];

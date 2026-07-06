@@ -56,6 +56,18 @@
         "contract_id": "radroots.wiki.article.v1",
         "operation": "build_validate_decode_expose"
       }
+    },
+    {
+      "id": "knowledge_claim_sdk_builder_downstream_valid_006",
+      "kind": "knowledge.sdk_builder_event.valid",
+      "input": {
+        "sdk": "radroots_sdk",
+        "builder": "RadrootsKnowledgeClaimBuilder"
+      },
+      "expected": {
+        "contract_id": "radroots.knowledge.claim.v1",
+        "operation": "build_event_validate_decode_expose"
+      }
     }
   ]
 }

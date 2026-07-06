@@ -9,6 +9,7 @@ license.workspace = true
 description = "Replica schema model for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_replica_db_schema"
 readme = "README"
 
 [lib]

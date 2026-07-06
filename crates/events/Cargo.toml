@@ -9,6 +9,7 @@ license.workspace = true
 description = "Domain event model for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_events"
 readme = "README"
 
 [features]

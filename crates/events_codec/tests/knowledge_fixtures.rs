@@ -9,28 +9,31 @@ use radroots_events::contract::{
 };
 use radroots_events::kinds::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM,
-    KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW,
+    KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_WIKI_ARTICLE,
 };
 use radroots_events::knowledge::{
     RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RadrootsWikiArticle,
 };
-use radroots_events_codec::error::EventEncodeError;
+use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::knowledge::{
     contribution_attestation_to_wire_parts, evidence_bounty_to_wire_parts,
     knowledge_change_proposal_to_wire_parts, knowledge_claim_to_wire_parts,
     knowledge_field_report_to_wire_parts, knowledge_relation_to_wire_parts,
-    knowledge_review_to_wire_parts, knowledge_source_to_wire_parts, wiki_article_to_wire_parts,
-    wiki_merge_request_to_wire_parts, wiki_redirect_to_wire_parts,
+    knowledge_review_to_wire_parts, knowledge_source_to_wire_parts, wiki_article_from_event,
+    wiki_article_to_wire_parts, wiki_merge_request_from_event, wiki_merge_request_to_wire_parts,
+    wiki_redirect_to_wire_parts,
 };
 use radroots_events_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
 use radroots_events_codec::wire::WireEventParts;
+use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 use radroots_test_fixtures::knowledge::{
     RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES, RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS,
-    RadrootsKnowledgeFixture, hex_64, knowledge_claim, knowledge_field_report,
-    knowledge_valid_fixtures, wiki_article,
+    RadrootsKnowledgeFixture, RadrootsKnowledgeFixtureCase, hex_64, knowledge_claim,
+    knowledge_field_report, knowledge_valid_fixtures, wiki_article, wiki_merge_request,
+    wiki_redirect,
 };
 
 fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
@@ -112,6 +115,24 @@ fn parts_for_fixture(fixture: &RadrootsKnowledgeFixture) -> WireEventParts {
     }
 }
 
+fn fixture_by_id<'a>(
+    fixtures: &'a [RadrootsKnowledgeFixtureCase],
+    id: &str,
+) -> &'a RadrootsKnowledgeFixtureCase {
+    fixtures
+        .iter()
+        .find(|fixture| fixture.id == id)
+        .unwrap_or_else(|| panic!("missing fixture {id}"))
+}
+
+fn has_exact_tag(tags: &[Vec<String>], expected: &[&str]) -> bool {
+    tags.iter().any(|tag| {
+        tag.iter()
+            .map(|entry| entry.as_str())
+            .eq(expected.iter().copied())
+    })
+}
+
 #[test]
 fn golden_knowledge_fixtures_cover_every_contract() {
     let fixtures = knowledge_valid_fixtures();
@@ -131,11 +152,44 @@ fn golden_knowledge_fixtures_cover_every_contract() {
 
     assert_eq!(fixture_contracts, registry_contracts);
 
-    for fixture in fixtures {
+    for fixture in &fixtures {
         let event = event_from_parts(parts_for_fixture(&fixture.data));
         validate_event_contract_shape(&event, fixture.contract_id).unwrap();
         assert_eq!(event.kind, fixture.kind, "{}", fixture.id);
     }
+
+    let article_parts = parts_for_fixture(&fixture_by_id(&fixtures, "wiki_article_valid").data);
+    let fork_address = format!("{}:{}:soil-health", KIND_WIKI_ARTICLE, hex_64('a'));
+    let defer_address = format!("{}:{}:soil-health-v2", KIND_WIKI_ARTICLE, hex_64('a'));
+    assert!(has_exact_tag(
+        &article_parts.tags,
+        &["a", fork_address.as_str(), RELAY_PRIMARY_WSS, "fork",]
+    ));
+    assert!(has_exact_tag(
+        &article_parts.tags,
+        &["e", hex_64('b').as_str(), RELAY_PRIMARY_WSS, "fork"]
+    ));
+    assert!(has_exact_tag(
+        &article_parts.tags,
+        &["a", defer_address.as_str(), RELAY_PRIMARY_WSS, "defer",]
+    ));
+    assert!(has_exact_tag(
+        &article_parts.tags,
+        &["e", hex_64('c').as_str(), RELAY_PRIMARY_WSS, "defer"]
+    ));
+
+    let merge_without_base =
+        parts_for_fixture(&fixture_by_id(&fixtures, "wiki_merge_request_without_base_valid").data);
+    assert!(has_exact_tag(
+        &merge_without_base.tags,
+        &["e", hex_64('f').as_str(), "", "source"]
+    ));
+    assert!(
+        !merge_without_base
+            .tags
+            .iter()
+            .any(|tag| tag == &vec!["e".to_string(), hex_64('e'), String::new()])
+    );
 }
 
 #[test]
@@ -246,6 +300,92 @@ fn nip54_and_signature_adversarial_fixtures_are_rejected() {
     assert_eq!(invalid_d_tag.expected_error_code, error.code());
     assert!(matches!(error, EventEncodeError::InvalidField("d_tag")));
 
+    let invalid_redirect = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
+        .iter()
+        .find(|fixture| fixture.id == "invalid_redirect_target_kind")
+        .unwrap();
+    let mut redirect = wiki_redirect();
+    redirect.target.kind = 30023;
+    let error = wiki_redirect_to_wire_parts(&redirect).unwrap_err();
+    assert_eq!(invalid_redirect.pipeline_stage, "encode");
+    assert_eq!(invalid_redirect.expected_error_code, error.code());
+    assert!(matches!(
+        error,
+        EventEncodeError::InvalidField("wiki_redirect.target")
+    ));
+
+    let missing_source = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
+        .iter()
+        .find(|fixture| fixture.id == "merge_request_missing_source_marker")
+        .unwrap();
+    let mut missing_source_event =
+        event_from_parts(wiki_merge_request_to_wire_parts(&wiki_merge_request()).unwrap());
+    missing_source_event.tags.retain(|tag| {
+        !(tag.first().map(|value| value.as_str()) == Some("e")
+            && tag.last().map(|value| value.as_str()) == Some("source"))
+    });
+    let error = wiki_merge_request_from_event(missing_source_event).unwrap_err();
+    assert_eq!(missing_source.pipeline_stage, "event_parse");
+    assert_eq!(missing_source.expected_error_code, error.code());
+    assert!(matches!(error, EventParseError::InvalidTag("e")));
+
+    let json_guard = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
+        .iter()
+        .find(|fixture| fixture.id == "merge_request_json_content_guard")
+        .unwrap();
+    let merge_parts = wiki_merge_request_to_wire_parts(&wiki_merge_request()).unwrap();
+    assert_eq!(json_guard.pipeline_stage, "wire_shape");
+    assert_eq!(json_guard.expected_error_code, "plain_text_content");
+    assert_eq!(merge_parts.content, "Merge synthetic soil article updates");
+    assert!(serde_json::from_str::<serde_json::Value>(&merge_parts.content).is_err());
+    assert!(!merge_parts.content.contains("target_article"));
+
+    let orphan_fork = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
+        .iter()
+        .find(|fixture| fixture.id == "orphan_fork_marker")
+        .unwrap();
+    let mut orphan_fork_event =
+        event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let mut removed_fork_event = false;
+    orphan_fork_event.tags.retain(|tag| {
+        if !removed_fork_event
+            && tag.first().map(|value| value.as_str()) == Some("e")
+            && tag.last().map(|value| value.as_str()) == Some("fork")
+        {
+            removed_fork_event = true;
+            false
+        } else {
+            true
+        }
+    });
+    let error = wiki_article_from_event(orphan_fork_event).unwrap_err();
+    assert_eq!(orphan_fork.pipeline_stage, "event_parse");
+    assert_eq!(orphan_fork.expected_error_code, error.code());
+    assert!(matches!(error, EventParseError::InvalidTag("a")));
+
+    let orphan_defer = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
+        .iter()
+        .find(|fixture| fixture.id == "orphan_defer_marker")
+        .unwrap();
+    let mut orphan_defer_event =
+        event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
+    let mut removed_defer_address = false;
+    orphan_defer_event.tags.retain(|tag| {
+        if !removed_defer_address
+            && tag.first().map(|value| value.as_str()) == Some("a")
+            && tag.last().map(|value| value.as_str()) == Some("defer")
+        {
+            removed_defer_address = true;
+            false
+        } else {
+            true
+        }
+    });
+    let error = wiki_article_from_event(orphan_defer_event).unwrap_err();
+    assert_eq!(orphan_defer.pipeline_stage, "event_parse");
+    assert_eq!(orphan_defer.expected_error_code, error.code());
+    assert!(matches!(error, EventParseError::InvalidTag("a")));
+
     let id_mismatch = RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES
         .iter()
         .find(|fixture| fixture.id == "id_mismatch")
@@ -338,6 +478,8 @@ fn immutable_knowledge_contracts_are_regular_events() {
 fn verified_decode_exposes_representative_downstream_compatibility_events() {
     let fixture_ids = [
         "wiki_article_valid",
+        "wiki_redirect_valid",
+        "wiki_merge_request_without_base_valid",
         "knowledge_source_valid",
         "knowledge_claim_valid",
         "knowledge_review_valid",
@@ -351,6 +493,8 @@ fn verified_decode_exposes_representative_downstream_compatibility_events() {
         let decoded = verify_and_decode_radroots_event(signed).unwrap();
         match decoded {
             RadrootsDecodedEvent::WikiArticle(_)
+            | RadrootsDecodedEvent::WikiRedirect(_)
+            | RadrootsDecodedEvent::WikiMergeRequest(_)
             | RadrootsDecodedEvent::KnowledgeSource(_)
             | RadrootsDecodedEvent::KnowledgeClaim(_)
             | RadrootsDecodedEvent::KnowledgeReview(_)

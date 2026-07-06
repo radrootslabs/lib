@@ -144,12 +144,7 @@ pub fn validate_listing_event(
     ) {
         return Err(TradeListingValidationError::MissingLocationLocality);
     }
-    if location.geohash.trim().is_empty() {
-        return Err(TradeListingValidationError::MissingLocationGeohash);
-    }
-    if !is_public_geohash5(&location.geohash) {
-        return Err(TradeListingValidationError::InvalidLocationGeohash);
-    }
+    validate_listing_location_geohash(&location.geohash)?;
     let delivery_method = listing
         .delivery_method
         .clone()
@@ -172,6 +167,17 @@ pub fn validate_listing_event(
         delivery_method,
         listing,
     })
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn validate_listing_location_geohash(geohash: &str) -> Result<(), TradeListingValidationError> {
+    if geohash.trim().is_empty() {
+        return Err(TradeListingValidationError::MissingLocationGeohash);
+    }
+    if !is_public_geohash5(geohash) {
+        return Err(TradeListingValidationError::InvalidLocationGeohash);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

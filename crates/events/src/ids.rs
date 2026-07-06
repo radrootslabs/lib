@@ -615,4 +615,68 @@ mod tests {
             format!("\"{}\"", hex_64('e'))
         );
     }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_missing_fields_exercise_identifier_deserializers() {
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingPublicKey {
+            value: RadrootsPublicKey,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingEventId {
+            value: RadrootsEventId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingDTag {
+            value: RadrootsDTag,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingListingAddress {
+            value: RadrootsListingAddress,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingOrderId {
+            value: RadrootsOrderId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingOrderRevisionId {
+            value: RadrootsOrderRevisionId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingOrderQuoteId {
+            value: RadrootsOrderQuoteId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingInventoryBinId {
+            value: RadrootsInventoryBinId,
+        }
+
+        fn missing_field_message<T>() -> String
+        where
+            T: serde::de::DeserializeOwned + core::fmt::Debug,
+        {
+            serde_json::from_str::<T>("{}")
+                .expect_err("missing field")
+                .to_string()
+        }
+
+        let missing = "missing field `value` at line 1 column 2";
+        assert_eq!(missing_field_message::<MissingPublicKey>(), missing);
+        assert_eq!(missing_field_message::<MissingEventId>(), missing);
+        assert_eq!(missing_field_message::<MissingDTag>(), missing);
+        assert_eq!(missing_field_message::<MissingListingAddress>(), missing);
+        assert_eq!(missing_field_message::<MissingOrderId>(), missing);
+        assert_eq!(missing_field_message::<MissingOrderRevisionId>(), missing);
+        assert_eq!(missing_field_message::<MissingOrderQuoteId>(), missing);
+        assert_eq!(missing_field_message::<MissingInventoryBinId>(), missing);
+    }
 }

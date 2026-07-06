@@ -367,3 +367,78 @@ fn ensure_raw_event_matches_signed_event(
     }
     Ok(())
 }
+
+#[cfg(all(test, feature = "client"))]
+mod tests {
+    use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
+    use nostr::JsonUtil;
+    use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+    use radroots_events::kinds::KIND_POST;
+    use radroots_nostr::prelude::{
+        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
+    };
+
+    const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
+        "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
+    const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
+        "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+
+    fn signed_post(content: &str) -> (RadrootsNostrEvent, RadrootsSignedNostrEvent) {
+        let secret_key =
+            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
+        let keys = RadrootsNostrKeys::new(secret_key);
+        let draft = RadrootsFrozenEventDraft::new(
+            "radroots.social.post.v1",
+            KIND_POST,
+            1_700_000_000,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            content,
+            FIXTURE_ALICE_PUBLIC_KEY_HEX,
+        )
+        .expect("draft");
+        let signed_event = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
+        let raw_event =
+            RadrootsNostrEvent::from_json(signed_event.raw_json.as_str()).expect("raw event");
+        (raw_event, signed_event)
+    }
+
+    fn assert_mismatch(raw_event: &RadrootsNostrEvent, signed_event: RadrootsSignedNostrEvent) {
+        assert!(ensure_raw_event_matches_signed_event(raw_event, &signed_event).is_err());
+    }
+
+    #[test]
+    fn raw_event_match_guard_accepts_exact_event_and_rejects_field_mismatches() {
+        let (raw_event, signed_event) = signed_post("matched");
+        ensure_raw_event_matches_signed_event(&raw_event, &signed_event).expect("matching event");
+
+        let mut mismatched = signed_event.clone();
+        mismatched.id = "00".repeat(32);
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event.clone();
+        mismatched.pubkey = "11".repeat(32);
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event.clone();
+        mismatched.created_at += 1;
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event.clone();
+        mismatched.kind += 1;
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event.clone();
+        mismatched.content.push_str(" changed");
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event.clone();
+        mismatched.sig = "22".repeat(64);
+        assert_mismatch(&raw_event, mismatched);
+
+        let mut mismatched = signed_event;
+        mismatched
+            .tags
+            .push(vec!["t".to_owned(), "compost".to_owned()]);
+        assert_mismatch(&raw_event, mismatched);
+    }
+}

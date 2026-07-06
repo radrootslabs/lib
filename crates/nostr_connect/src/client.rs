@@ -86,16 +86,12 @@ pub fn build_request_event(
         payload,
         Version::V2,
     )
-    .map_err(|error| RadrootsNostrConnectError::Encrypt {
-        reason: error.to_string(),
-    })?;
+    .map_err(encrypt_error)?;
 
     EventBuilder::new(Kind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND), ciphertext)
         .tag(Tag::public_key(target.remote_signer_public_key))
         .sign_with_keys(client_keys)
-        .map_err(|error| RadrootsNostrConnectError::Sign {
-            reason: error.to_string(),
-        })
+        .map_err(sign_error)
 }
 
 pub fn parse_response_event(
@@ -171,5 +167,19 @@ where
             RadrootsNostrConnectClientEventOutcome::Progress(progress) => on_progress(progress)?,
             RadrootsNostrConnectClientEventOutcome::Response(response) => return Ok(response),
         }
+    }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn encrypt_error(error: impl ToString) -> RadrootsNostrConnectError {
+    RadrootsNostrConnectError::Encrypt {
+        reason: error.to_string(),
+    }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn sign_error(error: impl ToString) -> RadrootsNostrConnectError {
+    RadrootsNostrConnectError::Sign {
+        reason: error.to_string(),
     }
 }

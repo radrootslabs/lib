@@ -9,6 +9,7 @@ license.workspace = true
 description = "Logging layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_log"
 readme = "README"
 
 [features]

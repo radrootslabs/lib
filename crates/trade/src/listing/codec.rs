@@ -204,10 +204,7 @@ fn listing_from_tags(
     if !is_d_tag_base64url(&d_tag) {
         return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
     }
-    let d_tag = match RadrootsDTag::parse(&d_tag) {
-        Ok(d_tag) => d_tag,
-        Err(_) => unreachable!(),
-    };
+    let d_tag = RadrootsDTag::parse(&d_tag).expect("base64url d tag parses");
     let mut product = RadrootsListingProduct {
         key: String::new(),
         title: String::new(),
@@ -930,6 +927,107 @@ mod tests {
             parse_d_tag(&[vec![TAG_D.into(), listing_d_tag()]]).unwrap(),
             listing_d_tag()
         );
+    }
+
+    #[test]
+    fn listing_from_event_parts_rejects_private_location_json_fields() {
+        let err =
+            listing_from_event_parts(&base_event_tags(), r#"{"location":{"lat":1}}"#).unwrap_err();
+
+        assert_eq!(parse_error_tag(err), "location".to_string());
+    }
+
+    #[test]
+    fn listing_from_tags_rejects_private_coordinate_and_geohash_edges() {
+        let mut invalid_geohash = base_trade_tags();
+        invalid_geohash.push(vec![
+            TAG_LOCATION.into(),
+            "Farm".into(),
+            "Town".into(),
+            "Region".into(),
+            "US".into(),
+        ]);
+        invalid_geohash.push(vec![TAG_GEOHASH.into(), "9q8yyz".into()]);
+        let err = listing_from_tags(
+            &invalid_geohash,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_GEOHASH.to_string());
+
+        let mut missing_geohash_value = base_trade_tags();
+        missing_geohash_value.push(vec![TAG_GEOHASH.into()]);
+        let err = listing_from_tags(
+            &missing_geohash_value,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_GEOHASH.to_string());
+
+        let mut duplicate_geohash = base_trade_tags();
+        duplicate_geohash.push(vec![
+            TAG_LOCATION.into(),
+            "Farm".into(),
+            "Town".into(),
+            "Region".into(),
+            "US".into(),
+        ]);
+        duplicate_geohash.push(vec![TAG_GEOHASH.into(), "9q8yy".into()]);
+        duplicate_geohash.push(vec![TAG_GEOHASH.into(), "u6sep".into()]);
+        let err = listing_from_tags(
+            &duplicate_geohash,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_GEOHASH.to_string());
+
+        let mut private_coordinates = base_trade_tags();
+        private_coordinates.push(vec![TAG_DD.into(), "1.0".into()]);
+        let err = listing_from_tags(
+            &private_coordinates,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_DD.to_string());
+
+        let mut blank_optional_locality = base_trade_tags();
+        blank_optional_locality.push(vec![
+            TAG_LOCATION.into(),
+            "Farm".into(),
+            " ".into(),
+            " ".into(),
+            "US".into(),
+        ]);
+        blank_optional_locality.push(vec![TAG_GEOHASH.into(), "9q8yy".into()]);
+        let listing = listing_from_tags(
+            &blank_optional_locality,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .expect("listing with blank optional locality");
+        let location = listing.location.expect("location");
+        assert_eq!(location.city, None);
+        assert_eq!(location.region, None);
+        assert_eq!(location.country.as_deref(), Some("US"));
     }
 
     #[test]

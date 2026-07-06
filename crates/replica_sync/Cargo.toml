@@ -9,6 +9,7 @@ license.workspace = true
 description = "Replica synchronization layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_replica_sync"
 readme = "README"
 
 [lib]

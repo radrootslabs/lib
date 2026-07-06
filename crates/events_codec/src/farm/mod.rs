@@ -4,9 +4,9 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use crate::error::EventEncodeError;
+    use crate::error::{EventEncodeError, EventParseError};
     #[cfg(feature = "serde_json")]
-    use crate::farm::decode::farm_from_event;
+    use crate::farm::decode::{farm_from_event, parsed_from_event};
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
         farm_listings_list_set_from_listings, farm_members_list_set,
@@ -228,6 +228,170 @@ mod tests {
             err,
             EventEncodeError::EmptyRequiredField("farm.d_tag")
         ));
+
+        let mut farm = RadrootsFarm {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: Some(RadrootsFarmPublicLocation {
+                primary: " ".to_string(),
+                city: Some("null".to_string()),
+                region: None,
+                country: None,
+                geohash: "9q8yy".to_string(),
+            }),
+            tags: None,
+        };
+        let err = farm_build_tags(&farm).expect_err("expected missing locality");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("location.locality")
+        ));
+
+        let location = farm.location.as_mut().expect("location");
+        location.primary = "Test Farm".to_string();
+        location.city = Some("Santa Cruz".to_string());
+        let tags = farm_build_tags(&farm).expect("valid location after locality repair");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(|value| value.as_str()) == Some("g"))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde_json")]
+    fn farm_decode_rejects_private_location_and_ops_shapes() {
+        let farm = RadrootsFarm {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: Some(RadrootsFarmPublicLocation {
+                primary: "Test Farm".to_string(),
+                city: Some("Santa Cruz".to_string()),
+                region: Some("California".to_string()),
+                country: Some("US".to_string()),
+                geohash: "9q8yy".to_string(),
+            }),
+            tags: None,
+        };
+        let content = serde_json::to_string(&farm).expect("farm content");
+        let tags = vec![
+            Vec::new(),
+            vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+            vec!["g".to_string(), "9q8yy".to_string()],
+        ];
+        let parsed = parsed_from_event(
+            "event-id".to_string(),
+            "author".to_string(),
+            42,
+            KIND_FARM,
+            content.clone(),
+            tags,
+            "sig".to_string(),
+        )
+        .expect("parsed farm");
+        assert_eq!(parsed.event.sig, "sig");
+        assert_eq!(parsed.data.data.name, "Test Farm");
+
+        for (tag, expected) in [
+            (vec!["g".to_string()], "g"),
+            (vec!["g".to_string(), "9q8ya".to_string()], "g"),
+            (vec!["dd".to_string(), "secret".to_string()], "dd"),
+            (vec!["dd.lat".to_string(), "1".to_string()], "dd.lat"),
+            (vec!["dd.lon".to_string(), "1".to_string()], "dd.lon"),
+            (vec!["l".to_string(), "private".to_string()], "l"),
+            (vec!["L".to_string(), "private".to_string()], "L"),
+        ] {
+            let tags = vec![
+                vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+                tag,
+            ];
+            let err = farm_from_event(KIND_FARM, &tags, &content).unwrap_err();
+            assert!(matches!(err, EventParseError::InvalidTag(found) if found == expected));
+        }
+
+        let invalid_geohash_content = r#"{"d_tag":"AAAAAAAAAAAAAAAAAAAAAA","name":"Test Farm","location":{"primary":"Test Farm","city":"Santa Cruz","region":"California","country":"US","geohash":"9q8ya"}}"#;
+        let err = farm_from_event(
+            KIND_FARM,
+            &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            invalid_geohash_content,
+        )
+        .unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("g")));
+
+        let missing_locality_content = r#"{"d_tag":"AAAAAAAAAAAAAAAAAAAAAA","name":"Test Farm","location":{"primary":" ","city":"null","region":null,"country":null,"geohash":"9q8yy"}}"#;
+        let err = farm_from_event(
+            KIND_FARM,
+            &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            missing_locality_content,
+        )
+        .unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("g")));
+
+        let err = farm_from_event(
+            KIND_FARM,
+            &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            "[]",
+        )
+        .unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidJson("content")));
+
+        for key in [
+            "workspace",
+            "farm_group_id",
+            "document_id",
+            "document_kind",
+            "crdt_backend",
+            "encoded_change",
+            "semantic_kind",
+            "owner_document_kind",
+            "owner_document_id",
+            "relays",
+            "media_servers",
+            "supported_kinds",
+            "protocol_version",
+        ] {
+            let content =
+                format!(r#"{{"d_tag":"AAAAAAAAAAAAAAAAAAAAAA","name":"Test Farm","{key}":"x"}}"#);
+            let err = farm_from_event(
+                KIND_FARM,
+                &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+                &content,
+            )
+            .unwrap_err();
+            assert!(matches!(err, EventParseError::InvalidJson("content")));
+        }
+
+        for key in [
+            "gcs",
+            "lat",
+            "lng",
+            "lon",
+            "point",
+            "polygon",
+            "coordinates",
+            "accuracy",
+            "altitude",
+            "label",
+            "tag_0",
+        ] {
+            let content = format!(
+                r#"{{"d_tag":"AAAAAAAAAAAAAAAAAAAAAA","name":"Test Farm","location":{{"primary":"Test Farm","city":"Santa Cruz","region":"California","country":"US","geohash":"9q8yy","{key}":"x"}}}}"#
+            );
+            let err = farm_from_event(
+                KIND_FARM,
+                &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+                &content,
+            )
+            .unwrap_err();
+            assert!(matches!(err, EventParseError::InvalidJson("content")));
+        }
     }
 
     #[test]

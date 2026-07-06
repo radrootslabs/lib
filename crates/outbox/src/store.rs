@@ -129,7 +129,7 @@ impl RadrootsOutbox {
             input.draft.expected_pubkey.as_str(),
             &input.draft,
             &digest_relays,
-        )?;
+        );
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref()
             && let Some(existing) = existing_idempotent_operation_for_pool(
@@ -169,7 +169,7 @@ impl RadrootsOutbox {
             input.draft.expected_pubkey.as_str(),
             &input.draft,
             &digest_relays,
-        )?;
+        );
         let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
@@ -267,7 +267,7 @@ impl RadrootsOutbox {
             input.draft.expected_pubkey.as_str(),
             &input.draft,
             &digest_relays,
-        )?;
+        );
         let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
@@ -1277,15 +1277,15 @@ fn idempotency_digest(
     expected_pubkey: &str,
     draft: &RadrootsFrozenEventDraft,
     target_relays: &[String],
-) -> Result<String, RadrootsOutboxError> {
+) -> String {
     let input = DigestInput {
         operation_kind,
         expected_pubkey,
         draft,
         target_relays,
     };
-    let bytes = serde_json::to_vec(&input)?;
-    Ok(hex::encode(Sha256::digest(bytes)))
+    let bytes = serde_json::to_vec(&input).expect("outbox digest input is serializable");
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn bool_i64(value: bool) -> i64 {
@@ -2155,6 +2155,73 @@ mod tests {
         ));
         assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
         assert_eq!(table_count(&outbox, "outbox_event").await, 1);
+    }
+
+    #[tokio::test]
+    async fn preflight_signed_operation_idempotency_covers_new_key_and_empty_relays() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight-new");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+
+        let without_key = outbox
+            .preflight_signed_operation_idempotency(&signed_operation_input(
+                draft.clone(),
+                signed_event.clone(),
+                1_000,
+            ))
+            .await
+            .expect("preflight without key");
+        let with_new_key = outbox
+            .preflight_signed_operation_idempotency(
+                &signed_operation_input(draft.clone(), signed_event.clone(), 1_001)
+                    .with_idempotency_key("new-preflight-key"),
+            )
+            .await
+            .expect("preflight with new key");
+        assert_eq!(
+            without_key.idempotency_digest,
+            with_new_key.idempotency_digest
+        );
+
+        let empty_relays = outbox
+            .preflight_signed_operation_idempotency(&RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft.clone(),
+                signed_event.clone(),
+                Vec::new(),
+                false,
+                1_007,
+                1_002,
+            ))
+            .await
+            .expect_err("empty relays");
+        assert!(matches!(
+            empty_relays,
+            RadrootsOutboxError::EmptyTargetRelays
+        ));
+        let delegated_empty_relays = outbox
+            .preflight_signed_operation_idempotency(
+                &RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft.clone(),
+                    signed_event.clone(),
+                    Vec::new(),
+                    false,
+                    1_008,
+                    1_003,
+                )
+                .allow_empty_target_relays(),
+            )
+            .await
+            .expect("delegated empty relays");
+        assert_ne!(
+            without_key.idempotency_digest,
+            delegated_empty_relays.idempotency_digest
+        );
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
     }
 
     #[tokio::test]

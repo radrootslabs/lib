@@ -250,3 +250,124 @@ impl RadrootsRelayTargetSet {
         self.relays.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RadrootsRelayUrlPolicy, forbidden_public_ipv4_reason, forbidden_public_ipv6_reason,
+        validate_host_destination,
+    };
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn host_destination_validation_covers_public_and_local_policy_edges() {
+        assert!(!RadrootsRelayUrlPolicy::Public.accepts_ws_host("localhost"));
+        assert!(RadrootsRelayUrlPolicy::Localhost.accepts_ws_host("localhost"));
+        validate_host_destination(
+            "wss://93.184.216.34",
+            "93.184.216.34",
+            RadrootsRelayUrlPolicy::Public,
+        )
+        .expect("public ipv4 host");
+        validate_host_destination(
+            "wss://relay.example.com",
+            "relay.example.com",
+            RadrootsRelayUrlPolicy::Public,
+        )
+        .expect("public dns host");
+        validate_host_destination(
+            "ws://127.0.0.1",
+            "127.0.0.1",
+            RadrootsRelayUrlPolicy::Localhost,
+        )
+        .expect("localhost policy host");
+    }
+
+    #[test]
+    fn public_ipv4_classifier_covers_forbidden_ranges_and_global_addresses() {
+        let cases = [
+            Ipv4Addr::new(0, 0, 0, 0),
+            Ipv4Addr::new(0, 1, 2, 3),
+            Ipv4Addr::new(127, 0, 0, 1),
+            Ipv4Addr::new(10, 1, 2, 3),
+            Ipv4Addr::new(169, 254, 1, 2),
+            Ipv4Addr::new(224, 0, 0, 1),
+            Ipv4Addr::new(255, 255, 255, 255),
+            Ipv4Addr::new(192, 0, 2, 1),
+            Ipv4Addr::new(100, 64, 0, 1),
+            Ipv4Addr::new(192, 0, 0, 8),
+            Ipv4Addr::new(198, 18, 0, 1),
+            Ipv4Addr::new(240, 0, 0, 1),
+        ];
+        for address in cases {
+            assert!(forbidden_public_ipv4_reason(address).is_some());
+        }
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(93, 184, 216, 34)),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(100, 128, 0, 1)),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(193, 0, 0, 8)),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(192, 1, 0, 8)),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(192, 0, 1, 8)),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv4_reason(Ipv4Addr::new(198, 20, 0, 1)),
+            None
+        );
+    }
+
+    #[test]
+    fn public_ipv6_classifier_covers_forbidden_ranges_and_global_addresses() {
+        let cases = [
+            "::ffff:192.168.1.10",
+            "::",
+            "::1",
+            "ff02::1",
+            "fd00::1",
+            "fe80::1",
+            "2001:db8::1",
+            "2001:1::1",
+        ];
+        for address in cases {
+            assert!(
+                forbidden_public_ipv6_reason(address.parse::<Ipv6Addr>().expect("ipv6")).is_some()
+            );
+        }
+        assert_eq!(
+            forbidden_public_ipv6_reason(
+                "2001:4860:4860::8888"
+                    .parse::<Ipv6Addr>()
+                    .expect("public ipv6")
+            ),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv6_reason("2002:db8::1".parse::<Ipv6Addr>().expect("ipv6")),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv6_reason("2001:db9::1".parse::<Ipv6Addr>().expect("ipv6")),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv6_reason("2002:1::1".parse::<Ipv6Addr>().expect("ipv6")),
+            None
+        );
+        assert_eq!(
+            forbidden_public_ipv6_reason("2001:200::1".parse::<Ipv6Addr>().expect("ipv6")),
+            None
+        );
+    }
+}

@@ -133,3 +133,77 @@ impl RadrootsTradeLocatorCandidate {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_events::kinds::KIND_LISTING;
+
+    const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    fn event_id(raw: u8) -> RadrootsEventId {
+        RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")
+    }
+
+    fn order_id() -> RadrootsOrderId {
+        RadrootsOrderId::parse("order-1").expect("order id")
+    }
+
+    fn public_key(raw: &str) -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(raw).expect("public key")
+    }
+
+    fn listing_addr() -> RadrootsListingAddress {
+        RadrootsListingAddress::parse(format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"))
+            .expect("listing address")
+    }
+
+    #[test]
+    fn trade_id_and_locator_accessors_cover_public_surface() {
+        let order_id = order_id();
+        let trade_id = RadrootsTradeId::parse(order_id.as_str()).expect("trade id");
+
+        assert_eq!(trade_id.as_order_id(), &order_id);
+        assert_eq!(trade_id.as_str(), "order-1");
+        assert_eq!(trade_id.as_ref(), "order-1");
+        assert_eq!(RadrootsTradeId::from_str("order-1").unwrap(), trade_id);
+        assert!(RadrootsTradeId::parse(" ").is_err());
+        assert_eq!(
+            RadrootsOrderId::from(trade_id.clone()),
+            trade_id.clone().into_order_id()
+        );
+
+        let locator = RadrootsTradeLocator::from_order_id(order_id.clone())
+            .with_root_event_id(event_id(1))
+            .with_listing_addr(listing_addr())
+            .with_buyer_pubkey(public_key(BUYER))
+            .with_seller_pubkey(public_key(SELLER));
+
+        assert_eq!(locator.order_id(), &order_id);
+        assert_eq!(locator.trade_id.as_order_id(), &order_id);
+        assert_eq!(locator.root_event_id, Some(event_id(1)));
+        assert_eq!(locator.listing_addr, Some(listing_addr()));
+        assert_eq!(locator.buyer_pubkey, Some(public_key(BUYER)));
+        assert_eq!(locator.seller_pubkey, Some(public_key(SELLER)));
+    }
+
+    #[test]
+    fn locator_candidate_converts_to_specific_locator() {
+        let candidate = RadrootsTradeLocatorCandidate {
+            trade_id: order_id().into(),
+            root_event_id: event_id(1),
+            listing_addr: listing_addr(),
+            buyer_pubkey: public_key(BUYER),
+            seller_pubkey: public_key(SELLER),
+        };
+
+        let locator = candidate.locator();
+
+        assert_eq!(locator.trade_id, candidate.trade_id);
+        assert_eq!(locator.root_event_id, Some(candidate.root_event_id));
+        assert_eq!(locator.listing_addr, Some(candidate.listing_addr));
+        assert_eq!(locator.buyer_pubkey, Some(candidate.buyer_pubkey));
+        assert_eq!(locator.seller_pubkey, Some(candidate.seller_pubkey));
+    }
+}

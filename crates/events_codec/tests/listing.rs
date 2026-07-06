@@ -582,6 +582,12 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
 
 #[test]
 fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
+    for expected in ["dd", "dd.lat", "dd.lon", "l", "L"] {
+        let mut tags = sample_listing_tags();
+        tags.push(vec![expected.to_string(), "synthetic".to_string()]);
+        assert_invalid_tag(tags, expected);
+    }
+
     let mut tags = sample_listing_tags();
     tags.push(vec!["location".to_string(), "Farm shelf".to_string()]);
     let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
@@ -618,6 +624,38 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
         "Moyobamba".to_string(),
     ]);
     assert_invalid_tag(tags, "location");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "location".to_string(),
+        "Farm stand".to_string(),
+        " ".to_string(),
+        "null".to_string(),
+        " ".to_string(),
+    ]);
+    tags.push(vec!["g".to_string(), "9q8yy".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(
+        decoded.location.as_ref().map(|location| {
+            (
+                location.primary.as_str(),
+                location.city.as_deref(),
+                location.region.as_deref(),
+                location.country.as_deref(),
+                location.geohash.as_str(),
+            )
+        }),
+        Some(("Farm stand", None, None, None, "9q8yy"))
+    );
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["g".to_string(), "9q8ya".to_string()]);
+    assert_invalid_tag(tags, "g");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["g".to_string(), "9q8yy".to_string()]);
+    tags.push(vec!["g".to_string(), "6gkzw".to_string()]);
+    assert_invalid_tag(tags, "g");
 
     let mut tags = sample_listing_tags();
     tags.push(vec!["inventory".to_string()]);
@@ -724,6 +762,38 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
         panic!("expected other availability status");
     };
     assert_eq!(value, "paused");
+}
+
+#[test]
+fn listing_from_event_rejects_private_location_content_edges() {
+    let tags = sample_listing_tags();
+    for content in [
+        "# Widget",
+        "{not-json",
+        r#"{"name":"Widget"}"#,
+        r#"{"location":{"public_label":"Farm shelf"}}"#,
+    ] {
+        let decoded = listing_from_event(KIND_LISTING, &tags, content).unwrap();
+        assert_eq!(decoded.product.key, "sku");
+    }
+
+    for key in [
+        "lat",
+        "lng",
+        "lon",
+        "point",
+        "polygon",
+        "coordinates",
+        "accuracy",
+        "altitude",
+        "label",
+        "tag_0",
+        "gcs",
+    ] {
+        let content = format!(r#"{{"location":{{"{key}":"secret"}}}}"#);
+        let err = listing_from_event(KIND_LISTING, &tags, &content).unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidJson("content")));
+    }
 }
 
 #[test]
@@ -1120,6 +1190,23 @@ fn listing_build_tags_ignores_null_strings() {
             .iter()
             .any(|tag| tag.iter().any(|value| value == "null"))
     );
+}
+
+#[test]
+fn listing_build_tags_rejects_location_without_public_locality() {
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    listing.location = Some(RadrootsListingPublicLocation {
+        primary: "Farm stand".to_string(),
+        city: Some("null".to_string()),
+        region: None,
+        country: None,
+        geohash: "9q8yy".to_string(),
+    });
+
+    assert!(matches!(
+        listing_build_tags(&listing),
+        Err(EventEncodeError::EmptyRequiredField("location.locality"))
+    ));
 }
 
 #[test]

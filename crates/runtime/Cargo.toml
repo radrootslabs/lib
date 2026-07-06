@@ -9,6 +9,7 @@ license.workspace = true
 description = "Runtime configuration model for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_runtime"
 readme = "README"
 
 [features]

@@ -96,32 +96,30 @@ pub fn event_head_candidate_for_class(
                     );
                 }
             };
-            let coordinate = match class {
-                RadrootsEventClass::Replaceable => RadrootsEventHeadCoordinate::Replaceable {
+            let coordinate = if class == RadrootsEventClass::Replaceable {
+                RadrootsEventHeadCoordinate::Replaceable {
                     kind: event.kind,
                     pubkey,
-                },
-                RadrootsEventClass::Addressable => {
-                    let Some(d_tag) = first_tag_value(&event.tags, TAG_D) else {
-                        return RadrootsEventHeadCandidateResult::Malformed(
-                            RadrootsEventHeadMalformed::MissingDTag,
-                        );
-                    };
-                    let d_tag = match RadrootsDTag::parse(d_tag) {
-                        Ok(d_tag) => d_tag,
-                        Err(error) => {
-                            return RadrootsEventHeadCandidateResult::Malformed(
-                                RadrootsEventHeadMalformed::InvalidDTag(error),
-                            );
-                        }
-                    };
-                    RadrootsEventHeadCoordinate::Addressable {
-                        kind: event.kind,
-                        pubkey,
-                        d_tag,
-                    }
                 }
-                RadrootsEventClass::Regular | RadrootsEventClass::Ephemeral => unreachable!(),
+            } else {
+                let Some(d_tag) = first_tag_value(&event.tags, TAG_D) else {
+                    return RadrootsEventHeadCandidateResult::Malformed(
+                        RadrootsEventHeadMalformed::MissingDTag,
+                    );
+                };
+                let d_tag = match RadrootsDTag::parse(d_tag) {
+                    Ok(d_tag) => d_tag,
+                    Err(error) => {
+                        return RadrootsEventHeadCandidateResult::Malformed(
+                            RadrootsEventHeadMalformed::InvalidDTag(error),
+                        );
+                    }
+                };
+                RadrootsEventHeadCoordinate::Addressable {
+                    kind: event.kind,
+                    pubkey,
+                    d_tag,
+                }
             };
             RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
                 coordinate,
@@ -486,5 +484,14 @@ mod tests {
             event_head_candidate_for_event(&regular_with_d_tag).expect("post contract"),
             RadrootsEventHeadCandidateResult::NotHeadSelected
         );
+    }
+
+    #[test]
+    fn expect_candidate_reports_non_candidate_inputs() {
+        let result = std::panic::catch_unwind(|| {
+            expect_candidate(RadrootsEventHeadCandidateResult::NotHeadSelected);
+        });
+
+        assert!(result.is_err());
     }
 }

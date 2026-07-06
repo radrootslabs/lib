@@ -200,6 +200,7 @@ fn regenproto_compatibility_vector_stays_generalized() {
             "knowledge_field_report_downstream_valid_004",
             "knowledge_review_downstream_valid_003",
             "knowledge_source_downstream_valid_001",
+            "knowledge_claim_sdk_builder_downstream_valid_006",
             "wiki_article_downstream_valid_005",
         ]
         .into_iter()

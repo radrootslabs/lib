@@ -9,6 +9,7 @@ license.workspace = true
 description = "Local event workspace for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_local_events"
 readme = "README"
 
 [lib]

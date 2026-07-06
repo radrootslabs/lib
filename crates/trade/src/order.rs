@@ -922,16 +922,21 @@ fn trade_locator_candidates(
             seller_pubkey: request.payload.seller_pubkey.clone(),
         })
         .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| {
-        left.root_event_id
-            .cmp(&right.root_event_id)
-            .then_with(|| left.trade_id.cmp(&right.trade_id))
-            .then_with(|| left.listing_addr.cmp(&right.listing_addr))
-            .then_with(|| left.buyer_pubkey.cmp(&right.buyer_pubkey))
-            .then_with(|| left.seller_pubkey.cmp(&right.seller_pubkey))
-    });
+    candidates.sort_by(trade_locator_candidate_order);
     candidates.dedup_by(|left, right| left.root_event_id == right.root_event_id);
     candidates
+}
+
+fn trade_locator_candidate_order(
+    left: &RadrootsTradeLocatorCandidate,
+    right: &RadrootsTradeLocatorCandidate,
+) -> core::cmp::Ordering {
+    left.root_event_id
+        .cmp(&right.root_event_id)
+        .then_with(|| left.trade_id.cmp(&right.trade_id))
+        .then_with(|| left.listing_addr.cmp(&right.listing_addr))
+        .then_with(|| left.buyer_pubkey.cmp(&right.buyer_pubkey))
+        .then_with(|| left.seller_pubkey.cmp(&right.seller_pubkey))
 }
 
 fn request_matches_trade_locator(
@@ -1379,11 +1384,19 @@ pub fn canonicalize_order_decision_for_signer(
 pub fn radroots_order_economics_digest(
     economics: &RadrootsOrderEconomics,
 ) -> Result<String, RadrootsOrderEconomicsDigestError> {
-    let encoded = serde_json::to_vec(economics)?;
+    let encoded = serialize_order_economics(economics)?;
     let digest = Sha256::digest(encoded);
     let mut value = String::from("sha256:");
     value.push_str(&hex::encode(digest));
     Ok(value)
+}
+
+#[cfg(feature = "serde_json")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn serialize_order_economics(
+    economics: &RadrootsOrderEconomics,
+) -> Result<Vec<u8>, RadrootsOrderEconomicsDigestError> {
+    serde_json::to_vec(economics).map_err(RadrootsOrderEconomicsDigestError::Serialize)
 }
 
 fn cancelled_projection(
@@ -2646,7 +2659,7 @@ mod tests {
         reduce_order_event_records, reduce_order_event_records_for_trade_locator,
         reduce_order_events,
     };
-    use crate::identity::RadrootsTradeLocator;
+    use crate::identity::{RadrootsTradeLocator, RadrootsTradeLocatorCandidate};
     use core::mem::discriminant;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -3098,6 +3111,157 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn trade_locator_reports_missing_and_filters_all_selected_record_families() {
+        let locator = RadrootsTradeLocator::from_order_id(order_id("order-missing"));
+        let missing = reduce_order_event_records_for_trade_locator(
+            &locator,
+            Vec::<RadrootsOrderEventRecord>::new(),
+        );
+        assert!(matches!(
+            missing,
+            RadrootsTradeLocatorProjectionResolution::Missing { .. }
+        ));
+
+        let mut second_request = request_record();
+        second_request.event_id = event_id(9);
+        let mut second_decision = accepted_decision();
+        second_decision.event_id = event_id(10);
+        second_decision.root_event_id = event_id(9);
+        second_decision.prev_event_id = event_id(9);
+        let mut second_proposal = revision_proposal();
+        second_proposal.event_id = event_id(11);
+        second_proposal.root_event_id = event_id(9);
+        second_proposal.prev_event_id = event_id(9);
+        second_proposal.payload.root_event_id = event_id(9);
+        second_proposal.payload.prev_event_id = event_id(9);
+        let mut second_revision_decision = accepted_revision_decision();
+        second_revision_decision.event_id = event_id(12);
+        second_revision_decision.root_event_id = event_id(9);
+        second_revision_decision.prev_event_id = event_id(11);
+        second_revision_decision.payload.root_event_id = event_id(9);
+        second_revision_decision.payload.prev_event_id = event_id(11);
+        let mut second_cancellation = cancellation(event_id(10));
+        second_cancellation.event_id = event_id(13);
+        second_cancellation.root_event_id = event_id(9);
+        let mut wrong_order_request = request_record();
+        wrong_order_request.event_id = event_id(14);
+        wrong_order_request.payload.order_id = order_id("order-2");
+        let mut wrong_order_decision = accepted_decision();
+        wrong_order_decision.event_id = event_id(15);
+        wrong_order_decision.payload.order_id = order_id("order-2");
+        let mut wrong_order_proposal = revision_proposal();
+        wrong_order_proposal.event_id = event_id(16);
+        wrong_order_proposal.payload.order_id = order_id("order-2");
+        let mut wrong_order_revision_decision = accepted_revision_decision();
+        wrong_order_revision_decision.event_id = event_id(17);
+        wrong_order_revision_decision.payload.order_id = order_id("order-2");
+        let mut wrong_order_cancellation = cancellation(event_id(2));
+        wrong_order_cancellation.event_id = event_id(18);
+        wrong_order_cancellation.payload.order_id = order_id("order-2");
+
+        let locator = RadrootsTradeLocator::from_order_id(order_id("order-1"))
+            .with_root_event_id(event_id(1));
+        let resolution = reduce_order_event_records_for_trade_locator(
+            &locator,
+            vec![
+                RadrootsOrderEventRecord::Request(request_record()),
+                RadrootsOrderEventRecord::Request(second_request),
+                RadrootsOrderEventRecord::Request(wrong_order_request),
+                RadrootsOrderEventRecord::Decision(accepted_decision()),
+                RadrootsOrderEventRecord::Decision(second_decision),
+                RadrootsOrderEventRecord::Decision(wrong_order_decision),
+                RadrootsOrderEventRecord::RevisionProposal(revision_proposal()),
+                RadrootsOrderEventRecord::RevisionProposal(second_proposal),
+                RadrootsOrderEventRecord::RevisionProposal(wrong_order_proposal),
+                RadrootsOrderEventRecord::RevisionDecision(accepted_revision_decision()),
+                RadrootsOrderEventRecord::RevisionDecision(second_revision_decision),
+                RadrootsOrderEventRecord::RevisionDecision(wrong_order_revision_decision),
+                RadrootsOrderEventRecord::Cancellation(cancellation(event_id(2))),
+                RadrootsOrderEventRecord::Cancellation(second_cancellation),
+                RadrootsOrderEventRecord::Cancellation(wrong_order_cancellation),
+            ],
+        );
+
+        assert!(matches!(
+            resolution,
+            RadrootsTradeLocatorProjectionResolution::Projected { .. }
+        ));
+    }
+
+    #[test]
+    fn trade_locator_optional_qualifiers_reject_mismatched_request_fields() {
+        for locator in [
+            RadrootsTradeLocator::from_order_id(order_id("order-1"))
+                .with_listing_addr(other_seller_listing_addr()),
+            RadrootsTradeLocator::from_order_id(order_id("order-1"))
+                .with_buyer_pubkey(public_key(OTHER)),
+            RadrootsTradeLocator::from_order_id(order_id("order-1"))
+                .with_seller_pubkey(public_key(OTHER)),
+        ] {
+            let resolution = reduce_order_event_records_for_trade_locator(
+                &locator,
+                vec![RadrootsOrderEventRecord::Request(request_record())],
+            );
+            assert!(matches!(
+                resolution,
+                RadrootsTradeLocatorProjectionResolution::Missing { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn trade_locator_candidate_order_covers_each_tie_breaker() {
+        let candidate = RadrootsTradeLocatorCandidate {
+            trade_id: order_id("order-1").into(),
+            root_event_id: event_id(1),
+            listing_addr: listing_addr(),
+            buyer_pubkey: public_key(BUYER),
+            seller_pubkey: public_key(SELLER),
+        };
+        let mut right = candidate.clone();
+        right.root_event_id = event_id(2);
+        assert_eq!(
+            super::trade_locator_candidate_order(&candidate, &right),
+            core::cmp::Ordering::Less
+        );
+
+        let mut right = candidate.clone();
+        right.trade_id = order_id("order-2").into();
+        assert_eq!(
+            super::trade_locator_candidate_order(&candidate, &right),
+            core::cmp::Ordering::Less
+        );
+
+        let mut right = candidate.clone();
+        right.listing_addr = other_seller_listing_addr();
+        assert_eq!(
+            super::trade_locator_candidate_order(&candidate, &right),
+            core::cmp::Ordering::Less
+        );
+
+        let mut right = candidate.clone();
+        right.buyer_pubkey = public_key(OTHER);
+        assert_eq!(
+            super::trade_locator_candidate_order(&candidate, &right),
+            core::cmp::Ordering::Less
+        );
+
+        let left = RadrootsTradeLocatorCandidate {
+            trade_id: order_id("order-1").into(),
+            root_event_id: event_id(1),
+            listing_addr: listing_addr(),
+            buyer_pubkey: public_key(BUYER),
+            seller_pubkey: public_key(SELLER),
+        };
+        let mut right = left.clone();
+        right.seller_pubkey = public_key(OTHER);
+        assert_eq!(
+            super::trade_locator_candidate_order(&left, &right),
+            core::cmp::Ordering::Less
+        );
+    }
+
     #[cfg(feature = "serde_json")]
     #[test]
     fn order_event_records_decode_wire_events_and_decode_errors() {
@@ -3287,6 +3451,79 @@ mod tests {
             deduped[0].payload.buyer_pubkey,
             duplicate_request.payload.buyer_pubkey
         );
+    }
+
+    #[test]
+    fn reducer_deduplicates_same_event_id_in_each_typed_family() {
+        let mut duplicate_request = request_record();
+        duplicate_request.payload.order_id = order_id("order-duplicate-request");
+        let requested = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record(), duplicate_request],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(requested.request_event_id, Some(event_id(1)));
+
+        let mut duplicate_decision = accepted_decision();
+        duplicate_decision.payload.order_id = order_id("order-duplicate-decision");
+        let decided = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record()],
+                decisions: vec![accepted_decision(), duplicate_decision],
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(decided.decision_event_id, Some(event_id(2)));
+
+        let mut duplicate_proposal = revision_proposal();
+        duplicate_proposal.payload.order_id = order_id("order-duplicate-proposal");
+        let proposed = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record()],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: vec![revision_proposal(), duplicate_proposal],
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(proposed.pending_revision_event_id, Some(event_id(3)));
+
+        let mut duplicate_revision_decision = accepted_revision_decision();
+        duplicate_revision_decision.payload.order_id = order_id("order-duplicate-revision");
+        let revision_decided = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record()],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: vec![revision_proposal()],
+                revision_decisions: vec![accepted_revision_decision(), duplicate_revision_decision],
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(revision_decided.agreement_event_id, Some(event_id(4)));
+
+        let mut duplicate_cancellation = cancellation(event_id(1));
+        duplicate_cancellation.payload.order_id = order_id("order-duplicate-cancellation");
+        let cancelled = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record()],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: vec![cancellation(event_id(1)), duplicate_cancellation],
+            },
+        );
+        assert_eq!(cancelled.cancellation_event_id, Some(event_id(5)));
     }
 
     #[test]
@@ -3782,13 +4019,71 @@ mod tests {
             RadrootsOrderIssue::CancellationPreviousMismatch {
                 event_id: id.clone(),
             },
-            RadrootsOrderIssue::ForkedLifecycle { event_ids },
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: event_ids.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptWithoutPendingAgreement {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptTypeMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptRootMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptTargetMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ValidationReceiptListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ConflictingValidationReceipts {
+                event_ids: event_ids.clone(),
+            },
+            RadrootsOrderIssue::DeterministicValidationFailure {
+                event_id: id.clone(),
+                reason: "failed".into(),
+            },
+            RadrootsOrderIssue::StaleListingEvent {
+                expected_event_id: id.clone(),
+                current_event_id: event_id(43),
+            },
         ];
 
         for (rank, issue) in issues.iter().enumerate() {
             assert_eq!(super::order_issue_rank(issue), rank as u8);
         }
-        assert_eq!(super::projection_issue_event_ids(&issues), vec![id]);
+        assert_eq!(
+            super::projection_issue_event_ids(&issues),
+            vec![id, event_id(43)]
+        );
+
+        let mut projection = super::RadrootsOrderProjection {
+            order_id: order_id("order-1"),
+            status: RadrootsTradeWorkflowState::Invalid,
+            request_event_id: None,
+            decision_event_id: None,
+            cancellation_event_id: None,
+            validation_receipt_event_id: None,
+            lifecycle_terminal: true,
+            economics: None,
+            agreement_event_id: None,
+            pending_revision_event_id: None,
+            pending_inventory_reservations: Vec::new(),
+            committed_inventory_reservations: Vec::new(),
+            listing_addr: None,
+            buyer_pubkey: None,
+            seller_pubkey: None,
+            last_event_id: None,
+            issues: vec![RadrootsOrderIssue::ValidationReceiptRootMismatch {
+                event_id: event_id(44),
+            }],
+        };
+        projection.finish_issue_state();
+        assert_eq!(projection.last_event_id, Some(event_id(44)));
     }
 
     #[test]
@@ -3974,7 +4269,23 @@ mod tests {
                     bin_count: 1,
                 },
             ],
-            committed_orders: Vec::new(),
+            committed_orders: vec![
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-2"),
+                    agreement_event_id: event_id(95),
+                    bin_count: 1,
+                },
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-1"),
+                    agreement_event_id: event_id(94),
+                    bin_count: 1,
+                },
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-1"),
+                    agreement_event_id: event_id(93),
+                    bin_count: 1,
+                },
+            ],
         };
         let mut finish_issues = Vec::new();
         super::finish_inventory_accounting_bins(
@@ -3987,6 +4298,14 @@ mod tests {
         assert_eq!(
             sorting_bin.pending_orders[0].agreement_event_id,
             event_id(90)
+        );
+        assert_eq!(
+            sorting_bin.committed_orders[0].order_id,
+            order_id("order-1")
+        );
+        assert_eq!(
+            sorting_bin.committed_orders[0].agreement_event_id,
+            event_id(93)
         );
         assert_inventory_issue_kind(
             &finish_issues,

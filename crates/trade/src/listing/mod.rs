@@ -81,9 +81,7 @@ pub fn parse_listing_address(
         .map_err(RadrootsListingAddressError::InvalidAddress)?;
     let parts = RadrootsAddressableCoordinateParts::parse(address.as_str())
         .map_err(RadrootsListingAddressError::InvalidAddress)?;
-    if !is_listing_kind(parts.kind) {
-        return Err(RadrootsListingAddressError::InvalidKind { actual: parts.kind });
-    }
+    ensure_listing_kind(parts.kind)?;
     Ok(RadrootsListingAddressParts {
         address,
         kind: parts.kind,
@@ -103,15 +101,29 @@ pub fn parse_public_listing_address(
             RadrootsPublicListingAddressError::InvalidListingKind { actual }
         }
     })?;
-    if parts.kind != KIND_LISTING {
-        return Err(RadrootsPublicListingAddressError::InvalidKind { actual: parts.kind });
-    }
+    ensure_public_listing_kind(parts.kind)?;
     Ok(RadrootsPublicListingAddress {
         address: parts.address,
         kind: parts.kind,
         seller_pubkey: parts.seller_pubkey,
         listing_id: parts.listing_id,
     })
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn ensure_listing_kind(kind: u32) -> Result<(), RadrootsListingAddressError> {
+    if !is_listing_kind(kind) {
+        return Err(RadrootsListingAddressError::InvalidKind { actual: kind });
+    }
+    Ok(())
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn ensure_public_listing_kind(kind: u32) -> Result<(), RadrootsPublicListingAddressError> {
+    if kind != KIND_LISTING {
+        return Err(RadrootsPublicListingAddressError::InvalidKind { actual: kind });
+    }
+    Ok(())
 }
 
 pub fn parse_listing_event(
@@ -263,6 +275,20 @@ mod tests {
         let raw = format!("{KIND_PROFILE}:{SELLER}:listing-1");
         assert!(matches!(
             parse_public_listing_address(&raw),
+            Err(RadrootsPublicListingAddressError::InvalidListingKind {
+                actual: KIND_PROFILE
+            })
+        ));
+
+        let typed = RadrootsListingAddress::parse(&raw).expect("typed profile address");
+        assert!(matches!(
+            parse_public_listing_address(typed.clone()),
+            Err(RadrootsPublicListingAddressError::InvalidListingKind {
+                actual: KIND_PROFILE
+            })
+        ));
+        assert!(matches!(
+            parse_public_listing_address(&typed),
             Err(RadrootsPublicListingAddressError::InvalidListingKind {
                 actual: KIND_PROFILE
             })

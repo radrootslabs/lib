@@ -9,6 +9,7 @@ license.workspace = true
 description = "SQL support layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_sql_core"
 readme = "README"
 
 [lib]

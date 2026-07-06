@@ -20,10 +20,12 @@ use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 fn parse_error_display_and_source_cover_variants() {
     let missing = EventParseError::MissingTag("d");
     assert_eq!(missing.to_string(), "missing tag: d");
+    assert_eq!(missing.code(), "missing_tag");
     assert!(missing.source().is_none());
 
     let invalid = EventParseError::InvalidTag("a");
     assert_eq!(invalid.to_string(), "invalid tag structure for 'a'");
+    assert_eq!(invalid.code(), "invalid_tag");
     assert!(invalid.source().is_none());
 
     let invalid_kind = EventParseError::InvalidKind {
@@ -31,6 +33,7 @@ fn parse_error_display_and_source_cover_variants() {
         got: 1,
     };
     assert_eq!(invalid_kind.to_string(), "invalid kind 1 (expected 30340)");
+    assert_eq!(invalid_kind.code(), "invalid_kind");
     assert!(invalid_kind.source().is_none());
 
     let parse_int = "x".parse::<u32>().expect_err("parse int error");
@@ -40,10 +43,12 @@ fn parse_error_display_and_source_cover_variants() {
             .to_string()
             .contains("invalid number in 'count'")
     );
+    assert_eq!(invalid_number.code(), "invalid_number");
     assert!(invalid_number.source().is_some());
 
     let invalid_json = EventParseError::InvalidJson("content");
     assert_eq!(invalid_json.to_string(), "invalid JSON in 'content'");
+    assert_eq!(invalid_json.code(), "invalid_json");
     assert!(invalid_json.source().is_none());
 }
 
@@ -51,15 +56,19 @@ fn parse_error_display_and_source_cover_variants() {
 fn encode_error_display_covers_variants() {
     let invalid_kind = EventEncodeError::InvalidKind(30402);
     assert_eq!(invalid_kind.to_string(), "invalid event kind: 30402");
+    assert_eq!(invalid_kind.code(), "invalid_kind");
 
     let empty_required = EventEncodeError::EmptyRequiredField("content");
     assert_eq!(empty_required.to_string(), "empty required field: content");
+    assert_eq!(empty_required.code(), "empty_required_field");
 
     let invalid_field = EventEncodeError::InvalidField("d");
     assert_eq!(invalid_field.to_string(), "invalid field: d");
+    assert_eq!(invalid_field.code(), "invalid_field");
 
     let json = EventEncodeError::Json;
     assert_eq!(json.to_string(), "failed to serialize JSON");
+    assert_eq!(json.code(), "json");
 }
 
 #[test]

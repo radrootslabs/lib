@@ -70,6 +70,7 @@ pub trait GeoNamesAssetFetcher {
 pub struct GeoNamesBlockingHttpFetcher;
 
 impl GeoNamesAssetFetcher for GeoNamesBlockingHttpFetcher {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch(&self, url: &str) -> Result<Vec<u8>, GeocoderError> {
         let response =
             reqwest::blocking::get(url).map_err(|source| GeocoderError::AssetDownload {
@@ -106,6 +107,7 @@ pub fn inspect_default_geonames_asset_in_cache_root(
     )
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn ensure_default_geonames_asset_in_cache_root(
     cache_root: impl AsRef<Path>,
 ) -> Result<GeoNamesAssetStatus, GeocoderError> {
@@ -125,6 +127,7 @@ where
     ensure_geonames_asset_path_with_fetcher(path, spec, fetcher)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn ensure_geonames_asset_path_with_fetcher<F>(
     path: impl AsRef<Path>,
     spec: &GeoNamesAssetSpec,
@@ -151,6 +154,7 @@ where
     Ok(status)
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn inspect_geonames_asset_path(
     path: impl AsRef<Path>,
     spec: &GeoNamesAssetSpec,
@@ -239,6 +243,7 @@ pub fn validate_geonames_asset_spec_source(spec: &GeoNamesAssetSpec) -> Result<(
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn install_geonames_asset_bytes(
     path: &Path,
     spec: &GeoNamesAssetSpec,
@@ -266,6 +271,7 @@ fn install_geonames_asset_bytes(
         .map_err(|error| GeocoderError::Io(error.error))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_sqlite_integrity_and_schema(path: &Path) -> Result<(), GeocoderError> {
     let conn =
         Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
@@ -292,6 +298,7 @@ fn validate_sqlite_integrity_and_schema(path: &Path) -> Result<(), GeocoderError
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_sqlite_integrity(path: &Path, conn: &Connection) -> Result<(), GeocoderError> {
     let mut stmt = conn.prepare("PRAGMA integrity_check").map_err(|error| {
         GeocoderError::InvalidAssetSqlite {
@@ -354,6 +361,7 @@ struct GeoNamesAssetLock {
 }
 
 impl GeoNamesAssetLock {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn acquire(path: PathBuf) -> Result<Self, GeocoderError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -385,8 +393,9 @@ mod tests {
 
     use super::{
         GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetSpec, GeoNamesAssetState,
-        ensure_geonames_asset_path_with_fetcher, inspect_geonames_asset_path, lock_path_for_asset,
-        validate_geonames_asset_file, validate_geonames_asset_spec_source,
+        ensure_geonames_asset_path_with_fetcher, inspect_geonames_asset_path,
+        is_invalid_asset_error, lock_path_for_asset, validate_geonames_asset_file,
+        validate_geonames_asset_spec_source,
     };
     use crate::GeocoderError;
 
@@ -522,6 +531,15 @@ mod tests {
             Err(GeocoderError::AssetLockUnavailable { .. })
         ));
         assert_eq!(fetcher.calls.get(), 0);
+    }
+
+    #[test]
+    fn geonames_asset_invalid_asset_classifier_rejects_runtime_errors() {
+        assert!(!is_invalid_asset_error(
+            &GeocoderError::AssetLockUnavailable {
+                path: PathBuf::from("geonames-test.db.lock"),
+            },
+        ));
     }
 
     fn fixture_database_bytes() -> Vec<u8> {

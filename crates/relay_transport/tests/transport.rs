@@ -14,14 +14,14 @@ use radroots_outbox::{
 };
 use radroots_relay_transport::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
-    RadrootsRelayFetchItem, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest,
-    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
-    RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
-    fetch_and_ingest_relay_events, fetch_relay_events, publish_claimed_outbox_event,
-    publish_signed_event,
+    RadrootsRelayFetchFilters, RadrootsRelayFetchItem, RadrootsRelayFetchMode,
+    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest, RadrootsRelayOutcome,
+    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
+    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
+    RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
+    fetch_relay_events_blocking, publish_claimed_outbox_event, publish_signed_event,
 };
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -230,6 +230,27 @@ fn relay_url_validation_and_target_normalization() {
         RadrootsRelayUrl::parse("wss://[fd00::1]", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
     ));
+    for relay_url in [
+        "wss://0.0.0.0",
+        "wss://169.254.1.2",
+        "wss://224.0.0.1",
+        "wss://255.255.255.255",
+        "wss://100.64.0.1",
+        "wss://192.0.0.8",
+        "wss://198.18.0.1",
+        "wss://240.0.0.1",
+        "wss://[::]",
+        "wss://[ff02::1]",
+        "wss://[fe80::1]",
+        "wss://[2001:db8::1]",
+        "wss://[2001:1::1]",
+        "wss://[::ffff:192.168.1.10]",
+    ] {
+        assert!(matches!(
+            RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Public),
+            Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
+        ));
+    }
     let public_relay =
         RadrootsRelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Public)
             .expect("public relay");
@@ -241,6 +262,24 @@ fn relay_url_validation_and_target_normalization() {
             .validate_public_resolved_ip_addrs([IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))]),
         Err(RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination { .. })
     ));
+    assert!(matches!(
+        public_relay.validate_public_resolved_ip_addrs([IpAddr::V6(
+            "::ffff:192.168.1.10"
+                .parse::<Ipv6Addr>()
+                .expect("mapped ipv6")
+        )]),
+        Err(RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination { .. })
+    ));
+    public_relay
+        .validate_public_resolved_ip_addrs([IpAddr::V6(
+            "2001:4860:4860::8888"
+                .parse::<Ipv6Addr>()
+                .expect("public ipv6"),
+        )])
+        .expect("public resolved ipv6");
+    public_relay
+        .validate_public_resolved_ip_addrs(Vec::<IpAddr>::new())
+        .expect("empty resolved set");
 
     assert!(
         RadrootsRelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public)
@@ -491,6 +530,10 @@ fn fetch_requests_reject_empty_filter_sets() {
 #[test]
 fn fetch_requests_reject_zero_limits_and_timeouts() {
     let filter = post_relay_fetch_filter(1);
+    let filters = RadrootsRelayFetchFilters::new([filter.clone()]).expect("filters");
+    let as_ref_filters: &[RadrootsNostrFilter] = filters.as_ref();
+    assert_eq!(as_ref_filters.len(), 1);
+
     assert!(matches!(
         RadrootsRelayFetchRequest::fetch(1_000, 0, [filter.clone()]),
         Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_events"
@@ -518,6 +561,47 @@ fn fetch_requests_reject_zero_limits_and_timeouts() {
         .expect("minimum raw scan limit");
     assert_eq!(request.timeout_ms(), 1);
     assert_eq!(request.max_raw_events(), 1);
+
+    let request = RadrootsRelayFetchRequest::subscription(1_005, 2, [post_relay_fetch_filter(2)])
+        .expect("subscription request")
+        .with_relay_urls([RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS])
+        .with_timeout_ms(25)
+        .expect("timeout")
+        .with_raw_event_scan_limit(3)
+        .expect("raw limit");
+    assert_eq!(request.mode(), RadrootsRelayFetchMode::Subscription);
+    assert_eq!(request.observed_at_ms(), 1_005);
+    assert_eq!(request.max_events(), 2);
+    assert_eq!(request.max_raw_events(), 3);
+    assert_eq!(
+        request.relay_urls(),
+        &[RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
+    );
+    assert_eq!(request.filters().len(), 1);
+    assert_eq!(request.timeout_ms(), 25);
+}
+
+#[test]
+fn fetch_blocking_facade_runs_mock_adapter() {
+    let signed = signed_post("blocking fetch");
+    let accepted_id = signed.id.clone();
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: signed.raw_json,
+            observed_at_ms: 1_090,
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_relay_events_blocking(&adapter, post_relay_fetch_request(1_090, 10))
+        .expect("blocking fetch");
+
+    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
 }
 
 #[tokio::test]

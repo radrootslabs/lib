@@ -444,8 +444,7 @@ pub fn build_transition_proof_result_tags(
             source,
         }
     })?;
-    let request_json = serde_json::to_string(request_event)
-        .map_err(RadrootsTradeDvmError::SerializeRequestEvent)?;
+    let request_json = serialize_request_event(request_event)?;
     let mut tags = vec![
         vec![RADROOTS_DVM_TAG_REQUEST.to_string(), request_json],
         vec![
@@ -493,6 +492,13 @@ pub fn build_transition_proof_result_tags(
         tags.push(input_event_tag(input.role, &input.event_id));
     }
     Ok(tags)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn serialize_request_event(
+    request_event: &RadrootsNostrEvent,
+) -> Result<String, RadrootsTradeDvmError> {
+    serde_json::to_string(request_event).map_err(RadrootsTradeDvmError::SerializeRequestEvent)
 }
 
 pub fn parse_transition_proof_result_tags(
@@ -623,14 +629,19 @@ fn validate_transition_proof_request_content(
         });
     }
     validate_hash32(&content.reducer_program_hash, "reducer_program_hash")?;
-    if let Some(previous_state_root) = content.previous_state_root.as_ref() {
-        validate_hash32(previous_state_root, "previous_state_root")?;
-    }
-    if let Some(sp1_program_hash) = content.sp1_program_hash.as_ref() {
-        validate_hash32(sp1_program_hash, "sp1_program_hash")?;
-    }
-    if let Some(sp1_verifying_key_hash) = content.sp1_verifying_key_hash.as_ref() {
-        validate_hash32(sp1_verifying_key_hash, "sp1_verifying_key_hash")?;
+    validate_optional_hash32(&content.previous_state_root, "previous_state_root")?;
+    validate_optional_hash32(&content.sp1_program_hash, "sp1_program_hash")?;
+    validate_optional_hash32(&content.sp1_verifying_key_hash, "sp1_verifying_key_hash")?;
+    Ok(())
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn validate_optional_hash32(
+    value: &Option<String>,
+    field: &'static str,
+) -> Result<(), RadrootsTradeDvmError> {
+    if let Some(value) = value.as_ref() {
+        validate_hash32(value, field)?;
     }
     Ok(())
 }
@@ -747,23 +758,28 @@ fn parse_listing_addr_tag(
 }
 
 fn validate_hash32(value: &str, field: &'static str) -> Result<(), RadrootsTradeDvmError> {
-    let Some(hex) = value.strip_prefix("0x") else {
-        return Err(RadrootsTradeDvmError::InvalidHash { field });
-    };
-    if hex.len() != 64
-        || !hex
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
+    if !is_hash32(value) {
         return Err(RadrootsTradeDvmError::InvalidHash { field });
     }
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn is_hash32(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("0x") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use radroots_events::kinds::KIND_LISTING;
+    use radroots_events::kinds::{KIND_LISTING, KIND_PROFILE};
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -929,6 +945,514 @@ mod tests {
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::MissingTag { tag: TAG_I })
+        ));
+    }
+
+    #[test]
+    fn dvm_label_helpers_cover_all_variants_and_unknown_values() {
+        for (mode, label) in [
+            (RadrootsTradeProofMode::None, "none"),
+            (RadrootsTradeProofMode::Core, "core"),
+            (RadrootsTradeProofMode::Compressed, "compressed"),
+            (RadrootsTradeProofMode::Groth16, "groth16"),
+            (RadrootsTradeProofMode::Plonk, "plonk"),
+        ] {
+            assert_eq!(mode.as_str(), label);
+            assert_eq!(RadrootsTradeProofMode::parse(label).unwrap(), mode);
+        }
+        assert!(matches!(
+            RadrootsTradeProofMode::parse("stark"),
+            Err(RadrootsTradeDvmError::InvalidProofMode { value }) if value == "stark"
+        ));
+
+        for (role, label) in [
+            (RadrootsTradeDvmInputRole::Listing, "radroots:listing_event"),
+            (
+                RadrootsTradeDvmInputRole::OrderRequest,
+                "radroots:order_request_event",
+            ),
+            (
+                RadrootsTradeDvmInputRole::OrderDecision,
+                "radroots:order_decision_event",
+            ),
+        ] {
+            assert_eq!(role.as_str(), label);
+            assert_eq!(RadrootsTradeDvmInputRole::parse(label).unwrap(), role);
+        }
+        assert!(matches!(
+            RadrootsTradeDvmInputRole::parse("radroots:legacy"),
+            Err(RadrootsTradeDvmError::InvalidInputRole { value }) if value == "radroots:legacy"
+        ));
+
+        for (status, label) in [
+            (
+                RadrootsTradeDvmFeedbackStatus::PaymentRequired,
+                "payment-required",
+            ),
+            (RadrootsTradeDvmFeedbackStatus::Processing, "processing"),
+            (RadrootsTradeDvmFeedbackStatus::Error, "error"),
+            (RadrootsTradeDvmFeedbackStatus::Success, "success"),
+            (RadrootsTradeDvmFeedbackStatus::Partial, "partial"),
+        ] {
+            assert_eq!(status.as_str(), label);
+            assert_eq!(
+                RadrootsTradeDvmFeedbackStatus::parse(label).unwrap(),
+                status
+            );
+        }
+        assert!(matches!(
+            RadrootsTradeDvmFeedbackStatus::parse("queued"),
+            Err(RadrootsTradeDvmError::InvalidTag {
+                tag: TAG_STATUS,
+                value,
+                ..
+            }) if value == "queued"
+        ));
+    }
+
+    #[test]
+    fn transition_proof_request_parser_rejects_kind_tag_content_and_hash_edges() {
+        let content = request_content();
+        let mut event = request_event(&content);
+        event.kind = KIND_PROFILE;
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::UnsupportedKind {
+                expected: KIND_TRADE_TRANSITION_PROOF_REQUEST,
+                actual: KIND_PROFILE
+            })
+        ));
+
+        let mut event = request_event(&content);
+        event.content = "{".to_string();
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidContent(_))
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.iter_mut().for_each(|tag| {
+            if tag.first().map(String::as_str) == Some(TAG_P) {
+                tag[1] = "bad".to_string();
+            }
+        });
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_P, .. })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.iter_mut().for_each(|tag| {
+            if tag.first().map(String::as_str) == Some(TAG_A) {
+                tag[1] = "bad".to_string();
+            }
+        });
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_A, .. })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.iter_mut().for_each(|tag| {
+            if tag.first().map(String::as_str) == Some(TAG_A) {
+                tag[1] = format!("{KIND_LISTING}:{SELLER}:BBBBBBBBBBBBBBBBBBBBBg");
+            }
+        });
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::ContentMismatch {
+                field: "request.listing_addr"
+            })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.iter_mut().for_each(|tag| {
+            if tag.first().map(String::as_str) == Some(TAG_I)
+                && tag.get(3).map(String::as_str)
+                    == Some(RadrootsTradeDvmInputRole::Listing.as_str())
+            {
+                tag[1] = event_id(99).into_string();
+            }
+        });
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::ContentMismatch {
+                field: "radroots:listing_event"
+            })
+        ));
+
+        for (bad_content, field) in [
+            {
+                let mut bad = content.clone();
+                bad.decision.order_id = RadrootsOrderId::parse("order-2").unwrap();
+                (bad, "order_id")
+            },
+            {
+                let mut bad = content.clone();
+                bad.decision.listing_addr = RadrootsListingAddress::parse(format!(
+                    "{KIND_LISTING}:{SELLER}:BBBBBBBBBBBBBBBBBBBBBg"
+                ))
+                .unwrap();
+                (bad, "listing_addr")
+            },
+            {
+                let mut bad = content.clone();
+                bad.decision.buyer_pubkey = public_key(WORKER);
+                (bad, "buyer_pubkey")
+            },
+            {
+                let mut bad = content.clone();
+                bad.decision.seller_pubkey = public_key(WORKER);
+                (bad, "seller_pubkey")
+            },
+        ] {
+            let event = request_event(&bad_content);
+            assert!(matches!(
+                parse_transition_proof_request_event(&event),
+                Err(RadrootsTradeDvmError::ContentMismatch { field: got }) if got == field
+            ));
+        }
+
+        for (bad_content, field) in [
+            {
+                let mut bad = content.clone();
+                bad.reducer_program_hash = "bad".to_string();
+                (bad, "reducer_program_hash")
+            },
+            {
+                let mut bad = content.clone();
+                bad.previous_state_root = Some("bad".to_string());
+                (bad, "previous_state_root")
+            },
+            {
+                let mut bad = content.clone();
+                bad.sp1_program_hash = Some("bad".to_string());
+                (bad, "sp1_program_hash")
+            },
+            {
+                let mut bad = content.clone();
+                bad.sp1_verifying_key_hash = Some("bad".to_string());
+                (bad, "sp1_verifying_key_hash")
+            },
+        ] {
+            let event = request_event(&bad_content);
+            assert!(matches!(
+                parse_transition_proof_request_event(&event),
+                Err(RadrootsTradeDvmError::InvalidHash { field: got }) if got == field
+            ));
+        }
+
+        let mut event = request_event(&content);
+        event.tags.push(vec![TAG_I.to_string()]);
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::MissingTag { tag: TAG_I })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.push(vec![
+            TAG_I.to_string(),
+            event_id(44).into_string(),
+            "url".to_string(),
+            RadrootsTradeDvmInputRole::Listing.as_str().to_string(),
+        ]);
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_I, .. })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.push(vec![
+            TAG_I.to_string(),
+            event_id(44).into_string(),
+            RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
+        ]);
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::MissingTag { tag: TAG_I })
+        ));
+
+        let mut event = request_event(&content);
+        event.tags.push(vec![
+            TAG_I.to_string(),
+            event_id(44).into_string(),
+            RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
+            "radroots:legacy_event".to_string(),
+        ]);
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidInputRole { .. })
+        ));
+    }
+
+    #[test]
+    fn transition_proof_request_parser_covers_required_tag_and_input_mismatch_edges() {
+        let content = request_content();
+        let tags = build_transition_proof_request_tags(&public_key(WORKER), &content);
+
+        for required in [TAG_P, TAG_A] {
+            let missing = tags
+                .iter()
+                .filter(|tag| tag.first().map(String::as_str) != Some(required))
+                .cloned()
+                .collect::<Vec<_>>();
+            assert!(matches!(
+                parse_transition_proof_request_tags(&missing),
+                Err(RadrootsTradeDvmError::MissingTag { tag }) if tag == required
+            ));
+        }
+
+        for (role, field, event_id) in [
+            (
+                RadrootsTradeDvmInputRole::OrderRequest,
+                "radroots:order_request_event",
+                event_id(98),
+            ),
+            (
+                RadrootsTradeDvmInputRole::OrderDecision,
+                "radroots:order_decision_event",
+                event_id(97),
+            ),
+        ] {
+            let mut event = request_event(&content);
+            event.tags.iter_mut().for_each(|tag| {
+                if tag.first().map(String::as_str) == Some(TAG_I)
+                    && tag.get(3).map(String::as_str) == Some(role.as_str())
+                {
+                    tag[1] = event_id.clone().into_string();
+                }
+            });
+            assert!(matches!(
+                parse_transition_proof_request_event(&event),
+                Err(RadrootsTradeDvmError::ContentMismatch { field: got }) if got == field
+            ));
+        }
+
+        let mut event = request_event(&content);
+        event.tags.push(vec![
+            TAG_I.to_string(),
+            "bad".to_string(),
+            RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
+            RadrootsTradeDvmInputRole::Listing.as_str().to_string(),
+        ]);
+        assert!(matches!(
+            parse_transition_proof_request_event(&event),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_I, .. })
+        ));
+
+        let mut uppercase_hash = content.clone();
+        uppercase_hash.reducer_program_hash = format!("0x{}", "A".repeat(64));
+        assert!(matches!(
+            parse_transition_proof_request_event(&request_event(&uppercase_hash)),
+            Err(RadrootsTradeDvmError::InvalidHash {
+                field: "reducer_program_hash"
+            })
+        ));
+    }
+
+    #[test]
+    fn transition_proof_result_and_feedback_parsers_cover_error_edges() {
+        let content = request_content();
+        let request_event = request_event(&content);
+        let request_tags =
+            parse_transition_proof_request_tags(&request_event.tags).expect("request tags");
+        let binding = RadrootsTradeTransitionProofResultBinding {
+            listing_event_id: content.listing_event_id.clone(),
+            root_event_id: content.request_event_id.clone(),
+            target_event_id: content.decision_event_id.clone(),
+            validation_receipt_event_id: None,
+        };
+        let tags = build_transition_proof_result_tags(
+            &request_event,
+            &public_key(BUYER),
+            &request_tags.inputs,
+            &binding,
+        )
+        .expect("result tags without receipt");
+        let parsed = parse_transition_proof_result_tags(KIND_TRADE_TRANSITION_PROOF_RESULT, &tags)
+            .expect("result tags without receipt");
+        assert_eq!(parsed.binding.validation_receipt_event_id, None);
+
+        for required in [
+            RADROOTS_DVM_TAG_REQUEST,
+            TAG_E,
+            TAG_P,
+            RADROOTS_DVM_TAG_LISTING_EVENT,
+            RADROOTS_DVM_TAG_ROOT_EVENT,
+            RADROOTS_DVM_TAG_TARGET_EVENT,
+        ] {
+            let missing = tags
+                .iter()
+                .filter(|tag| tag.first().map(String::as_str) != Some(required))
+                .cloned()
+                .collect::<Vec<_>>();
+            assert!(matches!(
+                parse_transition_proof_result_tags(KIND_TRADE_TRANSITION_PROOF_RESULT, &missing),
+                Err(RadrootsTradeDvmError::MissingTag { tag }) if tag == required
+            ));
+        }
+
+        assert!(matches!(
+            parse_transition_proof_result_tags(KIND_PROFILE, &tags),
+            Err(RadrootsTradeDvmError::UnsupportedKind {
+                expected: KIND_TRADE_TRANSITION_PROOF_RESULT,
+                actual: KIND_PROFILE
+            })
+        ));
+
+        let mut bad_request_event = request_event.clone();
+        bad_request_event.id = "bad".to_string();
+        assert!(matches!(
+            build_transition_proof_result_tags(
+                &bad_request_event,
+                &public_key(BUYER),
+                &request_tags.inputs,
+                &binding,
+            ),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_E, .. })
+        ));
+
+        let mut invalid_json = tags.clone();
+        invalid_json[0][1] = "{".to_string();
+        assert!(matches!(
+            parse_transition_proof_result_tags(KIND_TRADE_TRANSITION_PROOF_RESULT, &invalid_json),
+            Err(RadrootsTradeDvmError::InvalidRequestEvent(_))
+        ));
+
+        let mut wrong_kind_request = request_event.clone();
+        wrong_kind_request.kind = KIND_PROFILE;
+        let mut wrong_kind = tags.clone();
+        wrong_kind[0][1] = serde_json::to_string(&wrong_kind_request).unwrap();
+        assert!(matches!(
+            parse_transition_proof_result_tags(KIND_TRADE_TRANSITION_PROOF_RESULT, &wrong_kind),
+            Err(RadrootsTradeDvmError::RequestEventKind { kind: KIND_PROFILE })
+        ));
+
+        let mut mismatched_request_id = tags.clone();
+        let request_id_tag = mismatched_request_id
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E))
+            .expect("request e tag");
+        request_id_tag[1] = event_id(99).into_string();
+        assert!(matches!(
+            parse_transition_proof_result_tags(
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                &mismatched_request_id,
+            ),
+            Err(RadrootsTradeDvmError::RequestEventIdMismatch)
+        ));
+
+        let mut invalid_customer = tags.clone();
+        let customer_tag = invalid_customer
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_P))
+            .expect("customer p tag");
+        customer_tag[1] = "bad".to_string();
+        assert!(matches!(
+            parse_transition_proof_result_tags(
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                &invalid_customer,
+            ),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_P, .. })
+        ));
+
+        for required in [
+            RADROOTS_DVM_TAG_LISTING_EVENT,
+            RADROOTS_DVM_TAG_ROOT_EVENT,
+            RADROOTS_DVM_TAG_TARGET_EVENT,
+        ] {
+            let mut invalid_event_tag = tags.clone();
+            let tag = invalid_event_tag
+                .iter_mut()
+                .find(|tag| tag.first().map(String::as_str) == Some(required))
+                .expect("event tag");
+            tag[1] = "bad".to_string();
+            assert!(matches!(
+                parse_transition_proof_result_tags(
+                    KIND_TRADE_TRANSITION_PROOF_RESULT,
+                    &invalid_event_tag,
+                ),
+                Err(RadrootsTradeDvmError::InvalidTag { tag, .. }) if tag == required
+            ));
+        }
+
+        let mut invalid_input_event = tags.clone();
+        let input_tag = invalid_input_event
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_I))
+            .expect("input tag");
+        input_tag[1] = "bad".to_string();
+        assert!(matches!(
+            parse_transition_proof_result_tags(
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                &invalid_input_event,
+            ),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_I, .. })
+        ));
+
+        let mut invalid_receipt = tags.clone();
+        invalid_receipt.push(vec![
+            RADROOTS_DVM_TAG_VALIDATION_RECEIPT.to_string(),
+            "bad".to_string(),
+        ]);
+        assert!(matches!(
+            parse_transition_proof_result_tags(
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                &invalid_receipt
+            ),
+            Err(RadrootsTradeDvmError::InvalidTag {
+                tag: RADROOTS_DVM_TAG_VALIDATION_RECEIPT,
+                ..
+            })
+        ));
+
+        assert!(matches!(
+            parse_job_feedback_tags(KIND_PROFILE, &[]),
+            Err(RadrootsTradeDvmError::UnsupportedKind {
+                expected: KIND_JOB_FEEDBACK,
+                actual: KIND_PROFILE
+            })
+        ));
+
+        for required in [TAG_STATUS, TAG_E, TAG_P] {
+            let missing = build_job_feedback_tags(
+                RadrootsTradeDvmFeedbackStatus::Success,
+                &event_id(10),
+                &public_key(BUYER),
+            )
+            .into_iter()
+            .filter(|tag| tag.first().map(String::as_str) != Some(required))
+            .collect::<Vec<_>>();
+            assert!(matches!(
+                parse_job_feedback_tags(KIND_JOB_FEEDBACK, &missing),
+                Err(RadrootsTradeDvmError::MissingTag { tag }) if tag == required
+            ));
+        }
+
+        let mut bad_feedback = build_job_feedback_tags(
+            RadrootsTradeDvmFeedbackStatus::Success,
+            &event_id(10),
+            &public_key(BUYER),
+        );
+        bad_feedback[0][1] = "queued".to_string();
+        assert!(matches!(
+            parse_job_feedback_tags(KIND_JOB_FEEDBACK, &bad_feedback),
+            Err(RadrootsTradeDvmError::InvalidTag {
+                tag: TAG_STATUS,
+                ..
+            })
+        ));
+        bad_feedback[0][1] = RadrootsTradeDvmFeedbackStatus::Success.as_str().to_string();
+        bad_feedback[1][1] = "bad".to_string();
+        assert!(matches!(
+            parse_job_feedback_tags(KIND_JOB_FEEDBACK, &bad_feedback),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_E, .. })
+        ));
+        bad_feedback[1][1] = event_id(10).into_string();
+        bad_feedback[2][1] = "bad".to_string();
+        assert!(matches!(
+            parse_job_feedback_tags(KIND_JOB_FEEDBACK, &bad_feedback),
+            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_P, .. })
         ));
     }
 }

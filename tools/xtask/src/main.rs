@@ -69,6 +69,7 @@ fn run_release(args: &[String]) -> Result<(), String> {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn run_contract(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("validate") => validate_contract(),

@@ -126,6 +126,29 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_file_resolves_when_available() {
+        let selection = RadrootsSecretBackendSelection {
+            primary: RadrootsSecretBackend::EncryptedFile,
+        };
+
+        let resolved = selection
+            .resolve(RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: true,
+                external_command: false,
+                memory: false,
+            })
+            .expect("encrypted file resolves");
+
+        assert_eq!(
+            resolved,
+            RadrootsResolvedSecretBackend {
+                backend: RadrootsSecretBackend::EncryptedFile,
+            }
+        );
+    }
+
+    #[test]
     fn unsupported_host_vault_policy_fails_closed() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy {

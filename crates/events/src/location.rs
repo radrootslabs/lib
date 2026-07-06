@@ -28,3 +28,41 @@ fn has_public_location_text(value: &str) -> bool {
     let value = value.trim();
     !value.is_empty() && !value.eq_ignore_ascii_case("null")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_geohash5_accepts_base32_prefix_and_trims_input() {
+        assert!(is_public_geohash5(" 9q8yy "));
+        assert!(is_public_geohash5("9Q8YY"));
+        assert!(!is_public_geohash5("9q8y"));
+        assert!(!is_public_geohash5("9q8yyz"));
+        assert!(!is_public_geohash5("9q8ya"));
+    }
+
+    #[test]
+    fn textual_locality_requires_primary_and_one_public_component() {
+        assert!(has_textual_locality(
+            "Market shed",
+            Some("Asheville"),
+            None,
+            None
+        ));
+        assert!(has_textual_locality(
+            "Market shed",
+            Some("null"),
+            Some("NC"),
+            None
+        ));
+        assert!(!has_textual_locality("", Some("Asheville"), None, None));
+        assert!(!has_textual_locality("Market shed", None, None, None));
+        assert!(!has_textual_locality(
+            "Market shed",
+            Some("null"),
+            Some(" "),
+            None
+        ));
+    }
+}

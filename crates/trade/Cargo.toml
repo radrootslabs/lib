@@ -9,6 +9,7 @@ license.workspace = true
 description = "Trade domain model for Radroots"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/radroots_trade"
 readme = "README"
 
 [features]

@@ -3154,8 +3154,10 @@ pub fn identify_event_contract(
 pub fn validate_event_contract(
     event: &RadrootsNostrEvent,
 ) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
-    let contract = identify_event_contract(event.kind, &event.tags, &event.content)
-        .map_err(|error| RadrootsContractValidationError::ContractMatch { error })?;
+    let contract = match identify_event_contract(event.kind, &event.tags, &event.content) {
+        Ok(contract) => contract,
+        Err(error) => return Err(RadrootsContractValidationError::ContractMatch { error }),
+    };
     validate_event_contract_shape(event, contract.id)?;
     Ok(contract)
 }
@@ -3502,6 +3504,87 @@ mod tests {
         ),
     ];
 
+    static REQUIRED_MANY_TEST_TAGS: &[RadrootsTagContract] = &[tag(
+        "test_many",
+        RadrootsTagCardinality::RequiredMany,
+        RadrootsTagSemantic::Topic,
+        RadrootsTagValueType::Text,
+        false,
+    )];
+
+    static OPTIONAL_ONE_TEST_TAGS: &[RadrootsTagContract] = &[tag(
+        "test_optional",
+        RadrootsTagCardinality::OptionalOne,
+        RadrootsTagSemantic::Topic,
+        RadrootsTagValueType::Text,
+        false,
+    )];
+
+    static DUPLICATE_REQUIRED_TEST_TAGS: &[RadrootsTagContract] = &[
+        tag(
+            "test_required",
+            RadrootsTagCardinality::RequiredOne,
+            RadrootsTagSemantic::Topic,
+            RadrootsTagValueType::Text,
+            false,
+        ),
+        tag(
+            "test_required",
+            RadrootsTagCardinality::RequiredOne,
+            RadrootsTagSemantic::Category,
+            RadrootsTagValueType::Text,
+            false,
+        ),
+    ];
+
+    static DUPLICATE_OPTIONAL_TEST_TAGS: &[RadrootsTagContract] = &[
+        tag(
+            "test_optional",
+            RadrootsTagCardinality::OptionalOne,
+            RadrootsTagSemantic::Topic,
+            RadrootsTagValueType::Text,
+            false,
+        ),
+        tag(
+            "test_optional",
+            RadrootsTagCardinality::OptionalOne,
+            RadrootsTagSemantic::Category,
+            RadrootsTagValueType::Text,
+            false,
+        ),
+    ];
+
+    fn synthetic_event_contract(
+        id: &'static str,
+        tags: &'static [RadrootsTagContract],
+    ) -> RadrootsEventContract {
+        RadrootsEventContract {
+            id,
+            kind: KIND_POST,
+            name: "Test",
+            payload_type: "Test",
+            class: RadrootsEventClass::Regular,
+            stability: RadrootsEventStability::Experimental,
+            privacy: RadrootsEventPrivacy::Public,
+            author_role: RadrootsActorRole::Any,
+            content_schema: RadrootsContentSchema::PlainText,
+            discriminator: RadrootsEventDiscriminator::KindOnly,
+            tags,
+            reducers: SOCIAL_REDUCERS,
+        }
+    }
+
+    fn synthetic_kind_contract(kind: u32) -> RadrootsKindContract {
+        RadrootsKindContract {
+            kind,
+            canonical_constant: "KIND_TEST",
+            name: "Test",
+            class: RadrootsEventClass::Regular,
+            standard: RadrootsNostrStandard::Radroots,
+            accepted_event_contracts: &[],
+        }
+    }
+
     fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsNostrEvent {
         RadrootsNostrEvent {
             id: "0".repeat(64),
@@ -3652,6 +3735,99 @@ mod tests {
     }
 
     #[test]
+    fn contract_family_helpers_cover_prefixes_and_kind_branches() {
+        for (id, family) in [
+            (
+                "radroots.account.test.v1",
+                Some(RadrootsContractFamily::Account),
+            ),
+            (
+                "radroots.application.test.v1",
+                Some(RadrootsContractFamily::Application),
+            ),
+            (
+                "radroots.calendar.test.v1",
+                Some(RadrootsContractFamily::Calendar),
+            ),
+            ("radroots.farm.test.v1", Some(RadrootsContractFamily::Farm)),
+            (
+                "radroots.group.test.v1",
+                Some(RadrootsContractFamily::Group),
+            ),
+            ("radroots.http.test.v1", Some(RadrootsContractFamily::Http)),
+            ("radroots.job.test.v1", Some(RadrootsContractFamily::Job)),
+            (
+                "radroots.knowledge.test.v1",
+                Some(RadrootsContractFamily::Knowledge),
+            ),
+            (
+                "radroots.wiki.test.v1",
+                Some(RadrootsContractFamily::Knowledge),
+            ),
+            ("radroots.list.test.v1", Some(RadrootsContractFamily::List)),
+            (
+                "radroots.list_set.test.v1",
+                Some(RadrootsContractFamily::List),
+            ),
+            (
+                "radroots.listing.test.v1",
+                Some(RadrootsContractFamily::Market),
+            ),
+            (
+                "radroots.message.test.v1",
+                Some(RadrootsContractFamily::Message),
+            ),
+            (
+                "radroots.profile.test.v1",
+                Some(RadrootsContractFamily::Profile),
+            ),
+            (
+                "radroots.relay.test.v1",
+                Some(RadrootsContractFamily::Relay),
+            ),
+            (
+                "radroots.trade.test.v1",
+                Some(RadrootsContractFamily::Trade),
+            ),
+            (
+                "radroots.order.test.v1",
+                Some(RadrootsContractFamily::Trade),
+            ),
+            ("radroots.test.unknown.v1", None),
+        ] {
+            assert_eq!(contract_family_for_id(id), family, "{id}");
+        }
+
+        for (kind, family) in [
+            (KIND_PROFILE, RadrootsContractFamily::Profile),
+            (KIND_MESSAGE, RadrootsContractFamily::Message),
+            (KIND_POST, RadrootsContractFamily::Social),
+            (KIND_RELAY_AUTH, RadrootsContractFamily::Relay),
+            (KIND_GROUP_ROLES, RadrootsContractFamily::Group),
+            (KIND_LIST_SET_GENERIC, RadrootsContractFamily::List),
+            (KIND_CALENDAR_EVENT_RSVP, RadrootsContractFamily::Calendar),
+            (KIND_FARM_CRDT_CHANGE, RadrootsContractFamily::Farm),
+            (KIND_LISTING, RadrootsContractFamily::Market),
+            (KIND_ORDER_CANCELLATION, RadrootsContractFamily::Trade),
+            (KIND_KNOWLEDGE_CLAIM, RadrootsContractFamily::Knowledge),
+            (KIND_JOB_FEEDBACK, RadrootsContractFamily::Job),
+            (KIND_JOB_REQUEST_MIN, RadrootsContractFamily::Job),
+            (KIND_JOB_RESULT_MIN, RadrootsContractFamily::Job),
+        ] {
+            assert_eq!(
+                kind_contract_family(&synthetic_kind_contract(kind)),
+                Some(family),
+                "{kind}"
+            );
+        }
+
+        assert_eq!(
+            kind_contract_family(&synthetic_kind_contract(999_999)),
+            None
+        );
+    }
+
+    #[test]
     fn exposes_knowledge_contracts() {
         let wiki_article = event_contract("radroots.wiki.article.v1").expect("wiki article");
         assert_eq!(wiki_article.kind, KIND_WIKI_ARTICLE);
@@ -3699,10 +3875,31 @@ mod tests {
                 event_contract_family(contract),
                 Some(RadrootsContractFamily::Knowledge)
             );
-            assert!(contract.tags.iter().any(|tag| tag.name == "contract"
-                && tag.semantic == RadrootsTagSemantic::Contract
-                && tag.value_type == RadrootsTagValueType::ContractId));
+            let contract_tag = contract
+                .tags
+                .iter()
+                .find(|tag| tag.name == "contract")
+                .expect("contract tag");
+            assert_eq!(contract_tag.semantic, RadrootsTagSemantic::Contract);
+            assert_eq!(contract_tag.value_type, RadrootsTagValueType::ContractId);
         }
+    }
+
+    #[test]
+    fn custom_knowledge_schema_lookup_covers_registered_ids() {
+        for id in [
+            "radroots.knowledge.source.v1",
+            "radroots.knowledge.evidence_bounty.v1",
+            "radroots.knowledge.claim.v1",
+            "radroots.knowledge.relation.v1",
+            "radroots.knowledge.review.v1",
+            "radroots.knowledge.field_report.v1",
+            "radroots.knowledge.change_proposal.v1",
+            "radroots.knowledge.contribution_attestation.v1",
+        ] {
+            assert_eq!(custom_knowledge_schema(id), Some(id), "{id}");
+        }
+        assert_eq!(custom_knowledge_schema("radroots.wiki.article.v1"), None);
     }
 
     #[test]
@@ -3729,6 +3926,12 @@ mod tests {
         assert_eq!(
             identify_event_contract(999_999, &[], "{}"),
             Err(RadrootsContractMatchError::UnsupportedKind(999_999))
+        );
+        assert_eq!(
+            validate_event_contract(&unsigned_event(999_999, Vec::new(), "{}")),
+            Err(RadrootsContractValidationError::ContractMatch {
+                error: RadrootsContractMatchError::UnsupportedKind(999_999),
+            })
         );
 
         let tags = vec![vec!["d".to_owned(), "unknown".to_owned()]];
@@ -3880,6 +4083,176 @@ mod tests {
     }
 
     #[test]
+    fn validate_event_contract_shape_reports_registry_kind_and_content_errors() {
+        let event = unsigned_event(KIND_POST, Vec::new(), "hello");
+        assert_eq!(
+            validate_event_contract_shape(&event, "missing.contract.v1"),
+            Err(RadrootsContractValidationError::UnknownContract {
+                contract_id: "missing.contract.v1".to_owned(),
+            })
+        );
+        assert_eq!(
+            validate_event_contract_shape(&event, "radroots.profile.metadata.v1"),
+            Err(RadrootsContractValidationError::KindMismatch {
+                expected: KIND_PROFILE,
+                actual: KIND_POST,
+            })
+        );
+
+        let invalid_json = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            "not-json",
+        );
+        assert_eq!(
+            validate_event_contract_shape(&invalid_json, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::InvalidJsonContent {
+                contract_id: "radroots.knowledge.claim.v1",
+            })
+        );
+
+        assert_eq!(
+            validate_event_contract_shape(
+                &unsigned_event(KIND_POST, Vec::new(), "plain text"),
+                "radroots.social.post.v1",
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn validate_contract_tags_reports_cardinality_errors() {
+        let missing_required_one = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            Vec::new(),
+            r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&missing_required_one, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::MissingTag {
+                contract_id: "radroots.knowledge.claim.v1",
+                name: "contract",
+            })
+        );
+
+        let duplicate_required_one = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![
+                vec!["contract", "radroots.knowledge.claim.v1"],
+                vec!["contract", "radroots.knowledge.claim.v1"],
+            ],
+            r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&duplicate_required_one, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                name: "contract",
+            })
+        );
+
+        let required_many =
+            synthetic_event_contract("radroots.test.required_many.v1", REQUIRED_MANY_TEST_TAGS);
+        assert_eq!(
+            validate_contract_tags(&unsigned_event(KIND_POST, Vec::new(), ""), &required_many),
+            Err(RadrootsContractValidationError::MissingTag {
+                contract_id: "radroots.test.required_many.v1",
+                name: "test_many",
+            })
+        );
+        assert_eq!(
+            validate_contract_tags(
+                &unsigned_event(KIND_POST, vec![vec!["test_many", "one"]], ""),
+                &required_many,
+            ),
+            Ok(())
+        );
+
+        let optional_one =
+            synthetic_event_contract("radroots.test.optional_one.v1", OPTIONAL_ONE_TEST_TAGS);
+        assert_eq!(
+            validate_contract_tags(&unsigned_event(KIND_POST, Vec::new(), ""), &optional_one),
+            Ok(())
+        );
+        assert_eq!(
+            validate_contract_tags(
+                &unsigned_event(
+                    KIND_POST,
+                    vec![vec!["test_optional", "one"], vec!["test_optional", "two"],],
+                    "",
+                ),
+                &optional_one,
+            ),
+            Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                contract_id: "radroots.test.optional_one.v1",
+                name: "test_optional",
+            })
+        );
+
+        let duplicate_required = synthetic_event_contract(
+            "radroots.test.duplicate_required.v1",
+            DUPLICATE_REQUIRED_TEST_TAGS,
+        );
+        assert_eq!(
+            validate_contract_tags(
+                &unsigned_event(
+                    KIND_POST,
+                    vec![vec!["test_required", "one"], vec!["test_required", "two"],],
+                    "",
+                ),
+                &duplicate_required,
+            ),
+            Ok(())
+        );
+
+        let duplicate_optional = synthetic_event_contract(
+            "radroots.test.duplicate_optional.v1",
+            DUPLICATE_OPTIONAL_TEST_TAGS,
+        );
+        assert_eq!(
+            validate_contract_tags(
+                &unsigned_event(
+                    KIND_POST,
+                    vec![vec!["test_optional", "one"], vec!["test_optional", "two"],],
+                    "",
+                ),
+                &duplicate_optional,
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn validate_custom_knowledge_contract_rejects_missing_schema_and_bad_version() {
+        let missing_schema = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            r#"{"schema_version":1}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&missing_schema, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::MissingContentField {
+                contract_id: "radroots.knowledge.claim.v1",
+                field: "schema",
+            })
+        );
+
+        let bad_version = unsigned_event(
+            KIND_KNOWLEDGE_CLAIM,
+            vec![vec!["contract", "radroots.knowledge.claim.v1"]],
+            r#"{"schema":"radroots.knowledge.claim.v1","schema_version":2}"#,
+        );
+        assert_eq!(
+            validate_event_contract_shape(&bad_version, "radroots.knowledge.claim.v1"),
+            Err(RadrootsContractValidationError::ContentFieldMismatch {
+                contract_id: "radroots.knowledge.claim.v1",
+                field: "schema_version",
+                expected: "1".to_owned(),
+            })
+        );
+    }
+
+    #[test]
     fn validates_nip54_empty_redirect_content() {
         let event = unsigned_event(
             KIND_WIKI_REDIRECT,
@@ -3907,12 +4280,86 @@ mod tests {
 
     #[test]
     fn exposes_validation_error_codes() {
-        let error = RadrootsContractValidationError::MissingTag {
-            contract_id: "radroots.knowledge.claim.v1",
-            name: "contract",
-        };
-
-        assert_eq!(error.code(), "missing_tag");
+        for (error, code) in [
+            (
+                RadrootsContractValidationError::UnknownContract {
+                    contract_id: "missing".to_owned(),
+                },
+                "unknown_contract",
+            ),
+            (
+                RadrootsContractValidationError::ContractMatch {
+                    error: RadrootsContractMatchError::UnsupportedKind(999_999),
+                },
+                "contract_match",
+            ),
+            (
+                RadrootsContractValidationError::KindMismatch {
+                    expected: KIND_PROFILE,
+                    actual: KIND_POST,
+                },
+                "kind_mismatch",
+            ),
+            (
+                RadrootsContractValidationError::ContentMustBeEmpty {
+                    contract_id: "radroots.wiki.redirect.v1",
+                },
+                "content_must_be_empty",
+            ),
+            (
+                RadrootsContractValidationError::InvalidJsonContent {
+                    contract_id: "radroots.knowledge.claim.v1",
+                },
+                "invalid_json_content",
+            ),
+            (
+                RadrootsContractValidationError::MissingTag {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    name: "contract",
+                },
+                "missing_tag",
+            ),
+            (
+                RadrootsContractValidationError::TagCardinalityMismatch {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    name: "contract",
+                },
+                "tag_cardinality_mismatch",
+            ),
+            (
+                RadrootsContractValidationError::TagValueMismatch {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    name: "contract",
+                    expected: "radroots.knowledge.claim.v1".to_owned(),
+                    actual: None,
+                },
+                "tag_value_mismatch",
+            ),
+            (
+                RadrootsContractValidationError::MissingContentField {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    field: "schema",
+                },
+                "missing_content_field",
+            ),
+            (
+                RadrootsContractValidationError::ContentFieldMismatch {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    field: "schema",
+                    expected: "radroots.knowledge.claim.v1".to_owned(),
+                },
+                "content_field_mismatch",
+            ),
+            (
+                RadrootsContractValidationError::ForbiddenContentField {
+                    contract_id: "radroots.knowledge.claim.v1",
+                    field: "review_status",
+                },
+                "forbidden_content_field",
+            ),
+        ] {
+            assert_eq!(error.code(), code);
+        }
     }
 
     #[test]

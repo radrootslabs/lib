@@ -446,6 +446,77 @@ mod tests {
         }
     }
 
+    fn job_view() -> PublishJobView {
+        PublishJobView {
+            job_id: "job-1".to_owned(),
+            status: PublishJobStatus::Accepted,
+            terminal: false,
+            delivery_satisfied: false,
+            event_id: "0".repeat(64),
+            pubkey: "1".repeat(64),
+            event_kind: 30_402,
+            relay_policy: PublishRelayPolicy::ExplicitOnly,
+            delivery_policy: PublishDeliveryPolicy::Any,
+            relay_count: 1,
+            acknowledged_count: 0,
+            retryable_count: 0,
+            terminal_count: 0,
+            requested_at_ms: 1_700_000_000_000,
+            completed_at_ms: None,
+            last_error: None,
+            relays: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn protocol_error_display_covers_all_variants() {
+        let cases = [
+            (
+                PublishProxyProtocolError::InvalidHexField {
+                    field: "id",
+                    expected_len: 64,
+                },
+                "id must be 64 lowercase hex characters",
+            ),
+            (
+                PublishProxyProtocolError::InvalidKind(65_536),
+                "event kind 65536 exceeds publish proxy range",
+            ),
+            (
+                PublishProxyProtocolError::EmptyTag { index: 3 },
+                "tag 3 must not be empty",
+            ),
+            (
+                PublishProxyProtocolError::EmptyIdempotencyKey,
+                "idempotency key must not be empty",
+            ),
+            (
+                PublishProxyProtocolError::EmptyRelayUrl { index: 2 },
+                "relay URL 2 must not be empty",
+            ),
+            (
+                PublishProxyProtocolError::RelayLimitExceeded { max: 1, actual: 2 },
+                "relay count 2 exceeds limit 1",
+            ),
+            (
+                PublishProxyProtocolError::InvalidQuorum,
+                "delivery quorum must be greater than zero",
+            ),
+            (
+                PublishProxyProtocolError::EmptyPrincipalId,
+                "principal id must not be empty",
+            ),
+            (
+                PublishProxyProtocolError::EmptyJobId,
+                "job id must not be empty",
+            ),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
     #[test]
     fn signed_event_wire_uses_pubkey_and_rejects_author() {
         let value = serde_json::to_value(event()).expect("serialize");
@@ -476,6 +547,23 @@ mod tests {
             Err(PublishProxyProtocolError::InvalidHexField { field: "id", .. })
         ));
 
+        let mut invalid_pubkey = event();
+        invalid_pubkey.pubkey = "g".repeat(64);
+        assert!(matches!(
+            invalid_pubkey.validate(),
+            Err(PublishProxyProtocolError::InvalidHexField {
+                field: "pubkey",
+                ..
+            })
+        ));
+
+        let mut invalid_sig = event();
+        invalid_sig.sig = "2".repeat(127);
+        assert!(matches!(
+            invalid_sig.validate(),
+            Err(PublishProxyProtocolError::InvalidHexField { field: "sig", .. })
+        ));
+
         let mut invalid_kind = event();
         invalid_kind.kind = u16::MAX as u32 + 1;
         assert!(matches!(
@@ -503,6 +591,11 @@ mod tests {
         };
         request.validate(1).expect("valid request");
         assert_eq!(request.delivery_policy.required_ack_count(3), 1);
+        assert_eq!(PublishDeliveryPolicy::Any.required_ack_count(0), 0);
+        assert_eq!(PublishDeliveryPolicy::Any.required_ack_count(3), 1);
+        assert_eq!(PublishDeliveryPolicy::All.required_ack_count(3), 3);
+        PublishDeliveryPolicy::Any.validate().expect("any policy");
+        PublishDeliveryPolicy::All.validate().expect("all policy");
 
         let mut too_many = request.clone();
         too_many.relays.push("wss://relay-2.example.com".to_owned());
@@ -510,6 +603,26 @@ mod tests {
             too_many.validate(1),
             Err(PublishProxyProtocolError::RelayLimitExceeded { max: 1, actual: 2 })
         ));
+
+        let mut empty_relay = request.clone();
+        empty_relay.relays = vec![" ".to_owned()];
+        assert!(matches!(
+            empty_relay.validate(1),
+            Err(PublishProxyProtocolError::EmptyRelayUrl { index: 0 })
+        ));
+
+        let mut empty_idempotency_key = request.clone();
+        empty_idempotency_key.idempotency_key = Some(" ".to_owned());
+        assert!(matches!(
+            empty_idempotency_key.validate(1),
+            Err(PublishProxyProtocolError::EmptyIdempotencyKey)
+        ));
+
+        let mut no_idempotency_key = request.clone();
+        no_idempotency_key.idempotency_key = None;
+        no_idempotency_key
+            .validate(1)
+            .expect("missing idempotency key is valid");
 
         let mut invalid_quorum = request;
         invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
@@ -538,10 +651,100 @@ mod tests {
 
     #[test]
     fn outcome_kind_semantics_cover_daemon_results() {
-        assert!(PublishRelayOutcomeKind::SkippedAlreadyAccepted.counts_toward_quorum());
-        assert!(PublishRelayOutcomeKind::AuthRequired.is_retryable());
-        assert!(PublishRelayOutcomeKind::RelayUrlRejected.is_terminal_failure());
-        assert!(PublishRelayOutcomeKind::Muted.is_terminal_failure());
-        assert!(PublishRelayOutcomeKind::PaymentRequired.is_terminal_failure());
+        let all = [
+            PublishRelayOutcomeKind::Accepted,
+            PublishRelayOutcomeKind::DuplicateAccepted,
+            PublishRelayOutcomeKind::Blocked,
+            PublishRelayOutcomeKind::RateLimited,
+            PublishRelayOutcomeKind::Invalid,
+            PublishRelayOutcomeKind::PowRequired,
+            PublishRelayOutcomeKind::Restricted,
+            PublishRelayOutcomeKind::AuthRequired,
+            PublishRelayOutcomeKind::Muted,
+            PublishRelayOutcomeKind::Unsupported,
+            PublishRelayOutcomeKind::PaymentRequired,
+            PublishRelayOutcomeKind::Error,
+            PublishRelayOutcomeKind::Timeout,
+            PublishRelayOutcomeKind::ConnectionFailed,
+            PublishRelayOutcomeKind::RelayUrlRejected,
+            PublishRelayOutcomeKind::SkippedAlreadyAccepted,
+            PublishRelayOutcomeKind::Unknown,
+        ];
+        let quorum = [
+            PublishRelayOutcomeKind::Accepted,
+            PublishRelayOutcomeKind::DuplicateAccepted,
+            PublishRelayOutcomeKind::SkippedAlreadyAccepted,
+        ];
+        let retryable = [
+            PublishRelayOutcomeKind::RateLimited,
+            PublishRelayOutcomeKind::PowRequired,
+            PublishRelayOutcomeKind::AuthRequired,
+            PublishRelayOutcomeKind::Error,
+            PublishRelayOutcomeKind::Timeout,
+            PublishRelayOutcomeKind::ConnectionFailed,
+            PublishRelayOutcomeKind::Unknown,
+        ];
+        let terminal = [
+            PublishRelayOutcomeKind::Blocked,
+            PublishRelayOutcomeKind::Invalid,
+            PublishRelayOutcomeKind::Restricted,
+            PublishRelayOutcomeKind::Muted,
+            PublishRelayOutcomeKind::Unsupported,
+            PublishRelayOutcomeKind::PaymentRequired,
+            PublishRelayOutcomeKind::RelayUrlRejected,
+        ];
+
+        for kind in all {
+            assert_eq!(kind.counts_toward_quorum(), quorum.contains(&kind));
+            assert_eq!(kind.is_retryable(), retryable.contains(&kind));
+            assert_eq!(kind.is_terminal_failure(), terminal.contains(&kind));
+        }
+    }
+
+    #[test]
+    fn publish_job_view_validation_covers_success_and_errors() {
+        let valid = job_view();
+        valid.validate().expect("valid job view");
+
+        let mut empty_job_id = valid.clone();
+        empty_job_id.job_id = " ".to_owned();
+        assert!(matches!(
+            empty_job_id.validate(),
+            Err(PublishProxyProtocolError::EmptyJobId)
+        ));
+
+        let mut invalid_event_id = valid.clone();
+        invalid_event_id.event_id = "Z".repeat(64);
+        assert!(matches!(
+            invalid_event_id.validate(),
+            Err(PublishProxyProtocolError::InvalidHexField {
+                field: "event_id",
+                ..
+            })
+        ));
+
+        let mut invalid_pubkey = valid.clone();
+        invalid_pubkey.pubkey = "1".repeat(63);
+        assert!(matches!(
+            invalid_pubkey.validate(),
+            Err(PublishProxyProtocolError::InvalidHexField {
+                field: "pubkey",
+                ..
+            })
+        ));
+
+        let mut invalid_kind = valid.clone();
+        invalid_kind.event_kind = u16::MAX as u32 + 1;
+        assert!(matches!(
+            invalid_kind.validate(),
+            Err(PublishProxyProtocolError::InvalidKind(_))
+        ));
+
+        let mut invalid_quorum = valid;
+        invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
+        assert!(matches!(
+            invalid_quorum.validate(),
+            Err(PublishProxyProtocolError::InvalidQuorum)
+        ));
     }
 }

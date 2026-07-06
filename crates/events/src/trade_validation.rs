@@ -102,3 +102,28 @@ pub struct RadrootsTradeValidationListingResult {
     pub valid: bool,
     pub errors: Vec<RadrootsTradeValidationListingError>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn listing_validation_error_display_covers_location_variants() {
+        assert_eq!(
+            RadrootsTradeValidationListingError::MissingLocation.to_string(),
+            "missing listing location"
+        );
+        assert_eq!(
+            RadrootsTradeValidationListingError::MissingLocationLocality.to_string(),
+            "missing listing location locality"
+        );
+        assert_eq!(
+            RadrootsTradeValidationListingError::MissingLocationGeohash.to_string(),
+            "missing listing location geohash"
+        );
+        assert_eq!(
+            RadrootsTradeValidationListingError::InvalidLocationGeohash.to_string(),
+            "invalid listing location geohash"
+        );
+    }
+}

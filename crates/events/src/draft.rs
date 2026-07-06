@@ -169,8 +169,10 @@ impl RadrootsFrozenEventDraft {
         expected_pubkey: impl AsRef<str>,
     ) -> Result<Self, RadrootsDraftError> {
         let contract_id = contract_id.into();
-        let contract = event_contract(&contract_id)
-            .ok_or_else(|| RadrootsDraftError::UnknownContract(contract_id.clone()))?;
+        let contract = match event_contract(&contract_id) {
+            Some(contract) => contract,
+            None => return Err(RadrootsDraftError::UnknownContract(contract_id.clone())),
+        };
         if contract.kind != kind {
             return Err(RadrootsDraftError::ContractKindMismatch {
                 contract_id,
@@ -660,6 +662,14 @@ mod tests {
             error,
             RadrootsDraftError::SignedEventContentMismatch { .. }
         ));
+
+        let mut draft = post_draft();
+        draft.expected_pubkey = "not-hex".to_owned();
+        let mut signed = signed_event_for_draft(&post_draft());
+        signed.pubkey = "not-hex".to_owned();
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("id parse");
+        assert!(matches!(error, RadrootsDraftError::IdParse(_)));
 
         let mut draft = post_draft();
         draft.expected_event_id = hex_64('f');

@@ -526,20 +526,15 @@ pub fn validation_receipt_tags_from_tags(
     let event_set_root = required_tag_value(tags, TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT)?;
     let reducer_output_root = required_tag_value(tags, TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT)?;
     let public_values_hash = required_tag_value(tags, TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH)?;
-    let proof_system = RadrootsValidationReceiptProofSystem::from_label(&required_tag_value(
-        tags,
-        TAG_VALIDATION_RECEIPT_PROOF_SYSTEM,
-    )?)
-    .ok_or(RadrootsValidationReceiptError::InvalidTag(
-        TAG_VALIDATION_RECEIPT_PROOF_SYSTEM,
-    ))?;
-    let receipt_type = RadrootsValidationReceiptType::from_label(&required_tag_value(
-        tags,
-        TAG_VALIDATION_RECEIPT_RECEIPT_TYPE,
-    )?)
-    .ok_or(RadrootsValidationReceiptError::InvalidTag(
-        TAG_VALIDATION_RECEIPT_RECEIPT_TYPE,
-    ))?;
+    let proof_system_label = required_tag_value(tags, TAG_VALIDATION_RECEIPT_PROOF_SYSTEM)?;
+    let proof_system = RadrootsValidationReceiptProofSystem::from_label(&proof_system_label)
+        .ok_or(RadrootsValidationReceiptError::InvalidTag(
+            TAG_VALIDATION_RECEIPT_PROOF_SYSTEM,
+        ))?;
+    let receipt_type_label = required_tag_value(tags, TAG_VALIDATION_RECEIPT_RECEIPT_TYPE)?;
+    let receipt_type = RadrootsValidationReceiptType::from_label(&receipt_type_label).ok_or(
+        RadrootsValidationReceiptError::InvalidTag(TAG_VALIDATION_RECEIPT_RECEIPT_TYPE),
+    )?;
 
     validate_event_id(&listing_event_id, "tags.e.listing")?;
     validate_event_id(&root_event_id, "tags.e.root")?;
@@ -750,9 +745,7 @@ fn required_event_marker(
     if matches.next().is_some() {
         return Err(RadrootsValidationReceiptError::InvalidTag(marker));
     }
-    let value = tag
-        .get(1)
-        .ok_or(RadrootsValidationReceiptError::InvalidTag(marker))?;
+    let value = &tag[1];
     validate_required_str(value, marker)?;
     Ok(value.clone())
 }
@@ -869,7 +862,10 @@ mod tests {
         validation_receipt_tags, validation_receipt_tags_from_tags,
         verify_validation_receipt_event,
     };
-    use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D};
+    use radroots_events::{
+        RadrootsNostrEvent, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
+        tags::TAG_D,
+    };
 
     fn hash32(c: char) -> String {
         format!("0x{}", c.to_string().repeat(64))
@@ -1037,6 +1033,24 @@ mod tests {
     }
 
     #[test]
+    fn validation_trust_policy_builders_preserve_explicit_settings() {
+        let trusted = RadrootsPublicKey::parse(&event_id('a')).unwrap();
+        let other = RadrootsPublicKey::parse(&event_id('b')).unwrap();
+        let policy = RadrootsTradeValidationTrustPolicy::production()
+            .with_trusted_rhi_pubkeys(vec![trusted.clone()])
+            .with_allow_deterministic_none(true)
+            .with_require_cryptographic_proof(false);
+
+        assert_eq!(policy.trusted_rhi_pubkey_count(), 1);
+        assert!(policy.trusts_rhi_pubkey(&trusted));
+        assert!(!policy.trusts_rhi_pubkey(&other));
+        assert!(policy.allow_deterministic_none);
+        assert!(!policy.require_cryptographic_proof);
+        assert!(RadrootsTradeValidationTrustPolicy::default().require_cryptographic_proof);
+        assert!(RadrootsTradeValidationTrustPolicy::explicit_dev_test().allow_deterministic_none);
+    }
+
+    #[test]
     fn validation_receipt_validate_rejects_core_field_errors() {
         let mut receipt = sample_validation_receipt();
         receipt.version = 2;
@@ -1124,6 +1138,33 @@ mod tests {
             receipt.validate(),
             Err(RadrootsValidationReceiptError::InvalidField(
                 "statement.root_event_id"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.new_state_root = "bad".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "new_state_root"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.previous_state_root = "bad".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "previous_state_root"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.target_event_id = "bad".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.target_event_id"
             ))
         );
 
@@ -1352,6 +1393,56 @@ mod tests {
             Err(RadrootsValidationReceiptError::InvalidTag(
                 TAG_VALIDATION_RECEIPT_RECEIPT_TYPE
             ))
+        );
+
+        for marker in ["root", "target"] {
+            let missing = tags
+                .iter()
+                .filter(|tag| tag.get(4).map(String::as_str) != Some(marker))
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(
+                validation_receipt_tags_from_tags(&missing),
+                Err(RadrootsValidationReceiptError::MissingTag(marker))
+            );
+        }
+
+        let mut malformed_root = tags.clone();
+        malformed_root[2] = vec![
+            "e".to_string(),
+            String::new(),
+            String::new(),
+            "root".to_string(),
+        ];
+        assert_eq!(
+            validation_receipt_tags_from_tags(&malformed_root),
+            Err(RadrootsValidationReceiptError::MissingTag("root"))
+        );
+
+        let mut missing_root_value = tags.clone();
+        missing_root_value[2] = vec![
+            "e".to_string(),
+            String::new(),
+            String::new(),
+            "root".to_string(),
+        ];
+        missing_root_value[2].insert(1, event_id('1'));
+        missing_root_value[2].remove(1);
+        assert_eq!(
+            validation_receipt_tags_from_tags(&missing_root_value),
+            Err(RadrootsValidationReceiptError::MissingTag("root"))
+        );
+
+        let mut malformed_target = tags.clone();
+        malformed_target[3] = vec![
+            "e".to_string(),
+            String::new(),
+            String::new(),
+            "target".to_string(),
+        ];
+        assert_eq!(
+            validation_receipt_tags_from_tags(&malformed_target),
+            Err(RadrootsValidationReceiptError::MissingTag("target"))
         );
     }
 
@@ -2012,6 +2103,30 @@ mod tests {
             validation_receipt_content_from_str(&unknown_field),
             Err(RadrootsValidationReceiptError::InvalidJson)
         );
+    }
+
+    #[test]
+    fn validation_receipt_builders_reject_invalid_receipts_before_serializing() {
+        let mut receipt = sample_validation_receipt();
+        receipt.version = 2;
+        let content = serde_json::to_string(&receipt).unwrap();
+
+        assert_eq!(
+            validation_receipt_canonical_content(&receipt),
+            Err(RadrootsValidationReceiptError::InvalidField("version"))
+        );
+        assert_eq!(
+            validation_receipt_content_from_str(&content),
+            Err(RadrootsValidationReceiptError::InvalidField("version"))
+        );
+        assert_eq!(
+            validation_receipt_tags("order-1", &receipt),
+            Err(RadrootsValidationReceiptError::InvalidField("version"))
+        );
+        assert!(matches!(
+            validation_receipt_event_build("order-1", &receipt),
+            Err(RadrootsValidationReceiptError::InvalidField("version"))
+        ));
     }
 
     #[test]

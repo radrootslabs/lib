@@ -1,11 +1,31 @@
 use radroots_geocoder::{
-    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderLocalityLookup,
-    GeocoderLocalityQuery, GeocoderPoint, GeocoderReverseOptions,
+    GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetSpec, GeoNamesAssetState, Geocoder,
+    GeocoderCountryListResult, GeocoderError, GeocoderLocalityLookup, GeocoderLocalityQuery,
+    GeocoderPoint, GeocoderReverseOptions, default_geonames_asset_path_from_cache_root,
+    ensure_geonames_asset_in_cache_root_with_fetcher, ensure_geonames_asset_path_with_fetcher,
+    inspect_default_geonames_asset_in_cache_root, inspect_geonames_asset_path,
+    validate_geonames_asset_file, validate_geonames_asset_spec_source,
 };
 use rusqlite::Connection;
+use sha2::Digest;
+use std::cell::Cell;
 use std::fs;
 use std::path::Path;
 use tempfile::NamedTempFile;
+
+const TEST_ASSET_URL: &str = "https://assets.radroots.io/data/geonames/geonames-test.db";
+
+struct BytesFetcher {
+    bytes: Vec<u8>,
+    calls: Cell<usize>,
+}
+
+impl GeoNamesAssetFetcher for BytesFetcher {
+    fn fetch(&self, _url: &str) -> Result<Vec<u8>, GeocoderError> {
+        self.calls.set(self.calls.get() + 1);
+        Ok(self.bytes.clone())
+    }
+}
 
 #[test]
 fn reverse_returns_nearest_match_by_default() {
@@ -124,6 +144,146 @@ fn locality_resolves_structured_query_freeform_query_id_and_ambiguity() {
         .locality(&GeocoderLocalityQuery::structured("Missing Market").with_country("CA"))
         .expect("no-match lookup");
     assert!(matches!(no_match, GeocoderLocalityLookup::NoMatch));
+}
+
+#[test]
+fn locality_query_builders_cover_blank_single_region_alias_and_display_fallbacks() {
+    let geocoder = open_forward_fixture_geocoder();
+
+    let ignored_builder_fields = GeocoderLocalityQuery::feature_id(3004)
+        .with_region("ignored")
+        .with_country("ignored")
+        .with_limit(0);
+    let selected = geocoder
+        .locality(&ignored_builder_fields)
+        .expect("feature-id lookup");
+    assert_unique_locality(selected, 3004, "Identifier Grove, British Columbia, Canada");
+
+    let blank = geocoder
+        .locality(&GeocoderLocalityQuery::query(" , , "))
+        .expect("blank freeform lookup");
+    assert!(matches!(blank, GeocoderLocalityLookup::NoMatch));
+
+    let single = geocoder
+        .locality(&GeocoderLocalityQuery::query("Fixture Victoria"))
+        .expect("single-part freeform lookup");
+    assert_unique_locality(single, 3001, "Fixture Victoria, British Columbia, Canada");
+
+    let two_part = geocoder
+        .locality(&GeocoderLocalityQuery::query(
+            "Fixture Victoria, British Columbia",
+        ))
+        .expect("two-part freeform lookup");
+    assert_unique_locality(two_part, 3001, "Fixture Victoria, British Columbia, Canada");
+
+    let us_alias = geocoder
+        .locality(
+            &GeocoderLocalityQuery::structured("Alias Market")
+                .with_region("CA")
+                .with_country("US"),
+        )
+        .expect("us alias lookup");
+    assert_unique_locality(us_alias, 3006, "Alias Market, California, United States");
+
+    let fallback_display = geocoder
+        .locality(&GeocoderLocalityQuery::feature_id(3007))
+        .expect("fallback display lookup");
+    assert_unique_locality(fallback_display, 3007, "No Country Place, ZZ");
+
+    let missing_region = geocoder
+        .locality(
+            &GeocoderLocalityQuery::structured("No Country Place")
+                .with_region("Missing Region")
+                .with_country("ZZ"),
+        )
+        .expect("missing region lookup");
+    assert!(matches!(missing_region, GeocoderLocalityLookup::NoMatch));
+
+    let no_alias_region = geocoder
+        .locality(
+            &GeocoderLocalityQuery::structured("No Alias Place")
+                .with_region("NA")
+                .with_country("ZZ"),
+        )
+        .expect("country without region alias lookup");
+    assert!(matches!(no_alias_region, GeocoderLocalityLookup::NoMatch));
+
+    let ambiguous_zero_limit = geocoder
+        .locality(
+            &GeocoderLocalityQuery::structured("Shared Market")
+                .with_country("CA")
+                .with_limit(0),
+        )
+        .expect("zero-limit ambiguous lookup");
+    let GeocoderLocalityLookup::Ambiguous { candidates } = ambiguous_zero_limit else {
+        panic!("expected ambiguous lookup");
+    };
+    assert_eq!(candidates.len(), 1);
+}
+
+#[test]
+fn geonames_asset_public_helpers_refresh_validate_and_open_verified_fixture() {
+    let cache_root = tempfile::tempdir().expect("cache root");
+    let source_path = build_fixture_database();
+    let bytes = fs::read(&source_path).expect("fixture database bytes");
+    let spec = fixture_asset_spec(&bytes, TEST_ASSET_URL);
+
+    let default_path = default_geonames_asset_path_from_cache_root(cache_root.path());
+    assert!(default_path.ends_with(Path::new("geonames-1.0.db")));
+
+    let default_missing = inspect_default_geonames_asset_in_cache_root(cache_root.path())
+        .expect("inspect default missing asset");
+    assert_eq!(default_missing.state, GeoNamesAssetState::Missing);
+
+    let fetcher = BytesFetcher {
+        bytes,
+        calls: Cell::new(0),
+    };
+    let refreshed =
+        ensure_geonames_asset_in_cache_root_with_fetcher(cache_root.path(), &spec, &fetcher)
+            .expect("refresh asset");
+    assert_eq!(refreshed.state, GeoNamesAssetState::Refreshed);
+    assert_eq!(fetcher.calls.get(), 1);
+
+    let inspected = inspect_geonames_asset_path(&refreshed.path, &spec).expect("inspect asset");
+    assert_eq!(inspected.state, GeoNamesAssetState::Available);
+
+    let validated = validate_geonames_asset_file(&refreshed.path, &spec).expect("validate asset");
+    assert_eq!(validated.sha256, inspected.sha256);
+
+    let available = ensure_geonames_asset_path_with_fetcher(&refreshed.path, &spec, &fetcher)
+        .expect("available asset");
+    assert_eq!(available.state, GeoNamesAssetState::Available);
+    assert_eq!(fetcher.calls.get(), 1);
+
+    let geocoder = Geocoder::open_verified_geonames_asset(&refreshed.path, &spec)
+        .expect("open verified geocoder");
+    let country = geocoder.country("US").expect("country query");
+    assert_eq!(country.len(), 3);
+}
+
+#[test]
+fn geonames_asset_public_validation_rejects_invalid_url_shapes() {
+    let source_path = build_fixture_database();
+    let bytes = fs::read(&source_path).expect("fixture database bytes");
+
+    let bad_parse = GeoNamesAssetSpec {
+        url: "not a url",
+        ..fixture_asset_spec(&bytes, TEST_ASSET_URL)
+    };
+    assert!(matches!(
+        validate_geonames_asset_spec_source(&bad_parse),
+        Err(GeocoderError::InvalidAssetUrl { .. })
+    ));
+
+    let bad_scheme = GeoNamesAssetSpec {
+        url: "http://assets.radroots.io/data/geonames/geonames-test.db",
+        ..fixture_asset_spec(&bytes, TEST_ASSET_URL)
+    };
+    assert!(matches!(
+        validate_geonames_asset_spec_source(&bad_scheme),
+        Err(GeocoderError::InvalidAssetUrl { .. })
+    ));
 }
 
 #[test]
@@ -407,10 +567,17 @@ fn seed_forward_fixture_database(path: &str) {
 
     insert_country(&conn, "CA", "Canada");
     insert_country(&conn, "US", "United States");
+    conn.execute(
+        "INSERT INTO countries (id, name) VALUES (?1, ?2)",
+        rusqlite::params!["ZZ", Option::<String>::None],
+    )
+    .expect("insert unnamed country");
 
     insert_admin1(&conn, "CA", 2, "British Columbia");
     insert_admin1(&conn, "CA", 3, "Prairie Region");
     insert_admin1(&conn, "US", 4, "River Region");
+    insert_admin1(&conn, "US", 6, "California");
+    insert_admin1(&conn, "ZZ", 100, "No Alias Region");
 
     insert_feature(
         &conn,
@@ -425,6 +592,9 @@ fn seed_forward_fixture_database(path: &str) {
     insert_feature(&conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
     insert_feature(&conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
     insert_feature(&conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
+    insert_feature(&conn, 3006, "Alias Market", "US", 6, 38.5, -121.5);
+    insert_feature(&conn, 3007, "No Country Place", "ZZ", 99, 10.0, 11.0);
+    insert_feature(&conn, 3008, "No Alias Place", "ZZ", 100, 10.5, 11.5);
 }
 
 fn seed_reverse_country_row_error_database(path: &str) {
@@ -567,6 +737,19 @@ fn insert_feature(
 
 fn approx_eq(left: f64, right: f64) -> bool {
     (left - right).abs() < 0.000_001
+}
+
+fn fixture_asset_spec(bytes: &[u8], url: &'static str) -> GeoNamesAssetSpec {
+    let digest = sha2::Sha256::digest(bytes);
+    let sha256: &'static str = Box::leak(hex::encode(digest).into_boxed_str());
+    GeoNamesAssetSpec {
+        version: "test",
+        file_name: "geonames-test.db",
+        url,
+        allowed_host: GEONAMES_ASSET_HOST,
+        byte_size: bytes.len() as u64,
+        sha256,
+    }
 }
 
 fn assert_sqlite_error_contains(err: GeocoderError, needle: &str) {

@@ -287,6 +287,28 @@ fn ignores_response_from_unexpected_signer_identity() {
     assert_eq!(outcome, RadrootsNostrConnectClientEventOutcome::Ignore);
 }
 
+#[test]
+fn ignores_non_rpc_kind_from_expected_signer() {
+    let client_keys = client_keys();
+    let remote_keys = remote_signer_keys();
+    let target = target(&remote_keys);
+    let response = EventBuilder::text_note("not a NIP-46 response")
+        .tag(Tag::public_key(client_keys.public_key()))
+        .sign_with_keys(&remote_keys)
+        .expect("non-rpc response");
+
+    let outcome = parse_response_event(
+        &client_keys,
+        &target,
+        "req-ping",
+        &RadrootsNostrConnectMethod::Ping,
+        &response,
+    )
+    .expect("parse response");
+
+    assert_eq!(outcome, RadrootsNostrConnectClientEventOutcome::Ignore);
+}
+
 #[tokio::test]
 async fn executes_request_through_transport_with_auth_progress() {
     let client_keys = client_keys();

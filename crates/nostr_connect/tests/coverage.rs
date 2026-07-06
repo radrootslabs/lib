@@ -208,6 +208,22 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
             Some("also-not-a-kind")
         )
     );
+    assert!(
+        !RadrootsNostrConnectPermission::with_parameter(
+            RadrootsNostrConnectMethod::SignEvent,
+            "kind:"
+        )
+        .matches_sign_event_kind(30402)
+    );
+    let encrypt_permission = RadrootsNostrConnectPermission::with_parameter(
+        RadrootsNostrConnectMethod::Nip44Encrypt,
+        test_public_key().to_hex(),
+    );
+    assert!(encrypt_permission.matches_request(
+        &RadrootsNostrConnectMethod::Nip44Encrypt,
+        Some(&test_public_key().to_hex())
+    ));
+    assert!(!encrypt_permission.matches_request(&RadrootsNostrConnectMethod::Nip44Encrypt, None));
 
     let typed_permissions = RadrootsNostrConnectPermissions::from(vec![
         RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),

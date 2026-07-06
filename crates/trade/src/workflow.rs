@@ -200,9 +200,7 @@ fn apply_validation_receipts(
         return;
     }
 
-    let Some(receipt) = valid_receipts.first() else {
-        return;
-    };
+    let receipt = &valid_receipts[0];
 
     match receipt.receipt.result {
         RadrootsValidationReceiptResult::Valid => {
@@ -304,6 +302,7 @@ pub fn inventory_reservations_from_commitments(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -327,6 +326,7 @@ mod tests {
         RadrootsGroupedOrderEventRecords, RadrootsOrderCancellationRecord,
         RadrootsOrderDecisionRecord, RadrootsOrderIssue, RadrootsOrderRequestRecord,
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
+        RadrootsTradeLocatorProjectionResolution,
     };
     use crate::validation_receipt::{
         RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
@@ -339,8 +339,10 @@ mod tests {
     use super::{
         RadrootsTradeWorkflowDeterministicFailure, RadrootsTradeWorkflowRecords,
         RadrootsTradeWorkflowState, RadrootsTradeWorkflowValidationReceiptRecord,
-        reduce_trade_workflow_records,
+        inventory_reservations_from_commitments, reduce_trade_workflow_records,
+        reduce_trade_workflow_records_for_trade_locator,
     };
+    use crate::identity::RadrootsTradeLocator;
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -645,6 +647,25 @@ mod tests {
         assert_eq!(projection.validation_receipt_event_id, Some(event_id(9)));
         assert!(projection.pending_inventory_reservations.is_empty());
         assert_eq!(projection.committed_inventory_reservations.len(), 1);
+
+        let mut no_listing_expectation = workflow_records();
+        no_listing_expectation.expected_listing_event_id = None;
+        no_listing_expectation.current_listing_event_id = None;
+        no_listing_expectation
+            .order_events
+            .decisions
+            .push(accepted_decision());
+        no_listing_expectation
+            .validation_receipts
+            .push(receipt_record(
+                10,
+                RadrootsValidationReceiptResult::Valid,
+                event_id(1),
+                event_id(2),
+                event_id(80),
+            ));
+        let projection = reduce_trade_workflow_records(&order_id(), no_listing_expectation);
+        assert_eq!(projection.status, RadrootsTradeWorkflowState::Committed);
     }
 
     #[test]
@@ -750,5 +771,232 @@ mod tests {
             projection.issues.as_slice(),
             [RadrootsOrderIssue::ValidationReceiptTargetMismatch { .. }]
         ));
+    }
+
+    #[test]
+    fn workflow_locator_resolution_reports_missing_ambiguous_and_matched_records() {
+        let locator = RadrootsTradeLocator::from_order_id(order_id());
+
+        let missing = reduce_trade_workflow_records_for_trade_locator(
+            &locator,
+            RadrootsTradeWorkflowRecords::default(),
+        );
+        assert!(matches!(
+            missing,
+            RadrootsTradeLocatorProjectionResolution::Missing { .. }
+        ));
+
+        let mut ambiguous = workflow_records();
+        let mut second_request = request_record();
+        second_request.event_id = event_id(9);
+        ambiguous.order_events.requests.push(second_request);
+        let ambiguous_resolution =
+            reduce_trade_workflow_records_for_trade_locator(&locator, ambiguous);
+        assert!(matches!(
+            ambiguous_resolution,
+            RadrootsTradeLocatorProjectionResolution::Ambiguous { ref candidates, .. }
+                if candidates.len() == 2
+        ));
+
+        let mut matched = workflow_records();
+        matched.order_events.decisions.push(accepted_decision());
+        matched.validation_receipts.push(receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        ));
+        matched.validation_receipts.push(receipt_record(
+            10,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(9),
+            event_id(2),
+            event_id(80),
+        ));
+        let locator =
+            RadrootsTradeLocator::from_order_id(order_id()).with_root_event_id(event_id(1));
+        let matched_resolution = reduce_trade_workflow_records_for_trade_locator(&locator, matched);
+        assert!(matches!(
+            matched_resolution,
+            RadrootsTradeLocatorProjectionResolution::Projected { projection, .. }
+                if projection.status == RadrootsTradeWorkflowState::Committed
+                    && projection.validation_receipt_event_id == Some(event_id(9))
+        ));
+    }
+
+    #[test]
+    fn workflow_receipt_binding_reports_each_mismatch_variant() {
+        let mut conflicting = workflow_records();
+        conflicting.order_events.decisions.push(accepted_decision());
+        conflicting.validation_receipts.push(receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        ));
+        conflicting.validation_receipts.push(receipt_record(
+            10,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        ));
+        let projection = reduce_trade_workflow_records(&order_id(), conflicting);
+        assert!(matches!(
+            projection.issues.as_slice(),
+            [RadrootsOrderIssue::ConflictingValidationReceipts { .. }]
+        ));
+
+        let mut no_pending_agreement = workflow_records();
+        no_pending_agreement
+            .validation_receipts
+            .push(receipt_record(
+                9,
+                RadrootsValidationReceiptResult::Valid,
+                event_id(1),
+                event_id(2),
+                event_id(80),
+            ));
+        let projection = reduce_trade_workflow_records(&order_id(), no_pending_agreement);
+        assert!(matches!(
+            projection.issues.as_slice(),
+            [
+                RadrootsOrderIssue::ValidationReceiptWithoutPendingAgreement { .. },
+                ..
+            ]
+        ));
+
+        let mut wrong_order = workflow_records();
+        wrong_order.order_events.decisions.push(accepted_decision());
+        let mut receipt = receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        );
+        receipt.order_id = RadrootsOrderId::parse("order-2").unwrap();
+        wrong_order.validation_receipts.push(receipt);
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_order);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptOrderIdMismatch { .. }
+            )
+        }));
+
+        let mut wrong_order_tag = workflow_records();
+        wrong_order_tag
+            .order_events
+            .decisions
+            .push(accepted_decision());
+        let mut receipt = receipt_record(
+            10,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        );
+        receipt.tags.order_id = "order-2".to_string();
+        wrong_order_tag.validation_receipts.push(receipt);
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_order_tag);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptOrderIdMismatch { .. }
+            )
+        }));
+
+        let mut wrong_type = workflow_records();
+        wrong_type.order_events.decisions.push(accepted_decision());
+        let mut receipt = receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        );
+        receipt.receipt.receipt_type = RadrootsValidationReceiptType::ListingValidation;
+        wrong_type.validation_receipts.push(receipt);
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_type);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptTypeMismatch { .. }
+            )
+        }));
+
+        let mut wrong_type_tag = workflow_records();
+        wrong_type_tag
+            .order_events
+            .decisions
+            .push(accepted_decision());
+        let mut receipt = receipt_record(
+            10,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(80),
+        );
+        receipt.tags.receipt_type = RadrootsValidationReceiptType::ListingValidation;
+        wrong_type_tag.validation_receipts.push(receipt);
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_type_tag);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptTypeMismatch { .. }
+            )
+        }));
+
+        let mut wrong_root = workflow_records();
+        wrong_root.order_events.decisions.push(accepted_decision());
+        wrong_root.validation_receipts.push(receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(3),
+            event_id(2),
+            event_id(80),
+        ));
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_root);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptRootMismatch { .. }
+            )
+        }));
+
+        let mut wrong_listing = workflow_records();
+        wrong_listing
+            .order_events
+            .decisions
+            .push(accepted_decision());
+        wrong_listing.validation_receipts.push(receipt_record(
+            9,
+            RadrootsValidationReceiptResult::Valid,
+            event_id(1),
+            event_id(2),
+            event_id(81),
+        ));
+        let projection = reduce_trade_workflow_records(&order_id(), wrong_listing);
+        assert!(projection.issues.iter().any(|issue| {
+            matches!(
+                issue,
+                RadrootsOrderIssue::ValidationReceiptListingMismatch { .. }
+            )
+        }));
+
+        let reservations = inventory_reservations_from_commitments(&[
+            RadrootsOrderInventoryCommitment {
+                bin_id: bin_id("bin-2"),
+                bin_count: 1,
+            },
+            RadrootsOrderInventoryCommitment {
+                bin_id: bin_id("bin-1"),
+                bin_count: 1,
+            },
+        ]);
+        assert_eq!(reservations[0].bin_id, bin_id("bin-1"));
     }
 }

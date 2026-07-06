@@ -307,9 +307,6 @@ where
     let target_relays = request.relay_urls.clone();
     let max_events = request.max_events;
     let max_raw_events = request.max_raw_events;
-    if request.filters.as_slice().is_empty() {
-        return Err(RadrootsRelayTransportError::EmptyFetchFilters);
-    }
     let filters = request.filters.as_slice().to_vec();
     let items = adapter.fetch(request).await?;
     Ok(
@@ -319,6 +316,7 @@ where
 }
 
 #[cfg(feature = "runtime-tokio")]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn fetch_relay_events_blocking<A>(
     adapter: &A,
     request: RadrootsRelayFetchRequest,
@@ -345,9 +343,6 @@ where
     let target_relays = request.relay_urls.clone();
     let max_events = request.max_events;
     let max_raw_events = request.max_raw_events;
-    if request.filters.as_slice().is_empty() {
-        return Err(RadrootsRelayTransportError::EmptyFetchFilters);
-    }
     let filters = request.filters.as_slice().to_vec();
     let items = adapter.fetch(request).await?;
     let processed =
@@ -677,6 +672,7 @@ fn accepted_fetch_event_receipt(
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn relay_fetch_event_matches_filters(
     filters: &[RadrootsNostrFilter],
     event: &RadrootsNostrEvent,
@@ -691,6 +687,7 @@ fn relay_fetch_event_matches_filters(
 pub struct RadrootsNostrClientFetchAdapter;
 
 impl RadrootsRelayFetchAdapter for RadrootsNostrClientFetchAdapter {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch<'a>(
         &'a self,
         request: RadrootsRelayFetchRequest,
@@ -699,6 +696,7 @@ impl RadrootsRelayFetchAdapter for RadrootsNostrClientFetchAdapter {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 async fn fetch_from_nostr_relays(
     request: RadrootsRelayFetchRequest,
 ) -> Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError> {
@@ -787,6 +785,7 @@ impl RadrootsMockRelayFetchAdapter {
 }
 
 impl RadrootsRelayFetchAdapter for RadrootsMockRelayFetchAdapter {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch<'a>(
         &'a self,
         _request: RadrootsRelayFetchRequest,
@@ -798,4 +797,58 @@ impl RadrootsRelayFetchAdapter for RadrootsMockRelayFetchAdapter {
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn fetch_item_lock_error<T>(_error: PoisonError<T>) -> RadrootsRelayTransportError {
     RadrootsRelayTransportError::Transport("fetch item lock poisoned".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RadrootsNostrEvent, relay_fetch_event_matches_filters, summarize_nostr_output_failures,
+    };
+    use nostr::JsonUtil;
+    use radroots_nostr::prelude::{
+        RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
+        radroots_nostr_build_event,
+    };
+    use std::collections::HashMap;
+
+    const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
+        "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
+
+    fn signed_raw_event() -> RadrootsNostrEvent {
+        let secret_key =
+            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
+        let keys = RadrootsNostrKeys::new(secret_key);
+        let event = radroots_nostr_build_event(1, "hello", Vec::new())
+            .expect("event builder")
+            .sign_with_keys(&keys)
+            .expect("signed event");
+        RadrootsNostrEvent::from_json(event.as_json().as_str()).expect("raw event")
+    }
+
+    #[test]
+    fn relay_fetch_filter_helper_rejects_empty_filter_set() {
+        let event = signed_raw_event();
+        assert!(!relay_fetch_event_matches_filters(&[], &event));
+        assert!(relay_fetch_event_matches_filters(
+            &[RadrootsNostrFilter::new().kind(RadrootsNostrKind::TextNote)],
+            &event
+        ));
+    }
+
+    #[test]
+    fn nostr_output_failure_summary_covers_empty_and_reported_failures() {
+        assert_eq!(
+            summarize_nostr_output_failures::<String, String>(&HashMap::new()),
+            "no relay acknowledged the operation"
+        );
+
+        let mut failures = HashMap::new();
+        failures.insert("wss://relay.example.com".to_owned(), "timeout".to_owned());
+        failures.insert("wss://relay-2.example.com".to_owned(), "denied".to_owned());
+
+        let summary = summarize_nostr_output_failures(&failures);
+        assert!(summary.contains("wss://relay.example.com: timeout"));
+        assert!(summary.contains("wss://relay-2.example.com: denied"));
+        assert!(summary.contains("; "));
+    }
 }

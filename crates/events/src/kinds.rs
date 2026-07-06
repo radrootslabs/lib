@@ -819,7 +819,10 @@ mod tests {
         assert_eq!(KIND_KNOWLEDGE_CHANGE_PROPOSAL, 3464);
         assert_eq!(KIND_CONTRIBUTION_ATTESTATION, 3465);
 
+        assert!(is_wiki_event_kind(KIND_WIKI_MERGE_REQUEST));
         assert!(is_wiki_event_kind(KIND_WIKI_ARTICLE));
+        assert!(is_wiki_event_kind(KIND_WIKI_REDIRECT));
+        assert!(!is_wiki_event_kind(KIND_KNOWLEDGE_CLAIM));
         assert!(is_knowledge_event_kind(KIND_WIKI_ARTICLE));
         assert!(is_knowledge_event_kind(KIND_KNOWLEDGE_CLAIM));
         assert!(is_knowledge_mvp_event_kind(KIND_KNOWLEDGE_FIELD_REPORT));
