@@ -79,6 +79,16 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
     }
 }
 
+fn replace_first_tag_value(event: &mut RadrootsNostrEvent, name: &str, value: String) {
+    let tag = event
+        .tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(name))
+        .expect("tag");
+    let tag_value = tag.get_mut(1).expect("tag value");
+    *tag_value = value;
+}
+
 fn assert_parse_error(actual: EventParseError, expected: EventParseError) {
     match (actual, expected) {
         (EventParseError::MissingTag(actual), EventParseError::MissingTag(expected))
@@ -277,6 +287,45 @@ fn field_report() -> RadrootsKnowledgeFieldReport {
         artifact_refs: vec![event_ref('c', 1063)],
         related_refs: vec![event_ref('d', KIND_KNOWLEDGE_CLAIM)],
         limitations: vec!["single observer".to_string()],
+    }
+}
+
+fn bounty() -> RadrootsEvidenceBounty {
+    RadrootsEvidenceBounty {
+        schema: RADROOTS_EVIDENCE_BOUNTY_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        d_tag: "soil-bounty".to_string(),
+        title: "Soil bounty".to_string(),
+        summary: None,
+        topics: vec!["soil".to_string()],
+        target_refs: vec![event_ref('a', KIND_KNOWLEDGE_CLAIM)],
+        reward_note: None,
+        closes_at: None,
+    }
+}
+
+fn proposal() -> RadrootsKnowledgeChangeProposal {
+    RadrootsKnowledgeChangeProposal {
+        schema: RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        target: event_ref('b', KIND_KNOWLEDGE_CLAIM),
+        proposal_type: "amend".to_string(),
+        summary: "Clarify scope".to_string(),
+        rationale: None,
+        evidence_refs: vec![event_ref('c', KIND_KNOWLEDGE_SOURCE)],
+        supersedes: Vec::new(),
+    }
+}
+
+fn attestation() -> RadrootsContributionAttestation {
+    RadrootsContributionAttestation {
+        schema: RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA.to_string(),
+        schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        contributor_pubkey: hex_64('a'),
+        contribution_type: "review".to_string(),
+        subject_refs: vec![event_ref('d', KIND_KNOWLEDGE_REVIEW)],
+        summary: "Reviewed synthetic claim".to_string(),
+        evidence_refs: vec![event_ref('e', KIND_KNOWLEDGE_REVIEW)],
     }
 }
 
@@ -496,6 +545,94 @@ fn knowledge_codecs_roundtrip_all_contracts() {
             .data
             .contribution_type,
         "review"
+    );
+}
+
+#[test]
+fn knowledge_decode_rejects_mirrored_tag_content_drift() {
+    let mut source_event = event_from_parts(knowledge_source_to_wire_parts(&source()).unwrap());
+    replace_first_tag_value(&mut source_event, "source", hex_64('4'));
+    assert_parse_error(
+        knowledge_source_from_event(source_event).unwrap_err(),
+        EventParseError::InvalidTag("source"),
+    );
+
+    let mut bounty_event = event_from_parts(evidence_bounty_to_wire_parts(&bounty()).unwrap());
+    replace_first_tag_value(&mut bounty_event, "evidence", hex_64('b'));
+    assert_parse_error(
+        evidence_bounty_from_event(bounty_event).unwrap_err(),
+        EventParseError::InvalidTag("evidence"),
+    );
+
+    let mut claim_source_event = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
+    replace_first_tag_value(&mut claim_source_event, "source", hex_64('6'));
+    assert_parse_error(
+        knowledge_claim_from_event(claim_source_event).unwrap_err(),
+        EventParseError::InvalidTag("source"),
+    );
+
+    let mut claim_citation_event =
+        event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
+    replace_first_tag_value(&mut claim_citation_event, "citation", hex_64('6'));
+    assert_parse_error(
+        knowledge_claim_from_event(claim_citation_event).unwrap_err(),
+        EventParseError::InvalidTag("citation"),
+    );
+
+    let mut relation_event =
+        event_from_parts(knowledge_relation_to_wire_parts(&relation()).unwrap());
+    replace_first_tag_value(&mut relation_event, "source", hex_64('8'));
+    assert_parse_error(
+        knowledge_relation_from_event(relation_event).unwrap_err(),
+        EventParseError::InvalidTag("source"),
+    );
+
+    let mut review_target_event =
+        event_from_parts(knowledge_review_to_wire_parts(&review()).unwrap());
+    replace_first_tag_value(&mut review_target_event, "review_target", hex_64('9'));
+    assert_parse_error(
+        knowledge_review_from_event(review_target_event).unwrap_err(),
+        EventParseError::InvalidTag("review_target"),
+    );
+
+    let mut report_geohash_event =
+        event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
+    replace_first_tag_value(&mut report_geohash_event, "g", "c24".to_string());
+    assert_parse_error(
+        knowledge_field_report_from_event(report_geohash_event).unwrap_err(),
+        EventParseError::InvalidTag("g"),
+    );
+
+    let mut report_topic_event =
+        event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
+    replace_first_tag_value(&mut report_topic_event, "t", "soil".to_string());
+    assert_parse_error(
+        knowledge_field_report_from_event(report_topic_event).unwrap_err(),
+        EventParseError::InvalidTag("t"),
+    );
+
+    let mut report_evidence_event =
+        event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
+    replace_first_tag_value(&mut report_evidence_event, "evidence", hex_64('e'));
+    assert_parse_error(
+        knowledge_field_report_from_event(report_evidence_event).unwrap_err(),
+        EventParseError::InvalidTag("evidence"),
+    );
+
+    let mut proposal_event =
+        event_from_parts(knowledge_change_proposal_to_wire_parts(&proposal()).unwrap());
+    replace_first_tag_value(&mut proposal_event, "evidence", hex_64('d'));
+    assert_parse_error(
+        knowledge_change_proposal_from_event(proposal_event).unwrap_err(),
+        EventParseError::InvalidTag("evidence"),
+    );
+
+    let mut attestation_event =
+        event_from_parts(contribution_attestation_to_wire_parts(&attestation()).unwrap());
+    replace_first_tag_value(&mut attestation_event, "evidence", hex_64('f'));
+    assert_parse_error(
+        contribution_attestation_from_event(attestation_event).unwrap_err(),
+        EventParseError::InvalidTag("evidence"),
     );
 }
 

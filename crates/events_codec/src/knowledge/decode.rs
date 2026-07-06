@@ -25,17 +25,25 @@ use radroots_events::knowledge::{
     validate_wiki_article, validate_wiki_d_tag, validate_wiki_merge_request,
     validate_wiki_redirect,
 };
-use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_P, TAG_SUMMARY, TAG_T};
+use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T};
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventRef};
 use serde::de::DeserializeOwned;
 
 use crate::error::EventParseError;
 use crate::event_ref::parse_event_ref_tag;
+use crate::knowledge::encode::{
+    contribution_attestation_build_tags, evidence_bounty_build_tags,
+    knowledge_change_proposal_build_tags, knowledge_claim_build_tags,
+    knowledge_field_report_build_tags, knowledge_relation_build_tags, knowledge_review_build_tags,
+    knowledge_source_build_tags,
+};
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const TAG_TITLE: &str = "title";
 const TAG_SOURCE: &str = "source";
+const TAG_CITATION: &str = "citation";
 const TAG_REVIEW_TARGET: &str = "review_target";
+const TAG_EVIDENCE: &str = "evidence";
 const MARKER_FORK: &str = "fork";
 const MARKER_DEFER: &str = "defer";
 const E_MARKER_SOURCE: &str = "source";
@@ -94,6 +102,73 @@ fn values(tags: &[Vec<String>], name: &'static str) -> Vec<String> {
         .filter(|value| !value.trim().is_empty())
         .cloned()
         .collect()
+}
+
+fn tag_matches_names(tag: &[String], names: &[&'static str]) -> bool {
+    tag.first()
+        .map(|value| names.contains(&value.as_str()))
+        .unwrap_or(false)
+}
+
+fn mirrored_tags<'a>(tags: &'a [Vec<String>], names: &[&'static str]) -> Vec<&'a [String]> {
+    tags.iter()
+        .map(Vec::as_slice)
+        .filter(|tag| tag_matches_names(tag, names))
+        .collect()
+}
+
+fn tag_name(tag: &[String]) -> Option<&str> {
+    tag.first().map(String::as_str)
+}
+
+fn first_mirrored_difference(
+    actual: &[&[String]],
+    expected: &[&[String]],
+    names: &[&'static str],
+) -> &'static str {
+    for (actual_tag, expected_tag) in actual.iter().zip(expected.iter()) {
+        if actual_tag != expected_tag {
+            if let Some(name) = tag_name(actual_tag)
+                && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
+            {
+                return *expected_name;
+            }
+            if let Some(name) = tag_name(expected_tag)
+                && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
+            {
+                return *expected_name;
+            }
+        }
+    }
+    if actual.len() > expected.len()
+        && let Some(name) = tag_name(actual[expected.len()])
+        && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
+    {
+        return *expected_name;
+    }
+    if expected.len() > actual.len()
+        && let Some(name) = tag_name(expected[actual.len()])
+        && let Some(expected_name) = names.iter().find(|candidate| **candidate == name)
+    {
+        return *expected_name;
+    }
+    names[0]
+}
+
+fn ensure_mirrored_tags(
+    actual_tags: &[Vec<String>],
+    expected_tags: &[Vec<String>],
+    names: &[&'static str],
+) -> Result<(), EventParseError> {
+    let actual = mirrored_tags(actual_tags, names);
+    let expected = mirrored_tags(expected_tags, names);
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(EventParseError::InvalidTag(first_mirrored_difference(
+            &actual, &expected, names,
+        )))
+    }
 }
 
 fn event_refs(
@@ -397,6 +472,9 @@ pub fn knowledge_source_from_event(
         return Err(EventParseError::InvalidTag(TAG_D));
     }
     validate_knowledge_source(&source).map_err(parse_validation_error)?;
+    let expected_tags =
+        knowledge_source_build_tags(&source).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_D, TAG_T, TAG_SOURCE])?;
     Ok(parsed(event, source))
 }
 
@@ -411,6 +489,9 @@ pub fn evidence_bounty_from_event(
         return Err(EventParseError::InvalidTag(TAG_D));
     }
     validate_evidence_bounty(&bounty).map_err(parse_validation_error)?;
+    let expected_tags =
+        evidence_bounty_build_tags(&bounty).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_D, TAG_T, TAG_EVIDENCE])?;
     Ok(parsed(event, bounty))
 }
 
@@ -421,6 +502,13 @@ pub fn knowledge_claim_from_event(
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA)?;
     let claim: RadrootsKnowledgeClaim = json_content(&event.content)?;
     validate_knowledge_claim(&claim).map_err(parse_validation_error)?;
+    let expected_tags =
+        knowledge_claim_build_tags(&claim).map_err(|_| EventParseError::InvalidTag(TAG_SOURCE))?;
+    ensure_mirrored_tags(
+        &event.tags,
+        &expected_tags,
+        &[TAG_T, TAG_SOURCE, TAG_CITATION],
+    )?;
     Ok(parsed(event, claim))
 }
 
@@ -431,6 +519,9 @@ pub fn knowledge_relation_from_event(
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_RELATION_SCHEMA)?;
     let relation: RadrootsKnowledgeRelation = json_content(&event.content)?;
     validate_knowledge_relation(&relation).map_err(parse_validation_error)?;
+    let expected_tags = knowledge_relation_build_tags(&relation)
+        .map_err(|_| EventParseError::InvalidTag(TAG_SOURCE))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_SOURCE])?;
     Ok(parsed(event, relation))
 }
 
@@ -442,6 +533,13 @@ pub fn knowledge_review_from_event(
     required_one_value(&event.tags, TAG_REVIEW_TARGET)?;
     let review: RadrootsKnowledgeReview = json_content(&event.content)?;
     validate_knowledge_review(&review).map_err(parse_validation_error)?;
+    let expected_tags = knowledge_review_build_tags(&review)
+        .map_err(|_| EventParseError::InvalidTag(TAG_REVIEW_TARGET))?;
+    ensure_mirrored_tags(
+        &event.tags,
+        &expected_tags,
+        &[TAG_REVIEW_TARGET, TAG_EVIDENCE],
+    )?;
     Ok(parsed(event, review))
 }
 
@@ -457,6 +555,9 @@ pub fn knowledge_field_report_from_event(
     reject_private_coordinate_keys(&event.content)?;
     let report: RadrootsKnowledgeFieldReport = json_content(&event.content)?;
     validate_knowledge_field_report(&report).map_err(parse_validation_error)?;
+    let expected_tags = knowledge_field_report_build_tags(&report)
+        .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_T, TAG_G, TAG_EVIDENCE])?;
     Ok(parsed(event, report))
 }
 
@@ -471,6 +572,9 @@ pub fn knowledge_change_proposal_from_event(
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA)?;
     let proposal: RadrootsKnowledgeChangeProposal = json_content(&event.content)?;
     validate_knowledge_change_proposal(&proposal).map_err(parse_validation_error)?;
+    let expected_tags = knowledge_change_proposal_build_tags(&proposal)
+        .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_EVIDENCE])?;
     Ok(parsed(event, proposal))
 }
 
@@ -485,5 +589,8 @@ pub fn contribution_attestation_from_event(
     require_contract_tag(&event.tags, RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA)?;
     let attestation: RadrootsContributionAttestation = json_content(&event.content)?;
     validate_contribution_attestation(&attestation).map_err(parse_validation_error)?;
+    let expected_tags = contribution_attestation_build_tags(&attestation)
+        .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;
+    ensure_mirrored_tags(&event.tags, &expected_tags, &[TAG_EVIDENCE])?;
     Ok(parsed(event, attestation))
 }
