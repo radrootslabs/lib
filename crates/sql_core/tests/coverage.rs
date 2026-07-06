@@ -303,7 +303,7 @@ fn sql_error_code_and_to_json_cover_all_variants() {
         "ERR_UNSUPPORTED_PLATFORM",
     ];
 
-    for (err, code) in errors.into_iter().zip(expected.into_iter()) {
+    for (err, code) in errors.into_iter().zip(expected) {
         assert_eq!(err.code(), code);
         let json_value = err.to_json();
         assert_eq!(json_value.get("code").and_then(|v| v.as_str()), Some(code));
