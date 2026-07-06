@@ -149,6 +149,52 @@ fn knowledge_manifest_covers_required_fields_for_every_contract() {
 }
 
 #[test]
+fn wiki_article_manifest_includes_reference_tag_contracts() {
+    let manifest = knowledge_contract_manifest();
+    let article = manifest
+        .contracts
+        .iter()
+        .find(|contract| contract.contract_id == "radroots.wiki.article.v1")
+        .unwrap();
+
+    let expected = [
+        ("d", "required_one", "identifier", "d_tag", true),
+        ("title", "optional_one", "title", "text", false),
+        ("summary", "optional_one", "summary", "text", false),
+        (
+            "published_at",
+            "optional_one",
+            "published_at",
+            "unix_timestamp",
+            false,
+        ),
+        ("t", "optional_many", "topic", "text", true),
+        ("source", "optional_many", "source", "event_pointer", false),
+        (
+            "a",
+            "optional_many",
+            "addressable_coordinate",
+            "addressable_coordinate",
+            true,
+        ),
+        ("e", "optional_many", "event_pointer", "event_id", true),
+    ];
+
+    assert_eq!(article.tag_contracts.len(), expected.len());
+    for (name, cardinality, semantic, value_type, relay_indexed) in expected {
+        let tag = article
+            .tag_contracts
+            .iter()
+            .find(|tag| tag.name == name)
+            .unwrap();
+        assert_eq!(tag.cardinality, cardinality);
+        assert_eq!(tag.semantic, semantic);
+        assert_eq!(tag.value_type, value_type);
+        assert_eq!(tag.relay_indexed, relay_indexed);
+    }
+}
+
+#[test]
 fn knowledge_manifest_preserves_regular_immutable_classification() {
     let manifest = knowledge_contract_manifest();
     for (contract_id, kind) in [

@@ -533,6 +533,27 @@
           "semantic": "topic",
           "value_type": "text",
           "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
         }
       ],
       "reducers": [

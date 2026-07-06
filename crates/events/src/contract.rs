@@ -440,6 +440,13 @@ const TAG_A_OPTIONAL: RadrootsTagContract = tag(
     RadrootsTagValueType::AddressableCoordinate,
     true,
 );
+const TAG_A_MANY: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
 const TAG_E_ROOT: RadrootsTagContract = tag(
     "e",
     RadrootsTagCardinality::RequiredOne,
@@ -654,6 +661,9 @@ const WIKI_ARTICLE_TAGS: &[RadrootsTagContract] = &[
     TAG_SUMMARY,
     TAG_PUBLISHED_AT,
     TAG_TOPIC_MANY,
+    TAG_SOURCE_MANY,
+    TAG_A_MANY,
+    TAG_E_MANY,
 ];
 const WIKI_REDIRECT_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_A_ADDRESS_REQUIRED];
 const WIKI_MERGE_REQUEST_TAGS: &[RadrootsTagContract] = &[
