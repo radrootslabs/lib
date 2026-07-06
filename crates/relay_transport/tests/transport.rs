@@ -1,6 +1,8 @@
 use futures::future::BoxFuture;
 use nostr::JsonUtil;
-use radroots_event_store::{RadrootsEventStore, RadrootsEventVerificationStatus};
+use radroots_event_store::{
+    RadrootsEventStore, RadrootsEventVerificationStatus, RadrootsTransportObservationType,
+};
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::kinds::KIND_POST;
 use radroots_nostr::prelude::{
@@ -21,6 +23,7 @@ use radroots_relay_transport::{
     RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
     fetch_relay_events_blocking, publish_claimed_outbox_event, publish_signed_event,
 };
+use radroots_transport::RadrootsTransportKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -605,7 +608,7 @@ fn fetch_blocking_facade_runs_mock_adapter() {
 }
 
 #[tokio::test]
-async fn fetch_ingests_events_and_records_relay_observations() {
+async fn fetch_ingests_events_and_records_transport_observations() {
     let signed = signed_post("hello");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
@@ -721,7 +724,12 @@ async fn fetch_ingests_events_and_records_relay_observations() {
         .await
         .expect("observations");
     assert_eq!(observations.len(), 1);
-    assert_eq!(observations[0].relay_url, RELAY_PRIMARY_WSS);
+    assert_eq!(observations[0].transport_kind, RadrootsTransportKind::Nostr);
+    assert_eq!(observations[0].endpoint_uri.as_str(), RELAY_PRIMARY_WSS);
+    assert_eq!(
+        observations[0].observation_type,
+        RadrootsTransportObservationType::NostrFetch
+    );
     assert_eq!(observations[0].observation_count, 2);
 }
 
@@ -1059,7 +1067,10 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
         .await
         .expect("observations");
     assert_eq!(observations.len(), 1);
-    assert_eq!(observations[0].observation_type, "subscription");
+    assert_eq!(
+        observations[0].observation_type,
+        RadrootsTransportObservationType::NostrSubscription
+    );
 
     let closed_store = RadrootsEventStore::open_memory().await.expect("store");
     closed_store.pool().close().await;

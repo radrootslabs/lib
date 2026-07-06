@@ -38,18 +38,21 @@ CREATE TABLE IF NOT EXISTS nostr_event_tags (
 CREATE INDEX IF NOT EXISTS nostr_event_tag_lookup_idx ON nostr_event_tags(tag_name, tag_value, event_id);
 CREATE INDEX IF NOT EXISTS nostr_event_tag_relay_idx ON nostr_event_tags(relay_indexed, tag_name, tag_value, event_id);
 
-CREATE TABLE IF NOT EXISTS relay_event_seen (
+CREATE TABLE IF NOT EXISTS event_transport_observation (
   event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
-  relay_url TEXT NOT NULL,
+  transport_kind TEXT NOT NULL,
+  endpoint_uri TEXT NOT NULL,
+  endpoint_fingerprint TEXT NOT NULL,
   observation_type TEXT NOT NULL,
-  first_seen_at_ms INTEGER NOT NULL,
-  last_seen_at_ms INTEGER NOT NULL,
+  first_observed_at_ms INTEGER NOT NULL,
+  last_observed_at_ms INTEGER NOT NULL,
   observation_count INTEGER NOT NULL,
-  last_message TEXT,
-  PRIMARY KEY (event_id, relay_url, observation_type)
+  redacted_message TEXT,
+  PRIMARY KEY (event_id, transport_kind, endpoint_fingerprint, observation_type)
 );
 
-CREATE INDEX IF NOT EXISTS relay_event_seen_relay_idx ON relay_event_seen(relay_url, last_seen_at_ms, event_id);
+CREATE INDEX IF NOT EXISTS event_transport_observation_endpoint_idx
+ON event_transport_observation(transport_kind, endpoint_fingerprint, last_observed_at_ms, event_id);
 
 CREATE TABLE IF NOT EXISTS nostr_event_head (
   coordinate_type TEXT NOT NULL,
@@ -152,7 +155,7 @@ CREATE TABLE IF NOT EXISTS trade_projection (
   issues_json TEXT NOT NULL,
   issue_count INTEGER NOT NULL,
   source_event_count INTEGER NOT NULL,
-  relay_observation_count INTEGER NOT NULL,
+  transport_observation_count INTEGER NOT NULL,
   evidence_hash TEXT NOT NULL,
   last_source_event_seq INTEGER,
   updated_at_ms INTEGER NOT NULL,

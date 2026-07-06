@@ -80,6 +80,7 @@ radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",
 ] }
+radroots_transport = { workspace = true, default-features = false }
 sqlx = { workspace = true, default-features = false, features = [
   "runtime-tokio",
   "sqlite",

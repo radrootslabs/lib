@@ -2698,7 +2698,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_signed_event_ingest_is_idempotent_without_relay_observation() {
+    async fn local_signed_event_ingest_is_idempotent_without_transport_observation() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let event_store = RadrootsEventStore::open_memory()
             .await

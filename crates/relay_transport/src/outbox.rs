@@ -7,7 +7,8 @@ use crate::{
     publish_signed_event,
 };
 use radroots_event_store::{
-    RadrootsEventIngest, RadrootsEventStore, RadrootsRelayObservation, RadrootsRelayObservationType,
+    RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
+    RadrootsTransportObservationType,
 };
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::draft::RadrootsSignedNostrEvent;
@@ -15,6 +16,7 @@ use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxRelayStatus,
 };
+use radroots_transport::RadrootsTransportKind;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishPolicy {
@@ -274,13 +276,14 @@ async fn ingest_publish_observation(
     message: Option<&str>,
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {
-    let mut observation = RadrootsRelayObservation::new(
+    let mut observation = RadrootsTransportObservation::new(
+        RadrootsTransportKind::Nostr,
         relay_url,
-        RadrootsRelayObservationType::PublishAck,
+        RadrootsTransportObservationType::NostrPublishAck,
         observed_at_ms,
-    );
+    )?;
     if let Some(message) = message {
-        observation = observation.with_message(message);
+        observation = observation.with_redacted_message(message);
     }
     let ingest = RadrootsEventIngest::new(event_from_signed(signed_event), observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone())

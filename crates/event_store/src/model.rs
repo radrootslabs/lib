@@ -4,6 +4,9 @@ use radroots_events::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsTagSemantic, RadrootsTagValueType,
 };
 use radroots_events::event_head::RadrootsEventHeadDecision;
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventVerificationStatus {
@@ -125,48 +128,87 @@ impl StoredEventClass {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsRelayObservationType {
-    Fetch,
-    Subscription,
-    PublishAck,
-    Import,
+pub enum RadrootsTransportObservationType {
+    NostrFetch,
+    NostrSubscription,
+    NostrPublishAck,
+    LocalImport,
+    MeshHeard,
+    MeshForwarded,
+    GatewayStored,
+    GatewayRepublished,
+    DeliveryAck,
+    Other,
 }
 
-impl RadrootsRelayObservationType {
+impl RadrootsTransportObservationType {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Fetch => "fetch",
-            Self::Subscription => "subscription",
-            Self::PublishAck => "publish_ack",
-            Self::Import => "import",
+            Self::NostrFetch => "nostr_fetch",
+            Self::NostrSubscription => "nostr_subscription",
+            Self::NostrPublishAck => "nostr_publish_ack",
+            Self::LocalImport => "local_import",
+            Self::MeshHeard => "mesh_heard",
+            Self::MeshForwarded => "mesh_forwarded",
+            Self::GatewayStored => "gateway_stored",
+            Self::GatewayRepublished => "gateway_republished",
+            Self::DeliveryAck => "delivery_ack",
+            Self::Other => "other",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
+        match value {
+            "nostr_fetch" => Ok(Self::NostrFetch),
+            "nostr_subscription" => Ok(Self::NostrSubscription),
+            "nostr_publish_ack" => Ok(Self::NostrPublishAck),
+            "local_import" => Ok(Self::LocalImport),
+            "mesh_heard" => Ok(Self::MeshHeard),
+            "mesh_forwarded" => Ok(Self::MeshForwarded),
+            "gateway_stored" => Ok(Self::GatewayStored),
+            "gateway_republished" => Ok(Self::GatewayRepublished),
+            "delivery_ack" => Ok(Self::DeliveryAck),
+            "other" => Ok(Self::Other),
+            _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
+                field: "observation_type",
+                value: value.to_owned(),
+            }),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsRelayObservation {
-    pub relay_url: String,
-    pub observation_type: RadrootsRelayObservationType,
+pub struct RadrootsTransportObservation {
+    pub transport_kind: RadrootsTransportKind,
+    pub endpoint_uri: RadrootsTransportTargetUri,
+    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub observation_type: RadrootsTransportObservationType,
     pub observed_at_ms: i64,
-    pub message: Option<String>,
+    pub redacted_message: Option<String>,
 }
 
-impl RadrootsRelayObservation {
+impl RadrootsTransportObservation {
     pub fn new(
-        relay_url: impl Into<String>,
-        observation_type: RadrootsRelayObservationType,
+        transport_kind: RadrootsTransportKind,
+        endpoint_uri: impl AsRef<str>,
+        observation_type: RadrootsTransportObservationType,
         observed_at_ms: i64,
-    ) -> Self {
-        Self {
-            relay_url: relay_url.into(),
+    ) -> Result<Self, RadrootsEventStoreError> {
+        let endpoint_uri = RadrootsTransportTargetUri::parse(endpoint_uri)?;
+        let endpoint_fingerprint =
+            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+        Ok(Self {
+            transport_kind,
+            endpoint_uri,
+            endpoint_fingerprint,
             observation_type,
             observed_at_ms,
-            message: None,
-        }
+            redacted_message: None,
+        })
     }
 
-    pub fn with_message(mut self, message: impl Into<String>) -> Self {
-        self.message = Some(message.into());
+    pub fn with_redacted_message(mut self, message: impl Into<String>) -> Self {
+        self.redacted_message = Some(message.into());
         self
     }
 }
@@ -176,7 +218,7 @@ pub struct RadrootsEventIngest {
     pub event: RadrootsNostrEvent,
     pub raw_json: Option<String>,
     pub observed_at_ms: i64,
-    pub relay_observation: Option<RadrootsRelayObservation>,
+    pub transport_observation: Option<RadrootsTransportObservation>,
 }
 
 impl RadrootsEventIngest {
@@ -185,7 +227,7 @@ impl RadrootsEventIngest {
             event,
             raw_json: None,
             observed_at_ms,
-            relay_observation: None,
+            transport_observation: None,
         }
     }
 
@@ -194,8 +236,8 @@ impl RadrootsEventIngest {
         self
     }
 
-    pub fn with_observation(mut self, observation: RadrootsRelayObservation) -> Self {
-        self.relay_observation = Some(observation);
+    pub fn with_observation(mut self, observation: RadrootsTransportObservation) -> Self {
+        self.transport_observation = Some(observation);
         self
     }
 }
@@ -243,7 +285,7 @@ pub struct RadrootsEventIngestReceipt {
 pub struct RadrootsEventStoreStatusSummary {
     pub total_events: i64,
     pub projection_eligible_events: i64,
-    pub relay_observations: i64,
+    pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
 }
@@ -446,20 +488,37 @@ mod tests {
         assert!(StoredEventClass::parse("bad").is_err());
 
         for observation_type in [
-            RadrootsRelayObservationType::Fetch,
-            RadrootsRelayObservationType::Subscription,
-            RadrootsRelayObservationType::PublishAck,
-            RadrootsRelayObservationType::Import,
+            RadrootsTransportObservationType::NostrFetch,
+            RadrootsTransportObservationType::NostrSubscription,
+            RadrootsTransportObservationType::NostrPublishAck,
+            RadrootsTransportObservationType::LocalImport,
+            RadrootsTransportObservationType::MeshHeard,
+            RadrootsTransportObservationType::MeshForwarded,
+            RadrootsTransportObservationType::GatewayStored,
+            RadrootsTransportObservationType::GatewayRepublished,
+            RadrootsTransportObservationType::DeliveryAck,
+            RadrootsTransportObservationType::Other,
         ] {
             assert!(!observation_type.as_str().is_empty());
+            assert_eq!(
+                RadrootsTransportObservationType::parse(observation_type.as_str())
+                    .expect("observation type"),
+                observation_type
+            );
         }
-        let observation = RadrootsRelayObservation::new(
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
             "wss://relay.example.test",
-            RadrootsRelayObservationType::Fetch,
+            RadrootsTransportObservationType::NostrFetch,
             1,
         )
-        .with_message("seen");
-        assert_eq!(observation.message.as_deref(), Some("seen"));
+        .expect("observation")
+        .with_redacted_message("seen");
+        assert_eq!(observation.redacted_message.as_deref(), Some("seen"));
+        assert_eq!(
+            observation.endpoint_uri.as_str(),
+            "wss://relay.example.test"
+        );
     }
 
     #[test]

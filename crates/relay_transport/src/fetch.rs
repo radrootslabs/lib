@@ -5,12 +5,13 @@ use core::time::Duration;
 use futures::future::BoxFuture;
 use nostr::{JsonUtil, filter::MatchEventOptions};
 use radroots_event_store::{
-    RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore, RadrootsRelayObservation,
-    RadrootsRelayObservationType,
+    RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore,
+    RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter, radroots_event_from_nostr,
 };
+use radroots_transport::RadrootsTransportKind;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -361,18 +362,20 @@ where
             }) => {
                 let event = radroots_event_from_nostr(&raw_event);
                 let observation_type = match mode {
-                    RadrootsRelayFetchMode::Fetch => RadrootsRelayObservationType::Fetch,
+                    RadrootsRelayFetchMode::Fetch => RadrootsTransportObservationType::NostrFetch,
                     RadrootsRelayFetchMode::Subscription => {
-                        RadrootsRelayObservationType::Subscription
+                        RadrootsTransportObservationType::NostrSubscription
                     }
                 };
+                let observation = RadrootsTransportObservation::new(
+                    RadrootsTransportKind::Nostr,
+                    relay_url.clone(),
+                    observation_type,
+                    observed_at_ms,
+                )?;
                 let ingest = RadrootsEventIngest::new(event, observed_at_ms)
                     .with_raw_json(raw_json)
-                    .with_observation(RadrootsRelayObservation::new(
-                        relay_url.clone(),
-                        observation_type,
-                        observed_at_ms,
-                    ));
+                    .with_observation(observation);
                 match event_store.ingest_event(ingest).await {
                     Ok(store_receipt) => {
                         let unsupported =

@@ -12,6 +12,17 @@ pub enum RadrootsTransportKind {
 }
 
 impl RadrootsTransportKind {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        let canonical = value.as_ref().trim().to_ascii_lowercase();
+        match canonical.as_str() {
+            "nostr" => Ok(Self::Nostr),
+            "reticulum" => Ok(Self::Reticulum),
+            "mesh" => Ok(Self::Mesh),
+            "local" => Ok(Self::Local),
+            _ => Self::custom(canonical),
+        }
+    }
+
     pub fn custom(value: impl Into<String>) -> Result<Self, RadrootsTransportError> {
         let value = value.into();
         let canonical = value.trim().to_ascii_lowercase();

@@ -28,6 +28,34 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
 }
 
 #[test]
+fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
+    assert_eq!(
+        RadrootsTransportKind::parse(" NOSTR ").expect("nostr kind"),
+        RadrootsTransportKind::Nostr
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse("reticulum").expect("reticulum kind"),
+        RadrootsTransportKind::Reticulum
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse("mesh").expect("mesh kind"),
+        RadrootsTransportKind::Mesh
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse("local").expect("local kind"),
+        RadrootsTransportKind::Local
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse("fieldbus").expect("custom kind"),
+        RadrootsTransportKind::Custom("fieldbus".to_owned())
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse("bad kind").expect_err("invalid kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+}
+
+#[test]
 fn target_set_rejects_duplicate_fingerprints() {
     let first = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example/a")
         .expect("first target");

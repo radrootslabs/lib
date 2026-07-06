@@ -18,11 +18,11 @@ pub use migrations::{EVENT_STORE_MIGRATION_DOWN, EVENT_STORE_MIGRATION_UP};
 pub use model::{
     RadrootsEventContractStatus, RadrootsEventHeadStoreDecision, RadrootsEventIngest,
     RadrootsEventIngestReceipt, RadrootsEventStoreStatusSummary, RadrootsEventVerificationStatus,
-    RadrootsProjectionCursor, RadrootsRelayObservation, RadrootsRelayObservationType,
-    RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag, StoredEventClass,
+    RadrootsProjectionCursor, RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag,
+    RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
 };
 #[cfg(feature = "sqlite")]
 pub use store::{
     RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX, RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
-    RadrootsEventStore,
+    RadrootsEventStore, RadrootsTransportObservationRow,
 };

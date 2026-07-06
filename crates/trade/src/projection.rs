@@ -145,7 +145,7 @@ pub struct RadrootsProjectionRefreshReceipt {
     pub listing_upserts: usize,
     pub trade_upserts: usize,
     pub validation_receipts: usize,
-    pub relay_observations: i64,
+    pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
 }
 
@@ -215,8 +215,8 @@ pub async fn refresh_product_projections(
 
     for stored_event in &events {
         receipt.last_event_seq = Some(stored_event.seq);
-        receipt.relay_observations +=
-            relay_observation_count_for_event(store, &stored_event.event_id).await?;
+        receipt.transport_observations +=
+            transport_observation_count_for_event(store, &stored_event.event_id).await?;
         if is_listing_kind(stored_event.kind) {
             let event = stored_event_to_nostr_event(stored_event)?;
             let listing = validate_listing_event(&event).map_err(|source| {
@@ -449,7 +449,8 @@ async fn upsert_trade_projection(
         };
         let event_ids = projection_source_event_ids(&root_event_id, &projection);
         let source_event_count = event_ids.len();
-        let relay_observation_count = relay_observation_count_for_events(store, &event_ids).await?;
+        let transport_observation_count =
+            transport_observation_count_for_events(store, &event_ids).await?;
         let evidence_hash = projection_evidence_hash(&event_ids);
         upsert_trade_projection_row(
             store,
@@ -459,7 +460,7 @@ async fn upsert_trade_projection(
             expected_listing_event_id.as_ref(),
             current_listing_event_id.as_ref(),
             source_event_count,
-            relay_observation_count,
+            transport_observation_count,
             &evidence_hash,
             inputs.last_source_event_seq,
             updated_at_ms,
@@ -479,7 +480,7 @@ async fn upsert_trade_projection_row(
     expected_listing_event_id: Option<&RadrootsEventId>,
     current_listing_event_id: Option<&RadrootsEventId>,
     source_event_count: usize,
-    relay_observation_count: i64,
+    transport_observation_count: i64,
     evidence_hash: &str,
     last_source_event_seq: Option<i64>,
     updated_at_ms: i64,
@@ -521,7 +522,7 @@ async fn upsert_trade_projection_row(
     })?;
 
     sqlx::query(
-        "INSERT INTO trade_projection(order_id, root_event_id, projection_version, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, pending_revision_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, relay_observation_count, evidence_hash, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id, root_event_id, projection_version) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, pending_revision_event_id = excluded.pending_revision_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, relay_observation_count = excluded.relay_observation_count, evidence_hash = excluded.evidence_hash, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
+        "INSERT INTO trade_projection(order_id, root_event_id, projection_version, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, pending_revision_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, transport_observation_count, evidence_hash, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id, root_event_id, projection_version) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, pending_revision_event_id = excluded.pending_revision_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, transport_observation_count = excluded.transport_observation_count, evidence_hash = excluded.evidence_hash, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
     )
     .bind(order_id.as_str())
     .bind(root_event_id.as_str())
@@ -547,7 +548,7 @@ async fn upsert_trade_projection_row(
     .bind(issues_json)
     .bind(i64::try_from(projection.issues.len()).unwrap_or(i64::MAX))
     .bind(i64::try_from(source_event_count).unwrap_or(i64::MAX))
-    .bind(relay_observation_count)
+    .bind(transport_observation_count)
     .bind(evidence_hash)
     .bind(last_source_event_seq)
     .bind(updated_at_ms)
@@ -769,25 +770,26 @@ fn stored_event_to_nostr_event(
     })
 }
 
-async fn relay_observation_count_for_events(
+async fn transport_observation_count_for_events(
     store: &RadrootsEventStore,
     event_ids: &[RadrootsEventId],
 ) -> Result<i64, RadrootsTradeProjectionError> {
     let mut count = 0;
     for event_id in event_ids {
-        count += relay_observation_count_for_event(store, event_id.as_str()).await?;
+        count += transport_observation_count_for_event(store, event_id.as_str()).await?;
     }
     Ok(count)
 }
 
-async fn relay_observation_count_for_event(
+async fn transport_observation_count_for_event(
     store: &RadrootsEventStore,
     event_id: &str,
 ) -> Result<i64, RadrootsTradeProjectionError> {
-    let row = sqlx::query("SELECT COUNT(*) AS count FROM relay_event_seen WHERE event_id = ?")
-        .bind(event_id)
-        .fetch_one(store.pool())
-        .await?;
+    let row =
+        sqlx::query("SELECT COUNT(*) AS count FROM event_transport_observation WHERE event_id = ?")
+            .bind(event_id)
+            .fetch_one(store.pool())
+            .await?;
     Ok(row.try_get("count")?)
 }
 
@@ -906,7 +908,9 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_event_store::{RadrootsEventIngest, RadrootsRelayObservation};
+    use radroots_event_store::{
+        RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
+    };
     use radroots_events::{
         RadrootsNostrEventPtr,
         farm::RadrootsFarmRef,
@@ -927,6 +931,7 @@ mod tests {
         RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
         radroots_event_from_nostr, radroots_nostr_build_event,
     };
+    use radroots_transport::RadrootsTransportKind;
 
     use crate::validation_receipt::{
         RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
@@ -1213,11 +1218,13 @@ mod tests {
         store
             .ingest_event(
                 RadrootsEventIngest::new(request_event.clone(), 20).with_observation(
-                    RadrootsRelayObservation::new(
+                    RadrootsTransportObservation::new(
+                        RadrootsTransportKind::Nostr,
                         "wss://relay.example.test",
-                        radroots_event_store::RadrootsRelayObservationType::Import,
+                        RadrootsTransportObservationType::LocalImport,
                         20,
-                    ),
+                    )
+                    .expect("observation"),
                 ),
             )
             .await
@@ -1239,7 +1246,7 @@ mod tests {
         assert_eq!(refresh.listing_upserts, 1);
         assert_eq!(refresh.trade_upserts, 1);
         assert_eq!(refresh.validation_receipts, 1);
-        assert_eq!(refresh.relay_observations, 1);
+        assert_eq!(refresh.transport_observations, 1);
 
         let rows = search_listing_projection(
             &store,
@@ -1265,7 +1272,7 @@ mod tests {
 
         let root_event_id = RadrootsEventId::parse(request_event.id).expect("request");
         let trade_row = sqlx::query(
-            "SELECT root_event_id, projection_version, status, rhi_state, relay_observation_count, source_event_count, evidence_hash FROM trade_projection WHERE order_id = ? AND root_event_id = ? AND projection_version = ?",
+            "SELECT root_event_id, projection_version, status, rhi_state, transport_observation_count, source_event_count, evidence_hash FROM trade_projection WHERE order_id = ? AND root_event_id = ? AND projection_version = ?",
         )
         .bind(order_id().as_str())
         .bind(root_event_id.as_str())
@@ -1291,7 +1298,7 @@ mod tests {
         );
         assert_eq!(
             trade_row
-                .try_get::<i64, _>("relay_observation_count")
+                .try_get::<i64, _>("transport_observation_count")
                 .unwrap(),
             1
         );

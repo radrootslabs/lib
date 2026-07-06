@@ -1,6 +1,7 @@
 use radroots_events::contract::RadrootsContractMatchError;
 use radroots_events::event_head::RadrootsEventHeadMalformed;
 use radroots_events::ids::RadrootsIdParseError;
+use radroots_transport::RadrootsTransportError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RadrootsEventStoreError {
@@ -14,6 +15,8 @@ pub enum RadrootsEventStoreError {
     EventHeadMalformed(RadrootsEventHeadMalformed),
     #[error("identifier parse error: {0}")]
     IdParse(#[from] RadrootsIdParseError),
+    #[error("transport contract error: {0}")]
+    Transport(RadrootsTransportError),
     #[error("stored event `{0}` was not found")]
     MissingEvent(String),
     #[error("event-store tag query tag name cannot be empty")]
@@ -26,6 +29,21 @@ pub enum RadrootsEventStoreError {
     QueryLimitOutOfRange { min: u32, max: u32, actual: u32 },
     #[error("invalid stored enum value `{value}` for {field}")]
     InvalidStoredEnum { field: &'static str, value: String },
+    #[error(
+        "stored transport observation fingerprint `{endpoint_fingerprint}` does not match `{transport_kind}` endpoint `{endpoint_uri}` for event `{event_id}`"
+    )]
+    InvalidStoredTransportEndpointFingerprint {
+        event_id: String,
+        transport_kind: String,
+        endpoint_uri: String,
+        endpoint_fingerprint: String,
+    },
     #[error("integer value `{value}` is outside {field} range")]
     IntegerRange { field: &'static str, value: i64 },
+}
+
+impl From<RadrootsTransportError> for RadrootsEventStoreError {
+    fn from(value: RadrootsTransportError) -> Self {
+        Self::Transport(value)
+    }
 }

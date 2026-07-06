@@ -3,9 +3,9 @@ use crate::migrations::{EVENT_STORE_MIGRATION_DOWN, EVENT_STORE_MIGRATION_UP};
 use crate::model::{
     RadrootsEventContractStatus, RadrootsEventHeadStoreDecision, RadrootsEventIngest,
     RadrootsEventIngestReceipt, RadrootsEventStoreStatusSummary, RadrootsEventVerificationStatus,
-    RadrootsProjectionCursor, RadrootsRelayObservation, RadrootsStoredEvent,
-    RadrootsStoredEventHead, RadrootsStoredEventTag, StoredEventClass, tag_semantic_name,
-    tag_value_type_name,
+    RadrootsProjectionCursor, RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag,
+    RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
+    tag_semantic_name, tag_value_type_name,
 };
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::contract::{
@@ -18,6 +18,9 @@ use radroots_events::event_head::{
 };
 use radroots_events::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsPublicKey};
 use radroots_nostr::prelude::{RadrootsNostrEventVerification, radroots_nostr_verify_event};
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::path::Path;
@@ -84,12 +87,15 @@ impl RadrootsEventStore {
         )
         .fetch_one(&self.pool)
         .await?;
-        let relay_observations =
-            query_i64(&self.pool, "SELECT COUNT(*) FROM relay_event_seen").await?;
+        let transport_observations = query_i64(
+            &self.pool,
+            "SELECT COUNT(*) FROM event_transport_observation",
+        )
+        .await?;
         Ok(RadrootsEventStoreStatusSummary {
             total_events: row.try_get("total_events")?,
             projection_eligible_events: row.try_get("projection_eligible_events")?,
-            relay_observations,
+            transport_observations,
             last_event_seq: row.try_get("last_event_seq")?,
             last_event_updated_at_ms: row.try_get("last_event_updated_at_ms")?,
         })
@@ -148,7 +154,7 @@ impl RadrootsEventStore {
             projection_eligible = false;
         }
 
-        if let Some(observation) = ingest.relay_observation.as_ref() {
+        if let Some(observation) = ingest.transport_observation.as_ref() {
             upsert_observation(&mut tx, ingest.event.id.as_str(), observation).await?;
         }
 
@@ -197,14 +203,36 @@ impl RadrootsEventStore {
     pub async fn observations_for_event(
         &self,
         event_id: &str,
-    ) -> Result<Vec<RadrootsRelayObservationRow>, RadrootsEventStoreError> {
+    ) -> Result<Vec<RadrootsTransportObservationRow>, RadrootsEventStoreError> {
         let rows = sqlx::query(
-            "SELECT event_id, relay_url, observation_type, first_seen_at_ms, last_seen_at_ms, observation_count, last_message FROM relay_event_seen WHERE event_id = ? ORDER BY relay_url, observation_type",
+            "SELECT event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message FROM event_transport_observation WHERE event_id = ? ORDER BY transport_kind, endpoint_uri, observation_type",
         )
         .bind(event_id)
         .fetch_all(&self.pool)
         .await?;
-        rows.into_iter().map(relay_observation_from_row).collect()
+        rows.into_iter()
+            .map(transport_observation_from_row)
+            .collect()
+    }
+
+    pub async fn observations_for_endpoint(
+        &self,
+        transport_kind: RadrootsTransportKind,
+        endpoint_uri: impl AsRef<str>,
+    ) -> Result<Vec<RadrootsTransportObservationRow>, RadrootsEventStoreError> {
+        let endpoint_uri = RadrootsTransportTargetUri::parse(endpoint_uri)?;
+        let endpoint_fingerprint =
+            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+        let rows = sqlx::query(
+            "SELECT event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message FROM event_transport_observation WHERE transport_kind = ? AND endpoint_fingerprint = ? ORDER BY last_observed_at_ms, event_id, observation_type",
+        )
+        .bind(transport_kind.canonical_label())
+        .bind(endpoint_fingerprint.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(transport_observation_from_row)
+            .collect()
     }
 
     pub async fn event_head(
@@ -338,14 +366,16 @@ impl RadrootsEventStore {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsRelayObservationRow {
+pub struct RadrootsTransportObservationRow {
     pub event_id: String,
-    pub relay_url: String,
-    pub observation_type: String,
-    pub first_seen_at_ms: i64,
-    pub last_seen_at_ms: i64,
+    pub transport_kind: RadrootsTransportKind,
+    pub endpoint_uri: RadrootsTransportTargetUri,
+    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    pub observation_type: RadrootsTransportObservationType,
+    pub first_observed_at_ms: i64,
+    pub last_observed_at_ms: i64,
     pub observation_count: i64,
-    pub last_message: Option<String>,
+    pub redacted_message: Option<String>,
 }
 
 struct EventClassification {
@@ -553,17 +583,19 @@ async fn insert_tags(
 async fn upsert_observation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
-    observation: &RadrootsRelayObservation,
+    observation: &RadrootsTransportObservation,
 ) -> Result<(), RadrootsEventStoreError> {
     sqlx::query(
-        "INSERT INTO relay_event_seen(event_id, relay_url, observation_type, first_seen_at_ms, last_seen_at_ms, observation_count, last_message) VALUES (?, ?, ?, ?, ?, 1, ?) ON CONFLICT(event_id, relay_url, observation_type) DO UPDATE SET last_seen_at_ms = excluded.last_seen_at_ms, observation_count = relay_event_seen.observation_count + 1, last_message = excluded.last_message",
+        "INSERT INTO event_transport_observation(event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT(event_id, transport_kind, endpoint_fingerprint, observation_type) DO UPDATE SET endpoint_uri = excluded.endpoint_uri, last_observed_at_ms = excluded.last_observed_at_ms, observation_count = event_transport_observation.observation_count + 1, redacted_message = excluded.redacted_message",
     )
     .bind(event_id)
-    .bind(observation.relay_url.as_str())
+    .bind(observation.transport_kind.canonical_label())
+    .bind(observation.endpoint_uri.as_str())
+    .bind(observation.endpoint_fingerprint.as_str())
     .bind(observation.observation_type.as_str())
     .bind(observation.observed_at_ms)
     .bind(observation.observed_at_ms)
-    .bind(observation.message.as_deref())
+    .bind(observation.redacted_message.as_deref())
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -784,17 +816,41 @@ fn projection_cursor_from_row(
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn relay_observation_from_row(
+fn transport_observation_from_row(
     row: sqlx::sqlite::SqliteRow,
-) -> Result<RadrootsRelayObservationRow, RadrootsEventStoreError> {
-    Ok(RadrootsRelayObservationRow {
-        event_id: row.try_get("event_id")?,
-        relay_url: row.try_get("relay_url")?,
-        observation_type: row.try_get("observation_type")?,
-        first_seen_at_ms: row.try_get("first_seen_at_ms")?,
-        last_seen_at_ms: row.try_get("last_seen_at_ms")?,
+) -> Result<RadrootsTransportObservationRow, RadrootsEventStoreError> {
+    let event_id: String = row.try_get("event_id")?;
+    let transport_kind_label: String = row.try_get("transport_kind")?;
+    let endpoint_uri_raw: String = row.try_get("endpoint_uri")?;
+    let endpoint_fingerprint_raw: String = row.try_get("endpoint_fingerprint")?;
+    let transport_kind = RadrootsTransportKind::parse(&transport_kind_label)?;
+    let endpoint_uri = RadrootsTransportTargetUri::parse(&endpoint_uri_raw)?;
+    let endpoint_fingerprint =
+        RadrootsTransportTargetFingerprint::parse(&endpoint_fingerprint_raw)?;
+    let expected_fingerprint =
+        RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+    if endpoint_fingerprint != expected_fingerprint {
+        return Err(
+            RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint {
+                event_id,
+                transport_kind: transport_kind_label,
+                endpoint_uri: endpoint_uri_raw,
+                endpoint_fingerprint: endpoint_fingerprint_raw,
+            },
+        );
+    }
+    Ok(RadrootsTransportObservationRow {
+        event_id,
+        transport_kind,
+        endpoint_uri,
+        endpoint_fingerprint,
+        observation_type: RadrootsTransportObservationType::parse(
+            row.try_get("observation_type")?,
+        )?,
+        first_observed_at_ms: row.try_get("first_observed_at_ms")?,
+        last_observed_at_ms: row.try_get("last_observed_at_ms")?,
         observation_count: row.try_get("observation_count")?,
-        last_message: row.try_get("last_message")?,
+        redacted_message: row.try_get("redacted_message")?,
     })
 }
 
@@ -965,13 +1021,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn status_summary_counts_events_projections_and_relay_observations() {
+    async fn status_summary_counts_events_projections_and_transport_observations() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
 
         let empty = store.status_summary().await.expect("empty status");
         assert_eq!(empty.total_events, 0);
         assert_eq!(empty.projection_eligible_events, 0);
-        assert_eq!(empty.relay_observations, 0);
+        assert_eq!(empty.transport_observations, 0);
         assert_eq!(empty.last_event_seq, None);
         assert_eq!(empty.last_event_updated_at_ms, None);
 
@@ -981,11 +1037,13 @@ mod tests {
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             "hello",
         );
-        let observation = RadrootsRelayObservation::new(
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
             "wss://relay.example.com",
-            crate::RadrootsRelayObservationType::PublishAck,
+            crate::RadrootsTransportObservationType::NostrPublishAck,
             1_100,
-        );
+        )
+        .expect("observation");
         store
             .ingest_event(RadrootsEventIngest::new(event.clone(), 1_000))
             .await
@@ -998,7 +1056,7 @@ mod tests {
         let status = store.status_summary().await.expect("status");
         assert_eq!(status.total_events, 1);
         assert_eq!(status.projection_eligible_events, 1);
-        assert_eq!(status.relay_observations, 1);
+        assert_eq!(status.transport_observations, 1);
         assert_eq!(status.last_event_seq, Some(1));
         assert_eq!(status.last_event_updated_at_ms, Some(1_000));
     }
@@ -1772,22 +1830,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn relay_observations_upsert_separately_from_event_identity() {
+    async fn transport_observations_upsert_and_query_by_endpoint() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_POST, 15, Vec::new(), "hello");
-        let observation = RadrootsRelayObservation::new(
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
             "wss://relay.local",
-            crate::RadrootsRelayObservationType::Subscription,
+            crate::RadrootsTransportObservationType::NostrSubscription,
             4_000,
-        );
+        )
+        .expect("observation");
         let ingest = RadrootsEventIngest::new(event.clone(), 4_000).with_observation(observation);
         store.ingest_event(ingest).await.expect("first");
-        let observation = RadrootsRelayObservation::new(
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
             "wss://relay.local",
-            crate::RadrootsRelayObservationType::Subscription,
+            crate::RadrootsTransportObservationType::NostrSubscription,
             4_100,
         )
-        .with_message("duplicate accepted");
+        .expect("observation")
+        .with_redacted_message("duplicate accepted");
         let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
         store.ingest_event(ingest).await.expect("second");
 
@@ -1796,12 +1858,25 @@ mod tests {
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);
-        assert_eq!(observations[0].observation_count, 2);
-        assert_eq!(observations[0].last_seen_at_ms, 4_100);
+        assert_eq!(observations[0].transport_kind, RadrootsTransportKind::Nostr);
+        assert_eq!(observations[0].endpoint_uri.as_str(), "wss://relay.local");
         assert_eq!(
-            observations[0].last_message.as_deref(),
+            observations[0].observation_type,
+            crate::RadrootsTransportObservationType::NostrSubscription
+        );
+        assert_eq!(observations[0].observation_count, 2);
+        assert_eq!(observations[0].first_observed_at_ms, 4_000);
+        assert_eq!(observations[0].last_observed_at_ms, 4_100);
+        assert_eq!(
+            observations[0].redacted_message.as_deref(),
             Some("duplicate accepted")
         );
+
+        let endpoint_observations = store
+            .observations_for_endpoint(RadrootsTransportKind::Nostr, "WSS://RELAY.LOCAL")
+            .await
+            .expect("endpoint observations");
+        assert_eq!(endpoint_observations, observations);
     }
 
     #[tokio::test]

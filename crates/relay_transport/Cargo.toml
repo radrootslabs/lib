@@ -46,6 +46,7 @@ radroots_outbox = { workspace = true, optional = true, default-features = false,
   "sqlite",
   "runtime-tokio",
 ] }
+radroots_transport = { workspace = true, default-features = false }
 futures = { workspace = true }
 nostr = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
