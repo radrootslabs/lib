@@ -87,6 +87,155 @@ fn fluent_builders_reject_missing_and_invalid_required_fields() {
 }
 
 #[test]
+fn fluent_builders_reject_core_invalid_nested_models() {
+    let mut non_wiki_target = address_ref();
+    non_wiki_target.kind = KIND_KNOWLEDGE_SOURCE;
+    let redirect_error = RadrootsWikiRedirectBuilder::new("soil")
+        .target(non_wiki_target)
+        .build()
+        .expect_err("non wiki redirect target");
+    assert_eq!(
+        redirect_error,
+        RadrootsKnowledgeBuilderError::InvalidField("wiki_redirect.target")
+    );
+
+    let destination_error = merge_request_builder()
+        .destination_pubkey("bad")
+        .build()
+        .expect_err("invalid destination pubkey");
+    assert_eq!(
+        destination_error,
+        RadrootsKnowledgeBuilderError::InvalidField("destination_pubkey")
+    );
+
+    let source_version_error = merge_request_builder()
+        .source_version_event_id("bad")
+        .build()
+        .expect_err("invalid source version id");
+    assert_eq!(
+        source_version_error,
+        RadrootsKnowledgeBuilderError::InvalidField("source_version_event_id")
+    );
+
+    let blank_author_error = source_builder()
+        .author(" ")
+        .build()
+        .expect_err("blank author");
+    assert_eq!(
+        blank_author_error,
+        RadrootsKnowledgeBuilderError::MissingField("authors")
+    );
+
+    let malformed_artifact_error = source_builder()
+        .artifact_ref(malformed_event_ref(KIND_FILE_METADATA))
+        .build()
+        .expect_err("malformed artifact ref");
+    assert_eq!(
+        malformed_artifact_error,
+        RadrootsKnowledgeBuilderError::InvalidField("artifact_refs")
+    );
+
+    let mut invalid_subject = knowledge_node_ref("cover crops");
+    invalid_subject.external_id = Some("duplicate".to_owned());
+    let invalid_node_error = RadrootsKnowledgeRelationBuilder::new()
+        .subject(invalid_subject)
+        .predicate("supports")
+        .object(knowledge_node_ref("soil structure"))
+        .support_ref(event_ref('7', KIND_KNOWLEDGE_CLAIM))
+        .build()
+        .expect_err("invalid relation node");
+    assert_eq!(
+        invalid_node_error,
+        RadrootsKnowledgeBuilderError::InvalidField("subject")
+    );
+
+    let malformed_support_error = relation_builder()
+        .support_ref(malformed_event_ref(KIND_KNOWLEDGE_CLAIM))
+        .build()
+        .expect_err("malformed support ref");
+    assert_eq!(
+        malformed_support_error,
+        RadrootsKnowledgeBuilderError::InvalidField("support_refs")
+    );
+
+    let zero_kind_target = RadrootsKnowledgeReviewTarget {
+        event_id: hex_64('8'),
+        author_pubkey: hex_64('a'),
+        kind: 0,
+        address: None,
+        relays: vec![RELAY.to_owned()],
+        review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+    };
+    let zero_kind_error = review_builder()
+        .target(zero_kind_target)
+        .build()
+        .expect_err("zero target kind");
+    assert_eq!(
+        zero_kind_error,
+        RadrootsKnowledgeBuilderError::InvalidField("review_target")
+    );
+
+    let malformed_pubkey_target = RadrootsKnowledgeReviewTarget {
+        event_id: hex_64('8'),
+        author_pubkey: "bad".to_owned(),
+        kind: KIND_KNOWLEDGE_CLAIM,
+        address: None,
+        relays: vec![RELAY.to_owned()],
+        review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+    };
+    let malformed_pubkey_error = review_builder()
+        .target(malformed_pubkey_target)
+        .build()
+        .expect_err("malformed target pubkey");
+    assert_eq!(
+        malformed_pubkey_error,
+        RadrootsKnowledgeBuilderError::InvalidField("review_target")
+    );
+
+    let blank_score_dimension_error = review_builder()
+        .score(RadrootsKnowledgeReviewScore {
+            dimension: " ".to_owned(),
+            value: "partial".to_owned(),
+            note: None,
+        })
+        .build()
+        .expect_err("blank score dimension");
+    assert_eq!(
+        blank_score_dimension_error,
+        RadrootsKnowledgeBuilderError::MissingField("scores")
+    );
+
+    let exact_private_without_ref_error = field_report_builder()
+        .context(RadrootsKnowledgeFieldContext {
+            location_precision: RadrootsKnowledgeLocationPrecision::ExactPrivateReference,
+            public_location: None,
+            private_location_ref: None,
+            topics: vec!["field".to_owned()],
+            context_tags: vec!["observation".to_owned()],
+        })
+        .build()
+        .expect_err("missing private location ref");
+    assert_eq!(
+        exact_private_without_ref_error,
+        RadrootsKnowledgeBuilderError::MissingField("private_location_ref")
+    );
+
+    let blank_observation_error = field_report_builder()
+        .observation(RadrootsKnowledgeObservation {
+            observation_type: " ".to_owned(),
+            text: "Residue was visible across beds.".to_owned(),
+            observed_at: Some("2026-07-05".to_owned()),
+            values: Vec::new(),
+        })
+        .build()
+        .expect_err("blank observation data");
+    assert_eq!(
+        blank_observation_error,
+        RadrootsKnowledgeBuilderError::MissingField("observations")
+    );
+}
+
+#[test]
 fn wiki_article_builder_accepts_missing_title_but_rejects_blank_title() {
     let article = RadrootsWikiArticleBuilder::new("soil-health")
         .content_djot("# Soil health")
@@ -294,6 +443,12 @@ fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
         d_tag: None,
         relays: Some(vec![RELAY.to_owned()]),
     }
+}
+
+fn malformed_event_ref(kind: u32) -> RadrootsNostrEventRef {
+    let mut reference = event_ref('f', kind);
+    reference.id = "bad".to_owned();
+    reference
 }
 
 fn address_ref() -> RadrootsAddressableRef {

@@ -52,6 +52,10 @@ pub use radroots_events_codec::{
     wire::WireEventParts,
 };
 
+use radroots_events::knowledge::{
+    validate_knowledge_field_report, validate_knowledge_relation, validate_knowledge_review,
+    validate_knowledge_source, validate_wiki_merge_request, validate_wiki_redirect,
+};
 use radroots_events_codec::{
     contract_manifest_json as codec_contract_manifest_json,
     contract_manifest_sha256 as codec_contract_manifest_sha256,
@@ -256,7 +260,6 @@ impl RadrootsWikiArticleBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsWikiArticle, RadrootsKnowledgeBuilderError> {
-        validate_builder_wiki_d_tag(&self.d_tag)?;
         let article = RadrootsWikiArticle {
             d_tag: self.d_tag,
             title: self.title,
@@ -267,8 +270,7 @@ impl RadrootsWikiArticleBuilder {
             forked_from: self.forked_from,
             deferred_to: self.deferred_to,
         };
-        validate_wiki_article(&article).map_err(builder_validation_error)?;
-        Ok(article)
+        builder_validated(article, validate_wiki_article)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -308,11 +310,11 @@ impl RadrootsWikiRedirectBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsWikiRedirect, RadrootsKnowledgeBuilderError> {
-        validate_builder_wiki_d_tag(&self.d_tag)?;
-        Ok(RadrootsWikiRedirect {
+        let redirect = RadrootsWikiRedirect {
             d_tag: self.d_tag,
             target: builder_required(self.target, "target")?,
-        })
+        };
+        builder_validated(redirect, validate_wiki_redirect)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -378,7 +380,7 @@ impl RadrootsWikiMergeRequestBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsWikiMergeRequest, RadrootsKnowledgeBuilderError> {
-        Ok(RadrootsWikiMergeRequest {
+        let request = RadrootsWikiMergeRequest {
             target_article: builder_required(self.target_article, "target_article")?,
             destination_pubkey: builder_required_string(
                 self.destination_pubkey,
@@ -390,7 +392,8 @@ impl RadrootsWikiMergeRequestBuilder {
                 "source_version_event_id",
             )?,
             explanation: self.explanation,
-        })
+        };
+        builder_validated(request, validate_wiki_merge_request)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -490,8 +493,7 @@ impl RadrootsKnowledgeSourceBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsKnowledgeSource, RadrootsKnowledgeBuilderError> {
-        validate_builder_wiki_d_tag(&self.d_tag)?;
-        Ok(RadrootsKnowledgeSource {
+        let source = RadrootsKnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: self.d_tag,
@@ -506,7 +508,8 @@ impl RadrootsKnowledgeSourceBuilder {
             author_asserted_rights: self.author_asserted_rights,
             topics: self.topics,
             summary: self.summary,
-        })
+        };
+        builder_validated(source, validate_knowledge_source)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -600,8 +603,7 @@ impl RadrootsKnowledgeClaimBuilder {
             author_asserted_confidence: self.author_asserted_confidence,
             supersedes: self.supersedes,
         };
-        validate_knowledge_claim(&claim).map_err(builder_validation_error)?;
-        Ok(claim)
+        builder_validated(claim, validate_knowledge_claim)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -677,7 +679,7 @@ impl RadrootsKnowledgeRelationBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsKnowledgeRelation, RadrootsKnowledgeBuilderError> {
-        Ok(RadrootsKnowledgeRelation {
+        let relation = RadrootsKnowledgeRelation {
             schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             subject: builder_required(self.subject, "subject")?,
@@ -686,7 +688,8 @@ impl RadrootsKnowledgeRelationBuilder {
             support_refs: self.support_refs,
             author_asserted_confidence: self.author_asserted_confidence,
             supersedes: self.supersedes,
-        })
+        };
+        builder_validated(relation, validate_knowledge_relation)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -759,7 +762,7 @@ impl RadrootsKnowledgeReviewBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsKnowledgeReview, RadrootsKnowledgeBuilderError> {
-        Ok(RadrootsKnowledgeReview {
+        let review = RadrootsKnowledgeReview {
             schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             target: builder_required(self.target, "target")?,
@@ -768,7 +771,8 @@ impl RadrootsKnowledgeReviewBuilder {
             scores: self.scores,
             notes: self.notes,
             evidence_refs: self.evidence_refs,
-        })
+        };
+        builder_validated(review, validate_knowledge_review)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -855,10 +859,7 @@ impl RadrootsKnowledgeFieldReportBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsKnowledgeFieldReport, RadrootsKnowledgeBuilderError> {
-        if self.observations.is_empty() {
-            return Err(RadrootsKnowledgeBuilderError::MissingField("observations"));
-        }
-        Ok(RadrootsKnowledgeFieldReport {
+        let report = RadrootsKnowledgeFieldReport {
             schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             report_type: builder_required_string(self.report_type, "report_type")?,
@@ -869,7 +870,8 @@ impl RadrootsKnowledgeFieldReportBuilder {
             artifact_refs: self.artifact_refs,
             related_refs: self.related_refs,
             limitations: self.limitations,
-        })
+        };
+        builder_validated(report, validate_knowledge_field_report)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -1290,12 +1292,6 @@ fn builder_non_empty_string(
     }
 }
 
-fn validate_builder_wiki_d_tag(value: &str) -> Result<(), RadrootsKnowledgeBuilderError> {
-    validate_wiki_d_tag(value)
-        .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeBuilderError::InvalidField("d_tag"))
-}
-
 fn builder_validation_error(
     error: RadrootsKnowledgeValidationError,
 ) -> RadrootsKnowledgeBuilderError {
@@ -1307,6 +1303,14 @@ fn builder_validation_error(
             RadrootsKnowledgeBuilderError::InvalidField(field)
         }
     }
+}
+
+fn builder_validated<T>(
+    value: T,
+    validate: fn(&T) -> Result<(), RadrootsKnowledgeValidationError>,
+) -> Result<T, RadrootsKnowledgeBuilderError> {
+    validate(&value).map_err(builder_validation_error)?;
+    Ok(value)
 }
 
 pub mod prelude {
