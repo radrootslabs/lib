@@ -31,9 +31,10 @@ pub use radroots_events::{
         RadrootsKnowledgeLocationPrecision, RadrootsKnowledgeNodeRef, RadrootsKnowledgeObservation,
         RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
         RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
-        RadrootsKnowledgeSource, RadrootsRightsAssertion, RadrootsWikiArticle,
-        RadrootsWikiArticleVersionRef, RadrootsWikiDTagError, RadrootsWikiMergeRequest,
-        RadrootsWikiRedirect, normalize_wiki_d_tag, validate_wiki_d_tag,
+        RadrootsKnowledgeSource, RadrootsKnowledgeValidationError, RadrootsRightsAssertion,
+        RadrootsWikiArticle, RadrootsWikiArticleVersionRef, RadrootsWikiDTagError,
+        RadrootsWikiMergeRequest, RadrootsWikiRedirect, normalize_wiki_d_tag,
+        validate_knowledge_claim, validate_wiki_d_tag,
     },
 };
 pub use radroots_events_codec::{
@@ -586,7 +587,7 @@ impl RadrootsKnowledgeClaimBuilder {
     }
 
     pub fn build(self) -> Result<RadrootsKnowledgeClaim, RadrootsKnowledgeBuilderError> {
-        Ok(RadrootsKnowledgeClaim {
+        let claim = RadrootsKnowledgeClaim {
             schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             claim_type: builder_required_string(self.claim_type, "claim_type")?,
@@ -596,7 +597,9 @@ impl RadrootsKnowledgeClaimBuilder {
             applies_to: self.applies_to,
             author_asserted_confidence: self.author_asserted_confidence,
             supersedes: self.supersedes,
-        })
+        };
+        validate_knowledge_claim(&claim).map_err(builder_validation_error)?;
+        Ok(claim)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -1291,6 +1294,19 @@ fn validate_builder_wiki_d_tag(value: &str) -> Result<(), RadrootsKnowledgeBuild
         .map_err(|_| RadrootsKnowledgeBuilderError::InvalidField("d_tag"))
 }
 
+fn builder_validation_error(
+    error: RadrootsKnowledgeValidationError,
+) -> RadrootsKnowledgeBuilderError {
+    match error {
+        RadrootsKnowledgeValidationError::EmptyField(field) => {
+            RadrootsKnowledgeBuilderError::MissingField(field)
+        }
+        RadrootsKnowledgeValidationError::InvalidField(field) => {
+            RadrootsKnowledgeBuilderError::InvalidField(field)
+        }
+    }
+}
+
 pub mod prelude {
     pub use super::{
         KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
@@ -1317,20 +1333,20 @@ pub mod prelude {
         RadrootsKnowledgeRelation, RadrootsKnowledgeRelationBuilder, RadrootsKnowledgeReview,
         RadrootsKnowledgeReviewBuilder, RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore,
         RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsKnowledgeSourceBuilder,
-        RadrootsNip01VerificationError, RadrootsNostrEvent, RadrootsNostrEventRef,
-        RadrootsRightsAssertion, RadrootsSdkKnowledgeError, RadrootsSignatureVerifiedEvent,
-        RadrootsWikiArticle, RadrootsWikiArticleBuilder, RadrootsWikiArticleVersionRef,
-        RadrootsWikiDTagError, RadrootsWikiMergeRequest, RadrootsWikiMergeRequestBuilder,
-        RadrootsWikiRedirect, RadrootsWikiRedirectBuilder, WIKI_ARTICLE_CONTRACT_ID,
-        WIKI_MERGE_REQUEST_CONTRACT_ID, WIKI_REDIRECT_CONTRACT_ID, WireEventParts,
-        build_knowledge_claim_event, build_knowledge_field_report_event,
+        RadrootsKnowledgeValidationError, RadrootsNip01VerificationError, RadrootsNostrEvent,
+        RadrootsNostrEventRef, RadrootsRightsAssertion, RadrootsSdkKnowledgeError,
+        RadrootsSignatureVerifiedEvent, RadrootsWikiArticle, RadrootsWikiArticleBuilder,
+        RadrootsWikiArticleVersionRef, RadrootsWikiDTagError, RadrootsWikiMergeRequest,
+        RadrootsWikiMergeRequestBuilder, RadrootsWikiRedirect, RadrootsWikiRedirectBuilder,
+        WIKI_ARTICLE_CONTRACT_ID, WIKI_MERGE_REQUEST_CONTRACT_ID, WIKI_REDIRECT_CONTRACT_ID,
+        WireEventParts, build_knowledge_claim_event, build_knowledge_field_report_event,
         build_knowledge_relation_event, build_knowledge_review_event, build_knowledge_source_event,
         build_wiki_article_event, build_wiki_merge_request_event, build_wiki_redirect_event,
         contract_manifest, contract_manifest_json, contract_manifest_sha256, normalize_wiki_d_tag,
         prepare_knowledge_claim_draft, prepare_knowledge_field_report_draft,
         prepare_knowledge_relation_draft, prepare_knowledge_review_draft,
         prepare_knowledge_source_draft, prepare_wiki_article_draft,
-        prepare_wiki_merge_request_draft, prepare_wiki_redirect_draft, validate_wiki_d_tag,
-        verify_and_decode_radroots_event,
+        prepare_wiki_merge_request_draft, prepare_wiki_redirect_draft, validate_knowledge_claim,
+        validate_wiki_d_tag, verify_and_decode_radroots_event,
     };
 }

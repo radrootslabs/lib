@@ -87,6 +87,41 @@ fn fluent_builders_reject_missing_and_invalid_required_fields() {
 }
 
 #[test]
+fn knowledge_claim_builder_enforces_citation_rules() {
+    let missing_citations = RadrootsKnowledgeClaimBuilder::new()
+        .claim_type("practice_effect")
+        .text("Cover crops improve soil structure.")
+        .build()
+        .expect_err("missing citations");
+    assert_eq!(
+        missing_citations,
+        RadrootsKnowledgeBuilderError::MissingField("citation_spans")
+    );
+
+    assert!(claim_builder().build().is_ok());
+
+    for claim_type in ["hypothesis", "observation", "question"] {
+        let claim = RadrootsKnowledgeClaimBuilder::new()
+            .claim_type(claim_type)
+            .text("Synthetic uncited claim.")
+            .build()
+            .expect("uncited claim");
+        assert_eq!(claim.claim_type, claim_type);
+        assert!(claim.citation_spans.is_empty());
+    }
+
+    let capitalized = RadrootsKnowledgeClaimBuilder::new()
+        .claim_type("Hypothesis")
+        .text("Synthetic uncited claim.")
+        .build()
+        .expect_err("capitalized claim type requires citations");
+    assert_eq!(
+        capitalized,
+        RadrootsKnowledgeBuilderError::MissingField("citation_spans")
+    );
+}
+
+#[test]
 fn knowledge_draft_builder_freezes_mvp_drafts_without_runtime() {
     let draft_builder = KnowledgeDraftBuilder::new(public_key_hex(), CREATED_AT);
 
