@@ -34,7 +34,7 @@ pub use radroots_events::{
         RadrootsKnowledgeSource, RadrootsKnowledgeValidationError, RadrootsRightsAssertion,
         RadrootsWikiArticle, RadrootsWikiArticleVersionRef, RadrootsWikiDTagError,
         RadrootsWikiMergeRequest, RadrootsWikiRedirect, normalize_wiki_d_tag,
-        validate_knowledge_claim, validate_wiki_d_tag,
+        validate_knowledge_claim, validate_wiki_article, validate_wiki_d_tag,
     },
 };
 pub use radroots_events_codec::{
@@ -257,16 +257,18 @@ impl RadrootsWikiArticleBuilder {
 
     pub fn build(self) -> Result<RadrootsWikiArticle, RadrootsKnowledgeBuilderError> {
         validate_builder_wiki_d_tag(&self.d_tag)?;
-        Ok(RadrootsWikiArticle {
+        let article = RadrootsWikiArticle {
             d_tag: self.d_tag,
-            title: builder_required_string(self.title, "title")?,
+            title: self.title,
             content_djot: builder_required_string(self.content_djot, "content_djot")?,
             summary: self.summary,
             topics: self.topics,
             references: self.references,
             forked_from: self.forked_from,
             deferred_to: self.deferred_to,
-        })
+        };
+        validate_wiki_article(&article).map_err(builder_validation_error)?;
+        Ok(article)
     }
 
     pub fn build_event(self) -> Result<WireEventParts, RadrootsSdkKnowledgeError> {
@@ -1347,6 +1349,6 @@ pub mod prelude {
         prepare_knowledge_relation_draft, prepare_knowledge_review_draft,
         prepare_knowledge_source_draft, prepare_wiki_article_draft,
         prepare_wiki_merge_request_draft, prepare_wiki_redirect_draft, validate_knowledge_claim,
-        validate_wiki_d_tag, verify_and_decode_radroots_event,
+        validate_wiki_article, validate_wiki_d_tag, verify_and_decode_radroots_event,
     };
 }

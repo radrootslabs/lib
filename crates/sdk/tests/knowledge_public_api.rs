@@ -87,6 +87,36 @@ fn fluent_builders_reject_missing_and_invalid_required_fields() {
 }
 
 #[test]
+fn wiki_article_builder_accepts_missing_title_but_rejects_blank_title() {
+    let article = RadrootsWikiArticleBuilder::new("soil-health")
+        .content_djot("# Soil health")
+        .build()
+        .expect("title-free article");
+    assert_eq!(article.title, None);
+
+    let parts = RadrootsWikiArticleBuilder::new("soil-health")
+        .content_djot("# Soil health")
+        .build_event()
+        .expect("title-free article parts");
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(String::as_str) == Some("title"))
+    );
+
+    let blank_title = RadrootsWikiArticleBuilder::new("soil-health")
+        .title(" ")
+        .content_djot("# Soil health")
+        .build()
+        .expect_err("blank title");
+    assert_eq!(
+        blank_title,
+        RadrootsKnowledgeBuilderError::MissingField("title")
+    );
+}
+
+#[test]
 fn knowledge_claim_builder_enforces_citation_rules() {
     let missing_citations = RadrootsKnowledgeClaimBuilder::new()
         .claim_type("practice_effect")
@@ -278,7 +308,7 @@ fn address_ref() -> RadrootsAddressableRef {
 fn wiki_article() -> RadrootsWikiArticle {
     RadrootsWikiArticle {
         d_tag: "soil-health".to_owned(),
-        title: "Soil health".to_owned(),
+        title: Some("Soil health".to_owned()),
         content_djot: "# Soil health".to_owned(),
         summary: Some("Living soil basics".to_owned()),
         topics: vec!["soil".to_owned(), "local-food".to_owned()],
