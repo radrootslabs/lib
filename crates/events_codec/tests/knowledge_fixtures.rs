@@ -142,11 +142,7 @@ fn golden_knowledge_fixtures_cover_every_contract() {
         .collect::<BTreeSet<_>>();
     let registry_contracts = all_event_contracts()
         .iter()
-        .filter(|contract| {
-            RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS
-                .iter()
-                .any(|contract_id| *contract_id == contract.id)
-        })
+        .filter(|contract| RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS.contains(&contract.id))
         .map(|contract| contract.id)
         .collect::<BTreeSet<_>>();
 

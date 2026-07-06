@@ -156,9 +156,9 @@ mod tests {
                 entity_id: request.entity_id.clone(),
                 command: request.command.clone(),
             };
-            let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[
-                transmission.clone(),
-            ])
+            let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(
+                std::slice::from_ref(&transmission),
+            )
             .map_err(|error| error.to_string())?;
             let encoded = block.encode().map_err(|error| error.to_string())?;
             let decoded = RadrootsSimplexSmpTransportBlock::decode(&encoded)
@@ -179,7 +179,7 @@ mod tests {
                 message: response_message,
             };
             let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
-                &[response_transmission.clone()],
+                std::slice::from_ref(&response_transmission),
                 request.transport_version,
             )
             .map_err(|error| error.to_string())?;
@@ -220,9 +220,9 @@ mod tests {
             entity_id: b"rr-synth-queue".to_vec(),
             command: send_command.clone(),
         };
-        let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[
-            transmission.clone(),
-        ])
+        let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(
+            std::slice::from_ref(&transmission),
+        )
         .unwrap();
         let decoded = RadrootsSimplexSmpTransportBlock::decode(&block.encode().unwrap())
             .unwrap()

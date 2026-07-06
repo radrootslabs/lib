@@ -272,6 +272,7 @@ pub struct RadrootsOrderProjectionQueryResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum RadrootsTradeLocatorProjectionResolution {
     Missing {
         locator: RadrootsTradeLocator,

@@ -1062,9 +1062,11 @@ mod tests {
             .set_signer_identity(fixture_bob_identity())
             .expect("set signer identity");
 
-        let error = RadrootsNostrEmbeddedSignerBackend::new(manager, embedded_identity(0x91))
-            .err()
-            .expect("mismatched identity");
+        let error = match RadrootsNostrEmbeddedSignerBackend::new(manager, embedded_identity(0x91))
+        {
+            Ok(_) => panic!("mismatched identity"),
+            Err(error) => error,
+        };
         assert!(
             error
                 .to_string()
@@ -1766,9 +1768,8 @@ mod tests {
             "public_key_npub": "npub1invalid"
         }))
         .expect("invalid identity payload");
-        let error = parse_identity_public_key(&invalid_identity)
-            .err()
-            .expect("invalid public identity");
+        let error =
+            parse_identity_public_key(&invalid_identity).expect_err("invalid public identity");
         assert!(error.to_string().contains("identity public key is invalid"));
     }
 

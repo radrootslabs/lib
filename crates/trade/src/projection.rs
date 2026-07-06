@@ -470,6 +470,7 @@ async fn upsert_trade_projection(
     Ok(upserts)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn upsert_trade_projection_row(
     store: &RadrootsEventStore,
     order_id: &RadrootsOrderId,

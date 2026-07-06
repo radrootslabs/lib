@@ -99,9 +99,8 @@ mod tests {
 
     #[test]
     fn converts_serde_json_error() {
-        let source = serde_json::from_str::<serde_json::Value>("{not-json")
-            .err()
-            .expect("serde error");
+        let source =
+            serde_json::from_str::<serde_json::Value>("{not-json").expect_err("serde error");
         let converted: RadrootsNostrSignerError = source.into();
         assert!(converted.to_string().starts_with("store error:"));
     }

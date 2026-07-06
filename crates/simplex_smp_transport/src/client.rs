@@ -1,5 +1,3 @@
-#![cfg(feature = "std")]
-
 use crate::error::RadrootsSimplexSmpTransportError;
 use crate::executor::{
     RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
@@ -425,7 +423,7 @@ fn decode_live_transport_block(
                         ),
                     ));
                 }
-                return Err(error.into());
+                return Err(error);
             }
         }
     }
@@ -1013,7 +1011,7 @@ mod tests {
             command: RadrootsSimplexSmpCommand::Ping,
         };
         let command_block = RadrootsSimplexSmpTransportBlock::from_command_transmissions(
-            &[command_transmission.clone()],
+            std::slice::from_ref(&command_transmission),
             RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
         )
         .unwrap();
@@ -1037,7 +1035,7 @@ mod tests {
             message: RadrootsSimplexSmpBrokerMessage::Ok,
         };
         let broker_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
-            &[broker_transmission.clone()],
+            std::slice::from_ref(&broker_transmission),
             RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
         )
         .unwrap();

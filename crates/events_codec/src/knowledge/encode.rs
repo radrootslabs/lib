@@ -187,9 +187,10 @@ pub fn wiki_redirect_build_tags(
     redirect: &RadrootsWikiRedirect,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_wiki_redirect(redirect).map_err(encode_validation_error)?;
-    let mut tags = Vec::new();
-    tags.push(vec![TAG_D.to_string(), redirect.d_tag.clone()]);
-    tags.push(address_tag(TAG_A, &redirect.target));
+    let tags = vec![
+        vec![TAG_D.to_string(), redirect.d_tag.clone()],
+        address_tag(TAG_A, &redirect.target),
+    ];
     Ok(tags)
 }
 

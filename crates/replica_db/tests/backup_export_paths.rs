@@ -70,10 +70,10 @@ impl SqlExecutor for PatternExecutor {
         if let Some(result) = self.exec_queue.lock().expect("exec queue lock").pop_front() {
             return result;
         }
-        if let Some(needle) = &self.fail_exec_contains {
-            if sql.contains(needle) {
-                return Err(SqlError::InvalidQuery(String::from("forced exec failure")));
-            }
+        if let Some(needle) = &self.fail_exec_contains
+            && sql.contains(needle)
+        {
+            return Err(SqlError::InvalidQuery(String::from("forced exec failure")));
         }
         Ok(ExecOutcome {
             changes: 1,
@@ -90,10 +90,10 @@ impl SqlExecutor for PatternExecutor {
         {
             return result;
         }
-        if let Some(needle) = &self.fail_query_contains {
-            if sql.contains(needle) {
-                return Err(SqlError::InvalidQuery(String::from("forced query failure")));
-            }
+        if let Some(needle) = &self.fail_query_contains
+            && sql.contains(needle)
+        {
+            return Err(SqlError::InvalidQuery(String::from("forced query failure")));
         }
         for (needle, response) in &self.query_rules {
             if sql.contains(needle) {

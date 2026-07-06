@@ -95,10 +95,10 @@ mod tests {
 
         let filter = RadrootsNostrNdbFilterSpec::new().with_kind(1);
         let from_new = RadrootsNostrNdbSubscriptionSpec::new(vec![filter.clone()]);
-        assert_eq!(from_new.filters(), &[filter.clone()]);
+        assert_eq!(from_new.filters(), std::slice::from_ref(&filter));
 
         let from_single = RadrootsNostrNdbSubscriptionSpec::single(filter.clone());
-        assert_eq!(from_single.filters(), &[filter.clone()]);
+        assert_eq!(from_single.filters(), std::slice::from_ref(&filter));
 
         let text_notes = RadrootsNostrNdbSubscriptionSpec::text_notes(Some(10), Some(123));
         assert_eq!(text_notes.filters().len(), 1);

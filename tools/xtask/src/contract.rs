@@ -2161,12 +2161,10 @@ fn validate_knowledge_manifest_witnesses(
             .get("contract_id")
             .and_then(Value::as_str)
             .ok_or_else(|| "knowledge manifest entry missing contract_id".to_string())?;
-        if let Some(previous) = previous_id.as_deref() {
-            if previous > contract_id {
-                return Err(
-                    "knowledge manifest contracts must be sorted by contract_id".to_string()
-                );
-            }
+        if let Some(previous) = previous_id.as_deref()
+            && previous > contract_id
+        {
+            return Err("knowledge manifest contracts must be sorted by contract_id".to_string());
         }
         previous_id = Some(contract_id.to_string());
         if !ids.insert(contract_id.to_string()) {
@@ -2194,12 +2192,12 @@ fn validate_knowledge_manifest_witnesses(
         let wasm_verified_decode_support =
             manifest_bool_field(contract, "wasm_verified_decode_support")?;
 
-        if KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS.contains(&contract_id) {
-            if !sdk_builder_support || !sdk_draft_support || !wasm_tag_builder_support {
-                return Err(format!(
-                    "knowledge manifest MVP contract {contract_id} must report SDK and WASM tag support"
-                ));
-            }
+        if KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS.contains(&contract_id)
+            && (!sdk_builder_support || !sdk_draft_support || !wasm_tag_builder_support)
+        {
+            return Err(format!(
+                "knowledge manifest MVP contract {contract_id} must report SDK and WASM tag support"
+            ));
         }
         if KNOWLEDGE_BETA_CONTRACT_IDS.contains(&contract_id)
             && (sdk_builder_support || sdk_draft_support || wasm_tag_builder_support)
@@ -2621,13 +2619,12 @@ fn validate_policy_metadata(policy: &Policy) -> Result<(), String> {
     {
         return Err("contract policy flags must all be true".to_string());
     }
-    if let Some(replica) = &policy.replica {
-        if !replica.forbid_legacy_alias_identifiers
+    if let Some(replica) = &policy.replica
+        && (!replica.forbid_legacy_alias_identifiers
             || !replica.require_transport_agnostic_sync_contract
-            || !replica.require_deterministic_emit_ingest
-        {
-            return Err("contract replica policy flags must all be true".to_string());
-        }
+            || !replica.require_deterministic_emit_ingest)
+    {
+        return Err("contract replica policy flags must all be true".to_string());
     }
     Ok(())
 }
@@ -4418,7 +4415,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 passing_coverage_row("radroots_e"),
             ],
         );
-        let _ = fs::remove_file(root_release_policy_path(&root));
+        let _ = fs::remove_file(root_release_policy_path(root));
     }
 
     #[test]
@@ -6006,8 +6003,8 @@ publish = false
     fn workspace_package_publish_configs_cover_success_and_duplicate_names() {
         let root = create_synthetic_workspace("workspace_publish_configs");
         let flags = workspace_package_publish_flags(&root).expect("publish flags");
-        assert_eq!(flags["radroots_a"], true);
-        assert_eq!(flags["radroots_b"], false);
+        assert!(flags["radroots_a"]);
+        assert!(!flags["radroots_b"]);
 
         let configs = workspace_package_publish_configs(&root).expect("publish configs");
         assert_eq!(

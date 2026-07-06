@@ -1412,7 +1412,7 @@ mod tests {
         let blocked_path = restricted.join("child");
 
         let mut permissions = fs::metadata(&restricted).expect("metadata").permissions();
-        permissions.set_mode(0);
+        permissions.set_mode(0o0);
         fs::set_permissions(&restricted, permissions).expect("restrict permissions");
 
         let err = remove_path_if_exists(&blocked_path).expect_err("metadata lookup should fail");

@@ -72,7 +72,7 @@ mod test_hooks {
 
     thread_local! {
         static IGNORE_ENV: Cell<bool> = const { Cell::new(false) };
-        static CURRENT_RESOLVER: RefCell<Option<RadrootsPathResolver>> = RefCell::new(None);
+        static CURRENT_RESOLVER: RefCell<Option<RadrootsPathResolver>> = const { RefCell::new(None) };
     }
 
     pub fn set_ignore_env(ignore: bool) {

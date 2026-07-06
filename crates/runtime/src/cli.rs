@@ -1,5 +1,3 @@
-#![cfg(feature = "cli")]
-
 use clap::Parser;
 use config::{Map, Value};
 use serde::de::DeserializeOwned;

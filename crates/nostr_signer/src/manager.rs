@@ -1432,16 +1432,24 @@ mod tests {
             .expect("load error store save");
         let load_result = RadrootsNostrSignerManager::new(load_error_store);
         assert!(load_result.is_err());
-        let err = load_result.err().expect("load error");
+        let err = match load_result {
+            Ok(_) => panic!("load error"),
+            Err(err) => err,
+        };
         assert!(err.to_string().contains("store load failed"));
 
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let mut state = RadrootsNostrSignerStoreState::default();
-        state.version = 2;
+        let state = RadrootsNostrSignerStoreState {
+            version: 2,
+            ..Default::default()
+        };
         store.save(&state).expect("save");
         let version_result = RadrootsNostrSignerManager::new(store);
         assert!(version_result.is_err());
-        let err = version_result.err().expect("invalid version");
+        let err = match version_result {
+            Ok(_) => panic!("invalid version"),
+            Err(err) => err,
+        };
         assert!(
             err.to_string()
                 .contains("unsupported signer schema version")
@@ -3328,8 +3336,10 @@ mod tests {
     #[test]
     fn register_connection_rejects_invalid_persisted_signer_identity() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let mut state = RadrootsNostrSignerStoreState::default();
-        state.signer_identity = Some(invalid_public_identity(0x54));
+        let state = RadrootsNostrSignerStoreState {
+            signer_identity: Some(invalid_public_identity(0x54)),
+            ..Default::default()
+        };
         store.save(&state).expect("seed state");
 
         let manager = RadrootsNostrSignerManager::new(store).expect("manager");
@@ -3411,8 +3421,10 @@ mod tests {
     fn evaluate_connect_request_reports_poisoned_state_lock() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
         let signer_identity = public_identity(0x57);
-        let mut state = RadrootsNostrSignerStoreState::default();
-        state.signer_identity = Some(signer_identity.clone());
+        let state = RadrootsNostrSignerStoreState {
+            signer_identity: Some(signer_identity.clone()),
+            ..Default::default()
+        };
         store.save(&state).expect("save state");
 
         let manager = RadrootsNostrSignerManager::new(store).expect("manager");
@@ -3780,10 +3792,12 @@ mod tests {
         );
 
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let mut invalid_state = RadrootsNostrSignerStoreState::default();
         let mut invalid_identity = public_identity(0x69);
         invalid_identity.public_key_hex = "invalid".into();
-        invalid_state.signer_identity = Some(invalid_identity);
+        let invalid_state = RadrootsNostrSignerStoreState {
+            signer_identity: Some(invalid_identity),
+            ..Default::default()
+        };
         store
             .save(&invalid_state)
             .expect("save invalid signer state");
@@ -3940,8 +3954,10 @@ mod tests {
     fn evaluate_request_reports_invalid_corrupted_auth_state() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
         let signer_identity = public_identity(0x78);
-        let mut state = RadrootsNostrSignerStoreState::default();
-        state.signer_identity = Some(signer_identity.clone());
+        let mut state = RadrootsNostrSignerStoreState {
+            signer_identity: Some(signer_identity.clone()),
+            ..Default::default()
+        };
         let mut record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
             signer_identity,

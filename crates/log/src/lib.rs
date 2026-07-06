@@ -92,7 +92,7 @@ mod tests {
         let _ = tracing::subscriber::set_global_default(TestSubscriber);
         let span = tracing::span!(tracing::Level::INFO, "log_span", value = 1);
         let other = tracing::span!(tracing::Level::INFO, "log_span_other");
-        span.record("value", &2);
+        span.record("value", 2);
         span.follows_from(other.id());
         let _enter = span.enter();
         tracing::event!(tracing::Level::INFO, "log_event");

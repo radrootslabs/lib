@@ -160,8 +160,10 @@ mod tests {
 
     #[test]
     fn metadata_has_fields_true_when_about_is_set() {
-        let mut metadata = RadrootsNostrMetadata::default();
-        metadata.about = Some("ready".to_string());
+        let metadata = RadrootsNostrMetadata {
+            about: Some("ready".to_string()),
+            ..Default::default()
+        };
         assert!(radroots_nostr_metadata_has_fields(&metadata));
     }
 }

@@ -1770,6 +1770,10 @@ mod tests {
     #[cfg(feature = "sp1_verify")]
     use serde::Deserialize;
 
+    type ProofEnvelopeMutation = (&'static str, fn(&mut super::RadrootsSp1TradeProofEnvelope));
+    type PublicValuesExecutionMutation =
+        (&'static str, fn(&mut RadrootsSp1TradePublicValuesExecution));
+
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
         RadrootsSp1TradeOrderAcceptanceWitness {
             witness_version: RADROOTS_SP1_TRADE_WITNESS_VERSION,
@@ -2248,7 +2252,7 @@ mod tests {
             RadrootsSp1TradeHostError::PublicValuesHashMismatch
         );
 
-        let envelope_cases: [(&str, fn(&mut super::RadrootsSp1TradeProofEnvelope)); 10] = [
+        let envelope_cases: [ProofEnvelopeMutation; 10] = [
             (
                 "receipt_type",
                 |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
@@ -2435,7 +2439,7 @@ mod tests {
     fn validation_receipt_requires_event_bindings() {
         let bundle = generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
             .expect("proof bundle");
-        let cases: [(&str, fn(&mut RadrootsSp1TradePublicValuesExecution)); 3] = [
+        let cases: [PublicValuesExecutionMutation; 3] = [
             ("listing_event_id", |execution| {
                 execution.public_values.listing_event_id = None;
             }),

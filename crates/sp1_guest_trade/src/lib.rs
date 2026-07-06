@@ -820,6 +820,15 @@ mod tests {
         reduce_order_acceptance_canonical_public_values, reduce_order_acceptance_public_values,
     };
 
+    type OrderAcceptanceMutation = (
+        &'static str,
+        fn(&mut RadrootsSp1TradeOrderAcceptanceWitness),
+    );
+    type PublicValuesMutation = (
+        &'static str,
+        fn(&mut super::RadrootsSp1TradeProofPublicValues),
+    );
+
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
         RadrootsSp1TradeOrderAcceptanceWitness {
             witness_version: RADROOTS_SP1_TRADE_WITNESS_VERSION,
@@ -1353,7 +1362,7 @@ mod tests {
             RadrootsSp1TradeGuestError::DecisionNotAccepted
         );
 
-        let binding_cases: [(&str, fn(&mut RadrootsSp1TradeOrderAcceptanceWitness)); 4] = [
+        let binding_cases: [OrderAcceptanceMutation; 4] = [
             (
                 "order_id",
                 |input: &mut RadrootsSp1TradeOrderAcceptanceWitness| {
@@ -1471,7 +1480,7 @@ mod tests {
             RadrootsSp1TradeGuestError::UnsupportedProtocolVersion
         );
 
-        let hash_fields: [(&str, fn(&mut super::RadrootsSp1TradeProofPublicValues)); 12] = [
+        let hash_fields: [PublicValuesMutation; 12] = [
             (
                 "reducer_program_hash",
                 |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
@@ -1554,7 +1563,7 @@ mod tests {
             );
         }
 
-        let event_id_fields: [(&str, fn(&mut super::RadrootsSp1TradeProofPublicValues)); 3] = [
+        let event_id_fields: [PublicValuesMutation; 3] = [
             (
                 "listing_event_id",
                 |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {

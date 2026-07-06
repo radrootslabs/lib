@@ -184,8 +184,8 @@ mod tests {
             .with_limit(10)
             .with_search("coffee");
 
-        assert_eq!(spec.event_ids_hex(), &[event_id.clone()]);
-        assert_eq!(spec.authors_hex(), &[author.clone()]);
+        assert_eq!(spec.event_ids_hex(), std::slice::from_ref(&event_id));
+        assert_eq!(spec.authors_hex(), std::slice::from_ref(&author));
         assert_eq!(spec.kinds(), &[1, 30023]);
         assert_eq!(spec.since_unix(), Some(200));
         assert_eq!(spec.until_unix(), Some(300));

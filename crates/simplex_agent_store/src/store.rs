@@ -4184,7 +4184,7 @@ mod tests {
                 link_id,
                 link_data
             } if persisted_queue == &queue
-                && link_id.as_slice() == &[1_u8; 24]
+                && link_id.as_slice() == [1_u8; 24]
                 && link_data.fixed_data.as_slice() == b"fixed-link-data"
                 && link_data.user_data.as_slice() == b"user-link-data"
         )));

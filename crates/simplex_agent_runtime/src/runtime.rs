@@ -2103,7 +2103,7 @@ impl RadrootsSimplexAgentRuntime {
                 agent_message_hash.clone().unwrap_or_default(),
             )?;
         }
-        let message_hash = agent_message_hash.unwrap_or_else(|| transport_hash);
+        let message_hash = agent_message_hash.unwrap_or(transport_hash);
         self.handle_inbound_decrypted_message(connection_id, decrypted, message_hash)?;
         if !requires_app_ack {
             self.ack_broker_message(connection_id, queue.clone(), message.message_id, 0)?;
@@ -3100,9 +3100,9 @@ mod tests {
                     entity_id: request.entity_id.clone(),
                     command: request.command.clone(),
                 };
-            let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[
-                transmission.clone(),
-            ])
+            let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(
+                std::slice::from_ref(&transmission),
+            )
             .map_err(|error| error.to_string())?;
             let encoded = block.encode().map_err(|error| error.to_string())?;
             let decoded = RadrootsSimplexSmpTransportBlock::decode(&encoded)
@@ -3124,7 +3124,7 @@ mod tests {
                 message: response_message,
             };
             let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
-                &[response_transmission.clone()],
+                std::slice::from_ref(&response_transmission),
                 request.transport_version,
             )
             .map_err(|error| error.to_string())?;
@@ -3149,7 +3149,7 @@ mod tests {
                 return Ok(None);
             };
             let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
-                &[response_transmission.clone()],
+                std::slice::from_ref(&response_transmission),
                 RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
             )
             .map_err(|error| error.to_string())?;

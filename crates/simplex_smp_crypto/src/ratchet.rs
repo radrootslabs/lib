@@ -585,12 +585,11 @@ impl RadrootsSimplexSmpRatchetState {
         ratchet_ad: &[u8],
     ) -> Result<(OfficialRatchetStep, RadrootsSimplexSmpRatchetHeader), RadrootsSimplexSmpCryptoError>
     {
-        if let Some(receiving_header_key) = self.official_receiving_header_key.as_ref() {
-            if let Ok(ratchet_header) =
+        if let Some(receiving_header_key) = self.official_receiving_header_key.as_ref()
+            && let Ok(ratchet_header) =
                 decrypt_official_header_with_key(header, receiving_header_key, ratchet_ad)
-            {
-                return Ok((OfficialRatchetStep::Same, ratchet_header));
-            }
+        {
+            return Ok((OfficialRatchetStep::Same, ratchet_header));
         }
         let next_receiving_header_key = self.official_next_receiving_header_key.as_ref().ok_or(
             RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_next_receiving_header_key"),

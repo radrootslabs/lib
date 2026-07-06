@@ -1788,6 +1788,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn plot_event(
         id: u64,
         author: &str,
@@ -1972,8 +1973,7 @@ mod tests {
         assert!(err.to_string().contains("whole number"));
 
         let err = decimal_to_i64(&listing_decimal("9223372036854775808"), "listing inventory")
-            .err()
-            .expect("i64 overflow should fail");
+            .expect_err("i64 overflow should fail");
         assert!(err.to_string().contains("exceeds i64 range"));
     }
 
@@ -2786,7 +2786,7 @@ mod tests {
         .expect("plot")
         .result;
 
-        let _ = upsert_plot_location(&exec, &plot_row.id, None, &FixedFactory).expect("plot none");
+        upsert_plot_location(&exec, &plot_row.id, None, &FixedFactory).expect("plot none");
     }
 
     #[test]

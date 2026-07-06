@@ -598,6 +598,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn wait_for_note_keys_yields_results() {
         let _guard = test_hooks_guard();
         reset_test_flags();
@@ -623,6 +624,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn wait_for_note_keys_reports_ndb_error() {
         let _guard = test_hooks_guard();
         reset_test_flags();

@@ -239,7 +239,7 @@ fn sync_all_emits_expected_order() {
 fn unwrap_sql_panics_on_error() {
     let result = panic::catch_unwind(|| {
         let err = IError::from(SqlError::InvalidArgument("bad".to_string()));
-        let _ = unwrap_sql::<()>(Err(err), "unwrap");
+        unwrap_sql::<()>(Err(err), "unwrap");
     });
     assert!(result.is_err());
 }

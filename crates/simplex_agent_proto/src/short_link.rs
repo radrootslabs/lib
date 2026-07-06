@@ -33,6 +33,7 @@ const SIMPLEX_RATCHET_KEM_ACCEPTED: u8 = b'A';
 const SIMPLEX_USER_LINK_DATA_LARGE_TAG: u8 = u8::MAX;
 
 type ShortLinkResult<T> = Result<T, RadrootsSimplexAgentProtoError>;
+type OptionalKemParams = (Option<Vec<u8>>, Option<Vec<u8>>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentShortLinkScheme {
@@ -786,7 +787,7 @@ impl<'a> ShortLinkDataCursor<'a> {
 
     fn read_optional_kem_params(
         &mut self,
-    ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>), RadrootsSimplexAgentProtoError> {
+    ) -> Result<OptionalKemParams, RadrootsSimplexAgentProtoError> {
         match self.read_byte()? {
             SIMPLEX_MAYBE_NOTHING => Ok((None, None)),
             SIMPLEX_MAYBE_JUST => match self.read_byte()? {

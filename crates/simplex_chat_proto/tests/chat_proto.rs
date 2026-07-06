@@ -243,7 +243,8 @@ fn roundtrips_official_compressed_envelope_batches() {
         }
     }));
 
-    let encoded = encode_compressed_batch(&[message.clone()]).expect("encode compressed batch");
+    let encoded =
+        encode_compressed_batch(std::slice::from_ref(&message)).expect("encode compressed batch");
     assert_eq!(encoded.first(), Some(&b'X'));
 
     let decoded = decode_messages(&encoded).expect("decode compressed envelope");

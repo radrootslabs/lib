@@ -675,7 +675,7 @@ mod tests {
     #[test]
     fn unit_harness_covers_open_path_pathbuf_instantiation() {
         let path = build_fixture_database();
-        let geocoder = Geocoder::open_path(path.to_path_buf()).expect("open geocoder from pathbuf");
+        let geocoder = Geocoder::open_path(&path).expect("open geocoder from pathbuf");
         let results = geocoder
             .country("US")
             .expect("country query from pathbuf geocoder");
@@ -1098,6 +1098,7 @@ mod tests {
         .expect_err("country center row decode should fail")
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn map_reverse_row_error(
         id_sql: &str,
         name_sql: &str,

@@ -119,10 +119,10 @@ mod tests {
         }
 
         fn query_raw(&self, sql: &str, _params_json: &str) -> Result<String, SqlError> {
-            if let Some(needle) = &self.fail_query_contains {
-                if sql.contains(needle) {
-                    return Err(SqlError::InvalidQuery(String::from("forced query failure")));
-                }
+            if let Some(needle) = &self.fail_query_contains
+                && sql.contains(needle)
+            {
+                return Err(SqlError::InvalidQuery(String::from("forced query failure")));
             }
             for (needle, response) in &self.query_rules {
                 if sql.contains(needle) {

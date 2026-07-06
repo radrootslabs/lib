@@ -105,7 +105,7 @@ pub fn knowledge_contract_manifest() -> RadrootsKnowledgeContractManifest {
         .filter(|contract| {
             event_contract_family(contract) == Some(RadrootsContractFamily::Knowledge)
         })
-        .map(|contract| manifest_entry(contract))
+        .map(manifest_entry)
         .collect::<Vec<_>>();
     contracts.sort_by(|left, right| left.contract_id.cmp(&right.contract_id));
 

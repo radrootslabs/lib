@@ -222,7 +222,7 @@ fn parse_helpers_cover_success_and_failure() {
     let invalid = radroots_nostr_parse_pubkey("invalid");
     assert!(invalid.is_err());
 
-    let parsed = radroots_nostr_parse_pubkeys(&[pubkey_hex.clone()]);
+    let parsed = radroots_nostr_parse_pubkeys(std::slice::from_ref(&pubkey_hex));
     assert!(parsed.is_ok());
 
     let parse_err = radroots_nostr_parse_pubkeys(&[pubkey_hex, "invalid".to_string()]);

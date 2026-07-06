@@ -205,7 +205,7 @@ mod test_hooks {
 fn write_temp_file(tmp: &mut NamedTempFile, bytes: &[u8]) -> io::Result<()> {
     #[cfg(test)]
     if test_hooks::take_write() {
-        return Err(io::Error::new(io::ErrorKind::Other, "forced write failure"));
+        return Err(io::Error::other("forced write failure"));
     }
     tmp.write_all(bytes)
 }
@@ -213,7 +213,7 @@ fn write_temp_file(tmp: &mut NamedTempFile, bytes: &[u8]) -> io::Result<()> {
 fn sync_temp_file(tmp: &mut NamedTempFile) -> io::Result<()> {
     #[cfg(test)]
     if test_hooks::take_sync() {
-        return Err(io::Error::new(io::ErrorKind::Other, "forced sync failure"));
+        return Err(io::Error::other("forced sync failure"));
     }
     tmp.as_file_mut().sync_all()
 }
@@ -222,10 +222,7 @@ fn sync_temp_file(tmp: &mut NamedTempFile) -> io::Result<()> {
 fn set_temp_permissions(path: &Path, mode: u32) -> io::Result<()> {
     #[cfg(test)]
     if test_hooks::take_perms() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "forced permissions failure",
-        ));
+        return Err(io::Error::other("forced permissions failure"));
     }
     fs::set_permissions(path, fs::Permissions::from_mode(mode))
 }
@@ -341,8 +338,7 @@ mod tests {
     #[test]
     fn load_reports_file_open_error_for_directory() {
         let dir = tempdir().expect("tempdir");
-        let err = JsonFile::<Payload>::load(dir.path().to_path_buf())
-            .expect_err("directory path should fail");
+        let err = JsonFile::<Payload>::load(dir.path()).expect_err("directory path should fail");
         assert!(err.to_string().contains("Failed to parse JSON"));
         assert!(
             err.to_string()
@@ -379,8 +375,8 @@ mod tests {
     #[test]
     fn serialize_toggle_load_reports_file_open_error_for_directory() {
         let dir = tempdir().expect("tempdir");
-        let err = JsonFile::<SerializeToggle>::load(dir.path().to_path_buf())
-            .expect_err("directory path should fail");
+        let err =
+            JsonFile::<SerializeToggle>::load(dir.path()).expect_err("directory path should fail");
         assert!(err.to_string().contains("Failed to parse JSON"));
         assert!(
             err.to_string()

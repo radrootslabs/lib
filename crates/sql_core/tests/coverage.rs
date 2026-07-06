@@ -94,23 +94,21 @@ impl SqlExecutor for MockExecutor {
     fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
         let mut state = self.state.lock().expect("state");
         state.exec_sql.push(sql.to_string());
-        if let Some(needle) = &state.fail_sql_contains {
-            if sql.contains(needle) {
-                return Err(SqlError::InvalidQuery(sql.to_string()));
-            }
+        if let Some(needle) = &state.fail_sql_contains
+            && sql.contains(needle)
+        {
+            return Err(SqlError::InvalidQuery(sql.to_string()));
         }
 
         if sql.contains("insert or ignore into __migrations(name)") {
-            let params: Vec<String> =
-                serde_json::from_str(params_json).map_err(|err| SqlError::from(err))?;
+            let params: Vec<String> = serde_json::from_str(params_json).map_err(SqlError::from)?;
             if let Some(name) = params.first() {
                 state.applied.insert(name.clone());
             }
         }
 
         if sql.contains("delete from __migrations where name = ?") {
-            let params: Vec<String> =
-                serde_json::from_str(params_json).map_err(|err| SqlError::from(err))?;
+            let params: Vec<String> = serde_json::from_str(params_json).map_err(SqlError::from)?;
             if let Some(name) = params.first() {
                 state.applied.remove(name);
             }
@@ -127,8 +125,7 @@ impl SqlExecutor for MockExecutor {
         if let Some(override_value) = &state.query_override {
             return override_value.clone();
         }
-        let params: Vec<String> =
-            serde_json::from_str(params_json).map_err(|err| SqlError::from(err))?;
+        let params: Vec<String> = serde_json::from_str(params_json).map_err(SqlError::from)?;
         let Some(name) = params.first() else {
             return Ok(String::new());
         };

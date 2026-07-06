@@ -883,14 +883,17 @@ mod tests {
 
     #[test]
     fn new_reports_save_error_when_dirty_state_requires_rewrite() {
-        let mut state = RadrootsNostrAccountStoreState::default();
-        state.default_account_id = Some(RadrootsIdentity::generate().id());
+        let state = RadrootsNostrAccountStoreState {
+            default_account_id: Some(RadrootsIdentity::generate().id()),
+            ..Default::default()
+        };
         let store = Arc::new(SaveErrorStore::new(state));
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
 
-        let err = RadrootsNostrAccountsManager::new(store, vault)
-            .err()
-            .expect("dirty state save error");
+        let err = match RadrootsNostrAccountsManager::new(store, vault) {
+            Ok(_) => panic!("dirty state save error"),
+            Err(err) => err,
+        };
 
         assert_eq!(err.to_string(), "store error: store save failed");
     }
@@ -918,7 +921,7 @@ mod tests {
     #[test]
     fn new_local_file_backed_rejects_external_command_backend() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+        let err = match RadrootsNostrAccountsManager::new_local_file_backed(
             temp.path().join("accounts.json"),
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
@@ -931,9 +934,10 @@ mod tests {
                 memory: false,
             },
             "org.radroots.test.local-account",
-        )
-        .err()
-        .expect("external command must be rejected");
+        ) {
+            Ok(_) => panic!("external command must be rejected"),
+            Err(err) => err,
+        };
 
         assert_eq!(
             err.to_string(),
@@ -944,7 +948,7 @@ mod tests {
     #[test]
     fn new_local_file_backed_reports_backend_resolution_error() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+        let err = match RadrootsNostrAccountsManager::new_local_file_backed(
             temp.path().join("accounts.json"),
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
@@ -959,9 +963,10 @@ mod tests {
                 memory: false,
             },
             "org.radroots.test.local-account",
-        )
-        .err()
-        .expect("backend resolution error");
+        ) {
+            Ok(_) => panic!("backend resolution error"),
+            Err(err) => err,
+        };
 
         assert_eq!(
             err.to_string(),
@@ -972,7 +977,7 @@ mod tests {
     #[test]
     fn new_local_file_backed_reports_store_load_error() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+        let err = match RadrootsNostrAccountsManager::new_local_file_backed(
             temp.path(),
             temp.path().join("secrets"),
             RadrootsSecretBackendSelection {
@@ -985,9 +990,10 @@ mod tests {
                 memory: false,
             },
             "org.radroots.test.local-account",
-        )
-        .err()
-        .expect("store load error");
+        ) {
+            Ok(_) => panic!("store load error"),
+            Err(err) => err,
+        };
 
         assert!(err.to_string().starts_with("store error:"));
     }
@@ -1019,15 +1025,16 @@ mod tests {
     #[cfg(not(feature = "os-keyring"))]
     fn local_file_backed_secret_vault_rejects_host_vault_without_feature() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let err = local_file_backed_secret_vault(
+        let err = match local_file_backed_secret_vault(
             RadrootsSecretBackend::HostVault(
                 radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
             ),
             temp.path(),
             "org.radroots.test.local-account".into(),
-        )
-        .err()
-        .expect("host vault requires feature");
+        ) {
+            Ok(_) => panic!("host vault requires feature"),
+            Err(err) => err,
+        };
 
         assert_eq!(
             err.to_string(),
@@ -1318,13 +1325,16 @@ mod tests {
     fn new_rejects_unsupported_schema_version() {
         let store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
-        let mut state = RadrootsNostrAccountStoreState::default();
-        state.version = crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION + 1;
+        let state = RadrootsNostrAccountStoreState {
+            version: crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION + 1,
+            ..Default::default()
+        };
         store.save(&state).expect("save");
 
-        let err = RadrootsNostrAccountsManager::new(store, vault)
-            .err()
-            .expect("unsupported schema version");
+        let err = match RadrootsNostrAccountsManager::new(store, vault) {
+            Ok(_) => panic!("unsupported schema version"),
+            Err(err) => err,
+        };
         assert!(err.to_string().contains("invalid account state"));
     }
 
@@ -1332,8 +1342,10 @@ mod tests {
     fn new_clears_orphaned_default_account() {
         let store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
-        let mut state = RadrootsNostrAccountStoreState::default();
-        state.default_account_id = Some(RadrootsIdentity::generate().id());
+        let state = RadrootsNostrAccountStoreState {
+            default_account_id: Some(RadrootsIdentity::generate().id()),
+            ..Default::default()
+        };
         store.save(&state).expect("save");
 
         let manager = RadrootsNostrAccountsManager::new(store, vault).expect("manager");
@@ -1819,12 +1831,13 @@ mod tests {
 
     #[test]
     fn manager_propagates_store_and_vault_errors() {
-        let load_error = RadrootsNostrAccountsManager::new(
+        let load_error = match RadrootsNostrAccountsManager::new(
             Arc::new(LoadErrorStore),
             Arc::new(RadrootsNostrSecretVaultMemory::new()),
-        )
-        .err()
-        .expect("load error manager");
+        ) {
+            Ok(_) => panic!("load error manager"),
+            Err(err) => err,
+        };
         assert!(load_error.to_string().starts_with("store error:"));
 
         let save_error_store = Arc::new(SaveErrorStore::new(

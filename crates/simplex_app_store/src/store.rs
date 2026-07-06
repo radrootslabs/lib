@@ -2700,8 +2700,7 @@ mod tests {
             .expect("draft");
         let error = store
             .mark_outbox_message_acknowledged(&draft.outbox_message.outbox_id)
-            .err()
-            .expect("transition error");
+            .expect_err("transition error");
 
         assert!(matches!(
             error,

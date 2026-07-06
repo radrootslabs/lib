@@ -39,6 +39,8 @@ const RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX: [u8; 12] = [
     0x30, 0x42, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6f, 0x03, 0x39, 0x00,
 ];
 type RadrootsSimplexOfficialAes256Gcm = AesGcm<Aes256, U16>;
+type RadrootsSimplexOfficialHkdf3Output = (Vec<u8>, Vec<u8>, Vec<u8>);
+type RadrootsSimplexOfficialPqHeaderParts = (Option<Vec<u8>>, Option<Vec<u8>>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexOfficialX448Keypair {
@@ -134,8 +136,8 @@ pub fn official_ratchet_header_len(
     version: u16,
     pq_enabled: bool,
 ) -> Result<usize, RadrootsSimplexSmpCryptoError> {
-    if version < RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION
-        || version > RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION
+    if !(RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION..=RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION)
+        .contains(&version)
     {
         return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetVersion(version));
     }
@@ -841,7 +843,7 @@ fn official_hkdf3(
     salt: &[u8],
     ikm: &[u8],
     info: &[u8],
-) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), RadrootsSimplexSmpCryptoError> {
+) -> Result<RadrootsSimplexOfficialHkdf3Output, RadrootsSimplexSmpCryptoError> {
     let hkdf = Hkdf::<Sha512>::new(Some(salt), ikm);
     let mut output = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_HKDF3_OUTPUT_LENGTH];
     hkdf.expand(info, &mut output).map_err(|_| {
@@ -859,8 +861,8 @@ fn official_hkdf3(
 }
 
 fn validate_official_version(version: u16) -> Result<(), RadrootsSimplexSmpCryptoError> {
-    if version < RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION
-        || version > RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION
+    if !(RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION..=RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION)
+        .contains(&version)
     {
         return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetVersion(version));
     }
@@ -905,12 +907,12 @@ fn validate_official_x3dh_params(
             ));
         }
     }
-    if let Some(pq_ciphertext) = params.pq_ciphertext.as_deref() {
-        if pq_ciphertext.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH {
-            return Err(RadrootsSimplexSmpCryptoError::InvalidPqCiphertextLength(
-                pq_ciphertext.len(),
-            ));
-        }
+    if let Some(pq_ciphertext) = params.pq_ciphertext.as_deref()
+        && pq_ciphertext.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPqCiphertextLength(
+            pq_ciphertext.len(),
+        ));
     }
     Ok(())
 }
@@ -1029,7 +1031,7 @@ fn push_official_msg_header_pq(
 
 fn read_official_msg_header_pq(
     cursor: &mut OfficialCursor<'_>,
-) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>), RadrootsSimplexSmpCryptoError> {
+) -> Result<RadrootsSimplexOfficialPqHeaderParts, RadrootsSimplexSmpCryptoError> {
     match cursor.read_byte()? {
         b'0' => Ok((None, None)),
         b'1' => match cursor.read_byte()? {

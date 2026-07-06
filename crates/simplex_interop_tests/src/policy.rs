@@ -96,14 +96,11 @@ impl RadrootsSimplexInteropLocalUpstream {
         else {
             return Ok(None);
         };
-        let server_identity = match required_or_optional(
+        let server_identity = required_or_optional(
             server_identity,
             required,
             RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY_ENV,
-        )? {
-            Some(value) => Some(value),
-            None => None,
-        };
+        )?;
         Ok(Some(Self {
             host,
             port: port.parse::<u16>().map_err(|_| {

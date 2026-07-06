@@ -1034,8 +1034,8 @@ mod tests {
 
     #[test]
     fn validation_trust_policy_builders_preserve_explicit_settings() {
-        let trusted = RadrootsPublicKey::parse(&event_id('a')).unwrap();
-        let other = RadrootsPublicKey::parse(&event_id('b')).unwrap();
+        let trusted = RadrootsPublicKey::parse(event_id('a')).unwrap();
+        let other = RadrootsPublicKey::parse(event_id('b')).unwrap();
         let policy = RadrootsTradeValidationTrustPolicy::production()
             .with_trusted_rhi_pubkeys(vec![trusted.clone()])
             .with_allow_deterministic_none(true)
