@@ -160,7 +160,7 @@ pub fn wiki_article_build_tags(
     validate_wiki_article(article).map_err(encode_validation_error)?;
     let mut tags = Vec::new();
     tags.push(vec![TAG_D.to_string(), article.d_tag.clone()]);
-    push_value(&mut tags, TAG_TITLE, &article.title);
+    push_optional_value(&mut tags, TAG_TITLE, article.title.as_deref());
     push_optional_value(&mut tags, TAG_SUMMARY, article.summary.as_deref());
     push_topics(&mut tags, &article.topics);
     push_event_refs(&mut tags, TAG_SOURCE, &article.references);

@@ -317,7 +317,7 @@ pub fn wiki_article_from_event(
     ensure_kind(event.kind, KIND_WIKI_ARTICLE, "wiki article")?;
     let d_tag = required_one_value(&event.tags, TAG_D)?;
     validate_wiki_d_tag(&d_tag).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
-    let title = required_one_value(&event.tags, TAG_TITLE)?;
+    let title = optional_one_value(&event.tags, TAG_TITLE)?;
     let summary = optional_one_value(&event.tags, TAG_SUMMARY)?;
     let topics = values(&event.tags, TAG_T);
     let references = event_refs(&event.tags, TAG_SOURCE)?;

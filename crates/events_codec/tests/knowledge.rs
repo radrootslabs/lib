@@ -147,7 +147,7 @@ fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
 fn wiki_article() -> RadrootsWikiArticle {
     RadrootsWikiArticle {
         d_tag: "soil-health".to_string(),
-        title: "Soil health".to_string(),
+        title: Some("Soil health".to_string()),
         content_djot: "# Soil health".to_string(),
         summary: Some("Living soil basics".to_string()),
         topics: vec!["soil".to_string(), "health".to_string()],
@@ -318,7 +318,7 @@ fn knowledge_codecs_roundtrip_all_contracts() {
             .data
             .data
             .title,
-        "Soil health"
+        Some("Soil health".to_string())
     );
 
     let redirect = RadrootsWikiRedirect {
@@ -655,6 +655,21 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
         wiki_article_from_event(duplicate_defer).unwrap_err(),
         EventParseError::InvalidTag("a"),
     );
+}
+
+#[test]
+fn wiki_article_codec_accepts_missing_title_tag() {
+    let mut article = wiki_article();
+    article.title = None;
+    let article_event = event_from_parts(wiki_article_to_wire_parts(&article).unwrap());
+    assert!(
+        !article_event
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(String::as_str) == Some("title"))
+    );
+    let decoded = wiki_article_from_event(article_event).unwrap();
+    assert_eq!(decoded.data.data.title, None);
 }
 
 #[test]

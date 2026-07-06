@@ -295,7 +295,9 @@ pub fn validate_wiki_article(
     validate_wiki_d_tag(article.d_tag.as_str())
         .map(|_| ())
         .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("d_tag"))?;
-    require_non_empty(article.title.as_str(), "title")?;
+    if let Some(title) = article.title.as_deref() {
+        require_non_empty(title, "title")?;
+    }
     require_non_empty(article.content_djot.as_str(), "content_djot")?;
     validate_event_refs(&article.references, "references")?;
     for version_ref in &article.forked_from {
@@ -550,7 +552,7 @@ pub struct RadrootsRightsAssertion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiArticle {
     pub d_tag: String,
-    pub title: String,
+    pub title: Option<String>,
     pub content_djot: String,
     pub summary: Option<String>,
     pub topics: Vec<String>,
@@ -1138,7 +1140,7 @@ mod tests {
     fn models_wiki_article_as_djot_payload() {
         let article = RadrootsWikiArticle {
             d_tag: "soil-health".to_string(),
-            title: "Soil health".to_string(),
+            title: Some("Soil health".to_string()),
             content_djot: "# Soil health".to_string(),
             summary: Some("Living soil basics".to_string()),
             topics: vec!["soil".to_string()],
@@ -1217,7 +1219,7 @@ mod tests {
     fn knowledge_validators_accept_valid_models() {
         let article = RadrootsWikiArticle {
             d_tag: "soil-health".to_string(),
-            title: "Soil health".to_string(),
+            title: Some("Soil health".to_string()),
             content_djot: "# Soil health".to_string(),
             summary: None,
             topics: Vec::new(),
@@ -1260,6 +1262,27 @@ mod tests {
     }
 
     #[test]
+    fn wiki_article_title_is_optional_but_not_blank() {
+        let mut article = RadrootsWikiArticle {
+            d_tag: "soil-health".to_string(),
+            title: None,
+            content_djot: "# Soil health".to_string(),
+            summary: None,
+            topics: Vec::new(),
+            references: Vec::new(),
+            forked_from: Vec::new(),
+            deferred_to: None,
+        };
+        assert_eq!(validate_wiki_article(&article), Ok(()));
+
+        article.title = Some(" ".to_string());
+        assert_validation_error(
+            validate_wiki_article(&article),
+            RadrootsKnowledgeValidationError::EmptyField("title"),
+        );
+    }
+
+    #[test]
     fn knowledge_claims_require_citations_except_exact_uncited_types() {
         let mut claim = knowledge_claim();
         claim.citation_spans.clear();
@@ -1293,7 +1316,7 @@ mod tests {
     fn knowledge_validators_reject_representative_invalid_models() {
         let mut article = RadrootsWikiArticle {
             d_tag: "soil-health".to_string(),
-            title: "Soil health".to_string(),
+            title: Some("Soil health".to_string()),
             content_djot: " ".to_string(),
             summary: None,
             topics: Vec::new(),

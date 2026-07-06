@@ -185,7 +185,7 @@ pub fn wiki_article_deferred_version_ref() -> RadrootsWikiArticleVersionRef {
 pub fn wiki_article() -> RadrootsWikiArticle {
     RadrootsWikiArticle {
         d_tag: "soil-health".to_string(),
-        title: "Soil health".to_string(),
+        title: Some("Soil health".to_string()),
         content_djot: "# Soil health\n\nLiving soil supports resilient local food systems."
             .to_string(),
         summary: Some("Living soil basics".to_string()),
