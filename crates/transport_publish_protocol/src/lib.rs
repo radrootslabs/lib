@@ -48,6 +48,9 @@ pub enum TransportPublishProtocolError {
     InvalidReticulumPreviewEndpoint {
         index: usize,
     },
+    ExplicitProxyTarget {
+        index: usize,
+    },
     TargetLimitExceeded {
         max: usize,
         actual: usize,
@@ -89,6 +92,10 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::InvalidReticulumPreviewEndpoint { index } => write!(
                 f,
                 "transport target {index} Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
+            ),
+            Self::ExplicitProxyTarget { index } => write!(
+                f,
+                "transport target {index} proxy is an SDK delegation target and cannot be used as a daemon explicit target"
             ),
             Self::TargetLimitExceeded { max, actual } => {
                 write!(f, "transport target count {actual} exceeds limit {max}")
@@ -184,6 +191,9 @@ impl TransportPublishTarget {
         }
         let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
+        if transport_kind == RadrootsTransportKind::Proxy {
+            return Err(TransportPublishProtocolError::ExplicitProxyTarget { index });
+        }
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
         }
@@ -837,6 +847,18 @@ mod tests {
         assert_eq!(
             removed_proxy_kind.validate(1),
             Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
+        );
+
+        let mut explicit_proxy_target = request.clone();
+        explicit_proxy_target.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: "proxy".to_owned(),
+                endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+                preview_behavior: None,
+            }]);
+        assert_eq!(
+            explicit_proxy_target.validate(1),
+            Err(TransportPublishProtocolError::ExplicitProxyTarget { index: 0 })
         );
 
         let mut empty_key = request.clone();
