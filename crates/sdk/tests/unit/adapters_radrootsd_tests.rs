@@ -1,13 +1,13 @@
 use super::*;
+use radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI;
 use radroots_transport_nostr::{
     RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayUrlPolicy,
 };
 use radroots_transport_publish_protocol::{
-    NostrPublishTargetSourcePolicy, RETICULUM_PREVIEW_ENDPOINT_URI, TransportPublishDeliveryPolicy,
-    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishJobStatus,
-    TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishPreviewBehavior,
-    TransportPublishTarget, TransportPublishTargetOutcome, TransportPublishTargetPolicy,
-    TransportPublishTargetSource,
+    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
+    TransportPublishEventResponse, TransportPublishJobStatus, TransportPublishJobView,
+    TransportPublishOutcomeKind, TransportPublishPreviewBehavior, TransportPublishTarget,
+    TransportPublishTargetOutcome, TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -517,7 +517,7 @@ async fn publish_signed_event_preserves_typed_reticulum_preview_behavior() {
     );
     assert_eq!(
         body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
-        RETICULUM_PREVIEW_ENDPOINT_URI
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
     );
     assert_eq!(
         body["params"]["target_policy"]["targets"][0]["preview_behavior"],
@@ -646,7 +646,7 @@ async fn relay_publish_adapter_maps_proxy_errors_to_transport_errors() {
 fn relay_proxy_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
     let target = radroots_transport::RadrootsTransportTarget::new(
         radroots_transport::RadrootsTransportKind::Reticulum,
-        RETICULUM_PREVIEW_ENDPOINT_URI,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
     )
     .expect("Reticulum target");
 

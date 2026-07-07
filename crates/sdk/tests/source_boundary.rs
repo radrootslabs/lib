@@ -1397,6 +1397,20 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
         }
     }
 
+    let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
+    assert!(
+        transport_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
+        "src/transport.rs must consume the shared Reticulum preview endpoint constant"
+    );
+    assert!(
+        !transport_source.contains("const RETICULUM_PREVIEW_ENDPOINT_URI"),
+        "src/transport.rs must not duplicate the Reticulum preview endpoint constant"
+    );
+    assert!(
+        !transport_source.contains("reticulum:preview-unavailable"),
+        "src/transport.rs must not duplicate the Reticulum preview endpoint literal"
+    );
+
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
     for required in [
         "TransportProfile::ReticulumPreview { profile }",

@@ -3,7 +3,10 @@ use super::{
     ReticulumPreviewProfile, SatisfactionPolicy, TargetPolicy, TargetSet, TransportProfile,
 };
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
+use radroots_transport::{
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+};
 
 #[path = "../support/serializer_failure.rs"]
 mod serializer_failure;
@@ -175,7 +178,10 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
 fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
     let profile = ReticulumPreviewProfile::preview_unavailable();
 
-    assert_eq!(profile.endpoint_uri(), "reticulum:preview-unavailable");
+    assert_eq!(
+        profile.endpoint_uri(),
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    );
     assert_eq!(
         profile.behavior(),
         ReticulumPreviewBehavior::RejectDeliveryAttempts
@@ -199,13 +205,31 @@ fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
 
 #[test]
 fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
-    let err = TargetSet::transport_targets(vec![
-        RadrootsTransportTarget::new(
-            RadrootsTransportKind::Reticulum,
-            "reticulum:preview-unavailable-alt",
-        )
-        .expect("target"),
-    ])
+    for invalid in [
+        " reticulum:preview-unavailable",
+        "reticulum:preview-unavailable ",
+        "RETICULUM:preview-unavailable",
+        "reticulum:Preview-Unavailable",
+        "reticulum:preview",
+        "reticulum:preview-unavailable-alt",
+        "reticulum:custom",
+    ] {
+        assert_eq!(
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
+                .expect_err("invalid Reticulum target"),
+            RadrootsTransportError::InvalidTargetUri
+        );
+    }
+
+    let uri =
+        RadrootsTransportTargetUri::parse("reticulum:preview-unavailable-alt").expect("target uri");
+    let fingerprint =
+        RadrootsTransportTargetFingerprint::from_target(&RadrootsTransportKind::Reticulum, &uri);
+    let err = TargetSet::transport_targets(vec![RadrootsTransportTarget {
+        kind: RadrootsTransportKind::Reticulum,
+        uri,
+        fingerprint,
+    }])
     .expect_err("noncanonical Reticulum endpoint");
 
     assert!(matches!(err, RadrootsSdkError::InvalidRequest { .. }));

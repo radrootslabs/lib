@@ -1,8 +1,8 @@
 use crate::RadrootsSdkError;
 use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportKind, RadrootsTransportSatisfactionClass,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt,
-    RadrootsTransportTargetSet,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
 use serde::ser::{SerializeStruct, Serializer};
@@ -16,7 +16,6 @@ pub use radroots_transport::{
 };
 
 pub const SDK_TRANSPORT_TARGET_MAX_COUNT: usize = 20;
-const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -237,11 +236,11 @@ impl TargetSet {
         }
         for target in &targets {
             if target.kind == RadrootsTransportKind::Reticulum
-                && target.uri.as_str() != RETICULUM_PREVIEW_ENDPOINT_URI
+                && target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
             {
                 return Err(RadrootsSdkError::InvalidRequest {
                     message: format!(
-                        "Reticulum preview endpoint must be {RETICULUM_PREVIEW_ENDPOINT_URI}"
+                        "Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
                     ),
                 });
             }
@@ -308,7 +307,7 @@ pub struct ReticulumPreviewProfile {
 impl ReticulumPreviewProfile {
     pub fn preview_unavailable() -> Self {
         Self {
-            endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
             behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
         }
     }
