@@ -1,7 +1,7 @@
 use radroots_transport::{
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
     RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
@@ -151,9 +151,7 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
         );
         assert_eq!(
             target_receipt.outcome.message.as_deref(),
-            Some(
-                "Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."
-            )
+            Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
         );
     }
 }

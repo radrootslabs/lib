@@ -8,20 +8,16 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportOutcome,
+    RadrootsTransportTarget, RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
 pub const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 const UNAVAILABLE_CODE: &str = "transport_unavailable";
 const DEFERRED_CODE: &str = "deferred_until_implemented";
-pub const RETICULUM_PREVIEW_UNAVAILABLE_MESSAGE: &str = concat!(
-    "Reticulum transport is configured for future compatibility, ",
-    "but this build does not implement Reticulum delivery."
-);
 const DEFERRED_MESSAGE: &str = "Reticulum preview delivery is deferred until implementation";
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -304,7 +300,7 @@ fn preview_outcome(behavior: RadrootsReticulumPreviewBehavior) -> RadrootsTransp
     outcome.message = Some(
         match behavior {
             RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts => {
-                RETICULUM_PREVIEW_UNAVAILABLE_MESSAGE
+                RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
             }
             RadrootsReticulumPreviewBehavior::DeferDeliveryPlans => DEFERRED_MESSAGE,
         }

@@ -137,18 +137,29 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
         );
     }
 
-    let reticulum_source =
-        read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
+    let transport_message_source =
+        read_source(crates_root.join("transport/src/message.rs").as_path());
     for required in [
-        "RETICULUM_PREVIEW_UNAVAILABLE_MESSAGE",
+        "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
         "Reticulum transport is configured for future compatibility, ",
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
-            reticulum_source.contains(required),
-            "Reticulum preview source must retain unavailable message witness `{required}`"
+            transport_message_source.contains(required),
+            "transport message source must retain Reticulum unavailable message witness `{required}`"
         );
     }
+
+    let reticulum_source =
+        read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
+    assert!(
+        reticulum_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
+        "Reticulum preview source must consume the shared unavailable message constant"
+    );
+    assert!(
+        !reticulum_source.contains("Reticulum transport is configured for future compatibility, "),
+        "Reticulum preview source must not duplicate the shared unavailable message"
+    );
 
     let protocol_source = read_source(
         crates_root
@@ -156,8 +167,12 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
             .as_path(),
     );
     assert!(
-        protocol_source.contains("Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."),
-        "transport publish capabilities must retain the approved Reticulum unavailable message"
+        protocol_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
+        "transport publish capabilities must consume the shared Reticulum unavailable message"
+    );
+    assert!(
+        !protocol_source.contains("Reticulum transport is configured for future compatibility, "),
+        "transport publish protocol must not duplicate the shared unavailable message"
     );
 }
 

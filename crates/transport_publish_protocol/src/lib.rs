@@ -10,7 +10,9 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::fmt;
-use radroots_transport::{RadrootsTransportError, RadrootsTransportKind};
+use radroots_transport::{
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportError, RadrootsTransportKind,
+};
 
 pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
 pub const DAEMON_NAME: &str = "radrootsd";
@@ -551,8 +553,7 @@ impl TransportPublishCapabilities {
                         preview_behavior: Some(
                             TransportPublishPreviewBehavior::RejectDeliveryAttempts,
                         ),
-                        message: "Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."
-                            .to_owned(),
+                        message: RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE.to_owned(),
                     },
                 ],
             },
