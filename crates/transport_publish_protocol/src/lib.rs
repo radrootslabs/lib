@@ -17,6 +17,7 @@ pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
 pub const METHOD_EVENT: &str = "transport.publish.event";
 pub const METHOD_JOB_GET: &str = "transport.publish.job.get";
 pub const METHOD_JOB_LIST: &str = "transport.publish.job.list";
+pub const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TransportPublishProtocolError {
@@ -33,6 +34,9 @@ pub enum TransportPublishProtocolError {
         index: usize,
     },
     EmptyEndpointUri {
+        index: usize,
+    },
+    InvalidReticulumPreviewEndpoint {
         index: usize,
     },
     TargetLimitExceeded {
@@ -63,6 +67,10 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::EmptyEndpointUri { index } => {
                 write!(f, "transport target {index} endpoint_uri must not be empty")
             }
+            Self::InvalidReticulumPreviewEndpoint { index } => write!(
+                f,
+                "transport target {index} Reticulum preview endpoint must be {RETICULUM_PREVIEW_ENDPOINT_URI}"
+            ),
             Self::TargetLimitExceeded { max, actual } => {
                 write!(f, "transport target count {actual} exceeds limit {max}")
             }
@@ -143,13 +151,10 @@ impl TransportPublishTarget {
         }
     }
 
-    pub fn reticulum_preview(
-        endpoint_uri: impl Into<String>,
-        behavior: TransportPublishPreviewBehavior,
-    ) -> Self {
+    pub fn reticulum_preview(behavior: TransportPublishPreviewBehavior) -> Self {
         Self {
             transport_kind: "reticulum".to_owned(),
-            endpoint_uri: endpoint_uri.into(),
+            endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
             preview_behavior: Some(behavior),
         }
     }
@@ -160,6 +165,11 @@ impl TransportPublishTarget {
         }
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+        }
+        if self.transport_kind.trim() == "reticulum"
+            && self.endpoint_uri.trim() != RETICULUM_PREVIEW_ENDPOINT_URI
+        {
+            return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
         }
         Ok(())
     }
@@ -707,7 +717,6 @@ mod tests {
         too_many.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example.com"),
             TransportPublishTarget::reticulum_preview(
-                "reticulum:preview-unavailable",
                 TransportPublishPreviewBehavior::RejectDeliveryAttempts,
             ),
         ]);
@@ -725,6 +734,18 @@ mod tests {
             empty_endpoint.validate(1),
             Err(TransportPublishProtocolError::EmptyEndpointUri { index: 0 })
         ));
+
+        let mut invalid_reticulum_endpoint = request.clone();
+        invalid_reticulum_endpoint.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: "reticulum".to_owned(),
+                endpoint_uri: "reticulum:preview-unavailable-alt".to_owned(),
+                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+            }]);
+        assert_eq!(
+            invalid_reticulum_endpoint.validate(1),
+            Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 0 })
+        );
 
         let mut empty_key = request.clone();
         empty_key.idempotency_key = Some(" ".to_owned());
@@ -787,7 +808,6 @@ mod tests {
             event: event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::reticulum_preview(
-                    "reticulum:preview-unavailable",
                     TransportPublishPreviewBehavior::DeferDeliveryPlans,
                 ),
             ]),
@@ -832,6 +852,10 @@ mod tests {
             (
                 TransportPublishProtocolError::EmptyEndpointUri { index: 3 },
                 "transport target 3 endpoint_uri must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 4 },
+                "transport target 4 Reticulum preview endpoint must be reticulum:preview-unavailable",
             ),
             (
                 TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 },
@@ -912,7 +936,6 @@ mod tests {
         let explicit = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example"),
             TransportPublishTarget::reticulum_preview(
-                "reticulum:preview-unavailable",
                 TransportPublishPreviewBehavior::DeferDeliveryPlans,
             ),
         ]);

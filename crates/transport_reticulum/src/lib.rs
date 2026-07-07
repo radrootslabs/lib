@@ -15,7 +15,7 @@ use radroots_transport::{
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
-const DEFAULT_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
+pub const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 const UNAVAILABLE_CODE: &str = "transport_unavailable";
 const DEFERRED_CODE: &str = "deferred_until_implemented";
 const PREVIEW_UNAVAILABLE_MESSAGE: &str =
@@ -49,17 +49,13 @@ pub struct RadrootsReticulumPreviewEndpoint {
 
 impl RadrootsReticulumPreviewEndpoint {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsReticulumPreviewError> {
-        let uri = raw.as_ref().trim().to_ascii_lowercase();
-        if uri.is_empty() || !uri.starts_with("reticulum:") || uri == "reticulum:" {
+        let uri = raw.as_ref().trim();
+        if uri != RETICULUM_PREVIEW_ENDPOINT_URI {
             return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
         }
-        if uri
-            .chars()
-            .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
-        {
-            return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
-        }
-        Ok(Self { uri })
+        Ok(Self {
+            uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+        })
     }
 
     pub fn as_str(&self) -> &str {
@@ -73,7 +69,7 @@ impl RadrootsReticulumPreviewEndpoint {
 
 impl Default for RadrootsReticulumPreviewEndpoint {
     fn default() -> Self {
-        Self::parse(DEFAULT_ENDPOINT_URI).expect("default Reticulum preview endpoint")
+        Self::parse(RETICULUM_PREVIEW_ENDPOINT_URI).expect("default Reticulum preview endpoint")
     }
 }
 
@@ -276,13 +272,15 @@ impl fmt::Display for RadrootsReticulumPreviewError {
 fn ensure_reticulum_targets(
     targets: &[RadrootsTransportTarget],
 ) -> Result<(), RadrootsReticulumPreviewError> {
-    if targets
-        .iter()
-        .all(|target| target.kind == RadrootsTransportKind::Reticulum)
-    {
-        return Ok(());
+    for target in targets {
+        if target.kind != RadrootsTransportKind::Reticulum {
+            return Err(RadrootsReticulumPreviewError::NonReticulumTarget);
+        }
+        if target.uri.as_str() != RETICULUM_PREVIEW_ENDPOINT_URI {
+            return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
+        }
     }
-    Err(RadrootsReticulumPreviewError::NonReticulumTarget)
+    Ok(())
 }
 
 fn preview_outcome(behavior: RadrootsReticulumPreviewBehavior) -> RadrootsTransportOutcome {

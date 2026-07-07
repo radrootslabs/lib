@@ -53,10 +53,13 @@ fn default_profile_is_configured_preview_unavailable_and_rejecting() {
 #[test]
 fn endpoint_and_profile_validation_are_strict_and_canonical() {
     let endpoint =
-        RadrootsReticulumPreviewEndpoint::parse(" RETICULUM:Preview-Target ").expect("endpoint");
-    assert_eq!(endpoint.as_str(), "reticulum:preview-target");
-    assert_eq!(endpoint.to_string(), "reticulum:preview-target");
-    assert_eq!(endpoint.clone().into_string(), "reticulum:preview-target");
+        RadrootsReticulumPreviewEndpoint::parse("reticulum:preview-unavailable").expect("endpoint");
+    assert_eq!(endpoint.as_str(), "reticulum:preview-unavailable");
+    assert_eq!(endpoint.to_string(), "reticulum:preview-unavailable");
+    assert_eq!(
+        endpoint.clone().into_string(),
+        "reticulum:preview-unavailable"
+    );
     assert_eq!(
         RadrootsReticulumPreviewEndpoint::default().as_str(),
         "reticulum:preview-unavailable"
@@ -72,6 +75,15 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     );
     assert_eq!(
         RadrootsReticulumPreviewEndpoint::parse("https://target").expect_err("wrong scheme"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse("RETICULUM:Preview-Unavailable")
+            .expect_err("case drift endpoint"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse("reticulum:custom").expect_err("custom endpoint"),
         RadrootsReticulumPreviewError::InvalidEndpoint
     );
     assert_eq!(
@@ -104,12 +116,12 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     );
     let profile = RadrootsReticulumPreviewProfile::new(
         "transport.reticulum.custom",
-        RadrootsReticulumPreviewEndpoint::parse("reticulum:custom").expect("custom endpoint"),
+        RadrootsReticulumPreviewEndpoint::default(),
         RadrootsReticulumPreviewBehavior::DeferDeliveryPlans,
     )
-    .expect("custom profile");
+    .expect("custom behavior profile");
     assert_eq!(profile.profile_id(), "transport.reticulum.custom");
-    assert_eq!(profile.endpoint().as_str(), "reticulum:custom");
+    assert_eq!(profile.endpoint().as_str(), "reticulum:preview-unavailable");
     assert_eq!(
         profile.behavior(),
         RadrootsReticulumPreviewBehavior::DeferDeliveryPlans
@@ -119,13 +131,10 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
 #[test]
 fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing() {
     let transport = RadrootsReticulumPreviewTransport::default();
-    let request = delivery_request(vec![
-        reticulum_target("reticulum:preview-unavailable"),
-        reticulum_target("reticulum:preview-unavailable-alt"),
-    ]);
+    let request = delivery_request(vec![reticulum_target("reticulum:preview-unavailable")]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
-    assert_eq!(receipt.target_receipts.len(), 2);
+    assert_eq!(receipt.target_receipts.len(), 1);
     assert_eq!(
         receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
         0
@@ -141,6 +150,18 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
             Some("transport_unavailable")
         );
     }
+}
+
+#[test]
+fn noncanonical_reticulum_preview_targets_are_rejected() {
+    let transport = RadrootsReticulumPreviewTransport::default();
+    let err = transport
+        .deliver(delivery_request(vec![reticulum_target(
+            "reticulum:preview-unavailable-alt",
+        )]))
+        .expect_err("noncanonical Reticulum endpoint");
+
+    assert_eq!(err, RadrootsReticulumPreviewError::InvalidEndpoint);
 }
 
 #[test]
