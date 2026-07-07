@@ -68,11 +68,12 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
 
     for relative_root in TRANSPORT_HARDENING_CRATE_SOURCE_ROOTS {
         for path in rust_source_files(crates_root.join(relative_root).as_path()) {
-            let source = read_source(path.as_path());
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
             let relative_path = relative_path(crates_root, path.as_path());
 
             for concept in FORBIDDEN_TRANSPORT_CONCEPTS {
-                if contains_forbidden_concept(source.as_str(), concept.pattern) {
+                if contains_forbidden_concept(source, concept.pattern) {
                     findings.push(format!(
                         "{} contains removed transport concept `{}`: {}",
                         relative_path, concept.pattern, concept.reason
@@ -80,7 +81,7 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
                 }
             }
 
-            for line in removed_reticulum_preview_endpoint_lines(source.as_str()) {
+            for line in removed_reticulum_preview_endpoint_lines(source) {
                 findings.push(format!(
                     "{relative_path}:{line} contains removed Reticulum preview endpoint `reticulum:preview`"
                 ));
@@ -97,13 +98,14 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
 
 #[test]
 fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
-    let source = read_source(
+    let source_raw = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("transport crate parent")
             .join("transport_publish_protocol/src/lib.rs")
             .as_path(),
     );
+    let source = production_source(source_raw.as_str());
 
     for required in [
         "pub implementation_state: TransportPublishImplementationState,",
@@ -121,7 +123,7 @@ fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
 }
 
 #[test]
-fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
+fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
@@ -140,6 +142,8 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
     let transport_message_source =
         read_source(crates_root.join("transport/src/message.rs").as_path());
     for required in [
+        "RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI",
+        "reticulum:preview-unavailable",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
         "Reticulum transport is configured for future compatibility, ",
         "but this build does not implement Reticulum delivery.",
@@ -153,6 +157,14 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
     let reticulum_source =
         read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
     assert!(
+        reticulum_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
+        "Reticulum preview source must consume the shared endpoint URI constant"
+    );
+    assert!(
+        !reticulum_source.contains("reticulum:preview-unavailable"),
+        "Reticulum preview source must not duplicate the shared endpoint URI"
+    );
+    assert!(
         reticulum_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
         "Reticulum preview source must consume the shared unavailable message constant"
     );
@@ -161,10 +173,19 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
         "Reticulum preview source must not duplicate the shared unavailable message"
     );
 
-    let protocol_source = read_source(
+    let protocol_source_raw = read_source(
         crates_root
             .join("transport_publish_protocol/src/lib.rs")
             .as_path(),
+    );
+    let protocol_source = production_source(protocol_source_raw.as_str());
+    assert!(
+        protocol_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
+        "transport publish protocol must consume the shared Reticulum endpoint URI constant"
+    );
+    assert!(
+        !protocol_source.contains("reticulum:preview-unavailable"),
+        "transport publish protocol must not duplicate the shared endpoint URI"
     );
     assert!(
         protocol_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
@@ -200,6 +221,12 @@ fn collect_rust_source_files(root: &Path, paths: &mut Vec<PathBuf>) {
 fn read_source(path: &Path) -> String {
     fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("failed to read source {}: {error}", path.display()))
+}
+
+fn production_source(source: &str) -> &str {
+    source
+        .find("\n#[cfg(test)]")
+        .map_or(source, |index| &source[..index])
 }
 
 fn relative_path(root: &Path, path: &Path) -> String {

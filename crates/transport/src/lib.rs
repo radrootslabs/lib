@@ -17,7 +17,9 @@ pub use delivery::{
 };
 pub use error::RadrootsTransportError;
 pub use kind::{RadrootsTransportImplementationState, RadrootsTransportKind};
-pub use message::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
+pub use message::{
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+};
 pub use status::{RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome};
 pub use target::{
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,

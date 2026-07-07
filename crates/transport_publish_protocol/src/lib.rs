@@ -11,7 +11,8 @@ use std::{string::String, vec::Vec};
 
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportError, RadrootsTransportKind,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RadrootsTransportError, RadrootsTransportKind,
 };
 
 pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
@@ -20,7 +21,6 @@ pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
 pub const METHOD_EVENT: &str = "transport.publish.event";
 pub const METHOD_JOB_GET: &str = "transport.publish.job.get";
 pub const METHOD_JOB_LIST: &str = "transport.publish.job.list";
-pub const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TransportPublishProtocolError {
@@ -81,7 +81,7 @@ impl fmt::Display for TransportPublishProtocolError {
             }
             Self::InvalidReticulumPreviewEndpoint { index } => write!(
                 f,
-                "transport target {index} Reticulum preview endpoint must be {RETICULUM_PREVIEW_ENDPOINT_URI}"
+                "transport target {index} Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
             ),
             Self::TargetLimitExceeded { max, actual } => {
                 write!(f, "transport target count {actual} exceeds limit {max}")
@@ -166,7 +166,7 @@ impl TransportPublishTarget {
     pub fn reticulum_preview(behavior: TransportPublishPreviewBehavior) -> Self {
         Self {
             transport_kind: "reticulum".to_owned(),
-            endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
             preview_behavior: Some(behavior),
         }
     }
@@ -181,7 +181,7 @@ impl TransportPublishTarget {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
         }
         if transport_kind == RadrootsTransportKind::Reticulum
-            && self.endpoint_uri != RETICULUM_PREVIEW_ENDPOINT_URI
+            && self.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
         {
             return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
         }
@@ -776,13 +776,34 @@ mod tests {
         noncanonical_reticulum_kind.target_policy =
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "Reticulum".to_owned(),
-                endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+                endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
                 preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
             noncanonical_reticulum_kind.validate(1),
             Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
         );
+
+        for invalid in [
+            " reticulum:preview-unavailable",
+            "reticulum:preview-unavailable ",
+            "RETICULUM:preview-unavailable",
+            "reticulum:Preview-Unavailable",
+            "reticulum:preview",
+            "reticulum:custom",
+        ] {
+            let mut invalid_reticulum_endpoint = request.clone();
+            invalid_reticulum_endpoint.target_policy =
+                TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                    transport_kind: "reticulum".to_owned(),
+                    endpoint_uri: invalid.to_owned(),
+                    preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+                }]);
+            assert_eq!(
+                invalid_reticulum_endpoint.validate(1),
+                Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 0 })
+            );
+        }
 
         let mut removed_proxy_kind = request.clone();
         removed_proxy_kind.target_policy =

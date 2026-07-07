@@ -1,4 +1,6 @@
-use crate::{RadrootsTransportError, RadrootsTransportKind};
+use crate::{
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
+};
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -82,7 +84,13 @@ impl RadrootsTransportTarget {
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let uri = RadrootsTransportTargetUri::parse(uri)?;
+        let raw_uri = uri.as_ref();
+        if kind == RadrootsTransportKind::Reticulum
+            && raw_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+        {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        let uri = RadrootsTransportTargetUri::parse(raw_uri)?;
         let fingerprint = RadrootsTransportTargetFingerprint::from_target(&kind, &uri);
         Ok(Self {
             kind,

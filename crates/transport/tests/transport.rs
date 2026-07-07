@@ -1,10 +1,10 @@
 use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
-    RadrootsTransportTargetUri,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportOutcome,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt,
+    RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -17,7 +17,7 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
             .expect("nostr target");
     let reticulum = RadrootsTransportTarget::new(
         RadrootsTransportKind::Reticulum,
-        "wss://relay.example/Events",
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
     )
     .expect("reticulum target");
 
@@ -161,7 +161,7 @@ fn satisfaction_policy_counts_target_statuses() {
 fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
     let target = RadrootsTransportTarget::new(
         RadrootsTransportKind::Reticulum,
-        "reticulum:preview-unavailable",
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
     )
     .expect("target");
     let receipt = RadrootsTransportDeliveryReceipt {
@@ -302,6 +302,33 @@ fn transport_kind_and_target_parsers_cover_negative_edges() {
     ] {
         assert_eq!(
             RadrootsTransportTargetUri::parse(invalid).expect_err("invalid uri"),
+            RadrootsTransportError::InvalidTargetUri
+        );
+    }
+}
+
+#[test]
+fn reticulum_transport_targets_require_exact_preview_endpoint() {
+    let target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )
+    .expect("exact Reticulum preview endpoint");
+    assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+
+    for invalid in [
+        " reticulum:preview-unavailable",
+        "reticulum:preview-unavailable ",
+        "RETICULUM:preview-unavailable",
+        "reticulum:Preview-Unavailable",
+        "reticulum:preview",
+        "reticulum:preview-unavailable-alt",
+        "reticulum:custom",
+        "wss://relay.example/Events",
+    ] {
+        assert_eq!(
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
+                .expect_err("invalid Reticulum preview endpoint"),
             RadrootsTransportError::InvalidTargetUri
         );
     }

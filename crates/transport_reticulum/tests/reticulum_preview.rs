@@ -1,7 +1,8 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
     RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
@@ -35,7 +36,10 @@ fn default_profile_is_configured_preview_unavailable_and_rejecting() {
     let status = profile.status();
 
     assert_eq!(profile.profile_id(), "transport.reticulum.preview");
-    assert_eq!(profile.endpoint().as_str(), "reticulum:preview-unavailable");
+    assert_eq!(
+        profile.endpoint().as_str(),
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    );
     assert_eq!(
         profile.behavior(),
         RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts
@@ -52,17 +56,20 @@ fn default_profile_is_configured_preview_unavailable_and_rejecting() {
 
 #[test]
 fn endpoint_and_profile_validation_are_strict_and_canonical() {
-    let endpoint =
-        RadrootsReticulumPreviewEndpoint::parse("reticulum:preview-unavailable").expect("endpoint");
-    assert_eq!(endpoint.as_str(), "reticulum:preview-unavailable");
-    assert_eq!(endpoint.to_string(), "reticulum:preview-unavailable");
+    let endpoint = RadrootsReticulumPreviewEndpoint::parse(RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI)
+        .expect("endpoint");
+    assert_eq!(endpoint.as_str(), RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+    assert_eq!(
+        endpoint.to_string(),
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    );
     assert_eq!(
         endpoint.clone().into_string(),
-        "reticulum:preview-unavailable"
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
     );
     assert_eq!(
         RadrootsReticulumPreviewEndpoint::default().as_str(),
-        "reticulum:preview-unavailable"
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
     );
 
     assert_eq!(
@@ -80,6 +87,16 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     assert_eq!(
         RadrootsReticulumPreviewEndpoint::parse("RETICULUM:Preview-Unavailable")
             .expect_err("case drift endpoint"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse(" reticulum:preview-unavailable")
+            .expect_err("leading whitespace endpoint"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse("reticulum:preview-unavailable ")
+            .expect_err("trailing whitespace endpoint"),
         RadrootsReticulumPreviewError::InvalidEndpoint
     );
     assert_eq!(
@@ -121,7 +138,10 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     )
     .expect("custom behavior profile");
     assert_eq!(profile.profile_id(), "transport.reticulum.custom");
-    assert_eq!(profile.endpoint().as_str(), "reticulum:preview-unavailable");
+    assert_eq!(
+        profile.endpoint().as_str(),
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    );
     assert_eq!(
         profile.behavior(),
         RadrootsReticulumPreviewBehavior::DeferDeliveryPlans
@@ -131,7 +151,9 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
 #[test]
 fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing() {
     let transport = RadrootsReticulumPreviewTransport::default();
-    let request = delivery_request(vec![reticulum_target("reticulum:preview-unavailable")]);
+    let request = delivery_request(vec![reticulum_target(
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
     assert_eq!(receipt.target_receipts.len(), 1);
@@ -158,14 +180,21 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
 
 #[test]
 fn noncanonical_reticulum_preview_targets_are_rejected() {
-    let transport = RadrootsReticulumPreviewTransport::default();
-    let err = transport
-        .deliver(delivery_request(vec![reticulum_target(
-            "reticulum:preview-unavailable-alt",
-        )]))
-        .expect_err("noncanonical Reticulum endpoint");
-
-    assert_eq!(err, RadrootsReticulumPreviewError::InvalidEndpoint);
+    for invalid in [
+        " reticulum:preview-unavailable",
+        "reticulum:preview-unavailable ",
+        "RETICULUM:preview-unavailable",
+        "reticulum:Preview-Unavailable",
+        "reticulum:preview",
+        "reticulum:preview-unavailable-alt",
+        "reticulum:custom",
+    ] {
+        assert_eq!(
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
+                .expect_err("noncanonical Reticulum target"),
+            radroots_transport::RadrootsTransportError::InvalidTargetUri
+        );
+    }
 }
 
 #[test]
@@ -174,7 +203,9 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
         RadrootsReticulumPreviewProfile::default()
             .with_behavior(RadrootsReticulumPreviewBehavior::DeferDeliveryPlans),
     );
-    let request = delivery_request(vec![reticulum_target("reticulum:preview-unavailable")]);
+    let request = delivery_request(vec![reticulum_target(
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
     assert_eq!(receipt.target_receipts.len(), 1);
@@ -226,7 +257,10 @@ fn fetch_reports_preview_unavailable_without_observed_events() {
         .expect("fetch receipt");
 
     assert_eq!(receipt.request_id, "fetch-1");
-    assert_eq!(receipt.endpoint_uri, "reticulum:preview-unavailable");
+    assert_eq!(
+        receipt.endpoint_uri,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    );
     assert_eq!(receipt.observed_event_count, 0);
     assert_eq!(
         receipt.implementation_state,
