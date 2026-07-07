@@ -19,7 +19,8 @@ use radroots_events::draft::{
     RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 use serde::Serialize;
@@ -1218,14 +1219,15 @@ fn prepare_delivery_plan(
     let prepared_targets = targets
         .into_iter()
         .map(|target| {
+            validate_delivery_target(&target)?;
             let initial_status =
                 initial_delivery_target_status(&target, input.reticulum_preview_behavior);
-            PreparedDeliveryTarget {
+            Ok(PreparedDeliveryTarget {
                 target,
                 initial_status,
-            }
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, RadrootsOutboxError>>()?;
     let initial_status = initial_delivery_plan_status(&prepared_targets);
     let target_policy_fingerprint = target_policy_fingerprint(
         &input.satisfaction_policy,
@@ -1248,6 +1250,17 @@ fn prepare_delivery_plan(
         initial_status,
         targets: prepared_targets,
     })
+}
+
+fn validate_delivery_target(target: &RadrootsTransportTarget) -> Result<(), RadrootsOutboxError> {
+    if target.kind == RadrootsTransportKind::Reticulum
+        && target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+    {
+        return Err(RadrootsOutboxError::Transport(
+            radroots_transport::RadrootsTransportError::InvalidTargetUri,
+        ));
+    }
+    Ok(())
 }
 
 fn initial_delivery_target_status(
@@ -2026,6 +2039,19 @@ mod tests {
             .expect("reticulum target")
     }
 
+    fn malformed_reticulum_target(uri: &str) -> RadrootsTransportTarget {
+        let endpoint_uri = RadrootsTransportTargetUri::parse(uri).expect("target uri");
+        let endpoint_fingerprint = RadrootsTransportTargetFingerprint::from_target(
+            &RadrootsTransportKind::Reticulum,
+            &endpoint_uri,
+        );
+        RadrootsTransportTarget {
+            kind: RadrootsTransportKind::Reticulum,
+            uri: endpoint_uri,
+            fingerprint: endpoint_fingerprint,
+        }
+    }
+
     fn delivery_plan(targets: Vec<RadrootsTransportTarget>) -> RadrootsOutboxDeliveryPlanInput {
         RadrootsOutboxDeliveryPlanInput::new(
             "transport.nostr.local",
@@ -2206,6 +2232,35 @@ mod tests {
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_rejects_invalid_reticulum_targets_before_persistence() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(hex_64('a').as_str(), "invalid reticulum");
+
+        let err = outbox
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
+                "publish_post",
+                draft,
+                delivery_plan(vec![malformed_reticulum_target(
+                    "reticulum:preview-unavailable-alt",
+                )]),
+                1_000,
+            ))
+            .await
+            .expect_err("invalid Reticulum target");
+
+        assert!(matches!(
+            err,
+            RadrootsOutboxError::Transport(
+                radroots_transport::RadrootsTransportError::InvalidTargetUri
+            )
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_target").await, 0);
     }
 
     #[tokio::test]
