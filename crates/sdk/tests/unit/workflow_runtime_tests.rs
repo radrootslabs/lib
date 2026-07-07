@@ -100,7 +100,7 @@ fn workflow_delivery_plan() -> radroots_outbox::RadrootsOutboxDeliveryPlanInput 
     radroots_outbox::RadrootsOutboxDeliveryPlanInput::new(
         "explicit",
         1,
-        radroots_transport::RadrootsTransportSatisfactionPolicy::AllTargets,
+        radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
         target_set.into_targets(),
     )
 }

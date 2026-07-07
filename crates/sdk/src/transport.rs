@@ -1,7 +1,8 @@
 use crate::RadrootsSdkError;
 use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportKind, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt,
+    RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
 use serde::ser::{SerializeStruct, Serializer};
@@ -295,7 +296,7 @@ pub struct ReticulumPreviewProfile {
 impl ReticulumPreviewProfile {
     pub fn preview_unavailable() -> Self {
         Self {
-            endpoint_uri: "reticulum:preview".to_owned(),
+            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
             behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
         }
     }
@@ -522,7 +523,11 @@ impl TransportReceipt {
     pub fn satisfied_target_count(&self) -> usize {
         self.target_receipts
             .iter()
-            .filter(|receipt| receipt.status.counts_as_satisfied())
+            .filter(|receipt| {
+                receipt
+                    .status
+                    .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
+            })
             .count()
     }
 }

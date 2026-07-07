@@ -787,9 +787,9 @@ fn proxy_delivery_policy_from_satisfaction(
     }
     let required = satisfaction_policy.required_target_count(target_count)?;
     Ok(match satisfaction_policy {
-        RadrootsTransportSatisfactionPolicy::AnyTarget => TransportPublishDeliveryPolicy::Any,
-        RadrootsTransportSatisfactionPolicy::AllTargets => TransportPublishDeliveryPolicy::All,
-        RadrootsTransportSatisfactionPolicy::AtLeast(_) => {
+        RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
+        RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
+        RadrootsTransportSatisfactionPolicy::Quorum { .. } => {
             TransportPublishDeliveryPolicy::Quorum { quorum: required }
         }
     })

@@ -203,11 +203,11 @@ fn transport_satisfaction_policy(
 ) -> RadrootsTransportSatisfactionPolicy {
     match satisfaction_policy {
         SatisfactionPolicy::NoWait | SatisfactionPolicy::AllTargets => {
-            RadrootsTransportSatisfactionPolicy::AllTargets
+            RadrootsTransportSatisfactionPolicy::all_accepted()
         }
-        SatisfactionPolicy::AtLeastOneTarget => RadrootsTransportSatisfactionPolicy::AnyTarget,
+        SatisfactionPolicy::AtLeastOneTarget => RadrootsTransportSatisfactionPolicy::any_accepted(),
         SatisfactionPolicy::AtLeast { required } => {
-            RadrootsTransportSatisfactionPolicy::AtLeast(required)
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(required)
         }
     }
 }

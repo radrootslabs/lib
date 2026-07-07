@@ -554,7 +554,7 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
     assert_eq!(
         proxy_delivery_policy_from_satisfaction(
             0,
-            &RadrootsTransportSatisfactionPolicy::AllTargets
+            &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
         .expect("zero-target proxy policy"),
         TransportPublishDeliveryPolicy::Any
@@ -562,14 +562,17 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
     assert_eq!(
         proxy_delivery_policy_from_satisfaction(
             2,
-            &RadrootsTransportSatisfactionPolicy::AllTargets
+            &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
         .expect("all-target proxy policy"),
         TransportPublishDeliveryPolicy::All
     );
     assert_eq!(
-        proxy_delivery_policy_from_satisfaction(2, &RadrootsTransportSatisfactionPolicy::AnyTarget)
-            .expect("any-target proxy policy"),
+        proxy_delivery_policy_from_satisfaction(
+            2,
+            &RadrootsTransportSatisfactionPolicy::any_accepted()
+        )
+        .expect("any-target proxy policy"),
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(

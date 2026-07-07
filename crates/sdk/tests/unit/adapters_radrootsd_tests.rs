@@ -529,17 +529,17 @@ async fn relay_publish_adapter_derives_delivery_policy_and_timeout() {
     for (target_count, satisfaction_policy, expected_policy) in [
         (
             2,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::AllTargets,
+            radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
             TransportPublishDeliveryPolicy::All,
         ),
         (
             2,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::AnyTarget,
+            radroots_transport::RadrootsTransportSatisfactionPolicy::any_accepted(),
             TransportPublishDeliveryPolicy::Any,
         ),
         (
             3,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::AtLeast(2),
+            radroots_transport::RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
             TransportPublishDeliveryPolicy::Quorum { quorum: 2 },
         ),
     ] {
