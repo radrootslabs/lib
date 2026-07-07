@@ -10,6 +10,7 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::fmt;
+use radroots_transport::{RadrootsTransportError, RadrootsTransportKind};
 
 pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
 pub const DAEMON_NAME: &str = "radrootsd";
@@ -31,6 +32,9 @@ pub enum TransportPublishProtocolError {
     },
     EmptyIdempotencyKey,
     EmptyTransportKind {
+        index: usize,
+    },
+    InvalidTransportKind {
         index: usize,
     },
     EmptyEndpointUri {
@@ -63,6 +67,12 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::EmptyIdempotencyKey => f.write_str("idempotency key must not be empty"),
             Self::EmptyTransportKind { index } => {
                 write!(f, "transport target {index} kind must not be empty")
+            }
+            Self::InvalidTransportKind { index } => {
+                write!(
+                    f,
+                    "transport target {index} kind must be canonical lowercase"
+                )
             }
             Self::EmptyEndpointUri { index } => {
                 write!(f, "transport target {index} endpoint_uri must not be empty")
@@ -163,15 +173,29 @@ impl TransportPublishTarget {
         if self.transport_kind.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyTransportKind { index });
         }
+        let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
+            .map_err(|error| transport_kind_error(error, index))?;
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
         }
-        if self.transport_kind.trim() == "reticulum"
-            && self.endpoint_uri.trim() != RETICULUM_PREVIEW_ENDPOINT_URI
+        if transport_kind == RadrootsTransportKind::Reticulum
+            && self.endpoint_uri != RETICULUM_PREVIEW_ENDPOINT_URI
         {
             return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
         }
         Ok(())
+    }
+}
+
+fn transport_kind_error(
+    error: RadrootsTransportError,
+    index: usize,
+) -> TransportPublishProtocolError {
+    match error {
+        RadrootsTransportError::EmptyTransportKind => {
+            TransportPublishProtocolError::EmptyTransportKind { index }
+        }
+        _ => TransportPublishProtocolError::InvalidTransportKind { index },
     }
 }
 
@@ -747,12 +771,40 @@ mod tests {
             Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 0 })
         );
 
+        let mut noncanonical_reticulum_kind = request.clone();
+        noncanonical_reticulum_kind.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: "Reticulum".to_owned(),
+                endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+            }]);
+        assert_eq!(
+            noncanonical_reticulum_kind.validate(1),
+            Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
+        );
+
+        let mut removed_proxy_kind = request.clone();
+        removed_proxy_kind.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: removed_proxy_kind_string(),
+                endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+                preview_behavior: None,
+            }]);
+        assert_eq!(
+            removed_proxy_kind.validate(1),
+            Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
+        );
+
         let mut empty_key = request.clone();
         empty_key.idempotency_key = Some(" ".to_owned());
         assert_eq!(
             empty_key.validate(1),
             Err(TransportPublishProtocolError::EmptyIdempotencyKey)
         );
+    }
+
+    fn removed_proxy_kind_string() -> String {
+        ["radrootsd", "_proxy"].concat()
     }
 
     #[test]
@@ -848,6 +900,10 @@ mod tests {
             (
                 TransportPublishProtocolError::EmptyTransportKind { index: 1 },
                 "transport target 1 kind must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidTransportKind { index: 2 },
+                "transport target 2 kind must be canonical lowercase",
             ),
             (
                 TransportPublishProtocolError::EmptyEndpointUri { index: 3 },
@@ -967,6 +1023,17 @@ mod tests {
         assert_eq!(
             empty_targets.validate(10),
             Err(TransportPublishProtocolError::EmptyTransportKind { index: 0 })
+        );
+
+        empty_targets.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: "Nostr".to_owned(),
+                endpoint_uri: "wss://relay.example".to_owned(),
+                preview_behavior: None,
+            }]);
+        assert_eq!(
+            empty_targets.validate(10),
+            Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
         );
 
         empty_targets.target_policy = TransportPublishTargetPolicy::nostr(

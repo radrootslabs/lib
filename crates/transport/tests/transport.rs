@@ -65,6 +65,15 @@ fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
         RadrootsTransportKind::Custom("fieldbus".to_owned())
     );
     assert_eq!(
+        RadrootsTransportKind::parse(removed_proxy_kind()).expect_err("removed proxy kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
+        RadrootsTransportKind::custom(removed_proxy_kind().to_ascii_uppercase())
+            .expect_err("removed proxy custom kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
         RadrootsTransportKind::Custom("fieldbus".to_owned()).canonical_label(),
         "fieldbus".to_owned()
     );
@@ -72,6 +81,39 @@ fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
         RadrootsTransportKind::parse("bad kind").expect_err("invalid kind"),
         RadrootsTransportError::InvalidTransportKind
     );
+}
+
+#[test]
+fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical("nostr").expect("nostr kind"),
+        RadrootsTransportKind::Nostr
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical("fieldbus").expect("custom kind"),
+        RadrootsTransportKind::Custom("fieldbus".to_owned())
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical("NOSTR").expect_err("uppercase kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical(" nostr ").expect_err("trimmed kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical(removed_proxy_kind())
+            .expect_err("removed proxy kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical("").expect_err("empty kind"),
+        RadrootsTransportError::EmptyTransportKind
+    );
+}
+
+fn removed_proxy_kind() -> String {
+    ["radrootsd", "_proxy"].concat()
 }
 
 #[test]

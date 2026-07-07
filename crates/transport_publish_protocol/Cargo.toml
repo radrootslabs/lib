@@ -17,6 +17,7 @@ std = []
 serde = ["dep:serde"]
 
 [dependencies]
+radroots_transport = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true, features = ["alloc", "derive"] }
 
 [dev-dependencies]
