@@ -1339,6 +1339,23 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         !sync_runtime_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
         "src/sync_runtime.rs must not rewrite Reticulum proxy outbox targets to reject attempts"
     );
+    let sync_runtime_unit_source = read_source(
+        manifest_dir
+            .join("tests/unit/sync_runtime_tests.rs")
+            .as_path(),
+    );
+    for required in [
+        "claimed_uningested_proxy_event",
+        "assert_no_transport_publish_request",
+        "assert!(!stored_before.event_store_ingested)",
+        "assert!(!stored.event_store_ingested)",
+        "with_timeout(Duration::from_millis(50))",
+    ] {
+        assert!(
+            sync_runtime_unit_source.contains(required),
+            "tests/unit/sync_runtime_tests.rs must retain proxy local-validation ordering proof `{required}`"
+        );
+    }
 
     let adapter_source = read_source(manifest_dir.join("src/adapters/radrootsd.rs").as_path());
     assert!(

@@ -38,8 +38,9 @@ use radroots_nostr::prelude::{
 };
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_outbox::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
-    RadrootsOutboxDeliveryTargetStatus,
+    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput,
+    RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
+    RadrootsOutboxOperationInput,
 };
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
@@ -58,6 +59,12 @@ use radroots_transport_publish_protocol::{
     TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::collections::BTreeSet;
+#[cfg(feature = "radrootsd-proxy")]
+use std::io::ErrorKind;
+#[cfg(feature = "radrootsd-proxy")]
+use std::net::TcpListener;
+#[cfg(feature = "radrootsd-proxy")]
+use std::time::Duration;
 
 #[cfg(feature = "radrootsd-proxy")]
 const PROXY_SIGNER_SECRET_KEY_HEX: &str =
@@ -177,6 +184,102 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
         .expect("claim")
         .expect("claimed event");
     (sdk, claimed)
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+async fn claimed_uningested_proxy_event(
+    d_tag: &str,
+    proxy_endpoint: &str,
+) -> (crate::RadrootsClient, RadrootsOutboxClaimedEvent) {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_000,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let draft = proxy_frozen_draft(d_tag);
+    let proxy_target = RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, proxy_endpoint)
+        .expect("proxy target");
+    let enqueue = sdk
+        ._outbox
+        .enqueue_operation(
+            RadrootsOutboxOperationInput::new(
+                "sync.proxy.unit.v1",
+                draft,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "proxy",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![proxy_target],
+                ),
+                1_700_000_000_000,
+            )
+            .with_idempotency_key(format!("proxy-uningested-{d_tag}")),
+        )
+        .await
+        .expect("enqueue");
+    let signing_claim = sdk
+        ._outbox
+        .claim_next_ready_event(
+            CLAIM_OWNER,
+            "proxy-unit-sign",
+            1_700_000_000_500,
+            1_700_000_000_000,
+        )
+        .await
+        .expect("signing claim")
+        .expect("signing claim");
+    let signed_event = ProxyFixtureSigner::new()
+        .sign_frozen_draft(&signing_claim.draft)
+        .expect("signed event");
+    sdk._outbox
+        .complete_signing(
+            enqueue.outbox_event_id,
+            "proxy-unit-sign",
+            signed_event,
+            1_700_000_000_100,
+        )
+        .await
+        .expect("complete signing");
+    let stored = sdk
+        ._outbox
+        .get_event(enqueue.outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::Signed);
+    assert!(!stored.event_store_ingested);
+    assert_eq!(stored.event_store_ingested_at_ms, None);
+    assert_eq!(
+        sdk._outbox
+            .recover_expired_claims(1_700_000_000_501)
+            .await
+            .expect("recover signing claim"),
+        1
+    );
+    let claimed = sdk
+        ._outbox
+        .claim_next_ready_signed_event(
+            CLAIM_OWNER,
+            "proxy-unit-publish",
+            1_700_000_060_000,
+            1_700_000_001_000,
+        )
+        .await
+        .expect("publish claim")
+        .expect("publish claim");
+    (sdk, claimed)
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+fn assert_no_transport_publish_request(listener: &TcpListener) {
+    listener.set_nonblocking(true).expect("nonblocking");
+    match listener.accept() {
+        Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+        Err(error) => panic!("transport publish listener failed before request check: {error}"),
+        Ok(_) => panic!("transport publish listener received a request after local validation"),
+    }
 }
 
 #[cfg(feature = "radrootsd-proxy")]
@@ -784,7 +887,18 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
 #[cfg(feature = "radrootsd-proxy")]
 #[tokio::test]
 async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
-    let (sdk, mut claimed) = claimed_proxy_event("proxy-local-validation-error").await;
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
+    let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
+    let (sdk, mut claimed) =
+        claimed_uningested_proxy_event("proxy-local-validation-error", endpoint.as_str()).await;
+    let stored_before = sdk
+        ._outbox
+        .get_event(claimed.outbox_event_id)
+        .await
+        .expect("stored before")
+        .expect("stored before");
+    assert!(!stored_before.event_store_ingested);
+    assert_eq!(stored_before.event_store_ingested_at_ms, None);
     let reticulum_target = RadrootsTransportTarget::new(
         RadrootsTransportKind::Reticulum,
         RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
@@ -794,12 +908,14 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
     let sync = sdk.sync();
-    let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+    let adapter = RadrootsdProxyPublishAdapter::new(
+        RadrootsdProxyConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
+    );
     let error =
         push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
             .expect_err("local proxy validation error");
+    assert_no_transport_publish_request(&listener);
 
     assert!(matches!(
         error,
@@ -816,7 +932,8 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::FailedTerminal);
     assert!(stored.claim_token.is_none());
-    assert!(stored.event_store_ingested);
+    assert!(!stored.event_store_ingested);
+    assert_eq!(stored.event_store_ingested_at_ms, None);
     assert!(
         stored
             .last_error
