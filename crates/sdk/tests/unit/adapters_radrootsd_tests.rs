@@ -716,6 +716,22 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
             endpoint_uri: "wss://relay.example.com".to_owned(),
             preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
         }]);
+    let mut explicit_proxy_target = base.clone();
+    explicit_proxy_target.target_policy =
+        TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+            transport_kind: "proxy".to_owned(),
+            endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+            preview_behavior: None,
+        }]);
+    let proxy_error = adapter
+        .publish_signed_event(explicit_proxy_target)
+        .await
+        .expect_err("explicit proxy target");
+    assert!(matches!(
+        proxy_error,
+        RadrootsdError::InvalidRequest(message)
+            if message.contains("proxy") && message.contains("daemon explicit target")
+    ));
     let mut empty_idempotency = base;
     empty_idempotency.idempotency_key = Some(" ".to_owned());
 
