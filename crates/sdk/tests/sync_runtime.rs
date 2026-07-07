@@ -595,6 +595,8 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
                 "retryable_events": 0,
                 "terminal_events": 0,
                 "failed_terminal_events": 0,
+                "preview_unavailable_events": 0,
+                "deferred_until_implemented_events": 0,
                 "ready_signed_events": 0,
                 "publishing_events": 0,
                 "last_attempt_at_ms": null,
@@ -1934,7 +1936,22 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_specific_rea
             .await
             .expect("status");
         assert_eq!(status.outbox.ready_signed_events, 0);
-        assert_eq!(status.outbox.pending_events, 1);
+        assert_eq!(status.outbox.pending_events, 0);
+        let expected_preview = if behavior == ReticulumPreviewBehavior::RejectDeliveryAttempts {
+            1
+        } else {
+            0
+        };
+        let expected_deferred = if behavior == ReticulumPreviewBehavior::DeferDeliveryPlans {
+            1
+        } else {
+            0
+        };
+        assert_eq!(status.outbox.preview_unavailable_events, expected_preview);
+        assert_eq!(
+            status.outbox.deferred_until_implemented_events,
+            expected_deferred
+        );
         assert_eq!(status.outbox.total_events, 1);
         assert_eq!(enqueue.outbox_event_id, 1);
     }

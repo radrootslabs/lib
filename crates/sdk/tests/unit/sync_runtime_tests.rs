@@ -392,6 +392,8 @@ fn sync_status_summary_conversions_preserve_all_fields() {
         retryable_events: 4,
         terminal_events: 2,
         failed_terminal_events: 1,
+        preview_unavailable_events: 9,
+        deferred_until_implemented_events: 10,
         ready_signed_events: 6,
         publishing_events: 8,
         last_attempt_at_ms: Some(1_700_000_000_001),
@@ -403,6 +405,8 @@ fn sync_status_summary_conversions_preserve_all_fields() {
     assert_eq!(outbox_status.retryable_events, 4);
     assert_eq!(outbox_status.terminal_events, 2);
     assert_eq!(outbox_status.failed_terminal_events, 1);
+    assert_eq!(outbox_status.preview_unavailable_events, 9);
+    assert_eq!(outbox_status.deferred_until_implemented_events, 10);
     assert_eq!(outbox_status.ready_signed_events, 6);
     assert_eq!(outbox_status.publishing_events, 8);
     assert_eq!(outbox_status.last_attempt_at_ms, Some(1_700_000_000_001));

@@ -97,6 +97,8 @@ fn storage_status() -> StorageStatusReceipt {
             retryable_events: 0,
             terminal_events: 0,
             failed_terminal_events: 0,
+            preview_unavailable_events: 0,
+            deferred_until_implemented_events: 0,
             ready_signed_events: 0,
             publishing_events: 0,
             last_attempt_at_ms: None,

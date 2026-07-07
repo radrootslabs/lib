@@ -123,6 +123,8 @@ pub struct SyncOutboxStatus {
     pub retryable_events: i64,
     pub terminal_events: i64,
     pub failed_terminal_events: i64,
+    pub preview_unavailable_events: i64,
+    pub deferred_until_implemented_events: i64,
     pub ready_signed_events: i64,
     pub publishing_events: i64,
     pub last_attempt_at_ms: Option<i64>,
@@ -138,6 +140,8 @@ impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
             retryable_events: summary.retryable_events,
             terminal_events: summary.terminal_events,
             failed_terminal_events: summary.failed_terminal_events,
+            preview_unavailable_events: summary.preview_unavailable_events,
+            deferred_until_implemented_events: summary.deferred_until_implemented_events,
             ready_signed_events: summary.ready_signed_events,
             publishing_events: summary.publishing_events,
             last_attempt_at_ms: summary.last_attempt_at_ms,
@@ -588,7 +592,9 @@ impl<'sdk> SyncClient<'sdk> {
         let summary = self.sdk._outbox.status_summary(now_ms).await?;
         Ok(summary.ready_signed_events == 0
             && summary.pending_events == 0
-            && summary.retryable_events == 0)
+            && summary.retryable_events == 0
+            && summary.preview_unavailable_events == 0
+            && summary.deferred_until_implemented_events == 0)
     }
 
     pub async fn push_outbox_with_adapter<A>(
