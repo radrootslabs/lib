@@ -50,6 +50,9 @@ pub enum RadrootsOutboxError {
     #[error("Claim token mismatch for outbox event {outbox_event_id}")]
     ClaimTokenMismatch { outbox_event_id: i64 },
 
+    #[error("Outbox event {outbox_event_id} has no active delivery plan")]
+    MissingActiveDeliveryPlan { outbox_event_id: i64 },
+
     #[error("Signed event missing for outbox event {0}")]
     MissingSignedEvent(i64),
 

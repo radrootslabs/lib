@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS outbox_operations (
   expected_pubkey TEXT NOT NULL,
   idempotency_key TEXT,
   operation_idempotency_digest TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'failed_terminal', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'deferred_until_implemented', 'preview_unavailable', 'failed_terminal', 'cancelled')),
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -24,11 +24,12 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   draft_json TEXT NOT NULL,
   signed_event_json TEXT,
   raw_event_json TEXT,
-  state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'failed_terminal', 'cancelled')),
+  state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'deferred_until_implemented', 'preview_unavailable', 'failed_terminal', 'cancelled')),
   attempt_count INTEGER NOT NULL,
   claim_token TEXT,
   claim_owner TEXT,
   claim_expires_at_ms INTEGER,
+  active_delivery_plan_id INTEGER REFERENCES outbox_delivery_plan(delivery_plan_id) ON DELETE SET NULL,
   next_attempt_after_ms INTEGER NOT NULL,
   last_error TEXT,
   event_store_ingested INTEGER NOT NULL,

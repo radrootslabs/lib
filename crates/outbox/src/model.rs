@@ -11,6 +11,8 @@ use radroots_transport::{
 pub enum RadrootsOutboxOperationStatus {
     Queued,
     Complete,
+    DeferredUntilImplemented,
+    PreviewUnavailable,
     FailedTerminal,
     Cancelled,
 }
@@ -20,6 +22,8 @@ impl RadrootsOutboxOperationStatus {
         match self {
             Self::Queued => "queued",
             Self::Complete => "complete",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::PreviewUnavailable => "preview_unavailable",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -29,6 +33,8 @@ impl RadrootsOutboxOperationStatus {
         match value {
             "queued" => Ok(Self::Queued),
             "complete" => Ok(Self::Complete),
+            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "preview_unavailable" => Ok(Self::PreviewUnavailable),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -48,6 +54,8 @@ pub enum RadrootsOutboxEventState {
     Published,
     SignRetryable,
     PublishRetryable,
+    DeferredUntilImplemented,
+    PreviewUnavailable,
     FailedTerminal,
     Cancelled,
 }
@@ -62,6 +70,8 @@ impl RadrootsOutboxEventState {
             Self::Published => "published",
             Self::SignRetryable => "sign_retryable",
             Self::PublishRetryable => "publish_retryable",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::PreviewUnavailable => "preview_unavailable",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -76,6 +86,8 @@ impl RadrootsOutboxEventState {
             "published" => Ok(Self::Published),
             "sign_retryable" => Ok(Self::SignRetryable),
             "publish_retryable" => Ok(Self::PublishRetryable),
+            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "preview_unavailable" => Ok(Self::PreviewUnavailable),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -404,6 +416,7 @@ pub struct RadrootsOutboxEventRecord {
     pub claim_token: Option<String>,
     pub claim_owner: Option<String>,
     pub claim_expires_at_ms: Option<i64>,
+    pub active_delivery_plan_id: Option<i64>,
     pub next_attempt_after_ms: i64,
     pub last_error: Option<String>,
     pub event_store_ingested: bool,
@@ -461,6 +474,7 @@ pub struct RadrootsOutboxClaimedEvent {
     pub attempt_count: i64,
     pub state: RadrootsOutboxEventState,
     pub claim_token: String,
+    pub active_delivery_plan_id: Option<i64>,
     pub draft: RadrootsFrozenEventDraft,
     pub signed_event: Option<RadrootsSignedNostrEvent>,
     pub delivery_targets: Vec<RadrootsOutboxDeliveryTargetRecord>,
@@ -499,6 +513,14 @@ mod tests {
             (RadrootsOutboxOperationStatus::Queued, "queued"),
             (RadrootsOutboxOperationStatus::Complete, "complete"),
             (
+                RadrootsOutboxOperationStatus::DeferredUntilImplemented,
+                "deferred_until_implemented",
+            ),
+            (
+                RadrootsOutboxOperationStatus::PreviewUnavailable,
+                "preview_unavailable",
+            ),
+            (
                 RadrootsOutboxOperationStatus::FailedTerminal,
                 "failed_terminal",
             ),
@@ -508,6 +530,35 @@ mod tests {
             assert_eq!(
                 RadrootsOutboxOperationStatus::parse(expected).expect("status"),
                 status
+            );
+        }
+
+        for (state, expected) in [
+            (RadrootsOutboxEventState::DraftQueued, "draft_queued"),
+            (RadrootsOutboxEventState::Signing, "signing"),
+            (RadrootsOutboxEventState::Signed, "signed"),
+            (RadrootsOutboxEventState::Publishing, "publishing"),
+            (RadrootsOutboxEventState::Published, "published"),
+            (RadrootsOutboxEventState::SignRetryable, "sign_retryable"),
+            (
+                RadrootsOutboxEventState::PublishRetryable,
+                "publish_retryable",
+            ),
+            (
+                RadrootsOutboxEventState::DeferredUntilImplemented,
+                "deferred_until_implemented",
+            ),
+            (
+                RadrootsOutboxEventState::PreviewUnavailable,
+                "preview_unavailable",
+            ),
+            (RadrootsOutboxEventState::FailedTerminal, "failed_terminal"),
+            (RadrootsOutboxEventState::Cancelled, "cancelled"),
+        ] {
+            assert_eq!(state.as_str(), expected);
+            assert_eq!(
+                RadrootsOutboxEventState::parse(expected).expect("event state"),
+                state
             );
         }
 
