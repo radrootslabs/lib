@@ -106,6 +106,21 @@ const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[
     "trade_validation",
 ];
 
+const FORBIDDEN_DAEMON_PUBLISH_PROXY_IDENTIFIERS: &[&str] = &[
+    "radrootsd.publish_proxy.v1",
+    "radroots_publish_proxy_protocol",
+    "publish_proxy_protocol",
+    "publish.relays.resolve",
+    "\"publish.event\"",
+    "PublishRelayPolicy",
+    "PublishDeliveryPolicy",
+    "PublishEventRequest",
+    "PublishEventResponse",
+    "PublishJobView",
+    "PublishRelayOutcome",
+    "PublishRelaySource",
+];
+
 const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "RadrootsClient::builder()",
     "sdk.trades()",
@@ -1273,6 +1288,27 @@ fn sdk_public_api_does_not_export_protocol_workflow_bypass() {
         !manifest_dir.join("src/protocol").exists(),
         "src/protocol must not remain as a public protocol re-export surface"
     );
+}
+
+#[test]
+fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    for relative_path in [
+        "Cargo.toml",
+        "src/lib.rs",
+        "src/adapters/radrootsd.rs",
+        "src/sync_runtime.rs",
+        "src/transport.rs",
+    ] {
+        let source = read_source(manifest_dir.join(relative_path).as_path());
+        for forbidden in FORBIDDEN_DAEMON_PUBLISH_PROXY_IDENTIFIERS {
+            assert!(
+                !contains_forbidden_concept(source.as_str(), forbidden),
+                "{relative_path} must not reintroduce removed daemon publish proxy identifier `{forbidden}`"
+            );
+        }
+    }
 }
 
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
