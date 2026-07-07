@@ -49,8 +49,16 @@ fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
         RadrootsTransportKind::Local
     );
     assert_eq!(
+        RadrootsTransportKind::parse("PROXY").expect("proxy kind"),
+        RadrootsTransportKind::Proxy
+    );
+    assert_eq!(
         RadrootsTransportKind::Local.canonical_label(),
         "local".to_owned()
+    );
+    assert_eq!(
+        RadrootsTransportKind::Proxy.canonical_label(),
+        "proxy".to_owned()
     );
     assert_eq!(
         RadrootsTransportKind::parse("fieldbus").expect("custom kind"),

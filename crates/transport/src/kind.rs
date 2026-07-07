@@ -8,6 +8,7 @@ pub enum RadrootsTransportKind {
     Reticulum,
     Mesh,
     Local,
+    Proxy,
     Custom(String),
 }
 
@@ -19,6 +20,7 @@ impl RadrootsTransportKind {
             "reticulum" => Ok(Self::Reticulum),
             "mesh" => Ok(Self::Mesh),
             "local" => Ok(Self::Local),
+            "proxy" => Ok(Self::Proxy),
             _ => Self::custom(canonical),
         }
     }
@@ -44,6 +46,7 @@ impl RadrootsTransportKind {
             Self::Reticulum => "reticulum".to_string(),
             Self::Mesh => "mesh".to_string(),
             Self::Local => "local".to_string(),
+            Self::Proxy => "proxy".to_string(),
             Self::Custom(value) => value.clone(),
         }
     }

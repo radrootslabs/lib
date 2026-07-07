@@ -527,7 +527,7 @@ impl TransportPublishCapabilities {
                         preview_behavior: Some(
                             TransportPublishPreviewBehavior::RejectDeliveryAttempts,
                         ),
-                        message: "Reticulum preview is explicit and unavailable for real delivery"
+                        message: "Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."
                             .to_owned(),
                     },
                 ],

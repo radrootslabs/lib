@@ -149,6 +149,12 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
             target_receipt.outcome.code.as_deref(),
             Some("transport_unavailable")
         );
+        assert_eq!(
+            target_receipt.outcome.message.as_deref(),
+            Some(
+                "Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."
+            )
+        );
     }
 }
 
