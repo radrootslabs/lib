@@ -96,6 +96,59 @@ impl RadrootsOutbox {
         .fetch_one(&self.pool)
         .await?
         .try_get(0)?;
+        let deferred_preview_row = sqlx::query(
+            r#"
+            WITH signed_target_state AS (
+                SELECT
+                    event.outbox_event_id,
+                    EXISTS (
+                        SELECT 1
+                        FROM outbox_delivery_plan AS plan
+                        JOIN outbox_delivery_target AS target
+                            ON target.delivery_plan_id = plan.delivery_plan_id
+                        WHERE plan.outbox_event_id = event.outbox_event_id
+                            AND target.status = 'preview_unavailable'
+                    ) AS has_preview_unavailable,
+                    EXISTS (
+                        SELECT 1
+                        FROM outbox_delivery_plan AS plan
+                        JOIN outbox_delivery_target AS target
+                            ON target.delivery_plan_id = plan.delivery_plan_id
+                        WHERE plan.outbox_event_id = event.outbox_event_id
+                            AND target.status = 'deferred_until_implemented'
+                    ) AS has_deferred_until_implemented,
+                    EXISTS (
+                        SELECT 1
+                        FROM outbox_delivery_plan AS plan
+                        JOIN outbox_delivery_target AS target
+                            ON target.delivery_plan_id = plan.delivery_plan_id
+                        WHERE plan.outbox_event_id = event.outbox_event_id
+                            AND target.status IN ('pending', 'failed_retryable')
+                    ) AS has_ready_target
+                FROM outbox_event AS event
+                WHERE event.state = 'signed'
+                    AND event.signed_event_json IS NOT NULL
+            )
+            SELECT
+                COALESCE(SUM(CASE
+                    WHEN has_preview_unavailable AND NOT has_ready_target THEN 1
+                    ELSE 0
+                END), 0) AS preview_unavailable_events,
+                COALESCE(SUM(CASE
+                    WHEN NOT has_preview_unavailable
+                        AND has_deferred_until_implemented
+                        AND NOT has_ready_target THEN 1
+                    ELSE 0
+                END), 0) AS deferred_until_implemented_events
+            FROM signed_target_state
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let preview_unavailable_events: i64 =
+            deferred_preview_row.try_get("preview_unavailable_events")?;
+        let deferred_until_implemented_events: i64 =
+            deferred_preview_row.try_get("deferred_until_implemented_events")?;
         let last_attempt_at_ms =
             sqlx::query("SELECT MAX(attempted_at_ms) FROM outbox_delivery_attempt")
                 .fetch_one(&self.pool)
@@ -108,12 +161,17 @@ impl RadrootsOutbox {
         .await?
         .map(|row| row.try_get("last_error"))
         .transpose()?;
+        let pending_events: i64 = row.try_get("pending_events")?;
         Ok(RadrootsOutboxStatusSummary {
             total_events: row.try_get("total_events")?,
-            pending_events: row.try_get("pending_events")?,
+            pending_events: pending_events
+                .saturating_sub(preview_unavailable_events)
+                .saturating_sub(deferred_until_implemented_events),
             retryable_events: row.try_get("retryable_events")?,
             terminal_events: row.try_get("terminal_events")?,
             failed_terminal_events: row.try_get("failed_terminal_events")?,
+            preview_unavailable_events,
+            deferred_until_implemented_events,
             ready_signed_events,
             publishing_events: row.try_get("publishing_events")?,
             last_attempt_at_ms,
@@ -2376,7 +2434,10 @@ mod tests {
             RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable
         );
         let summary = outbox.status_summary(1_000).await.expect("summary");
+        assert_eq!(summary.pending_events, 0);
         assert_eq!(summary.ready_signed_events, 0);
+        assert_eq!(summary.preview_unavailable_events, 1);
+        assert_eq!(summary.deferred_until_implemented_events, 0);
         assert!(
             outbox
                 .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
@@ -2430,7 +2491,10 @@ mod tests {
             RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
         );
         let summary = outbox.status_summary(1_000).await.expect("summary");
+        assert_eq!(summary.pending_events, 0);
         assert_eq!(summary.ready_signed_events, 0);
+        assert_eq!(summary.preview_unavailable_events, 0);
+        assert_eq!(summary.deferred_until_implemented_events, 1);
         assert!(
             outbox
                 .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
@@ -2517,6 +2581,10 @@ mod tests {
                 .ready_signed_events,
             1
         );
+        let summary = outbox.status_summary(1_000).await.expect("summary");
+        assert_eq!(summary.pending_events, 1);
+        assert_eq!(summary.preview_unavailable_events, 0);
+        assert_eq!(summary.deferred_until_implemented_events, 0);
     }
 
     #[tokio::test]
@@ -2616,12 +2684,32 @@ mod tests {
                 .expect("plans");
             assert_eq!(plans[0].status, expected_plan_status);
             assert_eq!(
-                outbox
-                    .status_summary(1_200)
-                    .await
-                    .expect("summary")
-                    .ready_signed_events,
-                0
+                outbox.status_summary(1_200).await.expect("summary"),
+                RadrootsOutboxStatusSummary {
+                    total_events: 1,
+                    pending_events: 0,
+                    retryable_events: 0,
+                    terminal_events: 0,
+                    failed_terminal_events: 0,
+                    preview_unavailable_events: if expected_status
+                        == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+                    {
+                        1
+                    } else {
+                        0
+                    },
+                    deferred_until_implemented_events: if expected_status
+                        == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+                    {
+                        1
+                    } else {
+                        0
+                    },
+                    ready_signed_events: 0,
+                    publishing_events: 0,
+                    last_attempt_at_ms: Some(1_100),
+                    last_error: Some("delivery deferred until implemented".to_owned()),
+                }
             );
         }
     }
