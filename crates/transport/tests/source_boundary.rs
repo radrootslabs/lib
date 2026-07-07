@@ -145,12 +145,21 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI",
         "reticulum:preview-unavailable",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
-        "Reticulum transport is configured for future compatibility, ",
+        "Reticulum preview transport is registered, ",
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
             transport_message_source.contains(required),
             "transport message source must retain Reticulum unavailable message witness `{required}`"
+        );
+    }
+    for forbidden in [
+        "Reticulum transport is configured for future compatibility",
+        "future compatibility",
+    ] {
+        assert!(
+            !transport_message_source.contains(forbidden),
+            "transport message source must not use compatibility-posture Reticulum unavailable copy `{forbidden}`"
         );
     }
 
@@ -169,7 +178,7 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "Reticulum preview source must consume the shared unavailable message constant"
     );
     assert!(
-        !reticulum_source.contains("Reticulum transport is configured for future compatibility, "),
+        !reticulum_source.contains("Reticulum transport is configured for future compatibility"),
         "Reticulum preview source must not duplicate the shared unavailable message"
     );
 
@@ -192,7 +201,7 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "transport publish capabilities must consume the shared Reticulum unavailable message"
     );
     assert!(
-        !protocol_source.contains("Reticulum transport is configured for future compatibility, "),
+        !protocol_source.contains("Reticulum transport is configured for future compatibility"),
         "transport publish protocol must not duplicate the shared unavailable message"
     );
 }
