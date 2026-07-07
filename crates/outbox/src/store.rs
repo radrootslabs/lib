@@ -745,6 +745,44 @@ impl RadrootsOutbox {
         .await
     }
 
+    pub async fn mark_delivery_target_deferred_until_implemented(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        message: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+            Some(message),
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_preview_unavailable(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        message: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
+            Some(message),
+            attempted_at_ms,
+        )
+        .await
+    }
+
     pub async fn mark_delivery_target_skipped_policy_denied(
         &self,
         outbox_event_id: i64,
@@ -2479,6 +2517,113 @@ mod tests {
                 .ready_signed_events,
             1
         );
+    }
+
+    #[tokio::test]
+    async fn claimed_delivery_targets_can_complete_as_preview_outcomes() {
+        for (content, mark, expected_status, expected_plan_status) in [
+            (
+                "proxy deferred",
+                "deferred",
+                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+                RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented,
+            ),
+            (
+                "proxy preview unavailable",
+                "preview",
+                RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
+                RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable,
+            ),
+        ] {
+            let outbox = RadrootsOutbox::open_memory().await.expect("open");
+            let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, content);
+            let signed_event =
+                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let receipt = outbox
+                .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event,
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.nostr.local",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                    ),
+                    true,
+                    1_007,
+                    1_000,
+                ))
+                .await
+                .expect("enqueue");
+            let claimed = outbox
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+                .await
+                .expect("claim")
+                .expect("claimed");
+            let target_id = claimed.delivery_targets[0].delivery_target_id;
+
+            match mark {
+                "deferred" => {
+                    outbox
+                        .mark_delivery_target_deferred_until_implemented(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            "transport deferred",
+                            1_100,
+                        )
+                        .await
+                        .expect("deferred");
+                }
+                "preview" => {
+                    outbox
+                        .mark_delivery_target_preview_unavailable(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            "transport preview unavailable",
+                            1_100,
+                        )
+                        .await
+                        .expect("preview unavailable");
+                }
+                _ => unreachable!(),
+            }
+
+            let state = outbox
+                .complete_publish_attempt(
+                    receipt.outbox_event_id,
+                    "claim-a",
+                    "retryable",
+                    "terminal",
+                    2_500,
+                    1_200,
+                )
+                .await
+                .expect("complete");
+            assert_eq!(state, RadrootsOutboxEventState::Signed);
+            let targets = outbox
+                .delivery_targets(receipt.outbox_event_id)
+                .await
+                .expect("targets");
+            assert_eq!(targets[0].status, expected_status);
+            assert_eq!(targets[0].completed_at_ms, Some(1_100));
+            assert_eq!(targets[0].attempt_count, 1);
+            let plans = outbox
+                .delivery_plans(receipt.outbox_event_id)
+                .await
+                .expect("plans");
+            assert_eq!(plans[0].status, expected_plan_status);
+            assert_eq!(
+                outbox
+                    .status_summary(1_200)
+                    .await
+                    .expect("summary")
+                    .ready_signed_events,
+                0
+            );
+        }
     }
 
     #[tokio::test]
