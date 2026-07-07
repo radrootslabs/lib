@@ -13,8 +13,8 @@ use radroots_transport_nostr::{
 use radroots_transport_publish_protocol::{
     METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
     TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishOutcomeKind,
-    TransportPublishPreviewBehavior, TransportPublishProtocolError, TransportPublishTarget,
-    TransportPublishTargetOutcome, TransportPublishTargetPolicy,
+    TransportPublishProtocolError, TransportPublishTarget, TransportPublishTargetOutcome,
+    TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -127,7 +127,10 @@ impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
                 )?,
                 signed_event: request.signed_event,
                 target_policy: TransportPublishTargetPolicy::explicit_targets(
-                    targets.iter().map(transport_publish_target).collect(),
+                    targets
+                        .iter()
+                        .map(transport_publish_target)
+                        .collect::<Result<Vec<_>, _>>()?,
                 ),
                 idempotency_key: None,
                 timeout_ms: self.config.request_timeout_ms,
@@ -356,16 +359,20 @@ fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
     }
 }
 
-fn transport_publish_target(target: &RadrootsTransportTarget) -> TransportPublishTarget {
-    TransportPublishTarget {
+fn transport_publish_target(
+    target: &RadrootsTransportTarget,
+) -> Result<TransportPublishTarget, RadrootsRelayTransportError> {
+    if target.kind != RadrootsTransportKind::Nostr {
+        return Err(RadrootsRelayTransportError::Transport(format!(
+            "radrootsd proxy relay adapter is Nostr-only and cannot publish {} targets",
+            target.kind.canonical_label()
+        )));
+    }
+    Ok(TransportPublishTarget {
         transport_kind: target.kind.canonical_label(),
         endpoint_uri: target.uri.as_str().to_owned(),
-        preview_behavior: if target.kind == RadrootsTransportKind::Reticulum {
-            Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts)
-        } else {
-            None
-        },
-    }
+        preview_behavior: None,
+    })
 }
 
 fn delivery_policy_from_relay_request(

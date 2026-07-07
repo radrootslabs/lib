@@ -3,10 +3,11 @@ use radroots_transport_nostr::{
     RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayUrlPolicy,
 };
 use radroots_transport_publish_protocol::{
-    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
-    TransportPublishEventResponse, TransportPublishJobStatus, TransportPublishJobView,
-    TransportPublishOutcomeKind, TransportPublishTarget, TransportPublishTargetOutcome,
-    TransportPublishTargetPolicy, TransportPublishTargetSource,
+    NostrPublishTargetSourcePolicy, RETICULUM_PREVIEW_ENDPOINT_URI, TransportPublishDeliveryPolicy,
+    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishJobStatus,
+    TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishPreviewBehavior,
+    TransportPublishTarget, TransportPublishTargetOutcome, TransportPublishTargetPolicy,
+    TransportPublishTargetSource,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -488,6 +489,43 @@ async fn publish_signed_event_posts_typed_proxy_request() {
 }
 
 #[tokio::test]
+async fn publish_signed_event_preserves_typed_reticulum_preview_behavior() {
+    let (endpoint, handle) = spawn_http_server("200 OK", publish_response_json().as_str());
+    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+
+    adapter
+        .publish_signed_event(RadrootsdProxyPublishRequest {
+            signed_event: signed_event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                ),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: Some("idem-reticulum".to_owned()),
+            timeout_ms: None,
+        })
+        .await
+        .expect("typed Reticulum publish request");
+
+    let recorded = handle.join().expect("server thread");
+    let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
+    assert_eq!(body["params"]["target_policy"]["kind"], "explicit_targets");
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["transport_kind"],
+        "reticulum"
+    );
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
+        RETICULUM_PREVIEW_ENDPOINT_URI
+    );
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["preview_behavior"],
+        "defer_delivery_plans"
+    );
+}
+
+#[tokio::test]
 async fn publish_event_http_errors_omit_body_and_token_material() {
     let body = "{\"error\":\"token-secret content carrots\"}";
     let (endpoint, _handle) = spawn_http_server("503 Service Unavailable", body);
@@ -601,6 +639,23 @@ async fn relay_publish_adapter_maps_proxy_errors_to_transport_errors() {
         error,
         radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
             if message.contains("radrootsd")
+    ));
+}
+
+#[test]
+fn relay_proxy_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
+    let target = radroots_transport::RadrootsTransportTarget::new(
+        radroots_transport::RadrootsTransportKind::Reticulum,
+        RETICULUM_PREVIEW_ENDPOINT_URI,
+    )
+    .expect("Reticulum target");
+
+    let error = transport_publish_target(&target).expect_err("Reticulum rejected");
+
+    assert!(matches!(
+        error,
+        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
+            if message.contains("Nostr-only") && message.contains("reticulum")
     ));
 }
 

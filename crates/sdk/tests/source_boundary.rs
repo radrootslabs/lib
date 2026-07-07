@@ -1322,6 +1322,29 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         sync_runtime_source.contains("target.transport_kind == RadrootsTransportKind::Proxy"),
         "src/sync_runtime.rs must identify proxy delegate targets with RadrootsTransportKind::Proxy"
     );
+    assert!(
+        sync_runtime_source
+            .contains("radrootsd proxy outbox publish does not accept Reticulum target"),
+        "src/sync_runtime.rs must reject Reticulum proxy outbox targets before behavior is lost"
+    );
+    assert!(
+        !sync_runtime_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
+        "src/sync_runtime.rs must not rewrite Reticulum proxy outbox targets to reject attempts"
+    );
+
+    let adapter_source = read_source(manifest_dir.join("src/adapters/radrootsd.rs").as_path());
+    assert!(
+        adapter_source.contains("target.kind != RadrootsTransportKind::Nostr"),
+        "src/adapters/radrootsd.rs must keep the relay proxy adapter Nostr-only"
+    );
+    assert!(
+        adapter_source.contains("radrootsd proxy relay adapter is Nostr-only"),
+        "src/adapters/radrootsd.rs must return a typed Nostr-only proxy adapter error"
+    );
+    assert!(
+        !adapter_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
+        "src/adapters/radrootsd.rs must not rewrite Reticulum relay targets to reject attempts"
+    );
 
     for required in [
         "TransportPublishOutcomeKind::DeferredUntilImplemented",

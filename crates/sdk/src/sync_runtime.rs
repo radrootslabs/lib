@@ -762,7 +762,7 @@ async fn push_proxy_claimed_outbox_event(
             now_ms,
         )
         .await?;
-    let target_policy = proxy_transport_publish_target_policy(claimed);
+    let target_policy = proxy_transport_publish_target_policy(claimed)?;
     let request = RadrootsdProxyPublishRequest {
         signed_event: signed_event.clone(),
         delivery_policy: proxy_delivery_policy(sync, claimed, &target_policy).await?,
@@ -899,42 +899,44 @@ async fn complete_proxy_publish_attempt(
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 fn proxy_transport_publish_target_policy(
     claimed: &RadrootsOutboxClaimedEvent,
-) -> TransportPublishTargetPolicy {
+) -> Result<TransportPublishTargetPolicy, RadrootsSdkError> {
     let ready_targets = claimed
         .delivery_targets
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
         .collect::<Vec<_>>();
     if ready_targets.len() == 1 && is_proxy_delegate_target(ready_targets[0]) {
-        TransportPublishTargetPolicy::nostr(
+        Ok(TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
             Vec::new(),
-        )
+        ))
     } else {
-        TransportPublishTargetPolicy::explicit_targets(
+        Ok(TransportPublishTargetPolicy::explicit_targets(
             ready_targets
                 .into_iter()
                 .map(transport_publish_target_from_outbox_target)
-                .collect(),
-        )
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
     }
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 fn transport_publish_target_from_outbox_target(
     target: &RadrootsOutboxDeliveryTargetRecord,
-) -> TransportPublishTarget {
-    TransportPublishTarget {
+) -> Result<TransportPublishTarget, RadrootsSdkError> {
+    if target.transport_kind == RadrootsTransportKind::Reticulum {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "radrootsd proxy outbox publish does not accept Reticulum target {}",
+                target.endpoint_uri.as_str()
+            ),
+        });
+    }
+    Ok(TransportPublishTarget {
         transport_kind: target.transport_kind.canonical_label(),
         endpoint_uri: target.endpoint_uri.as_str().to_owned(),
-        preview_behavior: if target.transport_kind == RadrootsTransportKind::Reticulum {
-            Some(
-                radroots_transport_publish_protocol::TransportPublishPreviewBehavior::RejectDeliveryAttempts,
-            )
-        } else {
-            None
-        },
-    }
+        preview_behavior: None,
+    })
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]

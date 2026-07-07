@@ -3,6 +3,7 @@ use super::{
     CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_satisfaction,
     proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_job,
     push_proxy_claimed_outbox_event, push_proxy_event_receipt,
+    transport_publish_target_from_outbox_target,
 };
 use super::{
     PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxTargetOutcomeKind,
@@ -36,10 +37,15 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_outbox::{RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetStatus};
+use radroots_outbox::{
+    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
+    RadrootsOutboxDeliveryTargetStatus,
+};
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_transport::RadrootsTransportSatisfactionPolicy;
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+};
 use radroots_transport_nostr::{
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
@@ -608,6 +614,38 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         proxy_error_message(&RadrootsdError::Http("connection refused".to_owned())),
         "radrootsd proxy publish failed: connection refused"
     );
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[test]
+fn proxy_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
+    let target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        "reticulum:preview-unavailable",
+    )
+    .expect("Reticulum target");
+    let record = RadrootsOutboxDeliveryTargetRecord {
+        delivery_target_id: 1,
+        delivery_plan_id: 1,
+        transport_kind: target.kind.clone(),
+        endpoint_uri: target.uri.clone(),
+        endpoint_fingerprint: target.fingerprint.clone(),
+        status: RadrootsOutboxDeliveryTargetStatus::Pending,
+        attempt_count: 0,
+        last_attempt_at_ms: None,
+        completed_at_ms: None,
+        last_error: None,
+    };
+
+    let error =
+        transport_publish_target_from_outbox_target(&record).expect_err("Reticulum rejected");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("radrootsd proxy outbox publish")
+                && message.contains("Reticulum target")
+    ));
 }
 
 #[cfg(feature = "radrootsd-proxy")]
