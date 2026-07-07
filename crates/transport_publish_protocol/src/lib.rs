@@ -42,6 +42,9 @@ pub enum TransportPublishProtocolError {
     EmptyEndpointUri {
         index: usize,
     },
+    InvalidPreviewBehavior {
+        index: usize,
+    },
     InvalidReticulumPreviewEndpoint {
         index: usize,
     },
@@ -79,6 +82,10 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::EmptyEndpointUri { index } => {
                 write!(f, "transport target {index} endpoint_uri must not be empty")
             }
+            Self::InvalidPreviewBehavior { index } => write!(
+                f,
+                "transport target {index} preview_behavior is only valid for Reticulum targets"
+            ),
             Self::InvalidReticulumPreviewEndpoint { index } => write!(
                 f,
                 "transport target {index} Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
@@ -179,6 +186,9 @@ impl TransportPublishTarget {
             .map_err(|error| transport_kind_error(error, index))?;
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+        }
+        if transport_kind != RadrootsTransportKind::Reticulum && self.preview_behavior.is_some() {
+            return Err(TransportPublishProtocolError::InvalidPreviewBehavior { index });
         }
         if transport_kind == RadrootsTransportKind::Reticulum
             && self.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
@@ -784,6 +794,18 @@ mod tests {
             Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
         );
 
+        let mut nostr_preview_behavior = request.clone();
+        nostr_preview_behavior.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: "nostr".to_owned(),
+                endpoint_uri: "wss://relay.example.com".to_owned(),
+                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+            }]);
+        assert_eq!(
+            nostr_preview_behavior.validate(1),
+            Err(TransportPublishProtocolError::InvalidPreviewBehavior { index: 0 })
+        );
+
         for invalid in [
             " reticulum:preview-unavailable",
             "reticulum:preview-unavailable ",
@@ -932,8 +954,12 @@ mod tests {
                 "transport target 3 endpoint_uri must not be empty",
             ),
             (
-                TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 4 },
-                "transport target 4 Reticulum preview endpoint must be reticulum:preview-unavailable",
+                TransportPublishProtocolError::InvalidPreviewBehavior { index: 4 },
+                "transport target 4 preview_behavior is only valid for Reticulum targets",
+            ),
+            (
+                TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 5 },
+                "transport target 5 Reticulum preview endpoint must be reticulum:preview-unavailable",
             ),
             (
                 TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 },
