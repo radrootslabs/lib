@@ -840,7 +840,7 @@ async fn fail_proxy_local_validation(
     let message = error.to_string();
     sync.sdk
         ._outbox
-        .mark_publish_failed_terminal(
+        .mark_active_delivery_plan_failed_terminal(
             claimed.outbox_event_id,
             claimed.claim_token.as_str(),
             message.as_str(),

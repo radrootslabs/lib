@@ -38,9 +38,9 @@ use radroots_nostr::prelude::{
 };
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_outbox::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput,
+    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,
     RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
-    RadrootsOutboxOperationInput,
+    RadrootsOutboxOperationInput, RadrootsOutboxSignedOperationInput,
 };
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
@@ -935,6 +935,190 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
             .expect("last error")
             .contains("reticulum target")
     );
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
+async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
+    let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_000,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let draft = proxy_frozen_draft("proxy-local-validation-sibling");
+    let signed_event = ProxyFixtureSigner::new()
+        .sign_frozen_draft(&draft)
+        .expect("signed event");
+    let first = sdk
+        ._outbox
+        .enqueue_signed_operation(
+            RadrootsOutboxSignedOperationInput::new(
+                "sync.proxy.unit.v1",
+                draft.clone(),
+                signed_event.clone(),
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "proxy.validation.active",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![
+                        RadrootsTransportTarget::new(
+                            RadrootsTransportKind::Nostr,
+                            "wss://active.example.com",
+                        )
+                        .expect("active target"),
+                    ],
+                ),
+                true,
+                1_700_000_000_000,
+                1_700_000_000_000,
+            )
+            .with_idempotency_key("proxy-local-validation-sibling"),
+        )
+        .await
+        .expect("first plan");
+    let second = sdk
+        ._outbox
+        .enqueue_signed_operation(
+            RadrootsOutboxSignedOperationInput::new(
+                "sync.proxy.unit.v1",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "proxy.validation.sibling",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![
+                        RadrootsTransportTarget::new(
+                            RadrootsTransportKind::Nostr,
+                            "wss://sibling.example.com",
+                        )
+                        .expect("sibling target"),
+                    ],
+                ),
+                true,
+                1_700_000_000_000,
+                1_700_000_000_000,
+            )
+            .with_idempotency_key("proxy-local-validation-sibling"),
+        )
+        .await
+        .expect("second plan");
+    assert_eq!(first.outbox_event_id, second.outbox_event_id);
+    let mut claimed = sdk
+        ._outbox
+        .claim_next_ready_signed_event(
+            CLAIM_OWNER,
+            "proxy-sibling-claim-a",
+            1_700_000_060_000,
+            1_700_000_000_000,
+        )
+        .await
+        .expect("claim")
+        .expect("claim");
+    let active_plan_id = claimed.active_delivery_plan_id.expect("active plan");
+    let sibling_plan_id = if first.delivery_plan_id == active_plan_id {
+        second.delivery_plan_id
+    } else {
+        first.delivery_plan_id
+    };
+    let stored_before = sdk
+        ._outbox
+        .get_event(claimed.outbox_event_id)
+        .await
+        .expect("stored before")
+        .expect("stored before");
+    let ingested_before = stored_before.event_store_ingested;
+    let ingested_at_before = stored_before.event_store_ingested_at_ms;
+    let reticulum_target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )
+    .expect("Reticulum target");
+    claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
+    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
+    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
+    let sync = sdk.sync();
+    let adapter = RadrootsdProxyPublishAdapter::new(
+        RadrootsdProxyConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
+    );
+
+    let error =
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+            .await
+            .expect_err("local proxy validation error");
+    assert_no_transport_publish_request(&listener);
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("radrootsd proxy outbox publish")
+                && message.contains("Nostr-only")
+                && message.contains("reticulum target")
+    ));
+    let stored = sdk
+        ._outbox
+        .get_event(claimed.outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::PublishRetryable);
+    assert_eq!(stored.claim_token, None);
+    assert_eq!(stored.event_store_ingested, ingested_before);
+    assert_eq!(stored.event_store_ingested_at_ms, ingested_at_before);
+    let targets = sdk
+        ._outbox
+        .delivery_targets(claimed.outbox_event_id)
+        .await
+        .expect("targets");
+    assert!(
+        targets
+            .iter()
+            .filter(|target| target.delivery_plan_id == active_plan_id)
+            .all(|target| target.status == RadrootsOutboxDeliveryTargetStatus::FailedTerminal)
+    );
+    assert!(
+        targets
+            .iter()
+            .filter(|target| target.delivery_plan_id == sibling_plan_id)
+            .all(|target| target.status == RadrootsOutboxDeliveryTargetStatus::Pending)
+    );
+    let plans = sdk
+        ._outbox
+        .delivery_plans(claimed.outbox_event_id)
+        .await
+        .expect("plans");
+    assert_eq!(
+        plans
+            .iter()
+            .find(|plan| plan.delivery_plan_id == active_plan_id)
+            .expect("active plan")
+            .status,
+        RadrootsOutboxDeliveryPlanStatus::FailedTerminal
+    );
+    assert_eq!(
+        plans
+            .iter()
+            .find(|plan| plan.delivery_plan_id == sibling_plan_id)
+            .expect("sibling plan")
+            .status,
+        RadrootsOutboxDeliveryPlanStatus::Queued
+    );
+    let sibling_claim = sdk
+        ._outbox
+        .claim_next_ready_signed_event(
+            CLAIM_OWNER,
+            "proxy-sibling-claim-b",
+            1_700_000_060_000,
+            1_700_000_000_000,
+        )
+        .await
+        .expect("sibling claim")
+        .expect("sibling claim");
+    assert_eq!(sibling_claim.active_delivery_plan_id, Some(sibling_plan_id));
 }
 
 #[cfg(feature = "radrootsd-proxy")]
