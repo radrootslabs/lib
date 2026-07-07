@@ -1304,9 +1304,8 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         .expect("claim")
         .expect("claim");
     let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1441,9 +1440,8 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
         .expect("claim")
         .expect("claim");
     complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1534,9 +1532,8 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
         .expect("claim")
         .expect("claim");
     let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1623,9 +1620,8 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
         .expect("claim")
         .expect("claim");
     let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1698,9 +1694,8 @@ async fn outbox_publish_skips_non_nostr_targets() {
         .expect("claim")
         .expect("claim");
     complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1768,9 +1763,8 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
         .expect("claim")
         .expect("claim");
     let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1869,9 +1863,8 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
         .expect("claim")
         .expect("claim");
     let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -1953,9 +1946,8 @@ async fn outbox_publish_republish_policy_keeps_terminal_targets_excluded() {
         .expect("claim")
         .expect("claim");
     complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -2081,9 +2073,8 @@ async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_fil
         .expect("claim")
         .expect("claim");
     complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let mut publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");
@@ -2139,9 +2130,8 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
         .expect("claim")
         .expect("claim");
     complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
-        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
         .await
         .expect("claim")
         .expect("publish claim");

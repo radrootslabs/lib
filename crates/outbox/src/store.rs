@@ -601,7 +601,7 @@ impl RadrootsOutbox {
         }
         let signed_event_json = serde_json::to_string(&signed_event)?;
         let changed = sqlx::query(
-            "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = ?, last_error = NULL, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
+            "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, last_error = NULL, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
         .bind(signed_event_json.as_str())
         .bind(signed_event.raw_json.as_str())
@@ -2982,7 +2982,7 @@ mod tests {
             .expect("event")
             .expect("event");
         assert_eq!(event.state, RadrootsOutboxEventState::PreviewUnavailable);
-        assert_eq!(event.claim_token.as_deref(), Some("claim-a"));
+        assert_eq!(event.claim_token, None);
         let operation = outbox
             .get_operation(receipt.operation_id)
             .await
@@ -2992,23 +2992,9 @@ mod tests {
             operation.status,
             RadrootsOutboxOperationStatus::PreviewUnavailable
         );
-        assert_eq!(
-            outbox.recover_expired_claims(2_001).await.expect("recover"),
-            1
-        );
-        let recovered_event = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("event")
-            .expect("event");
-        assert_eq!(
-            recovered_event.state,
-            RadrootsOutboxEventState::PreviewUnavailable
-        );
-        assert_eq!(recovered_event.claim_token, None);
         assert!(
             outbox
-                .claim_next_ready_signed_event("publisher", "claim-b", 3_000, 2_100)
+                .claim_next_ready_signed_event("publisher", "claim-b", 3_000, 1_100)
                 .await
                 .expect("claim")
                 .is_none()
@@ -3244,9 +3230,8 @@ mod tests {
             )
             .await
             .expect("complete signing");
-        outbox.recover_expired_claims(2_001).await.expect("recover");
         outbox
-            .claim_next_ready_event("publisher", "claim-b", 3_000, 2_100)
+            .claim_next_ready_event("publisher", "claim-b", 3_000, 1_100)
             .await
             .expect("claim")
             .expect("publish claim");
