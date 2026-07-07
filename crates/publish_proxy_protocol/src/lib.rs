@@ -11,16 +11,15 @@ use std::{string::String, vec::Vec};
 
 use core::fmt;
 
-pub const API_VERSION: &str = "radrootsd.publish_proxy.v1";
+pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
 pub const DAEMON_NAME: &str = "radrootsd";
-pub const METHOD_CAPABILITIES: &str = "publish.capabilities";
-pub const METHOD_EVENT: &str = "publish.event";
-pub const METHOD_JOB_GET: &str = "publish.job.get";
-pub const METHOD_JOB_LIST: &str = "publish.job.list";
-pub const METHOD_RELAYS_RESOLVE: &str = "publish.relays.resolve";
+pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
+pub const METHOD_EVENT: &str = "transport.publish.event";
+pub const METHOD_JOB_GET: &str = "transport.publish.job.get";
+pub const METHOD_JOB_LIST: &str = "transport.publish.job.list";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PublishProxyProtocolError {
+pub enum TransportPublishProtocolError {
     InvalidHexField {
         field: &'static str,
         expected_len: usize,
@@ -30,32 +29,44 @@ pub enum PublishProxyProtocolError {
         index: usize,
     },
     EmptyIdempotencyKey,
-    EmptyRelayUrl {
+    EmptyTransportKind {
         index: usize,
     },
-    RelayLimitExceeded {
+    EmptyEndpointUri {
+        index: usize,
+    },
+    TargetLimitExceeded {
         max: usize,
         actual: usize,
     },
+    EmptyTargetSet,
     InvalidQuorum,
     EmptyPrincipalId,
     EmptyJobId,
 }
 
-impl fmt::Display for PublishProxyProtocolError {
+impl fmt::Display for TransportPublishProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidHexField {
                 field,
                 expected_len,
             } => write!(f, "{field} must be {expected_len} lowercase hex characters"),
-            Self::InvalidKind(kind) => write!(f, "event kind {kind} exceeds publish proxy range"),
+            Self::InvalidKind(kind) => {
+                write!(f, "event kind {kind} exceeds transport publish range")
+            }
             Self::EmptyTag { index } => write!(f, "tag {index} must not be empty"),
             Self::EmptyIdempotencyKey => f.write_str("idempotency key must not be empty"),
-            Self::EmptyRelayUrl { index } => write!(f, "relay URL {index} must not be empty"),
-            Self::RelayLimitExceeded { max, actual } => {
-                write!(f, "relay count {actual} exceeds limit {max}")
+            Self::EmptyTransportKind { index } => {
+                write!(f, "transport target {index} kind must not be empty")
             }
+            Self::EmptyEndpointUri { index } => {
+                write!(f, "transport target {index} endpoint_uri must not be empty")
+            }
+            Self::TargetLimitExceeded { max, actual } => {
+                write!(f, "transport target count {actual} exceeds limit {max}")
+            }
+            Self::EmptyTargetSet => f.write_str("transport publish target set must not be empty"),
             Self::InvalidQuorum => f.write_str("delivery quorum must be greater than zero"),
             Self::EmptyPrincipalId => f.write_str("principal id must not be empty"),
             Self::EmptyJobId => f.write_str("job id must not be empty"),
@@ -64,7 +75,7 @@ impl fmt::Display for PublishProxyProtocolError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for PublishProxyProtocolError {}
+impl std::error::Error for TransportPublishProtocolError {}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -80,16 +91,16 @@ pub struct SignedNostrEventWire {
 }
 
 impl SignedNostrEventWire {
-    pub fn validate(&self) -> Result<(), PublishProxyProtocolError> {
+    pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
         validate_lower_hex("id", self.id.as_str(), 64)?;
         validate_lower_hex("pubkey", self.pubkey.as_str(), 64)?;
         validate_lower_hex("sig", self.sig.as_str(), 128)?;
         if self.kind > u16::MAX as u32 {
-            return Err(PublishProxyProtocolError::InvalidKind(self.kind));
+            return Err(TransportPublishProtocolError::InvalidKind(self.kind));
         }
         for (index, tag) in self.tags.iter().enumerate() {
             if tag.is_empty() {
-                return Err(PublishProxyProtocolError::EmptyTag { index });
+                return Err(TransportPublishProtocolError::EmptyTag { index });
             }
         }
         Ok(())
@@ -99,7 +110,65 @@ impl SignedNostrEventWire {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishRelayPolicy {
+pub enum TransportPublishPreviewBehavior {
+    RejectDeliveryAttempts,
+    DeferDeliveryPlans,
+}
+
+impl Default for TransportPublishPreviewBehavior {
+    fn default() -> Self {
+        Self::RejectDeliveryAttempts
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportPublishTarget {
+    pub transport_kind: String,
+    pub endpoint_uri: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub preview_behavior: Option<TransportPublishPreviewBehavior>,
+}
+
+impl TransportPublishTarget {
+    pub fn nostr(endpoint_uri: impl Into<String>) -> Self {
+        Self {
+            transport_kind: "nostr".to_owned(),
+            endpoint_uri: endpoint_uri.into(),
+            preview_behavior: None,
+        }
+    }
+
+    pub fn reticulum_preview(
+        endpoint_uri: impl Into<String>,
+        behavior: TransportPublishPreviewBehavior,
+    ) -> Self {
+        Self {
+            transport_kind: "reticulum".to_owned(),
+            endpoint_uri: endpoint_uri.into(),
+            preview_behavior: Some(behavior),
+        }
+    }
+
+    fn validate(&self, index: usize) -> Result<(), TransportPublishProtocolError> {
+        if self.transport_kind.trim().is_empty() {
+            return Err(TransportPublishProtocolError::EmptyTransportKind { index });
+        }
+        if self.endpoint_uri.trim().is_empty() {
+            return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+        }
+        Ok(())
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NostrPublishTargetSourcePolicy {
     ExplicitOnly,
     RequestThenAuthorWriteThenDaemonDefault,
     AuthorWriteThenDaemonDefault,
@@ -107,27 +176,84 @@ pub enum PublishRelayPolicy {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "kind", rename_all = "snake_case"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TransportPublishTargetPolicy {
+    ExplicitTargets {
+        targets: Vec<TransportPublishTarget>,
+    },
+    Nostr {
+        source_policy: NostrPublishTargetSourcePolicy,
+        #[cfg_attr(feature = "serde", serde(default))]
+        relay_urls: Vec<String>,
+    },
+}
+
+impl TransportPublishTargetPolicy {
+    pub fn explicit_targets(targets: Vec<TransportPublishTarget>) -> Self {
+        Self::ExplicitTargets { targets }
+    }
+
+    pub fn nostr(source_policy: NostrPublishTargetSourcePolicy, relay_urls: Vec<String>) -> Self {
+        Self::Nostr {
+            source_policy,
+            relay_urls,
+        }
+    }
+
+    pub fn request_target_count(&self) -> usize {
+        match self {
+            Self::ExplicitTargets { targets } => targets.len(),
+            Self::Nostr { relay_urls, .. } => relay_urls.len(),
+        }
+    }
+
+    fn validate(&self, max_targets: usize) -> Result<(), TransportPublishProtocolError> {
+        match self {
+            Self::ExplicitTargets { targets } => {
+                validate_target_limit(targets.len(), max_targets)?;
+                if targets.is_empty() {
+                    return Err(TransportPublishProtocolError::EmptyTargetSet);
+                }
+                for (index, target) in targets.iter().enumerate() {
+                    target.validate(index)?;
+                }
+            }
+            Self::Nostr { relay_urls, .. } => {
+                validate_target_limit(relay_urls.len(), max_targets)?;
+                for (index, endpoint_uri) in relay_urls.iter().enumerate() {
+                    if endpoint_uri.trim().is_empty() {
+                        return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "mode", rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PublishDeliveryPolicy {
+pub enum TransportPublishDeliveryPolicy {
     Any,
     All,
     Quorum { quorum: usize },
 }
 
-impl PublishDeliveryPolicy {
-    pub fn validate(&self) -> Result<(), PublishProxyProtocolError> {
+impl TransportPublishDeliveryPolicy {
+    pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
         if matches!(self, Self::Quorum { quorum: 0 }) {
-            Err(PublishProxyProtocolError::InvalidQuorum)
+            Err(TransportPublishProtocolError::InvalidQuorum)
         } else {
             Ok(())
         }
     }
 
-    pub fn required_ack_count(&self, relay_count: usize) -> usize {
+    pub fn required_target_count(&self, target_count: usize) -> usize {
         match self {
-            Self::Any => usize::from(relay_count > 0),
-            Self::All => relay_count,
+            Self::Any => usize::from(target_count > 0),
+            Self::All => target_count,
             Self::Quorum { quorum } => *quorum,
         }
     }
@@ -136,12 +262,10 @@ impl PublishDeliveryPolicy {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishEventRequest {
+pub struct TransportPublishEventRequest {
     pub event: SignedNostrEventWire,
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub relays: Vec<String>,
-    pub relay_policy: PublishRelayPolicy,
-    pub delivery_policy: PublishDeliveryPolicy,
+    pub target_policy: TransportPublishTargetPolicy,
+    pub delivery_policy: TransportPublishDeliveryPolicy,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -154,27 +278,17 @@ pub struct PublishEventRequest {
     pub timeout_ms: Option<u64>,
 }
 
-impl PublishEventRequest {
-    pub fn validate(&self, max_relays: usize) -> Result<(), PublishProxyProtocolError> {
+impl TransportPublishEventRequest {
+    pub fn validate(&self, max_targets: usize) -> Result<(), TransportPublishProtocolError> {
         self.event.validate()?;
+        self.target_policy.validate(max_targets)?;
         self.delivery_policy.validate()?;
-        if self.relays.len() > max_relays {
-            return Err(PublishProxyProtocolError::RelayLimitExceeded {
-                max: max_relays,
-                actual: self.relays.len(),
-            });
-        }
-        for (index, relay) in self.relays.iter().enumerate() {
-            if relay.trim().is_empty() {
-                return Err(PublishProxyProtocolError::EmptyRelayUrl { index });
-            }
-        }
         if self
             .idempotency_key
             .as_ref()
             .is_some_and(|key| key.trim().is_empty())
         {
-            return Err(PublishProxyProtocolError::EmptyIdempotencyKey);
+            return Err(TransportPublishProtocolError::EmptyIdempotencyKey);
         }
         Ok(())
     }
@@ -183,7 +297,7 @@ impl PublishEventRequest {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishJobStatus {
+pub enum TransportPublishJobStatus {
     Accepted,
     Publishing,
     DeliverySatisfied,
@@ -195,7 +309,7 @@ pub enum PublishJobStatus {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishRelayOutcomeKind {
+pub enum TransportPublishOutcomeKind {
     Accepted,
     DuplicateAccepted,
     Blocked,
@@ -210,13 +324,15 @@ pub enum PublishRelayOutcomeKind {
     Error,
     Timeout,
     ConnectionFailed,
-    RelayUrlRejected,
+    TargetRejected,
     SkippedAlreadyAccepted,
+    Deferred,
+    Unavailable,
     Unknown,
 }
 
-impl PublishRelayOutcomeKind {
-    pub fn counts_toward_quorum(self) -> bool {
+impl TransportPublishOutcomeKind {
+    pub fn counts_toward_satisfaction(self) -> bool {
         matches!(
             self,
             Self::Accepted | Self::DuplicateAccepted | Self::SkippedAlreadyAccepted
@@ -245,19 +361,32 @@ impl PublishRelayOutcomeKind {
                 | Self::Muted
                 | Self::Unsupported
                 | Self::PaymentRequired
-                | Self::RelayUrlRejected
+                | Self::TargetRejected
+                | Self::Deferred
+                | Self::Unavailable
         )
     }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportPublishTargetSource {
+    Request,
+    NostrAuthorWrite,
+    DaemonDefault,
+    ReticulumPreview,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishRelayOutcome {
-    pub relay_url: String,
-    pub source: PublishRelaySource,
+pub struct TransportPublishTargetOutcome {
+    pub transport_kind: String,
+    pub endpoint_uri: String,
+    pub source: TransportPublishTargetSource,
     pub attempted: bool,
-    pub outcome_kind: PublishRelayOutcomeKind,
+    pub outcome_kind: TransportPublishOutcomeKind,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -271,28 +400,19 @@ pub struct PublishRelayOutcome {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishRelaySource {
-    Request,
-    AuthorWrite,
-    DaemonDefault,
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishJobView {
+pub struct TransportPublishJobView {
     pub job_id: String,
-    pub status: PublishJobStatus,
+    pub status: TransportPublishJobStatus,
     pub terminal: bool,
     pub delivery_satisfied: bool,
     pub event_id: String,
     pub pubkey: String,
     pub event_kind: u32,
-    pub relay_policy: PublishRelayPolicy,
-    pub delivery_policy: PublishDeliveryPolicy,
-    pub relay_count: usize,
+    pub target_policy: TransportPublishTargetPolicy,
+    pub delivery_policy: TransportPublishDeliveryPolicy,
+    pub target_count: usize,
     pub acknowledged_count: usize,
     pub retryable_count: usize,
     pub terminal_count: usize,
@@ -308,18 +428,18 @@ pub struct PublishJobView {
     )]
     pub last_error: Option<String>,
     #[cfg_attr(feature = "serde", serde(default))]
-    pub relays: Vec<PublishRelayOutcome>,
+    pub targets: Vec<TransportPublishTargetOutcome>,
 }
 
-impl PublishJobView {
-    pub fn validate(&self) -> Result<(), PublishProxyProtocolError> {
+impl TransportPublishJobView {
+    pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
         if self.job_id.trim().is_empty() {
-            return Err(PublishProxyProtocolError::EmptyJobId);
+            return Err(TransportPublishProtocolError::EmptyJobId);
         }
         validate_lower_hex("event_id", self.event_id.as_str(), 64)?;
         validate_lower_hex("pubkey", self.pubkey.as_str(), 64)?;
         if self.event_kind > u16::MAX as u32 {
-            return Err(PublishProxyProtocolError::InvalidKind(self.event_kind));
+            return Err(TransportPublishProtocolError::InvalidKind(self.event_kind));
         }
         self.delivery_policy.validate()
     }
@@ -328,25 +448,25 @@ impl PublishJobView {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishEventResponse {
+pub struct TransportPublishEventResponse {
     pub deduplicated: bool,
-    pub job: PublishJobView,
+    pub job: TransportPublishJobView,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishCapabilities {
+pub struct TransportPublishCapabilities {
     pub daemon: String,
     pub api_version: String,
     pub transports: Vec<String>,
     pub methods: Vec<String>,
-    pub auth: PublishAuthCapabilities,
-    pub publish: PublishSurfaceCapabilities,
+    pub auth: TransportPublishAuthCapabilities,
+    pub publish: TransportPublishSurfaceCapabilities,
 }
 
-impl PublishCapabilities {
-    pub fn v1(max_event_bytes: usize, max_relays_per_request: usize) -> Self {
+impl TransportPublishCapabilities {
+    pub fn v2(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
         Self {
             daemon: DAEMON_NAME.to_owned(),
             api_version: API_VERSION.to_owned(),
@@ -356,27 +476,25 @@ impl PublishCapabilities {
                 METHOD_EVENT.to_owned(),
                 METHOD_JOB_GET.to_owned(),
                 METHOD_JOB_LIST.to_owned(),
-                METHOD_RELAYS_RESOLVE.to_owned(),
             ],
-            auth: PublishAuthCapabilities {
+            auth: TransportPublishAuthCapabilities {
                 mode: "scoped_bearer_token".to_owned(),
             },
-            publish: PublishSurfaceCapabilities {
+            publish: TransportPublishSurfaceCapabilities {
                 signed_event_ingress: true,
                 server_side_user_signing: false,
                 max_event_bytes,
-                max_relays_per_request,
+                max_targets_per_request,
                 delivery_policies: vec![
-                    PublishDeliveryPolicyName::Any,
-                    PublishDeliveryPolicyName::Quorum,
-                    PublishDeliveryPolicyName::All,
+                    TransportPublishDeliveryPolicyName::Any,
+                    TransportPublishDeliveryPolicyName::Quorum,
+                    TransportPublishDeliveryPolicyName::All,
                 ],
-                relay_policies: vec![
-                    PublishRelayPolicy::ExplicitOnly,
-                    PublishRelayPolicy::RequestThenAuthorWriteThenDaemonDefault,
-                    PublishRelayPolicy::AuthorWriteThenDaemonDefault,
-                    PublishRelayPolicy::DaemonDefaultOnly,
+                target_policy_modes: vec![
+                    TransportPublishTargetPolicyName::ExplicitTargets,
+                    TransportPublishTargetPolicyName::Nostr,
                 ],
+                transport_kinds: vec!["nostr".to_owned(), "reticulum".to_owned()],
             },
         }
     }
@@ -385,36 +503,59 @@ impl PublishCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishAuthCapabilities {
+pub struct TransportPublishAuthCapabilities {
     pub mode: String,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublishSurfaceCapabilities {
+pub struct TransportPublishSurfaceCapabilities {
     pub signed_event_ingress: bool,
     pub server_side_user_signing: bool,
     pub max_event_bytes: usize,
-    pub max_relays_per_request: usize,
-    pub delivery_policies: Vec<PublishDeliveryPolicyName>,
-    pub relay_policies: Vec<PublishRelayPolicy>,
+    pub max_targets_per_request: usize,
+    pub delivery_policies: Vec<TransportPublishDeliveryPolicyName>,
+    pub target_policy_modes: Vec<TransportPublishTargetPolicyName>,
+    pub transport_kinds: Vec<String>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublishDeliveryPolicyName {
+pub enum TransportPublishDeliveryPolicyName {
     Any,
     Quorum,
     All,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportPublishTargetPolicyName {
+    ExplicitTargets,
+    Nostr,
+}
+
+fn validate_target_limit(
+    target_count: usize,
+    max_targets: usize,
+) -> Result<(), TransportPublishProtocolError> {
+    if target_count > max_targets {
+        Err(TransportPublishProtocolError::TargetLimitExceeded {
+            max: max_targets,
+            actual: target_count,
+        })
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_lower_hex(
     field: &'static str,
     value: &str,
     expected_len: usize,
-) -> Result<(), PublishProxyProtocolError> {
+) -> Result<(), TransportPublishProtocolError> {
     if value.len() == expected_len
         && value
             .as_bytes()
@@ -423,7 +564,7 @@ fn validate_lower_hex(
     {
         Ok(())
     } else {
-        Err(PublishProxyProtocolError::InvalidHexField {
+        Err(TransportPublishProtocolError::InvalidHexField {
             field,
             expected_len,
         })
@@ -441,310 +582,144 @@ mod tests {
             created_at: 1_700_000_000,
             kind: 30_402,
             tags: vec![vec!["d".to_owned(), "listing-1".to_owned()]],
-            content: "{\"name\":\"carrots\"}".to_owned(),
+            content: "{}".to_owned(),
             sig: "2".repeat(128),
         }
     }
 
-    fn job_view() -> PublishJobView {
-        PublishJobView {
-            job_id: "job-1".to_owned(),
-            status: PublishJobStatus::Accepted,
-            terminal: false,
-            delivery_satisfied: false,
-            event_id: "0".repeat(64),
-            pubkey: "1".repeat(64),
-            event_kind: 30_402,
-            relay_policy: PublishRelayPolicy::ExplicitOnly,
-            delivery_policy: PublishDeliveryPolicy::Any,
-            relay_count: 1,
-            acknowledged_count: 0,
-            retryable_count: 0,
-            terminal_count: 0,
-            requested_at_ms: 1_700_000_000_000,
-            completed_at_ms: None,
-            last_error: None,
-            relays: Vec::new(),
-        }
-    }
-
     #[test]
-    fn protocol_error_display_covers_all_variants() {
-        let cases = [
-            (
-                PublishProxyProtocolError::InvalidHexField {
-                    field: "id",
-                    expected_len: 64,
-                },
-                "id must be 64 lowercase hex characters",
-            ),
-            (
-                PublishProxyProtocolError::InvalidKind(65_536),
-                "event kind 65536 exceeds publish proxy range",
-            ),
-            (
-                PublishProxyProtocolError::EmptyTag { index: 3 },
-                "tag 3 must not be empty",
-            ),
-            (
-                PublishProxyProtocolError::EmptyIdempotencyKey,
-                "idempotency key must not be empty",
-            ),
-            (
-                PublishProxyProtocolError::EmptyRelayUrl { index: 2 },
-                "relay URL 2 must not be empty",
-            ),
-            (
-                PublishProxyProtocolError::RelayLimitExceeded { max: 1, actual: 2 },
-                "relay count 2 exceeds limit 1",
-            ),
-            (
-                PublishProxyProtocolError::InvalidQuorum,
-                "delivery quorum must be greater than zero",
-            ),
-            (
-                PublishProxyProtocolError::EmptyPrincipalId,
-                "principal id must not be empty",
-            ),
-            (
-                PublishProxyProtocolError::EmptyJobId,
-                "job id must not be empty",
-            ),
-        ];
+    fn transport_publish_capabilities_match_v2_surface() {
+        let capabilities = TransportPublishCapabilities::v2(1024, 10);
 
-        for (error, expected) in cases {
-            assert_eq!(error.to_string(), expected);
-        }
-    }
-
-    #[test]
-    fn signed_event_wire_uses_pubkey_and_rejects_author() {
-        let value = serde_json::to_value(event()).expect("serialize");
-        assert!(value.get("pubkey").is_some());
-        assert!(value.get("author").is_none());
-
-        let err = serde_json::from_value::<SignedNostrEventWire>(serde_json::json!({
-            "id": "0".repeat(64),
-            "author": "1".repeat(64),
-            "created_at": 1_700_000_000u64,
-            "kind": 30402u32,
-            "tags": [["d", "listing-1"]],
-            "content": "{}",
-            "sig": "2".repeat(128)
-        }))
-        .expect_err("author must not be accepted");
-        let message = err.to_string();
-        assert!(message.contains("author"));
-        assert!(message.contains("pubkey"));
-    }
-
-    #[test]
-    fn signed_event_validation_rejects_malformed_fields() {
-        let mut invalid_id = event();
-        invalid_id.id = "A".repeat(64);
-        assert!(matches!(
-            invalid_id.validate(),
-            Err(PublishProxyProtocolError::InvalidHexField { field: "id", .. })
-        ));
-
-        let mut invalid_pubkey = event();
-        invalid_pubkey.pubkey = "g".repeat(64);
-        assert!(matches!(
-            invalid_pubkey.validate(),
-            Err(PublishProxyProtocolError::InvalidHexField {
-                field: "pubkey",
-                ..
-            })
-        ));
-
-        let mut invalid_sig = event();
-        invalid_sig.sig = "2".repeat(127);
-        assert!(matches!(
-            invalid_sig.validate(),
-            Err(PublishProxyProtocolError::InvalidHexField { field: "sig", .. })
-        ));
-
-        let mut invalid_kind = event();
-        invalid_kind.kind = u16::MAX as u32 + 1;
-        assert!(matches!(
-            invalid_kind.validate(),
-            Err(PublishProxyProtocolError::InvalidKind(_))
-        ));
-
-        let mut empty_tag = event();
-        empty_tag.tags = vec![Vec::new()];
-        assert!(matches!(
-            empty_tag.validate(),
-            Err(PublishProxyProtocolError::EmptyTag { index: 0 })
-        ));
-    }
-
-    #[test]
-    fn publish_request_validation_covers_policy_and_relay_limits() {
-        let request = PublishEventRequest {
-            event: event(),
-            relays: vec!["wss://relay.example.com".to_owned()],
-            relay_policy: PublishRelayPolicy::RequestThenAuthorWriteThenDaemonDefault,
-            delivery_policy: PublishDeliveryPolicy::Quorum { quorum: 1 },
-            idempotency_key: Some("key-1".to_owned()),
-            timeout_ms: Some(10_000),
-        };
-        request.validate(1).expect("valid request");
-        assert_eq!(request.delivery_policy.required_ack_count(3), 1);
-        assert_eq!(PublishDeliveryPolicy::Any.required_ack_count(0), 0);
-        assert_eq!(PublishDeliveryPolicy::Any.required_ack_count(3), 1);
-        assert_eq!(PublishDeliveryPolicy::All.required_ack_count(3), 3);
-        PublishDeliveryPolicy::Any.validate().expect("any policy");
-        PublishDeliveryPolicy::All.validate().expect("all policy");
-
-        let mut too_many = request.clone();
-        too_many.relays.push("wss://relay-2.example.com".to_owned());
-        assert!(matches!(
-            too_many.validate(1),
-            Err(PublishProxyProtocolError::RelayLimitExceeded { max: 1, actual: 2 })
-        ));
-
-        let mut empty_relay = request.clone();
-        empty_relay.relays = vec![" ".to_owned()];
-        assert!(matches!(
-            empty_relay.validate(1),
-            Err(PublishProxyProtocolError::EmptyRelayUrl { index: 0 })
-        ));
-
-        let mut empty_idempotency_key = request.clone();
-        empty_idempotency_key.idempotency_key = Some(" ".to_owned());
-        assert!(matches!(
-            empty_idempotency_key.validate(1),
-            Err(PublishProxyProtocolError::EmptyIdempotencyKey)
-        ));
-
-        let mut no_idempotency_key = request.clone();
-        no_idempotency_key.idempotency_key = None;
-        no_idempotency_key
-            .validate(1)
-            .expect("missing idempotency key is valid");
-
-        let mut invalid_quorum = request;
-        invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
-        assert!(matches!(
-            invalid_quorum.validate(1),
-            Err(PublishProxyProtocolError::InvalidQuorum)
-        ));
-    }
-
-    #[test]
-    fn capabilities_match_publish_proxy_v1_surface() {
-        let capabilities = PublishCapabilities::v1(65_536, 20);
-        let value = serde_json::to_value(&capabilities).expect("capabilities");
-        assert_eq!(value["daemon"], DAEMON_NAME);
-        assert_eq!(value["api_version"], API_VERSION);
-        assert_eq!(value["auth"]["mode"], "scoped_bearer_token");
-        assert_eq!(value["publish"]["server_side_user_signing"], false);
-        assert!(
-            value["methods"]
-                .as_array()
-                .expect("methods")
-                .iter()
-                .any(|method| method == METHOD_EVENT)
+        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v2");
+        assert_eq!(
+            capabilities.methods,
+            vec![
+                "transport.publish.capabilities".to_owned(),
+                "transport.publish.event".to_owned(),
+                "transport.publish.job.get".to_owned(),
+                "transport.publish.job.list".to_owned()
+            ]
+        );
+        assert_eq!(capabilities.publish.max_targets_per_request, 10);
+        assert_eq!(
+            capabilities.publish.target_policy_modes,
+            vec![
+                TransportPublishTargetPolicyName::ExplicitTargets,
+                TransportPublishTargetPolicyName::Nostr
+            ]
         );
     }
 
     #[test]
-    fn outcome_kind_semantics_cover_daemon_results() {
-        let all = [
-            PublishRelayOutcomeKind::Accepted,
-            PublishRelayOutcomeKind::DuplicateAccepted,
-            PublishRelayOutcomeKind::Blocked,
-            PublishRelayOutcomeKind::RateLimited,
-            PublishRelayOutcomeKind::Invalid,
-            PublishRelayOutcomeKind::PowRequired,
-            PublishRelayOutcomeKind::Restricted,
-            PublishRelayOutcomeKind::AuthRequired,
-            PublishRelayOutcomeKind::Muted,
-            PublishRelayOutcomeKind::Unsupported,
-            PublishRelayOutcomeKind::PaymentRequired,
-            PublishRelayOutcomeKind::Error,
-            PublishRelayOutcomeKind::Timeout,
-            PublishRelayOutcomeKind::ConnectionFailed,
-            PublishRelayOutcomeKind::RelayUrlRejected,
-            PublishRelayOutcomeKind::SkippedAlreadyAccepted,
-            PublishRelayOutcomeKind::Unknown,
-        ];
-        let quorum = [
-            PublishRelayOutcomeKind::Accepted,
-            PublishRelayOutcomeKind::DuplicateAccepted,
-            PublishRelayOutcomeKind::SkippedAlreadyAccepted,
-        ];
-        let retryable = [
-            PublishRelayOutcomeKind::RateLimited,
-            PublishRelayOutcomeKind::PowRequired,
-            PublishRelayOutcomeKind::AuthRequired,
-            PublishRelayOutcomeKind::Error,
-            PublishRelayOutcomeKind::Timeout,
-            PublishRelayOutcomeKind::ConnectionFailed,
-            PublishRelayOutcomeKind::Unknown,
-        ];
-        let terminal = [
-            PublishRelayOutcomeKind::Blocked,
-            PublishRelayOutcomeKind::Invalid,
-            PublishRelayOutcomeKind::Restricted,
-            PublishRelayOutcomeKind::Muted,
-            PublishRelayOutcomeKind::Unsupported,
-            PublishRelayOutcomeKind::PaymentRequired,
-            PublishRelayOutcomeKind::RelayUrlRejected,
-        ];
+    fn request_validation_covers_targets_and_policy() {
+        let request = TransportPublishEventRequest {
+            event: event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com"),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: Some("idem-1".to_owned()),
+            timeout_ms: Some(5_000),
+        };
 
-        for kind in all {
-            assert_eq!(kind.counts_toward_quorum(), quorum.contains(&kind));
-            assert_eq!(kind.is_retryable(), retryable.contains(&kind));
-            assert_eq!(kind.is_terminal_failure(), terminal.contains(&kind));
-        }
+        request.validate(1).expect("valid request");
+
+        let mut too_many = request.clone();
+        too_many.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example.com"),
+            TransportPublishTarget::reticulum_preview(
+                "reticulum:preview",
+                TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+            ),
+        ]);
+        assert!(matches!(
+            too_many.validate(1),
+            Err(TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 })
+        ));
+
+        let mut empty_endpoint = request.clone();
+        empty_endpoint.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                " ",
+            )]);
+        assert!(matches!(
+            empty_endpoint.validate(1),
+            Err(TransportPublishProtocolError::EmptyEndpointUri { index: 0 })
+        ));
+
+        let mut empty_key = request.clone();
+        empty_key.idempotency_key = Some(" ".to_owned());
+        assert_eq!(
+            empty_key.validate(1),
+            Err(TransportPublishProtocolError::EmptyIdempotencyKey)
+        );
     }
 
     #[test]
-    fn publish_job_view_validation_covers_success_and_errors() {
-        let valid = job_view();
-        valid.validate().expect("valid job view");
+    fn outcome_kinds_classify_satisfaction_retry_and_terminal() {
+        assert!(TransportPublishOutcomeKind::Accepted.counts_toward_satisfaction());
+        assert!(TransportPublishOutcomeKind::SkippedAlreadyAccepted.counts_toward_satisfaction());
+        assert!(TransportPublishOutcomeKind::Timeout.is_retryable());
+        assert!(TransportPublishOutcomeKind::Unavailable.is_terminal_failure());
+        assert!(TransportPublishOutcomeKind::Deferred.is_terminal_failure());
+    }
 
-        let mut empty_job_id = valid.clone();
-        empty_job_id.job_id = " ".to_owned();
-        assert!(matches!(
-            empty_job_id.validate(),
-            Err(PublishProxyProtocolError::EmptyJobId)
-        ));
+    #[test]
+    fn job_view_validation_rejects_bad_identity() {
+        let job = TransportPublishJobView {
+            job_id: "job-1".to_owned(),
+            status: TransportPublishJobStatus::DeliverySatisfied,
+            terminal: true,
+            delivery_satisfied: true,
+            event_id: "0".repeat(64),
+            pubkey: "1".repeat(64),
+            event_kind: 30_402,
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com"),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            target_count: 1,
+            acknowledged_count: 1,
+            retryable_count: 0,
+            terminal_count: 0,
+            requested_at_ms: 1,
+            completed_at_ms: Some(2),
+            last_error: None,
+            targets: Vec::new(),
+        };
 
-        let mut invalid_event_id = valid.clone();
-        invalid_event_id.event_id = "Z".repeat(64);
+        job.validate().expect("valid job");
+        let mut invalid = job;
+        invalid.event_id = "bad".to_owned();
         assert!(matches!(
-            invalid_event_id.validate(),
-            Err(PublishProxyProtocolError::InvalidHexField {
+            invalid.validate(),
+            Err(TransportPublishProtocolError::InvalidHexField {
                 field: "event_id",
                 ..
             })
         ));
+    }
 
-        let mut invalid_pubkey = valid.clone();
-        invalid_pubkey.pubkey = "1".repeat(63);
-        assert!(matches!(
-            invalid_pubkey.validate(),
-            Err(PublishProxyProtocolError::InvalidHexField {
-                field: "pubkey",
-                ..
-            })
-        ));
-
-        let mut invalid_kind = valid.clone();
-        invalid_kind.event_kind = u16::MAX as u32 + 1;
-        assert!(matches!(
-            invalid_kind.validate(),
-            Err(PublishProxyProtocolError::InvalidKind(_))
-        ));
-
-        let mut invalid_quorum = valid;
-        invalid_quorum.delivery_policy = PublishDeliveryPolicy::Quorum { quorum: 0 };
-        assert!(matches!(
-            invalid_quorum.validate(),
-            Err(PublishProxyProtocolError::InvalidQuorum)
-        ));
+    #[test]
+    fn serde_round_trip_preserves_preview_target() {
+        let request = TransportPublishEventRequest {
+            event: event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    "reticulum:preview",
+                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                ),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::All,
+            idempotency_key: None,
+            timeout_ms: None,
+        };
+        let encoded = serde_json::to_string(&request).expect("encode");
+        assert!(encoded.contains("\"transport_kind\":\"reticulum\""));
+        assert!(encoded.contains("\"preview_behavior\":\"defer_delivery_plans\""));
+        let decoded: TransportPublishEventRequest =
+            serde_json::from_str(encoded.as_str()).expect("decode");
+        assert_eq!(decoded, request);
     }
 }

@@ -86,7 +86,7 @@ radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-feature
 radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_outbox = { path = "crates/outbox", version = "0.1.0-alpha.2", default-features = false }
-radroots_publish_proxy_protocol = { path = "crates/publish_proxy_protocol", version = "0.1.0-alpha.2", default-features = false }
+radroots_transport_publish_protocol = { path = "crates/publish_proxy_protocol", version = "0.1.0-alpha.2", default-features = false }
 radroots_transport_nostr = { path = "crates/transport_nostr", version = "0.1.0-alpha.2", default-features = false }
 radroots_transport_reticulum = { path = "crates/transport_reticulum", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "0.1.0-alpha.2", default-features = false }
