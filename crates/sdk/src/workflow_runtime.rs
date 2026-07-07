@@ -1,8 +1,8 @@
 #[cfg(feature = "signer-adapters")]
 use crate::RadrootsSdkSignRequest;
 use crate::{
-    RadrootsClient, RadrootsSdkError, SatisfactionPolicy, SdkIdempotencyKey, TargetPolicy,
-    TargetSet, runtime::sdk_now_ms,
+    RadrootsClient, RadrootsSdkError, ReticulumPreviewBehavior, SatisfactionPolicy,
+    SdkIdempotencyKey, TargetPolicy, TargetSet, TransportProfile, runtime::sdk_now_ms,
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event_store::RadrootsEventIngest;
@@ -13,7 +13,7 @@ use radroots_events::{
 };
 use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus,
-    RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
 use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(test)]
@@ -159,22 +159,32 @@ fn resolved_delivery_plan(
     satisfaction_policy: SatisfactionPolicy,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     match target_policy {
-        TargetPolicy::Explicit(target_policy) => {
-            delivery_plan_from_target_set("explicit", target_policy.clone(), satisfaction_policy)
-        }
+        TargetPolicy::Explicit(target_policy) => delivery_plan_from_target_set(
+            "explicit",
+            target_policy.clone(),
+            satisfaction_policy,
+            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+        ),
         TargetPolicy::UseConfiguredProfile => {
             let target_policy =
                 TargetSet::from_normalized_nostr_relays(sdk.configured_nostr_relay_urls())?;
-            delivery_plan_from_target_set("configured_profile", target_policy, satisfaction_policy)
+            delivery_plan_from_target_set(
+                "configured_profile",
+                target_policy,
+                satisfaction_policy,
+                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+            )
         }
         TargetPolicy::UseTransportProfile => {
-            let target_set = sdk.transport_profile().target_set()?.ok_or_else(|| {
+            let transport_profile = sdk.transport_profile();
+            let target_set = transport_profile.target_set()?.ok_or_else(|| {
                 RadrootsSdkError::empty_transport_targets("publish transport profile")
             })?;
             delivery_plan_from_target_set(
-                sdk.transport_profile().transport_profile_id(),
+                transport_profile.transport_profile_id(),
                 target_set,
                 satisfaction_policy,
+                outbox_reticulum_preview_behavior(transport_profile),
             )
         }
     }
@@ -184,6 +194,7 @@ fn delivery_plan_from_target_set(
     transport_profile_id: impl Into<String>,
     target_set: TargetSet,
     satisfaction_policy: SatisfactionPolicy,
+    reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     let canonical_targets = target_set.canonical_targets().to_vec();
     let delivery_plan = RadrootsOutboxDeliveryPlanInput::new(
@@ -191,7 +202,8 @@ fn delivery_plan_from_target_set(
         1,
         transport_satisfaction_policy(satisfaction_policy),
         target_set.into_targets(),
-    );
+    )
+    .with_reticulum_preview_behavior(reticulum_preview_behavior);
     Ok(SdkResolvedDeliveryPlan {
         delivery_plan,
         canonical_targets,
@@ -208,6 +220,37 @@ fn transport_satisfaction_policy(
         SatisfactionPolicy::AtLeastOneTarget => RadrootsTransportSatisfactionPolicy::any_accepted(),
         SatisfactionPolicy::AtLeast { required } => {
             RadrootsTransportSatisfactionPolicy::quorum_accepted(required)
+        }
+    }
+}
+
+fn outbox_reticulum_preview_behavior(
+    transport_profile: &TransportProfile,
+) -> RadrootsOutboxReticulumPreviewBehavior {
+    match transport_profile {
+        TransportProfile::ReticulumPreview { profile } => {
+            reticulum_preview_behavior(profile.behavior())
+        }
+        TransportProfile::Hybrid { profile } => {
+            reticulum_preview_behavior(profile.reticulum_preview().behavior())
+        }
+        TransportProfile::LocalOnly
+        | TransportProfile::Nostr { .. }
+        | TransportProfile::Proxy { .. } => {
+            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        }
+    }
+}
+
+fn reticulum_preview_behavior(
+    behavior: ReticulumPreviewBehavior,
+) -> RadrootsOutboxReticulumPreviewBehavior {
+    match behavior {
+        ReticulumPreviewBehavior::RejectDeliveryAttempts => {
+            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        }
+        ReticulumPreviewBehavior::DeferDeliveryPlans => {
+            RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans
         }
     }
 }
