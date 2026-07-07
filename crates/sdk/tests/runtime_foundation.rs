@@ -5,7 +5,7 @@ use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, NostrProfile,
     NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass,
     RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN,
+    RadrootsSdkTimestamp, RestoreRequest, ReticulumPreviewBehavior, SDK_IDEMPOTENCY_KEY_MAX_LEN,
     SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
     SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
@@ -476,6 +476,28 @@ fn sdk_error_contract_methods_cover_all_variants() {
             RadrootsSdkErrorClass::Unsupported,
             false,
             vec![RadrootsSdkRecoveryAction::EnableRequiredFeature],
+        ),
+        (
+            RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+                operation: "sync.push_outbox".to_owned(),
+                endpoint_uri: "reticulum:preview-unavailable".to_owned(),
+                behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
+            },
+            "reticulum_preview_transport_unavailable",
+            RadrootsSdkErrorClass::Unsupported,
+            false,
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
+        ),
+        (
+            RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+                operation: "sync.push_outbox".to_owned(),
+                endpoint_uri: "reticulum:preview-unavailable".to_owned(),
+                behavior: ReticulumPreviewBehavior::DeferDeliveryPlans,
+            },
+            "reticulum_preview_transport_deferred",
+            RadrootsSdkErrorClass::Unsupported,
+            false,
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
         ),
         (
             RadrootsSdkError::ProductSyncTransportSetupFailure {

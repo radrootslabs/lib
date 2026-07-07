@@ -336,6 +336,15 @@ pub enum ReticulumPreviewBehavior {
     DeferDeliveryPlans,
 }
 
+impl ReticulumPreviewBehavior {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RejectDeliveryAttempts => "reject_delivery_attempts",
+            Self::DeferDeliveryPlans => "defer_delivery_plans",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct HybridProfile {
     nostr: NostrProfile,

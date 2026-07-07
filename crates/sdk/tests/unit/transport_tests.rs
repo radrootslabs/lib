@@ -1,6 +1,6 @@
 use super::{
-    NostrProfile, NostrRelayUrlPolicy, PublishMode, SatisfactionPolicy, TargetPolicy, TargetSet,
-    TransportProfile,
+    NostrProfile, NostrRelayUrlPolicy, PublishMode, ReticulumPreviewBehavior,
+    ReticulumPreviewProfile, SatisfactionPolicy, TargetPolicy, TargetSet, TransportProfile,
 };
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
 
@@ -167,6 +167,32 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
     assert_eq!(
         nostr_profile.configured_nostr_relay_urls(),
         vec!["wss://relay-d.example.com".to_owned()]
+    );
+}
+
+#[test]
+fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
+    let profile = ReticulumPreviewProfile::preview_unavailable();
+
+    assert_eq!(profile.endpoint_uri(), "reticulum:preview-unavailable");
+    assert_eq!(
+        profile.behavior(),
+        ReticulumPreviewBehavior::RejectDeliveryAttempts
+    );
+    assert_eq!(
+        ReticulumPreviewBehavior::RejectDeliveryAttempts.as_str(),
+        "reject_delivery_attempts"
+    );
+    assert_eq!(
+        ReticulumPreviewBehavior::DeferDeliveryPlans.as_str(),
+        "defer_delivery_plans"
+    );
+    assert_eq!(
+        serde_json::to_value(profile).expect("profile json"),
+        serde_json::json!({
+            "endpoint_uri": "reticulum:preview-unavailable",
+            "behavior": "reject_delivery_attempts"
+        })
     );
 }
 

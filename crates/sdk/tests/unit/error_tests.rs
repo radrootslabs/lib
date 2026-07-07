@@ -3,6 +3,7 @@ use super::{
     RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, redacted_relay_url,
 };
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
+use crate::transport::ReticulumPreviewBehavior;
 use radroots_authority::RadrootsAuthorityError;
 use radroots_events::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
@@ -366,6 +367,16 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             operation: "sync.push_outbox",
             required_feature: "relay-runtime",
         },
+        RadrootsSdkError::reticulum_preview_transport_unavailable(
+            "sync.push_outbox",
+            "reticulum:preview-unavailable",
+            ReticulumPreviewBehavior::RejectDeliveryAttempts,
+        ),
+        RadrootsSdkError::reticulum_preview_transport_unavailable(
+            "sync.push_outbox",
+            "reticulum:preview-unavailable",
+            ReticulumPreviewBehavior::DeferDeliveryPlans,
+        ),
         RadrootsSdkError::ProductSyncTransportSetupFailure {
             message: "offline".to_owned(),
         },

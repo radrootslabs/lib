@@ -4,6 +4,8 @@ use std::{fmt, path::PathBuf};
 #[cfg(feature = "runtime")]
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
+use crate::transport::ReticulumPreviewBehavior;
+#[cfg(feature = "runtime")]
 use radroots_trade::identity::RadrootsTradeLocator;
 #[cfg(feature = "runtime")]
 use serde_json::{Value, json};
@@ -166,6 +168,11 @@ pub enum RadrootsSdkError {
         operation: &'static str,
         required_feature: &'static str,
     },
+    ReticulumPreviewTransportUnavailable {
+        operation: String,
+        endpoint_uri: String,
+        behavior: ReticulumPreviewBehavior,
+    },
     ProductSyncTransportSetupFailure {
         message: String,
     },
@@ -228,6 +235,14 @@ impl RadrootsSdkError {
             Self::TradeAmbiguous { .. } => "trade_ambiguous",
             Self::PrivacyPreflight { .. } => "privacy_preflight",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
+            Self::ReticulumPreviewTransportUnavailable { behavior, .. } => match behavior {
+                ReticulumPreviewBehavior::RejectDeliveryAttempts => {
+                    "reticulum_preview_transport_unavailable"
+                }
+                ReticulumPreviewBehavior::DeferDeliveryPlans => {
+                    "reticulum_preview_transport_deferred"
+                }
+            },
             Self::ProductSyncTransportSetupFailure { .. } => "product_sync_transport_setup_failure",
             Self::Authority { .. } => "authority",
             Self::EventStore { .. } => "event_store",
@@ -287,7 +302,10 @@ impl RadrootsSdkError {
             | Self::InvalidRequest { .. }
             | Self::ListingDraft { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
-            Self::ProductSyncUnsupported { .. } => RadrootsSdkErrorClass::Unsupported,
+            Self::ProductSyncUnsupported { .. }
+            | Self::ReticulumPreviewTransportUnavailable { .. } => {
+                RadrootsSdkErrorClass::Unsupported
+            }
             Self::ProductSyncTransportSetupFailure { .. }
             | Self::Transport { .. }
             | Self::SignerRequestTimedOut { .. }
@@ -356,6 +374,9 @@ impl RadrootsSdkError {
             Self::PrivacyPreflight { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
+            }
+            Self::ReticulumPreviewTransportUnavailable { .. } => {
+                vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
             }
             Self::ProductSyncTransportSetupFailure { .. } | Self::Transport { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure]
@@ -454,6 +475,15 @@ impl RadrootsSdkError {
                 operation,
                 required_feature,
             } => json!({ "operation": operation, "required_feature": required_feature }),
+            Self::ReticulumPreviewTransportUnavailable {
+                operation,
+                endpoint_uri,
+                behavior,
+            } => json!({
+                "operation": operation,
+                "endpoint_uri": endpoint_uri,
+                "behavior": behavior.as_str()
+            }),
             Self::ProductSyncTransportSetupFailure { message }
             | Self::Authority { message }
             | Self::EventStore { message }
@@ -527,6 +557,18 @@ impl RadrootsSdkError {
         Self::InvalidRelayUrl {
             url: redacted_relay_url(url.into()),
             reason: reason.into(),
+        }
+    }
+
+    pub(crate) fn reticulum_preview_transport_unavailable(
+        operation: impl Into<String>,
+        endpoint_uri: impl Into<String>,
+        behavior: ReticulumPreviewBehavior,
+    ) -> Self {
+        Self::ReticulumPreviewTransportUnavailable {
+            operation: operation.into(),
+            endpoint_uri: endpoint_uri.into(),
+            behavior,
         }
     }
 
@@ -654,6 +696,15 @@ impl fmt::Display for RadrootsSdkError {
             } => write!(
                 f,
                 "sdk product sync operation {operation} requires feature `{required_feature}`"
+            ),
+            Self::ReticulumPreviewTransportUnavailable {
+                operation,
+                endpoint_uri,
+                behavior,
+            } => write!(
+                f,
+                "sdk product sync operation {operation} cannot deliver through Reticulum preview endpoint `{endpoint_uri}` with behavior `{}`",
+                behavior.as_str()
             ),
             Self::ProductSyncTransportSetupFailure { message } => {
                 write!(f, "sdk product sync transport setup failed: {message}")

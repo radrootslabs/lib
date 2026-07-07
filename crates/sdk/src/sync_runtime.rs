@@ -525,14 +525,27 @@ impl<'sdk> SyncClient<'sdk> {
                     RadrootsdProxyPublishAdapter::new(radrootsd_proxy_config_from_profile(profile));
                 self.push_outbox_with_proxy_adapter(&adapter, request).await
             }
-            TransportProfile::LocalOnly | TransportProfile::ReticulumPreview { .. } => {
+            TransportProfile::LocalOnly => {
                 if self.push_outbox_has_no_ready_signed_work(&request).await? {
                     return Ok(PushOutboxReceipt::default());
                 }
                 Err(RadrootsSdkError::ProductSyncUnsupported {
                     operation: "sync.push_outbox",
-                    required_feature: "transport profile with Nostr delivery",
+                    required_feature: "delivery-capable transport profile",
                 })
+            }
+            TransportProfile::ReticulumPreview { profile } => {
+                if self
+                    .push_outbox_has_no_reticulum_preview_work(&request)
+                    .await?
+                {
+                    return Ok(PushOutboxReceipt::default());
+                }
+                Err(RadrootsSdkError::reticulum_preview_transport_unavailable(
+                    "sync.push_outbox",
+                    profile.endpoint_uri(),
+                    profile.behavior(),
+                ))
             }
         }
     }
@@ -545,6 +558,35 @@ impl<'sdk> SyncClient<'sdk> {
         let now_ms = sdk_now_ms(self.sdk)?;
         let summary = self.sdk._outbox.status_summary(now_ms).await?;
         Ok(summary.ready_signed_events == 0)
+    }
+
+    async fn push_outbox_has_no_reticulum_preview_work(
+        &self,
+        request: &PushOutboxRequest,
+    ) -> Result<bool, RadrootsSdkError> {
+        request.validate()?;
+        if let Some(outbox_event_id) = request.outbox_event_id {
+            let Some(event) = self.sdk._outbox.get_event(outbox_event_id).await? else {
+                return Ok(true);
+            };
+            if !matches!(
+                event.state,
+                RadrootsOutboxEventState::Signed | RadrootsOutboxEventState::PublishRetryable
+            ) || event.signed_event.is_none()
+            {
+                return Ok(true);
+            }
+            let targets = self.sdk._outbox.delivery_targets(outbox_event_id).await?;
+            return Ok(!targets.iter().any(|target| {
+                target.transport_kind == RadrootsTransportKind::Reticulum
+                    && (target.status.is_deferred_preview() || target.status.is_ready_for_attempt())
+            }));
+        }
+        let now_ms = sdk_now_ms(self.sdk)?;
+        let summary = self.sdk._outbox.status_summary(now_ms).await?;
+        Ok(summary.ready_signed_events == 0
+            && summary.pending_events == 0
+            && summary.retryable_events == 0)
     }
 
     pub async fn push_outbox_with_adapter<A>(

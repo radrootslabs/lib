@@ -25,8 +25,9 @@ use radroots_sdk::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
-    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp,
-    RestoreRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
+    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RestoreRequest, ReticulumPreviewBehavior,
+    ReticulumPreviewProfile, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
     StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
 use radroots_transport_nostr::{
@@ -452,6 +453,21 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
         ));
     }
     let sdk = builder.build().await.expect("sdk");
+    (tempdir, sdk)
+}
+
+async fn reticulum_preview_directory_sdk(
+    behavior: ReticulumPreviewBehavior,
+) -> (tempfile::TempDir, RadrootsClient) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let profile = ReticulumPreviewProfile::preview_unavailable().with_behavior(behavior);
+    let sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .transport_profile(TransportProfile::reticulum_preview(profile))
+        .build()
+        .await
+        .expect("sdk");
     (tempdir, sdk)
 }
 
@@ -1837,6 +1853,91 @@ async fn product_push_outbox_empty_queue_does_not_require_builder_relays() {
 
     assert_eq!(receipt.attempted_events, 0);
     assert!(receipt.events.is_empty());
+}
+
+#[tokio::test]
+async fn sync_runtime_product_push_outbox_reticulum_preview_reports_specific_ready_work_error() {
+    let cases = [
+        (
+            ReticulumPreviewBehavior::RejectDeliveryAttempts,
+            "reticulum_preview_transport_unavailable",
+        ),
+        (
+            ReticulumPreviewBehavior::DeferDeliveryPlans,
+            "reticulum_preview_transport_deferred",
+        ),
+    ];
+
+    for (behavior, expected_code) in cases {
+        let (_tempdir, sdk) = reticulum_preview_directory_sdk(behavior).await;
+        let empty = sdk
+            .sync()
+            .push_outbox(PushOutboxRequest::new())
+            .await
+            .expect("empty Reticulum preview push");
+        assert_eq!(empty.attempted_events, 0);
+        assert!(empty.events.is_empty());
+
+        let enqueue = sdk
+            .listings()
+            .enqueue_publish_with_explicit_signer(
+                ListingEnqueuePublishRequest::new(
+                    actor(),
+                    listing(LISTING_A_D_TAG, "Reticulum Preview Coffee"),
+                    TargetPolicy::use_transport_profile(),
+                ),
+                &FixtureSigner::new(SELLER),
+            )
+            .await
+            .expect("enqueue");
+
+        let error = sdk
+            .sync()
+            .push_outbox(PushOutboxRequest::new().with_limit(1))
+            .await
+            .expect_err("Reticulum preview is not delivery-capable");
+
+        assert!(matches!(
+            error,
+            RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+                ref operation,
+                ref endpoint_uri,
+                behavior: returned_behavior,
+            } if operation == "sync.push_outbox"
+                && endpoint_uri == "reticulum:preview-unavailable"
+                && returned_behavior == behavior
+        ));
+        assert_eq!(error.code(), expected_code);
+        assert_eq!(error.class(), RadrootsSdkErrorClass::Unsupported);
+        assert!(!error.retryable());
+        assert_eq!(
+            error.recovery_actions(),
+            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
+        );
+        let detail = error.detail_json();
+        assert_eq!(detail["detail"]["operation"], "sync.push_outbox");
+        assert_eq!(
+            detail["detail"]["endpoint_uri"],
+            "reticulum:preview-unavailable"
+        );
+        assert_eq!(detail["detail"]["behavior"], behavior.as_str());
+        assert!(
+            !detail["message"]
+                .as_str()
+                .expect("message")
+                .contains("Nostr")
+        );
+
+        let status = sdk
+            .sync()
+            .status(SyncStatusRequest::new())
+            .await
+            .expect("status");
+        assert_eq!(status.outbox.ready_signed_events, 0);
+        assert_eq!(status.outbox.pending_events, 1);
+        assert_eq!(status.outbox.total_events, 1);
+        assert_eq!(enqueue.outbox_event_id, 1);
+    }
 }
 
 #[tokio::test]
