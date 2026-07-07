@@ -236,6 +236,29 @@ fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
 }
 
 #[test]
+fn explicit_target_sets_reject_mixed_proxy_delegate_targets() {
+    let proxy =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, "http://127.0.0.1:8080/rpc")
+            .expect("proxy target");
+    let nostr =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example.com")
+            .expect("Nostr target");
+
+    let error = TargetSet::transport_targets(vec![proxy.clone(), nostr])
+        .expect_err("mixed proxy target set");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("proxy transport targets must be the only target")
+    ));
+
+    let proxy_only = TargetSet::transport_targets(vec![proxy]).expect("proxy-only target set");
+    assert_eq!(proxy_only.len(), 1);
+    assert_eq!(proxy_only.targets()[0].kind, RadrootsTransportKind::Proxy);
+}
+
+#[test]
 fn normalized_relays_reject_empty_and_over_limit_sets() {
     assert!(matches!(
         TargetSet::from_normalized_nostr_relays(Vec::new()),

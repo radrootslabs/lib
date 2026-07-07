@@ -1324,8 +1324,16 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
     );
     assert!(
         sync_runtime_source
-            .contains("radrootsd proxy outbox publish does not accept Reticulum target"),
-        "src/sync_runtime.rs must reject Reticulum proxy outbox targets before behavior is lost"
+            .contains("radrootsd proxy outbox publish explicit targets are Nostr-only"),
+        "src/sync_runtime.rs must reject non-Nostr proxy outbox explicit targets before behavior is lost"
+    );
+    assert!(
+        sync_runtime_source.contains("active_delivery_plan_id(claimed"),
+        "src/sync_runtime.rs must derive proxy publish behavior from the claimed active delivery plan"
+    );
+    assert!(
+        sync_runtime_source.contains("mixed proxy delegate targets"),
+        "src/sync_runtime.rs must fail closed if proxy delegate targets are mixed in a claimed publish set"
     );
     assert!(
         !sync_runtime_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),

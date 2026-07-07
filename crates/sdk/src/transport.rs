@@ -234,6 +234,16 @@ impl TargetSet {
                 targets.len(),
             ));
         }
+        if targets
+            .iter()
+            .any(|target| target.kind == RadrootsTransportKind::Proxy)
+            && (targets.len() != 1 || targets[0].kind != RadrootsTransportKind::Proxy)
+        {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "proxy transport targets must be the only target in a target set"
+                    .to_owned(),
+            });
+        }
         for target in &targets {
             if target.kind == RadrootsTransportKind::Reticulum
                 && target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI

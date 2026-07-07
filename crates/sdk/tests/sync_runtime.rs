@@ -16,7 +16,10 @@ use radroots_events::{
     ids::{RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId},
     listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
 };
-use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput};
+use radroots_outbox::{
+    RadrootsOutbox, RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventState,
+    RadrootsOutboxOperationInput, RadrootsOutboxSignedOperationInput,
+};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_sdk::ProxyProfile;
 use radroots_sdk::{
@@ -83,6 +86,8 @@ struct RecordingPublishAdapter {
     delay: Duration,
     raw_events: Arc<Mutex<Vec<String>>>,
     request_times_ms: Arc<Mutex<Vec<i64>>>,
+    idempotency_keys: Arc<Mutex<Vec<Option<String>>>>,
+    relay_batches: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 #[cfg(feature = "radrootsd-proxy")]
@@ -287,6 +292,8 @@ impl RecordingPublishAdapter {
             delay,
             raw_events: Arc::new(Mutex::new(Vec::new())),
             request_times_ms: Arc::new(Mutex::new(Vec::new())),
+            idempotency_keys: Arc::new(Mutex::new(Vec::new())),
+            relay_batches: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -299,6 +306,17 @@ impl RecordingPublishAdapter {
             .lock()
             .expect("request time lock")
             .clone()
+    }
+
+    fn idempotency_keys(&self) -> Vec<Option<String>> {
+        self.idempotency_keys
+            .lock()
+            .expect("idempotency key lock")
+            .clone()
+    }
+
+    fn relay_batches(&self) -> Vec<Vec<String>> {
+        self.relay_batches.lock().expect("relay batch lock").clone()
     }
 }
 
@@ -320,6 +338,14 @@ impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
                 .lock()
                 .expect("request time lock")
                 .push(request.now_ms);
+            self.idempotency_keys
+                .lock()
+                .expect("idempotency key lock")
+                .push(request.idempotency_key.clone());
+            self.relay_batches
+                .lock()
+                .expect("relay batch lock")
+                .push(request.targets.relay_strings());
             Ok(request
                 .targets
                 .relays()
@@ -1530,7 +1556,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         body["params"]["target_policy"]["source_policy"],
         "request_then_author_write_then_daemon_default"
     );
-    assert_eq!(body["params"]["delivery_policy"]["mode"], "any");
+    assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
     assert!(body["params"]["event"]["sig"].as_str().is_some());
     assert!(!recorded.body.contains("bridge."));
     assert!(!recorded.body.contains("signer_session_id"));
@@ -1574,6 +1600,15 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
         )
         .await
         .expect("enqueue");
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let plans = outbox
+        .delivery_plans(enqueue.outbox_event_id)
+        .await
+        .expect("plans");
+    assert_eq!(plans.len(), 1);
+    let active_plan_id = plans[0].delivery_plan_id;
 
     let first = sdk
         .sync()
@@ -1640,6 +1675,8 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
         second_key
             .starts_with(format!("radroots-sdk-outbox-{}-2-", enqueue.outbox_event_id).as_str())
     );
+    assert!(first_key.ends_with(format!("-{active_plan_id}").as_str()));
+    assert!(second_key.ends_with(format!("-{active_plan_id}").as_str()));
 }
 
 #[cfg(feature = "radrootsd-proxy")]
@@ -2041,6 +2078,183 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage = tempdir.path().join("sdk");
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage.clone())
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .build()
+        .await
+        .expect("sdk");
+    let first = sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(LISTING_A_D_TAG, "Duplicate Plan Coffee"),
+                TargetPolicy::UseConfiguredProfile,
+            )
+            .try_with_nostr_targets([RELAY_A], NostrRelayUrlPolicy::Public)
+            .expect("first targets")
+            .try_with_idempotency_key("sdk-duplicate-endpoint-plan")
+            .expect("first idempotency"),
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("first enqueue");
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stored_event = outbox
+        .get_event(first.outbox_event_id)
+        .await
+        .expect("stored event")
+        .expect("stored event");
+    let signed_event = stored_event.signed_event.clone().expect("signed event");
+    let second = outbox
+        .enqueue_signed_operation(
+            RadrootsOutboxSignedOperationInput::new(
+                LISTING_PUBLISH_OPERATION_KIND,
+                stored_event.draft.clone(),
+                signed_event,
+                radroots_outbox::RadrootsOutboxDeliveryPlanInput::new(
+                    "explicit.secondary",
+                    1,
+                    radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![
+                        radroots_transport::RadrootsTransportTarget::new(
+                            radroots_transport::RadrootsTransportKind::Nostr,
+                            RELAY_A,
+                        )
+                        .expect("second target"),
+                    ],
+                ),
+                true,
+                1_700_000_000_000,
+                1_700_000_000_000,
+            )
+            .with_idempotency_key("sdk-duplicate-endpoint-plan"),
+        )
+        .await
+        .expect("second plan");
+    assert_eq!(second.outbox_event_id, first.outbox_event_id);
+    let plans = outbox
+        .delivery_plans(first.outbox_event_id)
+        .await
+        .expect("plans");
+    assert_eq!(plans.len(), 2);
+    let first_plan_id = plans[0].delivery_plan_id;
+    let second_plan_id = plans[1].delivery_plan_id;
+    assert_ne!(first_plan_id, second_plan_id);
+    let event_before_push = outbox
+        .get_event(first.outbox_event_id)
+        .await
+        .expect("event before push")
+        .expect("event before push");
+    assert_eq!(event_before_push.state, RadrootsOutboxEventState::Signed);
+    let targets_before_push = outbox
+        .delivery_targets(first.outbox_event_id)
+        .await
+        .expect("targets before push");
+    assert_eq!(
+        targets_before_push
+            .iter()
+            .filter(|target| target.status == RadrootsOutboxDeliveryTargetStatus::Pending)
+            .count(),
+        2
+    );
+    let adapter = RecordingPublishAdapter::new(Duration::ZERO);
+
+    let first_receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(
+            &adapter,
+            PushOutboxRequest::new()
+                .with_limit(1)
+                .with_next_attempt_delay_ms(1),
+        )
+        .await
+        .expect("first push");
+
+    assert_eq!(first_receipt.attempted_events, 1);
+    assert_eq!(
+        first_receipt.events[0].final_state,
+        PushOutboxEventState::Published
+    );
+    let targets_after_first = outbox
+        .delivery_targets(first.outbox_event_id)
+        .await
+        .expect("targets after first");
+    assert_eq!(
+        targets_after_first
+            .iter()
+            .find(|target| target.delivery_plan_id == first_plan_id)
+            .expect("first target")
+            .status,
+        RadrootsOutboxDeliveryTargetStatus::Accepted
+    );
+    assert_eq!(
+        targets_after_first
+            .iter()
+            .find(|target| target.delivery_plan_id == second_plan_id)
+            .expect("second target")
+            .status,
+        RadrootsOutboxDeliveryTargetStatus::Pending
+    );
+    drop(sdk);
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage)
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
+        .build()
+        .await
+        .expect("reopened sdk");
+
+    let second_receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("second push");
+
+    assert_eq!(second_receipt.attempted_events, 1);
+    assert_eq!(
+        second_receipt.events[0].final_state,
+        PushOutboxEventState::Published
+    );
+    assert_eq!(
+        adapter.relay_batches(),
+        vec![vec![RELAY_A.to_owned()], vec![RELAY_A.to_owned()]]
+    );
+    let keys = adapter.idempotency_keys();
+    assert_eq!(keys.len(), 2);
+    let first_key = keys[0].as_deref().expect("first key");
+    let second_key = keys[1].as_deref().expect("second key");
+    assert_ne!(first_key, second_key);
+    assert!(
+        first_key.starts_with(
+            format!(
+                "radroots-nostr-outbox-{}-1-{}-",
+                first.outbox_event_id,
+                first.signed_event_id.as_str()
+            )
+            .as_str()
+        )
+    );
+    assert!(
+        second_key.starts_with(
+            format!(
+                "radroots-nostr-outbox-{}-2-{}-",
+                first.outbox_event_id,
+                first.signed_event_id.as_str()
+            )
+            .as_str()
+        )
+    );
+    assert!(first_key.ends_with(format!("-{first_plan_id}").as_str()));
+    assert!(second_key.ends_with(format!("-{second_plan_id}").as_str()));
 }
 
 #[tokio::test]

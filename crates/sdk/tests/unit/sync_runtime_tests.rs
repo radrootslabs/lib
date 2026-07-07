@@ -1,6 +1,6 @@
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
-    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_satisfaction,
+    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_remaining,
     proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_job,
     push_proxy_claimed_outbox_event, push_proxy_event_receipt,
     transport_publish_target_from_outbox_target,
@@ -574,7 +574,8 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
 
     assert_eq!(receipt.attempted_events, 0);
     assert_eq!(
-        proxy_delivery_policy_from_satisfaction(
+        proxy_delivery_policy_from_remaining(
+            0,
             0,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
@@ -582,7 +583,8 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
-        proxy_delivery_policy_from_satisfaction(
+        proxy_delivery_policy_from_remaining(
+            2,
             2,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
@@ -590,16 +592,17 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         TransportPublishDeliveryPolicy::All
     );
     assert_eq!(
-        proxy_delivery_policy_from_satisfaction(
+        proxy_delivery_policy_from_remaining(
             2,
+            1,
             &RadrootsTransportSatisfactionPolicy::any_accepted()
         )
         .expect("any-target proxy policy"),
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
-        proxy_outbox_idempotency_key(7, 3, "event-id"),
-        "radroots-sdk-outbox-7-3-event-id"
+        proxy_outbox_idempotency_key(7, 3, "event-id", 5),
+        "radroots-sdk-outbox-7-3-event-id-5"
     );
 
     let signed_event = ProxyFixtureSigner::new()
@@ -645,7 +648,36 @@ fn proxy_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss
         error,
         RadrootsSdkError::InvalidRequest { message }
             if message.contains("radrootsd proxy outbox publish")
-                && message.contains("Reticulum target")
+                && message.contains("Nostr-only")
+                && message.contains("reticulum target")
+    ));
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[test]
+fn proxy_outbox_target_conversion_rejects_proxy_targets_before_daemon_explicit_target() {
+    let target =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, "http://127.0.0.1:8080/rpc")
+            .expect("proxy target");
+    let record = RadrootsOutboxDeliveryTargetRecord {
+        delivery_target_id: 1,
+        delivery_plan_id: 1,
+        transport_kind: target.kind.clone(),
+        endpoint_uri: target.uri.clone(),
+        endpoint_fingerprint: target.fingerprint.clone(),
+        status: RadrootsOutboxDeliveryTargetStatus::Pending,
+        attempt_count: 0,
+        last_attempt_at_ms: None,
+        completed_at_ms: None,
+        last_error: None,
+    };
+
+    let error = transport_publish_target_from_outbox_target(&record).expect_err("proxy rejected");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("Nostr-only") && message.contains("proxy target")
     ));
 }
 
@@ -703,6 +735,7 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
         attempt_count: 3,
         state: RadrootsOutboxEventState::Signed,
         claim_token: "claim-token".to_owned(),
+        active_delivery_plan_id: Some(1),
         draft: RadrootsFrozenEventDraft {
             contract_id: "radroots.test".to_owned(),
             contract_registry_version: 1,
@@ -772,7 +805,8 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
         error,
         RadrootsSdkError::InvalidRequest { message }
             if message.contains("radrootsd proxy outbox publish")
-                && message.contains("Reticulum target")
+                && message.contains("Nostr-only")
+                && message.contains("reticulum target")
     ));
     let stored = sdk
         ._outbox
@@ -788,7 +822,7 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
             .last_error
             .as_deref()
             .expect("last error")
-            .contains("Reticulum target")
+            .contains("reticulum target")
     );
 }
 
@@ -820,14 +854,14 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
         (
             "proxy-complete-deferred",
             PushOutboxEventState::DeferredUntilImplemented,
-            PushOutboxEventState::Signed,
+            PushOutboxEventState::DeferredUntilImplemented,
             RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
             TransportPublishOutcomeKind::DeferredUntilImplemented,
         ),
         (
             "proxy-complete-preview-unavailable",
             PushOutboxEventState::PreviewUnavailable,
-            PushOutboxEventState::Signed,
+            PushOutboxEventState::PreviewUnavailable,
             RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
             TransportPublishOutcomeKind::PreviewUnavailable,
         ),

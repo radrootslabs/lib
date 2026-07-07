@@ -659,6 +659,23 @@ fn relay_proxy_target_conversion_rejects_reticulum_targets_before_behavior_loss(
     ));
 }
 
+#[test]
+fn relay_proxy_target_conversion_rejects_proxy_targets_before_daemon_explicit_target() {
+    let target = radroots_transport::RadrootsTransportTarget::new(
+        radroots_transport::RadrootsTransportKind::Proxy,
+        "http://127.0.0.1:8080/rpc",
+    )
+    .expect("proxy target");
+
+    let error = transport_publish_target(&target).expect_err("proxy rejected");
+
+    assert!(matches!(
+        error,
+        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
+            if message.contains("Nostr-only") && message.contains("proxy")
+    ));
+}
+
 #[tokio::test]
 async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
     let adapter =

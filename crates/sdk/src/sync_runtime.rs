@@ -412,6 +412,8 @@ impl From<RadrootsOutboxEventState> for PushOutboxEventState {
             RadrootsOutboxEventState::Published => Self::Published,
             RadrootsOutboxEventState::SignRetryable => Self::SignRetryable,
             RadrootsOutboxEventState::PublishRetryable => Self::PublishRetryable,
+            RadrootsOutboxEventState::DeferredUntilImplemented => Self::DeferredUntilImplemented,
+            RadrootsOutboxEventState::PreviewUnavailable => Self::PreviewUnavailable,
             RadrootsOutboxEventState::FailedTerminal => Self::FailedTerminal,
             RadrootsOutboxEventState::Cancelled => Self::Cancelled,
         }
@@ -759,7 +761,7 @@ async fn push_proxy_claimed_outbox_event(
             return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
         }
     };
-    let delivery_policy = match proxy_delivery_policy(sync, claimed, &target_policy).await {
+    let delivery_policy = match proxy_delivery_policy(sync, claimed).await {
         Ok(delivery_policy) => delivery_policy,
         Err(error) => {
             return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
@@ -782,6 +784,7 @@ async fn push_proxy_claimed_outbox_event(
             claimed.outbox_event_id,
             claimed.attempt_count,
             signed_event.id.as_str(),
+            active_delivery_plan_id(claimed, "radrootsd proxy publish")?,
         )),
         timeout_ms: adapter.config().request_timeout_ms,
     };
@@ -830,8 +833,8 @@ async fn fail_proxy_local_validation(
 async fn proxy_delivery_policy(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
-    target_policy: &TransportPublishTargetPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
+    let active_delivery_plan_id = active_delivery_plan_id(claimed, "radrootsd proxy publish")?;
     let plans = sync
         .sdk
         ._outbox
@@ -839,39 +842,64 @@ async fn proxy_delivery_policy(
         .await?;
     let plan = plans
         .iter()
-        .find(|plan| {
-            claimed
-                .delivery_targets
-                .iter()
-                .any(|target| target.delivery_plan_id == plan.delivery_plan_id)
-        })
-        .or_else(|| plans.first())
+        .find(|plan| plan.delivery_plan_id == active_delivery_plan_id)
         .ok_or_else(|| RadrootsSdkError::InvalidRequest {
             message: format!(
-                "outbox event {} has no delivery plan for proxy publish",
-                claimed.outbox_event_id
+                "outbox event {} active delivery plan {} was not found for proxy publish",
+                claimed.outbox_event_id, active_delivery_plan_id
             ),
         })?;
-    proxy_delivery_policy_from_satisfaction(
-        target_policy.request_target_count(),
+    let targets = sync
+        .sdk
+        ._outbox
+        .delivery_targets(claimed.outbox_event_id)
+        .await?;
+    let active_targets = targets
+        .iter()
+        .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
+        .collect::<Vec<_>>();
+    let satisfied_count = active_targets
+        .iter()
+        .filter(|target| {
+            target
+                .status
+                .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+        })
+        .count();
+    let ready_target_count = active_targets
+        .iter()
+        .filter(|target| target.status.is_ready_for_attempt())
+        .count();
+    let required_remaining = (plan.required_success_count as usize).saturating_sub(satisfied_count);
+    proxy_delivery_policy_from_remaining(
+        ready_target_count,
+        required_remaining,
         &plan.satisfaction_policy,
     )
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_delivery_policy_from_satisfaction(
-    target_count: usize,
+fn proxy_delivery_policy_from_remaining(
+    ready_target_count: usize,
+    required_remaining: usize,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
-    if target_count == 0 {
+    if ready_target_count == 0 || required_remaining == 0 {
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
-    let required = satisfaction_policy.required_target_count(target_count)?;
     Ok(match satisfaction_policy {
         RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
         RadrootsTransportSatisfactionPolicy::Quorum { .. } => {
-            TransportPublishDeliveryPolicy::Quorum { quorum: required }
+            if required_remaining >= ready_target_count {
+                TransportPublishDeliveryPolicy::All
+            } else if required_remaining == 1 {
+                TransportPublishDeliveryPolicy::Any
+            } else {
+                TransportPublishDeliveryPolicy::Quorum {
+                    quorum: required_remaining,
+                }
+            }
         }
     })
 }
@@ -881,8 +909,26 @@ fn proxy_outbox_idempotency_key(
     outbox_event_id: i64,
     attempt_count: i64,
     event_id: &str,
+    active_delivery_plan_id: i64,
 ) -> String {
-    format!("radroots-sdk-outbox-{outbox_event_id}-{attempt_count}-{event_id}")
+    format!(
+        "radroots-sdk-outbox-{outbox_event_id}-{attempt_count}-{event_id}-{active_delivery_plan_id}"
+    )
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn active_delivery_plan_id(
+    claimed: &RadrootsOutboxClaimedEvent,
+    operation: &'static str,
+) -> Result<i64, RadrootsSdkError> {
+    claimed
+        .active_delivery_plan_id
+        .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "outbox event {} has no active delivery plan for {operation}",
+                claimed.outbox_event_id
+            ),
+        })
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -936,7 +982,18 @@ fn proxy_transport_publish_target_policy(
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
         .collect::<Vec<_>>();
-    if ready_targets.len() == 1 && is_proxy_delegate_target(ready_targets[0]) {
+    if ready_targets
+        .iter()
+        .any(|target| is_proxy_delegate_target(target))
+    {
+        if ready_targets.len() != 1 || !is_proxy_delegate_target(ready_targets[0]) {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "radrootsd proxy outbox publish does not accept mixed proxy delegate targets for outbox event {}",
+                    claimed.outbox_event_id
+                ),
+            });
+        }
         Ok(TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
             Vec::new(),
@@ -955,10 +1012,11 @@ fn proxy_transport_publish_target_policy(
 fn transport_publish_target_from_outbox_target(
     target: &RadrootsOutboxDeliveryTargetRecord,
 ) -> Result<TransportPublishTarget, RadrootsSdkError> {
-    if target.transport_kind == RadrootsTransportKind::Reticulum {
+    if target.transport_kind != RadrootsTransportKind::Nostr {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
-                "radrootsd proxy outbox publish does not accept Reticulum target {}",
+                "radrootsd proxy outbox publish explicit targets are Nostr-only and cannot publish {} target {}",
+                target.transport_kind.canonical_label(),
                 target.endpoint_uri.as_str()
             ),
         });
