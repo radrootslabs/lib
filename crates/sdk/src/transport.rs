@@ -4,7 +4,7 @@ use radroots_transport::{
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
-use serde::ser::SerializeStruct;
+use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeSet;
 
 pub use radroots_transport::{
@@ -358,20 +358,66 @@ impl HybridProfile {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub enum ProxyAuth {
+    None,
+    BearerToken(String),
+}
+
+impl Default for ProxyAuth {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl core::fmt::Debug for ProxyAuth {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::BearerToken(_) => f.write_str("BearerToken(<redacted>)"),
+        }
+    }
+}
+
+impl serde::Serialize for ProxyAuth {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("ProxyAuth", 1)?;
+        match self {
+            Self::None => state.serialize_field("kind", "none")?,
+            Self::BearerToken(_) => state.serialize_field("kind", "bearer_token")?,
+        }
+        state.end()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ProxyProfile {
     endpoint_url: String,
+    auth: ProxyAuth,
 }
 
 impl ProxyProfile {
     pub fn new(endpoint_url: impl Into<String>) -> Self {
         Self {
             endpoint_url: endpoint_url.into(),
+            auth: ProxyAuth::None,
         }
+    }
+
+    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {
+        self.auth = ProxyAuth::BearerToken(token.into());
+        self
     }
 
     pub fn endpoint_url(&self) -> &str {
         self.endpoint_url.as_str()
+    }
+
+    pub fn auth(&self) -> &ProxyAuth {
+        &self.auth
     }
 
     pub(crate) fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {

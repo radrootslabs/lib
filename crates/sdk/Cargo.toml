@@ -42,11 +42,13 @@ radrootsd-proxy = [
   "std",
   "serde_json",
   "dep:futures",
-  "dep:radroots_publish_proxy_protocol",
+  "dep:radroots_transport",
+  "dep:radroots_transport_publish_protocol",
   "dep:radroots_transport_nostr",
   "dep:reqwest",
-  "radroots_publish_proxy_protocol/serde",
-  "radroots_publish_proxy_protocol/std",
+  "radroots_transport/serde",
+  "radroots_transport_publish_protocol/serde",
+  "radroots_transport_publish_protocol/std",
   "radroots_transport_nostr/std",
 ]
 signer-adapters = [
@@ -123,8 +125,8 @@ radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
 radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
-radroots_publish_proxy_protocol = { workspace = true, optional = true, default-features = false }
 radroots_transport = { workspace = true, optional = true, default-features = false }
+radroots_transport_publish_protocol = { workspace = true, optional = true, default-features = false }
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }

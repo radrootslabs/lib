@@ -65,13 +65,13 @@ struct FixtureSigner {
 struct TransportFailurePublishAdapter;
 
 #[cfg(feature = "radrootsd-proxy")]
-struct RecordedProxyRequest {
+struct RecordedTransportPublishRequest {
     body: String,
 }
 
 #[cfg(feature = "radrootsd-proxy")]
 #[derive(Clone, Copy)]
-enum ProxyResponseMode {
+enum TransportPublishResponseMode {
     Accepted,
     Retryable,
     Terminal,
@@ -85,23 +85,28 @@ struct RecordingPublishAdapter {
 }
 
 #[cfg(feature = "radrootsd-proxy")]
-fn spawn_publish_proxy_server() -> (String, JoinHandle<RecordedProxyRequest>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy server");
+fn spawn_transport_publish_server() -> (String, JoinHandle<RecordedTransportPublishRequest>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind transport publish server");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("accept");
-        let body = read_proxy_request_body(&mut stream);
-        write_proxy_response(&mut stream, body.as_str(), ProxyResponseMode::Accepted, 1);
-        RecordedProxyRequest { body }
+        let body = read_transport_publish_request_body(&mut stream);
+        write_transport_publish_response(
+            &mut stream,
+            body.as_str(),
+            TransportPublishResponseMode::Accepted,
+            1,
+        );
+        RecordedTransportPublishRequest { body }
     });
     (endpoint, handle)
 }
 
 #[cfg(feature = "radrootsd-proxy")]
-fn spawn_publish_proxy_sequence_server(
-    responses: Vec<ProxyResponseMode>,
-) -> (String, JoinHandle<Vec<RecordedProxyRequest>>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy server");
+fn spawn_transport_publish_sequence_server(
+    responses: Vec<TransportPublishResponseMode>,
+) -> (String, JoinHandle<Vec<RecordedTransportPublishRequest>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind transport publish server");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     let handle = std::thread::spawn(move || {
         responses
@@ -109,9 +114,9 @@ fn spawn_publish_proxy_sequence_server(
             .enumerate()
             .map(|(index, mode)| {
                 let (mut stream, _) = listener.accept().expect("accept");
-                let body = read_proxy_request_body(&mut stream);
-                write_proxy_response(&mut stream, body.as_str(), mode, index + 1);
-                RecordedProxyRequest { body }
+                let body = read_transport_publish_request_body(&mut stream);
+                write_transport_publish_response(&mut stream, body.as_str(), mode, index + 1);
+                RecordedTransportPublishRequest { body }
             })
             .collect()
     });
@@ -119,7 +124,7 @@ fn spawn_publish_proxy_sequence_server(
 }
 
 #[cfg(feature = "radrootsd-proxy")]
-fn read_proxy_request_body(stream: &mut TcpStream) -> String {
+fn read_transport_publish_request_body(stream: &mut TcpStream) -> String {
     let mut request = Vec::new();
     let mut buffer = [0u8; 1024];
     loop {
@@ -159,10 +164,10 @@ fn read_proxy_request_body(stream: &mut TcpStream) -> String {
 }
 
 #[cfg(feature = "radrootsd-proxy")]
-fn write_proxy_response(
+fn write_transport_publish_response(
     stream: &mut TcpStream,
     body: &str,
-    mode: ProxyResponseMode,
+    mode: TransportPublishResponseMode,
     job_number: usize,
 ) {
     let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
@@ -174,9 +179,9 @@ fn write_proxy_response(
         acknowledged_count,
         retryable_count,
         terminal_count,
-        relay,
+        target,
     ) = match mode {
-        ProxyResponseMode::Accepted => (
+        TransportPublishResponseMode::Accepted => (
             "delivery_satisfied",
             true,
             true,
@@ -184,14 +189,15 @@ fn write_proxy_response(
             0,
             0,
             serde_json::json!({
-                "relay_url": "wss://daemon-resolved.example.com",
+                "transport_kind": "nostr",
+                "endpoint_uri": "wss://daemon-resolved.example.com",
                 "source": "daemon_default",
                 "attempted": true,
                 "outcome_kind": "accepted",
                 "message": "accepted"
             }),
         ),
-        ProxyResponseMode::Retryable => (
+        TransportPublishResponseMode::Retryable => (
             "delivery_unsatisfied_retryable",
             false,
             false,
@@ -199,14 +205,15 @@ fn write_proxy_response(
             1,
             0,
             serde_json::json!({
-                "relay_url": "wss://daemon-resolved.example.com",
+                "transport_kind": "nostr",
+                "endpoint_uri": "wss://daemon-resolved.example.com",
                 "source": "daemon_default",
                 "attempted": false,
                 "outcome_kind": "connection_failed",
                 "message": "dns lookup failed"
             }),
         ),
-        ProxyResponseMode::Terminal => (
+        TransportPublishResponseMode::Terminal => (
             "delivery_unsatisfied_terminal",
             true,
             false,
@@ -214,7 +221,8 @@ fn write_proxy_response(
             0,
             1,
             serde_json::json!({
-                "relay_url": "wss://daemon-resolved.example.com",
+                "transport_kind": "nostr",
+                "endpoint_uri": "wss://daemon-resolved.example.com",
                 "source": "daemon_default",
                 "attempted": true,
                 "outcome_kind": "invalid",
@@ -235,15 +243,15 @@ fn write_proxy_response(
                 "event_id": event["id"],
                 "pubkey": event["pubkey"],
                 "event_kind": event["kind"],
-                "relay_policy": body_json["params"]["relay_policy"],
+                "target_policy": body_json["params"]["target_policy"],
                 "delivery_policy": body_json["params"]["delivery_policy"],
-                "relay_count": 1,
+                "target_count": 1,
                 "acknowledged_count": acknowledged_count,
                 "retryable_count": retryable_count,
                 "terminal_count": terminal_count,
                 "requested_at_ms": 1700000000000i64,
                 "completed_at_ms": 1700000000100i64,
-                "relays": [relay]
+                "targets": [target]
             }
         }
     })
@@ -1446,7 +1454,7 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
 #[cfg(feature = "radrootsd-proxy")]
 #[tokio::test]
 async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved_relays() {
-    let (endpoint, handle) = spawn_publish_proxy_server();
+    let (endpoint, handle) = spawn_transport_publish_server();
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
@@ -1473,7 +1481,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         .sync()
         .push_outbox(PushOutboxRequest::new().with_limit(1))
         .await
-        .expect("proxy push");
+        .expect("transport publish push");
 
     assert_eq!(receipt.attempted_events, 1);
     assert_eq!(receipt.published_events, 1);
@@ -1492,12 +1500,16 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         PushOutboxTargetOutcomeKind::Accepted
     );
 
-    let recorded = handle.join().expect("proxy request");
+    let recorded = handle.join().expect("transport publish request");
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
-    assert_eq!(body["method"], "publish.event");
-    assert_eq!(body["params"]["relays"], serde_json::json!([]));
+    assert_eq!(body["method"], "transport.publish.event");
+    assert_eq!(body["params"]["target_policy"]["kind"], "nostr");
     assert_eq!(
-        body["params"]["relay_policy"],
+        body["params"]["target_policy"]["relay_urls"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        body["params"]["target_policy"]["source_policy"],
         "request_then_author_write_then_daemon_default"
     );
     assert_eq!(body["params"]["delivery_policy"]["mode"], "any");
@@ -1517,9 +1529,9 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
 #[cfg(feature = "radrootsd-proxy")]
 #[tokio::test]
 async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
-    let (endpoint, handle) = spawn_publish_proxy_sequence_server(vec![
-        ProxyResponseMode::Retryable,
-        ProxyResponseMode::Accepted,
+    let (endpoint, handle) = spawn_transport_publish_sequence_server(vec![
+        TransportPublishResponseMode::Retryable,
+        TransportPublishResponseMode::Accepted,
     ]);
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
@@ -1553,7 +1565,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
                 .with_next_attempt_delay_ms(1),
         )
         .await
-        .expect("first proxy push");
+        .expect("first transport publish push");
 
     assert_eq!(first.attempted_events, 1);
     assert_eq!(first.retryable_events, 1);
@@ -1575,7 +1587,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
         .sync()
         .push_outbox(PushOutboxRequest::new().with_limit(1))
         .await
-        .expect("second proxy push");
+        .expect("second transport publish push");
 
     assert_eq!(second.attempted_events, 1);
     assert_eq!(second.published_events, 1);
@@ -1585,7 +1597,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
         PushOutboxEventState::Published
     );
 
-    let recorded = handle.join().expect("proxy requests");
+    let recorded = handle.join().expect("transport publish requests");
     assert_eq!(recorded.len(), 2);
     let first_body: serde_json::Value =
         serde_json::from_str(recorded[0].body.as_str()).expect("first body");
@@ -1647,7 +1659,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
                 .with_next_attempt_delay_ms(1),
         )
         .await
-        .expect("retryable proxy push");
+        .expect("retryable transport publish push");
     assert_eq!(retryable.retryable_events, 1);
     assert_eq!(
         retryable.events[0].final_state,
@@ -1669,7 +1681,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
     );
 
     let (terminal_endpoint, terminal_handle) =
-        spawn_publish_proxy_sequence_server(vec![ProxyResponseMode::Terminal]);
+        spawn_transport_publish_sequence_server(vec![TransportPublishResponseMode::Terminal]);
     let terminal_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("terminal-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
@@ -1696,7 +1708,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         .sync()
         .push_outbox(PushOutboxRequest::new().with_limit(1))
         .await
-        .expect("terminal proxy push");
+        .expect("terminal transport publish push");
     assert_eq!(terminal.terminal_events, 1);
     assert_eq!(terminal.events[0].outbox_event_id, enqueue.outbox_event_id);
     assert_eq!(

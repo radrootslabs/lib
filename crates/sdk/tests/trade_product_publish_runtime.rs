@@ -39,23 +39,23 @@ const SELLER_PUBLIC_KEY_HEX: &str =
     "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 const RELAY: &str = "wss://relay.radroots.test";
 
-struct RecordedProxyRequest {
+struct RecordedTransportPublishRequest {
     body: String,
 }
 
-fn spawn_trade_publish_proxy_server() -> (String, JoinHandle<RecordedProxyRequest>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy server");
+fn spawn_trade_transport_publish_server() -> (String, JoinHandle<RecordedTransportPublishRequest>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind transport publish server");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("accept");
-        let body = read_proxy_request_body(&mut stream);
-        write_proxy_accept_response(&mut stream, body.as_str());
-        RecordedProxyRequest { body }
+        let body = read_transport_publish_request_body(&mut stream);
+        write_transport_publish_accept_response(&mut stream, body.as_str());
+        RecordedTransportPublishRequest { body }
     });
     (endpoint, handle)
 }
 
-fn read_proxy_request_body(stream: &mut TcpStream) -> String {
+fn read_transport_publish_request_body(stream: &mut TcpStream) -> String {
     let mut request = Vec::new();
     let mut buffer = [0u8; 1024];
     loop {
@@ -94,7 +94,7 @@ fn read_proxy_request_body(stream: &mut TcpStream) -> String {
     body.to_owned()
 }
 
-fn write_proxy_accept_response(stream: &mut TcpStream, body: &str) {
+fn write_transport_publish_accept_response(stream: &mut TcpStream, body: &str) {
     let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
     let event = &body_json["params"]["event"];
     let response_body = serde_json::json!({
@@ -110,16 +110,17 @@ fn write_proxy_accept_response(stream: &mut TcpStream, body: &str) {
                 "event_id": event["id"],
                 "pubkey": event["pubkey"],
                 "event_kind": event["kind"],
-                "relay_policy": body_json["params"]["relay_policy"],
+                "target_policy": body_json["params"]["target_policy"],
                 "delivery_policy": body_json["params"]["delivery_policy"],
-                "relay_count": 1,
+                "target_count": 1,
                 "acknowledged_count": 1,
                 "retryable_count": 0,
                 "terminal_count": 0,
                 "requested_at_ms": 1700000000000i64,
                 "completed_at_ms": 1700000000100i64,
-                "relays": [{
-                    "relay_url": RELAY,
+                "targets": [{
+                    "transport_kind": "nostr",
+                    "endpoint_uri": RELAY,
                     "source": "request",
                     "attempted": true,
                     "outcome_kind": "accepted",
@@ -231,7 +232,7 @@ fn explicit_trade_relays() -> TargetPolicy {
 
 #[tokio::test]
 async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
-    let (endpoint, handle) = spawn_trade_publish_proxy_server();
+    let (endpoint, handle) = spawn_trade_transport_publish_server();
     let tempdir = tempfile::tempdir().expect("tempdir");
     let secret_key = RadrootsNostrSecretKey::from_hex(BUYER_SECRET_KEY_HEX).expect("secret key");
     let signer_keys = RadrootsNostrKeys::new(secret_key);
@@ -278,9 +279,13 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         PushOutboxTargetOutcomeKind::Accepted
     );
 
-    let recorded = handle.join().expect("proxy request");
+    let recorded = handle.join().expect("transport publish request");
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
-    assert_eq!(body["method"], "publish.event");
+    assert_eq!(body["method"], "transport.publish.event");
     assert_eq!(body["params"]["delivery_policy"]["mode"], "any");
-    assert_eq!(body["params"]["relays"], serde_json::json!([RELAY]));
+    assert_eq!(body["params"]["target_policy"]["kind"], "explicit_targets");
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
+        RELAY
+    );
 }

@@ -2,22 +2,26 @@ use core::fmt;
 use core::time::Duration;
 
 use radroots_events::draft::RadrootsSignedNostrEvent;
-use radroots_publish_proxy_protocol::{
-    METHOD_EVENT, PublishDeliveryPolicy, PublishEventRequest, PublishEventResponse,
-    PublishProxyProtocolError, PublishRelayOutcomeKind, PublishRelayPolicy, SignedNostrEventWire,
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
 };
-use radroots_transport::RadrootsTransportSatisfactionPolicy;
 use radroots_transport_nostr::{
     RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
     RadrootsRelayTransportError,
 };
+use radroots_transport_publish_protocol::{
+    METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
+    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishOutcomeKind,
+    TransportPublishPreviewBehavior, TransportPublishProtocolError, TransportPublishTarget,
+    TransportPublishTargetOutcome, TransportPublishTargetPolicy,
+};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
-pub const SDK_RADROOTSD_PROXY_REQUEST_ID: &str = "radroots-sdk-publish-event";
-pub const SDK_RADROOTSD_PROXY_MAX_RELAYS: usize = 20;
+pub const SDK_RADROOTSD_PROXY_REQUEST_ID: &str = "radroots-sdk-transport-publish-event";
+pub const SDK_RADROOTSD_PROXY_MAX_TARGETS: usize = 20;
 
 #[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum RadrootsdAuth {
@@ -39,7 +43,6 @@ impl fmt::Debug for RadrootsdAuth {
 pub struct RadrootsdProxyConfig {
     pub endpoint: String,
     pub auth: RadrootsdAuth,
-    pub relay_policy: PublishRelayPolicy,
     pub timeout: Duration,
     pub request_timeout_ms: Option<u64>,
 }
@@ -49,7 +52,6 @@ impl RadrootsdProxyConfig {
         Self {
             endpoint: endpoint.into(),
             auth: RadrootsdAuth::None,
-            relay_policy: PublishRelayPolicy::RequestThenAuthorWriteThenDaemonDefault,
             timeout: Duration::from_secs(10),
             request_timeout_ms: None,
         }
@@ -57,11 +59,6 @@ impl RadrootsdProxyConfig {
 
     pub fn with_auth(mut self, auth: RadrootsdAuth) -> Self {
         self.auth = auth;
-        self
-    }
-
-    pub fn with_relay_policy(mut self, relay_policy: PublishRelayPolicy) -> Self {
-        self.relay_policy = relay_policy;
         self
     }
 
@@ -93,19 +90,18 @@ impl RadrootsdProxyPublishAdapter {
     pub async fn publish_signed_event(
         &self,
         request: RadrootsdProxyPublishRequest,
-    ) -> Result<RadrootsRelayPublishReceipt, RadrootsdError> {
-        let request = request.into_protocol_request(self.config.relay_policy)?;
+    ) -> Result<TransportPublishEventResponse, RadrootsdError> {
+        let request = request.into_protocol_request();
         request
-            .validate(SDK_RADROOTSD_PROXY_MAX_RELAYS)
+            .validate(SDK_RADROOTSD_PROXY_MAX_TARGETS)
             .map_err(RadrootsdError::from_protocol)?;
-        let response = publish_event(
+        publish_event(
             self.config.endpoint.as_str(),
             &self.config.auth,
             &request,
             self.config.timeout,
         )
-        .await?;
-        proxy_receipt_from_response(response)
+        .await
     }
 }
 
@@ -118,19 +114,29 @@ impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
         Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>,
     > {
         Box::pin(async move {
+            let targets = request
+                .targets
+                .relay_strings()
+                .into_iter()
+                .map(|relay| RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, relay))
+                .collect::<Result<Vec<_>, _>>()?;
             let request = RadrootsdProxyPublishRequest {
                 delivery_policy: delivery_policy_from_relay_request(
-                    request.targets.len(),
+                    targets.len(),
                     &request.satisfaction_policy,
                 )?,
                 signed_event: request.signed_event,
-                relays: request.targets.relay_strings(),
+                target_policy: TransportPublishTargetPolicy::explicit_targets(
+                    targets.iter().map(transport_publish_target).collect(),
+                ),
                 idempotency_key: None,
                 timeout_ms: self.config.request_timeout_ms,
             };
-            let receipt = self
+            let response = self
                 .publish_signed_event(request)
                 .await
+                .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
+            let receipt = proxy_relay_receipt_from_response(response)
                 .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
             Ok(receipt.relays)
         })
@@ -140,25 +146,21 @@ impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsdProxyPublishRequest {
     pub signed_event: RadrootsSignedNostrEvent,
-    pub relays: Vec<String>,
-    pub delivery_policy: PublishDeliveryPolicy,
+    pub target_policy: TransportPublishTargetPolicy,
+    pub delivery_policy: TransportPublishDeliveryPolicy,
     pub idempotency_key: Option<String>,
     pub timeout_ms: Option<u64>,
 }
 
 impl RadrootsdProxyPublishRequest {
-    fn into_protocol_request(
-        self,
-        relay_policy: PublishRelayPolicy,
-    ) -> Result<PublishEventRequest, RadrootsdError> {
-        Ok(PublishEventRequest {
+    fn into_protocol_request(self) -> TransportPublishEventRequest {
+        TransportPublishEventRequest {
             event: signed_event_wire(&self.signed_event),
-            relays: self.relays,
-            relay_policy,
+            target_policy: self.target_policy,
             delivery_policy: self.delivery_policy,
             idempotency_key: self.idempotency_key,
             timeout_ms: self.timeout_ms,
-        })
+        }
     }
 }
 
@@ -172,7 +174,7 @@ pub enum RadrootsdError {
 }
 
 impl RadrootsdError {
-    fn from_protocol(error: PublishProxyProtocolError) -> Self {
+    fn from_protocol(error: TransportPublishProtocolError) -> Self {
         Self::InvalidRequest(error.to_string())
     }
 }
@@ -212,9 +214,9 @@ struct JsonRpcError {
 pub async fn publish_event(
     endpoint: &str,
     auth: &RadrootsdAuth,
-    request: &PublishEventRequest,
+    request: &TransportPublishEventRequest,
     timeout: Duration,
-) -> Result<PublishEventResponse, RadrootsdError> {
+) -> Result<TransportPublishEventResponse, RadrootsdError> {
     jsonrpc_call(
         endpoint,
         auth,
@@ -240,8 +242,10 @@ fn auth_headers(auth: &RadrootsdAuth) -> Result<HeaderMap, RadrootsdError> {
     }
 }
 
-pub fn publish_event_request_json(request: &PublishEventRequest) -> Result<Value, RadrootsdError> {
-    Ok(serde_json::to_value(request).expect("radrootsd publish.event request serializes"))
+pub fn publish_event_request_json(
+    request: &TransportPublishEventRequest,
+) -> Result<Value, RadrootsdError> {
+    Ok(serde_json::to_value(request).expect("radrootsd transport publish request serializes"))
 }
 
 fn http_status_error(status: reqwest::StatusCode, body: &str) -> RadrootsdError {
@@ -352,23 +356,35 @@ fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
     }
 }
 
+fn transport_publish_target(target: &RadrootsTransportTarget) -> TransportPublishTarget {
+    TransportPublishTarget {
+        transport_kind: target.kind.canonical_label(),
+        endpoint_uri: target.uri.as_str().to_owned(),
+        preview_behavior: if target.kind == RadrootsTransportKind::Reticulum {
+            Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts)
+        } else {
+            None
+        },
+    }
+}
+
 fn delivery_policy_from_relay_request(
     target_count: usize,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
-) -> Result<PublishDeliveryPolicy, RadrootsRelayTransportError> {
+) -> Result<TransportPublishDeliveryPolicy, RadrootsRelayTransportError> {
     let required = satisfaction_policy.required_target_count(target_count)?;
     let delivery_policy = if required >= target_count {
-        PublishDeliveryPolicy::All
+        TransportPublishDeliveryPolicy::All
     } else if required <= 1 {
-        PublishDeliveryPolicy::Any
+        TransportPublishDeliveryPolicy::Any
     } else {
-        PublishDeliveryPolicy::Quorum { quorum: required }
+        TransportPublishDeliveryPolicy::Quorum { quorum: required }
     };
     Ok(delivery_policy)
 }
 
-fn proxy_receipt_from_response(
-    response: PublishEventResponse,
+fn proxy_relay_receipt_from_response(
+    response: TransportPublishEventResponse,
 ) -> Result<RadrootsRelayPublishReceipt, RadrootsdError> {
     response
         .job
@@ -377,26 +393,15 @@ fn proxy_receipt_from_response(
     let quorum = response
         .job
         .delivery_policy
-        .required_ack_count(response.job.relay_count);
-    let attempted_count = response
-        .job
-        .relays
-        .iter()
-        .filter(|relay| relay.attempted)
-        .count();
+        .required_target_count(response.job.target_count);
     let relays = response
         .job
-        .relays
+        .targets
         .into_iter()
-        .map(|relay| RadrootsRelayPublishRelayReceipt {
-            relay_url: relay.relay_url,
-            attempted: relay.attempted,
-            outcome: RadrootsRelayOutcome {
-                kind: relay_outcome_kind(relay.outcome_kind),
-                message: relay.message,
-            },
-        })
-        .collect();
+        .filter(|target| target.transport_kind == "nostr")
+        .map(relay_receipt_from_target_outcome)
+        .collect::<Vec<_>>();
+    let attempted_count = relays.iter().filter(|relay| relay.attempted).count();
     Ok(RadrootsRelayPublishReceipt {
         event_id: response.job.event_id,
         attempted_count,
@@ -409,27 +414,44 @@ fn proxy_receipt_from_response(
     })
 }
 
-fn relay_outcome_kind(kind: PublishRelayOutcomeKind) -> RadrootsRelayOutcomeKind {
+fn relay_receipt_from_target_outcome(
+    target: TransportPublishTargetOutcome,
+) -> RadrootsRelayPublishRelayReceipt {
+    RadrootsRelayPublishRelayReceipt {
+        relay_url: target.endpoint_uri,
+        attempted: target.attempted,
+        outcome: RadrootsRelayOutcome {
+            kind: relay_outcome_kind(target.outcome_kind),
+            message: target.message,
+        },
+    }
+}
+
+fn relay_outcome_kind(kind: TransportPublishOutcomeKind) -> RadrootsRelayOutcomeKind {
     match kind {
-        PublishRelayOutcomeKind::Accepted => RadrootsRelayOutcomeKind::Accepted,
-        PublishRelayOutcomeKind::DuplicateAccepted => RadrootsRelayOutcomeKind::DuplicateAccepted,
-        PublishRelayOutcomeKind::Blocked => RadrootsRelayOutcomeKind::Blocked,
-        PublishRelayOutcomeKind::RateLimited => RadrootsRelayOutcomeKind::RateLimited,
-        PublishRelayOutcomeKind::Invalid => RadrootsRelayOutcomeKind::Invalid,
-        PublishRelayOutcomeKind::PowRequired => RadrootsRelayOutcomeKind::PowRequired,
-        PublishRelayOutcomeKind::Restricted => RadrootsRelayOutcomeKind::Restricted,
-        PublishRelayOutcomeKind::AuthRequired => RadrootsRelayOutcomeKind::AuthRequired,
-        PublishRelayOutcomeKind::Muted => RadrootsRelayOutcomeKind::Muted,
-        PublishRelayOutcomeKind::Unsupported => RadrootsRelayOutcomeKind::Unsupported,
-        PublishRelayOutcomeKind::PaymentRequired => RadrootsRelayOutcomeKind::PaymentRequired,
-        PublishRelayOutcomeKind::Error => RadrootsRelayOutcomeKind::Error,
-        PublishRelayOutcomeKind::Timeout => RadrootsRelayOutcomeKind::Timeout,
-        PublishRelayOutcomeKind::ConnectionFailed => RadrootsRelayOutcomeKind::ConnectionFailed,
-        PublishRelayOutcomeKind::RelayUrlRejected => RadrootsRelayOutcomeKind::RelayUrlRejected,
-        PublishRelayOutcomeKind::SkippedAlreadyAccepted => {
+        TransportPublishOutcomeKind::Accepted => RadrootsRelayOutcomeKind::Accepted,
+        TransportPublishOutcomeKind::DuplicateAccepted => {
+            RadrootsRelayOutcomeKind::DuplicateAccepted
+        }
+        TransportPublishOutcomeKind::Blocked => RadrootsRelayOutcomeKind::Blocked,
+        TransportPublishOutcomeKind::RateLimited => RadrootsRelayOutcomeKind::RateLimited,
+        TransportPublishOutcomeKind::Invalid => RadrootsRelayOutcomeKind::Invalid,
+        TransportPublishOutcomeKind::PowRequired => RadrootsRelayOutcomeKind::PowRequired,
+        TransportPublishOutcomeKind::Restricted => RadrootsRelayOutcomeKind::Restricted,
+        TransportPublishOutcomeKind::AuthRequired => RadrootsRelayOutcomeKind::AuthRequired,
+        TransportPublishOutcomeKind::Muted => RadrootsRelayOutcomeKind::Muted,
+        TransportPublishOutcomeKind::Unsupported => RadrootsRelayOutcomeKind::Unsupported,
+        TransportPublishOutcomeKind::PaymentRequired => RadrootsRelayOutcomeKind::PaymentRequired,
+        TransportPublishOutcomeKind::Error => RadrootsRelayOutcomeKind::Error,
+        TransportPublishOutcomeKind::Timeout => RadrootsRelayOutcomeKind::Timeout,
+        TransportPublishOutcomeKind::ConnectionFailed => RadrootsRelayOutcomeKind::ConnectionFailed,
+        TransportPublishOutcomeKind::TargetRejected => RadrootsRelayOutcomeKind::RelayUrlRejected,
+        TransportPublishOutcomeKind::SkippedAlreadyAccepted => {
             RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
         }
-        PublishRelayOutcomeKind::Unknown => RadrootsRelayOutcomeKind::Unknown,
+        TransportPublishOutcomeKind::Deferred
+        | TransportPublishOutcomeKind::Unavailable
+        | TransportPublishOutcomeKind::Unknown => RadrootsRelayOutcomeKind::Unknown,
     }
 }
 

@@ -1,7 +1,7 @@
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
     CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_satisfaction,
-    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_receipt,
+    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_job,
     push_proxy_claimed_outbox_event,
 };
 use super::{
@@ -39,12 +39,16 @@ use radroots_nostr::prelude::{
 use radroots_outbox::RadrootsOutboxClaimedEvent;
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_publish_proxy_protocol::PublishDeliveryPolicy;
-#[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::RadrootsTransportSatisfactionPolicy;
 use radroots_transport_nostr::{
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
+};
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_transport_publish_protocol::{
+    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishJobStatus,
+    TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishTargetOutcome,
+    TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::collections::BTreeSet;
 
@@ -166,6 +170,49 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
         .expect("claim")
         .expect("claimed event");
     (sdk, claimed)
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+fn proxy_job(event_id: &str, outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
+    let delivery_satisfied = outcome_kind.counts_toward_satisfaction();
+    let retryable = outcome_kind.is_retryable();
+    let terminal_failure = outcome_kind.is_terminal_failure();
+    TransportPublishJobView {
+        job_id: "proxy-unit-job".to_owned(),
+        status: if delivery_satisfied {
+            TransportPublishJobStatus::DeliverySatisfied
+        } else if retryable {
+            TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
+        } else {
+            TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
+        },
+        terminal: !retryable,
+        delivery_satisfied,
+        event_id: event_id.to_owned(),
+        pubkey: PROXY_SIGNER_PUBLIC_KEY_HEX.to_owned(),
+        event_kind: KIND_FARM,
+        target_policy: TransportPublishTargetPolicy::nostr(
+            NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
+            vec!["wss://relay.example.com".to_owned()],
+        ),
+        delivery_policy: TransportPublishDeliveryPolicy::Any,
+        target_count: 1,
+        acknowledged_count: usize::from(delivery_satisfied),
+        retryable_count: usize::from(retryable),
+        terminal_count: usize::from(terminal_failure),
+        requested_at_ms: 1_700_000_000_000,
+        completed_at_ms: Some(1_700_000_000_100),
+        last_error: None,
+        targets: vec![TransportPublishTargetOutcome {
+            transport_kind: "nostr".to_owned(),
+            endpoint_uri: "wss://relay.example.com".to_owned(),
+            source: TransportPublishTargetSource::Request,
+            attempted: true,
+            outcome_kind,
+            message: Some("daemon outcome".to_owned()),
+            latency_ms: Some(4),
+        }],
+    }
 }
 
 #[test]
@@ -501,7 +548,7 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         .sync()
         .push_outbox_with_proxy_adapter(&adapter, super::PushOutboxRequest::new())
         .await
-        .expect("empty proxy push");
+        .expect("empty transport publish push");
 
     assert_eq!(receipt.attempted_events, 0);
     assert_eq!(
@@ -510,7 +557,7 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
             &RadrootsTransportSatisfactionPolicy::AllTargets
         )
         .expect("zero-target proxy policy"),
-        PublishDeliveryPolicy::Any
+        TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
         proxy_delivery_policy_from_satisfaction(
@@ -518,24 +565,27 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
             &RadrootsTransportSatisfactionPolicy::AllTargets
         )
         .expect("all-target proxy policy"),
-        PublishDeliveryPolicy::All
+        TransportPublishDeliveryPolicy::All
     );
     assert_eq!(
         proxy_delivery_policy_from_satisfaction(2, &RadrootsTransportSatisfactionPolicy::AnyTarget)
             .expect("any-target proxy policy"),
-        PublishDeliveryPolicy::Any
+        TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
         proxy_outbox_idempotency_key(7, 3, "event-id"),
         "radroots-sdk-outbox-7-3-event-id"
     );
 
-    let proxy_receipt = proxy_transport_error_receipt("a".repeat(64));
-    assert_eq!(proxy_receipt.attempted_count, 1);
-    assert_eq!(proxy_receipt.retryable_count, 1);
-    assert_eq!(proxy_receipt.quorum, 1);
-    assert!(!proxy_receipt.quorum_met);
-    assert!(proxy_receipt.relays.is_empty());
+    let signed_event = ProxyFixtureSigner::new()
+        .sign_frozen_draft(&proxy_frozen_draft("proxy-transport-error-job"))
+        .expect("signed event");
+    let proxy_job = proxy_transport_error_job(&signed_event);
+    assert_eq!(proxy_job.event_id, signed_event.id);
+    assert_eq!(proxy_job.target_count, 1);
+    assert_eq!(proxy_job.retryable_count, 1);
+    assert!(!proxy_job.delivery_satisfied);
+    assert!(proxy_job.targets.is_empty());
     assert_eq!(
         proxy_error_message(&RadrootsdError::Http("connection refused".to_owned())),
         "radrootsd proxy publish failed: connection refused"
@@ -628,7 +678,7 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
     let receipt =
         push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
-            .expect("transport error receipt");
+            .expect("transport error job");
 
     assert_eq!(receipt.retryable_count, 1);
     let stored = sdk
@@ -645,43 +695,51 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
 #[tokio::test]
 async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_receipts() {
     let cases = [
-        ("proxy-complete-success", PushOutboxEventState::Published, {
-            let mut receipt = relay_publish_receipt("a".repeat(64).as_str());
-            receipt.quorum_met = true;
-            receipt.quorum = 1;
-            receipt.accepted_count = 1;
-            receipt
-        }),
+        (
+            "proxy-complete-success",
+            PushOutboxEventState::Published,
+            TransportPublishOutcomeKind::Accepted,
+        ),
         (
             "proxy-complete-retryable",
             PushOutboxEventState::PublishRetryable,
-            {
-                let mut receipt = relay_publish_receipt("b".repeat(64).as_str());
-                receipt.retryable_count = 1;
-                receipt.quorum = 1;
-                receipt
-            },
+            TransportPublishOutcomeKind::Timeout,
         ),
         (
             "proxy-complete-terminal",
             PushOutboxEventState::FailedTerminal,
-            {
-                let mut receipt = relay_publish_receipt("c".repeat(64).as_str());
-                receipt.terminal_count = 1;
-                receipt.quorum = 1;
-                receipt
-            },
+            TransportPublishOutcomeKind::Blocked,
         ),
     ];
 
-    for (d_tag, expected_state, mut publish) in cases {
+    for (d_tag, expected_state, outcome_kind) in cases {
         let (sdk, claimed) = claimed_proxy_event(d_tag).await;
-        publish.event_id = claimed
-            .signed_event
-            .as_ref()
-            .expect("signed event")
-            .id
-            .clone();
+        let publish = proxy_job(
+            claimed
+                .signed_event
+                .as_ref()
+                .expect("signed event")
+                .id
+                .as_str(),
+            outcome_kind,
+        );
+        assert_eq!(
+            publish.event_id,
+            claimed
+                .signed_event
+                .as_ref()
+                .expect("signed event")
+                .id
+                .clone()
+        );
+        assert_eq!(
+            publish.pubkey,
+            claimed.signed_event.as_ref().expect("signed event").pubkey
+        );
+        assert_eq!(
+            publish.event_kind,
+            claimed.signed_event.as_ref().expect("signed event").kind
+        );
         let sync = sdk.sync();
         complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
             .await

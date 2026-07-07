@@ -230,7 +230,7 @@ pub use crate::trade_storage::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::transport::{
-    HybridProfile, NostrProfile, NostrRelayUrlPolicy, ProxyProfile, PublishMode,
+    HybridProfile, NostrProfile, NostrRelayUrlPolicy, ProxyAuth, ProxyProfile, PublishMode,
     ReticulumPreviewBehavior, ReticulumPreviewProfile, SDK_TRANSPORT_TARGET_MAX_COUNT,
     SatisfactionPolicy, TargetPolicy, TargetSet, TransportDeliveryReceipt,
     TransportDeliveryTargetStatus, TransportKind, TransportOutcome, TransportProfile,
