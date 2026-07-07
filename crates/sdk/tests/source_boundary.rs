@@ -1322,6 +1322,38 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         sync_runtime_source.contains("target.transport_kind == RadrootsTransportKind::Proxy"),
         "src/sync_runtime.rs must identify proxy delegate targets with RadrootsTransportKind::Proxy"
     );
+
+    for required in [
+        "TransportPublishOutcomeKind::DeferredUntilImplemented",
+        "mark_delivery_target_deferred_until_implemented",
+        "TransportPublishOutcomeKind::PreviewUnavailable",
+        "mark_delivery_target_preview_unavailable",
+        "PushOutboxEventState::DeferredUntilImplemented",
+        "PushOutboxEventState::PreviewUnavailable",
+        "PushOutboxTargetOutcomeKind::DeferredUntilImplemented",
+        "PushOutboxTargetOutcomeKind::PreviewUnavailable",
+    ] {
+        assert!(
+            sync_runtime_source.contains(required),
+            "src/sync_runtime.rs must preserve proxy preview/deferred outcome witness `{required}`"
+        );
+    }
+
+    let receipt_source = source_between(
+        sync_runtime_source.as_str(),
+        "fn push_proxy_event_receipt",
+        "fn push_proxy_target_receipt",
+    );
+    assert!(
+        receipt_source.contains("push_receipt_event_id("),
+        "push_proxy_event_receipt must convert daemon event ids through the typed receipt helper"
+    );
+    for forbidden in [".expect(", ".unwrap(", "panic!("] {
+        assert!(
+            !receipt_source.contains(forbidden),
+            "push_proxy_event_receipt must not use production panic path `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -1509,6 +1541,21 @@ fn function_source<'source>(source: &'source str, function_name: &str) -> &'sour
     let end = source_after_start
         .find("\n#[tokio::test]")
         .unwrap_or(source_after_start.len());
+    &source_after_start[..end]
+}
+
+fn source_between<'source>(
+    source: &'source str,
+    start_marker: &str,
+    end_marker: &str,
+) -> &'source str {
+    let start = source
+        .find(start_marker)
+        .unwrap_or_else(|| panic!("failed to find source marker `{start_marker}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find(end_marker)
+        .unwrap_or_else(|| panic!("failed to find source marker `{end_marker}`"));
     &source_after_start[..end]
 }
 
