@@ -391,6 +391,8 @@ pub enum PushOutboxEventState {
     Published,
     SignRetryable,
     PublishRetryable,
+    DeferredUntilImplemented,
+    PreviewUnavailable,
     FailedTerminal,
     Cancelled,
 }
@@ -631,7 +633,7 @@ impl<'sdk> SyncClient<'sdk> {
                 claimed.outbox_event_id,
                 push_event_final_state(&publish.publish),
                 publish.publish,
-            ));
+            )?);
         }
         Ok(receipt)
     }
@@ -666,7 +668,7 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
-            receipt.push_event(push_proxy_event_receipt(claimed.outbox_event_id, publish));
+            receipt.push_event(push_proxy_event_receipt(claimed.outbox_event_id, publish)?);
         }
         Ok(receipt)
     }
@@ -975,6 +977,34 @@ async fn complete_proxy_delivery_target(
                 now_ms,
             )
             .await?;
+    } else if outcome.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented {
+        sync.sdk
+            ._outbox
+            .mark_delivery_target_deferred_until_implemented(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                target.delivery_target_id,
+                outcome
+                    .message
+                    .as_deref()
+                    .unwrap_or("radrootsd proxy publish deferred until implemented"),
+                now_ms,
+            )
+            .await?;
+    } else if outcome.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable {
+        sync.sdk
+            ._outbox
+            .mark_delivery_target_preview_unavailable(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                target.delivery_target_id,
+                outcome
+                    .message
+                    .as_deref()
+                    .unwrap_or("radrootsd proxy publish preview unavailable"),
+                now_ms,
+            )
+            .await?;
     } else {
         sync.sdk
             ._outbox
@@ -1008,6 +1038,28 @@ async fn complete_missing_proxy_delivery_target(
                 claimed.outbox_event_id,
                 claimed.claim_token.as_str(),
                 target.delivery_target_id,
+                now_ms,
+            )
+            .await?;
+    } else if publish.status == TransportPublishJobStatus::DeliveryDeferred {
+        sync.sdk
+            ._outbox
+            .mark_delivery_target_deferred_until_implemented(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                target.delivery_target_id,
+                "radrootsd proxy publish deferred until implemented",
+                now_ms,
+            )
+            .await?;
+    } else if publish.status == TransportPublishJobStatus::DeliveryPreviewUnavailable {
+        sync.sdk
+            ._outbox
+            .mark_delivery_target_preview_unavailable(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                target.delivery_target_id,
+                "radrootsd proxy publish preview unavailable",
                 now_ms,
             )
             .await?;
@@ -1077,6 +1129,10 @@ fn proxy_error_message(error: &RadrootsdError) -> String {
 fn proxy_push_event_final_state(publish: &TransportPublishJobView) -> PushOutboxEventState {
     if publish.delivery_satisfied {
         PushOutboxEventState::Published
+    } else if publish.status == TransportPublishJobStatus::DeliveryDeferred {
+        PushOutboxEventState::DeferredUntilImplemented
+    } else if publish.status == TransportPublishJobStatus::DeliveryPreviewUnavailable {
+        PushOutboxEventState::PreviewUnavailable
     } else if publish.retryable_count > 0 || !publish.terminal {
         PushOutboxEventState::PublishRetryable
     } else {
@@ -1088,13 +1144,15 @@ fn proxy_push_event_final_state(publish: &TransportPublishJobView) -> PushOutbox
 fn push_proxy_event_receipt(
     outbox_event_id: i64,
     publish: TransportPublishJobView,
-) -> PushOutboxEventReceipt {
-    let event_id = RadrootsEventId::parse(publish.event_id.as_str())
-        .expect("transport publish daemon job uses signed event id");
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
+    let event_id = push_receipt_event_id(
+        publish.event_id.as_str(),
+        "transport publish daemon job event id",
+    )?;
     let quorum = publish
         .delivery_policy
         .required_target_count(publish.target_count);
-    PushOutboxEventReceipt {
+    Ok(PushOutboxEventReceipt {
         event_id,
         outbox_event_id,
         final_state: proxy_push_event_final_state(&publish),
@@ -1113,7 +1171,7 @@ fn push_proxy_event_receipt(
             .into_iter()
             .map(push_proxy_target_receipt)
             .collect(),
-    }
+    })
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -1189,10 +1247,12 @@ fn push_event_receipt(
     outbox_event_id: i64,
     final_state: PushOutboxEventState,
     publish: RadrootsRelayPublishReceipt,
-) -> PushOutboxEventReceipt {
-    let event_id = RadrootsEventId::parse(publish.event_id.as_str())
-        .expect("relay transport publish receipt uses signed event id");
-    PushOutboxEventReceipt {
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
+    let event_id = push_receipt_event_id(
+        publish.event_id.as_str(),
+        "relay transport publish receipt event id",
+    )?;
+    Ok(PushOutboxEventReceipt {
         event_id,
         outbox_event_id,
         final_state,
@@ -1207,7 +1267,14 @@ fn push_event_receipt(
             .into_iter()
             .map(push_target_receipt)
             .collect(),
-    }
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn push_receipt_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsSdkError> {
+    RadrootsEventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
+        message: format!("{field} is invalid: {error}"),
+    })
 }
 
 #[cfg(feature = "runtime")]

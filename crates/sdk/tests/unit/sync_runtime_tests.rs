@@ -2,7 +2,7 @@
 use super::{
     CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_satisfaction,
     proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_job,
-    push_proxy_claimed_outbox_event,
+    push_proxy_claimed_outbox_event, push_proxy_event_receipt,
 };
 use super::{
     PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxTargetOutcomeKind,
@@ -36,7 +36,7 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_outbox::RadrootsOutboxClaimedEvent;
+use radroots_outbox::{RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetStatus};
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::RadrootsTransportSatisfactionPolicy;
@@ -177,15 +177,20 @@ fn proxy_job(event_id: &str, outcome_kind: TransportPublishOutcomeKind) -> Trans
     let delivery_satisfied = outcome_kind.counts_toward_satisfaction();
     let retryable = outcome_kind.is_retryable();
     let terminal_failure = outcome_kind.is_terminal_failure();
+    let status = if delivery_satisfied {
+        TransportPublishJobStatus::DeliverySatisfied
+    } else if retryable {
+        TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
+    } else if outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented {
+        TransportPublishJobStatus::DeliveryDeferred
+    } else if outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable {
+        TransportPublishJobStatus::DeliveryPreviewUnavailable
+    } else {
+        TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
+    };
     TransportPublishJobView {
         job_id: "proxy-unit-job".to_owned(),
-        status: if delivery_satisfied {
-            TransportPublishJobStatus::DeliverySatisfied
-        } else if retryable {
-            TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
-        } else {
-            TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
-        },
+        status,
         terminal: !retryable,
         delivery_satisfied,
         event_id: event_id.to_owned(),
@@ -232,7 +237,8 @@ fn push_event_receipt_parses_typed_event_id() {
         1,
         PushOutboxEventState::Published,
         relay_publish_receipt(event_id.as_str()).with_relay(),
-    );
+    )
+    .expect("receipt");
 
     assert_eq!(
         receipt.event_id,
@@ -245,13 +251,18 @@ fn push_event_receipt_parses_typed_event_id() {
 }
 
 #[test]
-#[should_panic(expected = "relay transport publish receipt uses signed event id")]
-fn push_event_receipt_panics_on_invalid_internal_event_id() {
-    let _ = push_event_receipt(
+fn push_event_receipt_returns_typed_error_for_invalid_internal_event_id() {
+    let error = push_event_receipt(
         1,
         PushOutboxEventState::Published,
         relay_publish_receipt("not-a-valid-event-id"),
-    );
+    )
+    .expect_err("invalid event id");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("relay transport publish receipt event id is invalid")
+    ));
 }
 
 #[test]
@@ -701,21 +712,48 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
         (
             "proxy-complete-success",
             PushOutboxEventState::Published,
+            PushOutboxEventState::Published,
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
             TransportPublishOutcomeKind::Accepted,
         ),
         (
             "proxy-complete-retryable",
             PushOutboxEventState::PublishRetryable,
+            PushOutboxEventState::PublishRetryable,
+            RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
             TransportPublishOutcomeKind::Timeout,
         ),
         (
             "proxy-complete-terminal",
             PushOutboxEventState::FailedTerminal,
+            PushOutboxEventState::FailedTerminal,
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
             TransportPublishOutcomeKind::Blocked,
+        ),
+        (
+            "proxy-complete-deferred",
+            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxEventState::Signed,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+            TransportPublishOutcomeKind::DeferredUntilImplemented,
+        ),
+        (
+            "proxy-complete-preview-unavailable",
+            PushOutboxEventState::PreviewUnavailable,
+            PushOutboxEventState::Signed,
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
+            TransportPublishOutcomeKind::PreviewUnavailable,
         ),
     ];
 
-    for (d_tag, expected_state, outcome_kind) in cases {
+    for (
+        d_tag,
+        expected_receipt_state,
+        expected_stored_state,
+        expected_target_status,
+        outcome_kind,
+    ) in cases
+    {
         let (sdk, claimed) = claimed_proxy_event(d_tag).await;
         let publish = proxy_job(
             claimed
@@ -743,6 +781,9 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
             publish.event_kind,
             claimed.signed_event.as_ref().expect("signed event").kind
         );
+        let proxy_receipt =
+            push_proxy_event_receipt(claimed.outbox_event_id, publish.clone()).expect("receipt");
+        assert_eq!(proxy_receipt.final_state, expected_receipt_state);
         let sync = sdk.sync();
         complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
             .await
@@ -753,9 +794,36 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
             .await
             .expect("stored")
             .expect("stored");
-        assert_eq!(PushOutboxEventState::from(stored.state), expected_state);
+        assert_eq!(
+            PushOutboxEventState::from(stored.state),
+            expected_stored_state
+        );
         assert!(stored.claim_token.is_none());
+        let targets = sdk
+            ._outbox
+            .delivery_targets(claimed.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(targets[0].status, expected_target_status);
     }
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[test]
+fn push_proxy_event_receipt_returns_typed_error_for_invalid_daemon_event_id() {
+    let error = push_proxy_event_receipt(
+        1,
+        proxy_job(
+            "not-a-valid-event-id",
+            TransportPublishOutcomeKind::Accepted,
+        ),
+    )
+    .expect_err("invalid daemon event id");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("transport publish daemon job event id is invalid")
+    ));
 }
 
 fn relay_publish_receipt(event_id: &str) -> RadrootsRelayPublishReceipt {
