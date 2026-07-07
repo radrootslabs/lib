@@ -44,7 +44,8 @@ use radroots_outbox::{
 use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
 };
 use radroots_transport_nostr::{
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
@@ -745,6 +746,50 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::PublishRetryable);
     assert!(stored.claim_token.is_none());
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
+async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
+    let (sdk, mut claimed) = claimed_proxy_event("proxy-local-validation-error").await;
+    let reticulum_target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )
+    .expect("Reticulum target");
+    claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
+    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
+    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
+    let sync = sdk.sync();
+    let adapter =
+        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+    let error =
+        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+            .await
+            .expect_err("local proxy validation error");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("radrootsd proxy outbox publish")
+                && message.contains("Reticulum target")
+    ));
+    let stored = sdk
+        ._outbox
+        .get_event(claimed.outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::FailedTerminal);
+    assert!(stored.claim_token.is_none());
+    assert!(stored.event_store_ingested);
+    assert!(
+        stored
+            .last_error
+            .as_deref()
+            .expect("last error")
+            .contains("Reticulum target")
+    );
 }
 
 #[cfg(feature = "radrootsd-proxy")]

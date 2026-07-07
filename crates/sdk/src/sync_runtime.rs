@@ -753,6 +753,18 @@ async fn push_proxy_claimed_outbox_event(
             claimed.outbox_event_id,
         ),
     )?;
+    let target_policy = match proxy_transport_publish_target_policy(claimed) {
+        Ok(target_policy) => target_policy,
+        Err(error) => {
+            return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
+        }
+    };
+    let delivery_policy = match proxy_delivery_policy(sync, claimed, &target_policy).await {
+        Ok(delivery_policy) => delivery_policy,
+        Err(error) => {
+            return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
+        }
+    };
     sync.sdk
         ._outbox
         .ingest_signed_event_local(
@@ -762,10 +774,9 @@ async fn push_proxy_claimed_outbox_event(
             now_ms,
         )
         .await?;
-    let target_policy = proxy_transport_publish_target_policy(claimed)?;
     let request = RadrootsdProxyPublishRequest {
         signed_event: signed_event.clone(),
-        delivery_policy: proxy_delivery_policy(sync, claimed, &target_policy).await?,
+        delivery_policy,
         target_policy,
         idempotency_key: Some(proxy_outbox_idempotency_key(
             claimed.outbox_event_id,
@@ -793,6 +804,26 @@ async fn push_proxy_claimed_outbox_event(
     };
     complete_proxy_publish_attempt(sync, claimed, &publish, next_attempt_delay_ms, now_ms).await?;
     Ok(publish)
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+async fn fail_proxy_local_validation(
+    sync: &SyncClient<'_>,
+    claimed: &RadrootsOutboxClaimedEvent,
+    error: RadrootsSdkError,
+    now_ms: i64,
+) -> Result<TransportPublishJobView, RadrootsSdkError> {
+    let message = error.to_string();
+    sync.sdk
+        ._outbox
+        .mark_publish_failed_terminal(
+            claimed.outbox_event_id,
+            claimed.claim_token.as_str(),
+            message.as_str(),
+            now_ms,
+        )
+        .await?;
+    Err(error)
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]

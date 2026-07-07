@@ -692,6 +692,13 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
         NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
         vec![" ".to_owned()],
     );
+    let mut nostr_preview_behavior = base.clone();
+    nostr_preview_behavior.target_policy =
+        TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+            transport_kind: "nostr".to_owned(),
+            endpoint_uri: "wss://relay.example.com".to_owned(),
+            preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+        }]);
     let mut empty_idempotency = base;
     empty_idempotency.idempotency_key = Some(" ".to_owned());
 
@@ -701,6 +708,7 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
         invalid_quorum,
         too_many_targets,
         empty_endpoint_uri,
+        nostr_preview_behavior,
         empty_idempotency,
     ] {
         assert!(matches!(
