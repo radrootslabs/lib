@@ -449,8 +449,8 @@ fn relay_outcome_kind(kind: TransportPublishOutcomeKind) -> RadrootsRelayOutcome
         TransportPublishOutcomeKind::SkippedAlreadyAccepted => {
             RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
         }
-        TransportPublishOutcomeKind::Deferred
-        | TransportPublishOutcomeKind::Unavailable
+        TransportPublishOutcomeKind::DeferredUntilImplemented
+        | TransportPublishOutcomeKind::PreviewUnavailable
         | TransportPublishOutcomeKind::Unknown => RadrootsRelayOutcomeKind::Unknown,
     }
 }

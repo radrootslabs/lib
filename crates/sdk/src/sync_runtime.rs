@@ -433,8 +433,8 @@ pub enum PushOutboxTargetOutcomeKind {
     ConnectionFailed,
     TargetUriRejected,
     SkippedAlreadyAccepted,
-    Deferred,
-    Unavailable,
+    DeferredUntilImplemented,
+    PreviewUnavailable,
     Unknown,
 }
 
@@ -1116,8 +1116,12 @@ fn push_proxy_target_outcome_kind(
         TransportPublishOutcomeKind::SkippedAlreadyAccepted => {
             PushOutboxTargetOutcomeKind::SkippedAlreadyAccepted
         }
-        TransportPublishOutcomeKind::Deferred => PushOutboxTargetOutcomeKind::Deferred,
-        TransportPublishOutcomeKind::Unavailable => PushOutboxTargetOutcomeKind::Unavailable,
+        TransportPublishOutcomeKind::DeferredUntilImplemented => {
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented
+        }
+        TransportPublishOutcomeKind::PreviewUnavailable => {
+            PushOutboxTargetOutcomeKind::PreviewUnavailable
+        }
         TransportPublishOutcomeKind::Unknown => PushOutboxTargetOutcomeKind::Unknown,
     }
 }
