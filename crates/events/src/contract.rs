@@ -85,7 +85,7 @@ pub enum RadrootsReducer {
     MarketProjection,
     OrderProjection,
     ProfileProjection,
-    RelayPolicyProjection,
+    NostrRelayPolicyProjection,
     SocialProjection,
     TradeValidation,
 }
@@ -758,7 +758,7 @@ const ORDER_REDUCERS: &[RadrootsReducer] = &[
     RadrootsReducer::ListingInventoryAccounting,
 ];
 const TRADE_VALIDATION_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::TradeValidation];
-const RELAY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::RelayPolicyProjection];
+const RELAY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::NostrRelayPolicyProjection];
 const KNOWLEDGE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::KnowledgeProjection];
 
 const FARM_MEMBERS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[

@@ -1287,7 +1287,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
 }
 
 #[tokio::test]
-async fn outbox_publish_transport_failure_releases_retryable_claim() {
+async fn outbox_transport_publish_failure_releases_retryable_claim() {
     let signed = signed_post("adapter transport failure");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
