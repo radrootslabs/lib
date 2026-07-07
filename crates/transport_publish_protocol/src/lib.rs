@@ -303,6 +303,8 @@ pub enum TransportPublishJobStatus {
     DeliverySatisfied,
     DeliveryUnsatisfiedRetryable,
     DeliveryUnsatisfiedTerminal,
+    DeliveryDeferred,
+    DeliveryPreviewUnavailable,
     Rejected,
 }
 
@@ -326,8 +328,8 @@ pub enum TransportPublishOutcomeKind {
     ConnectionFailed,
     TargetRejected,
     SkippedAlreadyAccepted,
-    Deferred,
-    Unavailable,
+    DeferredUntilImplemented,
+    PreviewUnavailable,
     Unknown,
 }
 
@@ -362,8 +364,13 @@ impl TransportPublishOutcomeKind {
                 | Self::Unsupported
                 | Self::PaymentRequired
                 | Self::TargetRejected
-                | Self::Deferred
-                | Self::Unavailable
+        )
+    }
+
+    pub fn is_deferred_preview(self) -> bool {
+        matches!(
+            self,
+            Self::DeferredUntilImplemented | Self::PreviewUnavailable
         )
     }
 }
@@ -494,7 +501,26 @@ impl TransportPublishCapabilities {
                     TransportPublishTargetPolicyName::ExplicitTargets,
                     TransportPublishTargetPolicyName::Nostr,
                 ],
-                transport_kinds: vec!["nostr".to_owned(), "reticulum".to_owned()],
+                transports: vec![
+                    TransportPublishTransportCapability {
+                        transport_kind: "nostr".to_owned(),
+                        implementation_state: TransportPublishImplementationState::Available,
+                        usable_for_delivery: true,
+                        preview_behavior: None,
+                        message: "Nostr relay publish is available".to_owned(),
+                    },
+                    TransportPublishTransportCapability {
+                        transport_kind: "reticulum".to_owned(),
+                        implementation_state:
+                            TransportPublishImplementationState::PreviewUnavailable,
+                        usable_for_delivery: false,
+                        preview_behavior: Some(
+                            TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                        ),
+                        message: "Reticulum preview is explicit and unavailable for real delivery"
+                            .to_owned(),
+                    },
+                ],
             },
         }
     }
@@ -517,7 +543,32 @@ pub struct TransportPublishSurfaceCapabilities {
     pub max_targets_per_request: usize,
     pub delivery_policies: Vec<TransportPublishDeliveryPolicyName>,
     pub target_policy_modes: Vec<TransportPublishTargetPolicyName>,
-    pub transport_kinds: Vec<String>,
+    pub transports: Vec<TransportPublishTransportCapability>,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportPublishImplementationState {
+    Available,
+    Disabled,
+    Misconfigured,
+    PreviewUnavailable,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportPublishTransportCapability {
+    pub transport_kind: String,
+    pub implementation_state: TransportPublishImplementationState,
+    pub usable_for_delivery: bool,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub preview_behavior: Option<TransportPublishPreviewBehavior>,
+    pub message: String,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -609,6 +660,33 @@ mod tests {
                 TransportPublishTargetPolicyName::Nostr
             ]
         );
+        assert_eq!(capabilities.publish.transports.len(), 2);
+        let nostr = capabilities
+            .publish
+            .transports
+            .iter()
+            .find(|transport| transport.transport_kind == "nostr")
+            .expect("nostr capability");
+        assert_eq!(
+            nostr.implementation_state,
+            TransportPublishImplementationState::Available
+        );
+        assert!(nostr.usable_for_delivery);
+        let reticulum = capabilities
+            .publish
+            .transports
+            .iter()
+            .find(|transport| transport.transport_kind == "reticulum")
+            .expect("reticulum capability");
+        assert_eq!(
+            reticulum.implementation_state,
+            TransportPublishImplementationState::PreviewUnavailable
+        );
+        assert!(!reticulum.usable_for_delivery);
+        assert_eq!(
+            reticulum.preview_behavior,
+            Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts)
+        );
     }
 
     #[test]
@@ -661,8 +739,10 @@ mod tests {
         assert!(TransportPublishOutcomeKind::Accepted.counts_toward_satisfaction());
         assert!(TransportPublishOutcomeKind::SkippedAlreadyAccepted.counts_toward_satisfaction());
         assert!(TransportPublishOutcomeKind::Timeout.is_retryable());
-        assert!(TransportPublishOutcomeKind::Unavailable.is_terminal_failure());
-        assert!(TransportPublishOutcomeKind::Deferred.is_terminal_failure());
+        assert!(TransportPublishOutcomeKind::PreviewUnavailable.is_deferred_preview());
+        assert!(TransportPublishOutcomeKind::DeferredUntilImplemented.is_deferred_preview());
+        assert!(!TransportPublishOutcomeKind::PreviewUnavailable.is_terminal_failure());
+        assert!(!TransportPublishOutcomeKind::DeferredUntilImplemented.is_terminal_failure());
     }
 
     #[test]
@@ -924,8 +1004,10 @@ mod tests {
             TransportPublishOutcomeKind::Unsupported,
             TransportPublishOutcomeKind::PaymentRequired,
             TransportPublishOutcomeKind::TargetRejected,
-            TransportPublishOutcomeKind::Deferred,
-            TransportPublishOutcomeKind::Unavailable,
+        ];
+        let deferred_preview = [
+            TransportPublishOutcomeKind::DeferredUntilImplemented,
+            TransportPublishOutcomeKind::PreviewUnavailable,
         ];
 
         for kind in satisfied {
@@ -942,6 +1024,12 @@ mod tests {
             assert!(!kind.counts_toward_satisfaction());
             assert!(!kind.is_retryable());
             assert!(kind.is_terminal_failure());
+        }
+        for kind in deferred_preview {
+            assert!(!kind.counts_toward_satisfaction());
+            assert!(!kind.is_retryable());
+            assert!(!kind.is_terminal_failure());
+            assert!(kind.is_deferred_preview());
         }
     }
 
