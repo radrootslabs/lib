@@ -1572,6 +1572,103 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
 
 #[cfg(feature = "radrootsd-proxy")]
 #[tokio::test]
+async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_before_selecting_work()
+ {
+    let (endpoint, handle) = spawn_transport_publish_server();
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage = tempdir.path().join("sdk");
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage.clone())
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint.clone())))
+        .build()
+        .await
+        .expect("sdk");
+    let enqueue = sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(LISTING_A_D_TAG, "Recovered Proxy Coffee"),
+                TargetPolicy::use_transport_profile(),
+            ),
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("enqueue");
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stale_claim = outbox
+        .claim_ready_signed_event(
+            enqueue.outbox_event_id,
+            "stalled-proxy-publisher",
+            "expired-proxy-publish",
+            1_700_000_000_500,
+            1_700_000_000_000,
+        )
+        .await
+        .expect("stale proxy claim")
+        .expect("stale proxy claim");
+    let active_delivery_plan_id = stale_claim
+        .active_delivery_plan_id
+        .expect("active delivery plan id");
+    let stored_before = outbox
+        .get_event(enqueue.outbox_event_id)
+        .await
+        .expect("stored before")
+        .expect("stored before");
+    assert_eq!(stored_before.state, RadrootsOutboxEventState::Publishing);
+    assert_eq!(
+        stored_before.claim_token.as_deref(),
+        Some("expired-proxy-publish")
+    );
+    drop(sdk);
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage)
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
+        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
+        .build()
+        .await
+        .expect("reopened sdk");
+
+    let receipt = sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("recovered transport publish push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(receipt.events[0].outbox_event_id, enqueue.outbox_event_id);
+    assert_eq!(
+        receipt.events[0].final_state,
+        PushOutboxEventState::Published
+    );
+    let stored_after = outbox
+        .get_event(enqueue.outbox_event_id)
+        .await
+        .expect("stored after")
+        .expect("stored after");
+    assert_eq!(stored_after.state, RadrootsOutboxEventState::Published);
+    assert_eq!(stored_after.claim_token, None);
+
+    let recorded = handle.join().expect("transport publish request");
+    let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
+    let idempotency_key = body["params"]["idempotency_key"]
+        .as_str()
+        .expect("idempotency key");
+    assert!(
+        idempotency_key
+            .starts_with(format!("radroots-sdk-outbox-{}-2-", enqueue.outbox_event_id).as_str())
+    );
+    assert!(idempotency_key.ends_with(format!("-{active_delivery_plan_id}").as_str()));
+    assert_eq!(body["params"]["target_policy"]["kind"], "nostr");
+    assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
 async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     let (endpoint, handle) = spawn_transport_publish_sequence_server(vec![
         TransportPublishResponseMode::Retryable,
@@ -2078,6 +2175,84 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_recovers_expired_publishing_claim_before_selecting_work() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let storage = tempdir.path().join("sdk");
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage.clone())
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .build()
+        .await
+        .expect("sdk");
+    let outbox_event_id =
+        enqueue_listing(&sdk, LISTING_A_D_TAG, "Recovered Coffee", &[RELAY_A]).await;
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stale_claim = outbox
+        .claim_ready_signed_event(
+            outbox_event_id,
+            "stalled-publisher",
+            "expired-publish",
+            1_700_000_000_500,
+            1_700_000_000_000,
+        )
+        .await
+        .expect("stale claim")
+        .expect("stale claim");
+    assert_eq!(stale_claim.state, RadrootsOutboxEventState::Publishing);
+    let active_delivery_plan_id = stale_claim
+        .active_delivery_plan_id
+        .expect("active delivery plan id");
+    let stored_before = outbox
+        .get_event(outbox_event_id)
+        .await
+        .expect("stored before")
+        .expect("stored before");
+    assert_eq!(stored_before.state, RadrootsOutboxEventState::Publishing);
+    assert_eq!(
+        stored_before.claim_token.as_deref(),
+        Some("expired-publish")
+    );
+    let adapter = RecordingPublishAdapter::new(Duration::ZERO);
+    drop(sdk);
+    let sdk = RadrootsClient::builder()
+        .directory_storage(storage)
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
+        .build()
+        .await
+        .expect("reopened sdk");
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("recovered push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(receipt.events[0].outbox_event_id, outbox_event_id);
+    assert_eq!(
+        receipt.events[0].final_state,
+        PushOutboxEventState::Published
+    );
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+    let idempotency_keys = adapter.idempotency_keys();
+    let idempotency_key = idempotency_keys[0].as_deref().expect("idempotency key");
+    assert!(
+        idempotency_key.starts_with(format!("radroots-nostr-outbox-{outbox_event_id}-2-").as_str())
+    );
+    assert!(idempotency_key.ends_with(format!("-{active_delivery_plan_id}").as_str()));
+    let stored_after = outbox
+        .get_event(outbox_event_id)
+        .await
+        .expect("stored after")
+        .expect("stored after");
+    assert_eq!(stored_after.state, RadrootsOutboxEventState::Published);
+    assert_eq!(stored_after.claim_token, None);
 }
 
 #[tokio::test]

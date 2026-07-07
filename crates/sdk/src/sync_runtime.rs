@@ -608,9 +608,15 @@ impl<'sdk> SyncClient<'sdk> {
         A: RadrootsRelayPublishAdapter,
     {
         request.validate()?;
+        let recovery_now_ms = sdk_now_ms(self.sdk)?;
+        recover_expired_outbox_claims_for_push(self.sdk, recovery_now_ms).await?;
         let mut receipt = PushOutboxReceipt::default();
-        for _ in 0..request.limit {
-            let claim_now_ms = sdk_now_ms(self.sdk)?;
+        for index in 0..request.limit {
+            let claim_now_ms = if index == 0 {
+                recovery_now_ms
+            } else {
+                sdk_now_ms(self.sdk)?
+            };
             let claim_token = push_outbox_claim_token();
             let Some(claimed) = claim_ready_signed_event_for_push(
                 self.sdk,
@@ -653,9 +659,15 @@ impl<'sdk> SyncClient<'sdk> {
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
         request.validate()?;
+        let recovery_now_ms = sdk_now_ms(self.sdk)?;
+        recover_expired_outbox_claims_for_push(self.sdk, recovery_now_ms).await?;
         let mut receipt = PushOutboxReceipt::default();
-        for _ in 0..request.limit {
-            let claim_now_ms = sdk_now_ms(self.sdk)?;
+        for index in 0..request.limit {
+            let claim_now_ms = if index == 0 {
+                recovery_now_ms
+            } else {
+                sdk_now_ms(self.sdk)?
+            };
             let claim_token = push_outbox_claim_token();
             let Some(claimed) = claim_ready_signed_event_for_push(
                 self.sdk,
@@ -691,6 +703,15 @@ fn radrootsd_proxy_config_from_profile(profile: &ProxyProfile) -> RadrootsdProxy
             config.with_auth(RadrootsdAuth::BearerToken(token.to_owned()))
         }
     }
+}
+
+#[cfg(feature = "runtime")]
+async fn recover_expired_outbox_claims_for_push(
+    sdk: &RadrootsClient,
+    now_ms: i64,
+) -> Result<(), RadrootsSdkError> {
+    sdk._outbox.recover_expired_claims(now_ms).await?;
+    Ok(())
 }
 
 #[cfg(feature = "runtime")]

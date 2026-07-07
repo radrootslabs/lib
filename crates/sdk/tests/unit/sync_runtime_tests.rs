@@ -251,20 +251,14 @@ async fn claimed_uningested_proxy_event(
     assert_eq!(stored.state, RadrootsOutboxEventState::Signed);
     assert!(!stored.event_store_ingested);
     assert_eq!(stored.event_store_ingested_at_ms, None);
-    assert_eq!(
-        sdk._outbox
-            .recover_expired_claims(1_700_000_000_501)
-            .await
-            .expect("recover signing claim"),
-        1
-    );
+    assert_eq!(stored.claim_token, None);
     let claimed = sdk
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
             "proxy-unit-publish",
             1_700_000_060_000,
-            1_700_000_001_000,
+            1_700_000_000_100,
         )
         .await
         .expect("publish claim")
