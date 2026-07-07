@@ -98,6 +98,7 @@ pub enum RadrootsOutboxDeliveryPlanStatus {
     Queued,
     Complete,
     DeferredUntilImplemented,
+    PreviewUnavailable,
     FailedTerminal,
     Cancelled,
 }
@@ -108,6 +109,7 @@ impl RadrootsOutboxDeliveryPlanStatus {
             Self::Queued => "queued",
             Self::Complete => "complete",
             Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::PreviewUnavailable => "preview_unavailable",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -118,6 +120,7 @@ impl RadrootsOutboxDeliveryPlanStatus {
             "queued" => Ok(Self::Queued),
             "complete" => Ok(Self::Complete),
             "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "preview_unavailable" => Ok(Self::PreviewUnavailable),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -226,12 +229,34 @@ impl RadrootsOutboxDeliveryTargetStatus {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsOutboxReticulumPreviewBehavior {
+    RejectDeliveryAttempts,
+    DeferDeliveryPlans,
+}
+
+impl RadrootsOutboxReticulumPreviewBehavior {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RejectDeliveryAttempts => "reject_delivery_attempts",
+            Self::DeferDeliveryPlans => "defer_delivery_plans",
+        }
+    }
+}
+
+impl Default for RadrootsOutboxReticulumPreviewBehavior {
+    fn default() -> Self {
+        Self::RejectDeliveryAttempts
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxDeliveryPlanInput {
     pub transport_profile_id: String,
     pub target_policy_version: u32,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     pub targets: Vec<RadrootsTransportTarget>,
+    pub reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
 }
 
 impl RadrootsOutboxDeliveryPlanInput {
@@ -246,7 +271,16 @@ impl RadrootsOutboxDeliveryPlanInput {
             target_policy_version,
             satisfaction_policy,
             targets,
+            reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior::default(),
         }
+    }
+
+    pub fn with_reticulum_preview_behavior(
+        mut self,
+        behavior: RadrootsOutboxReticulumPreviewBehavior,
+    ) -> Self {
+        self.reticulum_preview_behavior = behavior;
+        self
     }
 }
 
@@ -483,6 +517,10 @@ mod tests {
                 "deferred_until_implemented",
             ),
             (
+                RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable,
+                "preview_unavailable",
+            ),
+            (
                 RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
                 "failed_terminal",
             ),
@@ -494,6 +532,23 @@ mod tests {
                 status
             );
         }
+
+        for (behavior, expected) in [
+            (
+                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+                "reject_delivery_attempts",
+            ),
+            (
+                RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans,
+                "defer_delivery_plans",
+            ),
+        ] {
+            assert_eq!(behavior.as_str(), expected);
+        }
+        assert_eq!(
+            RadrootsOutboxReticulumPreviewBehavior::default(),
+            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        );
 
         for (status, expected, ready, satisfied, delivered, deferred_preview, terminal_failure) in [
             (

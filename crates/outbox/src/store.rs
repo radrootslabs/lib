@@ -10,7 +10,8 @@ use crate::model::{
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
     RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
+    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxStatusSummary,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::RadrootsNostrEvent;
@@ -1121,26 +1122,20 @@ fn prepare_delivery_plan(
     let prepared_targets = targets
         .into_iter()
         .map(|target| {
-            let initial_status = if target.kind == RadrootsTransportKind::Reticulum {
-                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
-            } else {
-                RadrootsOutboxDeliveryTargetStatus::Pending
-            };
+            let initial_status =
+                initial_delivery_target_status(&target, input.reticulum_preview_behavior);
             PreparedDeliveryTarget {
                 target,
                 initial_status,
             }
         })
         .collect::<Vec<_>>();
-    let initial_status = if prepared_targets.iter().all(|target| {
-        target.initial_status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
-    }) {
-        RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
-    } else {
-        RadrootsOutboxDeliveryPlanStatus::Queued
-    };
-    let target_policy_fingerprint =
-        target_policy_fingerprint(&input.satisfaction_policy, &prepared_targets);
+    let initial_status = initial_delivery_plan_status(&prepared_targets);
+    let target_policy_fingerprint = target_policy_fingerprint(
+        &input.satisfaction_policy,
+        input.reticulum_preview_behavior,
+        &prepared_targets,
+    );
     let delivery_plan_idempotency_digest = delivery_plan_idempotency_digest(
         event_id,
         input.transport_profile_id.as_str(),
@@ -1157,6 +1152,45 @@ fn prepare_delivery_plan(
         initial_status,
         targets: prepared_targets,
     })
+}
+
+fn initial_delivery_target_status(
+    target: &RadrootsTransportTarget,
+    reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
+) -> RadrootsOutboxDeliveryTargetStatus {
+    if target.kind != RadrootsTransportKind::Reticulum {
+        return RadrootsOutboxDeliveryTargetStatus::Pending;
+    }
+    match reticulum_preview_behavior {
+        RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts => {
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        }
+        RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans => {
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+        }
+    }
+}
+
+fn initial_delivery_plan_status(
+    prepared_targets: &[PreparedDeliveryTarget],
+) -> RadrootsOutboxDeliveryPlanStatus {
+    if prepared_targets
+        .iter()
+        .any(|target| target.initial_status.is_ready_for_attempt())
+    {
+        return RadrootsOutboxDeliveryPlanStatus::Queued;
+    }
+    if prepared_targets.iter().all(|target| {
+        target.initial_status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+    }) {
+        return RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable;
+    }
+    if prepared_targets.iter().all(|target| {
+        target.initial_status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+    }) {
+        return RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented;
+    }
+    RadrootsOutboxDeliveryPlanStatus::Queued
 }
 
 async fn existing_idempotent_operation(
@@ -1510,6 +1544,12 @@ async fn evaluate_delivery_plans(
             .iter()
             .filter(|target| target.status.is_deferred_preview())
             .count();
+        let preview_unavailable_count = targets
+            .iter()
+            .filter(|target| {
+                target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+            })
+            .count();
         let terminal_failure_count = targets
             .iter()
             .filter(|target| target.status.is_terminal_failure())
@@ -1518,7 +1558,11 @@ async fn evaluate_delivery_plans(
             RadrootsOutboxDeliveryPlanStatus::Complete
         } else if ready_count > 0 {
             RadrootsOutboxDeliveryPlanStatus::Queued
-        } else if deferred_count > 0 && terminal_failure_count == 0 {
+        } else if terminal_failure_count > 0 {
+            RadrootsOutboxDeliveryPlanStatus::FailedTerminal
+        } else if preview_unavailable_count > 0 {
+            RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable
+        } else if deferred_count > 0 {
             RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
         } else {
             RadrootsOutboxDeliveryPlanStatus::FailedTerminal
@@ -1717,6 +1761,7 @@ fn operation_idempotency_digest(
 #[derive(Serialize)]
 struct TargetPolicyDigestInput<'a> {
     satisfaction_policy: String,
+    reticulum_preview_behavior: &'a str,
     targets: Vec<TargetPolicyDigestTarget<'a>>,
 }
 
@@ -1729,6 +1774,7 @@ struct TargetPolicyDigestTarget<'a> {
 
 fn target_policy_fingerprint(
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
+    reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
     targets: &[PreparedDeliveryTarget],
 ) -> String {
     let mut target_inputs = targets
@@ -1747,6 +1793,7 @@ fn target_policy_fingerprint(
     });
     sha256_json(&TargetPolicyDigestInput {
         satisfaction_policy: satisfaction_policy_storage_value(satisfaction_policy),
+        reticulum_preview_behavior: reticulum_preview_behavior.as_str(),
         targets: target_inputs,
     })
 }
@@ -2251,6 +2298,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reticulum_reject_targets_are_preview_unavailable_and_not_ready() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum rejected");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.reticulum.preview",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![reticulum_target("reticulum:preview-unavailable")],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].status,
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        );
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(
+            plans[0].status,
+            RadrootsOutboxDeliveryPlanStatus::PreviewUnavailable
+        );
+        let summary = outbox.status_summary(1_000).await.expect("summary");
+        assert_eq!(summary.ready_signed_events, 0);
+        assert!(
+            outbox
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+                .await
+                .expect("claim")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
     async fn reticulum_deferred_targets_do_not_retry_or_satisfy_delivery() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred");
@@ -2266,6 +2364,9 @@ mod tests {
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![reticulum_target("reticulum:preview-unavailable")],
+                )
+                .with_reticulum_preview_behavior(
+                    RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans,
                 ),
                 true,
                 1_007,
@@ -2298,6 +2399,85 @@ mod tests {
                 .await
                 .expect("claim")
                 .is_none()
+        );
+        let default_behavior_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred");
+        let default_behavior_signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &default_behavior_draft)
+                .expect("signed event");
+        let default_behavior_preflight = outbox
+            .preflight_signed_operation_idempotency(&RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                default_behavior_draft,
+                default_behavior_signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.reticulum.preview",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![reticulum_target("reticulum:preview-unavailable")],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("preflight");
+        assert_ne!(
+            receipt.delivery_plan_idempotency_digest,
+            default_behavior_preflight.delivery_plan_idempotency_digest
+        );
+    }
+
+    #[tokio::test]
+    async fn hybrid_nostr_and_reticulum_preview_preserves_ready_nostr_work() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "hybrid preview");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.hybrid",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::any_accepted(),
+                    vec![
+                        nostr_target(NOSTR_PRIMARY_WSS),
+                        reticulum_target("reticulum:preview-unavailable"),
+                    ],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(targets.len(), 2);
+        assert!(
+            targets
+                .iter()
+                .any(|target| target.status == RadrootsOutboxDeliveryTargetStatus::Pending)
+        );
+        assert!(targets.iter().any(|target| {
+            target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        }));
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Queued);
+        assert_eq!(
+            outbox
+                .status_summary(1_000)
+                .await
+                .expect("summary")
+                .ready_signed_events,
+            1
         );
     }
 
