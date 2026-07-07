@@ -849,50 +849,92 @@ impl RadrootsOutbox {
         }
         let evaluation = evaluate_delivery_plans(&mut tx, outbox_event_id, now_ms).await?;
         let (event_state, operation_status, last_error, next_attempt_after_ms) =
-            if evaluation.all_complete {
-                (
-                    RadrootsOutboxEventState::Published,
-                    Some(RadrootsOutboxOperationStatus::Complete),
-                    None,
-                    now_ms,
-                )
-            } else if evaluation.any_failed_terminal {
-                (
-                    RadrootsOutboxEventState::FailedTerminal,
-                    Some(RadrootsOutboxOperationStatus::FailedTerminal),
-                    Some(terminal_error.as_ref()),
-                    now_ms,
-                )
-            } else if evaluation.any_ready {
-                (
-                    RadrootsOutboxEventState::PublishRetryable,
-                    None,
-                    Some(retryable_error.as_ref()),
-                    next_attempt_after_ms,
-                )
-            } else if evaluation.any_preview_unavailable {
-                (
-                    RadrootsOutboxEventState::PreviewUnavailable,
-                    Some(RadrootsOutboxOperationStatus::PreviewUnavailable),
-                    None,
-                    now_ms,
-                )
-            } else if evaluation.any_deferred_until_implemented {
-                (
-                    RadrootsOutboxEventState::DeferredUntilImplemented,
-                    Some(RadrootsOutboxOperationStatus::DeferredUntilImplemented),
-                    None,
-                    now_ms,
-                )
-            } else {
-                (
-                    RadrootsOutboxEventState::FailedTerminal,
-                    Some(RadrootsOutboxOperationStatus::FailedTerminal),
-                    Some(terminal_error.as_ref()),
-                    now_ms,
-                )
-            };
+            publish_lifecycle_from_plan_evaluation(
+                &evaluation,
+                retryable_error.as_ref(),
+                terminal_error.as_ref(),
+                next_attempt_after_ms,
+                now_ms,
+            );
 
+        let changed = sqlx::query(
+            "UPDATE outbox_event SET state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, last_error = ?, next_attempt_after_ms = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
+        )
+        .bind(event_state.as_str())
+        .bind(last_error)
+        .bind(next_attempt_after_ms)
+        .bind(now_ms)
+        .bind(outbox_event_id)
+        .bind(claim_token)
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() == 0 {
+            return Err(RadrootsOutboxError::ClaimTokenMismatch { outbox_event_id });
+        }
+
+        if let Some(operation_status) = operation_status {
+            sqlx::query(
+                "UPDATE outbox_operations SET status = ?, updated_at_ms = ? WHERE operation_id = ?",
+            )
+            .bind(operation_status.as_str())
+            .bind(now_ms)
+            .bind(row.operation_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(event_state)
+    }
+
+    pub async fn mark_active_delivery_plan_failed_terminal(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        error: impl AsRef<str>,
+        now_ms: i64,
+    ) -> Result<RadrootsOutboxEventState, RadrootsOutboxError> {
+        let mut tx = self.pool.begin().await?;
+        let row = claimed_event_identity_tx(&mut tx, outbox_event_id, claim_token).await?;
+        let Some(active_delivery_plan_id) = row.active_delivery_plan_id else {
+            return Err(RadrootsOutboxError::MissingActiveDeliveryPlan { outbox_event_id });
+        };
+        let targets = delivery_targets_for_plan_tx(&mut tx, active_delivery_plan_id).await?;
+        for target in targets
+            .iter()
+            .filter(|target| target.status.is_ready_for_attempt())
+        {
+            sqlx::query(
+                "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
+            )
+            .bind(RadrootsOutboxDeliveryTargetStatus::FailedTerminal.as_str())
+            .bind(now_ms)
+            .bind(now_ms)
+            .bind(error.as_ref())
+            .bind(target.delivery_target_id)
+            .bind(active_delivery_plan_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(active_delivery_plan_id)
+            .bind(target.delivery_target_id)
+            .bind(RadrootsOutboxDeliveryTargetStatus::FailedTerminal.as_str())
+            .bind(now_ms)
+            .bind(error.as_ref())
+            .execute(&mut *tx)
+            .await?;
+        }
+        let evaluation = evaluate_delivery_plans(&mut tx, outbox_event_id, now_ms).await?;
+        let (event_state, operation_status, last_error, next_attempt_after_ms) =
+            publish_lifecycle_from_plan_evaluation(
+                &evaluation,
+                error.as_ref(),
+                error.as_ref(),
+                now_ms,
+                now_ms,
+            );
         let changed = sqlx::query(
             "UPDATE outbox_event SET state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, last_error = ?, next_attempt_after_ms = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
@@ -1154,6 +1196,63 @@ struct PlanEvaluation {
     any_ready: bool,
     any_preview_unavailable: bool,
     any_deferred_until_implemented: bool,
+}
+
+fn publish_lifecycle_from_plan_evaluation<'a>(
+    evaluation: &PlanEvaluation,
+    retryable_error: &'a str,
+    terminal_error: &'a str,
+    next_attempt_after_ms: i64,
+    now_ms: i64,
+) -> (
+    RadrootsOutboxEventState,
+    Option<RadrootsOutboxOperationStatus>,
+    Option<&'a str>,
+    i64,
+) {
+    if evaluation.all_complete {
+        (
+            RadrootsOutboxEventState::Published,
+            Some(RadrootsOutboxOperationStatus::Complete),
+            None,
+            now_ms,
+        )
+    } else if evaluation.any_ready {
+        (
+            RadrootsOutboxEventState::PublishRetryable,
+            None,
+            Some(retryable_error),
+            next_attempt_after_ms,
+        )
+    } else if evaluation.any_failed_terminal {
+        (
+            RadrootsOutboxEventState::FailedTerminal,
+            Some(RadrootsOutboxOperationStatus::FailedTerminal),
+            Some(terminal_error),
+            now_ms,
+        )
+    } else if evaluation.any_preview_unavailable {
+        (
+            RadrootsOutboxEventState::PreviewUnavailable,
+            Some(RadrootsOutboxOperationStatus::PreviewUnavailable),
+            None,
+            now_ms,
+        )
+    } else if evaluation.any_deferred_until_implemented {
+        (
+            RadrootsOutboxEventState::DeferredUntilImplemented,
+            Some(RadrootsOutboxOperationStatus::DeferredUntilImplemented),
+            None,
+            now_ms,
+        )
+    } else {
+        (
+            RadrootsOutboxEventState::FailedTerminal,
+            Some(RadrootsOutboxOperationStatus::FailedTerminal),
+            Some(terminal_error),
+            now_ms,
+        )
+    }
 }
 
 async fn configure_connection(
@@ -2663,6 +2762,149 @@ mod tests {
             .await
             .expect("complete second plan");
         assert_eq!(final_state, RadrootsOutboxEventState::Published);
+    }
+
+    #[tokio::test]
+    async fn active_plan_terminal_failure_leaves_sibling_claimable() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "plan scoped terminal");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let first = outbox
+            .enqueue_signed_operation(
+                RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft.clone(),
+                    signed_event.clone(),
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.proxy.invalid",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                    ),
+                    true,
+                    1_007,
+                    1_000,
+                )
+                .with_idempotency_key("idem-plan-terminal"),
+            )
+            .await
+            .expect("first plan");
+        let second = outbox
+            .enqueue_signed_operation(
+                RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event,
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.nostr.sibling",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![nostr_target(NOSTR_SECONDARY_WSS)],
+                    ),
+                    true,
+                    1_017,
+                    1_010,
+                )
+                .with_idempotency_key("idem-plan-terminal"),
+            )
+            .await
+            .expect("second plan");
+        assert_eq!(first.outbox_event_id, second.outbox_event_id);
+
+        let first_claim = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_020)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let failed_plan_id = first_claim.active_delivery_plan_id.expect("active plan");
+        let failed_target_id = first_claim.delivery_targets[0].delivery_target_id;
+        let first_state = outbox
+            .mark_active_delivery_plan_failed_terminal(
+                first.outbox_event_id,
+                "claim-a",
+                "local proxy validation failed",
+                1_100,
+            )
+            .await
+            .expect("active plan terminal");
+        assert_eq!(first_state, RadrootsOutboxEventState::PublishRetryable);
+        let event_after_first = outbox
+            .get_event(first.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(
+            event_after_first.state,
+            RadrootsOutboxEventState::PublishRetryable
+        );
+        assert_eq!(event_after_first.claim_token, None);
+
+        let targets_after_first = outbox
+            .delivery_targets(first.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(
+            targets_after_first
+                .iter()
+                .find(|target| target.delivery_target_id == failed_target_id)
+                .expect("failed target")
+                .status,
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal
+        );
+        assert!(
+            targets_after_first
+                .iter()
+                .filter(|target| target.delivery_plan_id != failed_plan_id)
+                .all(|target| target.status == RadrootsOutboxDeliveryTargetStatus::Pending)
+        );
+        let plans_after_first = outbox
+            .delivery_plans(first.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(
+            plans_after_first
+                .iter()
+                .find(|plan| plan.delivery_plan_id == failed_plan_id)
+                .expect("failed plan")
+                .status,
+            RadrootsOutboxDeliveryPlanStatus::FailedTerminal
+        );
+        assert!(
+            plans_after_first
+                .iter()
+                .filter(|plan| plan.delivery_plan_id != failed_plan_id)
+                .all(|plan| plan.status == RadrootsOutboxDeliveryPlanStatus::Queued)
+        );
+
+        let sibling_claim = outbox
+            .claim_next_ready_signed_event("publisher", "claim-b", 3_000, 1_100)
+            .await
+            .expect("sibling claim")
+            .expect("sibling claim");
+        assert_ne!(
+            sibling_claim.active_delivery_plan_id,
+            first_claim.active_delivery_plan_id
+        );
+        let final_state = outbox
+            .mark_active_delivery_plan_failed_terminal(
+                first.outbox_event_id,
+                "claim-b",
+                "sibling terminal",
+                1_200,
+            )
+            .await
+            .expect("sibling terminal");
+        assert_eq!(final_state, RadrootsOutboxEventState::FailedTerminal);
+        let operation = outbox
+            .get_operation(first.operation_id)
+            .await
+            .expect("operation")
+            .expect("operation");
+        assert_eq!(
+            operation.status,
+            RadrootsOutboxOperationStatus::FailedTerminal
+        );
     }
 
     #[tokio::test]
