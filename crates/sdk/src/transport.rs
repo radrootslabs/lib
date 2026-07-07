@@ -16,6 +16,7 @@ pub use radroots_transport::{
 };
 
 pub const SDK_TRANSPORT_TARGET_MAX_COUNT: usize = 20;
+const RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -234,6 +235,17 @@ impl TargetSet {
                 targets.len(),
             ));
         }
+        for target in &targets {
+            if target.kind == RadrootsTransportKind::Reticulum
+                && target.uri.as_str() != RETICULUM_PREVIEW_ENDPOINT_URI
+            {
+                return Err(RadrootsSdkError::InvalidRequest {
+                    message: format!(
+                        "Reticulum preview endpoint must be {RETICULUM_PREVIEW_ENDPOINT_URI}"
+                    ),
+                });
+            }
+        }
         let canonical_targets = targets
             .iter()
             .map(|target| {
@@ -296,7 +308,7 @@ pub struct ReticulumPreviewProfile {
 impl ReticulumPreviewProfile {
     pub fn preview_unavailable() -> Self {
         Self {
-            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
+            endpoint_uri: RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
             behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
         }
     }
