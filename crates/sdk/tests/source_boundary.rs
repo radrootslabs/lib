@@ -1311,6 +1311,49 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
     }
 }
 
+#[test]
+fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    for relative_path in [
+        "src/transport.rs",
+        "src/sync_runtime.rs",
+        "src/error.rs",
+        "src/adapters/radrootsd.rs",
+    ] {
+        let source = read_source(manifest_dir.join(relative_path).as_path());
+        for line in removed_reticulum_preview_endpoint_lines(source.as_str()) {
+            panic!(
+                "{relative_path}:{line} contains removed Reticulum preview endpoint `reticulum:preview`"
+            );
+        }
+    }
+
+    let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    for required in [
+        "TransportProfile::ReticulumPreview { profile }",
+        "push_outbox_has_no_reticulum_preview_work",
+        "RadrootsSdkError::reticulum_preview_transport_unavailable",
+    ] {
+        assert!(
+            sync_runtime.contains(required),
+            "src/sync_runtime.rs must retain Reticulum preview push boundary `{required}`"
+        );
+    }
+
+    let error_source = read_source(manifest_dir.join("src/error.rs").as_path());
+    for required in [
+        "reticulum_preview_transport_unavailable",
+        "reticulum_preview_transport_deferred",
+        "Reticulum preview endpoint",
+    ] {
+        assert!(
+            error_source.contains(required),
+            "src/error.rs must retain Reticulum preview error witness `{required}`"
+        );
+    }
+}
+
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1365,6 +1408,16 @@ fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
         before.is_none_or(|character| !is_rust_identifier_character(character))
             && after.is_none_or(|character| !is_rust_identifier_character(character))
     })
+}
+
+fn removed_reticulum_preview_endpoint_lines(source: &str) -> Vec<usize> {
+    source
+        .match_indices("reticulum:preview")
+        .filter_map(|(index, _)| {
+            let after = source[index + "reticulum:preview".len()..].chars().next();
+            (after != Some('-')).then(|| line_number(source, index))
+        })
+        .collect()
 }
 
 fn root_trade_alias_findings(relative_path: &str, source: &str) -> Vec<String> {
