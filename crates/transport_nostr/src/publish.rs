@@ -25,6 +25,7 @@ pub struct RadrootsRelayPublishRequest {
     pub signed_event: RadrootsSignedNostrEvent,
     pub targets: RadrootsRelayTargetSet,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    pub idempotency_key: Option<String>,
     pub now_ms: i64,
 }
 
@@ -38,6 +39,7 @@ impl RadrootsRelayPublishRequest {
             signed_event,
             targets,
             satisfaction_policy: RadrootsTransportSatisfactionPolicy::all_accepted(),
+            idempotency_key: None,
             now_ms,
         }
     }
@@ -47,6 +49,11 @@ impl RadrootsRelayPublishRequest {
         satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     ) -> Self {
         self.satisfaction_policy = satisfaction_policy;
+        self
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
         self
     }
 }

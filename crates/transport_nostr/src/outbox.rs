@@ -113,8 +113,15 @@ where
         publishable.required_accept_count,
         publishable.relays.len(),
     )?;
+    let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
-        .with_satisfaction_policy(satisfaction_policy);
+        .with_satisfaction_policy(satisfaction_policy)
+        .with_idempotency_key(outbox_publish_idempotency_key(
+            claimed.outbox_event_id,
+            claimed.attempt_count,
+            signed_event.id.as_str(),
+            active_delivery_plan_id,
+        ));
     let publish = match publish_signed_event(adapter, request).await {
         Ok(receipt) => receipt,
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
@@ -222,6 +229,7 @@ fn adapter_transport_failure_receipt(
 }
 
 struct PublishableRelays {
+    active_delivery_plan_id: i64,
     relays: Vec<PublishableRelay>,
     accepted_count: usize,
     satisfaction_required_count: usize,
@@ -246,31 +254,53 @@ async fn publishable_relays(
     claimed: &RadrootsOutboxClaimedEvent,
     republish_accepted_relays: bool,
 ) -> Result<PublishableRelays, RadrootsRelayTransportError> {
+    let active_delivery_plan_id = claimed.active_delivery_plan_id.ok_or_else(|| {
+        RadrootsRelayTransportError::Transport(format!(
+            "outbox event {} has no active delivery plan for Nostr publish",
+            claimed.outbox_event_id
+        ))
+    })?;
     let targets = outbox.delivery_targets(claimed.outbox_event_id).await?;
     let plans = outbox.delivery_plans(claimed.outbox_event_id).await?;
-    let satisfaction_required_count = plans
+    let plan = plans
         .iter()
-        .map(|plan| plan.required_success_count as usize)
-        .sum::<usize>();
-    let required_accept_count = plans
+        .find(|plan| plan.delivery_plan_id == active_delivery_plan_id)
+        .ok_or_else(|| {
+            RadrootsRelayTransportError::Transport(format!(
+                "outbox event {} active delivery plan {} was not found for Nostr publish",
+                claimed.outbox_event_id, active_delivery_plan_id
+            ))
+        })?;
+    let satisfaction_required_count = plan.required_success_count as usize;
+    let active_targets = targets
         .iter()
-        .map(|plan| {
-            let satisfied_count = targets
-                .iter()
-                .filter(|target| target.delivery_plan_id == plan.delivery_plan_id)
-                .filter(|target| {
-                    target
-                        .status
-                        .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
-                })
-                .count();
-            (plan.required_success_count as usize).saturating_sub(satisfied_count)
+        .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
+        .collect::<Vec<_>>();
+    if let Some(target) = active_targets
+        .iter()
+        .find(|target| !is_nostr_target(target) && target.status.is_ready_for_attempt())
+    {
+        return Err(RadrootsRelayTransportError::Transport(format!(
+            "direct Nostr outbox publish does not accept {} target {} in active delivery plan {}",
+            target.transport_kind.canonical_label(),
+            target.endpoint_uri.as_str(),
+            active_delivery_plan_id
+        )));
+    }
+    let satisfied_count = active_targets
+        .iter()
+        .filter(|target| {
+            target
+                .status
+                .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
         })
-        .sum::<usize>();
+        .count();
+    let required_accept_count =
+        (plan.required_success_count as usize).saturating_sub(satisfied_count);
     let mut relays = Vec::new();
     let mut accepted_count = 0usize;
-    for target in targets {
-        if !is_nostr_target(&target) {
+    for target in active_targets {
+        if !is_nostr_target(target) {
             continue;
         }
         if target
@@ -291,11 +321,23 @@ async fn publishable_relays(
         }
     }
     Ok(PublishableRelays {
+        active_delivery_plan_id,
         relays,
         accepted_count,
         satisfaction_required_count,
         required_accept_count,
     })
+}
+
+fn outbox_publish_idempotency_key(
+    outbox_event_id: i64,
+    attempt_count: i64,
+    event_id: &str,
+    active_delivery_plan_id: i64,
+) -> String {
+    format!(
+        "radroots-nostr-outbox-{outbox_event_id}-{attempt_count}-{event_id}-{active_delivery_plan_id}"
+    )
 }
 
 fn is_nostr_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
