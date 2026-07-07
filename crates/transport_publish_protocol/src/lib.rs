@@ -722,4 +722,285 @@ mod tests {
             serde_json::from_str(encoded.as_str()).expect("decode");
         assert_eq!(decoded, request);
     }
+
+    #[test]
+    fn protocol_errors_have_stable_display_strings() {
+        let cases = [
+            (
+                TransportPublishProtocolError::InvalidHexField {
+                    field: "id",
+                    expected_len: 64,
+                },
+                "id must be 64 lowercase hex characters",
+            ),
+            (
+                TransportPublishProtocolError::InvalidKind(70_000),
+                "event kind 70000 exceeds transport publish range",
+            ),
+            (
+                TransportPublishProtocolError::EmptyTag { index: 2 },
+                "tag 2 must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::EmptyIdempotencyKey,
+                "idempotency key must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::EmptyTransportKind { index: 1 },
+                "transport target 1 kind must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::EmptyEndpointUri { index: 3 },
+                "transport target 3 endpoint_uri must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 },
+                "transport target count 2 exceeds limit 1",
+            ),
+            (
+                TransportPublishProtocolError::EmptyTargetSet,
+                "transport publish target set must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidQuorum,
+                "delivery quorum must be greater than zero",
+            ),
+            (
+                TransportPublishProtocolError::EmptyPrincipalId,
+                "principal id must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::EmptyJobId,
+                "job id must not be empty",
+            ),
+        ];
+
+        for (error, message) in cases {
+            assert_eq!(error.to_string(), message);
+        }
+    }
+
+    #[test]
+    fn signed_event_validation_rejects_each_invalid_event_shape() {
+        let mut invalid_id = event();
+        invalid_id.id = "A".repeat(64);
+        assert!(matches!(
+            invalid_id.validate(),
+            Err(TransportPublishProtocolError::InvalidHexField { field: "id", .. })
+        ));
+
+        let mut invalid_pubkey = event();
+        invalid_pubkey.pubkey = "g".repeat(64);
+        assert!(matches!(
+            invalid_pubkey.validate(),
+            Err(TransportPublishProtocolError::InvalidHexField {
+                field: "pubkey",
+                ..
+            })
+        ));
+
+        let mut invalid_sig = event();
+        invalid_sig.sig = "2".repeat(127);
+        assert!(matches!(
+            invalid_sig.validate(),
+            Err(TransportPublishProtocolError::InvalidHexField { field: "sig", .. })
+        ));
+
+        let mut invalid_kind = event();
+        invalid_kind.kind = u16::MAX as u32 + 1;
+        assert_eq!(
+            invalid_kind.validate(),
+            Err(TransportPublishProtocolError::InvalidKind(
+                u16::MAX as u32 + 1
+            ))
+        );
+
+        let mut empty_tag = event();
+        empty_tag.tags.push(Vec::new());
+        assert_eq!(
+            empty_tag.validate(),
+            Err(TransportPublishProtocolError::EmptyTag { index: 1 })
+        );
+    }
+
+    #[test]
+    fn target_and_delivery_policy_validation_cover_all_modes() {
+        assert_eq!(
+            TransportPublishPreviewBehavior::default(),
+            TransportPublishPreviewBehavior::RejectDeliveryAttempts
+        );
+        let explicit = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example"),
+            TransportPublishTarget::reticulum_preview(
+                "reticulum:preview",
+                TransportPublishPreviewBehavior::DeferDeliveryPlans,
+            ),
+        ]);
+        let nostr = TransportPublishTargetPolicy::nostr(
+            NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
+            vec!["wss://relay.example".to_owned()],
+        );
+        assert_eq!(explicit.request_target_count(), 2);
+        assert_eq!(nostr.request_target_count(), 1);
+
+        let mut empty_targets = TransportPublishEventRequest {
+            event: event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(Vec::new()),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: None,
+            timeout_ms: None,
+        };
+        assert_eq!(
+            empty_targets.validate(10),
+            Err(TransportPublishProtocolError::EmptyTargetSet)
+        );
+
+        empty_targets.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
+                transport_kind: " ".to_owned(),
+                endpoint_uri: "wss://relay.example".to_owned(),
+                preview_behavior: None,
+            }]);
+        assert_eq!(
+            empty_targets.validate(10),
+            Err(TransportPublishProtocolError::EmptyTransportKind { index: 0 })
+        );
+
+        empty_targets.target_policy = TransportPublishTargetPolicy::nostr(
+            NostrPublishTargetSourcePolicy::ExplicitOnly,
+            vec![" ".to_owned()],
+        );
+        assert_eq!(
+            empty_targets.validate(10),
+            Err(TransportPublishProtocolError::EmptyEndpointUri { index: 0 })
+        );
+
+        empty_targets.delivery_policy = TransportPublishDeliveryPolicy::Quorum { quorum: 0 };
+        empty_targets.target_policy = nostr;
+        assert_eq!(
+            empty_targets.validate(10),
+            Err(TransportPublishProtocolError::InvalidQuorum)
+        );
+
+        assert_eq!(
+            TransportPublishDeliveryPolicy::Any.required_target_count(0),
+            0
+        );
+        assert_eq!(
+            TransportPublishDeliveryPolicy::Any.required_target_count(3),
+            1
+        );
+        assert_eq!(
+            TransportPublishDeliveryPolicy::All.required_target_count(3),
+            3
+        );
+        assert_eq!(
+            TransportPublishDeliveryPolicy::Quorum { quorum: 2 }.required_target_count(3),
+            2
+        );
+    }
+
+    #[test]
+    fn outcome_kinds_cover_negative_classification_edges() {
+        let satisfied = [
+            TransportPublishOutcomeKind::Accepted,
+            TransportPublishOutcomeKind::DuplicateAccepted,
+            TransportPublishOutcomeKind::SkippedAlreadyAccepted,
+        ];
+        let retryable = [
+            TransportPublishOutcomeKind::RateLimited,
+            TransportPublishOutcomeKind::PowRequired,
+            TransportPublishOutcomeKind::AuthRequired,
+            TransportPublishOutcomeKind::Error,
+            TransportPublishOutcomeKind::Timeout,
+            TransportPublishOutcomeKind::ConnectionFailed,
+            TransportPublishOutcomeKind::Unknown,
+        ];
+        let terminal = [
+            TransportPublishOutcomeKind::Blocked,
+            TransportPublishOutcomeKind::Invalid,
+            TransportPublishOutcomeKind::Restricted,
+            TransportPublishOutcomeKind::Muted,
+            TransportPublishOutcomeKind::Unsupported,
+            TransportPublishOutcomeKind::PaymentRequired,
+            TransportPublishOutcomeKind::TargetRejected,
+            TransportPublishOutcomeKind::Deferred,
+            TransportPublishOutcomeKind::Unavailable,
+        ];
+
+        for kind in satisfied {
+            assert!(kind.counts_toward_satisfaction());
+            assert!(!kind.is_retryable());
+            assert!(!kind.is_terminal_failure());
+        }
+        for kind in retryable {
+            assert!(!kind.counts_toward_satisfaction());
+            assert!(kind.is_retryable());
+            assert!(!kind.is_terminal_failure());
+        }
+        for kind in terminal {
+            assert!(!kind.counts_toward_satisfaction());
+            assert!(!kind.is_retryable());
+            assert!(kind.is_terminal_failure());
+        }
+    }
+
+    #[test]
+    fn job_validation_rejects_empty_job_invalid_kind_and_invalid_delivery_policy() {
+        let base = TransportPublishJobView {
+            job_id: "job-1".to_owned(),
+            status: TransportPublishJobStatus::Accepted,
+            terminal: false,
+            delivery_satisfied: false,
+            event_id: "0".repeat(64),
+            pubkey: "1".repeat(64),
+            event_kind: 30_402,
+            target_policy: TransportPublishTargetPolicy::nostr(
+                NostrPublishTargetSourcePolicy::DaemonDefaultOnly,
+                Vec::new(),
+            ),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            target_count: 0,
+            acknowledged_count: 0,
+            retryable_count: 0,
+            terminal_count: 0,
+            requested_at_ms: 1,
+            completed_at_ms: None,
+            last_error: None,
+            targets: Vec::new(),
+        };
+
+        let mut empty_job = base.clone();
+        empty_job.job_id = " ".to_owned();
+        assert_eq!(
+            empty_job.validate(),
+            Err(TransportPublishProtocolError::EmptyJobId)
+        );
+
+        let mut invalid_kind = base.clone();
+        invalid_kind.event_kind = u16::MAX as u32 + 1;
+        assert_eq!(
+            invalid_kind.validate(),
+            Err(TransportPublishProtocolError::InvalidKind(
+                u16::MAX as u32 + 1
+            ))
+        );
+
+        let mut invalid_pubkey = base.clone();
+        invalid_pubkey.pubkey = "x".repeat(64);
+        assert!(matches!(
+            invalid_pubkey.validate(),
+            Err(TransportPublishProtocolError::InvalidHexField {
+                field: "pubkey",
+                ..
+            })
+        ));
+
+        let mut invalid_delivery = base;
+        invalid_delivery.delivery_policy = TransportPublishDeliveryPolicy::Quorum { quorum: 0 };
+        assert_eq!(
+            invalid_delivery.validate(),
+            Err(TransportPublishProtocolError::InvalidQuorum)
+        );
+    }
 }

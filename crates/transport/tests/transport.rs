@@ -48,8 +48,16 @@ fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
         RadrootsTransportKind::Local
     );
     assert_eq!(
+        RadrootsTransportKind::Local.canonical_label(),
+        "local".to_owned()
+    );
+    assert_eq!(
         RadrootsTransportKind::parse("fieldbus").expect("custom kind"),
         RadrootsTransportKind::Custom("fieldbus".to_owned())
+    );
+    assert_eq!(
+        RadrootsTransportKind::Custom("fieldbus".to_owned()).canonical_label(),
+        "fieldbus".to_owned()
     );
     assert_eq!(
         RadrootsTransportKind::parse("bad kind").expect_err("invalid kind"),
@@ -142,5 +150,156 @@ fn fingerprint_parser_rejects_non_sha256_hex() {
     assert_eq!(
         RadrootsTransportTargetUri::parse("wss://relay example").expect_err("space in target uri"),
         RadrootsTransportError::InvalidTargetUri
+    );
+}
+
+#[test]
+fn transport_errors_have_stable_display_strings() {
+    let cases = [
+        (
+            RadrootsTransportError::EmptyTransportKind,
+            "transport kind is empty",
+        ),
+        (
+            RadrootsTransportError::InvalidTransportKind,
+            "transport kind is invalid",
+        ),
+        (
+            RadrootsTransportError::EmptyTargetUri,
+            "transport target URI is empty",
+        ),
+        (
+            RadrootsTransportError::InvalidTargetUri,
+            "transport target URI is invalid",
+        ),
+        (
+            RadrootsTransportError::EmptyTargetSet,
+            "transport target set is empty",
+        ),
+        (
+            RadrootsTransportError::DuplicateTargetFingerprint,
+            "transport target set contains duplicate fingerprints",
+        ),
+        (
+            RadrootsTransportError::InvalidTargetFingerprint,
+            "transport target fingerprint is invalid",
+        ),
+        (
+            RadrootsTransportError::InvalidSatisfactionPolicy,
+            "transport satisfaction policy is invalid",
+        ),
+    ];
+
+    for (error, message) in cases {
+        assert_eq!(error.to_string(), message);
+    }
+}
+
+#[test]
+fn transport_kind_and_target_parsers_cover_negative_edges() {
+    assert_eq!(
+        RadrootsTransportKind::custom(" ").expect_err("empty kind"),
+        RadrootsTransportError::EmptyTransportKind
+    );
+    for invalid in ["bad kind", "bad:kind", "bad/kind", "bad\nkind"] {
+        assert_eq!(
+            RadrootsTransportKind::custom(invalid).expect_err("invalid kind"),
+            RadrootsTransportError::InvalidTransportKind
+        );
+    }
+    assert_eq!(
+        RadrootsTransportKind::custom(" FieldBus ").expect("custom kind"),
+        RadrootsTransportKind::Custom("fieldbus".to_owned())
+    );
+
+    let no_scheme =
+        RadrootsTransportTargetUri::parse(" transport-target ").expect("schemeless target uri");
+    assert_eq!(no_scheme.as_str(), "transport-target");
+    assert_eq!(no_scheme.to_string(), "transport-target");
+    let opaque = RadrootsTransportTargetUri::parse("RNS:PeerA").expect("opaque uri");
+    assert_eq!(opaque.as_str(), "rns:PeerA");
+    let authority = RadrootsTransportTargetUri::parse("MESH://Node.Example/path?q=1#frag")
+        .expect("authority uri");
+    assert_eq!(authority.as_str(), "mesh://node.example/path?q=1#frag");
+
+    assert_eq!(
+        RadrootsTransportTargetUri::parse(" ").expect_err("empty uri"),
+        RadrootsTransportError::EmptyTargetUri
+    );
+    for invalid in [
+        "bad target",
+        ":target",
+        "1bad:target",
+        "bad_scheme://target",
+        "bad\target",
+    ] {
+        assert_eq!(
+            RadrootsTransportTargetUri::parse(invalid).expect_err("invalid uri"),
+            RadrootsTransportError::InvalidTargetUri
+        );
+    }
+}
+
+#[test]
+fn target_fingerprints_and_sets_cover_accessors_and_validation() {
+    let target = RadrootsTransportTarget::new(RadrootsTransportKind::Mesh, "mesh://node.example")
+        .expect("mesh target");
+    let parsed =
+        RadrootsTransportTargetFingerprint::parse(target.fingerprint.as_str().to_ascii_uppercase())
+            .expect("uppercase fingerprint parses");
+    assert_eq!(parsed.as_str(), target.fingerprint.as_str());
+    assert_eq!(parsed.to_string(), target.fingerprint.as_str());
+    assert_eq!(
+        RadrootsTransportTargetFingerprint::parse("g".repeat(64)).expect_err("non-hex fingerprint"),
+        RadrootsTransportError::InvalidTargetFingerprint
+    );
+
+    assert_eq!(
+        RadrootsTransportTargetSet::new(Vec::new()).expect_err("empty target set"),
+        RadrootsTransportError::EmptyTargetSet
+    );
+    let target_set = RadrootsTransportTargetSet::new(vec![target]).expect("target set");
+    assert_eq!(target_set.len(), 1);
+    assert!(!target_set.is_empty());
+    assert_eq!(target_set.targets().len(), 1);
+}
+
+#[test]
+fn satisfaction_and_target_status_cover_all_contract_states() {
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::AllTargets
+            .required_target_count(3)
+            .expect("all targets"),
+        3
+    );
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::AnyTarget
+            .required_target_count(3)
+            .expect("any target"),
+        1
+    );
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::AtLeast(4)
+            .required_target_count(3)
+            .expect_err("at least too high"),
+        RadrootsTransportError::InvalidSatisfactionPolicy
+    );
+
+    let statuses = [
+        RadrootsTransportDeliveryTargetStatus::Pending,
+        RadrootsTransportDeliveryTargetStatus::Accepted,
+        RadrootsTransportDeliveryTargetStatus::Deferred,
+        RadrootsTransportDeliveryTargetStatus::Rejected,
+        RadrootsTransportDeliveryTargetStatus::Failed,
+        RadrootsTransportDeliveryTargetStatus::Unavailable,
+    ];
+    assert!(!statuses[0].is_terminal());
+    assert!(statuses[1..].iter().all(|status| status.is_terminal()));
+    assert!(RadrootsTransportDeliveryTargetStatus::Accepted.counts_as_satisfied());
+    assert!(
+        statuses
+            .iter()
+            .filter(|status| **status != RadrootsTransportDeliveryTargetStatus::Accepted)
+            .all(|status| !status.counts_as_satisfied())
     );
 }

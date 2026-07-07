@@ -56,7 +56,15 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     assert_eq!(endpoint.as_str(), "reticulum:preview-target");
     assert_eq!(endpoint.to_string(), "reticulum:preview-target");
     assert_eq!(endpoint.clone().into_string(), "reticulum:preview-target");
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::default().as_str(),
+        "reticulum:preview-unavailable"
+    );
 
+    assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse(" ").expect_err("empty endpoint"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
     assert_eq!(
         RadrootsReticulumPreviewEndpoint::parse("reticulum:").expect_err("empty endpoint"),
         RadrootsReticulumPreviewError::InvalidEndpoint
@@ -71,6 +79,11 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         RadrootsReticulumPreviewError::InvalidEndpoint
     );
     assert_eq!(
+        RadrootsReticulumPreviewEndpoint::parse("reticulum:bad\ntarget")
+            .expect_err("control endpoint"),
+        RadrootsReticulumPreviewError::InvalidEndpoint
+    );
+    assert_eq!(
         RadrootsReticulumPreviewProfile::new(
             "transport reticulum",
             endpoint,
@@ -78,6 +91,27 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         )
         .expect_err("profile id whitespace"),
         RadrootsReticulumPreviewError::InvalidProfileId
+    );
+    assert_eq!(
+        RadrootsReticulumPreviewProfile::new(
+            "",
+            RadrootsReticulumPreviewEndpoint::default(),
+            RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts,
+        )
+        .expect_err("empty profile id"),
+        RadrootsReticulumPreviewError::InvalidProfileId
+    );
+    let profile = RadrootsReticulumPreviewProfile::new(
+        "transport.reticulum.custom",
+        RadrootsReticulumPreviewEndpoint::parse("reticulum:custom").expect("custom endpoint"),
+        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans,
+    )
+    .expect("custom profile");
+    assert_eq!(profile.profile_id(), "transport.reticulum.custom");
+    assert_eq!(profile.endpoint().as_str(), "reticulum:custom");
+    assert_eq!(
+        profile.behavior(),
+        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans
     );
 }
 
@@ -144,6 +178,14 @@ fn non_reticulum_targets_are_rejected_without_nostr_routing() {
 #[test]
 fn fetch_reports_preview_unavailable_without_observed_events() {
     let transport = RadrootsReticulumPreviewTransport::default();
+    assert_eq!(
+        transport.profile().profile_id(),
+        "transport.reticulum.preview"
+    );
+    assert_eq!(
+        transport.status().implementation_state,
+        RadrootsTransportImplementationState::PreviewUnavailable
+    );
     let receipt = transport
         .fetch(RadrootsReticulumPreviewFetchRequest::new("fetch-1", 10).expect("fetch request"))
         .expect("fetch receipt");
@@ -163,6 +205,26 @@ fn fetch_reports_preview_unavailable_without_observed_events() {
         RadrootsReticulumPreviewFetchRequest::new("fetch-0", 0).expect_err("zero limit"),
         RadrootsReticulumPreviewError::InvalidFetchLimit
     );
+    assert_eq!(
+        transport
+            .fetch(RadrootsReticulumPreviewFetchRequest {
+                request_id: "fetch-public-zero".to_owned(),
+                max_events: 0,
+            })
+            .expect_err("zero limit at transport boundary"),
+        RadrootsReticulumPreviewError::InvalidFetchLimit
+    );
+    let deferred_transport = RadrootsReticulumPreviewTransport::new(
+        RadrootsReticulumPreviewProfile::default()
+            .with_behavior(RadrootsReticulumPreviewBehavior::DeferDeliveryPlans),
+    );
+    let deferred = deferred_transport
+        .fetch(RadrootsReticulumPreviewFetchRequest::new("fetch-deferred", 1).expect("fetch"))
+        .expect("fetch receipt");
+    assert_eq!(
+        deferred.outcome.status,
+        RadrootsTransportDeliveryTargetStatus::Deferred
+    );
 }
 
 #[test]
@@ -174,4 +236,34 @@ fn public_models_round_trip_through_serde() {
         serde_json::from_str(&json).expect("profile decode");
 
     assert_eq!(decoded, profile);
+}
+
+#[test]
+fn reticulum_preview_errors_and_defaults_are_stable() {
+    assert_eq!(
+        RadrootsReticulumPreviewBehavior::default(),
+        RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts
+    );
+    let cases = [
+        (
+            RadrootsReticulumPreviewError::InvalidEndpoint,
+            "invalid Reticulum preview endpoint",
+        ),
+        (
+            RadrootsReticulumPreviewError::InvalidProfileId,
+            "invalid Reticulum preview profile id",
+        ),
+        (
+            RadrootsReticulumPreviewError::InvalidFetchLimit,
+            "Reticulum preview fetch limit must be greater than zero",
+        ),
+        (
+            RadrootsReticulumPreviewError::NonReticulumTarget,
+            "Reticulum preview transport received a non-Reticulum target",
+        ),
+    ];
+
+    for (error, message) in cases {
+        assert_eq!(error.to_string(), message);
+    }
 }

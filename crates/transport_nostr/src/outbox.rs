@@ -107,11 +107,12 @@ where
         policy.relay_url_policy,
     )?;
     let target_strings = targets.relay_strings();
+    let satisfaction_policy = satisfaction_policy_for_required_accept_count(
+        publishable.required_accept_count,
+        publishable.relays.len(),
+    )?;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
-        .with_satisfaction_policy(satisfaction_policy_for_required_accept_count(
-            publishable.required_accept_count,
-            publishable.relays.len(),
-        )?);
+        .with_satisfaction_policy(satisfaction_policy);
     let publish = match publish_signed_event(adapter, request).await {
         Ok(receipt) => receipt,
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
@@ -315,12 +316,13 @@ async fn ingest_publish_observation(
     message: Option<&str>,
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {
-    let mut observation = RadrootsTransportObservation::new(
+    let observation = RadrootsTransportObservation::new(
         RadrootsTransportKind::Nostr,
         relay_url,
         RadrootsTransportObservationType::NostrPublishAck,
         observed_at_ms,
-    )?;
+    );
+    let mut observation = observation?;
     if let Some(message) = message {
         observation = observation.with_redacted_message(message);
     }
@@ -340,5 +342,51 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
         tags: signed_event.tags.clone(),
         content: signed_event.content.clone(),
         sig: signed_event.sig.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{adapter_transport_failure_receipt, satisfaction_policy_for_required_accept_count};
+    use radroots_transport::RadrootsTransportSatisfactionPolicy;
+
+    #[test]
+    fn internal_outbox_publish_helpers_cover_policy_edges() {
+        assert_eq!(
+            satisfaction_policy_for_required_accept_count(2, 2).expect("all targets"),
+            RadrootsTransportSatisfactionPolicy::AllTargets
+        );
+        assert_eq!(
+            satisfaction_policy_for_required_accept_count(1, 3).expect("at least one"),
+            RadrootsTransportSatisfactionPolicy::AtLeast(1)
+        );
+        assert!(
+            satisfaction_policy_for_required_accept_count(
+                usize::from(u16::MAX) + 1,
+                usize::from(u16::MAX) + 2,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn adapter_transport_failure_receipts_preserve_each_target() {
+        let receipt = adapter_transport_failure_receipt(
+            "event-1".to_owned(),
+            vec![
+                "wss://relay-a.example".to_owned(),
+                "wss://relay-b.example".to_owned(),
+            ],
+            2,
+            "offline".to_owned(),
+        );
+
+        assert_eq!(receipt.event_id, "event-1");
+        assert_eq!(receipt.attempted_count, 2);
+        assert_eq!(receipt.retryable_count, 2);
+        assert_eq!(receipt.terminal_count, 0);
+        assert_eq!(receipt.quorum, 2);
+        assert!(!receipt.quorum_met);
+        assert!(receipt.relays.iter().all(|relay| relay.attempted));
     }
 }
