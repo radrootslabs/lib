@@ -629,7 +629,7 @@ mod tests {
         too_many.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example.com"),
             TransportPublishTarget::reticulum_preview(
-                "reticulum:preview",
+                "reticulum:preview-unavailable",
                 TransportPublishPreviewBehavior::RejectDeliveryAttempts,
             ),
         ]);
@@ -707,7 +707,7 @@ mod tests {
             event: event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::reticulum_preview(
-                    "reticulum:preview",
+                    "reticulum:preview-unavailable",
                     TransportPublishPreviewBehavior::DeferDeliveryPlans,
                 ),
             ]),
@@ -832,7 +832,7 @@ mod tests {
         let explicit = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example"),
             TransportPublishTarget::reticulum_preview(
-                "reticulum:preview",
+                "reticulum:preview-unavailable",
                 TransportPublishPreviewBehavior::DeferDeliveryPlans,
             ),
         ]);

@@ -109,9 +109,11 @@ fn satisfaction_policy_counts_target_statuses() {
 
 #[test]
 fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
-    let target =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:preview")
-            .expect("target");
+    let target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        "reticulum:preview-unavailable",
+    )
+    .expect("target");
     let receipt = RadrootsTransportDeliveryReceipt {
         request_id: "reticulum-preview".to_owned(),
         target_receipts: vec![RadrootsTransportTargetReceipt::new(

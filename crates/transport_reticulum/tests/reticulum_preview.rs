@@ -120,8 +120,8 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
 fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing() {
     let transport = RadrootsReticulumPreviewTransport::default();
     let request = delivery_request(vec![
-        reticulum_target("reticulum:preview-a"),
-        reticulum_target("reticulum:preview-b"),
+        reticulum_target("reticulum:preview-unavailable"),
+        reticulum_target("reticulum:preview-unavailable-alt"),
     ]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
@@ -149,7 +149,7 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
         RadrootsReticulumPreviewProfile::default()
             .with_behavior(RadrootsReticulumPreviewBehavior::DeferDeliveryPlans),
     );
-    let request = delivery_request(vec![reticulum_target("reticulum:preview-deferred")]);
+    let request = delivery_request(vec![reticulum_target("reticulum:preview-unavailable")]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
     assert_eq!(receipt.target_receipts.len(), 1);

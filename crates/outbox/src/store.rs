@@ -2265,7 +2265,7 @@ mod tests {
                     "transport.reticulum.preview",
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
-                    vec![reticulum_target("reticulum:preview-target")],
+                    vec![reticulum_target("reticulum:preview-unavailable")],
                 ),
                 true,
                 1_007,

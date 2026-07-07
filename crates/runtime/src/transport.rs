@@ -292,13 +292,12 @@ impl RadrootsRuntimeDeliveryTarget {
         Self {
             delivery_target_id,
             target,
-            status: RadrootsTransportDeliveryTargetStatus::Deferred,
+            status: RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
         }
     }
 
     pub fn is_ready_for_attempt(&self) -> bool {
-        self.status == RadrootsTransportDeliveryTargetStatus::Pending
-            || self.status == RadrootsTransportDeliveryTargetStatus::Failed
+        self.status.is_ready_for_attempt()
     }
 }
 
@@ -522,8 +521,9 @@ mod tests {
     use radroots_events::draft::{RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts};
     use radroots_transport::{
         RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportSatisfactionPolicy,
-        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+        RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
+        RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+        RadrootsTransportTargetReceipt,
     };
 
     struct StaticAdapter {
@@ -630,7 +630,7 @@ mod tests {
                     "nostr-delivery",
                     RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
                     vec![target(RadrootsTransportKind::Nostr, "wss://relay.example")],
-                    RadrootsTransportSatisfactionPolicy::AnyTarget,
+                    RadrootsTransportSatisfactionPolicy::any_accepted(),
                     1_000,
                 )
                 .expect("request"),
@@ -638,7 +638,10 @@ mod tests {
             .await
             .expect("receipt");
 
-        assert_eq!(receipt.satisfied_target_count(), 1);
+        assert_eq!(
+            receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+            1
+        );
         assert_eq!(
             receipt.target_receipts[0].status,
             RadrootsTransportDeliveryTargetStatus::Accepted
@@ -662,9 +665,9 @@ mod tests {
                     RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
                     vec![target(
                         RadrootsTransportKind::Reticulum,
-                        "reticulum:preview",
+                        "reticulum:preview-unavailable",
                     )],
-                    RadrootsTransportSatisfactionPolicy::AnyTarget,
+                    RadrootsTransportSatisfactionPolicy::any_accepted(),
                     1_000,
                 )
                 .expect("request"),
@@ -672,10 +675,13 @@ mod tests {
             .await
             .expect("receipt");
 
-        assert_eq!(receipt.satisfied_target_count(), 0);
+        assert_eq!(
+            receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+            0
+        );
         assert_eq!(
             receipt.target_receipts[0].status,
-            RadrootsTransportDeliveryTargetStatus::Unavailable
+            RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
         );
     }
 
@@ -716,7 +722,10 @@ mod tests {
         );
         let deferred = RadrootsRuntimeDeliveryTarget::deferred_until_implemented(
             2,
-            target(RadrootsTransportKind::Reticulum, "reticulum:preview"),
+            target(
+                RadrootsTransportKind::Reticulum,
+                "reticulum:preview-unavailable",
+            ),
         );
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
@@ -724,7 +733,7 @@ mod tests {
                 payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
-                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::AnyTarget,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
                     targets: vec![ready, deferred],
                 }],
                 now_ms: 1_000,
