@@ -107,6 +107,7 @@ const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[
 ];
 
 const FORBIDDEN_DAEMON_PUBLISH_PROXY_IDENTIFIERS: &[&str] = &[
+    "\"radrootsd_proxy\"",
     "radrootsd.publish_proxy.v1",
     "radroots_publish_proxy_protocol",
     "publish_proxy_protocol",
@@ -1309,6 +1310,18 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
             );
         }
     }
+
+    let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
+    assert!(
+        transport_source.contains("RadrootsTransportKind::Proxy"),
+        "src/transport.rs must model SDK proxy targets with RadrootsTransportKind::Proxy"
+    );
+
+    let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    assert!(
+        sync_runtime_source.contains("target.transport_kind == RadrootsTransportKind::Proxy"),
+        "src/sync_runtime.rs must identify proxy delegate targets with RadrootsTransportKind::Proxy"
+    );
 }
 
 #[test]

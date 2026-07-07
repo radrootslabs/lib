@@ -444,7 +444,7 @@ impl ProxyProfile {
 
     pub(crate) fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
         TargetSet::transport_targets(vec![RadrootsTransportTarget::new(
-            RadrootsTransportKind::custom("radrootsd_proxy")?,
+            RadrootsTransportKind::Proxy,
             self.endpoint_url.as_str(),
         )?])
     }

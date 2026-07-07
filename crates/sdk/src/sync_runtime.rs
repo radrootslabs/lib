@@ -942,7 +942,7 @@ fn proxy_target_matches_outcome(
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 fn is_proxy_delegate_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
-    target.transport_kind.canonical_label() == "radrootsd_proxy"
+    target.transport_kind == RadrootsTransportKind::Proxy
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
