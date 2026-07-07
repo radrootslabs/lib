@@ -18,6 +18,10 @@ const TRANSPORT_HARDENING_CRATE_SOURCE_ROOTS: &[&str] = &[
 
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
+        pattern: "\"radrootsd_proxy\"",
+        reason: "proxy must use first-class RadrootsTransportKind::Proxy modeling",
+    },
+    ForbiddenConcept {
         pattern: "radrootsd.publish_proxy.v1",
         reason: "transport publish protocol v1 proxy identifiers are removed",
     },
@@ -114,6 +118,47 @@ fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
             "transport publish capabilities must retain readiness/usability field `{required}`"
         );
     }
+}
+
+#[test]
+fn transport_hardening_sources_keep_proxy_and_reticulum_message_contracts() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let transport_kind = read_source(crates_root.join("transport/src/kind.rs").as_path());
+    for required in [
+        "Proxy,",
+        r#""proxy" => Ok(Self::Proxy)"#,
+        r#"Self::Proxy => "proxy".to_string()"#,
+    ] {
+        assert!(
+            transport_kind.contains(required),
+            "transport kind source must retain first-class proxy witness `{required}`"
+        );
+    }
+
+    let reticulum_source =
+        read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
+    for required in [
+        "RETICULUM_PREVIEW_UNAVAILABLE_MESSAGE",
+        "Reticulum transport is configured for future compatibility, ",
+        "but this build does not implement Reticulum delivery.",
+    ] {
+        assert!(
+            reticulum_source.contains(required),
+            "Reticulum preview source must retain unavailable message witness `{required}`"
+        );
+    }
+
+    let protocol_source = read_source(
+        crates_root
+            .join("transport_publish_protocol/src/lib.rs")
+            .as_path(),
+    );
+    assert!(
+        protocol_source.contains("Reticulum transport is configured for future compatibility, but this build does not implement Reticulum delivery."),
+        "transport publish capabilities must retain the approved Reticulum unavailable message"
+    );
 }
 
 fn rust_source_files(root: &Path) -> Vec<PathBuf> {

@@ -1681,8 +1681,11 @@ async fn outbox_publish_skips_non_nostr_targets() {
                 RadrootsTransportSatisfactionPolicy::all_accepted(),
                 vec![
                     nostr_target(RELAY_PRIMARY_WSS),
-                    RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:a")
-                        .expect("reticulum target"),
+                    RadrootsTransportTarget::new(
+                        RadrootsTransportKind::Reticulum,
+                        "reticulum:preview-unavailable",
+                    )
+                    .expect("reticulum target"),
                 ],
             ),
             1_000,
@@ -1728,7 +1731,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
         .expect("targets");
     assert!(targets.iter().any(|target| {
         target.transport_kind == RadrootsTransportKind::Reticulum
-            && target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+            && target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
     }));
 }
 
