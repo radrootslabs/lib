@@ -288,11 +288,11 @@ fn ensure_reticulum_targets(
 fn preview_outcome(behavior: RadrootsReticulumPreviewBehavior) -> RadrootsTransportOutcome {
     let mut outcome = match behavior {
         RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts => {
-            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::Unavailable)
+            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable)
         }
-        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans => {
-            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::Deferred)
-        }
+        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans => RadrootsTransportOutcome::new(
+            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
+        ),
     };
     outcome.code = Some(
         match behavior {

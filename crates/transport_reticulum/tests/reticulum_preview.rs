@@ -1,7 +1,8 @@
 use radroots_transport::{
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
     RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumPreviewBehavior, RadrootsReticulumPreviewEndpoint,
@@ -24,7 +25,7 @@ fn delivery_request(targets: Vec<RadrootsTransportTarget>) -> RadrootsTransportD
         "reticulum-preview-delivery",
         "sha256:preview-payload",
         RadrootsTransportTargetSet::new(targets).expect("target set"),
-        RadrootsTransportSatisfactionPolicy::AnyTarget,
+        RadrootsTransportSatisfactionPolicy::any_accepted(),
     )
 }
 
@@ -125,12 +126,15 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
     let receipt = transport.deliver(request).expect("delivery receipt");
 
     assert_eq!(receipt.target_receipts.len(), 2);
-    assert_eq!(receipt.satisfied_target_count(), 0);
+    assert_eq!(
+        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+        0
+    );
     for target_receipt in receipt.target_receipts {
         assert_eq!(target_receipt.target.kind, RadrootsTransportKind::Reticulum);
         assert_eq!(
             target_receipt.status,
-            RadrootsTransportDeliveryTargetStatus::Unavailable
+            RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
         );
         assert_eq!(
             target_receipt.outcome.code.as_deref(),
@@ -149,18 +153,24 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
     let receipt = transport.deliver(request).expect("delivery receipt");
 
     assert_eq!(receipt.target_receipts.len(), 1);
-    assert_eq!(receipt.satisfied_target_count(), 0);
+    assert_eq!(
+        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+        0
+    );
     assert_eq!(
         receipt.target_receipts[0].status,
-        RadrootsTransportDeliveryTargetStatus::Deferred
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
         receipt.target_receipts[0].outcome.code.as_deref(),
         Some("deferred_until_implemented")
     );
     assert!(
-        !RadrootsTransportSatisfactionPolicy::AnyTarget
-            .is_satisfied_by(1, receipt.satisfied_target_count())
+        !RadrootsTransportSatisfactionPolicy::any_accepted()
+            .is_satisfied_by(
+                1,
+                receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted)
+            )
             .expect("satisfaction check")
     );
 }
@@ -199,7 +209,7 @@ fn fetch_reports_preview_unavailable_without_observed_events() {
     );
     assert_eq!(
         receipt.outcome.status,
-        RadrootsTransportDeliveryTargetStatus::Unavailable
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
     );
     assert_eq!(
         RadrootsReticulumPreviewFetchRequest::new("fetch-0", 0).expect_err("zero limit"),
@@ -223,7 +233,7 @@ fn fetch_reports_preview_unavailable_without_observed_events() {
         .expect("fetch receipt");
     assert_eq!(
         deferred.outcome.status,
-        RadrootsTransportDeliveryTargetStatus::Deferred
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }
 

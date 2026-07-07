@@ -11,7 +11,8 @@ mod target;
 
 pub use delivery::{
     RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetReceipt,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTargetReceipt,
 };
 pub use error::RadrootsTransportError;
 pub use kind::{RadrootsTransportImplementationState, RadrootsTransportKind};

@@ -18,8 +18,8 @@ use radroots_events::draft::{
     RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -985,10 +985,7 @@ impl RadrootsOutbox {
     ) -> Result<(), RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         claimed_event_identity_tx(&mut tx, outbox_event_id, claim_token).await?;
-        let completed_at_ms = (status.counts_as_satisfied()
-            || status.is_terminal_failure()
-            || status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented)
-            .then_some(attempted_at_ms);
+        let completed_at_ms = status.is_completed().then_some(attempted_at_ms);
         let changed = sqlx::query(
             "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id IN (SELECT delivery_plan_id FROM outbox_delivery_plan WHERE outbox_event_id = ?)",
         )
@@ -1499,7 +1496,11 @@ async fn evaluate_delivery_plans(
         let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
         let satisfied_count = targets
             .iter()
-            .filter(|target| target.status.counts_as_satisfied())
+            .filter(|target| {
+                target
+                    .status
+                    .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+            })
             .count() as i64;
         let ready_count = targets
             .iter()
@@ -1507,9 +1508,7 @@ async fn evaluate_delivery_plans(
             .count();
         let deferred_count = targets
             .iter()
-            .filter(|target| {
-                target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
-            })
+            .filter(|target| target.status.is_deferred_preview())
             .count();
         let terminal_failure_count = targets
             .iter()
@@ -1781,9 +1780,25 @@ fn sha256_json<T: Serialize>(value: &T) -> String {
 
 fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolicy) -> String {
     match policy {
-        RadrootsTransportSatisfactionPolicy::AllTargets => "all_targets".to_owned(),
-        RadrootsTransportSatisfactionPolicy::AnyTarget => "any_target".to_owned(),
-        RadrootsTransportSatisfactionPolicy::AtLeast(count) => format!("at_least:{count}"),
+        RadrootsTransportSatisfactionPolicy::All { class } => {
+            format!("all_{}", satisfaction_class_storage_value(*class))
+        }
+        RadrootsTransportSatisfactionPolicy::Any { class } => {
+            format!("any_{}", satisfaction_class_storage_value(*class))
+        }
+        RadrootsTransportSatisfactionPolicy::Quorum { class, threshold } => {
+            format!(
+                "quorum_{}:{threshold}",
+                satisfaction_class_storage_value(*class)
+            )
+        }
+    }
+}
+
+fn satisfaction_class_storage_value(class: RadrootsTransportSatisfactionClass) -> &'static str {
+    match class {
+        RadrootsTransportSatisfactionClass::Accepted => "accepted",
+        RadrootsTransportSatisfactionClass::Delivered => "delivered",
     }
 }
 
@@ -1792,22 +1807,32 @@ fn parse_satisfaction_policy(
     required_success_count: i64,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
     match value {
-        "all_targets" => Ok(RadrootsTransportSatisfactionPolicy::AllTargets),
-        "any_target" => Ok(RadrootsTransportSatisfactionPolicy::AnyTarget),
-        stored if stored == format!("at_least:{required_success_count}") => {
-            let count = u16::try_from(required_success_count).map_err(|_| {
-                RadrootsOutboxError::IntegerRange {
-                    field: "required_success_count",
-                    value: required_success_count,
-                }
-            })?;
-            Ok(RadrootsTransportSatisfactionPolicy::AtLeast(count))
+        "all_accepted" => Ok(RadrootsTransportSatisfactionPolicy::all_accepted()),
+        "any_accepted" => Ok(RadrootsTransportSatisfactionPolicy::any_accepted()),
+        "all_delivered" => Ok(RadrootsTransportSatisfactionPolicy::all_delivered()),
+        "any_delivered" => Ok(RadrootsTransportSatisfactionPolicy::any_delivered()),
+        stored if stored == format!("quorum_accepted:{required_success_count}") => {
+            Ok(RadrootsTransportSatisfactionPolicy::quorum_accepted(
+                required_count_u16(required_success_count)?,
+            ))
+        }
+        stored if stored == format!("quorum_delivered:{required_success_count}") => {
+            Ok(RadrootsTransportSatisfactionPolicy::quorum_delivered(
+                required_count_u16(required_success_count)?,
+            ))
         }
         _ => Err(RadrootsOutboxError::InvalidStoredEnum {
             field: "outbox_delivery_plan.satisfaction_policy",
             value: value.to_owned(),
         }),
     }
+}
+
+fn required_count_u16(required_success_count: i64) -> Result<u16, RadrootsOutboxError> {
+    u16::try_from(required_success_count).map_err(|_| RadrootsOutboxError::IntegerRange {
+        field: "required_success_count",
+        value: required_success_count,
+    })
 }
 
 fn bool_i64(value: bool) -> i64 {
@@ -1862,7 +1887,7 @@ mod tests {
         RadrootsOutboxDeliveryPlanInput::new(
             "transport.nostr.local",
             1,
-            RadrootsTransportSatisfactionPolicy::AllTargets,
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
             targets,
         )
     }
@@ -2116,7 +2141,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn at_least_delivery_plan_round_trips_and_completes_after_required_target() {
+    async fn quorum_accepted_delivery_plan_round_trips_and_completes_after_required_target() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "at least");
         let signed_event =
@@ -2129,7 +2154,7 @@ mod tests {
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     7,
-                    RadrootsTransportSatisfactionPolicy::AtLeast(1),
+                    RadrootsTransportSatisfactionPolicy::quorum_accepted(1),
                     vec![
                         nostr_target(NOSTR_PRIMARY_WSS),
                         nostr_target(NOSTR_SECONDARY_WSS),
@@ -2149,7 +2174,7 @@ mod tests {
         assert_eq!(plans.len(), 1);
         assert_eq!(
             plans[0].satisfaction_policy,
-            RadrootsTransportSatisfactionPolicy::AtLeast(1)
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(1)
         );
         assert_eq!(plans[0].required_success_count, 1);
         assert_eq!(plans[0].target_policy_version, 7);
@@ -2239,7 +2264,7 @@ mod tests {
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.preview",
                     1,
-                    RadrootsTransportSatisfactionPolicy::AllTargets,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![reticulum_target("reticulum:preview-target")],
                 ),
                 true,

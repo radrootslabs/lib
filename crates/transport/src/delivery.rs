@@ -6,14 +6,72 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportSatisfactionClass {
+    Accepted,
+    Delivered,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTransportSatisfactionPolicy {
-    AllTargets,
-    AnyTarget,
-    AtLeast(u16),
+    Any {
+        class: RadrootsTransportSatisfactionClass,
+    },
+    All {
+        class: RadrootsTransportSatisfactionClass,
+    },
+    Quorum {
+        class: RadrootsTransportSatisfactionClass,
+        threshold: u16,
+    },
 }
 
 impl RadrootsTransportSatisfactionPolicy {
+    pub fn any_accepted() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::Accepted,
+        }
+    }
+
+    pub fn all_accepted() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::Accepted,
+        }
+    }
+
+    pub fn quorum_accepted(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::Accepted,
+            threshold,
+        }
+    }
+
+    pub fn any_delivered() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::Delivered,
+        }
+    }
+
+    pub fn all_delivered() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::Delivered,
+        }
+    }
+
+    pub fn quorum_delivered(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::Delivered,
+            threshold,
+        }
+    }
+
+    pub fn class(&self) -> RadrootsTransportSatisfactionClass {
+        match self {
+            Self::Any { class } | Self::All { class } | Self::Quorum { class, .. } => *class,
+        }
+    }
+
     pub fn required_target_count(
         &self,
         total_targets: usize,
@@ -22,12 +80,14 @@ impl RadrootsTransportSatisfactionPolicy {
             return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
         }
         match self {
-            Self::AllTargets => Ok(total_targets),
-            Self::AnyTarget => Ok(1),
-            Self::AtLeast(count) if *count > 0 && usize::from(*count) <= total_targets => {
-                Ok(usize::from(*count))
+            Self::All { .. } => Ok(total_targets),
+            Self::Any { .. } => Ok(1),
+            Self::Quorum { threshold, .. }
+                if *threshold > 0 && usize::from(*threshold) <= total_targets =>
+            {
+                Ok(usize::from(*threshold))
             }
-            Self::AtLeast(_) => Err(RadrootsTransportError::InvalidSatisfactionPolicy),
+            Self::Quorum { .. } => Err(RadrootsTransportError::InvalidSatisfactionPolicy),
         }
     }
 
@@ -92,10 +152,13 @@ pub struct RadrootsTransportDeliveryReceipt {
 }
 
 impl RadrootsTransportDeliveryReceipt {
-    pub fn satisfied_target_count(&self) -> usize {
+    pub fn satisfied_target_count(
+        &self,
+        satisfaction_class: RadrootsTransportSatisfactionClass,
+    ) -> usize {
         self.target_receipts
             .iter()
-            .filter(|receipt| receipt.status.counts_as_satisfied())
+            .filter(|receipt| receipt.status.counts_as_satisfied(satisfaction_class))
             .count()
     }
 }

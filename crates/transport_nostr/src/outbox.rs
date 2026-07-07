@@ -15,7 +15,9 @@ use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventStoreIngestReceipt,
 };
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportSatisfactionPolicy};
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishPolicy {
@@ -256,7 +258,11 @@ async fn publishable_relays(
             let satisfied_count = targets
                 .iter()
                 .filter(|target| target.delivery_plan_id == plan.delivery_plan_id)
-                .filter(|target| target.status.counts_as_satisfied())
+                .filter(|target| {
+                    target
+                        .status
+                        .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+                })
                 .count();
             (plan.required_success_count as usize).saturating_sub(satisfied_count)
         })
@@ -267,7 +273,10 @@ async fn publishable_relays(
         if !is_nostr_target(&target) {
             continue;
         }
-        if target.status.counts_as_satisfied() {
+        if target
+            .status
+            .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
+        {
             accepted_count += 1;
         }
         if required_accept_count > 0
@@ -298,7 +307,15 @@ fn satisfaction_policy_for_required_accept_count(
     target_count: usize,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
     if required_accept_count >= target_count {
-        return Ok(RadrootsTransportSatisfactionPolicy::AllTargets);
+        return Ok(RadrootsTransportSatisfactionPolicy::all_accepted());
+    }
+    if required_accept_count == 0 {
+        return Err(RadrootsRelayTransportError::Transport(
+            "required Nostr relay acceptance count must be greater than zero".to_owned(),
+        ));
+    }
+    if required_accept_count == 1 {
+        return Ok(RadrootsTransportSatisfactionPolicy::any_accepted());
     }
     let count = u16::try_from(required_accept_count).map_err(|_| {
         RadrootsRelayTransportError::Transport(
@@ -306,7 +323,7 @@ fn satisfaction_policy_for_required_accept_count(
                 .to_owned(),
         )
     })?;
-    Ok(RadrootsTransportSatisfactionPolicy::AtLeast(count))
+    Ok(RadrootsTransportSatisfactionPolicy::quorum_accepted(count))
 }
 
 async fn ingest_publish_observation(
@@ -354,11 +371,11 @@ mod tests {
     fn internal_outbox_publish_helpers_cover_policy_edges() {
         assert_eq!(
             satisfaction_policy_for_required_accept_count(2, 2).expect("all targets"),
-            RadrootsTransportSatisfactionPolicy::AllTargets
+            RadrootsTransportSatisfactionPolicy::all_accepted()
         );
         assert_eq!(
             satisfaction_policy_for_required_accept_count(1, 3).expect("at least one"),
-            RadrootsTransportSatisfactionPolicy::AtLeast(1)
+            RadrootsTransportSatisfactionPolicy::any_accepted()
         );
         assert!(
             satisfaction_policy_for_required_accept_count(

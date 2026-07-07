@@ -189,7 +189,7 @@ where
     )
 }
 
-fn all_targets_outbox_operation_input<I, S>(
+fn all_accepted_outbox_operation_input<I, S>(
     draft: RadrootsFrozenEventDraft,
     relays: I,
 ) -> RadrootsOutboxOperationInput
@@ -200,7 +200,7 @@ where
     outbox_operation_input(
         draft,
         relays,
-        RadrootsTransportSatisfactionPolicy::AllTargets,
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
     )
 }
 
@@ -557,13 +557,13 @@ fn outcome_prefix_classification_covers_required_kinds() {
         RadrootsRelayOutcome::timeout("timeout: no OK")
             .to_transport_outcome()
             .status,
-        radroots_transport::RadrootsTransportDeliveryTargetStatus::Failed
+        radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     assert_eq!(
         RadrootsRelayOutcome::classify("restricted: denied")
             .to_transport_outcome()
             .status,
-        radroots_transport::RadrootsTransportDeliveryTargetStatus::Rejected
+        radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedTerminal
     );
     assert_eq!(
         RadrootsRelayOutcome::connection_failed("offline")
@@ -612,7 +612,7 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     let receipt = publish_signed_event(
         &adapter,
         radroots_transport_nostr::RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_000)
-            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::AtLeast(2)),
+            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::quorum_accepted(2)),
     )
     .await
     .expect("publish");
@@ -641,7 +641,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     let receipt = publish_signed_event(
         &adapter,
         RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_050)
-            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::AllTargets),
+            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
     )
     .await
     .expect("publish");
@@ -1288,7 +1288,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![
                 RELAY_PRIMARY_WSS.to_owned(),
@@ -1429,7 +1429,7 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
         ))
@@ -1522,7 +1522,7 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
         ))
@@ -1611,7 +1611,7 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned()],
         ))
@@ -1678,7 +1678,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
             RadrootsOutboxDeliveryPlanInput::new(
                 "transport.mixed.local",
                 1,
-                RadrootsTransportSatisfactionPolicy::AllTargets,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
                 vec![
                     nostr_target(RELAY_PRIMARY_WSS),
                     RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:a")
@@ -1755,7 +1755,7 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
                 RELAY_SECONDARY_WSS.to_owned(),
                 RELAY_TERTIARY_WSS.to_owned(),
             ],
-            RadrootsTransportSatisfactionPolicy::AtLeast(2),
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
         ))
         .await
         .expect("enqueue");
@@ -1854,7 +1854,7 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
         ))
@@ -1938,7 +1938,7 @@ async fn outbox_publish_republish_policy_keeps_terminal_targets_excluded() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
         ))
@@ -2019,7 +2019,7 @@ async fn outbox_publish_requires_claimed_signed_event() {
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned()],
         ))
@@ -2066,7 +2066,7 @@ async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_fil
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
         ))
@@ -2124,7 +2124,7 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
     )
     .expect("draft");
     let receipt = outbox
-        .enqueue_operation(all_targets_outbox_operation_input(
+        .enqueue_operation(all_accepted_outbox_operation_input(
             draft,
             vec!["ws://127.0.0.1:9999".to_owned()],
         ))

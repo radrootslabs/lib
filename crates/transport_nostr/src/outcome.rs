@@ -182,9 +182,9 @@ impl RadrootsRelayOutcome {
         let status = if self.counts_toward_quorum() {
             RadrootsTransportDeliveryTargetStatus::Accepted
         } else if self.is_retryable() {
-            RadrootsTransportDeliveryTargetStatus::Failed
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable
         } else {
-            RadrootsTransportDeliveryTargetStatus::Rejected
+            RadrootsTransportDeliveryTargetStatus::FailedTerminal
         };
         let mut outcome = RadrootsTransportOutcome::new(status);
         outcome.code = Some(self.kind.as_str().to_owned());

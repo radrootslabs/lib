@@ -37,7 +37,7 @@ impl RadrootsRelayPublishRequest {
         Self {
             signed_event,
             targets,
-            satisfaction_policy: RadrootsTransportSatisfactionPolicy::AllTargets,
+            satisfaction_policy: RadrootsTransportSatisfactionPolicy::all_accepted(),
             now_ms,
         }
     }

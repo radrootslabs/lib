@@ -3,8 +3,8 @@
 use crate::RadrootsOutboxError;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,6 +137,7 @@ pub enum RadrootsOutboxDeliveryTargetStatus {
     StoredByGateway,
     Seen,
     DeferredUntilImplemented,
+    PreviewUnavailable,
     SkippedPolicyDenied,
     FailedRetryable,
     FailedTerminal,
@@ -152,6 +153,7 @@ impl RadrootsOutboxDeliveryTargetStatus {
             Self::StoredByGateway => "stored_by_gateway",
             Self::Seen => "seen",
             Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::PreviewUnavailable => "preview_unavailable",
             Self::SkippedPolicyDenied => "skipped_policy_denied",
             Self::FailedRetryable => "failed_retryable",
             Self::FailedTerminal => "failed_terminal",
@@ -167,6 +169,7 @@ impl RadrootsOutboxDeliveryTargetStatus {
             "stored_by_gateway" => Ok(Self::StoredByGateway),
             "seen" => Ok(Self::Seen),
             "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
+            "preview_unavailable" => Ok(Self::PreviewUnavailable),
             "skipped_policy_denied" => Ok(Self::SkippedPolicyDenied),
             "failed_retryable" => Ok(Self::FailedRetryable),
             "failed_terminal" => Ok(Self::FailedTerminal),
@@ -181,15 +184,45 @@ impl RadrootsOutboxDeliveryTargetStatus {
         matches!(self, Self::Pending | Self::FailedRetryable)
     }
 
-    pub fn counts_as_satisfied(self) -> bool {
+    pub fn counts_as_transport_satisfaction(
+        self,
+        satisfaction_class: RadrootsTransportSatisfactionClass,
+    ) -> bool {
+        match satisfaction_class {
+            RadrootsTransportSatisfactionClass::Accepted => matches!(
+                self,
+                Self::Accepted
+                    | Self::Delivered
+                    | Self::Forwarded
+                    | Self::StoredByGateway
+                    | Self::Seen
+            ),
+            RadrootsTransportSatisfactionClass::Delivered => matches!(
+                self,
+                Self::Delivered | Self::Forwarded | Self::StoredByGateway | Self::Seen
+            ),
+        }
+    }
+
+    pub fn is_deferred_preview(self) -> bool {
         matches!(
             self,
-            Self::Accepted | Self::Delivered | Self::Forwarded | Self::StoredByGateway | Self::Seen
+            Self::DeferredUntilImplemented | Self::PreviewUnavailable
         )
+    }
+
+    pub fn is_retryable_failure(self) -> bool {
+        matches!(self, Self::FailedRetryable)
     }
 
     pub fn is_terminal_failure(self) -> bool {
         matches!(self, Self::SkippedPolicyDenied | Self::FailedTerminal)
+    }
+
+    pub fn is_completed(self) -> bool {
+        self.counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
+            || self.is_deferred_preview()
+            || self.is_terminal_failure()
     }
 }
 
@@ -462,11 +495,13 @@ mod tests {
             );
         }
 
-        for (status, expected, ready, satisfied, terminal_failure) in [
+        for (status, expected, ready, satisfied, delivered, deferred_preview, terminal_failure) in [
             (
                 RadrootsOutboxDeliveryTargetStatus::Pending,
                 "pending",
                 true,
+                false,
+                false,
                 false,
                 false,
             ),
@@ -476,12 +511,16 @@ mod tests {
                 false,
                 true,
                 false,
+                false,
+                false,
             ),
             (
                 RadrootsOutboxDeliveryTargetStatus::Delivered,
                 "delivered",
                 false,
                 true,
+                true,
+                false,
                 false,
             ),
             (
@@ -489,6 +528,8 @@ mod tests {
                 "forwarded",
                 false,
                 true,
+                true,
+                false,
                 false,
             ),
             (
@@ -496,6 +537,8 @@ mod tests {
                 "stored_by_gateway",
                 false,
                 true,
+                true,
+                false,
                 false,
             ),
             (
@@ -503,6 +546,8 @@ mod tests {
                 "seen",
                 false,
                 true,
+                true,
+                false,
                 false,
             ),
             (
@@ -511,10 +556,23 @@ mod tests {
                 false,
                 false,
                 false,
+                true,
+                false,
+            ),
+            (
+                RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
+                "preview_unavailable",
+                false,
+                false,
+                false,
+                true,
+                false,
             ),
             (
                 RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
                 "skipped_policy_denied",
+                false,
+                false,
                 false,
                 false,
                 true,
@@ -525,10 +583,14 @@ mod tests {
                 true,
                 false,
                 false,
+                false,
+                false,
             ),
             (
                 RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
                 "failed_terminal",
+                false,
+                false,
                 false,
                 false,
                 true,
@@ -540,7 +602,19 @@ mod tests {
                 status
             );
             assert_eq!(status.is_ready_for_attempt(), ready);
-            assert_eq!(status.counts_as_satisfied(), satisfied);
+            assert_eq!(
+                status.counts_as_transport_satisfaction(
+                    radroots_transport::RadrootsTransportSatisfactionClass::Accepted
+                ),
+                satisfied
+            );
+            assert_eq!(
+                status.counts_as_transport_satisfaction(
+                    radroots_transport::RadrootsTransportSatisfactionClass::Delivered
+                ),
+                delivered
+            );
+            assert_eq!(status.is_deferred_preview(), deferred_preview);
             assert_eq!(status.is_terminal_failure(), terminal_failure);
         }
     }

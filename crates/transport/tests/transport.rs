@@ -1,7 +1,8 @@
 use radroots_transport::{
     RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     RadrootsTransportTargetUri,
 };
@@ -80,20 +81,26 @@ fn target_set_rejects_duplicate_fingerprints() {
 
 #[test]
 fn satisfaction_policy_counts_target_statuses() {
-    let all = RadrootsTransportSatisfactionPolicy::AllTargets;
-    let any = RadrootsTransportSatisfactionPolicy::AnyTarget;
-    let two = RadrootsTransportSatisfactionPolicy::AtLeast(2);
+    let all = RadrootsTransportSatisfactionPolicy::all_accepted();
+    let any = RadrootsTransportSatisfactionPolicy::any_accepted();
+    let two = RadrootsTransportSatisfactionPolicy::quorum_accepted(2);
+    let delivered = RadrootsTransportSatisfactionPolicy::quorum_delivered(2);
 
     assert!(all.is_satisfied_by(2, 2).expect("all"));
     assert!(!all.is_satisfied_by(2, 1).expect("all incomplete"));
     assert!(any.is_satisfied_by(3, 1).expect("any"));
     assert!(two.is_satisfied_by(3, 2).expect("two"));
+    assert_eq!(all.class(), RadrootsTransportSatisfactionClass::Accepted);
+    assert_eq!(
+        delivered.class(),
+        RadrootsTransportSatisfactionClass::Delivered
+    );
     assert_eq!(
         any.is_satisfied_by(0, 0).expect_err("zero target set"),
         RadrootsTransportError::InvalidSatisfactionPolicy
     );
     assert_eq!(
-        RadrootsTransportSatisfactionPolicy::AtLeast(0)
+        RadrootsTransportSatisfactionPolicy::quorum_accepted(0)
             .is_satisfied_by(3, 0)
             .expect_err("zero required targets"),
         RadrootsTransportError::InvalidSatisfactionPolicy
@@ -109,15 +116,23 @@ fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
         request_id: "reticulum-preview".to_owned(),
         target_receipts: vec![RadrootsTransportTargetReceipt::new(
             target,
-            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::Deferred),
+            RadrootsTransportOutcome::new(
+                RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
+            ),
         )],
     };
 
-    assert!(RadrootsTransportDeliveryTargetStatus::Deferred.is_terminal());
-    assert_eq!(receipt.satisfied_target_count(), 0);
+    assert!(RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented.is_deferred_preview());
+    assert_eq!(
+        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+        0
+    );
     assert!(
-        !RadrootsTransportSatisfactionPolicy::AnyTarget
-            .is_satisfied_by(1, receipt.satisfied_target_count())
+        !RadrootsTransportSatisfactionPolicy::any_accepted()
+            .is_satisfied_by(
+                1,
+                receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted)
+            )
             .expect("satisfaction check")
     );
 }
@@ -131,7 +146,7 @@ fn request_models_round_trip_with_serde() {
         "req-1",
         "sha256:payload",
         target_set,
-        RadrootsTransportSatisfactionPolicy::AnyTarget,
+        RadrootsTransportSatisfactionPolicy::any_accepted(),
     );
 
     let json = serde_json::to_string(&request).expect("serialize request");
@@ -267,19 +282,19 @@ fn target_fingerprints_and_sets_cover_accessors_and_validation() {
 #[test]
 fn satisfaction_and_target_status_cover_all_contract_states() {
     assert_eq!(
-        RadrootsTransportSatisfactionPolicy::AllTargets
+        RadrootsTransportSatisfactionPolicy::all_accepted()
             .required_target_count(3)
             .expect("all targets"),
         3
     );
     assert_eq!(
-        RadrootsTransportSatisfactionPolicy::AnyTarget
+        RadrootsTransportSatisfactionPolicy::any_accepted()
             .required_target_count(3)
             .expect("any target"),
         1
     );
     assert_eq!(
-        RadrootsTransportSatisfactionPolicy::AtLeast(4)
+        RadrootsTransportSatisfactionPolicy::quorum_accepted(4)
             .required_target_count(3)
             .expect_err("at least too high"),
         RadrootsTransportError::InvalidSatisfactionPolicy
@@ -288,18 +303,49 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
     let statuses = [
         RadrootsTransportDeliveryTargetStatus::Pending,
         RadrootsTransportDeliveryTargetStatus::Accepted,
-        RadrootsTransportDeliveryTargetStatus::Deferred,
-        RadrootsTransportDeliveryTargetStatus::Rejected,
-        RadrootsTransportDeliveryTargetStatus::Failed,
-        RadrootsTransportDeliveryTargetStatus::Unavailable,
+        RadrootsTransportDeliveryTargetStatus::Delivered,
+        RadrootsTransportDeliveryTargetStatus::Forwarded,
+        RadrootsTransportDeliveryTargetStatus::StoredByGateway,
+        RadrootsTransportDeliveryTargetStatus::Seen,
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
+        RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+        RadrootsTransportDeliveryTargetStatus::FailedTerminal,
     ];
-    assert!(!statuses[0].is_terminal());
-    assert!(statuses[1..].iter().all(|status| status.is_terminal()));
-    assert!(RadrootsTransportDeliveryTargetStatus::Accepted.counts_as_satisfied());
+    assert!(RadrootsTransportDeliveryTargetStatus::Pending.is_ready_for_attempt());
+    assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_ready_for_attempt());
+    assert!(
+        RadrootsTransportDeliveryTargetStatus::Accepted
+            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
+    );
+    assert!(
+        !RadrootsTransportDeliveryTargetStatus::Accepted
+            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered)
+    );
+    for status in [
+        RadrootsTransportDeliveryTargetStatus::Delivered,
+        RadrootsTransportDeliveryTargetStatus::Forwarded,
+        RadrootsTransportDeliveryTargetStatus::StoredByGateway,
+        RadrootsTransportDeliveryTargetStatus::Seen,
+    ] {
+        assert!(status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted));
+        assert!(status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered));
+    }
     assert!(
         statuses
             .iter()
-            .filter(|status| **status != RadrootsTransportDeliveryTargetStatus::Accepted)
-            .all(|status| !status.counts_as_satisfied())
+            .filter(|status| !matches!(
+                status,
+                RadrootsTransportDeliveryTargetStatus::Accepted
+                    | RadrootsTransportDeliveryTargetStatus::Delivered
+                    | RadrootsTransportDeliveryTargetStatus::Forwarded
+                    | RadrootsTransportDeliveryTargetStatus::StoredByGateway
+                    | RadrootsTransportDeliveryTargetStatus::Seen
+            ))
+            .all(|status| !status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted))
     );
+    assert!(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable.is_deferred_preview());
+    assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_retryable_failure());
+    assert!(RadrootsTransportDeliveryTargetStatus::FailedTerminal.is_terminal_failure());
 }
