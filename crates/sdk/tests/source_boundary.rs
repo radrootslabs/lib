@@ -1457,6 +1457,40 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
 }
 
 #[test]
+fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+
+    for required in [
+        "pub configured_transport_target_count: usize,",
+        "pub configured_transport_targets: Vec<SyncTransportTargetSummary>,",
+        "pub transport_statuses: Vec<SyncTransportStatusSummary>,",
+        ".configured_transport_targets()?",
+        ".transport_statuses()",
+    ] {
+        assert!(
+            sync_runtime.contains(required),
+            "SDK sync status must retain transport-neutral field witness `{required}`"
+        );
+    }
+
+    for forbidden in [
+        concat!("configured_nostr", "_relay", "_count"),
+        concat!("configured_nostr", "_relays"),
+        concat!("target", "_relays"),
+        concat!("connected", "_relays"),
+        concat!("acknowledged", "_relays"),
+        concat!("failed", "_relays"),
+        concat!("relay", "_count"),
+    ] {
+        assert!(
+            !sync_runtime.contains(forbidden),
+            "SDK sync status source must not expose retired relay-shaped generic field `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
