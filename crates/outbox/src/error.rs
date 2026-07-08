@@ -47,6 +47,15 @@ pub enum RadrootsOutboxError {
     #[error("Outbox delivery target not found: {0}")]
     DeliveryTargetNotFound(i64),
 
+    #[error(
+        "Outbox delivery target {delivery_target_id} already completed as {current_status}; requested {requested_status}"
+    )]
+    DeliveryTargetStatusConflict {
+        delivery_target_id: i64,
+        current_status: &'static str,
+        requested_status: &'static str,
+    },
+
     #[error("Claim token mismatch for outbox event {outbox_event_id}")]
     ClaimTokenMismatch { outbox_event_id: i64 },
 

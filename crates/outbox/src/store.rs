@@ -13,7 +13,10 @@ use crate::model::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
     RadrootsOutboxStatusSummary,
 };
-use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
+use radroots_event_store::{
+    RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
+    RadrootsTransportObservationType,
+};
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::draft::{
     RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
@@ -697,8 +700,15 @@ impl RadrootsOutbox {
             .signed_event
             .ok_or(RadrootsOutboxError::MissingSignedEvent(outbox_event_id))?;
         let event = event_from_signed(&signed_event);
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Local,
+            "local:outbox",
+            RadrootsTransportObservationType::LocalImport,
+            observed_at_ms,
+        )?;
         let ingest = RadrootsEventIngest::new(event, observed_at_ms)
-            .with_raw_json(signed_event.raw_json.clone());
+            .with_raw_json(signed_event.raw_json.clone())
+            .with_observation(observation);
         let receipt = event_store.ingest_event(ingest).await?;
         let changed = sqlx::query(
             "UPDATE outbox_event SET event_store_ingested = 1, event_store_inserted = ?, event_store_ingested_at_ms = ?, state = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
@@ -1069,9 +1079,37 @@ impl RadrootsOutbox {
         let Some(active_delivery_plan_id) = identity.active_delivery_plan_id else {
             return Err(RadrootsOutboxError::MissingActiveDeliveryPlan { outbox_event_id });
         };
+        let target_row = sqlx::query(
+            "SELECT delivery_plan_id, status FROM outbox_delivery_target WHERE delivery_target_id = ? AND delivery_plan_id = ? AND delivery_plan_id IN (SELECT delivery_plan_id FROM outbox_delivery_plan WHERE outbox_event_id = ?)",
+        )
+        .bind(delivery_target_id)
+        .bind(active_delivery_plan_id)
+        .bind(outbox_event_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(target_row) = target_row else {
+            return Err(RadrootsOutboxError::DeliveryTargetNotFound(
+                delivery_target_id,
+            ));
+        };
+        let delivery_plan_id: i64 = target_row.try_get("delivery_plan_id")?;
+        let current_status = RadrootsOutboxDeliveryTargetStatus::parse(
+            target_row.try_get::<String, _>("status")?.as_str(),
+        )?;
+        if current_status.is_completed() {
+            if current_status == status {
+                tx.commit().await?;
+                return Ok(());
+            }
+            return Err(RadrootsOutboxError::DeliveryTargetStatusConflict {
+                delivery_target_id,
+                current_status: current_status.as_str(),
+                requested_status: status.as_str(),
+            });
+        }
         let completed_at_ms = status.is_completed().then_some(attempted_at_ms);
         let changed = sqlx::query(
-            "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ? AND delivery_plan_id IN (SELECT delivery_plan_id FROM outbox_delivery_plan WHERE outbox_event_id = ?)",
+            "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
         )
         .bind(status.as_str())
         .bind(attempted_at_ms)
@@ -1079,7 +1117,6 @@ impl RadrootsOutbox {
         .bind(message)
         .bind(delivery_target_id)
         .bind(active_delivery_plan_id)
-        .bind(outbox_event_id)
         .execute(&mut *tx)
         .await?;
         if changed.rows_affected() == 0 {
@@ -1087,13 +1124,6 @@ impl RadrootsOutbox {
                 delivery_target_id,
             ));
         }
-        let delivery_plan_id: i64 = sqlx::query(
-            "SELECT delivery_plan_id FROM outbox_delivery_target WHERE delivery_target_id = ?",
-        )
-        .bind(delivery_target_id)
-        .fetch_one(&mut *tx)
-        .await?
-        .try_get("delivery_plan_id")?;
         sqlx::query(
             "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?)",
         )
@@ -2306,6 +2336,88 @@ mod tests {
             .expect("table count")
     }
 
+    async fn mark_target_status_for_test(
+        outbox: &RadrootsOutbox,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        status: RadrootsOutboxDeliveryTargetStatus,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        match status {
+            RadrootsOutboxDeliveryTargetStatus::Accepted => {
+                outbox
+                    .mark_delivery_target_accepted(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented => {
+                outbox
+                    .mark_delivery_target_deferred_until_implemented(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        "transport deferred",
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable => {
+                outbox
+                    .mark_delivery_target_preview_unavailable(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        "transport preview unavailable",
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied => {
+                outbox
+                    .mark_delivery_target_skipped_policy_denied(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        "policy denied",
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal => {
+                outbox
+                    .mark_delivery_target_failed_terminal(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        "terminal failure",
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::FailedRetryable => {
+                outbox
+                    .mark_delivery_target_failed_retryable(
+                        outbox_event_id,
+                        claim_token,
+                        delivery_target_id,
+                        "retryable failure",
+                        attempted_at_ms,
+                    )
+                    .await
+            }
+            RadrootsOutboxDeliveryTargetStatus::Pending
+            | RadrootsOutboxDeliveryTargetStatus::Delivered
+            | RadrootsOutboxDeliveryTargetStatus::Forwarded
+            | RadrootsOutboxDeliveryTargetStatus::StoredByGateway
+            | RadrootsOutboxDeliveryTargetStatus::Seen => unreachable!(),
+        }
+    }
+
     #[test]
     fn event_wide_publish_failure_helper_names_stay_removed() {
         let source = include_str!("store.rs");
@@ -2609,6 +2721,119 @@ mod tests {
             attempts[0].status,
             RadrootsOutboxDeliveryTargetStatus::Accepted
         );
+    }
+
+    #[tokio::test]
+    async fn terminal_delivery_target_updates_are_idempotent_and_conflicting_rewrites_fail() {
+        for terminal_status in [
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
+            RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
+        ] {
+            let outbox = RadrootsOutbox::open_memory().await.expect("open");
+            let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, terminal_status.as_str());
+            let signed_event =
+                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let receipt = outbox
+                .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event,
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.nostr.local",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                    ),
+                    true,
+                    1_007,
+                    1_000,
+                ))
+                .await
+                .expect("enqueue");
+            let claimed = outbox
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+                .await
+                .expect("claim")
+                .expect("claimed");
+            let target_id = claimed.delivery_targets[0].delivery_target_id;
+
+            mark_target_status_for_test(
+                &outbox,
+                receipt.outbox_event_id,
+                "claim-a",
+                target_id,
+                terminal_status,
+                1_100,
+            )
+            .await
+            .expect("first terminal update");
+            mark_target_status_for_test(
+                &outbox,
+                receipt.outbox_event_id,
+                "claim-a",
+                target_id,
+                terminal_status,
+                1_200,
+            )
+            .await
+            .expect("idempotent terminal update");
+
+            let targets = outbox
+                .delivery_targets(receipt.outbox_event_id)
+                .await
+                .expect("targets");
+            assert_eq!(targets.len(), 1);
+            assert_eq!(targets[0].status, terminal_status);
+            assert_eq!(targets[0].attempt_count, 1);
+            assert_eq!(targets[0].last_attempt_at_ms, Some(1_100));
+            assert_eq!(targets[0].completed_at_ms, Some(1_100));
+            let attempts = outbox.delivery_attempts(target_id).await.expect("attempts");
+            assert_eq!(attempts.len(), 1);
+            assert_eq!(attempts[0].status, terminal_status);
+            assert_eq!(attempts[0].attempted_at_ms, 1_100);
+
+            let requested_status =
+                if terminal_status == RadrootsOutboxDeliveryTargetStatus::Accepted {
+                    RadrootsOutboxDeliveryTargetStatus::FailedTerminal
+                } else {
+                    RadrootsOutboxDeliveryTargetStatus::Accepted
+                };
+            let err = mark_target_status_for_test(
+                &outbox,
+                receipt.outbox_event_id,
+                "claim-a",
+                target_id,
+                requested_status,
+                1_300,
+            )
+            .await
+            .expect_err("conflicting terminal rewrite");
+            assert!(matches!(
+                err,
+                RadrootsOutboxError::DeliveryTargetStatusConflict {
+                    delivery_target_id,
+                    current_status,
+                    requested_status: observed_requested_status,
+                } if delivery_target_id == target_id
+                    && current_status == terminal_status.as_str()
+                    && observed_requested_status == requested_status.as_str()
+            ));
+            let targets = outbox
+                .delivery_targets(receipt.outbox_event_id)
+                .await
+                .expect("targets after conflict");
+            assert_eq!(targets[0].status, terminal_status);
+            assert_eq!(targets[0].attempt_count, 1);
+            assert_eq!(targets[0].completed_at_ms, Some(1_100));
+            let attempts = outbox
+                .delivery_attempts(target_id)
+                .await
+                .expect("attempts after conflict");
+            assert_eq!(attempts.len(), 1);
+        }
     }
 
     #[tokio::test]
@@ -3520,7 +3745,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_signed_event_ingest_remains_idempotent_without_transport_observation() {
+    async fn local_signed_event_ingest_records_one_idempotent_local_import_observation() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let event_store = RadrootsEventStore::open_memory()
             .await
@@ -3568,6 +3793,15 @@ mod tests {
             .observations_for_event(signed.id.as_str())
             .await
             .expect("observations");
-        assert!(observations.is_empty());
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].transport_kind, RadrootsTransportKind::Local);
+        assert_eq!(observations[0].endpoint_uri.as_str(), "local:outbox");
+        assert_eq!(
+            observations[0].observation_type,
+            RadrootsTransportObservationType::LocalImport
+        );
+        assert_eq!(observations[0].observation_count, 1);
+        assert_eq!(observations[0].first_observed_at_ms, 2_200);
+        assert_eq!(observations[0].last_observed_at_ms, 2_200);
     }
 }
