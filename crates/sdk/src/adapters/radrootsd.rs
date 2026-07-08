@@ -95,13 +95,15 @@ impl RadrootsdProxyPublishAdapter {
         request
             .validate(SDK_RADROOTSD_PROXY_MAX_TARGETS)
             .map_err(RadrootsdError::from_protocol)?;
-        publish_event(
+        let response = publish_event(
             self.config.endpoint.as_str(),
             &self.config.auth,
             &request,
             self.config.timeout,
         )
-        .await
+        .await?;
+        validate_transport_publish_response_for_request(&request, &response)?;
+        Ok(response)
     }
 }
 
@@ -357,6 +359,59 @@ fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
         content: event.content.clone(),
         sig: event.sig.clone(),
     }
+}
+
+fn validate_transport_publish_response_for_request(
+    request: &TransportPublishEventRequest,
+    response: &TransportPublishEventResponse,
+) -> Result<(), RadrootsdError> {
+    response.job.validate().map_err(|error| {
+        RadrootsdError::MalformedResponse(format!(
+            "radrootsd transport publish response invalid: {error}"
+        ))
+    })?;
+    if response.job.event_id != request.event.id {
+        return Err(response_mismatch("event_id"));
+    }
+    if response.job.pubkey != request.event.pubkey {
+        return Err(response_mismatch("pubkey"));
+    }
+    if response.job.event_kind != request.event.kind {
+        return Err(response_mismatch("event_kind"));
+    }
+    if response.job.delivery_policy != request.delivery_policy {
+        return Err(response_mismatch("delivery_policy"));
+    }
+    if response.job.target_policy != request.target_policy {
+        return Err(response_mismatch("target_policy"));
+    }
+    if let TransportPublishTargetPolicy::ExplicitTargets { targets } = &request.target_policy {
+        validate_explicit_response_targets(targets, response.job.targets.as_slice())?;
+    }
+    Ok(())
+}
+
+fn response_mismatch(field: &str) -> RadrootsdError {
+    RadrootsdError::MalformedResponse(format!(
+        "radrootsd transport publish response {field} does not match request"
+    ))
+}
+
+fn validate_explicit_response_targets(
+    request_targets: &[TransportPublishTarget],
+    response_targets: &[TransportPublishTargetOutcome],
+) -> Result<(), RadrootsdError> {
+    if request_targets.len() != response_targets.len() {
+        return Err(response_mismatch("explicit_targets"));
+    }
+    for (request_target, response_target) in request_targets.iter().zip(response_targets) {
+        if response_target.transport_kind != request_target.transport_kind
+            || response_target.endpoint_uri != request_target.endpoint_uri
+        {
+            return Err(response_mismatch("explicit_targets"));
+        }
+    }
+    Ok(())
 }
 
 fn transport_publish_target(
