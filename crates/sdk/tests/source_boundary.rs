@@ -1335,6 +1335,18 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         sync_runtime_source.contains("mixed proxy delegate targets"),
         "src/sync_runtime.rs must fail closed if proxy delegate targets are mixed in a claimed publish set"
     );
+    for required in [
+        "let mut completed_target_ids = std::collections::BTreeSet::new();",
+        "let mut matched_outcomes = Vec::new();",
+        "matched multiple ready delivery targets",
+        "matched delivery target",
+        "more than once",
+    ] {
+        assert!(
+            sync_runtime_source.contains(required),
+            "src/sync_runtime.rs must retain proxy completion uniqueness witness `{required}`"
+        );
+    }
     assert!(
         !sync_runtime_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
         "src/sync_runtime.rs must not rewrite Reticulum proxy outbox targets to reject attempts"
@@ -1350,6 +1362,7 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         "assert!(!stored_before.event_store_ingested)",
         "assert!(!stored.event_store_ingested)",
         "with_timeout(Duration::from_millis(50))",
+        "proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation",
     ] {
         assert!(
             sync_runtime_unit_source.contains(required),
