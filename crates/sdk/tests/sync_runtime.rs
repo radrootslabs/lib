@@ -8,7 +8,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_event_store::RadrootsEventStore;
+use radroots_event_store::{RadrootsEventStore, RadrootsTransportObservationType};
 use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts},
@@ -530,6 +530,36 @@ async fn enqueue_listing(sdk: &RadrootsClient, d_tag: &str, title: &str, relays:
     enqueue_listing_with_policy(sdk, d_tag, title, relays, NostrRelayUrlPolicy::Public).await
 }
 
+async fn assert_local_import_observation(sdk: &RadrootsClient, outbox_event_id: i64) {
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let stored_event = outbox
+        .get_event(outbox_event_id)
+        .await
+        .expect("outbox event")
+        .expect("outbox event");
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+        .await
+        .expect("event store");
+    let observations = event_store
+        .observations_for_event(stored_event.event_id.as_str())
+        .await
+        .expect("event observations");
+
+    assert!(
+        observations.iter().any(|observation| {
+            observation.observation_type == RadrootsTransportObservationType::LocalImport
+                && observation.transport_kind.canonical_label() == "local"
+                && observation.endpoint_uri.as_str() == "local:sdk"
+                && observation.observation_count == 1
+        }),
+        "event {} must have a local:sdk LocalImport observation",
+        stored_event.event_id
+    );
+}
+
 fn delivery_plan_for_relays<I, S>(
     relays: I,
     policy: NostrRelayUrlPolicy,
@@ -743,7 +773,8 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
 #[tokio::test]
 async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadata() {
     let (_tempdir, sdk) = directory_sdk(&[RELAY_A, RELAY_B, RELAY_C]).await;
-    enqueue_listing(&sdk, LISTING_A_D_TAG, "Retryable Coffee", &[RELAY_A]).await;
+    let retryable_event_id =
+        enqueue_listing(&sdk, LISTING_A_D_TAG, "Retryable Coffee", &[RELAY_A]).await;
     sdk.sync()
         .push_outbox_with_adapter(
             &TransportFailurePublishAdapter,
@@ -751,7 +782,8 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
         )
         .await
         .expect("retryable push");
-    enqueue_listing(&sdk, LISTING_B_D_TAG, "Published Coffee", &[RELAY_B]).await;
+    let published_event_id =
+        enqueue_listing(&sdk, LISTING_B_D_TAG, "Published Coffee", &[RELAY_B]).await;
     sdk.sync()
         .push_outbox_with_adapter(
             &RadrootsMockRelayPublishAdapter::new(),
@@ -759,7 +791,8 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
         )
         .await
         .expect("published push");
-    enqueue_listing(&sdk, LISTING_C_D_TAG, "Pending Coffee", &[RELAY_C]).await;
+    let pending_event_id =
+        enqueue_listing(&sdk, LISTING_C_D_TAG, "Pending Coffee", &[RELAY_C]).await;
 
     let receipt = sdk
         .sync()
@@ -781,6 +814,9 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
         receipt.outbox.last_error.as_deref(),
         Some("relay publish incomplete")
     );
+    assert_local_import_observation(&sdk, retryable_event_id).await;
+    assert_local_import_observation(&sdk, published_event_id).await;
+    assert_local_import_observation(&sdk, pending_event_id).await;
 }
 
 #[tokio::test]
