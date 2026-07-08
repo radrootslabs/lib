@@ -129,9 +129,9 @@ impl StoredEventClass {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTransportObservationType {
-    NostrFetch,
-    NostrSubscription,
-    NostrPublishAck,
+    Fetch,
+    Subscription,
+    PublishAck,
     LocalImport,
     MeshHeard,
     MeshForwarded,
@@ -144,9 +144,9 @@ pub enum RadrootsTransportObservationType {
 impl RadrootsTransportObservationType {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::NostrFetch => "nostr_fetch",
-            Self::NostrSubscription => "nostr_subscription",
-            Self::NostrPublishAck => "nostr_publish_ack",
+            Self::Fetch => "fetch",
+            Self::Subscription => "subscription",
+            Self::PublishAck => "publish_ack",
             Self::LocalImport => "local_import",
             Self::MeshHeard => "mesh_heard",
             Self::MeshForwarded => "mesh_forwarded",
@@ -159,9 +159,9 @@ impl RadrootsTransportObservationType {
 
     pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
         match value {
-            "nostr_fetch" => Ok(Self::NostrFetch),
-            "nostr_subscription" => Ok(Self::NostrSubscription),
-            "nostr_publish_ack" => Ok(Self::NostrPublishAck),
+            "fetch" => Ok(Self::Fetch),
+            "subscription" => Ok(Self::Subscription),
+            "publish_ack" => Ok(Self::PublishAck),
             "local_import" => Ok(Self::LocalImport),
             "mesh_heard" => Ok(Self::MeshHeard),
             "mesh_forwarded" => Ok(Self::MeshForwarded),
@@ -488,9 +488,9 @@ mod tests {
         assert!(StoredEventClass::parse("bad").is_err());
 
         for observation_type in [
-            RadrootsTransportObservationType::NostrFetch,
-            RadrootsTransportObservationType::NostrSubscription,
-            RadrootsTransportObservationType::NostrPublishAck,
+            RadrootsTransportObservationType::Fetch,
+            RadrootsTransportObservationType::Subscription,
+            RadrootsTransportObservationType::PublishAck,
             RadrootsTransportObservationType::LocalImport,
             RadrootsTransportObservationType::MeshHeard,
             RadrootsTransportObservationType::MeshForwarded,
@@ -509,7 +509,7 @@ mod tests {
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Nostr,
             "wss://relay.example.test",
-            RadrootsTransportObservationType::NostrFetch,
+            RadrootsTransportObservationType::Fetch,
             1,
         )
         .expect("observation")

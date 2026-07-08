@@ -19,6 +19,8 @@ pub enum RadrootsMeshAgentProtoError {
     MissingAction,
     MissingResponse,
     MissingReceipt,
+    MissingStatusSurface,
+    MissingPublishSurface,
     MissingError,
 }
 
@@ -31,6 +33,12 @@ impl fmt::Display for RadrootsMeshAgentProtoError {
             Self::MissingAction => f.write_str("mesh agent action schema is missing"),
             Self::MissingResponse => f.write_str("mesh agent response schema is missing"),
             Self::MissingReceipt => f.write_str("mesh agent receipt schema is missing"),
+            Self::MissingStatusSurface => {
+                f.write_str("mesh agent status schema surface is missing")
+            }
+            Self::MissingPublishSurface => {
+                f.write_str("mesh agent publish schema surface is missing")
+            }
             Self::MissingError => f.write_str("mesh agent error schema is missing"),
         }
     }
@@ -70,6 +78,8 @@ pub fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgentProtoEr
         || !schema.contains("validateFrame @0;")
         || !schema.contains("stageDelivery @1;")
         || !schema.contains("observeEventHead @2;")
+        || !schema.contains("status @3;")
+        || !schema.contains("publish @4;")
     {
         return Err(RadrootsMeshAgentProtoError::MissingAction);
     }
@@ -82,6 +92,30 @@ pub fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgentProtoEr
         || !schema.contains("acceptedEventHeads @1 :List(Text);")
     {
         return Err(RadrootsMeshAgentProtoError::MissingReceipt);
+    }
+    if !schema.contains("struct MeshAgentStatusRequest")
+        || !schema.contains("struct MeshAgentStatusResponse")
+        || !schema.contains("enum MeshAgentReadinessState")
+        || !schema.contains("enum MeshAgentImplementationState")
+        || !schema.contains("struct MeshAgentTransportStatus")
+        || !schema.contains("includeTransports @0 :Bool;")
+        || !schema.contains("readiness @0 :MeshAgentReadinessState;")
+        || !schema.contains("implementationState @1 :MeshAgentImplementationState;")
+        || !schema.contains("publishUsable @5 :Bool;")
+        || !schema.contains("fetchUsable @6 :Bool;")
+        || !schema.contains("previewUnavailable @3;")
+    {
+        return Err(RadrootsMeshAgentProtoError::MissingStatusSurface);
+    }
+    if !schema.contains("struct MeshAgentPublishRequest")
+        || !schema.contains("struct MeshAgentPublishResponse")
+        || !schema.contains("struct MeshAgentTransportReceipt")
+        || !schema.contains("publishRequest @4 :MeshAgentPublishRequest;")
+        || !schema.contains("publishResponse @5 :MeshAgentPublishResponse;")
+        || !schema.contains("publishRequestId @0 :Text;")
+        || !schema.contains("transportReceipts @2 :List(MeshAgentTransportReceipt);")
+    {
+        return Err(RadrootsMeshAgentProtoError::MissingPublishSurface);
     }
     if !schema.contains("struct MeshAgentError") {
         return Err(RadrootsMeshAgentProtoError::MissingError);

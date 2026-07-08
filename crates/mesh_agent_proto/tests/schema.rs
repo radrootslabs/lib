@@ -12,6 +12,10 @@ fn schema_declares_mesh_agent_v1_surface() {
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains(RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE));
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentRequest"));
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentResponse"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentStatusRequest"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentStatusResponse"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentPublishRequest"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentPublishResponse"));
 }
 
 #[test]
@@ -22,7 +26,7 @@ fn schema_hash_is_deterministic() {
     assert_eq!(first, second);
     assert_eq!(
         first,
-        "ceaaa2968805a21c9f08b76b22ac45ae819312ee595a60675f560ec81d6f8fe0"
+        "ea82bfc39ae963baf260a6c626ca9033767b0fec93aa013101f975e39baeae6a"
     );
 }
 
@@ -72,6 +76,14 @@ fn schema_validator_reports_each_missing_required_surface() {
             RadrootsMeshAgentProtoError::MissingAction,
         ),
         (
+            valid.replace("status @3;", "agentStatus @3;"),
+            RadrootsMeshAgentProtoError::MissingAction,
+        ),
+        (
+            valid.replace("publish @4;", "publishSomethingElse @4;"),
+            RadrootsMeshAgentProtoError::MissingAction,
+        ),
+        (
             valid.replace(
                 "struct MeshAgentResponse",
                 "struct MissingMeshAgentResponse",
@@ -95,6 +107,38 @@ fn schema_validator_reports_each_missing_required_surface() {
                 "acceptedEventIds @1 :List(Text);",
             ),
             RadrootsMeshAgentProtoError::MissingReceipt,
+        ),
+        (
+            valid.replace(
+                "struct MeshAgentStatusRequest",
+                "struct MissingMeshAgentStatusRequest",
+            ),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
+            valid.replace(
+                "enum MeshAgentReadinessState",
+                "enum MissingMeshAgentReadinessState",
+            ),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
+            valid.replace(
+                "implementationState @1 :MeshAgentImplementationState;",
+                "implementation @1 :MeshAgentImplementationState;",
+            ),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
+            valid.replace(
+                "struct MeshAgentPublishRequest",
+                "struct MissingMeshAgentPublishRequest",
+            ),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace("publishRequestId @0 :Text;", "operationId @0 :Text;"),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
         ),
         (
             valid.replace("struct MeshAgentError", "struct MissingMeshAgentError"),
@@ -133,6 +177,14 @@ fn mesh_agent_proto_errors_have_stable_display_strings() {
         (
             RadrootsMeshAgentProtoError::MissingReceipt,
             "mesh agent receipt schema is missing",
+        ),
+        (
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+            "mesh agent status schema surface is missing",
+        ),
+        (
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+            "mesh agent publish schema surface is missing",
         ),
         (
             RadrootsMeshAgentProtoError::MissingError,

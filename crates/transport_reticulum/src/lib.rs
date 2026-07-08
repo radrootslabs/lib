@@ -11,8 +11,8 @@ use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt,
+    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportReadinessState,
+    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
@@ -31,12 +31,6 @@ impl Default for RadrootsReticulumPreviewBehavior {
     fn default() -> Self {
         Self::RejectDeliveryAttempts
     }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsReticulumPreviewReadiness {
-    PreviewUnavailable,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -130,11 +124,15 @@ impl RadrootsReticulumPreviewProfile {
 
     pub fn status(&self) -> RadrootsReticulumPreviewStatus {
         RadrootsReticulumPreviewStatus {
-            profile_id: self.profile_id.clone(),
-            endpoint_uri: self.endpoint.as_str().to_owned(),
             behavior: self.behavior,
-            readiness: RadrootsReticulumPreviewReadiness::PreviewUnavailable,
-            implementation_state: RadrootsTransportImplementationState::PreviewUnavailable,
+            transport_status: RadrootsTransportStatus::new(
+                RadrootsTransportKind::Reticulum,
+                RadrootsTransportImplementationState::PreviewUnavailable,
+                RadrootsTransportReadinessState::PreviewUnavailable,
+            )
+            .with_profile_id(self.profile_id.clone())
+            .with_endpoint_uri(self.endpoint.as_str())
+            .with_redacted_message(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE),
         }
     }
 }
@@ -148,11 +146,8 @@ impl Default for RadrootsReticulumPreviewProfile {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumPreviewStatus {
-    pub profile_id: String,
-    pub endpoint_uri: String,
     pub behavior: RadrootsReticulumPreviewBehavior,
-    pub readiness: RadrootsReticulumPreviewReadiness,
-    pub implementation_state: RadrootsTransportImplementationState,
+    pub transport_status: RadrootsTransportStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

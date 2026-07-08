@@ -378,7 +378,7 @@ async fn ingest_publish_observation(
     let observation = RadrootsTransportObservation::new(
         RadrootsTransportKind::Nostr,
         relay_url,
-        RadrootsTransportObservationType::NostrPublishAck,
+        RadrootsTransportObservationType::PublishAck,
         observed_at_ms,
     );
     let mut observation = observation?;

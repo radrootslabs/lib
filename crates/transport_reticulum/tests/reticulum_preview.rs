@@ -1,15 +1,14 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportReadinessState,
     RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
     RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumPreviewBehavior, RadrootsReticulumPreviewEndpoint,
     RadrootsReticulumPreviewError, RadrootsReticulumPreviewFetchRequest,
-    RadrootsReticulumPreviewProfile, RadrootsReticulumPreviewReadiness,
-    RadrootsReticulumPreviewTransport,
+    RadrootsReticulumPreviewProfile, RadrootsReticulumPreviewTransport,
 };
 
 fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
@@ -45,13 +44,27 @@ fn default_profile_is_configured_preview_unavailable_and_rejecting() {
         RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts
     );
     assert_eq!(
-        status.implementation_state,
+        status.transport_status.implementation_state,
         RadrootsTransportImplementationState::PreviewUnavailable
     );
     assert_eq!(
-        status.readiness,
-        RadrootsReticulumPreviewReadiness::PreviewUnavailable
+        status.transport_status.readiness,
+        RadrootsTransportReadinessState::PreviewUnavailable
     );
+    assert_eq!(
+        status.transport_status.profile_id.as_deref(),
+        Some("transport.reticulum.preview")
+    );
+    assert_eq!(
+        status.transport_status.endpoint_uri.as_deref(),
+        Some(RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI)
+    );
+    assert_eq!(
+        status.transport_status.redacted_message.as_deref(),
+        Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
+    );
+    assert!(!status.transport_status.publish_usable);
+    assert!(!status.transport_status.fetch_usable);
 }
 
 #[test]
@@ -249,7 +262,7 @@ fn fetch_reports_preview_unavailable_without_observed_events() {
         "transport.reticulum.preview"
     );
     assert_eq!(
-        transport.status().implementation_state,
+        transport.status().transport_status.implementation_state,
         RadrootsTransportImplementationState::PreviewUnavailable
     );
     let receipt = transport

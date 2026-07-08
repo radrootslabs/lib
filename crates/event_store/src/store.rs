@@ -1040,7 +1040,7 @@ mod tests {
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Nostr,
             "wss://relay.example.com",
-            crate::RadrootsTransportObservationType::NostrPublishAck,
+            crate::RadrootsTransportObservationType::PublishAck,
             1_100,
         )
         .expect("observation");
@@ -1836,7 +1836,7 @@ mod tests {
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Nostr,
             "wss://relay.local",
-            crate::RadrootsTransportObservationType::NostrSubscription,
+            crate::RadrootsTransportObservationType::Subscription,
             4_000,
         )
         .expect("observation");
@@ -1845,7 +1845,7 @@ mod tests {
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Nostr,
             "wss://relay.local",
-            crate::RadrootsTransportObservationType::NostrSubscription,
+            crate::RadrootsTransportObservationType::Subscription,
             4_100,
         )
         .expect("observation")
@@ -1862,7 +1862,7 @@ mod tests {
         assert_eq!(observations[0].endpoint_uri.as_str(), "wss://relay.local");
         assert_eq!(
             observations[0].observation_type,
-            crate::RadrootsTransportObservationType::NostrSubscription
+            crate::RadrootsTransportObservationType::Subscription
         );
         assert_eq!(observations[0].observation_count, 2);
         assert_eq!(observations[0].first_observed_at_ms, 4_000);

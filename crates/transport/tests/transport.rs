@@ -1,10 +1,11 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportOutcome,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt,
-    RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    RadrootsTransportError, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportReadinessState, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -155,6 +156,35 @@ fn satisfaction_policy_counts_target_statuses() {
             .expect_err("zero required targets"),
         RadrootsTransportError::InvalidSatisfactionPolicy
     );
+}
+
+#[test]
+fn transport_status_models_generic_readiness_and_usability() {
+    let status = RadrootsTransportStatus::new(
+        RadrootsTransportKind::Nostr,
+        RadrootsTransportImplementationState::Available,
+        RadrootsTransportReadinessState::Ready,
+    )
+    .with_profile_id("transport.nostr.default")
+    .with_endpoint_uri("wss://relay.example")
+    .with_publish_usable(true)
+    .with_fetch_usable(true)
+    .with_redacted_message("ready");
+
+    assert_eq!(status.kind, RadrootsTransportKind::Nostr);
+    assert_eq!(
+        status.profile_id.as_deref(),
+        Some("transport.nostr.default")
+    );
+    assert_eq!(status.endpoint_uri.as_deref(), Some("wss://relay.example"));
+    assert_eq!(
+        status.implementation_state,
+        RadrootsTransportImplementationState::Available
+    );
+    assert_eq!(status.readiness, RadrootsTransportReadinessState::Ready);
+    assert!(status.publish_usable);
+    assert!(status.fetch_usable);
+    assert_eq!(status.redacted_message.as_deref(), Some("ready"));
 }
 
 #[test]

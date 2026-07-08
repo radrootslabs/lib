@@ -886,7 +886,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     assert_eq!(observations[0].endpoint_uri.as_str(), RELAY_PRIMARY_WSS);
     assert_eq!(
         observations[0].observation_type,
-        RadrootsTransportObservationType::NostrFetch
+        RadrootsTransportObservationType::Fetch
     );
     assert_eq!(observations[0].observation_count, 2);
 }
@@ -1227,7 +1227,7 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
     assert_eq!(observations.len(), 1);
     assert_eq!(
         observations[0].observation_type,
-        RadrootsTransportObservationType::NostrSubscription
+        RadrootsTransportObservationType::Subscription
     );
 
     let closed_store = RadrootsEventStore::open_memory().await.expect("store");

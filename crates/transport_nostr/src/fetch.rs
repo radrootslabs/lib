@@ -362,9 +362,9 @@ where
             }) => {
                 let event = radroots_event_from_nostr(&raw_event);
                 let observation_type = match mode {
-                    RadrootsRelayFetchMode::Fetch => RadrootsTransportObservationType::NostrFetch,
+                    RadrootsRelayFetchMode::Fetch => RadrootsTransportObservationType::Fetch,
                     RadrootsRelayFetchMode::Subscription => {
-                        RadrootsTransportObservationType::NostrSubscription
+                        RadrootsTransportObservationType::Subscription
                     }
                 };
                 let observation = RadrootsTransportObservation::new(
