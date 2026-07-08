@@ -152,8 +152,81 @@ fn schema_validator_reports_each_missing_required_surface() {
 }
 
 #[test]
+fn schema_validator_rejects_commented_required_declarations() {
+    let schema =
+        RADROOTS_MESH_AGENT_SCHEMA.replace("  frameCbor @2 :Data;", "  # frameCbor @2 :Data;");
+
+    assert_eq!(
+        validate_schema_text(schema.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingRequest)
+    );
+}
+
+#[test]
+fn schema_validator_rejects_misplaced_required_declarations() {
+    let schema = RADROOTS_MESH_AGENT_SCHEMA
+        .replace(
+            "  acceptedEventHeads @1 :List(Text);",
+            "  acceptedEventIds @1 :List(Text);",
+        )
+        .replace(
+            "  message @1 :Text;",
+            "  message @1 :Text;\n  acceptedEventHeads @2 :List(Text);",
+        );
+
+    assert_eq!(
+        validate_schema_text(schema.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingReceipt)
+    );
+}
+
+#[test]
+fn schema_validator_rejects_duplicate_incompatible_declarations() {
+    let duplicate_ordinal = RADROOTS_MESH_AGENT_SCHEMA.replace(
+        "  frameCbor @2 :Data;",
+        "  frameCbor @2 :Data;\n  frameBytes @2 :Data;",
+    );
+    let duplicate_name = RADROOTS_MESH_AGENT_SCHEMA.replace(
+        "  frameCbor @2 :Data;",
+        "  frameCbor @2 :Data;\n  frameCbor @9 :Text;",
+    );
+
+    assert_eq!(
+        validate_schema_text(duplicate_ordinal.as_str()),
+        Err(RadrootsMeshAgentProtoError::InvalidSchema)
+    );
+    assert_eq!(
+        validate_schema_text(duplicate_name.as_str()),
+        Err(RadrootsMeshAgentProtoError::InvalidSchema)
+    );
+}
+
+#[test]
+fn schema_validator_rejects_type_drift() {
+    let request_type_drift =
+        RADROOTS_MESH_AGENT_SCHEMA.replace("  frameCbor @2 :Data;", "  frameCbor @2 :Text;");
+    let status_type_drift = RADROOTS_MESH_AGENT_SCHEMA.replace(
+        "  includeTransports @0 :Bool;",
+        "  includeTransports @0 :Text;",
+    );
+
+    assert_eq!(
+        validate_schema_text(request_type_drift.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingRequest)
+    );
+    assert_eq!(
+        validate_schema_text(status_type_drift.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingStatusSurface)
+    );
+}
+
+#[test]
 fn mesh_agent_proto_errors_have_stable_display_strings() {
     let cases = [
+        (
+            RadrootsMeshAgentProtoError::InvalidSchema,
+            "mesh agent schema is invalid",
+        ),
         (
             RadrootsMeshAgentProtoError::MissingSchemaId,
             "mesh agent schema id is missing",
