@@ -586,7 +586,7 @@ async fn upsert_observation(
     observation: &RadrootsTransportObservation,
 ) -> Result<(), RadrootsEventStoreError> {
     sqlx::query(
-        "INSERT INTO event_transport_observation(event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT(event_id, transport_kind, endpoint_fingerprint, observation_type) DO UPDATE SET endpoint_uri = excluded.endpoint_uri, last_observed_at_ms = excluded.last_observed_at_ms, observation_count = event_transport_observation.observation_count + 1, redacted_message = excluded.redacted_message",
+        "INSERT INTO event_transport_observation(event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT(event_id, transport_kind, endpoint_fingerprint, observation_type) DO UPDATE SET endpoint_uri = CASE WHEN excluded.last_observed_at_ms >= event_transport_observation.last_observed_at_ms THEN excluded.endpoint_uri ELSE event_transport_observation.endpoint_uri END, first_observed_at_ms = min(event_transport_observation.first_observed_at_ms, excluded.first_observed_at_ms), last_observed_at_ms = max(event_transport_observation.last_observed_at_ms, excluded.last_observed_at_ms), observation_count = event_transport_observation.observation_count + 1, redacted_message = CASE WHEN excluded.last_observed_at_ms >= event_transport_observation.last_observed_at_ms AND excluded.redacted_message IS NOT NULL THEN excluded.redacted_message ELSE event_transport_observation.redacted_message END",
     )
     .bind(event_id)
     .bind(observation.transport_kind.canonical_label())
@@ -1852,6 +1852,64 @@ mod tests {
         .with_redacted_message("duplicate accepted");
         let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
         store.ingest_event(ingest).await.expect("second");
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://relay.local",
+            crate::RadrootsTransportObservationType::Subscription,
+            4_050,
+        )
+        .expect("observation")
+        .with_redacted_message("stale duplicate");
+        let ingest = RadrootsEventIngest::new(event.clone(), 4_050).with_observation(observation);
+        store.ingest_event(ingest).await.expect("older duplicate");
+
+        let observations = store
+            .observations_for_event(event.id.as_str())
+            .await
+            .expect("stale duplicate observations");
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].observation_count, 3);
+        assert_eq!(observations[0].first_observed_at_ms, 4_000);
+        assert_eq!(observations[0].last_observed_at_ms, 4_100);
+        assert_eq!(
+            observations[0].redacted_message.as_deref(),
+            Some("duplicate accepted")
+        );
+
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://relay.local",
+            crate::RadrootsTransportObservationType::Subscription,
+            4_100,
+        )
+        .expect("observation")
+        .with_redacted_message("tie duplicate accepted");
+        let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
+        store.ingest_event(ingest).await.expect("tie duplicate");
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://relay.local",
+            crate::RadrootsTransportObservationType::Subscription,
+            4_100,
+        )
+        .expect("observation");
+        let ingest = RadrootsEventIngest::new(event.clone(), 4_100).with_observation(observation);
+        store
+            .ingest_event(ingest)
+            .await
+            .expect("tie duplicate without message");
+        let observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://relay.local",
+            crate::RadrootsTransportObservationType::Subscription,
+            4_200,
+        )
+        .expect("observation");
+        let ingest = RadrootsEventIngest::new(event.clone(), 4_200).with_observation(observation);
+        store
+            .ingest_event(ingest)
+            .await
+            .expect("newer duplicate without message");
 
         let observations = store
             .observations_for_event(event.id.as_str())
@@ -1864,12 +1922,12 @@ mod tests {
             observations[0].observation_type,
             crate::RadrootsTransportObservationType::Subscription
         );
-        assert_eq!(observations[0].observation_count, 2);
+        assert_eq!(observations[0].observation_count, 6);
         assert_eq!(observations[0].first_observed_at_ms, 4_000);
-        assert_eq!(observations[0].last_observed_at_ms, 4_100);
+        assert_eq!(observations[0].last_observed_at_ms, 4_200);
         assert_eq!(
             observations[0].redacted_message.as_deref(),
-            Some("duplicate accepted")
+            Some("tie duplicate accepted")
         );
 
         let endpoint_observations = store
