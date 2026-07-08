@@ -768,6 +768,7 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
         .expect("status");
 
     assert_eq!(receipt.event_store.total_events, 3);
+    assert_eq!(receipt.event_store.transport_observations, 4);
     assert_eq!(receipt.outbox.total_events, 3);
     assert_eq!(receipt.outbox.pending_events, 1);
     assert_eq!(receipt.outbox.retryable_events, 1);

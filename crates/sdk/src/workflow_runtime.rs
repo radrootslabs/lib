@@ -5,7 +5,9 @@ use crate::{
     SdkIdempotencyKey, TargetPolicy, TargetSet, TransportProfile, runtime::sdk_now_ms,
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
-use radroots_event_store::RadrootsEventIngest;
+use radroots_event_store::{
+    RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
+};
 use radroots_events::{
     RadrootsNostrEvent,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
@@ -15,9 +17,11 @@ use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
-use radroots_transport::RadrootsTransportSatisfactionPolicy;
+use radroots_transport::{RadrootsTransportKind, RadrootsTransportSatisfactionPolicy};
 #[cfg(test)]
 use sha2::{Digest, Sha256};
+
+const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
 
 pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
@@ -102,8 +106,15 @@ async fn enqueue_signed_workflow_event(
     let partial_failure_digest_prefix =
         digest_prefix(preflight.operation_idempotency_digest.as_str());
     let event = event_from_signed(&signed_event);
+    let local_import_observation = RadrootsTransportObservation::new(
+        RadrootsTransportKind::Local,
+        SDK_LOCAL_EVENT_ENDPOINT_URI,
+        RadrootsTransportObservationType::LocalImport,
+        observed_at_ms,
+    )?;
     let ingest = RadrootsEventIngest::new(event, observed_at_ms)
-        .with_raw_json(signed_event.raw_json.clone());
+        .with_raw_json(signed_event.raw_json.clone())
+        .with_observation(local_import_observation);
     let ingest_receipt = sdk._event_store.ingest_event(ingest).await?;
     let outbox_input = signed_outbox_input(
         request.operation_kind,

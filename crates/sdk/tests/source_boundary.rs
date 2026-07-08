@@ -1491,6 +1491,24 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
 }
 
 #[test]
+fn sdk_workflow_runtime_records_local_import_observations() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workflow_runtime = read_source(manifest_dir.join("src/workflow_runtime.rs").as_path());
+
+    for required in [
+        "SDK_LOCAL_EVENT_ENDPOINT_URI",
+        "RadrootsTransportKind::Local",
+        "RadrootsTransportObservationType::LocalImport",
+        ".with_observation(local_import_observation)",
+    ] {
+        assert!(
+            workflow_runtime.contains(required),
+            "SDK workflow runtime must retain local import observation witness `{required}`"
+        );
+    }
+}
+
+#[test]
 fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
