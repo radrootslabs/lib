@@ -28,10 +28,13 @@ use radroots_trade::projection::{
     RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
     refresh_product_projections,
 };
-#[cfg(feature = "runtime")]
-use radroots_transport::RadrootsTransportKind;
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_transport::RadrootsTransportSatisfactionPolicy;
+#[cfg(feature = "runtime")]
+use radroots_transport::{
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportReadinessState,
+    RadrootsTransportStatus, RadrootsTransportTarget,
+};
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
@@ -154,8 +157,101 @@ impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SyncTransportProfileSummary {
     pub transport_profile_id: String,
-    pub configured_nostr_relay_count: usize,
-    pub configured_nostr_relays: Vec<String>,
+    pub configured_transport_target_count: usize,
+    pub configured_transport_targets: Vec<SyncTransportTargetSummary>,
+    pub transport_statuses: Vec<SyncTransportStatusSummary>,
+}
+
+#[cfg(feature = "runtime")]
+impl SyncTransportProfileSummary {
+    fn from_transport_profile(profile: &TransportProfile) -> Result<Self, RadrootsSdkError> {
+        let configured_transport_targets = profile
+            .configured_transport_targets()?
+            .iter()
+            .map(SyncTransportTargetSummary::from_transport_target)
+            .collect::<Vec<_>>();
+        Ok(Self {
+            transport_profile_id: profile.transport_profile_id().to_owned(),
+            configured_transport_target_count: configured_transport_targets.len(),
+            configured_transport_targets,
+            transport_statuses: profile
+                .transport_statuses()
+                .into_iter()
+                .map(SyncTransportStatusSummary::from_transport_status)
+                .collect(),
+        })
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncTransportTargetSummary {
+    pub transport_kind: String,
+    pub endpoint_uri: String,
+    pub endpoint_fingerprint: String,
+}
+
+#[cfg(feature = "runtime")]
+impl SyncTransportTargetSummary {
+    fn from_transport_target(target: &RadrootsTransportTarget) -> Self {
+        Self {
+            transport_kind: target.kind.canonical_label(),
+            endpoint_uri: target.uri.as_str().to_owned(),
+            endpoint_fingerprint: target.fingerprint.as_str().to_owned(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncTransportStatusSummary {
+    pub transport_kind: String,
+    pub profile_id: Option<String>,
+    pub endpoint_uri: Option<String>,
+    pub implementation_state: String,
+    pub readiness: String,
+    pub publish_usable: bool,
+    pub fetch_usable: bool,
+    pub redacted_message: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+impl SyncTransportStatusSummary {
+    fn from_transport_status(status: RadrootsTransportStatus) -> Self {
+        Self {
+            transport_kind: status.kind.canonical_label(),
+            profile_id: status.profile_id,
+            endpoint_uri: status.endpoint_uri,
+            implementation_state: transport_implementation_state_label(status.implementation_state)
+                .to_owned(),
+            readiness: transport_readiness_state_label(status.readiness).to_owned(),
+            publish_usable: status.publish_usable,
+            fetch_usable: status.fetch_usable,
+            redacted_message: status.redacted_message,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn transport_implementation_state_label(
+    state: RadrootsTransportImplementationState,
+) -> &'static str {
+    match state {
+        RadrootsTransportImplementationState::Available => "available",
+        RadrootsTransportImplementationState::Disabled => "disabled",
+        RadrootsTransportImplementationState::Misconfigured => "misconfigured",
+        RadrootsTransportImplementationState::PreviewUnavailable => "preview_unavailable",
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn transport_readiness_state_label(state: RadrootsTransportReadinessState) -> &'static str {
+    match state {
+        RadrootsTransportReadinessState::Ready => "ready",
+        RadrootsTransportReadinessState::Disabled => "disabled",
+        RadrootsTransportReadinessState::Misconfigured => "misconfigured",
+        RadrootsTransportReadinessState::PreviewUnavailable => "preview_unavailable",
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -492,15 +588,9 @@ impl<'sdk> SyncClient<'sdk> {
             observed_at_ms,
             event_store: event_store.into(),
             outbox: outbox.into(),
-            transport_profile: SyncTransportProfileSummary {
-                transport_profile_id: self
-                    .sdk
-                    .transport_profile()
-                    .transport_profile_id()
-                    .to_owned(),
-                configured_nostr_relay_count: self.sdk.configured_nostr_relay_urls().len(),
-                configured_nostr_relays: self.sdk.configured_nostr_relay_urls(),
-            },
+            transport_profile: SyncTransportProfileSummary::from_transport_profile(
+                self.sdk.transport_profile(),
+            )?,
         })
     }
 

@@ -1,8 +1,10 @@
 use crate::RadrootsSdkError;
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportReadinessState, RadrootsTransportSatisfactionClass, RadrootsTransportStatus,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt,
+    RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
 use serde::ser::{SerializeStruct, Serializer};
@@ -497,6 +499,63 @@ impl TransportProfile {
         }
     }
 
+    pub(crate) fn configured_transport_targets(
+        &self,
+    ) -> Result<Vec<RadrootsTransportTarget>, RadrootsSdkError> {
+        Ok(self
+            .target_set()?
+            .map(TargetSet::into_targets)
+            .unwrap_or_default())
+    }
+
+    pub(crate) fn transport_statuses(&self) -> Vec<RadrootsTransportStatus> {
+        match self {
+            Self::LocalOnly => vec![
+                RadrootsTransportStatus::new(
+                    RadrootsTransportKind::Local,
+                    RadrootsTransportImplementationState::Available,
+                    RadrootsTransportReadinessState::Ready,
+                )
+                .with_profile_id(self.transport_profile_id()),
+            ],
+            Self::Nostr { .. } => vec![nostr_transport_status(self.transport_profile_id())],
+            Self::ReticulumPreview { profile } => {
+                vec![reticulum_preview_transport_status(
+                    self.transport_profile_id(),
+                    profile.endpoint_uri(),
+                )]
+            }
+            Self::Hybrid { profile } => vec![
+                nostr_transport_status(self.transport_profile_id()),
+                reticulum_preview_transport_status(
+                    self.transport_profile_id(),
+                    profile.reticulum_preview().endpoint_uri(),
+                ),
+            ],
+            Self::Proxy { profile } => {
+                let auth_configured = matches!(profile.auth(), ProxyAuth::BearerToken(_));
+                vec![
+                    RadrootsTransportStatus::new(
+                        RadrootsTransportKind::Proxy,
+                        if auth_configured {
+                            RadrootsTransportImplementationState::Available
+                        } else {
+                            RadrootsTransportImplementationState::Misconfigured
+                        },
+                        if auth_configured {
+                            RadrootsTransportReadinessState::Ready
+                        } else {
+                            RadrootsTransportReadinessState::Misconfigured
+                        },
+                    )
+                    .with_profile_id(self.transport_profile_id())
+                    .with_endpoint_uri(profile.endpoint_url())
+                    .with_publish_usable(auth_configured),
+                ]
+            }
+        }
+    }
+
     pub(crate) fn configured_nostr_relay_urls(&self) -> Vec<String> {
         match self {
             Self::Nostr { profile } => profile.relay_urls(),
@@ -504,6 +563,31 @@ impl TransportProfile {
             Self::LocalOnly | Self::ReticulumPreview { .. } | Self::Proxy { .. } => Vec::new(),
         }
     }
+}
+
+fn nostr_transport_status(profile_id: &str) -> RadrootsTransportStatus {
+    RadrootsTransportStatus::new(
+        RadrootsTransportKind::Nostr,
+        RadrootsTransportImplementationState::Available,
+        RadrootsTransportReadinessState::Ready,
+    )
+    .with_profile_id(profile_id)
+    .with_publish_usable(true)
+    .with_fetch_usable(true)
+}
+
+fn reticulum_preview_transport_status(
+    profile_id: &str,
+    endpoint_uri: &str,
+) -> RadrootsTransportStatus {
+    RadrootsTransportStatus::new(
+        RadrootsTransportKind::Reticulum,
+        RadrootsTransportImplementationState::PreviewUnavailable,
+        RadrootsTransportReadinessState::PreviewUnavailable,
+    )
+    .with_profile_id(profile_id)
+    .with_endpoint_uri(endpoint_uri)
+    .with_redacted_message(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
 }
 
 impl From<RadrootsTransportDeliveryReceipt> for TransportReceipt {

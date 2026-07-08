@@ -23,8 +23,8 @@ use radroots_outbox::{
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_sdk::ProxyProfile;
 use radroots_sdk::{
-    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest,
-    ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy,
+    BackupRequest, HybridProfile, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND,
+    ListingEnqueuePublishRequest, ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy,
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
@@ -497,6 +497,22 @@ async fn reticulum_preview_directory_sdk(
     (tempdir, sdk)
 }
 
+async fn hybrid_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .transport_profile(TransportProfile::hybrid(HybridProfile::new(
+            NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
+                .expect("Nostr profile"),
+            ReticulumPreviewProfile::preview_unavailable(),
+        )))
+        .build()
+        .await
+        .expect("sdk");
+    (tempdir, sdk)
+}
+
 async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let mut builder = RadrootsClient::builder().directory_storage(tempdir.path().join("sdk"));
@@ -576,7 +592,7 @@ async fn enqueue_listing_with_policy(
 }
 
 #[tokio::test]
-async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays() {
+async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets() {
     let (_tempdir, sdk) = directory_sdk(&[RELAY_B, RELAY_A]).await;
 
     let receipt = sdk
@@ -598,10 +614,27 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
     assert_eq!(receipt.outbox.failed_terminal_events, 0);
     assert_eq!(receipt.outbox.ready_signed_events, 0);
     assert_eq!(receipt.transport_profile.transport_profile_id, "nostr");
-    assert_eq!(receipt.transport_profile.configured_nostr_relay_count, 2);
     assert_eq!(
-        receipt.transport_profile.configured_nostr_relays,
-        vec![RELAY_B.to_owned(), RELAY_A.to_owned()]
+        receipt.transport_profile.configured_transport_target_count,
+        2
+    );
+    assert_eq!(
+        receipt
+            .transport_profile
+            .configured_transport_targets
+            .iter()
+            .map(|target| target.endpoint_uri.as_str())
+            .collect::<Vec<_>>(),
+        vec![RELAY_B, RELAY_A]
+    );
+    assert_eq!(receipt.transport_profile.transport_statuses.len(), 1);
+    assert_eq!(
+        receipt.transport_profile.transport_statuses[0].transport_kind,
+        "nostr"
+    );
+    assert_eq!(
+        receipt.transport_profile.transport_statuses[0].readiness,
+        "ready"
     );
     assert_eq!(
         serde_json::to_value(&receipt).expect("status json"),
@@ -630,10 +663,80 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
             },
             "transport_profile": {
                 "transport_profile_id": "nostr",
-                "configured_nostr_relay_count": 2,
-                "configured_nostr_relays": [RELAY_B, RELAY_A]
+                "configured_transport_target_count": 2,
+                "configured_transport_targets": [
+                    {
+                        "transport_kind": "nostr",
+                        "endpoint_uri": RELAY_B,
+                        "endpoint_fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
+                    },
+                    {
+                        "transport_kind": "nostr",
+                        "endpoint_uri": RELAY_A,
+                        "endpoint_fingerprint": "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa"
+                    }
+                ],
+                "transport_statuses": [{
+                    "transport_kind": "nostr",
+                    "profile_id": "nostr",
+                    "endpoint_uri": null,
+                    "implementation_state": "available",
+                    "readiness": "ready",
+                    "publish_usable": true,
+                    "fetch_usable": true,
+                    "redacted_message": null
+                }]
             }
         })
+    );
+}
+
+#[tokio::test]
+async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
+    let (_tempdir, sdk) = hybrid_directory_sdk(&[RELAY_A, RELAY_B]).await;
+
+    let receipt = sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("status");
+
+    assert_eq!(receipt.transport_profile.transport_profile_id, "hybrid");
+    assert_eq!(
+        receipt.transport_profile.configured_transport_target_count,
+        3
+    );
+    assert_eq!(
+        receipt
+            .transport_profile
+            .configured_transport_targets
+            .iter()
+            .map(|target| { (target.transport_kind.as_str(), target.endpoint_uri.as_str(),) })
+            .collect::<Vec<_>>(),
+        vec![
+            ("nostr", RELAY_A),
+            ("nostr", RELAY_B),
+            ("reticulum", "reticulum:preview-unavailable")
+        ]
+    );
+    assert_eq!(
+        receipt
+            .transport_profile
+            .transport_statuses
+            .iter()
+            .map(|status| {
+                (
+                    status.transport_kind.as_str(),
+                    status.readiness.as_str(),
+                    status.publish_usable,
+                    status.fetch_usable,
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            ("nostr", "ready", true, true),
+            ("reticulum", "preview_unavailable", false, false)
+        ]
     );
 }
 
