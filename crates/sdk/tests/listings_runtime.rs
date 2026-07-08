@@ -743,7 +743,7 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         listing(LISTING_F_D_TAG, "Coffee"),
         TargetPolicy::use_transport_profile(),
     )
-    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");
     let second = ListingEnqueuePublishRequest::new(
         actor(),

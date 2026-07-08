@@ -3386,7 +3386,7 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");
     let second = TradeSubmitEnqueueRequest::new(
         buyer_actor(),

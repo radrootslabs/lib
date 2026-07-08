@@ -88,7 +88,7 @@ fn transport_profile_policy_serializes_as_kind_only() {
 }
 
 #[test]
-fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
+fn target_set_accessors_and_configured_relays_cover_empty_paths() {
     assert!(
         TransportProfile::local_only()
             .configured_nostr_relay_urls()
@@ -96,11 +96,7 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
     );
 
     let targets = TargetSet::new(
-        [
-            "wss://relay-a.example.com",
-            "wss://relay-a.example.com",
-            "wss://relay-b.example.com",
-        ],
+        ["wss://relay-a.example.com", "wss://relay-b.example.com"],
         NostrRelayUrlPolicy::Public,
     )
     .expect("targets");
@@ -168,6 +164,43 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
         nostr_profile.configured_nostr_relay_urls(),
         vec!["wss://relay-d.example.com".to_owned()]
     );
+}
+
+#[test]
+fn target_sets_reject_duplicate_transport_fingerprints() {
+    let duplicate_relays = TargetSet::new(
+        [
+            "wss://relay-a.example.com/path",
+            "WSS://RELAY-A.EXAMPLE.COM/path",
+        ],
+        NostrRelayUrlPolicy::Public,
+    )
+    .expect_err("duplicate relays");
+
+    assert!(matches!(
+        duplicate_relays,
+        RadrootsSdkError::Transport { ref message }
+            if message == "transport target set contains duplicate fingerprints"
+    ));
+
+    let first = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Nostr,
+        "wss://relay-a.example.com/path",
+    )
+    .expect("first target");
+    let second = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Nostr,
+        "WSS://RELAY-A.EXAMPLE.COM/path",
+    )
+    .expect("second target");
+    let duplicate_targets =
+        TargetSet::transport_targets(vec![first, second]).expect_err("duplicate targets");
+
+    assert!(matches!(
+        duplicate_targets,
+        RadrootsSdkError::Transport { ref message }
+            if message == "transport target set contains duplicate fingerprints"
+    ));
 }
 
 #[test]

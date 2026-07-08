@@ -723,7 +723,7 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         farm(FARM_D_D_TAG, "North Farm"),
         TargetPolicy::use_transport_profile(),
     )
-    .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
+    .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),

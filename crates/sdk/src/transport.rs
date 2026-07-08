@@ -132,15 +132,12 @@ impl TargetSet {
         S: AsRef<str>,
     {
         let mut targets = Vec::new();
-        let mut seen = BTreeSet::new();
         for relay in relays {
             let normalized = normalized_nostr_relay_url(relay.as_ref(), policy)?;
-            if seen.insert(normalized.clone()) {
-                targets.push(RadrootsTransportTarget::new(
-                    RadrootsTransportKind::Nostr,
-                    normalized,
-                )?);
-            }
+            targets.push(RadrootsTransportTarget::new(
+                RadrootsTransportKind::Nostr,
+                normalized,
+            )?);
         }
         Self::from_transport_targets(targets)
     }
@@ -229,6 +226,7 @@ impl TargetSet {
                 });
             }
         }
+        RadrootsTransportTargetSet::new(targets.clone())?;
         let canonical_targets = targets
             .iter()
             .map(|target| {

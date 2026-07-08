@@ -48,11 +48,7 @@ async fn sdk_builder_validates_configured_relay_targets() {
     let sdk = RadrootsClient::builder()
         .transport_profile(
             nostr_profile(
-                [
-                    " wss://relay-b.example.com/ ",
-                    "wss://relay-a.example.com",
-                    "wss://relay-a.example.com",
-                ],
+                [" wss://relay-b.example.com/ ", "wss://relay-a.example.com"],
                 NostrRelayUrlPolicy::Public,
             )
             .expect("profile"),
@@ -625,13 +621,9 @@ fn sdk_error_contract_methods_cover_all_variants() {
 }
 
 #[test]
-fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
+fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
     let targets = TargetSet::new(
-        [
-            " wss://relay-b.example.com/ ",
-            "wss://relay-a.example.com",
-            "wss://relay-a.example.com",
-        ],
+        [" wss://relay-b.example.com/ ", "wss://relay-a.example.com"],
         NostrRelayUrlPolicy::Public,
     )
     .expect("targets");
@@ -673,6 +665,15 @@ fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
             ]
         })
     );
+
+    assert!(matches!(
+        TargetSet::new(
+            ["wss://relay-a.example.com", "WSS://RELAY-A.EXAMPLE.COM/"],
+            NostrRelayUrlPolicy::Public,
+        ),
+        Err(RadrootsSdkError::Transport { ref message })
+            if message == "transport target set contains duplicate fingerprints"
+    ));
 
     assert!(matches!(
         TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
