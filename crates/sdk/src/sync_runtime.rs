@@ -966,16 +966,41 @@ async fn complete_proxy_publish_attempt(
     now_ms: i64,
 ) -> Result<(), RadrootsSdkError> {
     let mut completed_target_ids = std::collections::BTreeSet::new();
+    let mut matched_outcomes = Vec::new();
     for outcome in &publish.targets {
-        if let Some(target) = claimed
+        let matched_targets = claimed
             .delivery_targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
-            .find(|target| proxy_target_matches_outcome(target, outcome))
-        {
-            complete_proxy_delivery_target(sync, claimed, target, outcome, now_ms).await?;
-            completed_target_ids.insert(target.delivery_target_id);
+            .filter(|target| proxy_target_matches_outcome(target, outcome))
+            .collect::<Vec<_>>();
+        if matched_targets.is_empty() {
+            continue;
         }
+        if matched_targets.len() > 1 {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "radrootsd proxy publish outcome for {} {} matched multiple ready delivery targets on outbox event {}",
+                    outcome.transport_kind, outcome.endpoint_uri, claimed.outbox_event_id
+                ),
+            });
+        }
+        let target = matched_targets[0];
+        if !completed_target_ids.insert(target.delivery_target_id) {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "radrootsd proxy publish outcome for {} {} matched delivery target {} more than once on outbox event {}",
+                    outcome.transport_kind,
+                    outcome.endpoint_uri,
+                    target.delivery_target_id,
+                    claimed.outbox_event_id
+                ),
+            });
+        }
+        matched_outcomes.push((target, outcome));
+    }
+    for (target, outcome) in matched_outcomes {
+        complete_proxy_delivery_target(sync, claimed, target, outcome, now_ms).await?;
     }
     for target in claimed
         .delivery_targets

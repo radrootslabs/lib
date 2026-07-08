@@ -1250,6 +1250,44 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
 }
 
 #[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
+async fn proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation() {
+    let (sdk, claimed) = claimed_proxy_event("proxy-complete-duplicate-outcome").await;
+    let mut publish = proxy_job(
+        claimed
+            .signed_event
+            .as_ref()
+            .expect("signed event")
+            .id
+            .as_str(),
+        TransportPublishOutcomeKind::Accepted,
+    );
+    publish.targets.push(publish.targets[0].clone());
+
+    let sync = sdk.sync();
+    let error =
+        complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
+            .await
+            .expect_err("duplicate daemon outcome must fail closed");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { message }
+            if message.contains("matched delivery target")
+                && message.contains("more than once")
+    ));
+    let targets = sdk
+        ._outbox
+        .delivery_targets(claimed.outbox_event_id)
+        .await
+        .expect("targets");
+    assert_ne!(
+        targets[0].status,
+        RadrootsOutboxDeliveryTargetStatus::Accepted
+    );
+}
+
+#[cfg(feature = "radrootsd-proxy")]
 #[test]
 fn push_proxy_event_receipt_returns_typed_error_for_invalid_daemon_event_id() {
     let error = push_proxy_event_receipt(
