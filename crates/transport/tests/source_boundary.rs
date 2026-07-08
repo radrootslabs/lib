@@ -123,6 +123,56 @@ fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
 }
 
 #[test]
+fn transport_target_identity_sources_reject_silent_dedupe() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+
+    let transport_source = read_source(crates_root.join("transport/src/target.rs").as_path());
+    for required in [
+        "let mut fingerprints = BTreeSet::new();",
+        "RadrootsTransportError::DuplicateTargetFingerprint",
+    ] {
+        assert!(
+            transport_source.contains(required),
+            "transport target set source must retain duplicate rejection witness `{required}`"
+        );
+    }
+
+    let protocol_source = read_source(
+        crates_root
+            .join("transport_publish_protocol/src/lib.rs")
+            .as_path(),
+    );
+    for required in [
+        "validate_explicit_target_uniqueness(targets)?;",
+        "TransportPublishProtocolError::DuplicateTarget { index }",
+        "duplicate_targets.validate(2)",
+    ] {
+        assert!(
+            protocol_source.contains(required),
+            "transport publish protocol must retain explicit-target duplicate rejection witness `{required}`"
+        );
+    }
+
+    let outbox_source = read_source(crates_root.join("outbox/src/store.rs").as_path());
+    for required in [
+        "validate_unique_targets(&targets)?;",
+        "RadrootsTransportError::DuplicateTargetFingerprint",
+        "enqueue_rejects_duplicate_delivery_targets_before_persistence",
+    ] {
+        assert!(
+            outbox_source.contains(required),
+            "outbox source must retain duplicate target rejection witness `{required}`"
+        );
+    }
+    assert!(
+        !outbox_source.contains("ordered_unique_targets"),
+        "outbox source must not reintroduce silent ordered target dedupe before delivery-plan preparation"
+    );
+}
+
+#[test]
 fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
