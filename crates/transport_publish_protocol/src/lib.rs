@@ -59,6 +59,35 @@ pub enum TransportPublishProtocolError {
     InvalidQuorum,
     EmptyPrincipalId,
     EmptyJobId,
+    InvalidJobTargetCount {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidJobAcknowledgedCount {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidJobRetryableCount {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidJobTerminalCount {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidJobTerminalState,
+    InvalidJobDeliverySatisfiedState,
+    InvalidJobCompletedAt,
+    InvalidJobStatusState,
+    InvalidTargetOutcomeKind {
+        index: usize,
+    },
+    InvalidTargetSource {
+        index: usize,
+    },
+    InvalidReticulumOutcome {
+        index: usize,
+    },
 }
 
 impl fmt::Display for TransportPublishProtocolError {
@@ -104,6 +133,46 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::InvalidQuorum => f.write_str("delivery quorum must be greater than zero"),
             Self::EmptyPrincipalId => f.write_str("principal id must not be empty"),
             Self::EmptyJobId => f.write_str("job id must not be empty"),
+            Self::InvalidJobTargetCount { expected, actual } => write!(
+                f,
+                "job target_count {actual} does not match {expected} target outcomes"
+            ),
+            Self::InvalidJobAcknowledgedCount { expected, actual } => write!(
+                f,
+                "job acknowledged_count {actual} does not match {expected} target outcomes"
+            ),
+            Self::InvalidJobRetryableCount { expected, actual } => write!(
+                f,
+                "job retryable_count {actual} does not match {expected} target outcomes"
+            ),
+            Self::InvalidJobTerminalCount { expected, actual } => write!(
+                f,
+                "job terminal_count {actual} does not match {expected} target outcomes"
+            ),
+            Self::InvalidJobTerminalState => f.write_str("job terminal flag does not match status"),
+            Self::InvalidJobDeliverySatisfiedState => {
+                f.write_str("job delivery_satisfied flag does not match status")
+            }
+            Self::InvalidJobCompletedAt => {
+                f.write_str("job completed_at_ms does not match status or request time")
+            }
+            Self::InvalidJobStatusState => f.write_str("job status does not match target outcomes"),
+            Self::InvalidTargetOutcomeKind { index } => {
+                write!(
+                    f,
+                    "transport target outcome {index} kind is not valid for its transport"
+                )
+            }
+            Self::InvalidTargetSource { index } => {
+                write!(
+                    f,
+                    "transport target outcome {index} source does not match transport kind"
+                )
+            }
+            Self::InvalidReticulumOutcome { index } => write!(
+                f,
+                "transport target outcome {index} Reticulum preview must be unavailable or deferred"
+            ),
         }
     }
 }
@@ -504,7 +573,71 @@ impl TransportPublishJobView {
         if self.event_kind > u16::MAX as u32 {
             return Err(TransportPublishProtocolError::InvalidKind(self.event_kind));
         }
-        self.delivery_policy.validate()
+        self.target_policy.validate(usize::MAX)?;
+        self.delivery_policy.validate()?;
+        if self.terminal != job_status_is_terminal(self.status) {
+            return Err(TransportPublishProtocolError::InvalidJobTerminalState);
+        }
+        if self.delivery_satisfied != (self.status == TransportPublishJobStatus::DeliverySatisfied)
+        {
+            return Err(TransportPublishProtocolError::InvalidJobDeliverySatisfiedState);
+        }
+        let completed = job_status_has_completed_at(self.status);
+        if self.completed_at_ms.is_some() != completed {
+            return Err(TransportPublishProtocolError::InvalidJobCompletedAt);
+        }
+        if self
+            .completed_at_ms
+            .is_some_and(|completed_at_ms| completed_at_ms < self.requested_at_ms)
+        {
+            return Err(TransportPublishProtocolError::InvalidJobCompletedAt);
+        }
+        for (index, target) in self.targets.iter().enumerate() {
+            validate_target_outcome(target, index)?;
+        }
+        let has_outcomes = !self.targets.is_empty();
+        if has_outcomes || completed {
+            if self.target_count != self.targets.len() {
+                return Err(TransportPublishProtocolError::InvalidJobTargetCount {
+                    expected: self.targets.len(),
+                    actual: self.target_count,
+                });
+            }
+        }
+        let acknowledged_count = self
+            .targets
+            .iter()
+            .filter(|target| target.outcome_kind.counts_toward_satisfaction())
+            .count();
+        let retryable_count = self
+            .targets
+            .iter()
+            .filter(|target| target.outcome_kind.is_retryable())
+            .count();
+        let terminal_count = self
+            .targets
+            .iter()
+            .filter(|target| target.outcome_kind.is_terminal_failure())
+            .count();
+        if self.acknowledged_count != acknowledged_count {
+            return Err(TransportPublishProtocolError::InvalidJobAcknowledgedCount {
+                expected: acknowledged_count,
+                actual: self.acknowledged_count,
+            });
+        }
+        if self.retryable_count != retryable_count {
+            return Err(TransportPublishProtocolError::InvalidJobRetryableCount {
+                expected: retryable_count,
+                actual: self.retryable_count,
+            });
+        }
+        if self.terminal_count != terminal_count {
+            return Err(TransportPublishProtocolError::InvalidJobTerminalCount {
+                expected: terminal_count,
+                actual: self.terminal_count,
+            });
+        }
+        validate_job_status_state(self, acknowledged_count, retryable_count, terminal_count)
     }
 }
 
@@ -677,6 +810,121 @@ fn validate_lower_hex(
     }
 }
 
+fn job_status_is_terminal(status: TransportPublishJobStatus) -> bool {
+    matches!(
+        status,
+        TransportPublishJobStatus::DeliverySatisfied
+            | TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
+            | TransportPublishJobStatus::DeliveryDeferred
+            | TransportPublishJobStatus::DeliveryPreviewUnavailable
+            | TransportPublishJobStatus::Rejected
+    )
+}
+
+fn job_status_has_completed_at(status: TransportPublishJobStatus) -> bool {
+    !matches!(
+        status,
+        TransportPublishJobStatus::Accepted | TransportPublishJobStatus::Publishing
+    )
+}
+
+fn validate_target_outcome(
+    target: &TransportPublishTargetOutcome,
+    index: usize,
+) -> Result<(), TransportPublishProtocolError> {
+    if target.transport_kind.trim().is_empty() {
+        return Err(TransportPublishProtocolError::EmptyTransportKind { index });
+    }
+    let transport_kind = RadrootsTransportKind::parse_canonical(target.transport_kind.as_str())
+        .map_err(|error| transport_kind_error(error, index))?;
+    if target.endpoint_uri.trim().is_empty() {
+        return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+    }
+    if transport_kind == RadrootsTransportKind::Reticulum {
+        if target.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
+            return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
+        }
+        if target.source != TransportPublishTargetSource::ReticulumPreview {
+            return Err(TransportPublishProtocolError::InvalidTargetSource { index });
+        }
+        if target.attempted || !target.outcome_kind.is_deferred_preview() {
+            return Err(TransportPublishProtocolError::InvalidReticulumOutcome { index });
+        }
+        return Ok(());
+    }
+    if target.source == TransportPublishTargetSource::ReticulumPreview {
+        return Err(TransportPublishProtocolError::InvalidTargetSource { index });
+    }
+    if target.outcome_kind.is_deferred_preview() {
+        return Err(TransportPublishProtocolError::InvalidTargetOutcomeKind { index });
+    }
+    Ok(())
+}
+
+fn validate_job_status_state(
+    job: &TransportPublishJobView,
+    acknowledged_count: usize,
+    retryable_count: usize,
+    terminal_count: usize,
+) -> Result<(), TransportPublishProtocolError> {
+    if matches!(
+        job.status,
+        TransportPublishJobStatus::Accepted | TransportPublishJobStatus::Publishing
+    ) {
+        return Ok(());
+    }
+    if job.status == TransportPublishJobStatus::Rejected {
+        if job.target_count == 0
+            && job.targets.is_empty()
+            && acknowledged_count == 0
+            && retryable_count == 0
+            && terminal_count == 0
+        {
+            return Ok(());
+        }
+        return Err(TransportPublishProtocolError::InvalidJobStatusState);
+    }
+    if job.targets.is_empty() {
+        return Err(TransportPublishProtocolError::InvalidJobStatusState);
+    }
+    let required_count = job.delivery_policy.required_target_count(job.target_count);
+    let satisfied = required_count > 0 && acknowledged_count >= required_count;
+    match job.status {
+        TransportPublishJobStatus::DeliverySatisfied if satisfied => Ok(()),
+        TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
+            if !satisfied && retryable_count > 0 =>
+        {
+            Ok(())
+        }
+        TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
+            if !satisfied && retryable_count == 0 && terminal_count > 0 =>
+        {
+            Ok(())
+        }
+        TransportPublishJobStatus::DeliveryDeferred
+            if !satisfied
+                && terminal_count == 0
+                && retryable_count == 0
+                && job.targets.iter().any(|target| {
+                    target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
+                }) =>
+        {
+            Ok(())
+        }
+        TransportPublishJobStatus::DeliveryPreviewUnavailable
+            if !satisfied
+                && terminal_count == 0
+                && retryable_count == 0
+                && job.targets.iter().any(|target| {
+                    target.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
+                }) =>
+        {
+            Ok(())
+        }
+        _ => Err(TransportPublishProtocolError::InvalidJobStatusState),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -690,6 +938,102 @@ mod tests {
             tags: vec![vec!["d".to_owned(), "listing-1".to_owned()]],
             content: "{}".to_owned(),
             sig: "2".repeat(128),
+        }
+    }
+
+    fn nostr_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishTargetOutcome {
+        TransportPublishTargetOutcome {
+            transport_kind: "nostr".to_owned(),
+            endpoint_uri: "wss://relay.example.com".to_owned(),
+            source: TransportPublishTargetSource::Request,
+            attempted: true,
+            outcome_kind,
+            message: None,
+            latency_ms: Some(7),
+        }
+    }
+
+    fn reticulum_outcome(
+        outcome_kind: TransportPublishOutcomeKind,
+    ) -> TransportPublishTargetOutcome {
+        TransportPublishTargetOutcome {
+            transport_kind: "reticulum".to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            source: TransportPublishTargetSource::ReticulumPreview,
+            attempted: false,
+            outcome_kind,
+            message: None,
+            latency_ms: None,
+        }
+    }
+
+    fn job_from_targets(
+        status: TransportPublishJobStatus,
+        target_policy: TransportPublishTargetPolicy,
+        targets: Vec<TransportPublishTargetOutcome>,
+    ) -> TransportPublishJobView {
+        TransportPublishJobView {
+            job_id: "job-1".to_owned(),
+            status,
+            terminal: job_status_is_terminal(status),
+            delivery_satisfied: status == TransportPublishJobStatus::DeliverySatisfied,
+            event_id: "0".repeat(64),
+            pubkey: "1".repeat(64),
+            event_kind: 30_402,
+            target_policy,
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            target_count: targets.len(),
+            acknowledged_count: targets
+                .iter()
+                .filter(|target| target.outcome_kind.counts_toward_satisfaction())
+                .count(),
+            retryable_count: targets
+                .iter()
+                .filter(|target| target.outcome_kind.is_retryable())
+                .count(),
+            terminal_count: targets
+                .iter()
+                .filter(|target| target.outcome_kind.is_terminal_failure())
+                .count(),
+            requested_at_ms: 1,
+            completed_at_ms: Some(2),
+            last_error: None,
+            targets,
+        }
+    }
+
+    fn accepted_job() -> TransportPublishJobView {
+        job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com",
+            )]),
+            vec![nostr_outcome(TransportPublishOutcomeKind::Accepted)],
+        )
+    }
+
+    fn rejected_job() -> TransportPublishJobView {
+        TransportPublishJobView {
+            job_id: "job-1".to_owned(),
+            status: TransportPublishJobStatus::Rejected,
+            terminal: true,
+            delivery_satisfied: false,
+            event_id: "0".repeat(64),
+            pubkey: "1".repeat(64),
+            event_kind: 30_402,
+            target_policy: TransportPublishTargetPolicy::nostr(
+                NostrPublishTargetSourcePolicy::DaemonDefaultOnly,
+                Vec::new(),
+            ),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            target_count: 0,
+            acknowledged_count: 0,
+            retryable_count: 0,
+            terminal_count: 0,
+            requested_at_ms: 1,
+            completed_at_ms: Some(2),
+            last_error: Some("no_transport_publish_targets".to_owned()),
+            targets: Vec::new(),
         }
     }
 
@@ -886,27 +1230,7 @@ mod tests {
 
     #[test]
     fn job_view_validation_rejects_bad_identity() {
-        let job = TransportPublishJobView {
-            job_id: "job-1".to_owned(),
-            status: TransportPublishJobStatus::DeliverySatisfied,
-            terminal: true,
-            delivery_satisfied: true,
-            event_id: "0".repeat(64),
-            pubkey: "1".repeat(64),
-            event_kind: 30_402,
-            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::nostr("wss://relay.example.com"),
-            ]),
-            delivery_policy: TransportPublishDeliveryPolicy::Any,
-            target_count: 1,
-            acknowledged_count: 1,
-            retryable_count: 0,
-            terminal_count: 0,
-            requested_at_ms: 1,
-            completed_at_ms: Some(2),
-            last_error: None,
-            targets: Vec::new(),
-        };
+        let job = accepted_job();
 
         job.validate().expect("valid job");
         let mut invalid = job;
@@ -918,6 +1242,171 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn job_view_validation_accepts_valid_status_shapes() {
+        accepted_job().validate().expect("accepted job");
+        job_from_targets(
+            TransportPublishJobStatus::DeliveryUnsatisfiedRetryable,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com",
+            )]),
+            vec![nostr_outcome(TransportPublishOutcomeKind::Timeout)],
+        )
+        .validate()
+        .expect("retryable job");
+        job_from_targets(
+            TransportPublishJobStatus::DeliveryUnsatisfiedTerminal,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com",
+            )]),
+            vec![nostr_outcome(TransportPublishOutcomeKind::TargetRejected)],
+        )
+        .validate()
+        .expect("terminal job");
+        job_from_targets(
+            TransportPublishJobStatus::DeliveryPreviewUnavailable,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                ),
+            ]),
+            vec![reticulum_outcome(
+                TransportPublishOutcomeKind::PreviewUnavailable,
+            )],
+        )
+        .validate()
+        .expect("preview unavailable job");
+        rejected_job().validate().expect("rejected job");
+    }
+
+    #[test]
+    fn job_view_validation_rejects_inconsistent_counts_flags_and_status() {
+        let mut target_count_mismatch = accepted_job();
+        target_count_mismatch.target_count = 2;
+        assert_eq!(
+            target_count_mismatch.validate(),
+            Err(TransportPublishProtocolError::InvalidJobTargetCount {
+                expected: 1,
+                actual: 2
+            })
+        );
+
+        let mut acknowledged_mismatch = accepted_job();
+        acknowledged_mismatch.acknowledged_count = 0;
+        assert_eq!(
+            acknowledged_mismatch.validate(),
+            Err(TransportPublishProtocolError::InvalidJobAcknowledgedCount {
+                expected: 1,
+                actual: 0
+            })
+        );
+
+        let mut terminal_flag_mismatch = accepted_job();
+        terminal_flag_mismatch.terminal = false;
+        assert_eq!(
+            terminal_flag_mismatch.validate(),
+            Err(TransportPublishProtocolError::InvalidJobTerminalState)
+        );
+
+        let mut satisfied_flag_mismatch = accepted_job();
+        satisfied_flag_mismatch.delivery_satisfied = false;
+        assert_eq!(
+            satisfied_flag_mismatch.validate(),
+            Err(TransportPublishProtocolError::InvalidJobDeliverySatisfiedState)
+        );
+
+        let mut completed_at_missing = accepted_job();
+        completed_at_missing.completed_at_ms = None;
+        assert_eq!(
+            completed_at_missing.validate(),
+            Err(TransportPublishProtocolError::InvalidJobCompletedAt)
+        );
+
+        let mut completed_at_before_request = accepted_job();
+        completed_at_before_request.completed_at_ms = Some(0);
+        assert_eq!(
+            completed_at_before_request.validate(),
+            Err(TransportPublishProtocolError::InvalidJobCompletedAt)
+        );
+
+        let mut terminal_status_with_retryable_outcome = job_from_targets(
+            TransportPublishJobStatus::DeliveryUnsatisfiedTerminal,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com",
+            )]),
+            vec![nostr_outcome(TransportPublishOutcomeKind::Timeout)],
+        );
+        terminal_status_with_retryable_outcome.retryable_count = 1;
+        assert_eq!(
+            terminal_status_with_retryable_outcome.validate(),
+            Err(TransportPublishProtocolError::InvalidJobStatusState)
+        );
+    }
+
+    #[test]
+    fn job_view_validation_rejects_reticulum_success_and_non_reticulum_preview() {
+        let mut reticulum_success = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                ),
+            ]),
+            vec![reticulum_outcome(TransportPublishOutcomeKind::Accepted)],
+        );
+        reticulum_success.acknowledged_count = 1;
+        assert_eq!(
+            reticulum_success.validate(),
+            Err(TransportPublishProtocolError::InvalidReticulumOutcome { index: 0 })
+        );
+
+        let non_reticulum_preview = job_from_targets(
+            TransportPublishJobStatus::DeliveryPreviewUnavailable,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com",
+            )]),
+            vec![nostr_outcome(
+                TransportPublishOutcomeKind::PreviewUnavailable,
+            )],
+        );
+        assert_eq!(
+            non_reticulum_preview.validate(),
+            Err(TransportPublishProtocolError::InvalidTargetOutcomeKind { index: 0 })
+        );
+
+        let mut reticulum_wrong_source = job_from_targets(
+            TransportPublishJobStatus::DeliveryDeferred,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                ),
+            ]),
+            vec![reticulum_outcome(
+                TransportPublishOutcomeKind::DeferredUntilImplemented,
+            )],
+        );
+        reticulum_wrong_source.targets[0].source = TransportPublishTargetSource::Request;
+        assert_eq!(
+            reticulum_wrong_source.validate(),
+            Err(TransportPublishProtocolError::InvalidTargetSource { index: 0 })
+        );
+
+        let reticulum_deferred = job_from_targets(
+            TransportPublishJobStatus::DeliveryDeferred,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::reticulum_preview(
+                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                ),
+            ]),
+            vec![reticulum_outcome(
+                TransportPublishOutcomeKind::DeferredUntilImplemented,
+            )],
+        );
+        reticulum_deferred
+            .validate()
+            .expect("Reticulum deferred job");
     }
 
     #[test]
