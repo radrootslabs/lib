@@ -12,7 +12,8 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-    RadrootsTransportError, RadrootsTransportKind,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint,
 };
 
 pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
@@ -42,6 +43,9 @@ pub enum TransportPublishProtocolError {
     EmptyEndpointUri {
         index: usize,
     },
+    InvalidEndpointUri {
+        index: usize,
+    },
     InvalidPreviewBehavior {
         index: usize,
     },
@@ -50,6 +54,9 @@ pub enum TransportPublishProtocolError {
         index: usize,
     },
     ExplicitProxyTarget {
+        index: usize,
+    },
+    DuplicateTarget {
         index: usize,
     },
     TargetLimitExceeded {
@@ -118,6 +125,9 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::EmptyEndpointUri { index } => {
                 write!(f, "transport target {index} endpoint_uri must not be empty")
             }
+            Self::InvalidEndpointUri { index } => {
+                write!(f, "transport target {index} endpoint_uri is invalid")
+            }
             Self::InvalidPreviewBehavior { index } => write!(
                 f,
                 "transport target {index} preview_behavior is only valid for Reticulum targets"
@@ -131,6 +141,9 @@ impl fmt::Display for TransportPublishProtocolError {
                 f,
                 "transport target {index} proxy is an SDK delegation target and cannot be used as a daemon explicit target"
             ),
+            Self::DuplicateTarget { index } => {
+                write!(f, "transport target {index} duplicates an earlier target")
+            }
             Self::TargetLimitExceeded { max, actual } => {
                 write!(f, "transport target count {actual} exceeds limit {max}")
             }
@@ -285,6 +298,17 @@ impl TransportPublishTarget {
         }
         Ok(())
     }
+
+    fn fingerprint(
+        &self,
+        index: usize,
+    ) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
+        let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
+            .map_err(|error| transport_kind_error(error, index))?;
+        let target = RadrootsTransportTarget::new(transport_kind, self.endpoint_uri.as_str())
+            .map_err(|error| target_fingerprint_error(error, index))?;
+        Ok(target.fingerprint)
+    }
 }
 
 fn transport_kind_error(
@@ -296,6 +320,18 @@ fn transport_kind_error(
             TransportPublishProtocolError::EmptyTransportKind { index }
         }
         _ => TransportPublishProtocolError::InvalidTransportKind { index },
+    }
+}
+
+fn target_fingerprint_error(
+    error: RadrootsTransportError,
+    index: usize,
+) -> TransportPublishProtocolError {
+    match error {
+        RadrootsTransportError::EmptyTargetUri => {
+            TransportPublishProtocolError::EmptyEndpointUri { index }
+        }
+        _ => TransportPublishProtocolError::InvalidEndpointUri { index },
     }
 }
 
@@ -352,6 +388,7 @@ impl TransportPublishTargetPolicy {
                 for (index, target) in targets.iter().enumerate() {
                     target.validate(index)?;
                 }
+                validate_explicit_target_uniqueness(targets)?;
             }
             Self::Nostr { relay_urls, .. } => {
                 validate_target_limit(relay_urls.len(), max_targets)?;
@@ -364,6 +401,20 @@ impl TransportPublishTargetPolicy {
         }
         Ok(())
     }
+}
+
+fn validate_explicit_target_uniqueness(
+    targets: &[TransportPublishTarget],
+) -> Result<(), TransportPublishProtocolError> {
+    let mut fingerprints = Vec::new();
+    for (index, target) in targets.iter().enumerate() {
+        let fingerprint = target.fingerprint(index)?;
+        if fingerprints.iter().any(|existing| existing == &fingerprint) {
+            return Err(TransportPublishProtocolError::DuplicateTarget { index });
+        }
+        fingerprints.push(fingerprint);
+    }
+    Ok(())
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1180,6 +1231,16 @@ mod tests {
             Err(TransportPublishProtocolError::EmptyEndpointUri { index: 0 })
         ));
 
+        let mut invalid_endpoint = request.clone();
+        invalid_endpoint.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay.example.com/has space",
+            )]);
+        assert_eq!(
+            invalid_endpoint.validate(1),
+            Err(TransportPublishProtocolError::InvalidEndpointUri { index: 0 })
+        );
+
         let mut invalid_reticulum_endpoint = request.clone();
         invalid_reticulum_endpoint.target_policy =
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
@@ -1259,6 +1320,16 @@ mod tests {
         assert_eq!(
             explicit_proxy_target.validate(1),
             Err(TransportPublishProtocolError::ExplicitProxyTarget { index: 0 })
+        );
+
+        let mut duplicate_targets = request.clone();
+        duplicate_targets.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example.com/a"),
+            TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a"),
+        ]);
+        assert_eq!(
+            duplicate_targets.validate(2),
+            Err(TransportPublishProtocolError::DuplicateTarget { index: 1 })
         );
 
         let mut empty_key = request.clone();
@@ -1582,6 +1653,10 @@ mod tests {
                 "transport target 3 endpoint_uri must not be empty",
             ),
             (
+                TransportPublishProtocolError::InvalidEndpointUri { index: 3 },
+                "transport target 3 endpoint_uri is invalid",
+            ),
+            (
                 TransportPublishProtocolError::InvalidPreviewBehavior { index: 4 },
                 "transport target 4 preview_behavior is only valid for Reticulum targets",
             ),
@@ -1596,6 +1671,10 @@ mod tests {
             (
                 TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 },
                 "transport target count 2 exceeds limit 1",
+            ),
+            (
+                TransportPublishProtocolError::DuplicateTarget { index: 1 },
+                "transport target 1 duplicates an earlier target",
             ),
             (
                 TransportPublishProtocolError::EmptyTargetSet,

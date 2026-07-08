@@ -27,6 +27,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteQueryResult};
 use sqlx::{Row, SqlitePool};
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -1255,10 +1256,11 @@ fn prepare_delivery_plan(
     if input.transport_profile_id.trim().is_empty() {
         return Err(RadrootsOutboxError::EmptyTransportProfileId);
     }
-    let targets = ordered_unique_targets(input.targets.clone());
+    let targets = input.targets.clone();
     if targets.is_empty() {
         return Err(RadrootsOutboxError::EmptyDeliveryTargets);
     }
+    validate_unique_targets(&targets)?;
     if targets
         .iter()
         .any(|target| target.kind == RadrootsTransportKind::Proxy)
@@ -1314,6 +1316,18 @@ fn validate_delivery_target(target: &RadrootsTransportTarget) -> Result<(), Radr
         return Err(RadrootsOutboxError::Transport(
             radroots_transport::RadrootsTransportError::InvalidTargetUri,
         ));
+    }
+    Ok(())
+}
+
+fn validate_unique_targets(targets: &[RadrootsTransportTarget]) -> Result<(), RadrootsOutboxError> {
+    let mut fingerprints = BTreeSet::new();
+    for target in targets {
+        if !fingerprints.insert(target.fingerprint.as_str()) {
+            return Err(RadrootsOutboxError::Transport(
+                RadrootsTransportError::DuplicateTargetFingerprint,
+            ));
+        }
     }
     Ok(())
 }
@@ -2026,19 +2040,6 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
     }
 }
 
-fn ordered_unique_targets(targets: Vec<RadrootsTransportTarget>) -> Vec<RadrootsTransportTarget> {
-    let mut out = Vec::new();
-    for target in targets {
-        if !out
-            .iter()
-            .any(|existing: &RadrootsTransportTarget| existing.fingerprint == target.fingerprint)
-        {
-            out.push(target);
-        }
-    }
-    out
-}
-
 #[derive(Serialize)]
 struct OperationDigestInput<'a> {
     operation_kind: &'a str,
@@ -2267,7 +2268,6 @@ mod tests {
             delivery_plan(vec![
                 nostr_target(NOSTR_PRIMARY_WSS),
                 nostr_target(NOSTR_SECONDARY_WSS),
-                nostr_target(NOSTR_PRIMARY_WSS),
             ]),
             created_at_ms,
         )
@@ -2439,6 +2439,34 @@ mod tests {
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_rejects_duplicate_delivery_targets_before_persistence() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(hex_64('a').as_str(), "duplicate targets");
+
+        let err = outbox
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
+                "publish_post",
+                draft,
+                delivery_plan(vec![
+                    nostr_target(NOSTR_PRIMARY_WSS),
+                    nostr_target(NOSTR_PRIMARY_WSS),
+                ]),
+                1_000,
+            ))
+            .await
+            .expect_err("duplicate targets");
+
+        assert!(matches!(
+            err,
+            RadrootsOutboxError::Transport(RadrootsTransportError::DuplicateTargetFingerprint)
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_target").await, 0);
     }
 
     #[tokio::test]
