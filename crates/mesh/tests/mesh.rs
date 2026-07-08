@@ -1,19 +1,29 @@
 use radroots_mesh::{
-    RadrootsMeshError, RadrootsMeshEventHead, RadrootsMeshFrame, RadrootsMeshPayloadPolicy,
+    RadrootsMeshError, RadrootsMeshFrame, RadrootsMeshFrameType, RadrootsMeshPayload,
     RadrootsMeshScope, decode_mesh_frame_cbor, encode_mesh_frame_cbor,
 };
 
+fn default_frame() -> RadrootsMeshFrame {
+    RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::Hello,
+        RadrootsMeshScope::Local,
+        "message-1",
+        42,
+        60_000,
+    )
+}
+
 #[test]
-fn default_frame_encodes_as_deterministic_cbor() {
-    let frame = RadrootsMeshFrame::new(RadrootsMeshScope::Local, Vec::new());
+fn default_frame_encodes_as_mesh_frame_v1_cddl_cbor() {
+    let frame = default_frame();
     let encoded = encode_mesh_frame_cbor(&frame).expect("encode frame");
 
     assert_eq!(
         encoded,
         [
-            0xa5, 0x01, 0x01, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x71, b'p', b'a',
-            b'y', b'l', b'o', b'a', b'd', b'-', b'f', b'o', b'r', b'b', b'i', b'd', b'd', b'e',
-            b'n', 0x04, 0x80, 0x05, 0xf6,
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x69,
+            b'm', b'e', b's', b's', b'a', b'g', b'e', b'-', b'1', 0x04, 0x18, 0x2a, 0x05, 0x19,
+            0xea, 0x60, 0x06, 0xa0,
         ]
     );
     assert_eq!(
@@ -23,48 +33,57 @@ fn default_frame_encodes_as_deterministic_cbor() {
 }
 
 #[test]
-fn event_head_frames_round_trip() {
-    let frame = RadrootsMeshFrame::new(
-        RadrootsMeshScope::Community,
-        vec![RadrootsMeshEventHead {
-            event_id: "event-1".to_string(),
-            author: "author-1".to_string(),
-            kind: 30818,
-            created_at: 1_725_000_000,
-        }],
-    );
-    let encoded = encode_mesh_frame_cbor(&frame).expect("encode frame");
-    let decoded = decode_mesh_frame_cbor(&encoded).expect("decode frame");
+fn all_frame_types_round_trip_with_stable_codes_and_labels() {
+    let cases = [
+        (RadrootsMeshFrameType::Hello, 0, "hello"),
+        (
+            RadrootsMeshFrameType::EventHeadAnnounce,
+            1,
+            "event_head_announce",
+        ),
+        (RadrootsMeshFrameType::EventRequest, 2, "event_request"),
+        (RadrootsMeshFrameType::EventChunk, 3, "event_chunk"),
+        (RadrootsMeshFrameType::EventAck, 4, "event_ack"),
+        (RadrootsMeshFrameType::RouteProbe, 5, "route_probe"),
+    ];
 
-    assert_eq!(decoded, frame);
-    assert_eq!(encode_mesh_frame_cbor(&decoded).expect("reencode"), encoded);
-}
+    for (frame_type, code, label) in cases {
+        let frame = RadrootsMeshFrame::new(
+            frame_type,
+            RadrootsMeshScope::Community,
+            format!("{label}-message"),
+            u64::from(code) + 1,
+            1_000,
+        );
+        let encoded = encode_mesh_frame_cbor(&frame).expect("encode frame");
+        let decoded = decode_mesh_frame_cbor(&encoded).expect("decode frame");
 
-#[test]
-fn payload_transmission_is_forbidden_in_mvp_frames() {
-    let mut frame = RadrootsMeshFrame::new(RadrootsMeshScope::Local, Vec::new());
-    frame.payload_policy = RadrootsMeshPayloadPolicy::PayloadTransmissionForbidden;
-    frame.payload = Some(vec![1, 2, 3]);
-
-    assert_eq!(
-        encode_mesh_frame_cbor(&frame).expect_err("payload must fail"),
-        RadrootsMeshError::PayloadTransmissionForbidden
-    );
+        assert_eq!(decoded, frame);
+        assert_eq!(encode_mesh_frame_cbor(&decoded).expect("reencode"), encoded);
+        assert_eq!(frame_type.code(), code);
+        assert_eq!(frame_type.label(), label);
+    }
 }
 
 #[test]
 fn custom_scope_has_explicit_namespace() {
     let scope = RadrootsMeshScope::custom(" Farm-North ").expect("custom scope");
     assert_eq!(scope.label(), "farm-north");
-    let frame = RadrootsMeshFrame::new(scope, Vec::new());
+    let frame = RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::RouteProbe,
+        scope,
+        "route-probe-1",
+        10,
+        1,
+    );
     let encoded = encode_mesh_frame_cbor(&frame).expect("encode custom scope");
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode custom scope");
 
-    assert_eq!(decoded.scope.cbor_label(), "custom:farm-north");
+    assert_eq!(decoded.scope_id.cbor_label(), "custom:farm-north");
 }
 
 #[test]
-fn mesh_scope_and_payload_policy_parsers_reject_unknown_values() {
+fn mesh_parsers_and_validation_reject_unknown_or_empty_values() {
     assert_eq!(
         RadrootsMeshScope::custom(" ").expect_err("empty custom scope"),
         RadrootsMeshError::EmptyCustomScope
@@ -73,15 +92,35 @@ fn mesh_scope_and_payload_policy_parsers_reject_unknown_values() {
         RadrootsMeshScope::parse("unscoped").expect_err("unknown scope"),
         RadrootsMeshError::UnknownScope
     );
+    assert_eq!(
+        RadrootsMeshFrameType::parse_code(6).expect_err("unknown frame type"),
+        RadrootsMeshError::UnknownFrameType
+    );
     assert_eq!(RadrootsMeshScope::Local.label(), "local");
     assert_eq!(RadrootsMeshScope::Community.label(), "community");
-    assert_eq!(
-        RadrootsMeshPayloadPolicy::parse("inline-payloads").expect_err("unknown policy"),
-        RadrootsMeshError::UnknownPayloadPolicy
+
+    let empty_message = RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::Hello,
+        RadrootsMeshScope::Local,
+        " ",
+        1,
+        1,
     );
     assert_eq!(
-        RadrootsMeshPayloadPolicy::PayloadTransmissionForbidden.label(),
-        "payload-forbidden"
+        empty_message.validate().expect_err("empty message id"),
+        RadrootsMeshError::EmptyMessageId
+    );
+
+    let zero_ttl = RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::Hello,
+        RadrootsMeshScope::Local,
+        "message-1",
+        1,
+        0,
+    );
+    assert_eq!(
+        zero_ttl.validate().expect_err("zero ttl"),
+        RadrootsMeshError::InvalidTtl
     );
 }
 
@@ -93,6 +132,11 @@ fn mesh_errors_have_stable_display_strings() {
             "mesh custom scope is empty",
         ),
         (
+            RadrootsMeshError::EmptyMessageId,
+            "mesh message id is empty",
+        ),
+        (RadrootsMeshError::InvalidTtl, "mesh frame TTL is invalid"),
+        (
             RadrootsMeshError::PayloadTransmissionForbidden,
             "mesh payload transmission is forbidden",
         ),
@@ -101,11 +145,11 @@ fn mesh_errors_have_stable_display_strings() {
             RadrootsMeshError::InvalidUtf8,
             "mesh frame text is invalid UTF-8",
         ),
-        (RadrootsMeshError::UnknownScope, "mesh scope is unknown"),
         (
-            RadrootsMeshError::UnknownPayloadPolicy,
-            "mesh payload policy is unknown",
+            RadrootsMeshError::UnknownFrameType,
+            "mesh frame type is unknown",
         ),
+        (RadrootsMeshError::UnknownScope, "mesh scope is unknown"),
         (
             RadrootsMeshError::UnsupportedVersion,
             "mesh frame version is unsupported",
@@ -118,15 +162,33 @@ fn mesh_errors_have_stable_display_strings() {
 }
 
 #[test]
+fn payload_transmission_is_forbidden_in_mvp_frames() {
+    let mut frame = default_frame();
+    frame.payload = RadrootsMeshPayload::Bytes(vec![1, 2, 3]);
+
+    assert_eq!(
+        encode_mesh_frame_cbor(&frame).expect_err("payload must fail"),
+        RadrootsMeshError::PayloadTransmissionForbidden
+    );
+
+    let mut encoded_payload = encode_mesh_frame_cbor(&default_frame()).expect("encode default");
+    let payload_offset = encoded_payload.len() - 1;
+    encoded_payload[payload_offset] = 0x43;
+    encoded_payload.extend_from_slice(&[1, 2, 3]);
+    assert_eq!(
+        decode_mesh_frame_cbor(&encoded_payload).expect_err("decode payload"),
+        RadrootsMeshError::PayloadTransmissionForbidden
+    );
+}
+
+#[test]
 fn cbor_codec_covers_extended_integer_widths() {
     let frame = RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::EventAck,
         RadrootsMeshScope::Community,
-        vec![RadrootsMeshEventHead {
-            event_id: "event-with-wide-created-at".to_string(),
-            author: "author-with-wide-created-at".to_string(),
-            kind: 24,
-            created_at: u64::MAX,
-        }],
+        "wide-created-at",
+        u64::MAX,
+        u64::MAX,
     );
     let encoded = encode_mesh_frame_cbor(&frame).expect("encode wide frame");
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode wide frame");
@@ -135,44 +197,80 @@ fn cbor_codec_covers_extended_integer_widths() {
 }
 
 #[test]
+fn decoder_rejects_previous_five_field_frame_shape() {
+    let previous_shape = vec![
+        0xa5, 0x01, 0x01, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x71, b'p', b'a', b'y',
+        b'l', b'o', b'a', b'd', b'-', b'f', b'o', b'r', b'b', b'i', b'd', b'd', b'e', b'n', 0x04,
+        0x80, 0x05, 0xf6,
+    ];
+
+    assert_eq!(
+        decode_mesh_frame_cbor(&previous_shape).expect_err("old frame shape"),
+        RadrootsMeshError::InvalidCbor
+    );
+}
+
+#[test]
 fn decoder_rejects_malformed_cbor_shapes() {
-    let encoded = encode_mesh_frame_cbor(&RadrootsMeshFrame::new(
-        RadrootsMeshScope::Local,
-        Vec::new(),
-    ))
-    .expect("encode default");
+    let encoded = encode_mesh_frame_cbor(&default_frame()).expect("encode default");
     let mut unsupported_version = encoded.clone();
     unsupported_version[2] = 2;
     assert_eq!(
         decode_mesh_frame_cbor(&unsupported_version).expect_err("unsupported version"),
         RadrootsMeshError::UnsupportedVersion
     );
-    let mut frame = RadrootsMeshFrame::new(RadrootsMeshScope::Local, Vec::new());
-    frame.version = 2;
+
+    let mut out_of_range_version = encoded.clone();
+    out_of_range_version.splice(2..3, [0x1a, 0x00, 0x01, 0x00, 0x01]);
     assert_eq!(
-        frame.validate().expect_err("unsupported frame version"),
-        RadrootsMeshError::UnsupportedVersion
+        decode_mesh_frame_cbor(&out_of_range_version).expect_err("out of range version"),
+        RadrootsMeshError::InvalidCbor
+    );
+
+    let mut unknown_frame_type = encoded.clone();
+    unknown_frame_type[4] = 6;
+    assert_eq!(
+        decode_mesh_frame_cbor(&unknown_frame_type).expect_err("unknown frame type"),
+        RadrootsMeshError::UnknownFrameType
+    );
+
+    let mut zero_ttl = encoded.clone();
+    zero_ttl.splice(27..30, [0x00]);
+    assert_eq!(
+        decode_mesh_frame_cbor(&zero_ttl).expect_err("zero ttl"),
+        RadrootsMeshError::InvalidTtl
+    );
+
+    let mut wrong_key_order = encoded.clone();
+    wrong_key_order[3] = 2;
+    assert_eq!(
+        decode_mesh_frame_cbor(&wrong_key_order).expect_err("wrong key order"),
+        RadrootsMeshError::InvalidCbor
     );
 
     let cases = [
         vec![0x80],
         vec![0xbc],
-        vec![0xa4],
-        vec![0xa5, 0x02],
-        vec![0xa5, 0x01, 0x01, 0x02, 0x61, 0xff],
+        vec![0xa6],
+        vec![0xa7, 0x01],
+        vec![0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x61, 0xff],
         vec![
-            0xa5, 0x01, 0x01, 0x02, 0x63, b'b', b'a', b'd', 0x03, 0x71, b'p', b'a', b'y', b'l',
-            b'o', b'a', b'd', b'-', b'f', b'o', b'r', b'b', b'i', b'd', b'd', b'e', b'n', 0x04,
-            0x80, 0x05, 0xf6,
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x63, b'b', b'a', b'd', 0x03, 0x69, b'm', b'e',
+            b's', b's', b'a', b'g', b'e', b'-', b'1', 0x04, 0x18, 0x2a, 0x05, 0x19, 0xea, 0x60,
+            0x06, 0xa0,
         ],
         vec![
-            0xa5, 0x01, 0x01, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x67, b'u', b'n',
-            b'k', b'n', b'o', b'w', b'n', 0x04, 0x80, 0x05, 0xf6,
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x7b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff,
         ],
         vec![
-            0xa5, 0x01, 0x01, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x71, b'p', b'a',
-            b'y', b'l', b'o', b'a', b'd', b'-', b'f', b'o', b'r', b'b', b'i', b'd', b'd', b'e',
-            b'n', 0x04, 0x80, 0x05, 0x00,
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x60,
+            0x04, 0x18, 0x2a, 0x05, 0x19, 0xea, 0x60, 0x06, 0xa0,
+        ],
+        vec![
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x69,
+            b'm', b'e', b's', b's', b'a', b'g', b'e', b'-', b'1', 0x04, 0x18, 0x2a, 0x05, 0x19,
+            0xea, 0x60, 0x06, 0xa1,
         ],
     ];
 
