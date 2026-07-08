@@ -16,6 +16,15 @@ const TRANSPORT_HARDENING_CRATE_SOURCE_ROOTS: &[&str] = &[
     "outbox/src",
 ];
 
+const GENERIC_TRANSPORT_STATUS_SOURCE_ROOTS: &[&str] = &[
+    "event_store/src",
+    "mesh_agent_proto/src",
+    "outbox/src",
+    "transport/src",
+    "transport_publish_protocol/src",
+    "transport_reticulum/src",
+];
+
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "\"radrootsd_proxy\"",
@@ -57,6 +66,61 @@ const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
         pattern: "PublishRelaySource",
         reason: "old relay-shaped publish source names must not return",
     },
+    ForbiddenConcept {
+        pattern: concat!("Nostr", "Fetch"),
+        reason: "generic transport observations must use transport-neutral fetch naming",
+    },
+    ForbiddenConcept {
+        pattern: concat!("Nostr", "Subscription"),
+        reason: "generic transport observations must use transport-neutral subscription naming",
+    },
+    ForbiddenConcept {
+        pattern: concat!("Nostr", "PublishAck"),
+        reason: "generic transport observations must use transport-neutral publish ack naming",
+    },
+    ForbiddenConcept {
+        pattern: concat!("nostr", "_fetch"),
+        reason: "generic transport observation storage strings must be transport-neutral",
+    },
+    ForbiddenConcept {
+        pattern: concat!("nostr", "_subscription"),
+        reason: "generic transport observation storage strings must be transport-neutral",
+    },
+    ForbiddenConcept {
+        pattern: concat!("nostr", "_publish_ack"),
+        reason: "generic transport observation storage strings must be transport-neutral",
+    },
+];
+
+const FORBIDDEN_GENERIC_TRANSPORT_STATUS_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: concat!("configured_nostr", "_relay", "_count"),
+        reason: "generic status surfaces must expose configured transport target counts",
+    },
+    ForbiddenConcept {
+        pattern: concat!("configured_nostr", "_relays"),
+        reason: "generic status surfaces must expose configured transport targets",
+    },
+    ForbiddenConcept {
+        pattern: concat!("target", "_relays"),
+        reason: "generic transport target surfaces must use endpoint terminology",
+    },
+    ForbiddenConcept {
+        pattern: concat!("connected", "_relays"),
+        reason: "generic transport attempt surfaces must use endpoint terminology",
+    },
+    ForbiddenConcept {
+        pattern: concat!("acknowledged", "_relays"),
+        reason: "generic transport acknowledgement surfaces must use endpoint terminology",
+    },
+    ForbiddenConcept {
+        pattern: concat!("failed", "_relays"),
+        reason: "generic transport failure surfaces must use target terminology",
+    },
+    ForbiddenConcept {
+        pattern: concat!("relay", "_count"),
+        reason: "generic transport status counts must use transport target terminology",
+    },
 ];
 
 #[test]
@@ -92,6 +156,37 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
     assert!(
         findings.is_empty(),
         "transport hardening source-boundary violations:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn generic_transport_status_sources_reject_retired_relay_shaped_names() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let mut findings = Vec::new();
+
+    for relative_root in GENERIC_TRANSPORT_STATUS_SOURCE_ROOTS {
+        for path in rust_source_files(crates_root.join(relative_root).as_path()) {
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
+            let relative_path = relative_path(crates_root, path.as_path());
+
+            for concept in FORBIDDEN_GENERIC_TRANSPORT_STATUS_CONCEPTS {
+                if contains_forbidden_concept(source, concept.pattern) {
+                    findings.push(format!(
+                        "{} contains retired generic transport status concept `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "generic transport status source-boundary violations:\n{}",
         findings.join("\n")
     );
 }

@@ -1,7 +1,8 @@
 use futures::future::BoxFuture;
 use nostr::JsonUtil;
 use radroots_event_store::{
-    RadrootsEventStore, RadrootsEventVerificationStatus, RadrootsTransportObservationType,
+    RadrootsEventStore, RadrootsEventVerificationStatus, RadrootsTransportObservationRow,
+    RadrootsTransportObservationType,
 };
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::kinds::KIND_POST;
@@ -107,6 +108,30 @@ fn fixture_keys() -> RadrootsNostrKeys {
 
 fn signed_post(content: &str) -> RadrootsSignedNostrEvent {
     signed_event_with_kind_and_hashtag(content, KIND_POST, "soil")
+}
+
+fn assert_outbox_publish_observations(
+    observations: &[RadrootsTransportObservationRow],
+    publish_ack_count: usize,
+) {
+    assert_eq!(observations.len(), publish_ack_count + 1);
+    assert_eq!(
+        observations
+            .iter()
+            .filter(|observation| observation.observation_type
+                == RadrootsTransportObservationType::LocalImport
+                && observation.endpoint_uri.as_str() == "local:outbox")
+            .count(),
+        1
+    );
+    assert_eq!(
+        observations
+            .iter()
+            .filter(|observation| observation.observation_type
+                == RadrootsTransportObservationType::PublishAck)
+            .count(),
+        publish_ack_count
+    );
 }
 
 fn signed_event_with_kind_and_hashtag(
@@ -1410,7 +1435,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         .observations_for_event(signed.id.as_str())
         .await
         .expect("observations");
-    assert_eq!(observations.len(), 3);
+    assert_outbox_publish_observations(&observations, 3);
 }
 
 #[tokio::test]
@@ -1649,8 +1674,11 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
         .observations_for_event(signed.id.as_str())
         .await
         .expect("observations");
-    assert_eq!(observations.len(), 1);
-    assert_eq!(observations[0].endpoint_uri.as_str(), RELAY_PRIMARY_WSS);
+    assert_outbox_publish_observations(&observations, 1);
+    assert!(observations.iter().any(|observation| {
+        observation.observation_type == RadrootsTransportObservationType::PublishAck
+            && observation.endpoint_uri.as_str() == RELAY_PRIMARY_WSS
+    }));
 }
 
 #[tokio::test]
@@ -1833,7 +1861,7 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
         .observations_for_event(signed.id.as_str())
         .await
         .expect("observations");
-    assert_eq!(observations.len(), 2);
+    assert_outbox_publish_observations(&observations, 2);
 }
 
 #[tokio::test]
