@@ -104,7 +104,7 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
     let enqueue = ListingEnqueuePublishRequest::from_document(
         actor(),
         RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -119,7 +119,7 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
     let try_key = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Try Key Greens"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("listing-unit-try-key")
     .expect("try key");
@@ -134,7 +134,7 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let invalid_key = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Invalid Key Greens"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("");
     assert!(invalid_key.is_err());

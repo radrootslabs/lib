@@ -234,7 +234,7 @@ async fn dvm_configured_enqueue_reports_prepare_and_target_errors_without_mutati
         deterministic_event_id("request-event"),
         deterministic_event_id("decision-event"),
         inventory_bins(),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
     let error = sdk
         .dvm()
@@ -414,7 +414,7 @@ async fn dvm_trade_transition_proof_request_reports_prepare_and_target_errors_wi
         deterministic_event_id("request-event"),
         deterministic_event_id("decision-event"),
         inventory_bins(),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
     let error = sdk
         .dvm()

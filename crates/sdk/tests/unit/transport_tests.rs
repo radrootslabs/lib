@@ -78,14 +78,7 @@ fn relay_authority_host(authority: &str) -> Option<String> {
 }
 
 #[test]
-fn use_configured_policy_serializes_as_kind_only() {
-    let policy = TargetPolicy::UseConfiguredProfile;
-    assert_eq!(
-        serde_json::to_value(&policy).expect("json"),
-        serde_json::json!({ "kind": "use_configured_profile" })
-    );
-    assert_struct_serialize_error_paths(&policy, 1);
-
+fn transport_profile_policy_serializes_as_kind_only() {
     let transport_profile_policy = TargetPolicy::use_transport_profile();
     assert_eq!(
         serde_json::to_value(&transport_profile_policy).expect("json"),
@@ -102,11 +95,14 @@ fn target_set_accessors_and_configured_relays_cover_empty_and_dedupe_paths() {
             .is_empty()
     );
 
-    let targets = TargetSet::from_normalized_nostr_relays(vec![
-        "wss://relay-a.example.com".to_owned(),
-        "wss://relay-a.example.com".to_owned(),
-        "wss://relay-b.example.com".to_owned(),
-    ])
+    let targets = TargetSet::new(
+        [
+            "wss://relay-a.example.com",
+            "wss://relay-a.example.com",
+            "wss://relay-b.example.com",
+        ],
+        NostrRelayUrlPolicy::Public,
+    )
     .expect("targets");
 
     assert_eq!(targets.len(), 2);
@@ -261,7 +257,7 @@ fn explicit_target_sets_reject_mixed_proxy_delegate_targets() {
 #[test]
 fn normalized_relays_reject_empty_and_over_limit_sets() {
     assert!(matches!(
-        TargetSet::from_normalized_nostr_relays(Vec::new()),
+        TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::EmptyTransportTargets { .. })
     ));
 
@@ -269,7 +265,7 @@ fn normalized_relays_reject_empty_and_over_limit_sets() {
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     assert!(matches!(
-        TargetSet::from_normalized_nostr_relays(too_many),
+        TargetSet::new(too_many, NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::TransportTargetLimitExceeded { actual, .. })
             if actual == SDK_TRANSPORT_TARGET_MAX_COUNT + 1
     ));

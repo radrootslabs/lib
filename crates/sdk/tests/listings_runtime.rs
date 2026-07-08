@@ -241,7 +241,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_B_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("idem-b")
     .expect("idempotency key");
@@ -293,24 +293,24 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
 }
 
 #[tokio::test]
-async fn enqueue_publish_use_configured_profile_rejects_empty_transport_targets() {
+async fn enqueue_publish_use_transport_profile_rejects_empty_transport_targets() {
     let (_tempdir, sdk) = directory_sdk_with_relays(&[]).await;
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
 
     let error = sdk
         .listings()
         .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
-        .expect_err("empty configured profile");
+        .expect_err("empty transport profile");
 
     assert!(matches!(
         error,
         RadrootsSdkError::EmptyTransportTargets { operation }
-            if operation == "sdk transport target set"
+            if operation == "publish transport profile"
     ));
 }
 
@@ -330,7 +330,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared.clone(),
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -369,7 +369,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_A_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("debug-secret-idempotency")
     .expect("idempotency key");
@@ -428,7 +428,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let enqueue_request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_B_D_TAG, "Queued Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -469,7 +469,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let try_key_request = ListingEnqueuePublishRequest::from_document(
         actor(),
         RadrootsListingDraftDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("listing-serialized-try-key")
     .expect("try idempotency key");
@@ -506,7 +506,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
         .enqueue_prepared_publish_with_explicit_signer(
             &prepared_actor,
             prepared_plan,
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -517,7 +517,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     let convenience_request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_H_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
     let convenience_receipt = convenience_sdk
         .listings()
@@ -543,7 +543,7 @@ async fn enqueue_prepared_publish_returns_structured_actor_errors() {
         .enqueue_prepared_publish_with_explicit_signer(
             &non_seller_actor(),
             prepared,
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
             None,
             &FixtureSigner::new(SELLER),
         )
@@ -569,7 +569,7 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
         .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared,
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
             None,
             &FixtureSigner::new(OTHER),
         )
@@ -593,7 +593,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_K_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .with_created_at(created_at);
 
@@ -639,7 +639,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
     let request = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
     let error = sdk
         .listings()
@@ -662,7 +662,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     let first = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_D_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("idem-d")
     .expect("idempotency key");
@@ -697,7 +697,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     let second = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_E_D_TAG, "Changed"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("idem-d")
     .expect("idempotency key");
@@ -741,7 +741,7 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
     let first = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");

@@ -2,19 +2,10 @@ use core::fmt;
 use core::time::Duration;
 
 use radroots_events::draft::RadrootsSignedNostrEvent;
-use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-};
-use radroots_transport_nostr::{
-    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
-    RadrootsRelayTransportError,
-};
 use radroots_transport_publish_protocol::{
     METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
-    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishOutcomeKind,
-    TransportPublishProtocolError, TransportPublishTarget, TransportPublishTargetOutcome,
-    TransportPublishTargetPolicy,
+    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishProtocolError,
+    TransportPublishTarget, TransportPublishTargetOutcome, TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -104,47 +95,6 @@ impl RadrootsdProxyPublishAdapter {
         .await?;
         validate_transport_publish_response_for_request(&request, &response)?;
         Ok(response)
-    }
-}
-
-impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
-    fn publish<'a>(
-        &'a self,
-        request: RadrootsRelayPublishRequest,
-    ) -> futures::future::BoxFuture<
-        'a,
-        Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>,
-    > {
-        Box::pin(async move {
-            let targets = request
-                .targets
-                .relay_strings()
-                .into_iter()
-                .map(|relay| RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, relay))
-                .collect::<Result<Vec<_>, _>>()?;
-            let request = RadrootsdProxyPublishRequest {
-                delivery_policy: delivery_policy_from_relay_request(
-                    targets.len(),
-                    &request.satisfaction_policy,
-                )?,
-                signed_event: request.signed_event,
-                target_policy: TransportPublishTargetPolicy::explicit_targets(
-                    targets
-                        .iter()
-                        .map(transport_publish_target)
-                        .collect::<Result<Vec<_>, _>>()?,
-                ),
-                idempotency_key: None,
-                timeout_ms: self.config.request_timeout_ms,
-            };
-            let response = self
-                .publish_signed_event(request)
-                .await
-                .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
-            let receipt = proxy_relay_receipt_from_response(response)
-                .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
-            Ok(receipt.relays)
-        })
     }
 }
 
@@ -412,109 +362,6 @@ fn validate_explicit_response_targets(
         }
     }
     Ok(())
-}
-
-fn transport_publish_target(
-    target: &RadrootsTransportTarget,
-) -> Result<TransportPublishTarget, RadrootsRelayTransportError> {
-    if target.kind != RadrootsTransportKind::Nostr {
-        return Err(RadrootsRelayTransportError::Transport(format!(
-            "radrootsd proxy relay adapter is Nostr-only and cannot publish {} targets",
-            target.kind.canonical_label()
-        )));
-    }
-    Ok(TransportPublishTarget {
-        transport_kind: target.kind.canonical_label(),
-        endpoint_uri: target.uri.as_str().to_owned(),
-        preview_behavior: None,
-    })
-}
-
-fn delivery_policy_from_relay_request(
-    target_count: usize,
-    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
-) -> Result<TransportPublishDeliveryPolicy, RadrootsRelayTransportError> {
-    let required = satisfaction_policy.required_target_count(target_count)?;
-    let delivery_policy = if required >= target_count {
-        TransportPublishDeliveryPolicy::All
-    } else if required <= 1 {
-        TransportPublishDeliveryPolicy::Any
-    } else {
-        TransportPublishDeliveryPolicy::Quorum { quorum: required }
-    };
-    Ok(delivery_policy)
-}
-
-fn proxy_relay_receipt_from_response(
-    response: TransportPublishEventResponse,
-) -> Result<RadrootsRelayPublishReceipt, RadrootsdError> {
-    response
-        .job
-        .validate()
-        .map_err(RadrootsdError::from_protocol)?;
-    let quorum = response
-        .job
-        .delivery_policy
-        .required_target_count(response.job.target_count);
-    let relays = response
-        .job
-        .targets
-        .into_iter()
-        .filter(|target| target.transport_kind == "nostr")
-        .map(relay_receipt_from_target_outcome)
-        .collect::<Vec<_>>();
-    let attempted_count = relays.iter().filter(|relay| relay.attempted).count();
-    Ok(RadrootsRelayPublishReceipt {
-        event_id: response.job.event_id,
-        attempted_count,
-        accepted_count: response.job.acknowledged_count,
-        retryable_count: response.job.retryable_count,
-        terminal_count: response.job.terminal_count,
-        quorum,
-        quorum_met: response.job.delivery_satisfied,
-        relays,
-    })
-}
-
-fn relay_receipt_from_target_outcome(
-    target: TransportPublishTargetOutcome,
-) -> RadrootsRelayPublishRelayReceipt {
-    RadrootsRelayPublishRelayReceipt {
-        relay_url: target.endpoint_uri,
-        attempted: target.attempted,
-        outcome: RadrootsRelayOutcome {
-            kind: relay_outcome_kind(target.outcome_kind),
-            message: target.message,
-        },
-    }
-}
-
-fn relay_outcome_kind(kind: TransportPublishOutcomeKind) -> RadrootsRelayOutcomeKind {
-    match kind {
-        TransportPublishOutcomeKind::Accepted => RadrootsRelayOutcomeKind::Accepted,
-        TransportPublishOutcomeKind::DuplicateAccepted => {
-            RadrootsRelayOutcomeKind::DuplicateAccepted
-        }
-        TransportPublishOutcomeKind::Blocked => RadrootsRelayOutcomeKind::Blocked,
-        TransportPublishOutcomeKind::RateLimited => RadrootsRelayOutcomeKind::RateLimited,
-        TransportPublishOutcomeKind::Invalid => RadrootsRelayOutcomeKind::Invalid,
-        TransportPublishOutcomeKind::PowRequired => RadrootsRelayOutcomeKind::PowRequired,
-        TransportPublishOutcomeKind::Restricted => RadrootsRelayOutcomeKind::Restricted,
-        TransportPublishOutcomeKind::AuthRequired => RadrootsRelayOutcomeKind::AuthRequired,
-        TransportPublishOutcomeKind::Muted => RadrootsRelayOutcomeKind::Muted,
-        TransportPublishOutcomeKind::Unsupported => RadrootsRelayOutcomeKind::Unsupported,
-        TransportPublishOutcomeKind::PaymentRequired => RadrootsRelayOutcomeKind::PaymentRequired,
-        TransportPublishOutcomeKind::Error => RadrootsRelayOutcomeKind::Error,
-        TransportPublishOutcomeKind::Timeout => RadrootsRelayOutcomeKind::Timeout,
-        TransportPublishOutcomeKind::ConnectionFailed => RadrootsRelayOutcomeKind::ConnectionFailed,
-        TransportPublishOutcomeKind::TargetRejected => RadrootsRelayOutcomeKind::RelayUrlRejected,
-        TransportPublishOutcomeKind::SkippedAlreadyAccepted => {
-            RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
-        }
-        TransportPublishOutcomeKind::DeferredUntilImplemented
-        | TransportPublishOutcomeKind::PreviewUnavailable
-        | TransportPublishOutcomeKind::Unknown => RadrootsRelayOutcomeKind::Unknown,
-    }
 }
 
 #[cfg(test)]

@@ -165,16 +165,6 @@ fn resolved_delivery_plan(
             satisfaction_policy,
             RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
         ),
-        TargetPolicy::UseConfiguredProfile => {
-            let target_policy =
-                TargetSet::from_normalized_nostr_relays(sdk.configured_nostr_relay_urls())?;
-            delivery_plan_from_target_set(
-                "configured_profile",
-                target_policy,
-                satisfaction_policy,
-                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
-            )
-        }
         TargetPolicy::UseTransportProfile => {
             let transport_profile = sdk.transport_profile();
             let target_set = transport_profile.target_set()?.ok_or_else(|| {

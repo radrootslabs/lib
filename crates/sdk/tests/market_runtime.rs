@@ -150,7 +150,7 @@ async fn market_search_refreshes_local_projection_and_reads_fts() {
     let publish = ListingEnqueuePublishRequest::new(
         seller_actor(),
         listing("Blueberries"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("target relays");

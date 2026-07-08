@@ -1,8 +1,5 @@
 use super::*;
 use radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI;
-use radroots_transport_nostr::{
-    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayUrlPolicy,
-};
 use radroots_transport_publish_protocol::{
     NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
     TransportPublishEventResponse, TransportPublishJobStatus, TransportPublishJobView,
@@ -441,102 +438,6 @@ fn decode_jsonrpc_response_validates_envelope_and_errors() {
     ));
 }
 
-#[test]
-fn daemon_outcomes_map_to_relay_transport_receipts() {
-    let payment = proxy_relay_receipt_from_response(TransportPublishEventResponse {
-        deduplicated: false,
-        job: job(TransportPublishOutcomeKind::PaymentRequired),
-    })
-    .expect("payment receipt");
-    assert_eq!(
-        payment.relays[0].outcome.kind,
-        RadrootsRelayOutcomeKind::PaymentRequired
-    );
-    assert_eq!(payment.terminal_count, 1);
-
-    let skipped = proxy_relay_receipt_from_response(TransportPublishEventResponse {
-        deduplicated: true,
-        job: job(TransportPublishOutcomeKind::SkippedAlreadyAccepted),
-    })
-    .expect("skipped receipt");
-    assert_eq!(
-        skipped.relays[0].outcome.kind,
-        RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
-    );
-    assert!(skipped.quorum_met);
-
-    let cases = [
-        (
-            TransportPublishOutcomeKind::Accepted,
-            RadrootsRelayOutcomeKind::Accepted,
-        ),
-        (
-            TransportPublishOutcomeKind::DuplicateAccepted,
-            RadrootsRelayOutcomeKind::DuplicateAccepted,
-        ),
-        (
-            TransportPublishOutcomeKind::Blocked,
-            RadrootsRelayOutcomeKind::Blocked,
-        ),
-        (
-            TransportPublishOutcomeKind::RateLimited,
-            RadrootsRelayOutcomeKind::RateLimited,
-        ),
-        (
-            TransportPublishOutcomeKind::Invalid,
-            RadrootsRelayOutcomeKind::Invalid,
-        ),
-        (
-            TransportPublishOutcomeKind::PowRequired,
-            RadrootsRelayOutcomeKind::PowRequired,
-        ),
-        (
-            TransportPublishOutcomeKind::Restricted,
-            RadrootsRelayOutcomeKind::Restricted,
-        ),
-        (
-            TransportPublishOutcomeKind::AuthRequired,
-            RadrootsRelayOutcomeKind::AuthRequired,
-        ),
-        (
-            TransportPublishOutcomeKind::Muted,
-            RadrootsRelayOutcomeKind::Muted,
-        ),
-        (
-            TransportPublishOutcomeKind::Unsupported,
-            RadrootsRelayOutcomeKind::Unsupported,
-        ),
-        (
-            TransportPublishOutcomeKind::Error,
-            RadrootsRelayOutcomeKind::Error,
-        ),
-        (
-            TransportPublishOutcomeKind::Timeout,
-            RadrootsRelayOutcomeKind::Timeout,
-        ),
-        (
-            TransportPublishOutcomeKind::ConnectionFailed,
-            RadrootsRelayOutcomeKind::ConnectionFailed,
-        ),
-        (
-            TransportPublishOutcomeKind::TargetRejected,
-            RadrootsRelayOutcomeKind::RelayUrlRejected,
-        ),
-        (
-            TransportPublishOutcomeKind::Unknown,
-            RadrootsRelayOutcomeKind::Unknown,
-        ),
-    ];
-    for (proxy_kind, relay_kind) in cases {
-        let receipt = proxy_relay_receipt_from_response(TransportPublishEventResponse {
-            deduplicated: false,
-            job: job(proxy_kind),
-        })
-        .expect("receipt");
-        assert_eq!(receipt.relays[0].outcome.kind, relay_kind);
-    }
-}
-
 #[tokio::test]
 async fn publish_event_posts_transport_publish_jsonrpc() {
     let (endpoint, handle) = spawn_http_server("200 OK", publish_response_json().as_str());
@@ -837,120 +738,6 @@ async fn publish_event_empty_http_error_reports_empty_body() {
 }
 
 #[tokio::test]
-async fn relay_publish_adapter_derives_delivery_policy_and_timeout() {
-    for (target_count, satisfaction_policy, expected_policy) in [
-        (
-            2,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
-            TransportPublishDeliveryPolicy::All,
-        ),
-        (
-            2,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::any_accepted(),
-            TransportPublishDeliveryPolicy::Any,
-        ),
-        (
-            3,
-            radroots_transport::RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
-            TransportPublishDeliveryPolicy::Quorum { quorum: 2 },
-        ),
-    ] {
-        let relays = (0..target_count)
-            .map(|index| format!("wss://relay-{index}.example.com"))
-            .collect::<Vec<_>>();
-        let response_body = explicit_nostr_response_json(relays.clone(), expected_policy.clone());
-        let (endpoint, handle) = spawn_http_server("200 OK", response_body.as_str());
-        let adapter = RadrootsdProxyPublishAdapter::new(
-            RadrootsdProxyConfig::new(endpoint).with_request_timeout_ms(4_000),
-        );
-        let targets =
-            RadrootsRelayTargetSet::new(&relays, RadrootsRelayUrlPolicy::Public).expect("targets");
-
-        let receipts = adapter
-            .publish(
-                RadrootsRelayPublishRequest::new(signed_event(), targets, 10)
-                    .with_satisfaction_policy(satisfaction_policy),
-            )
-            .await
-            .expect("adapter publish");
-
-        assert_eq!(receipts[0].outcome.kind, RadrootsRelayOutcomeKind::Accepted);
-        let recorded = handle.join().expect("server thread");
-        let body: serde_json::Value =
-            serde_json::from_str(recorded.body.as_str()).expect("request body");
-        assert_eq!(body["params"]["timeout_ms"], 4_000);
-        assert_eq!(
-            serde_json::from_value::<TransportPublishDeliveryPolicy>(
-                body["params"]["delivery_policy"].clone()
-            )
-            .expect("delivery policy"),
-            expected_policy
-        );
-    }
-}
-
-#[tokio::test]
-async fn relay_publish_adapter_maps_proxy_errors_to_transport_errors() {
-    let adapter = RadrootsdProxyPublishAdapter::new(
-        RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc").with_timeout(Duration::from_millis(50)),
-    );
-    let targets = RadrootsRelayTargetSet::new(
-        &["wss://relay.example.com".to_owned()],
-        RadrootsRelayUrlPolicy::Public,
-    )
-    .expect("targets");
-
-    let error = adapter
-        .publish(RadrootsRelayPublishRequest::new(
-            signed_event(),
-            targets,
-            1_700_000_000_000,
-        ))
-        .await
-        .expect_err("transport error");
-
-    assert!(matches!(
-        error,
-        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
-            if message.contains("radrootsd")
-    ));
-}
-
-#[test]
-fn relay_proxy_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
-    let target = radroots_transport::RadrootsTransportTarget::new(
-        radroots_transport::RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-    )
-    .expect("Reticulum target");
-
-    let error = transport_publish_target(&target).expect_err("Reticulum rejected");
-
-    assert!(matches!(
-        error,
-        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
-            if message.contains("Nostr-only") && message.contains("reticulum")
-    ));
-}
-
-#[test]
-fn relay_proxy_target_conversion_rejects_proxy_targets_before_daemon_explicit_target() {
-    let target = radroots_transport::RadrootsTransportTarget::new(
-        radroots_transport::RadrootsTransportKind::Proxy,
-        "http://127.0.0.1:8080/rpc",
-    )
-    .expect("proxy target");
-
-    let error = transport_publish_target(&target).expect_err("proxy rejected");
-
-    assert!(matches!(
-        error,
-        radroots_transport_nostr::RadrootsRelayTransportError::Transport(message)
-            if message.contains("Nostr-only") && message.contains("proxy")
-    ));
-}
-
-#[tokio::test]
 async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
     let adapter =
         RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
@@ -1020,36 +807,6 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
     ] {
         assert!(matches!(
             adapter.publish_signed_event(request).await,
-            Err(RadrootsdError::InvalidRequest(_))
-        ));
-    }
-}
-
-#[test]
-fn proxy_relay_receipt_from_response_rejects_invalid_daemon_job_contracts() {
-    let mut empty_job_id = job(TransportPublishOutcomeKind::Accepted);
-    empty_job_id.job_id = " ".to_owned();
-    let mut invalid_event_id = job(TransportPublishOutcomeKind::Accepted);
-    invalid_event_id.event_id = "not-an-event-id".to_owned();
-    let mut invalid_pubkey = job(TransportPublishOutcomeKind::Accepted);
-    invalid_pubkey.pubkey = "not-a-pubkey".to_owned();
-    let mut invalid_kind = job(TransportPublishOutcomeKind::Accepted);
-    invalid_kind.event_kind = 70_000;
-    let mut invalid_quorum = job(TransportPublishOutcomeKind::Accepted);
-    invalid_quorum.delivery_policy = TransportPublishDeliveryPolicy::Quorum { quorum: 0 };
-
-    for job in [
-        empty_job_id,
-        invalid_event_id,
-        invalid_pubkey,
-        invalid_kind,
-        invalid_quorum,
-    ] {
-        assert!(matches!(
-            proxy_relay_receipt_from_response(TransportPublishEventResponse {
-                deduplicated: false,
-                job,
-            }),
             Err(RadrootsdError::InvalidRequest(_))
         ));
     }

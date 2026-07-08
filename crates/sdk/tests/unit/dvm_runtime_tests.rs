@@ -230,7 +230,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     let idempotency_len = idempotency.as_str().len();
     let request = DvmTradeTransitionProofEnqueueRequest::from_prepare(
         prepare.clone(),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("relays")
@@ -254,7 +254,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
         event_id('2'),
         event_id('3'),
         inventory_bins(),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("dvm-proof-request-2")
     .expect("idempotency")
@@ -267,7 +267,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     assert!(matches!(
         DvmTradeTransitionProofEnqueueRequest::from_prepare(
             prepare,
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
         )
         .try_with_nostr_targets(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
@@ -275,7 +275,7 @@ fn enqueue_request_builders_and_ingest_request_builders_are_deterministic() {
     assert!(matches!(
         DvmTradeTransitionProofEnqueueRequest::from_prepare(
             proof_request(service_actor()),
-            TargetPolicy::UseConfiguredProfile,
+            TargetPolicy::use_transport_profile(),
         )
         .try_with_idempotency_key(""),
         Err(RadrootsSdkError::InvalidRequest { .. })

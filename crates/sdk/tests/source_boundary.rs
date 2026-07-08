@@ -1359,12 +1359,13 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
 
     let adapter_source = read_source(manifest_dir.join("src/adapters/radrootsd.rs").as_path());
     assert!(
-        adapter_source.contains("target.kind != RadrootsTransportKind::Nostr"),
-        "src/adapters/radrootsd.rs must keep the relay proxy adapter Nostr-only"
+        !adapter_source
+            .contains("impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter"),
+        "src/adapters/radrootsd.rs must not implement relay publish traits for RadrootsdProxyPublishAdapter"
     );
     assert!(
-        adapter_source.contains("radrootsd proxy relay adapter is Nostr-only"),
-        "src/adapters/radrootsd.rs must return a typed Nostr-only proxy adapter error"
+        !adapter_source.contains("proxy_relay_receipt_from_response"),
+        "src/adapters/radrootsd.rs must not convert typed transport publish jobs into relay receipts"
     );
     assert!(
         !adapter_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
@@ -1401,6 +1402,44 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
             !receipt_source.contains(forbidden),
             "push_proxy_event_receipt must not use production panic path `{forbidden}`"
         );
+    }
+}
+
+#[test]
+fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for relative_path in [
+        "src",
+        "tests",
+        "examples",
+        "packages/events-bindings/src",
+        "packages/events-codec-js/src",
+    ] {
+        let root = manifest_dir.join(relative_path);
+        if !root.exists() {
+            continue;
+        }
+        for path in rust_source_files(root.as_path()) {
+            if path.file_name().and_then(|file_name| file_name.to_str())
+                == Some("source_boundary.rs")
+            {
+                continue;
+            }
+            let source = read_source(path.as_path());
+            for forbidden in [
+                "UseConfiguredProfile",
+                "use_configured_profile",
+                "configured_profile()",
+                "impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter",
+                "proxy_relay_receipt_from_response",
+            ] {
+                assert!(
+                    !source.contains(forbidden),
+                    "{} must not reintroduce removed transport policy or proxy relay bridge surface `{forbidden}`",
+                    path.display()
+                );
+            }
+        }
     }
 }
 

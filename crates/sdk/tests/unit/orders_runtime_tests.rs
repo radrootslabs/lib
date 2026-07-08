@@ -2075,7 +2075,7 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
         RadrootsOrderRevisionOutcome::Accepted,
     );
     let cancellation_payload = cancellation_payload();
-    let policy = TargetPolicy::UseConfiguredProfile;
+    let policy = TargetPolicy::use_transport_profile();
 
     assert_error_display(
         TradeSubmitEnqueueRequest::new(
@@ -4029,7 +4029,7 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
             reason: "not workable".to_owned(),
         },
     );
-    let policy = TargetPolicy::UseConfiguredProfile;
+    let policy = TargetPolicy::use_transport_profile();
 
     let submit_prepare =
         TradeSubmitPrepareRequest::new(buyer_actor(), root_event.clone(), order_request_payload())

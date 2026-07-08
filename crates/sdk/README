@@ -9,7 +9,7 @@ The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
 profile, and no production network publishing. Directory storage is opt-in and creates
 `event_store.sqlite` and `outbox.sqlite` in the selected directory. Configured Nostr relay URLs live
 inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::Hybrid`, and product
-enqueue requests choose them through `TargetPolicy::UseConfiguredProfile`.
+enqueue requests choose the active profile through `TargetPolicy::use_transport_profile()`.
 
 When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
 `RadrootsSdkSignerProvider`. The production signing modes are `local_key` and `myc_nip46`. Product

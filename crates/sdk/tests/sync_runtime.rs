@@ -564,7 +564,7 @@ async fn enqueue_listing_with_policy(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(d_tag, title),
-                TargetPolicy::UseConfiguredProfile,
+                TargetPolicy::use_transport_profile(),
             )
             .try_with_nostr_targets(relays, url_policy)
             .expect("relay targets"),
@@ -2271,7 +2271,7 @@ async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Duplicate Plan Coffee"),
-                TargetPolicy::UseConfiguredProfile,
+                TargetPolicy::use_transport_profile(),
             )
             .try_with_nostr_targets([RELAY_A], NostrRelayUrlPolicy::Public)
             .expect("first targets")
@@ -2557,7 +2557,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Nonlocal Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([NONLOCAL_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("nonlocal ws relay target");
@@ -2567,7 +2567,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Private LAN Coffee"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([PRIVATE_LAN_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("private LAN ws relay target");

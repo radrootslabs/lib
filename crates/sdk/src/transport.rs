@@ -67,16 +67,11 @@ impl NostrRelayUrlPolicy {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TargetPolicy {
-    UseConfiguredProfile,
     Explicit(TargetSet),
     UseTransportProfile,
 }
 
 impl TargetPolicy {
-    pub fn configured_profile() -> Self {
-        Self::UseConfiguredProfile
-    }
-
     pub fn explicit(targets: TargetSet) -> Self {
         Self::Explicit(targets)
     }
@@ -108,11 +103,6 @@ impl serde::Serialize for TargetPolicy {
         S: serde::Serializer,
     {
         match self {
-            Self::UseConfiguredProfile => {
-                let mut state = serializer.serialize_struct("TargetPolicy", 1)?;
-                state.serialize_field("kind", "use_configured_profile")?;
-                state.end()
-            }
             Self::Explicit(targets) => {
                 let mut state = serializer.serialize_struct("TargetPolicy", 3)?;
                 state.serialize_field("kind", "explicit")?;
@@ -202,22 +192,6 @@ impl TargetSet {
 
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
-    }
-
-    pub(crate) fn from_normalized_nostr_relays(
-        relays: Vec<String>,
-    ) -> Result<Self, RadrootsSdkError> {
-        let mut targets = Vec::new();
-        let mut seen = BTreeSet::new();
-        for relay in relays {
-            if seen.insert(relay.clone()) {
-                targets.push(RadrootsTransportTarget::new(
-                    RadrootsTransportKind::Nostr,
-                    relay,
-                )?);
-            }
-        }
-        Self::from_transport_targets(targets)
     }
 
     fn from_transport_targets(

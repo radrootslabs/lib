@@ -609,7 +609,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "North Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("farm-idem-b")
     .expect("idempotency key");
@@ -675,7 +675,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "North Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     );
     let error = sdk
         .farms()
@@ -721,7 +721,7 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY_B, RELAY, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");
@@ -775,7 +775,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "Sync Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("transport targets");
@@ -832,7 +832,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_E_D_TAG, "North Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -867,7 +867,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_F_D_TAG, "Changed Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -941,7 +941,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Queued Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -1003,7 +1003,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let try_key_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Queued Farm"),
-        TargetPolicy::UseConfiguredProfile,
+        TargetPolicy::use_transport_profile(),
     )
     .try_with_idempotency_key("farm-serialized-try-key")
     .expect("try idempotency key");
