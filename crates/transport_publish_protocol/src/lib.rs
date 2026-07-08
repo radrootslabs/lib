@@ -45,6 +45,7 @@ pub enum TransportPublishProtocolError {
     InvalidPreviewBehavior {
         index: usize,
     },
+    InvalidTimeoutMs,
     InvalidReticulumPreviewEndpoint {
         index: usize,
     },
@@ -79,6 +80,9 @@ pub enum TransportPublishProtocolError {
     InvalidJobDeliverySatisfiedState,
     InvalidJobCompletedAt,
     InvalidJobStatusState,
+    InvalidExplicitTargetOutcome {
+        index: usize,
+    },
     InvalidTargetOutcomeKind {
         index: usize,
     },
@@ -118,6 +122,7 @@ impl fmt::Display for TransportPublishProtocolError {
                 f,
                 "transport target {index} preview_behavior is only valid for Reticulum targets"
             ),
+            Self::InvalidTimeoutMs => f.write_str("timeout_ms must be greater than zero"),
             Self::InvalidReticulumPreviewEndpoint { index } => write!(
                 f,
                 "transport target {index} Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
@@ -157,6 +162,10 @@ impl fmt::Display for TransportPublishProtocolError {
                 f.write_str("job completed_at_ms does not match status or request time")
             }
             Self::InvalidJobStatusState => f.write_str("job status does not match target outcomes"),
+            Self::InvalidExplicitTargetOutcome { index } => write!(
+                f,
+                "transport target outcome {index} does not match explicit target policy"
+            ),
             Self::InvalidTargetOutcomeKind { index } => {
                 write!(
                     f,
@@ -415,6 +424,9 @@ impl TransportPublishEventRequest {
         {
             return Err(TransportPublishProtocolError::EmptyIdempotencyKey);
         }
+        if self.timeout_ms == Some(0) {
+            return Err(TransportPublishProtocolError::InvalidTimeoutMs);
+        }
         Ok(())
     }
 }
@@ -595,6 +607,7 @@ impl TransportPublishJobView {
         for (index, target) in self.targets.iter().enumerate() {
             validate_target_outcome(target, index)?;
         }
+        validate_job_target_policy_outcomes(&self.target_policy, &self.targets)?;
         let has_outcomes = !self.targets.is_empty();
         if has_outcomes || completed {
             if self.target_count != self.targets.len() {
@@ -861,6 +874,42 @@ fn validate_target_outcome(
     Ok(())
 }
 
+fn validate_job_target_policy_outcomes(
+    target_policy: &TransportPublishTargetPolicy,
+    outcomes: &[TransportPublishTargetOutcome],
+) -> Result<(), TransportPublishProtocolError> {
+    let TransportPublishTargetPolicy::ExplicitTargets { targets } = target_policy else {
+        return Ok(());
+    };
+    if outcomes.is_empty() {
+        return Ok(());
+    }
+    if targets.len() != outcomes.len() {
+        return Err(
+            TransportPublishProtocolError::InvalidExplicitTargetOutcome {
+                index: outcomes.len().min(targets.len()),
+            },
+        );
+    }
+    let mut matched_targets = Vec::new();
+    matched_targets.resize(targets.len(), false);
+    for (outcome_index, outcome) in outcomes.iter().enumerate() {
+        let Some((target_index, _)) = targets.iter().enumerate().find(|(target_index, target)| {
+            !matched_targets[*target_index]
+                && target.transport_kind == outcome.transport_kind
+                && target.endpoint_uri == outcome.endpoint_uri
+        }) else {
+            return Err(
+                TransportPublishProtocolError::InvalidExplicitTargetOutcome {
+                    index: outcome_index,
+                },
+            );
+        };
+        matched_targets[target_index] = true;
+    }
+    Ok(())
+}
+
 fn validate_job_status_state(
     job: &TransportPublishJobView,
     acknowledged_count: usize,
@@ -942,9 +991,16 @@ mod tests {
     }
 
     fn nostr_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishTargetOutcome {
+        nostr_outcome_for("wss://relay.example.com", outcome_kind)
+    }
+
+    fn nostr_outcome_for(
+        endpoint_uri: impl Into<String>,
+        outcome_kind: TransportPublishOutcomeKind,
+    ) -> TransportPublishTargetOutcome {
         TransportPublishTargetOutcome {
             transport_kind: "nostr".to_owned(),
-            endpoint_uri: "wss://relay.example.com".to_owned(),
+            endpoint_uri: endpoint_uri.into(),
             source: TransportPublishTargetSource::Request,
             attempted: true,
             outcome_kind,
@@ -1211,6 +1267,13 @@ mod tests {
             empty_key.validate(1),
             Err(TransportPublishProtocolError::EmptyIdempotencyKey)
         );
+
+        let mut zero_timeout = request;
+        zero_timeout.timeout_ms = Some(0);
+        assert_eq!(
+            zero_timeout.validate(1),
+            Err(TransportPublishProtocolError::InvalidTimeoutMs)
+        );
     }
 
     fn removed_proxy_kind_string() -> String {
@@ -1279,6 +1342,60 @@ mod tests {
         .validate()
         .expect("preview unavailable job");
         rejected_job().validate().expect("rejected job");
+    }
+
+    #[test]
+    fn job_view_validation_matches_explicit_target_outcomes_by_identity() {
+        job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay-a.example.com"),
+                TransportPublishTarget::nostr("wss://relay-b.example.com"),
+            ]),
+            vec![
+                nostr_outcome_for(
+                    "wss://relay-b.example.com",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+                nostr_outcome_for(
+                    "wss://relay-a.example.com",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+            ],
+        )
+        .validate()
+        .expect("explicit target outcomes match regardless of order");
+
+        let mismatched_endpoint = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay-a.example.com",
+            )]),
+            vec![nostr_outcome_for(
+                "wss://relay-b.example.com",
+                TransportPublishOutcomeKind::Accepted,
+            )],
+        );
+        assert_eq!(
+            mismatched_endpoint.validate(),
+            Err(TransportPublishProtocolError::InvalidExplicitTargetOutcome { index: 0 })
+        );
+
+        let mismatched_count = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay-a.example.com"),
+                TransportPublishTarget::nostr("wss://relay-b.example.com"),
+            ]),
+            vec![nostr_outcome_for(
+                "wss://relay-a.example.com",
+                TransportPublishOutcomeKind::Accepted,
+            )],
+        );
+        assert_eq!(
+            mismatched_count.validate(),
+            Err(TransportPublishProtocolError::InvalidExplicitTargetOutcome { index: 1 })
+        );
     }
 
     #[test]
@@ -1469,6 +1586,10 @@ mod tests {
                 "transport target 4 preview_behavior is only valid for Reticulum targets",
             ),
             (
+                TransportPublishProtocolError::InvalidTimeoutMs,
+                "timeout_ms must be greater than zero",
+            ),
+            (
                 TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 5 },
                 "transport target 5 Reticulum preview endpoint must be reticulum:preview-unavailable",
             ),
@@ -1491,6 +1612,10 @@ mod tests {
             (
                 TransportPublishProtocolError::EmptyJobId,
                 "job id must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidExplicitTargetOutcome { index: 6 },
+                "transport target outcome 6 does not match explicit target policy",
             ),
         ];
 
