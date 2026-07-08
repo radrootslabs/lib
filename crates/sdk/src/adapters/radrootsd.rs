@@ -5,7 +5,7 @@ use radroots_events::draft::RadrootsSignedNostrEvent;
 use radroots_transport_publish_protocol::{
     METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
     TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishProtocolError,
-    TransportPublishTarget, TransportPublishTargetOutcome, TransportPublishTargetPolicy,
+    TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -335,9 +335,6 @@ fn validate_transport_publish_response_for_request(
     if response.job.target_policy != request.target_policy {
         return Err(response_mismatch("target_policy"));
     }
-    if let TransportPublishTargetPolicy::ExplicitTargets { targets } = &request.target_policy {
-        validate_explicit_response_targets(targets, response.job.targets.as_slice())?;
-    }
     Ok(())
 }
 
@@ -345,23 +342,6 @@ fn response_mismatch(field: &str) -> RadrootsdError {
     RadrootsdError::MalformedResponse(format!(
         "radrootsd transport publish response {field} does not match request"
     ))
-}
-
-fn validate_explicit_response_targets(
-    request_targets: &[TransportPublishTarget],
-    response_targets: &[TransportPublishTargetOutcome],
-) -> Result<(), RadrootsdError> {
-    if request_targets.len() != response_targets.len() {
-        return Err(response_mismatch("explicit_targets"));
-    }
-    for (request_target, response_target) in request_targets.iter().zip(response_targets) {
-        if response_target.transport_kind != request_target.transport_kind
-            || response_target.endpoint_uri != request_target.endpoint_uri
-        {
-            return Err(response_mismatch("explicit_targets"));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

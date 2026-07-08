@@ -1,7 +1,7 @@
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
     CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_remaining,
-    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_job,
+    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_receipt,
     push_proxy_claimed_outbox_event, push_proxy_event_receipt,
     transport_publish_target_from_outbox_target,
 };
@@ -702,15 +702,27 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         "radroots-sdk-outbox-7-3-event-id-5"
     );
 
-    let signed_event = ProxyFixtureSigner::new()
-        .sign_frozen_draft(&proxy_frozen_draft("proxy-transport-error-job"))
-        .expect("signed event");
-    let proxy_job = proxy_transport_error_job(&signed_event);
-    assert_eq!(proxy_job.event_id, signed_event.id);
-    assert_eq!(proxy_job.target_count, 1);
-    assert_eq!(proxy_job.retryable_count, 1);
-    assert!(!proxy_job.delivery_satisfied);
-    assert!(proxy_job.targets.is_empty());
+    let (_sdk, claimed) = claimed_proxy_event("proxy-transport-error-receipt").await;
+    let signed_event = claimed.signed_event.as_ref().expect("signed event");
+    let message = proxy_error_message(&RadrootsdError::Http("connection refused".to_owned()));
+    let receipt = proxy_transport_error_receipt(
+        &claimed,
+        signed_event,
+        &TransportPublishDeliveryPolicy::All,
+        message.clone(),
+    )
+    .expect("proxy transport error receipt");
+    assert_eq!(receipt.event_id, signed_event.id);
+    assert_eq!(receipt.final_state, PushOutboxEventState::PublishRetryable);
+    assert_eq!(receipt.retryable_count, 1);
+    assert!(!receipt.quorum_met);
+    assert_eq!(receipt.targets.len(), 1);
+    assert_eq!(
+        receipt.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::ConnectionFailed
+    );
+    assert!(!receipt.targets[0].attempted);
+    assert_eq!(receipt.targets[0].message.as_ref(), Some(&message));
     assert_eq!(
         proxy_error_message(&RadrootsdError::Http("connection refused".to_owned())),
         "radrootsd proxy publish failed: connection refused"
@@ -868,6 +880,19 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
             .expect("transport error job");
 
     assert_eq!(receipt.retryable_count, 1);
+    assert_eq!(receipt.final_state, PushOutboxEventState::PublishRetryable);
+    assert_eq!(receipt.targets.len(), 1);
+    assert_eq!(
+        receipt.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::ConnectionFailed
+    );
+    assert!(!receipt.targets[0].attempted);
+    assert!(
+        receipt.targets[0]
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("radrootsd proxy publish failed"))
+    );
     let stored = sdk
         ._outbox
         .get_event(claimed.outbox_event_id)

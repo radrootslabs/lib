@@ -688,7 +688,7 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
-            receipt.push_event(push_proxy_event_receipt(claimed.outbox_event_id, publish)?);
+            receipt.push_event(publish);
         }
         Ok(receipt)
     }
@@ -770,7 +770,7 @@ async fn push_proxy_claimed_outbox_event(
     claimed: &RadrootsOutboxClaimedEvent,
     next_attempt_delay_ms: i64,
     now_ms: i64,
-) -> Result<TransportPublishJobView, RadrootsSdkError> {
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
     let signed_event = claimed.signed_event.clone().ok_or(
         radroots_transport_nostr::RadrootsRelayTransportError::MissingSignedOutboxEvent(
             claimed.outbox_event_id,
@@ -799,7 +799,7 @@ async fn push_proxy_claimed_outbox_event(
         .await?;
     let request = RadrootsdProxyPublishRequest {
         signed_event: signed_event.clone(),
-        delivery_policy,
+        delivery_policy: delivery_policy.clone(),
         target_policy,
         idempotency_key: Some(proxy_outbox_idempotency_key(
             claimed.outbox_event_id,
@@ -823,11 +823,16 @@ async fn push_proxy_claimed_outbox_event(
                     now_ms,
                 )
                 .await?;
-            return Ok(proxy_transport_error_job(&signed_event));
+            return proxy_transport_error_receipt(
+                claimed,
+                &signed_event,
+                &delivery_policy,
+                message,
+            );
         }
     };
     complete_proxy_publish_attempt(sync, claimed, &publish, next_attempt_delay_ms, now_ms).await?;
-    Ok(publish)
+    push_proxy_event_receipt(claimed.outbox_event_id, publish)
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -836,7 +841,7 @@ async fn fail_proxy_local_validation(
     claimed: &RadrootsOutboxClaimedEvent,
     error: RadrootsSdkError,
     now_ms: i64,
-) -> Result<TransportPublishJobView, RadrootsSdkError> {
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
     let message = error.to_string();
     sync.sdk
         ._outbox
@@ -1211,36 +1216,45 @@ async fn complete_missing_proxy_delivery_target(
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_transport_error_job(
-    event: &radroots_events::draft::RadrootsSignedNostrEvent,
-) -> TransportPublishJobView {
-    TransportPublishJobView {
-        job_id: "radroots-sdk-transport-error".to_owned(),
-        status: TransportPublishJobStatus::DeliveryUnsatisfiedRetryable,
-        terminal: false,
-        delivery_satisfied: false,
-        event_id: event.id.clone(),
-        pubkey: event.pubkey.clone(),
-        event_kind: event.kind,
-        target_policy: TransportPublishTargetPolicy::nostr(
-            NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
-            Vec::new(),
-        ),
-        delivery_policy: TransportPublishDeliveryPolicy::Any,
-        target_count: 1,
-        acknowledged_count: 0,
-        retryable_count: 1,
-        terminal_count: 0,
-        requested_at_ms: 0,
-        completed_at_ms: None,
-        last_error: Some("radrootsd proxy publish failed".to_owned()),
-        targets: Vec::new(),
-    }
+fn proxy_error_message(error: &RadrootsdError) -> String {
+    format!("radrootsd proxy publish failed: {error}")
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_error_message(error: &RadrootsdError) -> String {
-    format!("radrootsd proxy publish failed: {error}")
+fn proxy_transport_error_receipt(
+    claimed: &RadrootsOutboxClaimedEvent,
+    event: &radroots_events::draft::RadrootsSignedNostrEvent,
+    delivery_policy: &TransportPublishDeliveryPolicy,
+    message: String,
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
+    let ready_targets = claimed
+        .delivery_targets
+        .iter()
+        .filter(|target| target.status.is_ready_for_attempt())
+        .collect::<Vec<_>>();
+    let target_count = ready_targets.len();
+    let event_id = push_receipt_event_id(event.id.as_str(), "proxy transport failure event id")?;
+    Ok(PushOutboxEventReceipt {
+        event_id,
+        outbox_event_id: claimed.outbox_event_id,
+        final_state: PushOutboxEventState::PublishRetryable,
+        attempted_count: 0,
+        accepted_count: 0,
+        retryable_count: target_count,
+        terminal_count: 0,
+        quorum: delivery_policy.required_target_count(target_count),
+        quorum_met: false,
+        targets: ready_targets
+            .into_iter()
+            .map(|target| PushOutboxTargetReceipt {
+                transport_kind: target.transport_kind.canonical_label(),
+                endpoint_uri: target.endpoint_uri.as_str().to_owned(),
+                outcome_kind: PushOutboxTargetOutcomeKind::ConnectionFailed,
+                attempted: false,
+                message: Some(message.clone()),
+            })
+            .collect(),
+    })
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]

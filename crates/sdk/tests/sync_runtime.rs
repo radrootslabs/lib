@@ -1817,7 +1817,18 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         retryable.events[0].final_state,
         PushOutboxEventState::PublishRetryable
     );
-    assert!(retryable.events[0].targets.is_empty());
+    assert_eq!(retryable.events[0].targets.len(), 1);
+    assert_eq!(
+        retryable.events[0].targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::ConnectionFailed
+    );
+    assert!(!retryable.events[0].targets[0].attempted);
+    assert!(
+        retryable.events[0].targets[0]
+            .message
+            .as_deref()
+            .is_some_and(|error| error.contains("radrootsd proxy publish failed"))
+    );
     let retryable_status = retryable_sdk
         .sync()
         .status(SyncStatusRequest::new())

@@ -673,6 +673,45 @@ async fn publish_signed_event_rejects_mismatched_explicit_target_response() {
 }
 
 #[tokio::test]
+async fn publish_signed_event_accepts_reordered_explicit_target_outcomes() {
+    let mut response_job = explicit_nostr_job(
+        vec![
+            "wss://relay-a.example.com".to_owned(),
+            "wss://relay-b.example.com".to_owned(),
+        ],
+        TransportPublishDeliveryPolicy::Any,
+    );
+    response_job.targets.reverse();
+    let response_json = publish_response_json_for_job(response_job);
+    let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
+    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+
+    let response = adapter
+        .publish_signed_event(RadrootsdProxyPublishRequest {
+            signed_event: signed_event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay-a.example.com"),
+                TransportPublishTarget::nostr("wss://relay-b.example.com"),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: Some("idem-explicit-reordered-outcomes".to_owned()),
+            timeout_ms: None,
+        })
+        .await
+        .expect("reordered explicit target outcomes");
+
+    assert!(response.job.delivery_satisfied);
+    assert_eq!(
+        response.job.targets[0].endpoint_uri,
+        "wss://relay-b.example.com"
+    );
+    assert_eq!(
+        response.job.targets[1].endpoint_uri,
+        "wss://relay-a.example.com"
+    );
+}
+
+#[tokio::test]
 async fn publish_signed_event_rejects_mismatched_explicit_target_outcomes() {
     let mut response_job = explicit_nostr_job(
         vec!["wss://relay.example.com".to_owned()],
@@ -697,7 +736,7 @@ async fn publish_signed_event_rejects_mismatched_explicit_target_outcomes() {
         .expect_err("explicit target outcome mismatch");
 
     assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
-    assert_message(error, "explicit_targets");
+    assert_message(error, "explicit target policy");
 }
 
 #[tokio::test]
