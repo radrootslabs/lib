@@ -15,6 +15,7 @@ pub enum RadrootsTransportSatisfactionClass {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTransportSatisfactionPolicy {
+    NoWait,
     Any {
         class: RadrootsTransportSatisfactionClass,
     },
@@ -28,6 +29,10 @@ pub enum RadrootsTransportSatisfactionPolicy {
 }
 
 impl RadrootsTransportSatisfactionPolicy {
+    pub fn no_wait() -> Self {
+        Self::NoWait
+    }
+
     pub fn any_accepted() -> Self {
         Self::Any {
             class: RadrootsTransportSatisfactionClass::Accepted,
@@ -66,9 +71,10 @@ impl RadrootsTransportSatisfactionPolicy {
         }
     }
 
-    pub fn class(&self) -> RadrootsTransportSatisfactionClass {
+    pub fn target_satisfaction_class(&self) -> Option<RadrootsTransportSatisfactionClass> {
         match self {
-            Self::Any { class } | Self::All { class } | Self::Quorum { class, .. } => *class,
+            Self::NoWait => None,
+            Self::Any { class } | Self::All { class } | Self::Quorum { class, .. } => Some(*class),
         }
     }
 
@@ -76,10 +82,14 @@ impl RadrootsTransportSatisfactionPolicy {
         &self,
         total_targets: usize,
     ) -> Result<usize, RadrootsTransportError> {
+        if matches!(self, Self::NoWait) {
+            return Ok(0);
+        }
         if total_targets == 0 {
             return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
         }
         match self {
+            Self::NoWait => Ok(0),
             Self::All { .. } => Ok(total_targets),
             Self::Any { .. } => Ok(1),
             Self::Quorum { threshold, .. }

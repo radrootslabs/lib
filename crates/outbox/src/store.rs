@@ -94,7 +94,7 @@ impl RadrootsOutbox {
         .fetch_one(&self.pool)
         .await?;
         let ready_signed_events = sqlx::query(
-            "SELECT COUNT(*) FROM outbox_event AS event WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.status IN ('pending', 'failed_retryable'))",
+            "SELECT COUNT(*) FROM outbox_event AS event WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND plan.status = 'queued' AND target.status IN ('pending', 'failed_retryable'))",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -450,7 +450,7 @@ impl RadrootsOutbox {
     ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = sqlx::query(
-            "SELECT outbox_event_id, state, signed_event_json FROM outbox_event AS event WHERE ((event.state IN ('draft_queued', 'sign_retryable')) OR (event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.status IN ('pending', 'failed_retryable')))) AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) ORDER BY event.created_at_ms, event.outbox_event_id LIMIT 1",
+            "SELECT outbox_event_id, state, signed_event_json FROM outbox_event AS event WHERE ((event.state IN ('draft_queued', 'sign_retryable')) OR (event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND plan.status = 'queued' AND target.status IN ('pending', 'failed_retryable')))) AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) ORDER BY event.created_at_ms, event.outbox_event_id LIMIT 1",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -529,7 +529,7 @@ impl RadrootsOutbox {
     ) -> Result<Option<RadrootsOutboxClaimedEvent>, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let row = sqlx::query(
-            "SELECT event.outbox_event_id, plan.delivery_plan_id FROM outbox_event AS event JOIN outbox_delivery_plan AS plan ON plan.outbox_event_id = event.outbox_event_id JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND target.status IN ('pending', 'failed_retryable') GROUP BY event.outbox_event_id, plan.delivery_plan_id ORDER BY event.created_at_ms, event.outbox_event_id, plan.delivery_plan_id LIMIT 1",
+            "SELECT event.outbox_event_id, plan.delivery_plan_id FROM outbox_event AS event JOIN outbox_delivery_plan AS plan ON plan.outbox_event_id = event.outbox_event_id JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE event.state IN ('signed', 'publish_retryable') AND event.signed_event_json IS NOT NULL AND event.next_attempt_after_ms <= ? AND (event.claim_token IS NULL OR event.claim_expires_at_ms <= ?) AND plan.status = 'queued' AND target.status IN ('pending', 'failed_retryable') GROUP BY event.outbox_event_id, plan.delivery_plan_id ORDER BY event.created_at_ms, event.outbox_event_id, plan.delivery_plan_id LIMIT 1",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -1311,7 +1311,8 @@ fn prepare_delivery_plan(
         return Err(RadrootsOutboxError::EmptyTransportProfileId);
     }
     let targets = input.targets.clone();
-    if targets.is_empty() {
+    let is_no_wait = input.satisfaction_policy == RadrootsTransportSatisfactionPolicy::no_wait();
+    if targets.is_empty() && !is_no_wait {
         return Err(RadrootsOutboxError::EmptyDeliveryTargets);
     }
     validate_unique_targets(&targets)?;
@@ -1344,7 +1345,8 @@ fn prepare_delivery_plan(
                 &prepared_targets,
                 total_target_count,
             ))? as i64;
-    let initial_status = initial_delivery_plan_status(&prepared_targets);
+    let initial_status =
+        initial_delivery_plan_status(&input.satisfaction_policy, &prepared_targets);
     let target_policy_fingerprint = target_policy_fingerprint(
         &input.satisfaction_policy,
         input.reticulum_preview_behavior,
@@ -1423,8 +1425,12 @@ fn initial_delivery_target_status(
 }
 
 fn initial_delivery_plan_status(
+    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
     prepared_targets: &[PreparedDeliveryTarget],
 ) -> RadrootsOutboxDeliveryPlanStatus {
+    if *satisfaction_policy == RadrootsTransportSatisfactionPolicy::no_wait() {
+        return RadrootsOutboxDeliveryPlanStatus::Complete;
+    }
     if prepared_targets
         .iter()
         .any(|target| target.initial_status.is_ready_for_attempt())
@@ -1509,8 +1515,10 @@ async fn insert_or_get_delivery_plan(
         });
     }
 
+    let satisfied_at_ms = (plan.initial_status == RadrootsOutboxDeliveryPlanStatus::Complete)
+        .then_some(created_at_ms);
     let inserted = sqlx::query(
-        "INSERT INTO outbox_delivery_plan(outbox_event_id, transport_profile_id, target_policy_fingerprint, target_policy_version, satisfaction_policy, required_success_count, delivery_plan_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO outbox_delivery_plan(outbox_event_id, transport_profile_id, target_policy_fingerprint, target_policy_version, satisfaction_policy, required_success_count, delivery_plan_idempotency_digest, status, satisfied_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(outbox_event_id)
     .bind(plan.transport_profile_id.as_str())
@@ -1520,6 +1528,7 @@ async fn insert_or_get_delivery_plan(
     .bind(plan.required_success_count)
     .bind(plan.delivery_plan_idempotency_digest.as_str())
     .bind(plan.initial_status.as_str())
+    .bind(satisfied_at_ms)
     .bind(created_at_ms)
     .bind(created_at_ms)
     .execute(&mut **tx)
@@ -1706,7 +1715,7 @@ async fn claim_publish_event_for_plan(
     now_ms: i64,
 ) -> Result<SqliteQueryResult, RadrootsOutboxError> {
     let changed = sqlx::query(
-        "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, active_delivery_plan_id = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = outbox_event.outbox_event_id AND plan.delivery_plan_id = ? AND target.status IN ('pending', 'failed_retryable'))",
+        "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, active_delivery_plan_id = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? AND state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?) AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = outbox_event.outbox_event_id AND plan.delivery_plan_id = ? AND plan.status = 'queued' AND target.status IN ('pending', 'failed_retryable'))",
     )
     .bind(RadrootsOutboxEventState::Publishing.as_str())
     .bind(claim_token)
@@ -1839,7 +1848,7 @@ async fn reticulum_preview_event_ids_pool(
         value: i64::MAX,
     })?;
     let mut query = String::from(
-        "SELECT event.outbox_event_id FROM outbox_event AS event WHERE event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented'))",
+        "SELECT event.outbox_event_id FROM outbox_event AS event WHERE event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND plan.status IN ('queued', 'preview_unavailable', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented'))",
     );
     if outbox_event_id.is_some() {
         query.push_str(" AND event.outbox_event_id = ?");
@@ -1861,7 +1870,7 @@ async fn reticulum_preview_targets_for_event_pool(
     outbox_event_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status IN ('queued', 'preview_unavailable', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
@@ -1887,7 +1896,7 @@ async fn ready_delivery_plan_id_for_event_tx(
     outbox_event_id: i64,
 ) -> Result<Option<i64>, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT plan.delivery_plan_id FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = ? AND target.status IN ('pending', 'failed_retryable') GROUP BY plan.delivery_plan_id ORDER BY plan.delivery_plan_id LIMIT 1",
+        "SELECT plan.delivery_plan_id FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status = 'queued' AND target.status IN ('pending', 'failed_retryable') GROUP BY plan.delivery_plan_id ORDER BY plan.delivery_plan_id LIMIT 1",
     )
     .bind(outbox_event_id)
     .fetch_optional(&mut **tx)
@@ -1947,14 +1956,20 @@ async fn evaluate_delivery_plans(
     let mut any_deferred_until_implemented = false;
     for plan in plans {
         let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
-        let satisfied_count = targets
-            .iter()
-            .filter(|target| {
-                target
-                    .status
-                    .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+        let satisfied_count = plan
+            .satisfaction_policy
+            .target_satisfaction_class()
+            .map(|satisfaction_class| {
+                targets
+                    .iter()
+                    .filter(|target| {
+                        target
+                            .status
+                            .counts_as_transport_satisfaction(satisfaction_class)
+                    })
+                    .count() as i64
             })
-            .count() as i64;
+            .unwrap_or(0);
         let ready_count = targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
@@ -2242,6 +2257,7 @@ fn sha256_json<T: Serialize>(value: &T) -> String {
 
 fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolicy) -> String {
     match policy {
+        RadrootsTransportSatisfactionPolicy::NoWait => "no_wait".to_owned(),
         RadrootsTransportSatisfactionPolicy::All { class } => {
             format!("all_{}", satisfaction_class_storage_value(*class))
         }
@@ -2269,6 +2285,9 @@ fn parse_satisfaction_policy(
     required_success_count: i64,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
     match value {
+        "no_wait" if required_success_count == 0 => {
+            Ok(RadrootsTransportSatisfactionPolicy::no_wait())
+        }
         "all_accepted" => Ok(RadrootsTransportSatisfactionPolicy::all_accepted()),
         "any_accepted" => Ok(RadrootsTransportSatisfactionPolicy::any_accepted()),
         "all_delivered" => Ok(RadrootsTransportSatisfactionPolicy::all_delivered()),
@@ -2634,6 +2653,92 @@ mod tests {
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+    }
+
+    #[tokio::test]
+    async fn no_wait_delivery_plan_persists_directly_and_completes_without_target_satisfaction() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "no wait");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.no_wait.local",
+                    11,
+                    RadrootsTransportSatisfactionPolicy::no_wait(),
+                    vec![
+                        nostr_target(NOSTR_PRIMARY_WSS),
+                        reticulum_target(RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI),
+                    ],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+
+        let stored_policy: String = sqlx::query_scalar(
+            "SELECT satisfaction_policy FROM outbox_delivery_plan WHERE delivery_plan_id = ?",
+        )
+        .bind(receipt.delivery_plan_id)
+        .fetch_one(outbox.pool())
+        .await
+        .expect("stored satisfaction policy");
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        let operation = outbox
+            .get_operation(receipt.operation_id)
+            .await
+            .expect("operation")
+            .expect("operation");
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+
+        assert_eq!(stored_policy, "no_wait");
+        assert_eq!(event.state, RadrootsOutboxEventState::Published);
+        assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
+        assert_eq!(plans.len(), 1);
+        assert_eq!(
+            plans[0].satisfaction_policy,
+            RadrootsTransportSatisfactionPolicy::no_wait()
+        );
+        assert_eq!(plans[0].required_success_count, 0);
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Complete);
+        assert_eq!(plans[0].satisfied_at_ms, Some(1_000));
+        assert_eq!(targets.len(), 2);
+        assert!(targets.iter().all(|target| {
+            !target
+                .status
+                .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
+        }));
+        assert!(
+            outbox
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+                .await
+                .expect("claim")
+                .is_none()
+        );
+        assert!(
+            outbox
+                .reticulum_preview_events(None, 10)
+                .await
+                .expect("reticulum preview events")
+                .is_empty()
+        );
     }
 
     #[tokio::test]

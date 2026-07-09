@@ -132,19 +132,28 @@ fn target_set_rejects_duplicate_fingerprints() {
 
 #[test]
 fn satisfaction_policy_counts_target_statuses() {
+    let no_wait = RadrootsTransportSatisfactionPolicy::no_wait();
     let all = RadrootsTransportSatisfactionPolicy::all_accepted();
     let any = RadrootsTransportSatisfactionPolicy::any_accepted();
     let two = RadrootsTransportSatisfactionPolicy::quorum_accepted(2);
     let delivered = RadrootsTransportSatisfactionPolicy::quorum_delivered(2);
 
+    assert_eq!(no_wait.required_target_count(0).expect("no wait"), 0);
+    assert_eq!(no_wait.required_target_count(3).expect("no wait"), 0);
+    assert!(no_wait.is_satisfied_by(0, 0).expect("no wait"));
+    assert_ne!(no_wait, all);
     assert!(all.is_satisfied_by(2, 2).expect("all"));
     assert!(!all.is_satisfied_by(2, 1).expect("all incomplete"));
     assert!(any.is_satisfied_by(3, 1).expect("any"));
     assert!(two.is_satisfied_by(3, 2).expect("two"));
-    assert_eq!(all.class(), RadrootsTransportSatisfactionClass::Accepted);
+    assert_eq!(no_wait.target_satisfaction_class(), None);
     assert_eq!(
-        delivered.class(),
-        RadrootsTransportSatisfactionClass::Delivered
+        all.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Accepted)
+    );
+    assert_eq!(
+        delivered.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Delivered)
     );
     assert_eq!(
         any.is_satisfied_by(0, 0).expect_err("zero target set"),
@@ -390,6 +399,12 @@ fn target_fingerprints_and_sets_cover_accessors_and_validation() {
 
 #[test]
 fn satisfaction_and_target_status_cover_all_contract_states() {
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::no_wait()
+            .required_target_count(0)
+            .expect("no wait"),
+        0
+    );
     assert_eq!(
         RadrootsTransportSatisfactionPolicy::all_accepted()
             .required_target_count(3)

@@ -287,14 +287,20 @@ async fn publishable_relays(
             active_delivery_plan_id
         )));
     }
-    let satisfied_count = active_targets
-        .iter()
-        .filter(|target| {
-            target
-                .status
-                .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+    let satisfied_count = plan
+        .satisfaction_policy
+        .target_satisfaction_class()
+        .map(|satisfaction_class| {
+            active_targets
+                .iter()
+                .filter(|target| {
+                    target
+                        .status
+                        .counts_as_transport_satisfaction(satisfaction_class)
+                })
+                .count()
         })
-        .count();
+        .unwrap_or(0);
     let required_accept_count =
         (plan.required_success_count as usize).saturating_sub(satisfied_count);
     let mut relays = Vec::new();

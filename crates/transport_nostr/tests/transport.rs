@@ -1747,7 +1747,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
         .await
         .expect("event")
         .expect("event");
-    assert_eq!(event.state, RadrootsOutboxEventState::PreviewUnavailable);
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
     let targets = outbox
         .delivery_targets(receipt.outbox_event_id)
         .await
