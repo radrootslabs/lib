@@ -1,6 +1,7 @@
 use crate::RadrootsMeshError;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use radroots_transport::{RadrootsTransportError, RadrootsTransportMeshScopeId};
 
 pub const RADROOTS_MESH_FRAME_VERSION: u16 = 1;
 
@@ -60,13 +61,14 @@ pub enum RadrootsMeshScope {
 }
 
 impl RadrootsMeshScope {
-    pub fn custom(value: impl Into<String>) -> Result<Self, RadrootsMeshError> {
-        let value = value.into();
-        let canonical = value.trim().to_ascii_lowercase();
-        if canonical.is_empty() {
-            return Err(RadrootsMeshError::EmptyCustomScope);
-        }
-        Ok(Self::Custom(canonical))
+    pub fn custom(value: impl AsRef<str>) -> Result<Self, RadrootsMeshError> {
+        let scope =
+            RadrootsTransportMeshScopeId::parse(value.as_ref()).map_err(|err| match err {
+                RadrootsTransportError::EmptyTargetScope => RadrootsMeshError::EmptyCustomScope,
+                RadrootsTransportError::InvalidTargetScope => RadrootsMeshError::InvalidCustomScope,
+                _ => RadrootsMeshError::InvalidCustomScope,
+            })?;
+        Ok(Self::Custom(scope.as_str().to_string()))
     }
 
     pub fn label(&self) -> &str {

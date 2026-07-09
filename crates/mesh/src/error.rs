@@ -3,6 +3,7 @@ use core::fmt;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsMeshError {
     EmptyCustomScope,
+    InvalidCustomScope,
     EmptyMessageId,
     InvalidTtl,
     PayloadTransmissionForbidden,
@@ -17,6 +18,7 @@ impl fmt::Display for RadrootsMeshError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyCustomScope => f.write_str("mesh custom scope is empty"),
+            Self::InvalidCustomScope => f.write_str("mesh custom scope is invalid"),
             Self::EmptyMessageId => f.write_str("mesh message id is empty"),
             Self::InvalidTtl => f.write_str("mesh frame TTL is invalid"),
             Self::PayloadTransmissionForbidden => {

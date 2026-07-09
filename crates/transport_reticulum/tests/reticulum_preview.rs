@@ -16,6 +16,16 @@ fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
     RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, uri).expect("reticulum target")
 }
 
+fn scoped_reticulum_target(scope: &str) -> RadrootsTransportTarget {
+    RadrootsTransportTarget::new_with_metadata(
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+        Some(RadrootsTransportMeshScopeId::parse(scope).expect("scope")),
+        None,
+    )
+    .expect("scoped reticulum target")
+}
+
 fn nostr_target() -> RadrootsTransportTarget {
     RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
         .expect("nostr target")
@@ -142,11 +152,23 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         agent_endpoint.clone().into_string(),
         "reticulum-agent://localhost:19999"
     );
+    let local_agent_endpoint =
+        RadrootsReticulumPreviewAgentEndpoint::parse("reticulum-agent:local-controller")
+            .expect("local agent endpoint");
+    assert_eq!(
+        local_agent_endpoint.as_str(),
+        "reticulum-agent:local-controller"
+    );
     for invalid_agent in [
         "",
         " reticulum-agent://localhost",
+        "reticulum-agent:",
         "reticulum agent",
         "agent",
+        "https://localhost:19999",
+        "ws://localhost:19999",
+        "reticulum://localhost:19999",
+        "RETICULUM-AGENT://localhost:19999",
     ] {
         assert_eq!(
             RadrootsReticulumPreviewAgentEndpoint::parse(invalid_agent)
@@ -196,6 +218,57 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     assert_eq!(
         profile.agent_endpoint().map(|endpoint| endpoint.as_str()),
         Some("reticulum-agent://localhost:19999")
+    );
+}
+
+#[test]
+fn direct_preview_delivery_accepts_any_typed_reticulum_scope_as_inert_metadata() {
+    let transport = RadrootsReticulumPreviewTransport::default();
+    let request = delivery_request(vec![scoped_reticulum_target("farm-north.preview_1")]);
+    let receipt = transport.deliver(request).expect("delivery receipt");
+
+    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(
+        receipt.target_receipts[0]
+            .target
+            .scope
+            .as_ref()
+            .map(|scope| scope.as_str()),
+        Some("farm-north.preview_1")
+    );
+    assert_eq!(
+        receipt.target_receipts[0].status,
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
+    );
+    assert_eq!(
+        receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+        0
+    );
+
+    let deferred_transport = RadrootsReticulumPreviewTransport::new(
+        RadrootsReticulumPreviewProfile::default()
+            .with_behavior(RadrootsReticulumPreviewBehavior::DeferDeliveryPlans),
+    );
+    let deferred = deferred_transport
+        .deliver(delivery_request(vec![scoped_reticulum_target(
+            "farm-south.preview_2",
+        )]))
+        .expect("deferred delivery receipt");
+    assert_eq!(
+        deferred.target_receipts[0]
+            .target
+            .scope
+            .as_ref()
+            .map(|scope| scope.as_str()),
+        Some("farm-south.preview_2")
+    );
+    assert_eq!(
+        deferred.target_receipts[0].status,
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+    );
+    assert_eq!(
+        deferred.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
+        0
     );
 }
 
@@ -290,6 +363,18 @@ fn non_reticulum_targets_are_rejected_without_nostr_routing() {
         .expect_err("non-reticulum target");
 
     assert_eq!(err, RadrootsReticulumPreviewError::NonReticulumTarget);
+}
+
+#[test]
+fn malformed_reticulum_target_without_typed_scope_is_rejected() {
+    let transport = RadrootsReticulumPreviewTransport::default();
+    let mut target = reticulum_target(RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+    target.scope = None;
+    let err = transport
+        .deliver(delivery_request(vec![target]))
+        .expect_err("missing typed scope");
+
+    assert_eq!(err, RadrootsReticulumPreviewError::InvalidEndpoint);
 }
 
 #[test]
@@ -406,6 +491,25 @@ fn public_models_round_trip_through_serde() {
         serde_json::from_str(&json).expect("profile decode");
 
     assert_eq!(decoded, profile);
+}
+
+#[test]
+fn preview_source_remains_inert_without_runtime_delivery_hooks() {
+    let source = include_str!("../src/lib.rs").to_ascii_lowercase();
+    for forbidden in [
+        "socket",
+        "rnsd",
+        "python",
+        "identity",
+        "send_mesh",
+        "fallback",
+        "nostr",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "Reticulum preview source contains forbidden runtime hook {forbidden}"
+        );
+    }
 }
 
 #[test]

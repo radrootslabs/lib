@@ -77,8 +77,8 @@ fn all_frame_types_round_trip_with_stable_codes_and_labels() {
 
 #[test]
 fn custom_scope_has_explicit_namespace() {
-    let scope = RadrootsMeshScope::custom(" Farm-North ").expect("custom scope");
-    assert_eq!(scope.label(), "farm-north");
+    let scope = RadrootsMeshScope::custom("farm-north.preview_1").expect("custom scope");
+    assert_eq!(scope.label(), "farm-north.preview_1");
     let frame = RadrootsMeshFrame::new(
         RadrootsMeshFrameType::RouteProbe,
         scope,
@@ -89,14 +89,37 @@ fn custom_scope_has_explicit_namespace() {
     let encoded = encode_mesh_frame_cbor(&frame).expect("encode custom scope");
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode custom scope");
 
-    assert_eq!(decoded.scope_id.cbor_label(), "custom:farm-north");
+    assert_eq!(decoded.scope_id.cbor_label(), "custom:farm-north.preview_1");
+    assert_eq!(encode_mesh_frame_cbor(&decoded).expect("reencode"), encoded);
 }
 
 #[test]
-fn mesh_parsers_and_validation_reject_unknown_or_empty_values() {
+fn mesh_parsers_and_validation_reject_unknown_empty_or_invalid_values() {
     assert_eq!(
-        RadrootsMeshScope::custom(" ").expect_err("empty custom scope"),
+        RadrootsMeshScope::custom("").expect_err("empty custom scope"),
         RadrootsMeshError::EmptyCustomScope
+    );
+    for invalid in [
+        " ",
+        " farm-north",
+        "farm-north ",
+        "farm north",
+        "farm/north",
+        "farm:north",
+        "farm\nnorth",
+    ] {
+        assert_eq!(
+            RadrootsMeshScope::custom(invalid).expect_err("invalid custom scope"),
+            RadrootsMeshError::InvalidCustomScope
+        );
+    }
+    assert_eq!(
+        RadrootsMeshScope::parse("custom:").expect_err("empty parsed custom scope"),
+        RadrootsMeshError::EmptyCustomScope
+    );
+    assert_eq!(
+        RadrootsMeshScope::parse("custom:farm north").expect_err("invalid parsed custom scope"),
+        RadrootsMeshError::InvalidCustomScope
     );
     assert_eq!(
         RadrootsMeshScope::parse("unscoped").expect_err("unknown scope"),
@@ -140,6 +163,10 @@ fn mesh_errors_have_stable_display_strings() {
         (
             RadrootsMeshError::EmptyCustomScope,
             "mesh custom scope is empty",
+        ),
+        (
+            RadrootsMeshError::InvalidCustomScope,
+            "mesh custom scope is invalid",
         ),
         (
             RadrootsMeshError::EmptyMessageId,
@@ -272,6 +299,19 @@ fn decoder_rejects_previous_five_field_frame_shape() {
 #[test]
 fn decoder_rejects_malformed_cbor_shapes() {
     let encoded = encode_mesh_frame_cbor(&default_frame()).expect("encode default");
+    let invalid_custom_scope = default_encoded_with_replacement(
+        6,
+        12,
+        [
+            0x70, b'c', b'u', b's', b't', b'o', b'm', b':', b'f', b'a', b'r', b'm', b' ', b'n',
+            b'o', b'r', b't',
+        ],
+    );
+    assert_eq!(
+        decode_mesh_frame_cbor(&invalid_custom_scope).expect_err("invalid custom scope"),
+        RadrootsMeshError::InvalidCustomScope
+    );
+
     let mut unsupported_version = encoded.clone();
     unsupported_version[2] = 2;
     assert_eq!(

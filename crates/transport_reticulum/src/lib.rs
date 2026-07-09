@@ -8,15 +8,16 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
-    RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
+const RETICULUM_AGENT_ENDPOINT_PREFIX: &str = "reticulum-agent:";
 const UNAVAILABLE_CODE: &str = "transport_unavailable";
 const DEFERRED_CODE: &str = "deferred_until_implemented";
 const DEFERRED_MESSAGE: &str = "Reticulum preview delivery is deferred until implementation";
@@ -87,7 +88,8 @@ impl RadrootsReticulumPreviewAgentEndpoint {
             || uri
                 .chars()
                 .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
-            || uri.find(':').is_none()
+            || !uri.starts_with(RETICULUM_AGENT_ENDPOINT_PREFIX)
+            || uri.len() == RETICULUM_AGENT_ENDPOINT_PREFIX.len()
         {
             return Err(RadrootsReticulumPreviewError::InvalidAgentEndpoint);
         }
@@ -347,9 +349,7 @@ fn ensure_reticulum_targets(
         if target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
             return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
         }
-        if target.scope.as_ref().map(|scope| scope.as_str())
-            != Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
-        {
+        if target.scope.is_none() {
             return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
         }
     }
