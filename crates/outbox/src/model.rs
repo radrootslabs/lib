@@ -457,6 +457,12 @@ pub struct RadrootsOutboxDeliveryTargetRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxReticulumPreviewEventRecord {
+    pub event: RadrootsOutboxEventRecord,
+    pub targets: Vec<RadrootsOutboxDeliveryTargetRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxDeliveryAttemptRecord {
     pub delivery_attempt_id: i64,
     pub delivery_plan_id: i64,

@@ -10,8 +10,8 @@ use crate::model::{
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
     RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxReticulumPreviewEventRecord,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
@@ -408,6 +408,30 @@ impl RadrootsOutbox {
         outbox_event_id: i64,
     ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
         delivery_targets_for_event_pool(&self.pool, outbox_event_id).await
+    }
+
+    pub async fn reticulum_preview_events(
+        &self,
+        outbox_event_id: Option<i64>,
+        limit: usize,
+    ) -> Result<Vec<RadrootsOutboxReticulumPreviewEventRecord>, RadrootsOutboxError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let outbox_event_ids =
+            reticulum_preview_event_ids_pool(&self.pool, outbox_event_id, limit).await?;
+        let mut records = Vec::with_capacity(outbox_event_ids.len());
+        for outbox_event_id in outbox_event_ids {
+            let Some(event) = self.get_event(outbox_event_id).await? else {
+                continue;
+            };
+            let targets =
+                reticulum_preview_targets_for_event_pool(&self.pool, outbox_event_id).await?;
+            if !targets.is_empty() {
+                records.push(RadrootsOutboxReticulumPreviewEventRecord { event, targets });
+            }
+        }
+        Ok(records)
     }
 
     pub async fn delivery_attempts(
@@ -1798,6 +1822,46 @@ async fn delivery_targets_for_event_pool(
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
         "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
+    )
+    .bind(outbox_event_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(delivery_target_from_row).collect()
+}
+
+async fn reticulum_preview_event_ids_pool(
+    pool: &SqlitePool,
+    outbox_event_id: Option<i64>,
+    limit: usize,
+) -> Result<Vec<i64>, RadrootsOutboxError> {
+    let limit = i64::try_from(limit).map_err(|_| RadrootsOutboxError::IntegerRange {
+        field: "reticulum_preview_events.limit",
+        value: i64::MAX,
+    })?;
+    let mut query = String::from(
+        "SELECT event.outbox_event_id FROM outbox_event AS event WHERE event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented'))",
+    );
+    if outbox_event_id.is_some() {
+        query.push_str(" AND event.outbox_event_id = ?");
+    }
+    query.push_str(" ORDER BY event.created_at_ms, event.outbox_event_id LIMIT ?");
+    let mut query = sqlx::query(query.as_str());
+    if let Some(outbox_event_id) = outbox_event_id {
+        query = query.bind(outbox_event_id);
+    }
+    let rows = query.bind(limit).fetch_all(pool).await?;
+    rows.into_iter()
+        .map(|row| row.try_get("outbox_event_id"))
+        .collect::<Result<Vec<_>, sqlx::Error>>()
+        .map_err(Into::into)
+}
+
+async fn reticulum_preview_targets_for_event_pool(
+    pool: &SqlitePool,
+    outbox_event_id: i64,
+) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
+    let rows = sqlx::query(
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
@@ -3501,6 +3565,112 @@ mod tests {
         assert_ne!(
             receipt.delivery_plan_idempotency_digest,
             default_behavior_preflight.delivery_plan_idempotency_digest
+        );
+    }
+
+    #[tokio::test]
+    async fn reticulum_preview_events_report_preview_and_deferred_records() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let preview_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum preview record");
+        let preview_signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &preview_draft)
+                .expect("preview signed event");
+        let preview = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                preview_draft,
+                preview_signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.reticulum.preview",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![reticulum_target("reticulum:preview-unavailable")],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("preview enqueue");
+        let deferred_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum deferred record");
+        let deferred_signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &deferred_draft)
+                .expect("deferred signed event");
+        let deferred = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                deferred_draft,
+                deferred_signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.reticulum.preview",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![reticulum_target("reticulum:preview-unavailable")],
+                )
+                .with_reticulum_preview_behavior(
+                    RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans,
+                ),
+                true,
+                1_008,
+                1_001,
+            ))
+            .await
+            .expect("deferred enqueue");
+
+        let records = outbox
+            .reticulum_preview_events(None, 10)
+            .await
+            .expect("records");
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].event.outbox_event_id, preview.outbox_event_id);
+        assert_eq!(
+            records[0].event.state,
+            RadrootsOutboxEventState::PreviewUnavailable
+        );
+        assert_eq!(records[0].targets.len(), 1);
+        assert_eq!(
+            records[0].targets[0].status,
+            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        );
+        assert_eq!(records[0].targets[0].attempt_count, 0);
+        assert_eq!(records[1].event.outbox_event_id, deferred.outbox_event_id);
+        assert_eq!(
+            records[1].event.state,
+            RadrootsOutboxEventState::DeferredUntilImplemented
+        );
+        assert_eq!(records[1].targets.len(), 1);
+        assert_eq!(
+            records[1].targets[0].status,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+        );
+        assert_eq!(records[1].targets[0].attempt_count, 0);
+
+        let limited = outbox
+            .reticulum_preview_events(None, 1)
+            .await
+            .expect("limited");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].event.outbox_event_id, preview.outbox_event_id);
+
+        let specific = outbox
+            .reticulum_preview_events(Some(deferred.outbox_event_id), 10)
+            .await
+            .expect("specific");
+        assert_eq!(specific.len(), 1);
+        assert_eq!(specific[0].event.outbox_event_id, deferred.outbox_event_id);
+        assert!(
+            outbox
+                .reticulum_preview_events(Some(999), 10)
+                .await
+                .expect("missing")
+                .is_empty()
+        );
+        assert!(
+            outbox
+                .reticulum_preview_events(None, 0)
+                .await
+                .expect("zero")
+                .is_empty()
         );
     }
 

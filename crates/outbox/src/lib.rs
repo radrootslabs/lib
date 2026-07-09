@@ -16,7 +16,7 @@ pub use model::{
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
     RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxReticulumPreviewEventRecord,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
 pub use store::RadrootsOutbox;
