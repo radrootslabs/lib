@@ -28,6 +28,7 @@ const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
 const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
+const ALLOWED_RETICULUM_PREVIEW_PACKAGE: &str = "radroots-transport-reticulum";
 
 #[derive(Debug, Deserialize)]
 struct PnpmPackEntry {
@@ -50,6 +51,16 @@ struct PackedPackage {
 #[derive(Debug)]
 struct NpmPackFile {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadata {
+    packages: Vec<CargoMetadataPackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadataPackage {
+    name: String,
 }
 
 pub fn check() -> Result<(), String> {
@@ -100,18 +111,244 @@ fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    let dependencies = manifest
-        .get("dependencies")
-        .and_then(toml::Value::as_table)
-        .ok_or_else(|| format!("{} must define [dependencies]", path.display()))?;
-    for dependency in ["rns", "rnsd", "reticulum", "python"] {
-        if dependencies.contains_key(dependency) {
+    check_sdk_workspace_reticulum_dependency_boundaries(root)?;
+    Ok(())
+}
+
+fn check_sdk_workspace_reticulum_dependency_boundaries(root: &Path) -> Result<(), String> {
+    for path in sdk_manifest_paths(root)? {
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let manifest = raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let manifest_label = relative_path_string(root, &path)?;
+        check_manifest_reticulum_dependency_boundaries(&manifest, &manifest_label)?;
+    }
+    check_cargo_lock_reticulum_package_names(root)?;
+    check_cargo_metadata_reticulum_package_names(root)?;
+    Ok(())
+}
+
+fn sdk_manifest_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let root_manifest_path = root.join("Cargo.toml");
+    let raw = fs::read_to_string(&root_manifest_path)
+        .map_err(|error| format!("failed to read {}: {error}", root_manifest_path.display()))?;
+    let manifest = raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("failed to parse {}: {error}", root_manifest_path.display()))?;
+    let members = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("members"))
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "Cargo.toml must define workspace.members".to_owned())?;
+    let mut paths = Vec::with_capacity(members.len() + 1);
+    paths.push(root_manifest_path);
+    for member in members {
+        let member = member
+            .as_str()
+            .ok_or_else(|| "Cargo.toml workspace.members entries must be strings".to_owned())?;
+        if member.contains('*') {
             return Err(format!(
-                "crates/sdk/Cargo.toml must not add real Reticulum runtime dependency `{dependency}`"
+                "Cargo.toml workspace member globs are not supported by the SDK Reticulum gate: {member}"
             ));
+        }
+        paths.push(root.join(member).join("Cargo.toml"));
+    }
+    Ok(paths)
+}
+
+fn check_manifest_reticulum_dependency_boundaries(
+    manifest: &toml::Value,
+    manifest_label: &str,
+) -> Result<(), String> {
+    let table = manifest
+        .as_table()
+        .ok_or_else(|| format!("{manifest_label} must parse as a TOML table"))?;
+    inspect_manifest_table_for_reticulum_dependencies(table, manifest_label, &mut Vec::new())
+}
+
+fn inspect_manifest_table_for_reticulum_dependencies(
+    table: &toml::map::Map<String, toml::Value>,
+    manifest_label: &str,
+    path: &mut Vec<String>,
+) -> Result<(), String> {
+    for (key, value) in table {
+        path.push(key.clone());
+        if is_dependency_section_key(key) {
+            let dependencies = value.as_table().ok_or_else(|| {
+                format!(
+                    "{manifest_label} section `{}` must be a table",
+                    path.join(".")
+                )
+            })?;
+            check_reticulum_dependency_table(dependencies, manifest_label, path)?;
+            path.pop();
+            continue;
+        }
+        if key == "features" {
+            let features = value.as_table().ok_or_else(|| {
+                format!(
+                    "{manifest_label} section `{}` must be a table",
+                    path.join(".")
+                )
+            })?;
+            check_reticulum_feature_table(features, manifest_label, path)?;
+        }
+        if let Some(nested) = value.as_table() {
+            inspect_manifest_table_for_reticulum_dependencies(nested, manifest_label, path)?;
+        }
+        path.pop();
+    }
+    Ok(())
+}
+
+fn is_dependency_section_key(key: &str) -> bool {
+    matches!(
+        key,
+        "dependencies" | "dev-dependencies" | "build-dependencies"
+    )
+}
+
+fn check_reticulum_dependency_table(
+    dependencies: &toml::map::Map<String, toml::Value>,
+    manifest_label: &str,
+    path: &[String],
+) -> Result<(), String> {
+    let section = path.join(".");
+    for (dependency_key, dependency_spec) in dependencies {
+        reject_forbidden_reticulum_runtime_name(dependency_key, manifest_label, &section)?;
+        if let Some(package_name) = dependency_spec
+            .as_table()
+            .and_then(|table| table.get("package"))
+            .and_then(toml::Value::as_str)
+        {
+            reject_forbidden_reticulum_runtime_name(package_name, manifest_label, &section)?;
         }
     }
     Ok(())
+}
+
+fn check_reticulum_feature_table(
+    features: &toml::map::Map<String, toml::Value>,
+    manifest_label: &str,
+    path: &[String],
+) -> Result<(), String> {
+    let section = path.join(".");
+    for (feature_name, entries) in features {
+        if feature_name == "transport-reticulum-preview" || feature_name == "reticulum-runtime" {
+            return Err(format!(
+                "{manifest_label} feature `{feature_name}` must not introduce a Reticulum preview alias"
+            ));
+        }
+        reject_forbidden_reticulum_runtime_name(feature_name, manifest_label, &section)?;
+        let entries = entries
+            .as_array()
+            .ok_or_else(|| format!("{manifest_label} feature `{feature_name}` must be an array"))?;
+        for entry in entries {
+            let entry = entry.as_str().ok_or_else(|| {
+                format!("{manifest_label} feature `{feature_name}` entries must be strings")
+            })?;
+            check_reticulum_feature_entry(entry, manifest_label, feature_name)?;
+        }
+    }
+    Ok(())
+}
+
+fn check_reticulum_feature_entry(
+    entry: &str,
+    manifest_label: &str,
+    feature_name: &str,
+) -> Result<(), String> {
+    let feature_dependency = entry.strip_prefix("dep:").unwrap_or(entry);
+    let (dependency_name, dependency_feature) = feature_dependency
+        .split_once('/')
+        .map_or((feature_dependency, None), |(name, feature)| {
+            (name, Some(feature))
+        });
+    let normalized_dependency = normalize_package_name(dependency_name);
+    if normalized_dependency == ALLOWED_RETICULUM_PREVIEW_PACKAGE && dependency_feature.is_some() {
+        return Err(format!(
+            "{manifest_label} feature `{feature_name}` must not enable Reticulum preview crate features through `{entry}`"
+        ));
+    }
+    reject_forbidden_reticulum_runtime_name(dependency_name, manifest_label, "features")?;
+    Ok(())
+}
+
+fn check_cargo_lock_reticulum_package_names(root: &Path) -> Result<(), String> {
+    let path = root.join("Cargo.lock");
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let lock = raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    let packages = lock
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "Cargo.lock must define package entries".to_owned())?;
+    for package in packages {
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| "Cargo.lock package entry must define name".to_owned())?;
+        reject_forbidden_reticulum_runtime_name(name, "Cargo.lock", "package")?;
+    }
+    Ok(())
+}
+
+fn check_cargo_metadata_reticulum_package_names(root: &Path) -> Result<(), String> {
+    let output = Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--all-features"])
+        .current_dir(root)
+        .output()
+        .map_err(|error| format!("failed to run cargo metadata: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo metadata failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let metadata = serde_json::from_slice::<CargoMetadata>(&output.stdout)
+        .map_err(|error| format!("failed to parse cargo metadata: {error}"))?;
+    for package in metadata.packages {
+        reject_forbidden_reticulum_runtime_name(&package.name, "cargo metadata", "packages")?;
+    }
+    Ok(())
+}
+
+fn reject_forbidden_reticulum_runtime_name(
+    name: &str,
+    manifest_label: &str,
+    section: &str,
+) -> Result<(), String> {
+    if is_forbidden_reticulum_runtime_name(name) {
+        Err(format!(
+            "{manifest_label} section `{section}` must not reference real Reticulum or Python runtime dependency `{name}`"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn is_forbidden_reticulum_runtime_name(name: &str) -> bool {
+    let normalized = normalize_package_name(name);
+    if normalized == ALLOWED_RETICULUM_PREVIEW_PACKAGE {
+        return false;
+    }
+    matches!(
+        normalized.as_str(),
+        "rns" | "rnsd" | "reticulum" | "reticulum-rs" | "python" | "pyo3"
+    ) || normalized.contains("reticulum")
+        || normalized.starts_with("rns-")
+        || normalized.contains("-rns-")
+        || normalized.ends_with("-rns")
+        || normalized.starts_with("python-")
+        || normalized.starts_with("pyo3-")
+}
+
+fn normalize_package_name(name: &str) -> String {
+    name.to_ascii_lowercase().replace('_', "-")
 }
 
 fn feature_entries<'features>(
@@ -1438,16 +1675,130 @@ mod tests {
 
     use super::{
         PackedPackage, check_binding_crate_sources, check_generated_package_artifact_inventory,
-        check_no_typescript_files, check_package_distribution_metadata, check_package_index,
-        check_package_json, check_package_surface_artifacts, check_packed_package_json,
+        check_manifest_reticulum_dependency_boundaries, check_no_typescript_files,
+        check_package_distribution_metadata, check_package_index, check_package_json,
+        check_package_surface_artifacts, check_packed_package_json, check_reticulum_feature_entry,
         check_wasm_package_surface, consumer_smoke_script, expected_packed_dist_files,
-        normalized_package_path, parse_pnpm_pack_entry, read_packed_package_json,
-        validate_npm_pack_payload, validate_packed_dist_inventory,
+        is_forbidden_reticulum_runtime_name, normalized_package_path, parse_pnpm_pack_entry,
+        read_packed_package_json, validate_npm_pack_payload, validate_packed_dist_inventory,
     };
 
     #[test]
     fn package_skeleton_is_valid() {
         validate_package_matrix().expect("package matrix validates");
+    }
+
+    #[test]
+    fn reticulum_gate_allows_first_party_preview_dependency_only() {
+        let manifest = manifest_value(
+            r#"
+[package]
+name = "radroots_sdk"
+
+[features]
+runtime = ["dep:radroots_transport_reticulum"]
+
+[dependencies]
+radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
+"#,
+        );
+
+        check_manifest_reticulum_dependency_boundaries(&manifest, "crates/sdk/Cargo.toml")
+            .expect("first-party preview dependency is allowed");
+    }
+
+    #[test]
+    fn reticulum_gate_rejects_workspace_package_alias_to_real_runtime() {
+        let manifest = manifest_value(
+            r#"
+[workspace.dependencies]
+rr_mesh = { package = "reticulum", version = "1" }
+"#,
+        );
+
+        let error = check_manifest_reticulum_dependency_boundaries(&manifest, "Cargo.toml")
+            .expect_err("Reticulum package alias is rejected");
+
+        assert!(error.contains("reticulum"));
+        assert!(error.contains("workspace.dependencies"));
+    }
+
+    #[test]
+    fn reticulum_gate_rejects_build_dependency_alias_to_python_binding() {
+        let manifest = manifest_value(
+            r#"
+[package]
+name = "radroots_sdk"
+
+[build-dependencies]
+ffi_bridge = { package = "pyo3", version = "0.24" }
+"#,
+        );
+
+        let error =
+            check_manifest_reticulum_dependency_boundaries(&manifest, "crates/sdk/Cargo.toml")
+                .expect_err("Python runtime binding package alias is rejected");
+
+        assert!(error.contains("pyo3"));
+        assert!(error.contains("build-dependencies"));
+    }
+
+    #[test]
+    fn reticulum_gate_rejects_reticulum_feature_aliases_and_runtime_features() {
+        let alias_manifest = manifest_value(
+            r#"
+[package]
+name = "radroots_sdk"
+
+[features]
+transport-reticulum-preview = []
+"#,
+        );
+        let alias_error = check_manifest_reticulum_dependency_boundaries(
+            &alias_manifest,
+            "crates/sdk/Cargo.toml",
+        )
+        .expect_err("Reticulum feature alias is rejected");
+
+        assert!(alias_error.contains("transport-reticulum-preview"));
+
+        let entry_error = check_reticulum_feature_entry(
+            "radroots_transport_reticulum/client",
+            "crates/sdk/Cargo.toml",
+            "runtime",
+        )
+        .expect_err("Reticulum preview crate runtime feature is rejected");
+
+        assert!(entry_error.contains("radroots_transport_reticulum/client"));
+    }
+
+    #[test]
+    fn reticulum_gate_package_name_classifier_is_runtime_scoped() {
+        for name in [
+            "reticulum",
+            "reticulum-rs",
+            "rns",
+            "rns-client",
+            "python",
+            "python-runtime",
+            "pyo3",
+            "pyo3-ffi",
+        ] {
+            assert!(
+                is_forbidden_reticulum_runtime_name(name),
+                "{name} must be forbidden"
+            );
+        }
+        for name in [
+            "radroots_transport_reticulum",
+            "radroots-transport-reticulum",
+            "dto_bindgen_backend_python",
+        ] {
+            assert!(
+                !is_forbidden_reticulum_runtime_name(name),
+                "{name} must be allowed"
+            );
+        }
     }
 
     #[test]
@@ -2305,5 +2656,9 @@ mod tests {
 
     fn package_json_value(raw: &str) -> serde_json::Value {
         serde_json::from_str(raw).expect("package json parses")
+    }
+
+    fn manifest_value(raw: &str) -> toml::Value {
+        raw.parse::<toml::Value>().expect("manifest parses")
     }
 }

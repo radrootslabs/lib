@@ -1679,10 +1679,33 @@ fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
         "dep:rns",
         "dep:rnsd",
         "dep:reticulum",
+        "dep:pyo3",
+        "package = \"reticulum\"",
+        "package = \"pyo3\"",
     ] {
         assert!(
             !manifest_source.contains(forbidden),
             "SDK feature matrix must not introduce Reticulum preview alias or real runtime dependency `{forbidden}`"
+        );
+    }
+
+    let xtask_check_source = read_source(
+        manifest_dir
+            .join("../../tools/xtask/src/check.rs")
+            .as_path(),
+    );
+    for required in [
+        "check_sdk_workspace_reticulum_dependency_boundaries",
+        "check_manifest_reticulum_dependency_boundaries",
+        "check_cargo_lock_reticulum_package_names",
+        "check_cargo_metadata_reticulum_package_names",
+        "package = \"reticulum\"",
+        "package = \"pyo3\"",
+        "dto_bindgen_backend_python",
+    ] {
+        assert!(
+            xtask_check_source.contains(required),
+            "SDK xtask Reticulum release gate must retain package-graph bypass witness `{required}`"
         );
     }
 
