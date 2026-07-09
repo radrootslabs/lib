@@ -849,7 +849,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         buyer_actor(),
         listing_event_ptr(),
         order,
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3332,7 +3332,7 @@ async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() 
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-wrong-signer"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3382,7 +3382,7 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3469,7 +3469,7 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-sync"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3533,7 +3533,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-a"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3550,7 +3550,7 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-conflict-b"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3642,7 +3642,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-serialized-enqueue"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -3661,13 +3661,17 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
             "kind": "explicit",
             "targets": [
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
                 },
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY_B,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                 }
             ],
@@ -3692,7 +3696,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         buyer_actor(),
         listing_event_ptr(),
         order_request("order-submit-try-idempotency"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4663,7 +4667,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-serialized-enqueue"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4682,13 +4686,17 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
             "kind": "explicit",
             "targets": [
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
                 },
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY_B,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                 }
             ],
@@ -4713,7 +4721,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-try-idempotency"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4866,7 +4874,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4883,13 +4891,17 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             "kind": "explicit",
             "targets": [
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
                 },
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": RELAY_B,
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                 }
             ],
@@ -4910,7 +4922,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         proposal.clone(),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4953,7 +4965,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         revision_decision,
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -4982,7 +4994,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             &previous_event_id,
             RadrootsOrderRevisionOutcome::Accepted,
         ),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5014,7 +5026,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         cancellation,
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5043,7 +5055,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
         root_event.clone(),
         previous_event.clone(),
         order_cancellation("order-revision-dto"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5085,7 +5097,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-accept"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5192,7 +5204,7 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
         seller_actor(),
         request_event_ptr(&request_event),
         decision,
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5236,7 +5248,7 @@ async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation
         seller_actor(),
         missing_request,
         order_decision("order-decision-missing-request"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5284,7 +5296,7 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
         seller_actor(),
         request_event_ptr(&request_event),
         order_decision("order-decision-wrong-signer"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5339,7 +5351,7 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         seller_actor(),
         request_event_ptr(&request_event),
         decline,
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
@@ -5549,7 +5561,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal,
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5592,7 +5604,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-pending-revision"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5620,7 +5632,7 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 blocked_proposal,
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5667,7 +5679,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 proposal.clone(),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5692,7 +5704,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 declined_revision,
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5742,7 +5754,7 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&proposal_receipt.signed_event_id),
                 second_decision,
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5826,7 +5838,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
                 request_event_ptr(&request_event),
                 request_event_ptr(&request_event),
                 order_cancellation("order-lifecycle-cancel"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5882,7 +5894,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                     &request_event_id,
                     &request_event_id,
                 ),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5913,7 +5925,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 seller_actor(),
                 request_event_ptr(&request_event),
                 order_decision("order-lifecycle-invalid"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5940,7 +5952,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 revision_without_proposal,
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
@@ -5963,7 +5975,7 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
                 request_event_ptr(&request_event),
                 order_event_ptr(&decision_receipt.signed_event_id),
                 order_cancellation("order-lifecycle-invalid"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )

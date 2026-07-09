@@ -611,7 +611,7 @@ async fn enqueue_listing_with_policy(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(d_tag, title),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             )
             .try_with_nostr_targets(relays, url_policy)
             .expect("relay targets"),
@@ -660,12 +660,12 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
     );
     assert_eq!(receipt.transport_profile.transport_statuses.len(), 1);
     assert_eq!(
-        receipt.transport_profile.transport_statuses[0].transport_kind,
+        receipt.transport_profile.transport_statuses[0].transport,
         "nostr"
     );
     assert_eq!(
-        receipt.transport_profile.transport_statuses[0].readiness,
-        "ready"
+        receipt.transport_profile.transport_statuses[0].implementation,
+        "real"
     );
     assert_eq!(
         serde_json::to_value(&receipt).expect("status json"),
@@ -708,14 +708,13 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
                     }
                 ],
                 "transport_statuses": [{
-                    "transport_kind": "nostr",
+                    "transport": "nostr",
                     "profile_id": "nostr",
                     "endpoint_uri": null,
-                    "implementation_state": "available",
-                    "readiness": "ready",
-                    "publish_usable": true,
-                    "fetch_usable": true,
-                    "redacted_message": null
+                    "configured": true,
+                    "implementation": "real",
+                    "usable_for_delivery": true,
+                    "message": "ready"
                 }]
             }
         })
@@ -757,16 +756,16 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
             .iter()
             .map(|status| {
                 (
-                    status.transport_kind.as_str(),
-                    status.readiness.as_str(),
-                    status.publish_usable,
-                    status.fetch_usable,
+                    status.transport.as_str(),
+                    status.implementation.as_str(),
+                    status.configured,
+                    status.usable_for_delivery,
                 )
             })
             .collect::<Vec<_>>(),
         vec![
-            ("nostr", "ready", true, true),
-            ("reticulum", "preview_unavailable", false, false)
+            ("nostr", "real", true, true),
+            ("reticulum", "preview_unavailable", true, false)
         ]
     );
 }
@@ -1655,7 +1654,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1731,7 +1730,7 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Recovered Proxy Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1832,7 +1831,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Retry Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -1937,7 +1936,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Error Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -2001,7 +2000,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_B_D_TAG, "Terminal Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(SELLER),
         )
@@ -2175,7 +2174,7 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
                 ListingEnqueuePublishRequest::new(
                     actor(),
                     listing(LISTING_A_D_TAG, "Reticulum Preview Coffee"),
-                    TargetPolicy::use_transport_profile(),
+                    TargetPolicy::default_profile(),
                 ),
                 &FixtureSigner::new(SELLER),
             )
@@ -2428,7 +2427,7 @@ async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Duplicate Plan Coffee"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             )
             .try_with_nostr_targets([RELAY_A], NostrRelayUrlPolicy::Public)
             .expect("first targets")
@@ -2714,7 +2713,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Nonlocal Coffee"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([NONLOCAL_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("nonlocal ws relay target");
@@ -2724,7 +2723,7 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     let error = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Private LAN Coffee"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([PRIVATE_LAN_WS_RELAY], NostrRelayUrlPolicy::Localhost)
     .expect_err("private LAN ws relay target");

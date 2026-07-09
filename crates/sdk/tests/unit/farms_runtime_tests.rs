@@ -167,7 +167,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     let enqueue = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Queued Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -182,7 +182,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     let try_key = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Try Key Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("farm-unit-try-key")
     .expect("try key");
@@ -357,7 +357,7 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let invalid_relays = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_A_D_TAG, "Invalid Relay Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets(["http://relay.radroots.test"], NostrRelayUrlPolicy::Public);
     assert!(invalid_relays.is_err());
@@ -365,7 +365,7 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let invalid_key = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Invalid Key Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("");
     assert!(invalid_key.is_err());

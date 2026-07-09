@@ -18,7 +18,8 @@ use radroots_outbox::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
 };
 
 const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
@@ -174,7 +175,7 @@ fn resolved_delivery_plan(
             satisfaction_policy,
             RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
         ),
-        TargetPolicy::UseTransportProfile => {
+        TargetPolicy::DefaultProfile => {
             let transport_profile = sdk.transport_profile();
             let targets = transport_profile
                 .target_set()?
@@ -190,6 +191,35 @@ fn resolved_delivery_plan(
                 targets,
                 satisfaction_policy,
                 outbox_reticulum_preview_behavior(transport_profile),
+            )
+        }
+        TargetPolicy::LocalOnly => {
+            if satisfaction_policy != SatisfactionPolicy::NoWait {
+                return Err(RadrootsSdkError::InvalidRequest {
+                    message: "local-only target policy requires no_wait satisfaction policy"
+                        .to_owned(),
+                });
+            }
+            delivery_plan_from_targets(
+                "local_only",
+                Vec::new(),
+                satisfaction_policy,
+                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+            )
+        }
+        TargetPolicy::MeshScope(scope) => {
+            let target_set =
+                TargetSet::transport_targets(vec![RadrootsTransportTarget::new_with_metadata(
+                    RadrootsTransportKind::Reticulum,
+                    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+                    Some(scope.transport_scope()),
+                    None,
+                )?])?;
+            delivery_plan_from_targets(
+                "mesh_scope",
+                target_set.into_targets(),
+                satisfaction_policy,
+                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
             )
         }
     }

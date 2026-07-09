@@ -1506,6 +1506,8 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
                 "UseConfiguredProfile",
                 "use_configured_profile",
                 "configured_profile()",
+                "UseTransportProfile",
+                "use_transport_profile",
                 "impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter",
                 "proxy_relay_receipt_from_response",
             ] {
@@ -1523,6 +1525,11 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
 fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    let status_summary = source_between(
+        sync_runtime.as_str(),
+        "pub struct SyncTransportStatusSummary",
+        "\n}\n\n#[cfg(feature = \"runtime\")]\nimpl SyncTransportStatusSummary",
+    );
 
     for required in [
         "pub configured_transport_target_count: usize,",
@@ -1530,10 +1537,28 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         "pub transport_statuses: Vec<SyncTransportStatusSummary>,",
         ".configured_transport_targets()?",
         ".transport_statuses()",
+        "pub transport: String,",
+        "pub configured: bool,",
+        "pub implementation: String,",
+        "pub usable_for_delivery: bool,",
+        "pub message: String,",
     ] {
         assert!(
             sync_runtime.contains(required),
             "SDK sync status must retain transport-neutral field witness `{required}`"
+        );
+    }
+
+    for required in [
+        "pub transport: String,",
+        "pub configured: bool,",
+        "pub implementation: String,",
+        "pub usable_for_delivery: bool,",
+        "pub message: String,",
+    ] {
+        assert!(
+            status_summary.contains(required),
+            "SDK sync status summary must retain canonical status field witness `{required}`"
         );
     }
 
@@ -1549,6 +1574,20 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         assert!(
             !sync_runtime.contains(forbidden),
             "SDK sync status source must not expose retired relay-shaped generic field `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        concat!("pub transport", "_kind: String,"),
+        concat!("pub implementation", "_state: String,"),
+        "pub readiness: String,",
+        concat!("pub publish", "_usable: bool,"),
+        concat!("pub fetch", "_usable: bool,"),
+        concat!("pub redacted", "_message: Option<String>,"),
+    ] {
+        assert!(
+            !status_summary.contains(forbidden),
+            "SDK sync status summary must not expose retired status field `{forbidden}`"
         );
     }
 }

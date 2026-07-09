@@ -649,13 +649,17 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
             "kind": "explicit",
             "targets": [
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": "wss://relay-b.example.com",
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                 },
                 {
-                    "kind": "Nostr",
+                    "kind": "nostr",
                     "uri": "wss://relay-a.example.com",
+                    "scope": null,
+                    "label": null,
                     "fingerprint": "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa"
                 }
             ],

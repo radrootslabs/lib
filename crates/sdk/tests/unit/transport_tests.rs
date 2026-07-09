@@ -79,10 +79,10 @@ fn relay_authority_host(authority: &str) -> Option<String> {
 
 #[test]
 fn transport_profile_policy_serializes_as_kind_only() {
-    let transport_profile_policy = TargetPolicy::use_transport_profile();
+    let transport_profile_policy = TargetPolicy::default_profile();
     assert_eq!(
         serde_json::to_value(&transport_profile_policy).expect("json"),
-        serde_json::json!({ "kind": "use_transport_profile" })
+        serde_json::json!({ "kind": "default_profile" })
     );
     assert_struct_serialize_error_paths(&transport_profile_policy, 1);
 }
@@ -148,8 +148,10 @@ fn target_set_accessors_and_configured_relays_cover_empty_paths() {
         serde_json::json!({
             "kind": "explicit",
             "targets": [{
-                "kind": "Nostr",
+                "kind": "nostr",
                 "uri": "wss://relay-c.example.com",
+                "scope": null,
+                "label": null,
                 "fingerprint": "ec4b5005dd1fcf0d949045e3d5524f9a6a95209ecc888f582ae2e9bf69e5b8e6"
             }],
             "canonical_targets": ["ec4b5005dd1fcf0d949045e3d5524f9a6a95209ecc888f582ae2e9bf69e5b8e6"]
@@ -227,6 +229,8 @@ fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
         serde_json::to_value(profile).expect("profile json"),
         serde_json::json!({
             "endpoint_uri": "reticulum:preview-unavailable",
+            "scope": "local_preview",
+            "agent_endpoint": null,
             "behavior": "reject_delivery_attempts"
         })
     );
@@ -252,11 +256,16 @@ fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
 
     let uri =
         RadrootsTransportTargetUri::parse("reticulum:preview-unavailable-alt").expect("target uri");
-    let fingerprint =
-        RadrootsTransportTargetFingerprint::from_target(&RadrootsTransportKind::Reticulum, &uri);
+    let fingerprint = RadrootsTransportTargetFingerprint::from_target(
+        &RadrootsTransportKind::Reticulum,
+        &uri,
+        None,
+    );
     let err = TargetSet::transport_targets(vec![RadrootsTransportTarget {
         kind: RadrootsTransportKind::Reticulum,
         uri,
+        scope: None,
+        label: None,
         fingerprint,
     }])
     .expect_err("noncanonical Reticulum endpoint");

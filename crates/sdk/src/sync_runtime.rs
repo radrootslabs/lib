@@ -36,8 +36,7 @@ use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportReadinessState, RadrootsTransportStatus,
-    RadrootsTransportTarget,
+    RadrootsTransportKind, RadrootsTransportStatus, RadrootsTransportTarget,
 };
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
@@ -209,52 +208,36 @@ impl SyncTransportTargetSummary {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SyncTransportStatusSummary {
-    pub transport_kind: String,
+    pub transport: String,
     pub profile_id: Option<String>,
     pub endpoint_uri: Option<String>,
-    pub implementation_state: String,
-    pub readiness: String,
-    pub publish_usable: bool,
-    pub fetch_usable: bool,
-    pub redacted_message: Option<String>,
+    pub configured: bool,
+    pub implementation: String,
+    pub usable_for_delivery: bool,
+    pub message: String,
 }
 
 #[cfg(feature = "runtime")]
 impl SyncTransportStatusSummary {
     fn from_transport_status(status: RadrootsTransportStatus) -> Self {
         Self {
-            transport_kind: status.kind.canonical_label(),
+            transport: status.kind.canonical_label(),
             profile_id: status.profile_id,
             endpoint_uri: status.endpoint_uri,
-            implementation_state: transport_implementation_state_label(status.implementation_state)
-                .to_owned(),
-            readiness: transport_readiness_state_label(status.readiness).to_owned(),
-            publish_usable: status.publish_usable,
-            fetch_usable: status.fetch_usable,
-            redacted_message: status.redacted_message,
+            configured: status.configured,
+            implementation: transport_implementation_label(status.implementation).to_owned(),
+            usable_for_delivery: status.usable_for_delivery,
+            message: status.message,
         }
     }
 }
 
 #[cfg(feature = "runtime")]
-fn transport_implementation_state_label(
-    state: RadrootsTransportImplementationState,
-) -> &'static str {
+fn transport_implementation_label(state: RadrootsTransportImplementationState) -> &'static str {
     match state {
-        RadrootsTransportImplementationState::Available => "available",
-        RadrootsTransportImplementationState::Disabled => "disabled",
-        RadrootsTransportImplementationState::Misconfigured => "misconfigured",
+        RadrootsTransportImplementationState::Real => "real",
+        RadrootsTransportImplementationState::Mock => "mock",
         RadrootsTransportImplementationState::PreviewUnavailable => "preview_unavailable",
-    }
-}
-
-#[cfg(feature = "runtime")]
-fn transport_readiness_state_label(state: RadrootsTransportReadinessState) -> &'static str {
-    match state {
-        RadrootsTransportReadinessState::Ready => "ready",
-        RadrootsTransportReadinessState::Disabled => "disabled",
-        RadrootsTransportReadinessState::Misconfigured => "misconfigured",
-        RadrootsTransportReadinessState::PreviewUnavailable => "preview_unavailable",
     }
 }
 

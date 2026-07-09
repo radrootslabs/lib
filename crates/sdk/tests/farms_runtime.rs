@@ -628,7 +628,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "North Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("farm-idem-b")
     .expect("idempotency key");
@@ -694,7 +694,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     let request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "North Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     );
     let error = sdk
         .farms()
@@ -740,7 +740,7 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
     .expect("first transport targets");
@@ -794,7 +794,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "Sync Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
     .expect("transport targets");
@@ -854,7 +854,7 @@ async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum
             FarmEnqueuePublishRequest::new(
                 farmer_actor(),
                 farm(FARM_E_D_TAG, "Hybrid Farm"),
-                TargetPolicy::use_transport_profile(),
+                TargetPolicy::default_profile(),
             ),
             &FixtureSigner::new(FARMER),
         )
@@ -923,7 +923,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_E_D_TAG, "North Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -958,7 +958,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_F_D_TAG, "Changed Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
@@ -1032,7 +1032,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let enqueue_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_B_D_TAG, "Queued Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
@@ -1066,13 +1066,17 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                 "kind": "explicit",
                 "targets": [
                     {
-                        "kind": "Nostr",
+                        "kind": "nostr",
                         "uri": RELAY,
+                        "scope": null,
+                        "label": null,
                         "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
                     },
                     {
-                        "kind": "Nostr",
+                        "kind": "nostr",
                         "uri": RELAY_B,
+                        "scope": null,
+                        "label": null,
                         "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                     }
                 ],
@@ -1094,7 +1098,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     let try_key_request = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Queued Farm"),
-        TargetPolicy::use_transport_profile(),
+        TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("farm-serialized-try-key")
     .expect("try idempotency key");

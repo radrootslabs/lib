@@ -231,11 +231,11 @@ pub use crate::trade_storage::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::transport::{
-    HybridProfile, NostrProfile, NostrRelayUrlPolicy, ProxyAuth, ProxyProfile, PublishMode,
-    ReticulumPreviewBehavior, ReticulumPreviewProfile, SDK_TRANSPORT_TARGET_MAX_COUNT,
-    SatisfactionPolicy, TargetPolicy, TargetSet, TransportDeliveryReceipt,
-    TransportDeliveryTargetStatus, TransportKind, TransportOutcome, TransportProfile,
-    TransportReceipt, TransportTargetReceipt,
+    HybridProfile, MeshScopeId, NostrProfile, NostrRelayUrlPolicy, ProxyAuth, ProxyProfile,
+    PublishMode, ReticulumPreviewAgentEndpoint, ReticulumPreviewBehavior, ReticulumPreviewProfile,
+    SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy, TargetSet,
+    TransportDeliveryReceipt, TransportDeliveryTargetStatus, TransportKind, TransportOutcome,
+    TransportProfile, TransportReceipt, TransportTargetReceipt,
 };
 #[cfg(feature = "runtime")]
 pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
