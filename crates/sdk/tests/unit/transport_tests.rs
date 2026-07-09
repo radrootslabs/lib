@@ -33,22 +33,47 @@ fn publish_mode_and_ack_policy_serialize_explicit_product_contracts() {
         serde_json::json!("no_wait")
     );
     assert_eq!(
-        serde_json::to_value(SatisfactionPolicy::AtLeastOneTarget).expect("json"),
-        serde_json::json!("at_least_one_target")
+        serde_json::to_value(SatisfactionPolicy::AnyAccepted).expect("json"),
+        serde_json::json!("any_accepted")
     );
     assert_eq!(
-        serde_json::to_value(SatisfactionPolicy::AllTargets).expect("json"),
-        serde_json::json!("all_targets")
+        serde_json::to_value(SatisfactionPolicy::AllAccepted).expect("json"),
+        serde_json::json!("all_accepted")
     );
     assert_eq!(
-        serde_json::to_value(SatisfactionPolicy::at_least(2).expect("satisfaction policy"))
+        serde_json::to_value(SatisfactionPolicy::quorum_accepted(2).expect("satisfaction policy"))
             .expect("json"),
-        serde_json::json!({ "at_least": { "required": 2 } })
+        serde_json::json!({ "quorum_accepted": { "threshold": 2 } })
+    );
+    assert_eq!(
+        serde_json::to_value(SatisfactionPolicy::AnyDelivered).expect("json"),
+        serde_json::json!("any_delivered")
+    );
+    assert_eq!(
+        serde_json::to_value(SatisfactionPolicy::AllDelivered).expect("json"),
+        serde_json::json!("all_delivered")
+    );
+    assert_eq!(
+        serde_json::to_value(SatisfactionPolicy::quorum_delivered(3).expect("satisfaction policy"))
+            .expect("json"),
+        serde_json::json!({ "quorum_delivered": { "threshold": 3 } })
+    );
+    assert_eq!(
+        serde_json::to_value(
+            SatisfactionPolicy::required_accepted_targets(["a".repeat(64)])
+                .expect("satisfaction policy")
+        )
+        .expect("json"),
+        serde_json::json!({
+            "required_accepted_targets": {
+                "target_fingerprints": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+            }
+        })
     );
     assert!(matches!(
-        SatisfactionPolicy::at_least(0),
+        SatisfactionPolicy::quorum_accepted(0),
         Err(RadrootsSdkError::InvalidRequest { ref message })
-            if message == "satisfaction policy must require at least one target"
+            if message == "satisfaction policy threshold must require at least one target"
     ));
 }
 
@@ -259,6 +284,26 @@ fn reticulum_preview_profile_preserves_explicit_scope_and_agent_endpoint() {
             "behavior": "reject_delivery_attempts"
         })
     );
+}
+
+#[test]
+fn reticulum_preview_agent_endpoint_rejects_non_agent_endpoint_families() {
+    for invalid in [
+        "",
+        "reticulum-agent:",
+        " reticulum-agent:local",
+        "reticulum-agent:local ",
+        "RETICULUM-AGENT:local",
+        "reticulum:local",
+        "https://reticulum.example.com",
+        "ws://127.0.0.1:9735",
+    ] {
+        assert!(matches!(
+            ReticulumPreviewAgentEndpoint::parse(invalid),
+            Err(RadrootsSdkError::InvalidRequest { ref message })
+                if message == "Reticulum preview agent endpoint is invalid"
+        ));
+    }
 }
 
 #[test]

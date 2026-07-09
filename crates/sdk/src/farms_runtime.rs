@@ -481,7 +481,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_policy,
-                satisfaction_policy: SatisfactionPolicy::AllTargets,
+                satisfaction_policy: SatisfactionPolicy::AllAccepted,
                 idempotency_key,
             },
         )
@@ -504,7 +504,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_policy,
-                satisfaction_policy: SatisfactionPolicy::AllTargets,
+                satisfaction_policy: SatisfactionPolicy::AllAccepted,
                 idempotency_key,
             },
             signer,

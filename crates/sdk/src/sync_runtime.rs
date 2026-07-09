@@ -7,7 +7,7 @@ use crate::adapters::radrootsd::{
 use crate::{
     NostrRelayUrlPolicy, RadrootsSdkError, SyncClient,
     runtime::{RadrootsClient, sdk_now_ms},
-    transport::TransportProfile,
+    transport::{ReticulumPreviewProfile, TransportProfile},
 };
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use crate::{ProxyAuth, ProxyProfile};
@@ -36,7 +36,8 @@ use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportKind, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
+    RadrootsTransportTarget,
 };
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
@@ -75,6 +76,18 @@ pub struct SyncStatusRequest {}
 
 #[cfg(feature = "runtime")]
 impl SyncStatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct ReticulumPreviewTryNowRequest {}
+
+#[cfg(feature = "runtime")]
+impl ReticulumPreviewTryNowRequest {
     pub fn new() -> Self {
         Self::default()
     }
@@ -191,6 +204,8 @@ impl SyncTransportProfileSummary {
 pub struct SyncTransportTargetSummary {
     pub transport_kind: String,
     pub endpoint_uri: String,
+    pub target_scope: Option<String>,
+    pub target_label: Option<String>,
     pub endpoint_fingerprint: String,
 }
 
@@ -200,6 +215,8 @@ impl SyncTransportTargetSummary {
         Self {
             transport_kind: target.kind.canonical_label(),
             endpoint_uri: target.uri.as_str().to_owned(),
+            target_scope: target.scope.as_ref().map(|scope| scope.as_str().to_owned()),
+            target_label: target.label.as_ref().map(|label| label.as_str().to_owned()),
             endpoint_fingerprint: target.fingerprint.as_str().to_owned(),
         }
     }
@@ -465,7 +482,10 @@ pub struct PushOutboxEventReceipt {
 pub struct PushOutboxTargetReceipt {
     pub transport_kind: String,
     pub endpoint_uri: String,
+    pub target_scope: Option<String>,
+    pub target_label: Option<String>,
     pub outcome_kind: PushOutboxTargetOutcomeKind,
+    pub transport_outcome_kind: Option<PushOutboxTransportOutcomeKind>,
     pub attempted: bool,
     pub message: Option<String>,
 }
@@ -531,6 +551,51 @@ pub enum PushOutboxTargetOutcomeKind {
     DeferredUntilImplemented,
     PreviewUnavailable,
     Unknown,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PushOutboxTransportOutcomeKind {
+    Accepted,
+    DuplicateAccepted,
+    Delivered,
+    Forwarded,
+    StoredByGateway,
+    Seen,
+    DeferredUntilImplemented,
+    Rejected,
+    RouteUnavailable,
+    PayloadTooLarge,
+    PolicyDenied,
+    Timeout,
+    ConnectionFailed,
+    TransportUnavailable,
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsTransportOutcomeKind> for PushOutboxTransportOutcomeKind {
+    fn from(kind: RadrootsTransportOutcomeKind) -> Self {
+        match kind {
+            RadrootsTransportOutcomeKind::Accepted => Self::Accepted,
+            RadrootsTransportOutcomeKind::DuplicateAccepted => Self::DuplicateAccepted,
+            RadrootsTransportOutcomeKind::Delivered => Self::Delivered,
+            RadrootsTransportOutcomeKind::Forwarded => Self::Forwarded,
+            RadrootsTransportOutcomeKind::StoredByGateway => Self::StoredByGateway,
+            RadrootsTransportOutcomeKind::Seen => Self::Seen,
+            RadrootsTransportOutcomeKind::DeferredUntilImplemented => {
+                Self::DeferredUntilImplemented
+            }
+            RadrootsTransportOutcomeKind::Rejected => Self::Rejected,
+            RadrootsTransportOutcomeKind::RouteUnavailable => Self::RouteUnavailable,
+            RadrootsTransportOutcomeKind::PayloadTooLarge => Self::PayloadTooLarge,
+            RadrootsTransportOutcomeKind::PolicyDenied => Self::PolicyDenied,
+            RadrootsTransportOutcomeKind::Timeout => Self::Timeout,
+            RadrootsTransportOutcomeKind::ConnectionFailed => Self::ConnectionFailed,
+            RadrootsTransportOutcomeKind::TransportUnavailable => Self::TransportUnavailable,
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -632,6 +697,25 @@ impl<'sdk> SyncClient<'sdk> {
                 self.reticulum_preview_push_receipt(request).await
             }
         }
+    }
+
+    pub async fn try_reticulum_preview_now(
+        &self,
+        _request: ReticulumPreviewTryNowRequest,
+    ) -> Result<(), RadrootsSdkError> {
+        let profile =
+            active_reticulum_preview_profile(self.sdk.transport_profile()).ok_or_else(|| {
+                RadrootsSdkError::InvalidRequest {
+                message:
+                    "sync.try_reticulum_preview_now requires a Reticulum preview transport profile"
+                        .to_owned(),
+            }
+            })?;
+        Err(RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+            operation: "sync.try_reticulum_preview_now".to_owned(),
+            endpoint_uri: profile.endpoint_uri().to_owned(),
+            behavior: profile.behavior(),
+        })
     }
 
     async fn push_outbox_has_no_ready_signed_work(
@@ -863,13 +947,35 @@ fn reticulum_preview_target_receipt(
     PushOutboxTargetReceipt {
         transport_kind: target.transport_kind.canonical_label(),
         endpoint_uri: target.endpoint_uri.as_str().to_owned(),
+        target_scope: target
+            .target_scope
+            .as_ref()
+            .map(|scope| scope.as_str().to_owned()),
+        target_label: target
+            .target_label
+            .as_ref()
+            .map(|label| label.as_str().to_owned()),
         outcome_kind: reticulum_preview_target_outcome_kind(target.status),
+        transport_outcome_kind: target.last_outcome_kind.map(Into::into),
         attempted: false,
         message: Some(
             target
                 .last_error
                 .unwrap_or_else(|| RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE.to_owned()),
         ),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn active_reticulum_preview_profile(
+    profile: &TransportProfile,
+) -> Option<&ReticulumPreviewProfile> {
+    match profile {
+        TransportProfile::ReticulumPreview { profile } => Some(profile),
+        TransportProfile::Hybrid { profile } => Some(profile.reticulum_preview()),
+        TransportProfile::LocalOnly
+        | TransportProfile::Nostr { .. }
+        | TransportProfile::Proxy { .. } => None,
     }
 }
 
@@ -1076,6 +1182,9 @@ fn proxy_delivery_policy_from_remaining(
         RadrootsTransportSatisfactionPolicy::NoWait => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
+        RadrootsTransportSatisfactionPolicy::RequiredTargets { .. } => {
+            TransportPublishDeliveryPolicy::All
+        }
         RadrootsTransportSatisfactionPolicy::Quorum { .. } => {
             if required_remaining >= ready_target_count {
                 TransportPublishDeliveryPolicy::All
@@ -1434,7 +1543,16 @@ fn proxy_transport_error_receipt(
             .map(|target| PushOutboxTargetReceipt {
                 transport_kind: target.transport_kind.canonical_label(),
                 endpoint_uri: target.endpoint_uri.as_str().to_owned(),
+                target_scope: target
+                    .target_scope
+                    .as_ref()
+                    .map(|scope| scope.as_str().to_owned()),
+                target_label: target
+                    .target_label
+                    .as_ref()
+                    .map(|label| label.as_str().to_owned()),
                 outcome_kind: PushOutboxTargetOutcomeKind::ConnectionFailed,
+                transport_outcome_kind: Some(PushOutboxTransportOutcomeKind::ConnectionFailed),
                 attempted: false,
                 message: Some(message.clone()),
             })
@@ -1496,7 +1614,10 @@ fn push_proxy_target_receipt(outcome: TransportPublishTargetOutcome) -> PushOutb
     PushOutboxTargetReceipt {
         transport_kind: outcome.transport_kind,
         endpoint_uri: outcome.endpoint_uri,
+        target_scope: None,
+        target_label: None,
         outcome_kind: push_proxy_target_outcome_kind(outcome.outcome_kind),
+        transport_outcome_kind: Some(push_proxy_transport_outcome_kind(outcome.outcome_kind)),
         attempted: outcome.attempted,
         message: outcome.message,
     }
@@ -1540,6 +1661,41 @@ fn push_proxy_target_outcome_kind(
             PushOutboxTargetOutcomeKind::PreviewUnavailable
         }
         TransportPublishOutcomeKind::Unknown => PushOutboxTargetOutcomeKind::Unknown,
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn push_proxy_transport_outcome_kind(
+    outcome_kind: TransportPublishOutcomeKind,
+) -> PushOutboxTransportOutcomeKind {
+    match outcome_kind {
+        TransportPublishOutcomeKind::Accepted => PushOutboxTransportOutcomeKind::Accepted,
+        TransportPublishOutcomeKind::DuplicateAccepted
+        | TransportPublishOutcomeKind::SkippedAlreadyAccepted => {
+            PushOutboxTransportOutcomeKind::DuplicateAccepted
+        }
+        TransportPublishOutcomeKind::DeferredUntilImplemented => {
+            PushOutboxTransportOutcomeKind::DeferredUntilImplemented
+        }
+        TransportPublishOutcomeKind::Blocked
+        | TransportPublishOutcomeKind::Invalid
+        | TransportPublishOutcomeKind::Restricted
+        | TransportPublishOutcomeKind::Muted
+        | TransportPublishOutcomeKind::Unsupported
+        | TransportPublishOutcomeKind::TargetRejected => PushOutboxTransportOutcomeKind::Rejected,
+        TransportPublishOutcomeKind::PaymentRequired
+        | TransportPublishOutcomeKind::PowRequired
+        | TransportPublishOutcomeKind::AuthRequired => PushOutboxTransportOutcomeKind::PolicyDenied,
+        TransportPublishOutcomeKind::Timeout => PushOutboxTransportOutcomeKind::Timeout,
+        TransportPublishOutcomeKind::ConnectionFailed => {
+            PushOutboxTransportOutcomeKind::ConnectionFailed
+        }
+        TransportPublishOutcomeKind::RateLimited
+        | TransportPublishOutcomeKind::Error
+        | TransportPublishOutcomeKind::PreviewUnavailable
+        | TransportPublishOutcomeKind::Unknown => {
+            PushOutboxTransportOutcomeKind::TransportUnavailable
+        }
     }
 }
 
@@ -1599,7 +1755,10 @@ fn push_target_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxTar
     PushOutboxTargetReceipt {
         transport_kind: RadrootsTransportKind::Nostr.canonical_label(),
         endpoint_uri: relay.relay_url,
+        target_scope: None,
+        target_label: None,
         outcome_kind: relay.outcome.kind.into(),
+        transport_outcome_kind: Some(relay.outcome.kind.transport_outcome_kind().into()),
         attempted: relay.attempted,
         message: relay.outcome.message,
     }

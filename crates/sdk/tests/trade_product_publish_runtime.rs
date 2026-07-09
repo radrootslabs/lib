@@ -254,7 +254,7 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
             trade_propose_request(
                 "trade-product-publish",
                 PublishMode::EnqueueAndPublish,
-                SatisfactionPolicy::AtLeastOneTarget,
+                SatisfactionPolicy::AnyAccepted,
             )
             .try_with_idempotency_key("trade-product-publish")
             .expect("idempotency"),

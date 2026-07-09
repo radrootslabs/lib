@@ -218,11 +218,11 @@ pub use crate::sync_runtime::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
-    PushOutboxTargetReceipt, SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT,
-    SYNC_PROJECTION_REFRESH_MAX_LIMIT, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
-    SyncProjectionRefreshReceipt, SyncProjectionRefreshRequest, SyncStatusReceipt,
-    SyncStatusRequest, SyncStatusSource, SyncTransportProfileSummary, SyncTransportStatusSummary,
-    SyncTransportTargetSummary,
+    PushOutboxTargetReceipt, PushOutboxTransportOutcomeKind, ReticulumPreviewTryNowRequest,
+    SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT, SYNC_PROJECTION_REFRESH_MAX_LIMIT, SdkRelayAuthPolicy,
+    SyncEventStoreStatus, SyncOutboxStatus, SyncProjectionRefreshReceipt,
+    SyncProjectionRefreshRequest, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
+    SyncTransportProfileSummary, SyncTransportStatusSummary, SyncTransportTargetSummary,
 };
 #[cfg(feature = "runtime")]
 pub use crate::trade_storage::{
@@ -235,7 +235,7 @@ pub use crate::transport::{
     PublishMode, ReticulumPreviewAgentEndpoint, ReticulumPreviewBehavior, ReticulumPreviewProfile,
     SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy, TargetSet,
     TransportDeliveryReceipt, TransportDeliveryTargetStatus, TransportKind, TransportOutcome,
-    TransportProfile, TransportReceipt, TransportTargetReceipt,
+    TransportProfile, TransportReceipt, TransportSatisfactionClass, TransportTargetReceipt,
 };
 #[cfg(feature = "runtime")]
 pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;

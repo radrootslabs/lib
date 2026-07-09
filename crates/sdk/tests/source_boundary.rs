@@ -1537,6 +1537,10 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         "pub transport_statuses: Vec<SyncTransportStatusSummary>,",
         ".configured_transport_targets()?",
         ".transport_statuses()",
+        "pub target_scope: Option<String>,",
+        "pub target_label: Option<String>,",
+        "target.scope.as_ref()",
+        "target.label.as_ref()",
         "pub transport: String,",
         "pub configured: bool,",
         "pub implementation: String,",
@@ -1588,6 +1592,50 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         assert!(
             !status_summary.contains(forbidden),
             "SDK sync status summary must not expose retired status field `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn sdk_transport_sources_expose_full_satisfaction_policy_without_legacy_aliases() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
+    let workflow_runtime = read_source(manifest_dir.join("src/workflow_runtime.rs").as_path());
+
+    for required in [
+        "pub enum SatisfactionPolicy",
+        "AnyAccepted",
+        "AllAccepted",
+        "QuorumAccepted",
+        "AnyDelivered",
+        "AllDelivered",
+        "QuorumDelivered",
+        "RequiredAcceptedTargets",
+        "RequiredDeliveredTargets",
+        "pub fn quorum_accepted(",
+        "pub fn quorum_delivered(",
+        "pub fn required_accepted_targets",
+        "pub fn required_delivered_targets",
+        "RadrootsTransportSatisfactionPolicy::required_targets",
+        "RadrootsTransportSatisfactionClass::Accepted",
+        "RadrootsTransportSatisfactionClass::Delivered",
+    ] {
+        assert!(
+            transport_source.contains(required),
+            "src/transport.rs must retain full SDK satisfaction policy witness `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "AtLeastOneTarget",
+        "AllTargets",
+        "pub fn at_least",
+        concat!("at_least", "_one_target"),
+        concat!("all", "_targets"),
+    ] {
+        assert!(
+            !transport_source.contains(forbidden) && !workflow_runtime.contains(forbidden),
+            "SDK transport/workflow sources must not retain legacy satisfaction alias `{forbidden}`"
         );
     }
 }
@@ -1649,6 +1697,14 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
         "reticulum_preview_event_receipt",
         "push_reported_event",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
+        "ReticulumPreviewTryNowRequest",
+        "try_reticulum_preview_now",
+        "\"sync.try_reticulum_preview_now\"",
+        "RadrootsSdkError::ReticulumPreviewTransportUnavailable",
+        "pub target_scope: Option<String>,",
+        "pub target_label: Option<String>,",
+        "pub transport_outcome_kind: Option<PushOutboxTransportOutcomeKind>,",
+        "PushOutboxTransportOutcomeKind::TransportUnavailable",
     ] {
         assert!(
             sync_runtime.contains(required),

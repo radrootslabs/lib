@@ -2212,27 +2212,28 @@ fn order_enqueue_request_mutators_reject_invalid_relays_and_idempotency_keys() {
 #[test]
 fn trade_enqueue_policy_rejects_publish_modes_without_matching_side_effects() {
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::DryRun, SatisfactionPolicy::NoWait),
+        validate_trade_enqueue_policy(PublishMode::DryRun, &SatisfactionPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade dry-run publish mode must use a prepare request"
     ));
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::AtLeastOneTarget),
+        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, &SatisfactionPolicy::AnyAccepted),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade enqueue-only publish mode only supports no-wait satisfaction"
     ));
     assert!(matches!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, SatisfactionPolicy::NoWait),
+        validate_trade_enqueue_policy(PublishMode::EnqueueAndPublish, &SatisfactionPolicy::NoWait),
         Err(RadrootsSdkError::InvalidRequest { ref message })
             if message == "trade enqueue-and-publish requires a transport satisfaction policy"
     ));
     assert!(
-        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, SatisfactionPolicy::NoWait).is_ok()
+        validate_trade_enqueue_policy(PublishMode::EnqueueOnly, &SatisfactionPolicy::NoWait)
+            .is_ok()
     );
     assert!(
         validate_trade_enqueue_policy(
             PublishMode::EnqueueAndPublish,
-            SatisfactionPolicy::AtLeastOneTarget
+            &SatisfactionPolicy::AnyAccepted
         )
         .is_ok()
     );

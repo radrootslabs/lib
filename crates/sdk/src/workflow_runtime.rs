@@ -18,8 +18,7 @@ use radroots_outbox::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
 };
 
 const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
@@ -48,7 +47,7 @@ pub(crate) async fn enqueue_signed_workflow(
     signer: &dyn RadrootsEventSigner,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let delivery_plan =
-        resolved_delivery_plan(sdk, &request.target_policy, request.satisfaction_policy)?;
+        resolved_delivery_plan(sdk, &request.target_policy, &request.satisfaction_policy)?;
     let signed_event = sign_authorized_draft(request.actor, signer, request.frozen_draft)?;
     enqueue_signed_workflow_event(sdk, request, signed_event, delivery_plan).await
 }
@@ -59,7 +58,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
     request: SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let delivery_plan =
-        resolved_delivery_plan(sdk, &request.target_policy, request.satisfaction_policy)?;
+        resolved_delivery_plan(sdk, &request.target_policy, &request.satisfaction_policy)?;
     let signed_event = sdk
         .sign_with_configured_signer(RadrootsSdkSignRequest::new(
             request.operation_kind,
@@ -166,22 +165,27 @@ struct SdkResolvedDeliveryPlan {
 fn resolved_delivery_plan(
     sdk: &RadrootsClient,
     target_policy: &TargetPolicy,
-    satisfaction_policy: SatisfactionPolicy,
+    satisfaction_policy: &SatisfactionPolicy,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     match target_policy {
-        TargetPolicy::Explicit(target_policy) => delivery_plan_from_targets(
-            "explicit",
-            target_policy.clone().into_targets(),
-            satisfaction_policy,
-            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
-        ),
+        TargetPolicy::Explicit(target_policy) => {
+            let targets = target_policy.clone().into_targets();
+            let reticulum_preview_behavior =
+                reticulum_preview_behavior_for_targets(sdk.transport_profile(), &targets);
+            delivery_plan_from_targets(
+                "explicit",
+                targets,
+                satisfaction_policy,
+                reticulum_preview_behavior,
+            )
+        }
         TargetPolicy::DefaultProfile => {
             let transport_profile = sdk.transport_profile();
             let targets = transport_profile
                 .target_set()?
                 .map(TargetSet::into_targets)
                 .unwrap_or_default();
-            if targets.is_empty() && satisfaction_policy != SatisfactionPolicy::NoWait {
+            if targets.is_empty() && !satisfaction_policy.is_no_wait() {
                 return Err(RadrootsSdkError::empty_transport_targets(
                     "publish transport profile",
                 ));
@@ -194,7 +198,7 @@ fn resolved_delivery_plan(
             )
         }
         TargetPolicy::LocalOnly => {
-            if satisfaction_policy != SatisfactionPolicy::NoWait {
+            if !satisfaction_policy.is_no_wait() {
                 return Err(RadrootsSdkError::InvalidRequest {
                     message: "local-only target policy requires no_wait satisfaction policy"
                         .to_owned(),
@@ -219,7 +223,7 @@ fn resolved_delivery_plan(
                 "mesh_scope",
                 target_set.into_targets(),
                 satisfaction_policy,
-                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+                outbox_reticulum_preview_behavior(sdk.transport_profile()),
             )
         }
     }
@@ -228,29 +232,30 @@ fn resolved_delivery_plan(
 fn delivery_plan_from_targets(
     transport_profile_id: impl Into<String>,
     targets: Vec<RadrootsTransportTarget>,
-    satisfaction_policy: SatisfactionPolicy,
+    satisfaction_policy: &SatisfactionPolicy,
     reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     let delivery_plan = RadrootsOutboxDeliveryPlanInput::new(
         transport_profile_id,
         1,
-        transport_satisfaction_policy(satisfaction_policy),
+        satisfaction_policy.transport_satisfaction_policy()?,
         targets,
     )
     .with_reticulum_preview_behavior(reticulum_preview_behavior);
     Ok(SdkResolvedDeliveryPlan { delivery_plan })
 }
 
-fn transport_satisfaction_policy(
-    satisfaction_policy: SatisfactionPolicy,
-) -> RadrootsTransportSatisfactionPolicy {
-    match satisfaction_policy {
-        SatisfactionPolicy::NoWait => RadrootsTransportSatisfactionPolicy::no_wait(),
-        SatisfactionPolicy::AllTargets => RadrootsTransportSatisfactionPolicy::all_accepted(),
-        SatisfactionPolicy::AtLeastOneTarget => RadrootsTransportSatisfactionPolicy::any_accepted(),
-        SatisfactionPolicy::AtLeast { required } => {
-            RadrootsTransportSatisfactionPolicy::quorum_accepted(required)
-        }
+fn reticulum_preview_behavior_for_targets(
+    transport_profile: &TransportProfile,
+    targets: &[RadrootsTransportTarget],
+) -> RadrootsOutboxReticulumPreviewBehavior {
+    if targets
+        .iter()
+        .any(|target| target.kind == RadrootsTransportKind::Reticulum)
+    {
+        outbox_reticulum_preview_behavior(transport_profile)
+    } else {
+        RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
     }
 }
 

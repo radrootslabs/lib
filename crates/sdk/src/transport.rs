@@ -2,8 +2,9 @@ use crate::RadrootsSdkError;
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportDeliveryReceipt, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportSatisfactionClass, RadrootsTransportStatus,
-    RadrootsTransportTarget, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportMeshScopeId, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
 use serde::ser::{SerializeStruct, Serializer};
@@ -13,10 +14,12 @@ pub use radroots_transport::{
     RadrootsTransportDeliveryReceipt as TransportDeliveryReceipt,
     RadrootsTransportDeliveryTargetStatus as TransportDeliveryTargetStatus,
     RadrootsTransportKind as TransportKind, RadrootsTransportOutcome as TransportOutcome,
+    RadrootsTransportSatisfactionClass as TransportSatisfactionClass,
     RadrootsTransportTargetReceipt as TransportTargetReceipt,
 };
 
 pub const SDK_TRANSPORT_TARGET_MAX_COUNT: usize = 20;
+pub const RETICULUM_AGENT_ENDPOINT_PREFIX: &str = "reticulum-agent:";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,25 +30,120 @@ pub enum PublishMode {
     EnqueueAndPublish,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SatisfactionPolicy {
     NoWait,
-    AtLeastOneTarget,
-    AllTargets,
-    AtLeast { required: u16 },
+    AnyAccepted,
+    AllAccepted,
+    QuorumAccepted {
+        threshold: u16,
+    },
+    AnyDelivered,
+    AllDelivered,
+    QuorumDelivered {
+        threshold: u16,
+    },
+    RequiredAcceptedTargets {
+        target_fingerprints: Vec<RadrootsTransportTargetFingerprint>,
+    },
+    RequiredDeliveredTargets {
+        target_fingerprints: Vec<RadrootsTransportTargetFingerprint>,
+    },
 }
 
 impl SatisfactionPolicy {
-    pub fn at_least(required: u16) -> Result<Self, RadrootsSdkError> {
-        if required == 0 {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "satisfaction policy must require at least one target".to_owned(),
-            });
-        }
-        Ok(Self::AtLeast { required })
+    pub fn quorum_accepted(threshold: u16) -> Result<Self, RadrootsSdkError> {
+        validate_satisfaction_threshold(threshold)?;
+        Ok(Self::QuorumAccepted { threshold })
     }
+
+    pub fn quorum_delivered(threshold: u16) -> Result<Self, RadrootsSdkError> {
+        validate_satisfaction_threshold(threshold)?;
+        Ok(Self::QuorumDelivered { threshold })
+    }
+
+    pub fn required_accepted_targets<I, S>(targets: I) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Ok(Self::RequiredAcceptedTargets {
+            target_fingerprints: required_target_fingerprints(targets)?,
+        })
+    }
+
+    pub fn required_delivered_targets<I, S>(targets: I) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Ok(Self::RequiredDeliveredTargets {
+            target_fingerprints: required_target_fingerprints(targets)?,
+        })
+    }
+
+    pub fn is_no_wait(&self) -> bool {
+        matches!(self, Self::NoWait)
+    }
+
+    pub(crate) fn transport_satisfaction_policy(
+        &self,
+    ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsSdkError> {
+        Ok(match self {
+            Self::NoWait => RadrootsTransportSatisfactionPolicy::no_wait(),
+            Self::AnyAccepted => RadrootsTransportSatisfactionPolicy::any_accepted(),
+            Self::AllAccepted => RadrootsTransportSatisfactionPolicy::all_accepted(),
+            Self::QuorumAccepted { threshold } => {
+                RadrootsTransportSatisfactionPolicy::quorum_accepted(*threshold)
+            }
+            Self::AnyDelivered => RadrootsTransportSatisfactionPolicy::any_delivered(),
+            Self::AllDelivered => RadrootsTransportSatisfactionPolicy::all_delivered(),
+            Self::QuorumDelivered { threshold } => {
+                RadrootsTransportSatisfactionPolicy::quorum_delivered(*threshold)
+            }
+            Self::RequiredAcceptedTargets {
+                target_fingerprints,
+            } => RadrootsTransportSatisfactionPolicy::required_targets(
+                RadrootsTransportSatisfactionClass::Accepted,
+                target_fingerprints.clone(),
+            )?,
+            Self::RequiredDeliveredTargets {
+                target_fingerprints,
+            } => RadrootsTransportSatisfactionPolicy::required_targets(
+                RadrootsTransportSatisfactionClass::Delivered,
+                target_fingerprints.clone(),
+            )?,
+        })
+    }
+}
+
+fn validate_satisfaction_threshold(threshold: u16) -> Result<(), RadrootsSdkError> {
+    if threshold == 0 {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "satisfaction policy threshold must require at least one target".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn required_target_fingerprints<I, S>(
+    targets: I,
+) -> Result<Vec<RadrootsTransportTargetFingerprint>, RadrootsSdkError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let fingerprints = targets
+        .into_iter()
+        .map(|target| RadrootsTransportTargetFingerprint::parse(target.as_ref()))
+        .collect::<Result<Vec<_>, _>>()?;
+    RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        fingerprints.clone(),
+    )?;
+    Ok(fingerprints)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -387,12 +485,17 @@ pub struct ReticulumPreviewAgentEndpoint(String);
 impl ReticulumPreviewAgentEndpoint {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsSdkError> {
         let uri = raw.as_ref();
+        let Some(suffix) = uri.strip_prefix(RETICULUM_AGENT_ENDPOINT_PREFIX) else {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "Reticulum preview agent endpoint is invalid".to_owned(),
+            });
+        };
         if uri.is_empty()
             || uri != uri.trim()
+            || suffix.is_empty()
             || uri
                 .chars()
                 .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
-            || uri.find(':').is_none()
         {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: "Reticulum preview agent endpoint is invalid".to_owned(),
@@ -695,15 +798,19 @@ pub struct TransportReceipt {
 }
 
 impl TransportReceipt {
-    pub fn satisfied_target_count(&self) -> usize {
+    pub fn satisfied_target_count(&self, satisfaction_class: TransportSatisfactionClass) -> usize {
         self.target_receipts
             .iter()
-            .filter(|receipt| {
-                receipt
-                    .status
-                    .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
-            })
+            .filter(|receipt| receipt.status.counts_as_satisfied(satisfaction_class))
             .count()
+    }
+
+    pub fn is_satisfied_by(&self, policy: &SatisfactionPolicy) -> Result<bool, RadrootsSdkError> {
+        Ok(RadrootsTransportDeliveryReceipt {
+            request_id: self.request_id.clone(),
+            target_receipts: self.target_receipts.clone(),
+        }
+        .is_satisfied_by(&policy.transport_satisfaction_policy()?)?)
     }
 }
 

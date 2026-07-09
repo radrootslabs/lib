@@ -174,7 +174,7 @@ async fn default_operation_idempotency_ignores_target_policy() {
             actor: &actor,
             frozen_draft: &draft,
             target_policy: first_target_policy,
-            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: None,
         },
         &signer,
@@ -188,7 +188,7 @@ async fn default_operation_idempotency_ignores_target_policy() {
             actor: &actor,
             frozen_draft: &draft,
             target_policy: second_target_policy,
-            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: None,
         },
         &signer,
@@ -334,7 +334,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             actor: &actor,
             frozen_draft: &first_draft,
             target_policy: TargetPolicy::default_profile(),
-            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: Some(idempotency_key.clone()),
         },
         &signer,
@@ -375,7 +375,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
             actor: &actor,
             frozen_draft: &second_draft,
             target_policy: TargetPolicy::default_profile(),
-            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: Some(idempotency_key),
         },
         &signer,
@@ -438,7 +438,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
             actor: &actor,
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
-            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: None,
         },
     )
@@ -473,7 +473,7 @@ async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutati
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
-        satisfaction_policy: SatisfactionPolicy::AllTargets,
+        satisfaction_policy: SatisfactionPolicy::AllAccepted,
         idempotency_key: None,
     };
 
@@ -509,7 +509,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
-        satisfaction_policy: SatisfactionPolicy::AllTargets,
+        satisfaction_policy: SatisfactionPolicy::AllAccepted,
         idempotency_key: None,
     };
     assert!(matches!(
@@ -539,7 +539,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
-        satisfaction_policy: SatisfactionPolicy::AllTargets,
+        satisfaction_policy: SatisfactionPolicy::AllAccepted,
         idempotency_key: None,
     };
     assert!(matches!(
@@ -559,7 +559,7 @@ async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_proxy
         actor: &actor,
         frozen_draft: &draft,
         target_policy: TargetPolicy::DefaultProfile,
-        satisfaction_policy: SatisfactionPolicy::AllTargets,
+        satisfaction_policy: SatisfactionPolicy::AllAccepted,
         idempotency_key: None,
     };
 

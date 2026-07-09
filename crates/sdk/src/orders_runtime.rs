@@ -2578,7 +2578,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeSubmitPrepareRequest {
             actor: actor.clone(),
             listing_event,
@@ -2613,7 +2613,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeSubmitPrepareRequest {
             actor: actor.clone(),
             listing_event,
@@ -2643,7 +2643,7 @@ impl<'sdk> TradesClient<'sdk> {
         satisfaction_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
@@ -2670,7 +2670,7 @@ impl<'sdk> TradesClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeSubmitReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
@@ -2717,7 +2717,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeDecisionPrepareRequest {
             actor: actor.clone(),
             request_event,
@@ -2752,7 +2752,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeDecisionPrepareRequest {
             actor: actor.clone(),
             request_event,
@@ -2782,7 +2782,7 @@ impl<'sdk> TradesClient<'sdk> {
         satisfaction_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -2815,7 +2815,7 @@ impl<'sdk> TradesClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeDecisionReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -2870,7 +2870,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeRevisionProposalPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -2907,7 +2907,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeRevisionProposalPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -2938,7 +2938,7 @@ impl<'sdk> TradesClient<'sdk> {
         satisfaction_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -2971,7 +2971,7 @@ impl<'sdk> TradesClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeRevisionProposalReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -3026,7 +3026,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeRevisionDecisionPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -3063,7 +3063,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeRevisionDecisionPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -3094,7 +3094,7 @@ impl<'sdk> TradesClient<'sdk> {
         satisfaction_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -3127,7 +3127,7 @@ impl<'sdk> TradesClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeRevisionDecisionReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -3182,7 +3182,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeCancellationPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -3219,7 +3219,7 @@ impl<'sdk> TradesClient<'sdk> {
             idempotency_key,
             created_at,
         } = request;
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         let prepare_request = TradeCancellationPrepareRequest {
             actor: actor.clone(),
             root_event,
@@ -3233,7 +3233,7 @@ impl<'sdk> TradesClient<'sdk> {
             plan,
             target_policy,
             publish_mode,
-            satisfaction_policy,
+            satisfaction_policy.clone(),
             idempotency_key,
             signer,
         )
@@ -3250,7 +3250,7 @@ impl<'sdk> TradesClient<'sdk> {
         satisfaction_policy: SatisfactionPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -3283,7 +3283,7 @@ impl<'sdk> TradesClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<TradeCancellationReceipt, RadrootsSdkError> {
-        validate_trade_enqueue_policy(publish_mode, satisfaction_policy)?;
+        validate_trade_enqueue_policy(publish_mode, &satisfaction_policy)?;
         if !self
             .prepared_order_event_exists(&plan.expected_event_id)
             .await?
@@ -5292,7 +5292,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
         &self,
         request: TradeProposeRequest,
     ) -> Result<TradeMutationOutcome<TradeSubmitPlan, TradeSubmitReceipt>, RadrootsSdkError> {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         require_trade_product_privacy_preflight(
             "trade.propose",
             trade_propose_privacy_fields(&request),
@@ -5338,7 +5338,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5359,7 +5359,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
         TradeMutationOutcome<TradeCancellationPlan, TradeCancellationReceipt>,
         RadrootsSdkError,
     > {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeCancelRequest {
             actor,
             locator,
@@ -5403,7 +5403,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5445,7 +5445,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
         TradeMutationOutcome<TradeRevisionDecisionPlan, TradeRevisionDecisionReceipt>,
         RadrootsSdkError,
     > {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeRevisionDecisionRequest {
             actor,
             locator,
@@ -5499,7 +5499,7 @@ impl<'sdk> TradeBuyerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5594,7 +5594,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         request: TradeAcceptRequest,
     ) -> Result<TradeMutationOutcome<TradeDecisionPlan, TradeDecisionReceipt>, RadrootsSdkError>
     {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeAcceptRequest {
             actor,
             locator,
@@ -5639,7 +5639,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5662,7 +5662,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
     where
         A: RadrootsRelayFetchAdapter,
     {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeAcceptRequest {
             actor,
             locator,
@@ -5713,7 +5713,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5733,7 +5733,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         request: TradeDeclineRequest,
     ) -> Result<TradeMutationOutcome<TradeDecisionPlan, TradeDecisionReceipt>, RadrootsSdkError>
     {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeDeclineRequest {
             actor,
             locator,
@@ -5776,7 +5776,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -5798,7 +5798,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
         TradeMutationOutcome<TradeRevisionProposalPlan, TradeRevisionProposalReceipt>,
         RadrootsSdkError,
     > {
-        validate_trade_product_publish_policy(request.publish_mode, request.satisfaction_policy)?;
+        validate_trade_product_publish_policy(request.publish_mode, &request.satisfaction_policy)?;
         let TradeRevisionProposalRequest {
             actor,
             locator,
@@ -5851,7 +5851,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 plan,
                 target_policy,
                 publish_mode,
-                satisfaction_policy,
+                satisfaction_policy.clone(),
                 idempotency_key,
             )
             .await?;
@@ -6148,32 +6148,29 @@ fn push_request_for_satisfaction_policy(
     outbox_event_id: i64,
 ) -> Result<PushOutboxRequest, RadrootsSdkError> {
     let request = PushOutboxRequest::new().with_outbox_event_id(outbox_event_id);
-    match satisfaction_policy {
-        SatisfactionPolicy::NoWait => Err(RadrootsSdkError::InvalidRequest {
+    if satisfaction_policy.is_no_wait() {
+        Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-and-publish requires a transport satisfaction policy"
                 .to_owned(),
-        }),
-        SatisfactionPolicy::AtLeastOneTarget
-        | SatisfactionPolicy::AllTargets
-        | SatisfactionPolicy::AtLeast { .. } => Ok(request),
+        })
+    } else {
+        Ok(request)
     }
 }
 
 #[cfg(feature = "signer-adapters")]
 fn validate_trade_product_publish_policy(
     publish_mode: PublishMode,
-    satisfaction_policy: SatisfactionPolicy,
+    satisfaction_policy: &SatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
     match publish_mode {
-        PublishMode::DryRun | PublishMode::EnqueueOnly
-            if satisfaction_policy != SatisfactionPolicy::NoWait =>
-        {
+        PublishMode::DryRun | PublishMode::EnqueueOnly if !satisfaction_policy.is_no_wait() => {
             Err(RadrootsSdkError::InvalidRequest {
                 message: "trade dry-run and enqueue-only modes require no-wait satisfaction"
                     .to_owned(),
             })
         }
-        PublishMode::EnqueueAndPublish if satisfaction_policy == SatisfactionPolicy::NoWait => {
+        PublishMode::EnqueueAndPublish if satisfaction_policy.is_no_wait() => {
             Err(RadrootsSdkError::InvalidRequest {
                 message: "trade enqueue-and-publish requires a transport satisfaction policy"
                     .to_owned(),
@@ -6279,23 +6276,20 @@ fn trade_reason_contains_private_coordination(reason: &str) -> bool {
 #[cfg(any(feature = "signer-adapters", test))]
 fn validate_trade_enqueue_policy(
     publish_mode: PublishMode,
-    satisfaction_policy: SatisfactionPolicy,
+    satisfaction_policy: &SatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
     if publish_mode == PublishMode::DryRun {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade dry-run publish mode must use a prepare request".to_owned(),
         });
     }
-    if publish_mode == PublishMode::EnqueueOnly && satisfaction_policy != SatisfactionPolicy::NoWait
-    {
+    if publish_mode == PublishMode::EnqueueOnly && !satisfaction_policy.is_no_wait() {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-only publish mode only supports no-wait satisfaction"
                 .to_owned(),
         });
     }
-    if publish_mode == PublishMode::EnqueueAndPublish
-        && satisfaction_policy == SatisfactionPolicy::NoWait
-    {
+    if publish_mode == PublishMode::EnqueueAndPublish && satisfaction_policy.is_no_wait() {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "trade enqueue-and-publish requires a transport satisfaction policy"
                 .to_owned(),

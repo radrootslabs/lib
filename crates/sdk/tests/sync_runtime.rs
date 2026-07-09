@@ -28,10 +28,10 @@ use radroots_sdk::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
-    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp,
-    RestoreRequest, ReticulumPreviewBehavior, ReticulumPreviewProfile, SdkBackupManifestKind,
-    SdkRelayAuthPolicy, SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
-    TargetPolicy, TransportProfile,
+    PushOutboxTargetReceipt, PushOutboxTransportOutcomeKind, RadrootsClient, RadrootsSdkError,
+    RadrootsSdkTimestamp, RestoreRequest, ReticulumPreviewBehavior, ReticulumPreviewProfile,
+    ReticulumPreviewTryNowRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
+    StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
 use radroots_transport::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
 use radroots_transport_nostr::{
@@ -699,11 +699,15 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
                     {
                         "transport_kind": "nostr",
                         "endpoint_uri": RELAY_B,
+                        "target_scope": null,
+                        "target_label": null,
                         "endpoint_fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
                     },
                     {
                         "transport_kind": "nostr",
                         "endpoint_uri": RELAY_A,
+                        "target_scope": null,
+                        "target_label": null,
                         "endpoint_fingerprint": "fc957b234632cc52e2be19cba88bc85c69966ee5a2df61742b5875ff717fd6fa"
                     }
                 ],
@@ -741,12 +745,24 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
             .transport_profile
             .configured_transport_targets
             .iter()
-            .map(|target| { (target.transport_kind.as_str(), target.endpoint_uri.as_str(),) })
+            .map(|target| {
+                (
+                    target.transport_kind.as_str(),
+                    target.endpoint_uri.as_str(),
+                    target.target_scope.as_deref(),
+                    target.target_label.as_deref(),
+                )
+            })
             .collect::<Vec<_>>(),
         vec![
-            ("nostr", RELAY_A),
-            ("nostr", RELAY_B),
-            ("reticulum", "reticulum:preview-unavailable")
+            ("nostr", RELAY_A, None, None),
+            ("nostr", RELAY_B, None, None),
+            (
+                "reticulum",
+                "reticulum:preview-unavailable",
+                Some("local_preview"),
+                None
+            )
         ]
     );
     assert_eq!(
@@ -2075,7 +2091,10 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
             targets: vec![PushOutboxTargetReceipt {
                 transport_kind: "nostr".to_owned(),
                 endpoint_uri: RELAY_A.to_owned(),
+                target_scope: None,
+                target_label: None,
                 outcome_kind: PushOutboxTargetOutcomeKind::DuplicateAccepted,
+                transport_outcome_kind: Some(PushOutboxTransportOutcomeKind::DuplicateAccepted),
                 attempted: true,
                 message: Some("duplicate".to_owned()),
             }],
@@ -2101,7 +2120,10 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
                 "targets": [{
                     "transport_kind": "nostr",
                     "endpoint_uri": RELAY_A,
+                    "target_scope": null,
+                    "target_label": null,
                     "outcome_kind": "duplicate_accepted",
+                    "transport_outcome_kind": "duplicate_accepted",
                     "attempted": true,
                     "message": "duplicate"
                 }]
@@ -2150,15 +2172,17 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             ReticulumPreviewBehavior::RejectDeliveryAttempts,
             PushOutboxEventState::PreviewUnavailable,
             PushOutboxTargetOutcomeKind::PreviewUnavailable,
+            PushOutboxTransportOutcomeKind::TransportUnavailable,
         ),
         (
             ReticulumPreviewBehavior::DeferDeliveryPlans,
             PushOutboxEventState::DeferredUntilImplemented,
             PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
+            PushOutboxTransportOutcomeKind::DeferredUntilImplemented,
         ),
     ];
 
-    for (behavior, expected_state, expected_outcome) in cases {
+    for (behavior, expected_state, expected_outcome, expected_transport_outcome) in cases {
         let (_tempdir, sdk) = reticulum_preview_directory_sdk(behavior).await;
         let empty = sdk
             .sync()
@@ -2204,7 +2228,13 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
         let target = &event.targets[0];
         assert_eq!(target.transport_kind, "reticulum");
         assert_eq!(target.endpoint_uri, "reticulum:preview-unavailable");
+        assert_eq!(target.target_scope.as_deref(), Some("local_preview"));
+        assert_eq!(target.target_label.as_deref(), None);
         assert_eq!(target.outcome_kind, expected_outcome);
+        assert_eq!(
+            target.transport_outcome_kind,
+            Some(expected_transport_outcome)
+        );
         assert!(!target.attempted);
         assert_eq!(
             target.message.as_deref(),
@@ -2233,6 +2263,12 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             status.outbox.deferred_until_implemented_events,
             expected_deferred
         );
+        assert_eq!(
+            status.transport_profile.configured_transport_targets[0]
+                .target_scope
+                .as_deref(),
+            Some("local_preview")
+        );
         assert_eq!(status.outbox.total_events, 1);
         assert_eq!(enqueue.outbox_event_id, 1);
 
@@ -2245,6 +2281,28 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
         assert_eq!(specific.events.len(), 1);
         assert_eq!(specific.events[0].outbox_event_id, enqueue.outbox_event_id);
     }
+}
+
+#[tokio::test]
+async fn sync_runtime_try_reticulum_preview_now_returns_explicit_unavailable_error() {
+    let (_tempdir, sdk) =
+        reticulum_preview_directory_sdk(ReticulumPreviewBehavior::DeferDeliveryPlans).await;
+
+    let error = sdk
+        .sync()
+        .try_reticulum_preview_now(ReticulumPreviewTryNowRequest::new())
+        .await
+        .expect_err("Reticulum preview unavailable");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+            ref operation,
+            ref endpoint_uri,
+            behavior: ReticulumPreviewBehavior::DeferDeliveryPlans,
+        } if operation == "sync.try_reticulum_preview_now"
+            && endpoint_uri == "reticulum:preview-unavailable"
+    ));
 }
 
 #[tokio::test]
