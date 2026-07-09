@@ -16,6 +16,58 @@ fn schema_declares_mesh_agent_v1_surface() {
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentStatusResponse"));
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentPublishRequest"));
     assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("struct MeshAgentPublishResponse"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("enum MeshAgentTransportKind"));
+    assert!(RADROOTS_MESH_AGENT_SCHEMA.contains("enum MeshAgentTransportOutcome"));
+}
+
+#[test]
+fn schema_is_canonical_transport_v1_authority() {
+    validate_schema().expect("schema validates");
+
+    assert_eq!(RADROOTS_MESH_AGENT_SCHEMA_ID, "0xb83e0c4f71838d9a");
+    assert_ne!(RADROOTS_MESH_AGENT_SCHEMA_ID, "0xdecafbaddecaf001");
+    assert_eq!(
+        validate_schema_text(
+            RADROOTS_MESH_AGENT_SCHEMA
+                .replace(RADROOTS_MESH_AGENT_SCHEMA_ID, "0xdecafbaddecaf001")
+                .as_str(),
+        ),
+        Err(RadrootsMeshAgentProtoError::MissingSchemaId)
+    );
+}
+
+#[test]
+fn schema_covers_transport_v1_status_and_publish_intent() {
+    for required in [
+        "requestId @0 :Text;",
+        "statusRequest @3 :MeshAgentStatusRequest;",
+        "publishRequest @4 :MeshAgentPublishRequest;",
+        "statusResponse @4 :MeshAgentStatusResponse;",
+        "publishResponse @5 :MeshAgentPublishResponse;",
+        "includeTransports @0 :Bool;",
+        "readiness @0 :MeshAgentReadinessState;",
+        "implementationState @1 :MeshAgentImplementationState;",
+        "transports @2 :List(MeshAgentTransportStatus);",
+        "transportKind @0 :MeshAgentTransportKind;",
+        "profileId @1 :Text;",
+        "publishUsable @5 :Bool;",
+        "fetchUsable @6 :Bool;",
+        "previewUnavailable @3;",
+        "previewNoop @0;",
+        "reticulum @0;",
+        "publishRequestId @0 :Text;",
+        "payloadCbor @1 :Data;",
+        "eventId @2 :Text;",
+        "targetFingerprint @3 :Text;",
+        "transportReceipts @2 :List(MeshAgentTransportReceipt);",
+        "eventId @3 :Text;",
+        "outcome @2 :MeshAgentTransportOutcome;",
+        "deferredUntilImplemented @4;",
+        "transportUnavailable @8;",
+        "errors @3 :List(MeshAgentError);",
+    ] {
+        assert!(RADROOTS_MESH_AGENT_SCHEMA.contains(required), "{required}");
+    }
 }
 
 #[test]
@@ -26,7 +78,7 @@ fn schema_hash_is_deterministic() {
     assert_eq!(first, second);
     assert_eq!(
         first,
-        "ea82bfc39ae963baf260a6c626ca9033767b0fec93aa013101f975e39baeae6a"
+        "eff807dfb46416296b51fa0214fee869fbe7ec1da068ffc9c1ce4facc308be17"
     );
 }
 
@@ -130,6 +182,18 @@ fn schema_validator_reports_each_missing_required_surface() {
             RadrootsMeshAgentProtoError::MissingStatusSurface,
         ),
         (
+            valid.replace("profileId @1 :Text;", "transportProfileId @1 :Text;"),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
+            valid.replace("reticulum @0;", "reticulumPreview @0;"),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
+            valid.replace("previewNoop @0;", "previewUnavailable @0;"),
+            RadrootsMeshAgentProtoError::MissingStatusSurface,
+        ),
+        (
             valid.replace(
                 "struct MeshAgentPublishRequest",
                 "struct MissingMeshAgentPublishRequest",
@@ -138,6 +202,35 @@ fn schema_validator_reports_each_missing_required_surface() {
         ),
         (
             valid.replace("publishRequestId @0 :Text;", "operationId @0 :Text;"),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace("eventId @2 :Text;", "eventIdentifier @2 :Text;"),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace("targetFingerprint @3 :Text;", "transportTarget @3 :Text;"),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace(
+                "transportReceipts @2 :List(MeshAgentTransportReceipt);",
+                "transportResults @2 :List(MeshAgentTransportReceipt);",
+            ),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace(
+                "outcome @2 :MeshAgentTransportOutcome;",
+                "outcome @2 :Text;",
+            ),
+            RadrootsMeshAgentProtoError::MissingPublishSurface,
+        ),
+        (
+            valid.replace(
+                "transportUnavailable @8;",
+                "transportUnavailablePreview @8;",
+            ),
             RadrootsMeshAgentProtoError::MissingPublishSurface,
         ),
         (

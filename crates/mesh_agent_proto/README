@@ -5,10 +5,12 @@ agent protocol schema surface for the `radroots` core libraries.
 
 ## Overview
 
- * Cap'n Proto schema text for the future `radroots.mesh_agent.v1` IPC surface;
+ * canonical Transport V1 Cap'n Proto schema text for the future
+   `radroots.mesh_agent.v1` IPC surface, superseding earlier handoff draft
+   schema text;
  * schema id and deterministic SHA-256 digest helpers;
- * narrow validation helpers for required request, response, event, and error
-   schema declarations;
+ * narrow validation helpers for required request, response, status, Reticulum
+   transport, publish placeholder, receipt, and error schema declarations;
  * schema-only protocol posture without an agent runtime or IPC client.
 
 ## Copyright

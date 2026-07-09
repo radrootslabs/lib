@@ -96,7 +96,12 @@ const STATUS_FIELDS: &[RequiredField] = &[
         2,
         "List(MeshAgentTransportStatus)",
     ),
-    field("MeshAgentTransportStatus", "transportKind", 0, "Text"),
+    field(
+        "MeshAgentTransportStatus",
+        "transportKind",
+        0,
+        "MeshAgentTransportKind",
+    ),
     field("MeshAgentTransportStatus", "profileId", 1, "Text"),
     field("MeshAgentTransportStatus", "endpointUri", 2, "Text"),
     field(
@@ -124,15 +129,31 @@ const READINESS_VARIANTS: &[RequiredVariant] = &[
 ];
 
 const IMPLEMENTATION_VARIANTS: &[RequiredVariant] = &[
-    variant("MeshAgentImplementationState", "available", 0),
-    variant("MeshAgentImplementationState", "disabled", 1),
-    variant("MeshAgentImplementationState", "misconfigured", 2),
-    variant("MeshAgentImplementationState", "previewUnavailable", 3),
+    variant("MeshAgentImplementationState", "previewNoop", 0),
+    variant("MeshAgentImplementationState", "mock", 1),
+    variant("MeshAgentImplementationState", "real", 2),
+];
+
+const TRANSPORT_KIND_VARIANTS: &[RequiredVariant] =
+    &[variant("MeshAgentTransportKind", "reticulum", 0)];
+
+const TRANSPORT_OUTCOME_VARIANTS: &[RequiredVariant] = &[
+    variant("MeshAgentTransportOutcome", "accepted", 0),
+    variant("MeshAgentTransportOutcome", "delivered", 1),
+    variant("MeshAgentTransportOutcome", "forwarded", 2),
+    variant("MeshAgentTransportOutcome", "storedByGateway", 3),
+    variant("MeshAgentTransportOutcome", "deferredUntilImplemented", 4),
+    variant("MeshAgentTransportOutcome", "rejected", 5),
+    variant("MeshAgentTransportOutcome", "routeUnavailable", 6),
+    variant("MeshAgentTransportOutcome", "timeout", 7),
+    variant("MeshAgentTransportOutcome", "transportUnavailable", 8),
 ];
 
 const PUBLISH_FIELDS: &[RequiredField] = &[
     field("MeshAgentPublishRequest", "publishRequestId", 0, "Text"),
     field("MeshAgentPublishRequest", "payloadCbor", 1, "Data"),
+    field("MeshAgentPublishRequest", "eventId", 2, "Text"),
+    field("MeshAgentPublishRequest", "targetFingerprint", 3, "Text"),
     field("MeshAgentPublishResponse", "publishRequestId", 0, "Text"),
     field(
         "MeshAgentPublishResponse",
@@ -146,9 +167,20 @@ const PUBLISH_FIELDS: &[RequiredField] = &[
         2,
         "List(MeshAgentTransportReceipt)",
     ),
-    field("MeshAgentTransportReceipt", "transportKind", 0, "Text"),
+    field("MeshAgentPublishResponse", "eventId", 3, "Text"),
+    field(
+        "MeshAgentTransportReceipt",
+        "transportKind",
+        0,
+        "MeshAgentTransportKind",
+    ),
     field("MeshAgentTransportReceipt", "endpointUri", 1, "Text"),
-    field("MeshAgentTransportReceipt", "deliveryStatus", 2, "Text"),
+    field(
+        "MeshAgentTransportReceipt",
+        "outcome",
+        2,
+        "MeshAgentTransportOutcome",
+    ),
     field("MeshAgentTransportReceipt", "redactedMessage", 3, "Text"),
 ];
 
@@ -227,9 +259,19 @@ pub(crate) fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgent
         IMPLEMENTATION_VARIANTS,
         RadrootsMeshAgentProtoError::MissingStatusSurface,
     )?;
+    validate_variants(
+        &parsed,
+        TRANSPORT_KIND_VARIANTS,
+        RadrootsMeshAgentProtoError::MissingStatusSurface,
+    )?;
     validate_fields(
         &parsed,
         PUBLISH_FIELDS,
+        RadrootsMeshAgentProtoError::MissingPublishSurface,
+    )?;
+    validate_variants(
+        &parsed,
+        TRANSPORT_OUTCOME_VARIANTS,
         RadrootsMeshAgentProtoError::MissingPublishSurface,
     )?;
     validate_fields(
