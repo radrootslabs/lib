@@ -365,7 +365,7 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         },
         RadrootsSdkError::ProductSyncUnsupported {
             operation: "sync.push_outbox",
-            required_feature: "relay-runtime",
+            required_feature: "transport-nostr-runtime",
         },
         RadrootsSdkError::reticulum_preview_transport_unavailable(
             "sync.push_outbox",

@@ -35,7 +35,7 @@ clock at enqueue time. Listing enqueue receipts report mutation state with the p
 `StoredAndQueued` and `AlreadyQueued`.
 
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued signed outbox work
-when `relay-runtime` is enabled. Push time uses the delivery targets already stored on each queued
+when `transport-nostr-runtime` is enabled. Push time uses the delivery targets already stored on each queued
 outbox event, so already queued work does not require a configured builder profile. Nostr transport
 publishing and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither
 transport owns signing. `push_outbox_with_adapter(...)` remains available for tests and controlled
@@ -58,9 +58,9 @@ actions. Runtime-only builds intentionally expose no buyer write handle and no t
 DTOs. DVM proof requests and validation receipt ingestion use `sdk.dvm()`.
 
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
-enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `relay-runtime`, and
-`relay-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
-`relay-client` supplies the Nostr relay WebSocket publish adapter used when signed outbox work
+enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `transport-nostr-runtime`, and
+`transport-nostr-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
+`transport-nostr-client` supplies the Nostr relay WebSocket publish adapter used when signed outbox work
 targets Nostr relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publishing through
 `publish.event` and the same configured signer provider API.
 
@@ -107,7 +107,7 @@ Optional advanced substrate is explicitly feature-scoped:
 - `identity-models`: identity data types without local storage coupling
 - `identity-storage`: encrypted identity-file helpers
 - `signing`: Nostr builder and local signing adapters
-- `relay-client`: relay client and publish adapters
+- `transport-nostr-client`: Nostr relay WebSocket client and publish adapters
 - `signer-adapters`: SDK local-key and Myc NIP-46 signer providers plus configured-signer product
   write APIs
 

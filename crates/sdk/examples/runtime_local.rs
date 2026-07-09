@@ -55,12 +55,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         prepared.public_listing_addr.as_str(),
         enqueue.public_listing_addr.as_str()
     );
-    #[cfg(feature = "relay-runtime")]
+    #[cfg(feature = "transport-nostr-runtime")]
     assert!(matches!(
         push,
         Err(RadrootsSdkError::ProductSyncTransportSetupFailure { .. })
     ));
-    #[cfg(not(feature = "relay-runtime"))]
+    #[cfg(not(feature = "transport-nostr-runtime"))]
     assert!(matches!(
         push,
         Err(RadrootsSdkError::ProductSyncUnsupported { .. })

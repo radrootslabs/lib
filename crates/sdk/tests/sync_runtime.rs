@@ -2110,7 +2110,7 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
     );
 }
 
-#[cfg(not(feature = "relay-runtime"))]
+#[cfg(not(feature = "transport-nostr-runtime"))]
 #[tokio::test]
 async fn product_push_outbox_without_relay_runtime_returns_structured_error() {
     let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
@@ -2127,7 +2127,7 @@ async fn product_push_outbox_without_relay_runtime_returns_structured_error() {
     ));
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn product_push_outbox_empty_queue_does_not_require_builder_relays() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;

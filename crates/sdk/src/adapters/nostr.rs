@@ -70,5 +70,5 @@ pub async fn publish_signed_event(
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/adapters_relay_tests.rs"]
+#[path = "../../tests/unit/adapters_nostr_tests.rs"]
 mod tests;

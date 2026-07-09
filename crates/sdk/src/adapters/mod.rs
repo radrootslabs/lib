@@ -1,7 +1,7 @@
+#[cfg(feature = "transport-nostr-client")]
+pub mod nostr;
 #[cfg(feature = "radrootsd-proxy")]
 pub mod radrootsd;
-#[cfg(feature = "relay-client")]
-pub mod relay;
 #[cfg(feature = "signer-adapters")]
 pub mod signer;
 #[cfg(feature = "signing")]

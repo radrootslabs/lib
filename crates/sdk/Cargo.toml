@@ -37,7 +37,7 @@ identity-models = [
 ]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:nostr", "dep:radroots_nostr", "nostr"]
-relay-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
+transport-nostr-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
 radrootsd-proxy = [
   "std",
   "serde_json",
@@ -89,7 +89,7 @@ runtime = [
   "radroots_trade/event_store",
 ]
 local-signer = ["runtime", "radroots_authority/local_signer"]
-relay-runtime = [
+transport-nostr-runtime = [
   "runtime",
   "dep:radroots_nostr",
   "radroots_nostr/client",
@@ -101,8 +101,8 @@ local-runtime = [
   "serde_json",
   "runtime",
   "signer-adapters",
-  "relay-runtime",
-  "relay-client",
+  "transport-nostr-runtime",
+  "transport-nostr-client",
 ]
 local-runtime-radrootsd-proxy = [
   "std",

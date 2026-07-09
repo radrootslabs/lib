@@ -32,9 +32,9 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
         .await
         .expect_err("resync requires configured relays");
 
-    #[cfg(feature = "relay-runtime")]
+    #[cfg(feature = "transport-nostr-runtime")]
     assert_eq!(resync_error.code(), "empty_transport_targets");
-    #[cfg(not(feature = "relay-runtime"))]
+    #[cfg(not(feature = "transport-nostr-runtime"))]
     assert_eq!(resync_error.code(), "product_sync_unsupported");
 
     let validation_receipt_error = validation_receipts
@@ -45,9 +45,9 @@ async fn grouped_trade_surface_is_the_public_product_entrypoint() {
         .await
         .expect_err("validation receipt list requires configured relays");
 
-    #[cfg(feature = "relay-runtime")]
+    #[cfg(feature = "transport-nostr-runtime")]
     assert_eq!(validation_receipt_error.code(), "empty_transport_targets");
-    #[cfg(not(feature = "relay-runtime"))]
+    #[cfg(not(feature = "transport-nostr-runtime"))]
     assert_eq!(validation_receipt_error.code(), "product_sync_unsupported");
 
     let seller_actor =

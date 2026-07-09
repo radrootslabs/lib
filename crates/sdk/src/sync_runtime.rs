@@ -13,7 +13,7 @@ use crate::{
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(feature = "runtime")]
 use radroots_events::ids::RadrootsEventId;
-#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+#[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_outbox::{
@@ -35,7 +35,7 @@ use radroots_transport::{
     RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportReadinessState,
     RadrootsTransportStatus, RadrootsTransportTarget,
 };
-#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+#[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
 use radroots_transport_nostr::{
@@ -600,7 +600,7 @@ impl<'sdk> SyncClient<'sdk> {
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
         match self.sdk.transport_profile() {
             TransportProfile::Nostr { .. } | TransportProfile::Hybrid { .. } => {
-                #[cfg(feature = "relay-runtime")]
+                #[cfg(feature = "transport-nostr-runtime")]
                 {
                     let adapter = RadrootsNostrClientPublishAdapter::new(
                         RadrootsNostrClient::new_signerless(),
@@ -608,12 +608,12 @@ impl<'sdk> SyncClient<'sdk> {
                     self.push_outbox_with_adapter(&adapter, request).await
                 }
 
-                #[cfg(not(feature = "relay-runtime"))]
+                #[cfg(not(feature = "transport-nostr-runtime"))]
                 {
                     let _ = request;
                     Err(RadrootsSdkError::ProductSyncUnsupported {
                         operation: "sync.push_outbox",
-                        required_feature: "relay-runtime",
+                        required_feature: "transport-nostr-runtime",
                     })
                 }
             }

@@ -466,7 +466,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
         (
             RadrootsSdkError::ProductSyncUnsupported {
                 operation: "sync.push_outbox",
-                required_feature: "relay-runtime",
+                required_feature: "transport-nostr-runtime",
             },
             "product_sync_unsupported",
             RadrootsSdkErrorClass::Unsupported,

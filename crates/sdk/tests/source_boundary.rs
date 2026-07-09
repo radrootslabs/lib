@@ -513,6 +513,69 @@ fn sdk_manifest_does_not_depend_on_app_or_cli_crates() {
 }
 
 #[test]
+fn sdk_transport_nostr_features_do_not_retain_relay_named_aliases() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest = read_source(manifest_dir.join("Cargo.toml").as_path());
+
+    for required in [
+        "transport-nostr-client = [",
+        "transport-nostr-runtime = [",
+        "\"transport-nostr-runtime\",",
+        "\"transport-nostr-client\",",
+    ] {
+        assert!(
+            manifest.contains(required),
+            "Cargo.toml must retain canonical SDK transport feature witness `{required}`"
+        );
+    }
+    for forbidden in ["relay-client", "relay-runtime"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "Cargo.toml must not retain removed SDK transport feature `{forbidden}`"
+        );
+    }
+
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
+    assert!(
+        lib_source.contains("feature = \"transport-nostr-client\""),
+        "src/lib.rs must gate adapters on transport-nostr-client"
+    );
+    assert!(
+        !lib_source.contains("relay-client") && !lib_source.contains("relay-runtime"),
+        "src/lib.rs must not retain removed transport feature names"
+    );
+
+    let adapters_mod_source = read_source(manifest_dir.join("src/adapters/mod.rs").as_path());
+    assert!(
+        adapters_mod_source.contains("pub mod nostr;"),
+        "src/adapters/mod.rs must expose the Nostr adapter module by transport kind"
+    );
+    assert!(
+        !adapters_mod_source.contains("pub mod relay;"),
+        "src/adapters/mod.rs must not retain a relay-named public adapter module"
+    );
+    assert!(
+        !manifest_dir.join("src/adapters/relay.rs").exists(),
+        "src/adapters/relay.rs must not remain as a relay-named public adapter module"
+    );
+
+    for relative_path in [
+        "src/sync_runtime.rs",
+        "src/orders_runtime.rs",
+        "examples/runtime_local.rs",
+        "README",
+    ] {
+        let source = read_source(manifest_dir.join(relative_path).as_path());
+        for forbidden in ["relay-client", "relay-runtime"] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative_path} must not retain removed SDK transport feature `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn sdk_readme_documents_current_public_product_surface() {
     let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README");
     let readme = read_source(readme_path.as_path());

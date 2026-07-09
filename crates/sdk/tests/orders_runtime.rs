@@ -2,20 +2,20 @@
 
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use std::path::Path;
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use futures::future::BoxFuture;
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use nostr::JsonUtil;
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
@@ -38,7 +38,7 @@ use radroots_nostr::prelude::{
     radroots_nostr_build_event,
 };
 use radroots_outbox::RadrootsOutbox;
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use radroots_sdk::{
     DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind, TradeResyncRelayOutcomeKind,
     TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxRequest,
@@ -60,7 +60,7 @@ use radroots_sdk::{
 use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use radroots_trade::identity::RadrootsTradeLocator;
 use radroots_trade::order::RadrootsOrderIssue;
 use radroots_trade::validation_receipt::{
@@ -69,7 +69,7 @@ use radroots_trade::validation_receipt::{
     RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
     validation_receipt_event_build, validation_receipt_public_values_hash_hex,
 };
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 use radroots_transport_nostr::{
     RadrootsMockRelayFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchItem,
     RadrootsRelayFetchRequest, RadrootsRelayTransportError,
@@ -91,7 +91,7 @@ const RELAY: &str = "wss://relay.radroots.test";
 #[cfg(any())]
 const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
 const PERF_TRADE_RELEVANT_EVENTS: i64 = 25_000;
@@ -111,13 +111,13 @@ struct FailingStructSerializer {
     failure: FailingSerializeFailure,
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[derive(Clone, Default)]
 struct CapturingRelayFetchAdapter {
     filters_json: Arc<Mutex<Vec<String>>>,
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 impl CapturingRelayFetchAdapter {
     fn filters_json(&self) -> Vec<String> {
         self.filters_json
@@ -127,7 +127,7 @@ impl CapturingRelayFetchAdapter {
     }
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 impl RadrootsRelayFetchAdapter for CapturingRelayFetchAdapter {
     fn fetch<'a>(
         &'a self,
@@ -462,7 +462,7 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, Radroo
     (tempdir, sdk, store)
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 async fn directory_sdk_and_store_with_relays(
     relays: &[&str],
 ) -> (tempfile::TempDir, RadrootsClient, RadrootsEventStore) {
@@ -964,7 +964,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
 #[cfg(all(
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "relay-runtime"
+    feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
 async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
@@ -1107,7 +1107,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
 #[cfg(all(
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "relay-runtime"
+    feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
 async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
@@ -1415,7 +1415,7 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
 #[cfg(all(
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "relay-runtime"
+    feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
 async fn trade_product_accept_resync_before_mutation_imports_relay_visible_request() {
@@ -1522,7 +1522,7 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
 #[cfg(all(
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "relay-runtime"
+    feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
 async fn trade_product_revision_status_resync_imports_pending_revision_proposal() {
@@ -1669,7 +1669,7 @@ async fn trade_product_revision_status_resync_imports_pending_revision_proposal(
 #[cfg(all(
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "relay-runtime"
+    feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
 async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
@@ -1884,7 +1884,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -1999,7 +1999,7 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_trust_config() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2100,7 +2100,7 @@ async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_tr
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_validation_receipt_list_rejects_out_of_filter_order_receipts() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2144,7 +2144,7 @@ async fn trade_validation_receipt_list_rejects_out_of_filter_order_receipts() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_validation_receipt_inspect_rejects_unrequested_relay_receipts() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2196,7 +2196,7 @@ async fn trade_validation_receipt_inspect_rejects_unrequested_relay_receipts() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_validation_receipt_inspect_skips_noise_before_exact_receipt_match() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2263,7 +2263,7 @@ async fn trade_validation_receipt_inspect_skips_noise_before_exact_receipt_match
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2328,7 +2328,7 @@ async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_status_local_only_ignores_failing_fetch_adapter() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2349,7 +2349,7 @@ async fn trade_status_local_only_ignores_failing_fetch_adapter() {
     assert!(status.online_evidence.is_none());
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_status_resync_then_local_fetches_evidence_before_status() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2395,7 +2395,7 @@ async fn trade_status_resync_then_local_fetches_evidence_before_status() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_skips_noise_before_matching_trade_event() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2435,7 +2435,7 @@ async fn trade_resync_skips_noise_before_matching_trade_event() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_duplicate_replay_is_idempotent() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2465,7 +2465,7 @@ async fn trade_resync_duplicate_replay_is_idempotent() {
     assert_eq!(second.status.status, TradeStatusKind::Requested);
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_splits_lifecycle_branch_into_single_kind_filters() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2498,7 +2498,7 @@ async fn trade_resync_splits_lifecycle_branch_into_single_kind_filters() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_reports_malformed_evidence_without_poisoning_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2530,7 +2530,7 @@ async fn trade_resync_reports_malformed_evidence_without_poisoning_store() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_rejects_out_of_filter_evidence_without_poisoning_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
@@ -2567,7 +2567,7 @@ async fn trade_resync_rejects_out_of_filter_evidence_without_poisoning_store() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_errors_on_total_relay_failure() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY, RELAY_B]).await;
@@ -2591,7 +2591,7 @@ async fn trade_resync_errors_on_total_relay_failure() {
     assert_eq!(error.code(), "product_sync_transport_setup_failure");
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
 async fn trade_resync_reports_partial_relay_failure() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY, RELAY_B]).await;
@@ -2627,7 +2627,7 @@ async fn trade_resync_reports_partial_relay_failure() {
     );
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 async fn relay_event_item_from_store(
     source: &RadrootsEventStore,
     event_id: &RadrootsEventId,
@@ -2660,7 +2660,7 @@ async fn event_from_store(
     radroots_event_from_nostr(&event)
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn relay_raw_event_item(
     event: &nostr::Event,
     relay_url: &str,
@@ -2673,14 +2673,14 @@ fn relay_raw_event_item(
     }
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn relay_eose(relay_url: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Eose {
         relay_url: relay_url.to_owned(),
     }
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn relay_closed(relay_url: &str, message: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Closed {
         relay_url: relay_url.to_owned(),
@@ -2688,7 +2688,7 @@ fn relay_closed(relay_url: &str, message: &str) -> RadrootsRelayFetchItem {
     }
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn relay_malformed(relay_url: &str) -> RadrootsRelayFetchItem {
     RadrootsRelayFetchItem::Event {
         relay_url: relay_url.to_owned(),
@@ -3853,7 +3853,7 @@ fn revision_economics() -> RadrootsOrderEconomics {
     }
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn signed_raw_validation_receipt_event(
     raw_order_id: &str,
     listing_event_id: &RadrootsEventId,
@@ -3893,7 +3893,7 @@ fn signed_raw_sp1_validation_receipt_event(
     )
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn validation_receipt_wire_parts(
     raw_order_id: &str,
     listing_event_id: &RadrootsEventId,
@@ -4031,7 +4031,7 @@ fn signed_raw_sp1_worker_result_event(
     )
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn signed_raw_worker_result_event(
     raw_order_id: &str,
     receipt_event_id: &RadrootsEventId,
@@ -4205,7 +4205,7 @@ fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNo
     signed_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
-#[cfg(feature = "relay-runtime")]
+#[cfg(feature = "transport-nostr-runtime")]
 fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr::Event {
     let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),

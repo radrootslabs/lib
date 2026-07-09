@@ -9,7 +9,7 @@ mod actor_json;
 #[cfg(any(
     feature = "radrootsd-proxy",
     feature = "signing",
-    feature = "relay-client",
+    feature = "transport-nostr-client",
     feature = "signer-adapters"
 ))]
 pub mod adapters;
