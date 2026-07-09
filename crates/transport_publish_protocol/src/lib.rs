@@ -16,7 +16,7 @@ use radroots_transport::{
     RadrootsTransportTargetFingerprint,
 };
 
-pub const API_VERSION: &str = "radrootsd.transport_publish.v2";
+pub const API_VERSION: &str = "radrootsd.transport_publish.v3";
 pub const DAEMON_NAME: &str = "radrootsd";
 pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
 pub const METHOD_EVENT: &str = "transport.publish.event";
@@ -726,7 +726,7 @@ pub struct TransportPublishCapabilities {
 }
 
 impl TransportPublishCapabilities {
-    pub fn v2(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
+    pub fn v3(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
         Self {
             daemon: DAEMON_NAME.to_owned(),
             api_version: API_VERSION.to_owned(),
@@ -756,16 +756,17 @@ impl TransportPublishCapabilities {
                 ],
                 transports: vec![
                     TransportPublishTransportCapability {
-                        transport_kind: "nostr".to_owned(),
-                        implementation_state: TransportPublishImplementationState::Available,
+                        transport: "nostr".to_owned(),
+                        configured: true,
+                        implementation: TransportPublishImplementation::Real,
                         usable_for_delivery: true,
                         preview_behavior: None,
                         message: "Nostr relay publish is available".to_owned(),
                     },
                     TransportPublishTransportCapability {
-                        transport_kind: "reticulum".to_owned(),
-                        implementation_state:
-                            TransportPublishImplementationState::PreviewUnavailable,
+                        transport: "reticulum".to_owned(),
+                        configured: true,
+                        implementation: TransportPublishImplementation::PreviewUnavailable,
                         usable_for_delivery: false,
                         preview_behavior: Some(
                             TransportPublishPreviewBehavior::RejectDeliveryAttempts,
@@ -801,10 +802,9 @@ pub struct TransportPublishSurfaceCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TransportPublishImplementationState {
-    Available,
-    Disabled,
-    Misconfigured,
+pub enum TransportPublishImplementation {
+    Real,
+    Mock,
     PreviewUnavailable,
 }
 
@@ -812,8 +812,9 @@ pub enum TransportPublishImplementationState {
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportPublishTransportCapability {
-    pub transport_kind: String,
-    pub implementation_state: TransportPublishImplementationState,
+    pub transport: String,
+    pub configured: bool,
+    pub implementation: TransportPublishImplementation,
     pub usable_for_delivery: bool,
     #[cfg_attr(
         feature = "serde",
@@ -1145,10 +1146,10 @@ mod tests {
     }
 
     #[test]
-    fn transport_publish_capabilities_match_v2_surface() {
-        let capabilities = TransportPublishCapabilities::v2(1024, 10);
+    fn transport_publish_capabilities_match_v3_surface() {
+        let capabilities = TransportPublishCapabilities::v3(1024, 10);
 
-        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v2");
+        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v3");
         assert_eq!(
             capabilities.methods,
             vec![
@@ -1171,22 +1172,21 @@ mod tests {
             .publish
             .transports
             .iter()
-            .find(|transport| transport.transport_kind == "nostr")
+            .find(|transport| transport.transport == "nostr")
             .expect("nostr capability");
-        assert_eq!(
-            nostr.implementation_state,
-            TransportPublishImplementationState::Available
-        );
+        assert!(nostr.configured);
+        assert_eq!(nostr.implementation, TransportPublishImplementation::Real);
         assert!(nostr.usable_for_delivery);
         let reticulum = capabilities
             .publish
             .transports
             .iter()
-            .find(|transport| transport.transport_kind == "reticulum")
+            .find(|transport| transport.transport == "reticulum")
             .expect("reticulum capability");
+        assert!(reticulum.configured);
         assert_eq!(
-            reticulum.implementation_state,
-            TransportPublishImplementationState::PreviewUnavailable
+            reticulum.implementation,
+            TransportPublishImplementation::PreviewUnavailable
         );
         assert!(!reticulum.usable_for_delivery);
         assert_eq!(
