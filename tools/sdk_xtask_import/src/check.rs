@@ -56,6 +56,7 @@ pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
     let root = workspace_root()?;
     validate_sdk_contracts(&root)?;
+    check_sdk_feature_matrix(&root)?;
     check_forbidden_packages(&root)?;
     check_binding_crate_sources(&root)?;
     check_package_source_metadata(&root)?;
@@ -63,6 +64,81 @@ pub fn check() -> Result<(), String> {
     check_package_build_artifacts(&root)?;
     check_npm_pack_payloads(&root)?;
     Ok(())
+}
+
+fn check_sdk_feature_matrix(root: &Path) -> Result<(), String> {
+    let path = root.join("crates/sdk/Cargo.toml");
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let manifest = raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    let features = manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{} must define [features]", path.display()))?;
+    let runtime = feature_entries(features, "runtime")?;
+    for entry in [
+        "dep:radroots_transport_reticulum",
+        "dep:radroots_transport",
+        "dep:radroots_outbox",
+    ] {
+        require_feature_entry(&runtime, "runtime", entry)?;
+    }
+    let nostr_runtime = feature_entries(features, "transport-nostr-runtime")?;
+    for entry in [
+        "runtime",
+        "dep:radroots_nostr",
+        "radroots_nostr/client",
+        "radroots_transport_nostr/client",
+    ] {
+        require_feature_entry(&nostr_runtime, "transport-nostr-runtime", entry)?;
+    }
+    if features.contains_key("transport-reticulum-preview") {
+        return Err(
+            "crates/sdk/Cargo.toml must not introduce transport-reticulum-preview as a runtime-owned Reticulum preview feature alias"
+                .to_owned(),
+        );
+    }
+    let dependencies = manifest
+        .get("dependencies")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{} must define [dependencies]", path.display()))?;
+    for dependency in ["rns", "rnsd", "reticulum", "python"] {
+        if dependencies.contains_key(dependency) {
+            return Err(format!(
+                "crates/sdk/Cargo.toml must not add real Reticulum runtime dependency `{dependency}`"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn feature_entries<'features>(
+    features: &'features toml::map::Map<String, toml::Value>,
+    feature: &str,
+) -> Result<Vec<&'features str>, String> {
+    features
+        .get(feature)
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| format!("crates/sdk/Cargo.toml must define feature `{feature}`"))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .ok_or_else(|| format!("feature `{feature}` must contain only string entries"))
+        })
+        .collect()
+}
+
+fn require_feature_entry(entries: &[&str], feature: &str, entry: &str) -> Result<(), String> {
+    if entries.contains(&entry) {
+        Ok(())
+    } else {
+        Err(format!(
+            "crates/sdk/Cargo.toml feature `{feature}` must include `{entry}`"
+        ))
+    }
 }
 
 fn check_package_source_metadata(root: &Path) -> Result<(), String> {

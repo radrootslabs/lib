@@ -5,10 +5,12 @@ use crate::adapters::radrootsd::{
 };
 #[cfg(feature = "runtime")]
 use crate::{
-    NostrRelayUrlPolicy, ProxyAuth, ProxyProfile, RadrootsSdkError, SyncClient,
+    NostrRelayUrlPolicy, RadrootsSdkError, SyncClient,
     runtime::{RadrootsClient, sdk_now_ms},
     transport::TransportProfile,
 };
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use crate::{ProxyAuth, ProxyProfile};
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(feature = "runtime")]
@@ -629,6 +631,11 @@ impl<'sdk> SyncClient<'sdk> {
                     RadrootsdProxyPublishAdapter::new(radrootsd_proxy_config_from_profile(profile));
                 self.push_outbox_with_proxy_adapter(&adapter, request).await
             }
+            #[cfg(not(feature = "radrootsd-proxy"))]
+            TransportProfile::Proxy { .. } => Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "sync.push_outbox",
+                required_feature: "radrootsd-proxy",
+            }),
             TransportProfile::LocalOnly => {
                 if self.push_outbox_has_no_ready_signed_work(&request).await? {
                     return Ok(PushOutboxReceipt::default());

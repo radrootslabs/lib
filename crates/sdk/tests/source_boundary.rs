@@ -1638,6 +1638,67 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
     }
 }
 
+#[test]
+fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest_source = read_source(manifest_dir.join("Cargo.toml").as_path());
+    let features_source = source_between(manifest_source.as_str(), "[features]", "[dependencies]");
+    let runtime_source = source_between(features_source, "runtime = [", "local-signer = [");
+    let nostr_runtime_source = source_between(
+        features_source,
+        "transport-nostr-runtime = [",
+        "local-runtime = [",
+    );
+
+    for required in [
+        "\"dep:radroots_transport_reticulum\"",
+        "\"dep:radroots_transport\"",
+        "\"dep:radroots_outbox\"",
+    ] {
+        assert!(
+            runtime_source.contains(required),
+            "SDK runtime feature must retain Reticulum preview matrix witness `{required}`"
+        );
+    }
+    for required in [
+        "\"runtime\"",
+        "\"dep:radroots_nostr\"",
+        "\"radroots_nostr/client\"",
+        "\"radroots_transport_nostr/client\"",
+    ] {
+        assert!(
+            nostr_runtime_source.contains(required),
+            "SDK Nostr runtime feature must retain real delivery matrix witness `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "transport-reticulum-preview",
+        "radroots_transport_reticulum/client",
+        "reticulum-runtime",
+        "dep:rns",
+        "dep:rnsd",
+        "dep:reticulum",
+    ] {
+        assert!(
+            !manifest_source.contains(forbidden),
+            "SDK feature matrix must not introduce Reticulum preview alias or real runtime dependency `{forbidden}`"
+        );
+    }
+
+    let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    for required in [
+        "#[cfg(not(feature = \"radrootsd-proxy\"))]",
+        "TransportProfile::Proxy { .. } => Err(RadrootsSdkError::ProductSyncUnsupported",
+        "required_feature: \"radrootsd-proxy\"",
+    ] {
+        assert!(
+            sync_runtime_source.contains(required),
+            "SDK runtime-only push_outbox must retain proxy feature gate witness `{required}`"
+        );
+    }
+}
+
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
