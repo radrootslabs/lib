@@ -1605,15 +1605,25 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
 
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
     for required in [
-        "TransportProfile::ReticulumPreview { profile }",
-        "push_outbox_has_no_reticulum_preview_work",
-        "RadrootsSdkError::reticulum_preview_transport_unavailable",
+        "TransportProfile::ReticulumPreview { .. }",
+        "reticulum_preview_push_receipt",
+        "reticulum_preview_event_receipt",
+        "push_reported_event",
+        "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
     ] {
         assert!(
             sync_runtime.contains(required),
             "src/sync_runtime.rs must retain Reticulum preview push boundary `{required}`"
         );
     }
+    assert!(
+        !sync_runtime.contains("push_outbox_has_no_reticulum_preview_work"),
+        "src/sync_runtime.rs must not revive the Reticulum preview ready-work error probe"
+    );
+    assert!(
+        !sync_runtime.contains("RadrootsSdkError::reticulum_preview_transport_unavailable(\n"),
+        "src/sync_runtime.rs must not return Reticulum preview unavailable errors from push_outbox"
+    );
 
     let error_source = read_source(manifest_dir.join("src/error.rs").as_path());
     for required in [

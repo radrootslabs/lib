@@ -367,16 +367,16 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             operation: "sync.push_outbox",
             required_feature: "transport-nostr-runtime",
         },
-        RadrootsSdkError::reticulum_preview_transport_unavailable(
-            "sync.push_outbox",
-            "reticulum:preview-unavailable",
-            ReticulumPreviewBehavior::RejectDeliveryAttempts,
-        ),
-        RadrootsSdkError::reticulum_preview_transport_unavailable(
-            "sync.push_outbox",
-            "reticulum:preview-unavailable",
-            ReticulumPreviewBehavior::DeferDeliveryPlans,
-        ),
+        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+            operation: "sync.push_outbox".to_owned(),
+            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
+            behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
+        },
+        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+            operation: "sync.push_outbox".to_owned(),
+            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
+            behavior: ReticulumPreviewBehavior::DeferDeliveryPlans,
+        },
         RadrootsSdkError::ProductSyncTransportSetupFailure {
             message: "offline".to_owned(),
         },

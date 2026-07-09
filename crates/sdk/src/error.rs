@@ -560,18 +560,6 @@ impl RadrootsSdkError {
         }
     }
 
-    pub(crate) fn reticulum_preview_transport_unavailable(
-        operation: impl Into<String>,
-        endpoint_uri: impl Into<String>,
-        behavior: ReticulumPreviewBehavior,
-    ) -> Self {
-        Self::ReticulumPreviewTransportUnavailable {
-            operation: operation.into(),
-            endpoint_uri: endpoint_uri.into(),
-            behavior,
-        }
-    }
-
     pub(crate) fn trade_status_limit_invalid(limit: u32, min: u32, max: u32) -> Self {
         Self::TradeStatusLimitInvalid { limit, min, max }
     }

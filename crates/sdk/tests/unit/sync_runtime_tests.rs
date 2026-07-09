@@ -461,10 +461,10 @@ fn auth_policy_defaults_and_outbox_state_mappings_cover_all_public_states() {
     );
 
     let mut receipt = PushOutboxReceipt::default();
-    receipt.push_event(push_receipt(PushOutboxEventState::Published));
-    receipt.push_event(push_receipt(PushOutboxEventState::PublishRetryable));
-    receipt.push_event(push_receipt(PushOutboxEventState::FailedTerminal));
-    receipt.push_event(push_receipt(PushOutboxEventState::Cancelled));
+    receipt.push_attempted_event(push_receipt(PushOutboxEventState::Published));
+    receipt.push_attempted_event(push_receipt(PushOutboxEventState::PublishRetryable));
+    receipt.push_attempted_event(push_receipt(PushOutboxEventState::FailedTerminal));
+    receipt.push_attempted_event(push_receipt(PushOutboxEventState::Cancelled));
     assert_eq!(receipt.attempted_events, 4);
     assert_eq!(receipt.terminal_events, 1);
     assert_eq!(receipt.published_events, 1);

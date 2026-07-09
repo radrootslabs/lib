@@ -16,12 +16,13 @@ use radroots_events::ids::RadrootsEventId;
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-use radroots_outbox::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
-    RadrootsOutboxDeliveryTargetStatus,
-};
+use radroots_outbox::RadrootsOutboxClaimedEvent;
 #[cfg(feature = "runtime")]
-use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
+use radroots_outbox::{
+    RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
+    RadrootsOutboxEventState, RadrootsOutboxReticulumPreviewEventRecord,
+    RadrootsOutboxStatusSummary,
+};
 #[cfg(feature = "runtime")]
 use radroots_trade::projection::{
     RADROOTS_PRODUCT_PROJECTION_ID, RADROOTS_PRODUCT_PROJECTION_VERSION,
@@ -32,8 +33,9 @@ use radroots_trade::projection::{
 use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
-    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportReadinessState,
-    RadrootsTransportStatus, RadrootsTransportTarget,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportReadinessState, RadrootsTransportStatus,
+    RadrootsTransportTarget,
 };
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
@@ -442,8 +444,12 @@ pub struct PushOutboxReceipt {
 
 #[cfg(feature = "runtime")]
 impl PushOutboxReceipt {
-    fn push_event(&mut self, event: PushOutboxEventReceipt) {
+    fn push_attempted_event(&mut self, event: PushOutboxEventReceipt) {
         self.attempted_events += 1;
+        self.push_reported_event(event);
+    }
+
+    fn push_reported_event(&mut self, event: PushOutboxEventReceipt) {
         match event.final_state {
             PushOutboxEventState::Published => self.published_events += 1,
             PushOutboxEventState::PublishRetryable => self.retryable_events += 1,
@@ -632,18 +638,8 @@ impl<'sdk> SyncClient<'sdk> {
                     required_feature: "delivery-capable transport profile",
                 })
             }
-            TransportProfile::ReticulumPreview { profile } => {
-                if self
-                    .push_outbox_has_no_reticulum_preview_work(&request)
-                    .await?
-                {
-                    return Ok(PushOutboxReceipt::default());
-                }
-                Err(RadrootsSdkError::reticulum_preview_transport_unavailable(
-                    "sync.push_outbox",
-                    profile.endpoint_uri(),
-                    profile.behavior(),
-                ))
+            TransportProfile::ReticulumPreview { .. } => {
+                self.reticulum_preview_push_receipt(request).await
             }
         }
     }
@@ -656,37 +652,6 @@ impl<'sdk> SyncClient<'sdk> {
         let now_ms = sdk_now_ms(self.sdk)?;
         let summary = self.sdk._outbox.status_summary(now_ms).await?;
         Ok(summary.ready_signed_events == 0)
-    }
-
-    async fn push_outbox_has_no_reticulum_preview_work(
-        &self,
-        request: &PushOutboxRequest,
-    ) -> Result<bool, RadrootsSdkError> {
-        request.validate()?;
-        if let Some(outbox_event_id) = request.outbox_event_id {
-            let Some(event) = self.sdk._outbox.get_event(outbox_event_id).await? else {
-                return Ok(true);
-            };
-            if !matches!(
-                event.state,
-                RadrootsOutboxEventState::Signed | RadrootsOutboxEventState::PublishRetryable
-            ) || event.signed_event.is_none()
-            {
-                return Ok(true);
-            }
-            let targets = self.sdk._outbox.delivery_targets(outbox_event_id).await?;
-            return Ok(!targets.iter().any(|target| {
-                target.transport_kind == RadrootsTransportKind::Reticulum
-                    && (target.status.is_deferred_preview() || target.status.is_ready_for_attempt())
-            }));
-        }
-        let now_ms = sdk_now_ms(self.sdk)?;
-        let summary = self.sdk._outbox.status_summary(now_ms).await?;
-        Ok(summary.ready_signed_events == 0
-            && summary.pending_events == 0
-            && summary.retryable_events == 0
-            && summary.preview_unavailable_events == 0
-            && summary.deferred_until_implemented_events == 0)
     }
 
     pub async fn push_outbox_with_adapter<A>(
@@ -733,7 +698,7 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
-            receipt.push_event(push_event_receipt(
+            receipt.push_attempted_event(push_event_receipt(
                 claimed.outbox_event_id,
                 push_event_final_state(&publish.publish),
                 publish.publish,
@@ -778,7 +743,24 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
-            receipt.push_event(publish);
+            receipt.push_attempted_event(publish);
+        }
+        Ok(receipt)
+    }
+
+    async fn reticulum_preview_push_receipt(
+        &self,
+        request: PushOutboxRequest,
+    ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
+        request.validate()?;
+        let records = self
+            .sdk
+            ._outbox
+            .reticulum_preview_events(request.outbox_event_id, request.limit)
+            .await?;
+        let mut receipt = PushOutboxReceipt::default();
+        for record in records {
+            receipt.push_reported_event(reticulum_preview_event_receipt(record)?);
         }
         Ok(receipt)
     }
@@ -832,6 +814,97 @@ async fn claim_ready_signed_event_for_push(
                 claim_now_ms,
             )
             .await?),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn reticulum_preview_event_receipt(
+    record: RadrootsOutboxReticulumPreviewEventRecord,
+) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
+    let event_id = push_receipt_event_id(
+        record.event.event_id.as_str(),
+        "Reticulum preview outbox event id",
+    )?;
+    let final_state = reticulum_preview_event_final_state(record.event.state, &record.targets);
+    let quorum = record.targets.len();
+    Ok(PushOutboxEventReceipt {
+        event_id,
+        outbox_event_id: record.event.outbox_event_id,
+        final_state,
+        attempted_count: 0,
+        accepted_count: 0,
+        retryable_count: 0,
+        terminal_count: 0,
+        quorum,
+        quorum_met: false,
+        targets: record
+            .targets
+            .into_iter()
+            .map(reticulum_preview_target_receipt)
+            .collect(),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn reticulum_preview_event_final_state(
+    event_state: RadrootsOutboxEventState,
+    targets: &[RadrootsOutboxDeliveryTargetRecord],
+) -> PushOutboxEventState {
+    if event_state == RadrootsOutboxEventState::PreviewUnavailable
+        || targets.iter().any(|target| {
+            matches!(
+                target.status,
+                RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+                    | RadrootsOutboxDeliveryTargetStatus::Pending
+                    | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+            )
+        })
+    {
+        PushOutboxEventState::PreviewUnavailable
+    } else {
+        PushOutboxEventState::DeferredUntilImplemented
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn reticulum_preview_target_receipt(
+    target: RadrootsOutboxDeliveryTargetRecord,
+) -> PushOutboxTargetReceipt {
+    PushOutboxTargetReceipt {
+        transport_kind: target.transport_kind.canonical_label(),
+        endpoint_uri: target.endpoint_uri.as_str().to_owned(),
+        outcome_kind: reticulum_preview_target_outcome_kind(target.status),
+        attempted: false,
+        message: Some(
+            target
+                .last_error
+                .unwrap_or_else(|| RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE.to_owned()),
+        ),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn reticulum_preview_target_outcome_kind(
+    status: RadrootsOutboxDeliveryTargetStatus,
+) -> PushOutboxTargetOutcomeKind {
+    match status {
+        RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented => {
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented
+        }
+        RadrootsOutboxDeliveryTargetStatus::Pending
+        | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+        | RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable => {
+            PushOutboxTargetOutcomeKind::PreviewUnavailable
+        }
+        RadrootsOutboxDeliveryTargetStatus::Accepted
+        | RadrootsOutboxDeliveryTargetStatus::Delivered
+        | RadrootsOutboxDeliveryTargetStatus::Forwarded
+        | RadrootsOutboxDeliveryTargetStatus::StoredByGateway
+        | RadrootsOutboxDeliveryTargetStatus::Seen
+        | RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied
+        | RadrootsOutboxDeliveryTargetStatus::FailedTerminal => {
+            PushOutboxTargetOutcomeKind::Unknown
+        }
     }
 }
 

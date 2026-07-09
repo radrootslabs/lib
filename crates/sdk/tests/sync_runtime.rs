@@ -28,11 +28,12 @@ use radroots_sdk::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
-    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkErrorClass,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RestoreRequest, ReticulumPreviewBehavior,
-    ReticulumPreviewProfile, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
-    StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
+    PushOutboxTargetReceipt, RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp,
+    RestoreRequest, ReticulumPreviewBehavior, ReticulumPreviewProfile, SdkBackupManifestKind,
+    SdkRelayAuthPolicy, SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
+    TargetPolicy, TransportProfile,
 };
+use radroots_transport::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
 use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
@@ -2143,19 +2144,22 @@ async fn product_push_outbox_empty_queue_does_not_require_builder_relays() {
 }
 
 #[tokio::test]
-async fn sync_runtime_product_push_outbox_reticulum_preview_reports_specific_ready_work_error() {
+async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempts_with_preview_work()
+ {
     let cases = [
         (
             ReticulumPreviewBehavior::RejectDeliveryAttempts,
-            "reticulum_preview_transport_unavailable",
+            PushOutboxEventState::PreviewUnavailable,
+            PushOutboxTargetOutcomeKind::PreviewUnavailable,
         ),
         (
             ReticulumPreviewBehavior::DeferDeliveryPlans,
-            "reticulum_preview_transport_deferred",
+            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
         ),
     ];
 
-    for (behavior, expected_code) in cases {
+    for (behavior, expected_state, expected_outcome) in cases {
         let (_tempdir, sdk) = reticulum_preview_directory_sdk(behavior).await;
         let empty = sdk
             .sync()
@@ -2178,41 +2182,34 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_specific_rea
             .await
             .expect("enqueue");
 
-        let error = sdk
+        let receipt = sdk
             .sync()
             .push_outbox(PushOutboxRequest::new().with_limit(1))
             .await
-            .expect_err("Reticulum preview is not delivery-capable");
-
-        assert!(matches!(
-            error,
-            RadrootsSdkError::ReticulumPreviewTransportUnavailable {
-                ref operation,
-                ref endpoint_uri,
-                behavior: returned_behavior,
-            } if operation == "sync.push_outbox"
-                && endpoint_uri == "reticulum:preview-unavailable"
-                && returned_behavior == behavior
-        ));
-        assert_eq!(error.code(), expected_code);
-        assert_eq!(error.class(), RadrootsSdkErrorClass::Unsupported);
-        assert!(!error.retryable());
+            .expect("Reticulum preview push receipt");
+        assert_eq!(receipt.attempted_events, 0);
+        assert_eq!(receipt.published_events, 0);
+        assert_eq!(receipt.retryable_events, 0);
+        assert_eq!(receipt.terminal_events, 0);
+        assert_eq!(receipt.events.len(), 1);
+        let event = &receipt.events[0];
+        assert_eq!(event.outbox_event_id, enqueue.outbox_event_id);
+        assert_eq!(event.final_state, expected_state);
+        assert_eq!(event.attempted_count, 0);
+        assert_eq!(event.accepted_count, 0);
+        assert_eq!(event.retryable_count, 0);
+        assert_eq!(event.terminal_count, 0);
+        assert_eq!(event.quorum, 1);
+        assert!(!event.quorum_met);
+        assert_eq!(event.targets.len(), 1);
+        let target = &event.targets[0];
+        assert_eq!(target.transport_kind, "reticulum");
+        assert_eq!(target.endpoint_uri, "reticulum:preview-unavailable");
+        assert_eq!(target.outcome_kind, expected_outcome);
+        assert!(!target.attempted);
         assert_eq!(
-            error.recovery_actions(),
-            vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
-        );
-        let detail = error.detail_json();
-        assert_eq!(detail["detail"]["operation"], "sync.push_outbox");
-        assert_eq!(
-            detail["detail"]["endpoint_uri"],
-            "reticulum:preview-unavailable"
-        );
-        assert_eq!(detail["detail"]["behavior"], behavior.as_str());
-        assert!(
-            !detail["message"]
-                .as_str()
-                .expect("message")
-                .contains("Nostr")
+            target.message.as_deref(),
+            Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
         );
 
         let status = sdk
@@ -2239,6 +2236,15 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_specific_rea
         );
         assert_eq!(status.outbox.total_events, 1);
         assert_eq!(enqueue.outbox_event_id, 1);
+
+        let specific = sdk
+            .sync()
+            .push_outbox(PushOutboxRequest::new().with_outbox_event_id(enqueue.outbox_event_id))
+            .await
+            .expect("specific Reticulum preview push receipt");
+        assert_eq!(specific.attempted_events, 0);
+        assert_eq!(specific.events.len(), 1);
+        assert_eq!(specific.events[0].outbox_event_id, enqueue.outbox_event_id);
     }
 }
 
