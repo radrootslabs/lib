@@ -54,6 +54,7 @@ pub use transport::{
 #[cfg(feature = "transport-workers")]
 pub use transport::{
     RadrootsRuntimeDeliveryJob, RadrootsRuntimeDeliveryJobReceipt, RadrootsRuntimeDeliveryPlan,
+    RadrootsRuntimeDeliveryPlanReceipt, RadrootsRuntimeDeliveryPlanSatisfactionState,
     RadrootsRuntimeDeliveryTarget, RadrootsRuntimeDeliveryWorker,
     RadrootsRuntimeDeliveryWorkerConfig, RadrootsRuntimeInboundObservation,
     RadrootsRuntimeInboundObservationSink, RadrootsRuntimeLeaseRecord,

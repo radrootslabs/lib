@@ -333,9 +333,74 @@ impl Default for RadrootsRuntimeDeliveryWorkerConfig {
 
 #[cfg(feature = "transport-workers")]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsRuntimeDeliveryPlanSatisfactionState {
+    Satisfied,
+    Unsatisfied,
+}
+
+#[cfg(feature = "transport-workers")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsRuntimeDeliveryPlanReceipt {
+    pub delivery_plan_id: i64,
+    pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    pub target_count: usize,
+    pub attempted_target_count: usize,
+    pub required_target_count: usize,
+    pub satisfied_target_count: usize,
+    pub satisfaction_state: RadrootsRuntimeDeliveryPlanSatisfactionState,
+    pub target_receipts: Vec<RadrootsTransportTargetReceipt>,
+}
+
+#[cfg(feature = "transport-workers")]
+impl RadrootsRuntimeDeliveryPlanReceipt {
+    fn from_statuses(
+        delivery_plan_id: i64,
+        satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+        target_statuses: &[RadrootsTransportDeliveryTargetStatus],
+        target_receipts: Vec<RadrootsTransportTargetReceipt>,
+    ) -> Result<Self, RadrootsRuntimeTransportError> {
+        let required_target_count =
+            satisfaction_policy.required_target_count(target_statuses.len())?;
+        let satisfied_target_count =
+            satisfaction_policy
+                .target_satisfaction_class()
+                .map_or(0, |satisfaction_class| {
+                    target_statuses
+                        .iter()
+                        .filter(|status| status.counts_as_satisfied(satisfaction_class))
+                        .count()
+                });
+        let satisfaction_state = if satisfaction_policy
+            .is_satisfied_by(target_statuses.len(), satisfied_target_count)?
+        {
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
+        } else {
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Unsatisfied
+        };
+        Ok(Self {
+            delivery_plan_id,
+            satisfaction_policy,
+            target_count: target_statuses.len(),
+            attempted_target_count: target_receipts.len(),
+            required_target_count,
+            satisfied_target_count,
+            satisfaction_state,
+            target_receipts,
+        })
+    }
+
+    pub fn is_satisfied(&self) -> bool {
+        self.satisfaction_state == RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
+    }
+}
+
+#[cfg(feature = "transport-workers")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRuntimeDeliveryJobReceipt {
     pub outbox_event_id: i64,
     pub dispatch_count: usize,
+    pub plan_receipts: Vec<RadrootsRuntimeDeliveryPlanReceipt>,
+    pub all_plans_satisfied: bool,
     pub target_receipts: Vec<RadrootsTransportTargetReceipt>,
 }
 
@@ -363,8 +428,16 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
         job: RadrootsRuntimeDeliveryJob,
     ) -> Result<RadrootsRuntimeDeliveryJobReceipt, RadrootsRuntimeTransportError> {
         let mut target_receipts = Vec::new();
+        let mut plan_receipts = Vec::new();
         let mut dispatch_count = 0usize;
         for plan in job.plans {
+            let delivery_plan_id = plan.delivery_plan_id;
+            let satisfaction_policy = plan.satisfaction_policy.clone();
+            let mut target_statuses = plan
+                .targets
+                .iter()
+                .map(|target| (target.target.fingerprint.as_str().to_owned(), target.status))
+                .collect::<BTreeMap<_, _>>();
             let mut by_kind =
                 BTreeMap::<RadrootsTransportKind, Vec<RadrootsRuntimeDeliveryTarget>>::new();
             for target in plan
@@ -377,6 +450,7 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     .or_default()
                     .push(target);
             }
+            let mut plan_target_receipts = Vec::new();
             for (kind, targets) in by_kind {
                 let adapter = self.registry.adapter(&kind)?;
                 let transport_targets = targets
@@ -390,17 +464,37 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     ),
                     job.payload.clone(),
                     transport_targets,
-                    plan.satisfaction_policy.clone(),
+                    satisfaction_policy.clone(),
                     job.now_ms,
                 )?;
                 let receipt = adapter.deliver(request).await?;
-                target_receipts.extend(receipt.target_receipts);
+                for target_receipt in receipt.target_receipts {
+                    target_statuses.insert(
+                        target_receipt.target.fingerprint.as_str().to_owned(),
+                        target_receipt.status,
+                    );
+                    plan_target_receipts.push(target_receipt);
+                }
                 dispatch_count += 1;
             }
+            let final_statuses = target_statuses.into_values().collect::<Vec<_>>();
+            let plan_receipt = RadrootsRuntimeDeliveryPlanReceipt::from_statuses(
+                delivery_plan_id,
+                satisfaction_policy,
+                &final_statuses,
+                plan_target_receipts,
+            )?;
+            target_receipts.extend(plan_receipt.target_receipts.iter().cloned());
+            plan_receipts.push(plan_receipt);
         }
+        let all_plans_satisfied = plan_receipts
+            .iter()
+            .all(RadrootsRuntimeDeliveryPlanReceipt::is_satisfied);
         Ok(RadrootsRuntimeDeliveryJobReceipt {
             outbox_event_id: job.outbox_event_id,
             dispatch_count,
+            plan_receipts,
+            all_plans_satisfied,
             target_receipts,
         })
     }
@@ -512,7 +606,8 @@ mod tests {
     };
     #[cfg(feature = "transport-workers")]
     use super::{
-        RadrootsRuntimeDeliveryJob, RadrootsRuntimeDeliveryPlan, RadrootsRuntimeDeliveryTarget,
+        RadrootsRuntimeDeliveryJob, RadrootsRuntimeDeliveryPlan,
+        RadrootsRuntimeDeliveryPlanSatisfactionState, RadrootsRuntimeDeliveryTarget,
         RadrootsRuntimeDeliveryWorker, RadrootsRuntimeDeliveryWorkerConfig,
         RadrootsRuntimeInboundObservation, RadrootsRuntimeInboundObservationSink,
         RadrootsRuntimeLeaseRecord, record_verified_inbound_observation, recover_expired_leases,
@@ -743,11 +838,197 @@ mod tests {
 
         assert_eq!(worker.queue_capacity(), 8);
         assert_eq!(receipt.dispatch_count, 1);
+        assert!(receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts.len(), 1);
+        assert_eq!(receipt.plan_receipts[0].delivery_plan_id, 7);
+        assert_eq!(receipt.plan_receipts[0].target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].attempted_target_count, 1);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 1);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 1);
+        assert_eq!(
+            receipt.plan_receipts[0].satisfaction_state,
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
+        );
         assert_eq!(receipt.target_receipts.len(), 1);
         assert_eq!(
             receipt.target_receipts[0].status,
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
+    async fn delivery_worker_reports_no_wait_satisfied_without_dispatch() {
+        let registry = RadrootsRuntimeTransportRegistry::new();
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::no_wait(),
+                    targets: Vec::new(),
+                }],
+                now_ms: 1_000,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 0);
+        assert!(receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts[0].target_count, 0);
+        assert_eq!(receipt.plan_receipts[0].attempted_target_count, 0);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 0);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 0);
+        assert_eq!(
+            receipt.plan_receipts[0].satisfaction_state,
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
+        );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
+    async fn delivery_worker_keeps_accepted_and_delivered_satisfaction_distinct() {
+        let mut registry = RadrootsRuntimeTransportRegistry::new();
+        registry
+            .register(StaticAdapter {
+                kind: RadrootsTransportKind::Nostr,
+                status: RadrootsTransportDeliveryTargetStatus::Accepted,
+            })
+            .expect("register");
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_delivered(),
+                    targets: vec![RadrootsRuntimeDeliveryTarget::ready(
+                        1,
+                        target(RadrootsTransportKind::Nostr, "wss://relay.example"),
+                    )],
+                }],
+                now_ms: 1_000,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 1);
+        assert!(!receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 1);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 0);
+        assert_eq!(
+            receipt.plan_receipts[0].satisfaction_state,
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Unsatisfied
+        );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
+    async fn delivery_worker_reports_quorum_satisfaction() {
+        let mut registry = RadrootsRuntimeTransportRegistry::new();
+        registry
+            .register(StaticAdapter {
+                kind: RadrootsTransportKind::Nostr,
+                status: RadrootsTransportDeliveryTargetStatus::Accepted,
+            })
+            .expect("register");
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    targets: vec![
+                        RadrootsRuntimeDeliveryTarget::ready(
+                            1,
+                            target(RadrootsTransportKind::Nostr, "wss://relay-a.example"),
+                        ),
+                        RadrootsRuntimeDeliveryTarget::ready(
+                            2,
+                            target(RadrootsTransportKind::Nostr, "wss://relay-b.example"),
+                        ),
+                    ],
+                }],
+                now_ms: 1_000,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 1);
+        assert!(receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts[0].target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].attempted_target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 2);
+        assert_eq!(
+            receipt.plan_receipts[0].satisfaction_state,
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
+        );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
+    async fn delivery_worker_reports_reticulum_preview_targets_unsatisfied_without_retry_failure() {
+        let registry = RadrootsRuntimeTransportRegistry::new();
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let preview_target = RadrootsRuntimeDeliveryTarget {
+            delivery_target_id: 1,
+            target: target(
+                RadrootsTransportKind::Reticulum,
+                "reticulum:preview-unavailable",
+            ),
+            status: RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
+        };
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
+                    targets: vec![preview_target],
+                }],
+                now_ms: 1_000,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 0);
+        assert!(!receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts[0].target_count, 1);
+        assert_eq!(receipt.plan_receipts[0].attempted_target_count, 0);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 1);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 0);
+        assert_eq!(
+            receipt.plan_receipts[0].satisfaction_state,
+            RadrootsRuntimeDeliveryPlanSatisfactionState::Unsatisfied
+        );
+        assert!(receipt.target_receipts.is_empty());
     }
 
     #[cfg(feature = "transport-workers")]
