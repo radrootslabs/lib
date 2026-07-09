@@ -290,7 +290,7 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI",
         "reticulum:preview-unavailable",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
-        "Reticulum preview transport is registered, ",
+        "Reticulum transport is configured for future compatibility, ",
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
@@ -298,13 +298,10 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
             "transport message source must retain Reticulum unavailable message witness `{required}`"
         );
     }
-    for forbidden in [
-        "Reticulum transport is configured for future compatibility",
-        "future compatibility",
-    ] {
+    for forbidden in ["Reticulum preview transport is registered, "] {
         assert!(
             !transport_message_source.contains(forbidden),
-            "transport message source must not use compatibility-posture Reticulum unavailable copy `{forbidden}`"
+            "transport message source must not retain superseded Reticulum unavailable copy `{forbidden}`"
         );
     }
 
