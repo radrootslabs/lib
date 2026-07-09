@@ -23,7 +23,9 @@ that prepared plan, ingests it into the local event store, queues signed outbox 
 typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)` is the convenience path that
 prepares once and delegates to `enqueue_prepared_publish(...)`. Farm and trade write methods follow
 the same configured signer pattern. The enqueue path uses typed transport target and idempotency
-inputs; omitted idempotency keys are derived deterministically.
+inputs; omitted idempotency keys are derived deterministically. `SatisfactionPolicy::NoWait` records
+first-class no-wait delivery plans, so enqueue-only product workflows can complete without accepted
+or delivered transport targets and without fabricated target delivery receipts.
 
 Explicit signer injection remains available under `*_with_explicit_signer` method names for
 controlled adapter-level tests and advanced integration checks. Those methods are not the primary
@@ -35,10 +37,12 @@ clock at enqueue time. Listing enqueue receipts report mutation state with the p
 `StoredAndQueued` and `AlreadyQueued`.
 
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued signed outbox work
-when `transport-nostr-runtime` is enabled. Push time uses the delivery targets already stored on each queued
-outbox event, so already queued work does not require a configured builder profile. Nostr transport
-publishing and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither
-transport owns signing. `push_outbox_with_adapter(...)` remains available for tests and controlled
+when `transport-nostr-runtime` is enabled. Push time uses the delivery targets already stored on each
+queued outbox event, so already queued work does not require a configured builder profile. Reticulum
+preview work reports explicit preview-unavailable or deferred receipt state with zero network
+attempts; it does not deliver and does not fall back to another transport. Nostr transport publishing
+and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither transport
+owns signing. `push_outbox_with_adapter(...)` remains available for tests and controlled
 adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
 `publish.event`.
 
