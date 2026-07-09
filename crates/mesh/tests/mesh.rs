@@ -13,6 +13,16 @@ fn default_frame() -> RadrootsMeshFrame {
     )
 }
 
+fn default_encoded_with_replacement(
+    start: usize,
+    end: usize,
+    replacement: impl IntoIterator<Item = u8>,
+) -> Vec<u8> {
+    let mut encoded = encode_mesh_frame_cbor(&default_frame()).expect("encode default");
+    encoded.splice(start..end, replacement);
+    encoded
+}
+
 #[test]
 fn default_frame_encodes_as_mesh_frame_v1_cddl_cbor() {
     let frame = default_frame();
@@ -194,6 +204,55 @@ fn cbor_codec_covers_extended_integer_widths() {
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode wide frame");
 
     assert_eq!(decoded, frame);
+}
+
+#[test]
+fn decoder_rejects_noncanonical_cbor_widths() {
+    let cases = [
+        (
+            "over-wide map length",
+            default_encoded_with_replacement(0, 1, [0xb8, 0x07]),
+        ),
+        (
+            "over-wide key",
+            default_encoded_with_replacement(1, 2, [0x18, 0x00]),
+        ),
+        (
+            "over-wide version",
+            default_encoded_with_replacement(2, 3, [0x18, 0x01]),
+        ),
+        (
+            "over-wide frame type",
+            default_encoded_with_replacement(4, 5, [0x1a, 0x00, 0x00, 0x00, 0x00]),
+        ),
+        (
+            "over-wide text length",
+            default_encoded_with_replacement(6, 7, [0x78, 0x05]),
+        ),
+        (
+            "over-wide created-at",
+            default_encoded_with_replacement(24, 26, [0x19, 0x00, 0x2a]),
+        ),
+        (
+            "over-wide ttl",
+            default_encoded_with_replacement(
+                27,
+                30,
+                [0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xea, 0x60],
+            ),
+        ),
+        (
+            "over-wide forbidden byte payload length",
+            default_encoded_with_replacement(31, 32, [0x58, 0x03, 1, 2, 3]),
+        ),
+    ];
+
+    for (label, encoded) in cases {
+        assert_eq!(
+            decode_mesh_frame_cbor(&encoded).expect_err(label),
+            RadrootsMeshError::InvalidCbor
+        );
+    }
 }
 
 #[test]

@@ -149,22 +149,38 @@ impl<'a> Cursor<'a> {
         }
         match initial & 0x1f {
             value @ 0..=23 => Ok(u64::from(value)),
-            24 => Ok(u64::from(self.read_byte()?)),
+            24 => {
+                let value = u64::from(self.read_byte()?);
+                if value < 24 {
+                    return Err(RadrootsMeshError::InvalidCbor);
+                }
+                Ok(value)
+            }
             25 => {
                 let bytes = self.read_exact(2)?;
-                Ok(u64::from(u16::from_be_bytes([bytes[0], bytes[1]])))
+                let value = u64::from(u16::from_be_bytes([bytes[0], bytes[1]]));
+                if value < 0x100 {
+                    return Err(RadrootsMeshError::InvalidCbor);
+                }
+                Ok(value)
             }
             26 => {
                 let bytes = self.read_exact(4)?;
-                Ok(u64::from(u32::from_be_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3],
-                ])))
+                let value = u64::from(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
+                if value < 0x1_0000 {
+                    return Err(RadrootsMeshError::InvalidCbor);
+                }
+                Ok(value)
             }
             27 => {
                 let bytes = self.read_exact(8)?;
-                Ok(u64::from_be_bytes([
+                let value = u64::from_be_bytes([
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                ]))
+                ]);
+                if value < 0x1_0000_0000 {
+                    return Err(RadrootsMeshError::InvalidCbor);
+                }
+                Ok(value)
             }
             _ => Err(RadrootsMeshError::InvalidCbor),
         }
