@@ -69,8 +69,11 @@ CREATE TABLE IF NOT EXISTS outbox_delivery_target (
   delivery_plan_id INTEGER NOT NULL REFERENCES outbox_delivery_plan(delivery_plan_id) ON DELETE CASCADE,
   transport_kind TEXT NOT NULL,
   endpoint_uri TEXT NOT NULL,
+  target_scope TEXT,
+  target_label TEXT,
   endpoint_fingerprint TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'delivered', 'forwarded', 'stored_by_gateway', 'seen', 'deferred_until_implemented', 'preview_unavailable', 'skipped_policy_denied', 'failed_retryable', 'failed_terminal')),
+  last_outcome_kind TEXT CHECK (last_outcome_kind IS NULL OR last_outcome_kind IN ('accepted', 'duplicate_accepted', 'delivered', 'forwarded', 'stored_by_gateway', 'seen', 'deferred_until_implemented', 'rejected', 'route_unavailable', 'payload_too_large', 'policy_denied', 'timeout', 'connection_failed', 'transport_unavailable')),
   attempt_count INTEGER NOT NULL,
   last_attempt_at_ms INTEGER,
   completed_at_ms INTEGER,
@@ -86,6 +89,7 @@ CREATE TABLE IF NOT EXISTS outbox_delivery_attempt (
   delivery_plan_id INTEGER NOT NULL REFERENCES outbox_delivery_plan(delivery_plan_id) ON DELETE CASCADE,
   delivery_target_id INTEGER NOT NULL REFERENCES outbox_delivery_target(delivery_target_id) ON DELETE CASCADE,
   status TEXT NOT NULL,
+  outcome_kind TEXT NOT NULL CHECK (outcome_kind IN ('accepted', 'duplicate_accepted', 'delivered', 'forwarded', 'stored_by_gateway', 'seen', 'deferred_until_implemented', 'rejected', 'route_unavailable', 'payload_too_large', 'policy_denied', 'timeout', 'connection_failed', 'transport_unavailable')),
   attempted_at_ms INTEGER NOT NULL,
   message TEXT
 );

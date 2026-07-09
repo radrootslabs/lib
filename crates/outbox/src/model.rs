@@ -3,8 +3,10 @@
 use crate::RadrootsOutboxError;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetUri,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -448,8 +450,11 @@ pub struct RadrootsOutboxDeliveryTargetRecord {
     pub delivery_plan_id: i64,
     pub transport_kind: RadrootsTransportKind,
     pub endpoint_uri: RadrootsTransportTargetUri,
+    pub target_scope: Option<RadrootsTransportMeshScopeId>,
+    pub target_label: Option<RadrootsTransportTargetLabel>,
     pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
     pub status: RadrootsOutboxDeliveryTargetStatus,
+    pub last_outcome_kind: Option<RadrootsTransportOutcomeKind>,
     pub attempt_count: i64,
     pub last_attempt_at_ms: Option<i64>,
     pub completed_at_ms: Option<i64>,
@@ -468,6 +473,7 @@ pub struct RadrootsOutboxDeliveryAttemptRecord {
     pub delivery_plan_id: i64,
     pub delivery_target_id: i64,
     pub status: RadrootsOutboxDeliveryTargetStatus,
+    pub outcome_kind: RadrootsTransportOutcomeKind,
     pub attempted_at_ms: i64,
     pub message: Option<String>,
 }

@@ -23,8 +23,9 @@ use radroots_events::draft::{
 };
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel, RadrootsTransportTargetUri,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -935,14 +936,17 @@ impl RadrootsOutbox {
             return Err(RadrootsOutboxError::MissingActiveDeliveryPlan { outbox_event_id });
         };
         let targets = delivery_targets_for_plan_tx(&mut tx, active_delivery_plan_id).await?;
+        let terminal_outcome_kind =
+            outcome_kind_for_status(RadrootsOutboxDeliveryTargetStatus::FailedTerminal);
         for target in targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
         {
             sqlx::query(
-                "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
+                "UPDATE outbox_delivery_target SET status = ?, last_outcome_kind = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
             )
             .bind(RadrootsOutboxDeliveryTargetStatus::FailedTerminal.as_str())
+            .bind(terminal_outcome_kind.as_str())
             .bind(now_ms)
             .bind(now_ms)
             .bind(error.as_ref())
@@ -951,11 +955,12 @@ impl RadrootsOutbox {
             .execute(&mut *tx)
             .await?;
             sqlx::query(
-                "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, outcome_kind, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?, ?)",
             )
             .bind(active_delivery_plan_id)
             .bind(target.delivery_target_id)
             .bind(RadrootsOutboxDeliveryTargetStatus::FailedTerminal.as_str())
+            .bind(terminal_outcome_kind.as_str())
             .bind(now_ms)
             .bind(error.as_ref())
             .execute(&mut *tx)
@@ -1132,10 +1137,12 @@ impl RadrootsOutbox {
             });
         }
         let completed_at_ms = status.is_completed().then_some(attempted_at_ms);
+        let outcome_kind = outcome_kind_for_status(status);
         let changed = sqlx::query(
-            "UPDATE outbox_delivery_target SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
+            "UPDATE outbox_delivery_target SET status = ?, last_outcome_kind = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, completed_at_ms = ?, last_error = ? WHERE delivery_target_id = ? AND delivery_plan_id = ?",
         )
         .bind(status.as_str())
+        .bind(outcome_kind.as_str())
         .bind(attempted_at_ms)
         .bind(completed_at_ms)
         .bind(message)
@@ -1149,11 +1156,12 @@ impl RadrootsOutbox {
             ));
         }
         sqlx::query(
-            "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_delivery_attempt(delivery_plan_id, delivery_target_id, status, outcome_kind, attempted_at_ms, message) VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(delivery_plan_id)
         .bind(delivery_target_id)
         .bind(status.as_str())
+        .bind(outcome_kind.as_str())
         .bind(attempted_at_ms)
         .bind(message)
         .execute(&mut *tx)
@@ -1535,14 +1543,33 @@ async fn insert_or_get_delivery_plan(
     .await?;
     let delivery_plan_id = inserted.last_insert_rowid();
     for prepared_target in &plan.targets {
+        let last_outcome_kind = prepared_target
+            .initial_status
+            .is_completed()
+            .then(|| outcome_kind_for_status(prepared_target.initial_status));
         sqlx::query(
-            "INSERT INTO outbox_delivery_target(delivery_plan_id, transport_kind, endpoint_uri, endpoint_fingerprint, status, attempt_count) VALUES (?, ?, ?, ?, ?, 0)",
+            "INSERT INTO outbox_delivery_target(delivery_plan_id, transport_kind, endpoint_uri, target_scope, target_label, endpoint_fingerprint, status, last_outcome_kind, attempt_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
         )
         .bind(delivery_plan_id)
         .bind(prepared_target.target.kind.canonical_label())
         .bind(prepared_target.target.uri.as_str())
+        .bind(
+            prepared_target
+                .target
+                .scope
+                .as_ref()
+                .map(RadrootsTransportMeshScopeId::as_str),
+        )
+        .bind(
+            prepared_target
+                .target
+                .label
+                .as_ref()
+                .map(RadrootsTransportTargetLabel::as_str),
+        )
         .bind(prepared_target.target.fingerprint.as_str())
         .bind(prepared_target.initial_status.as_str())
+        .bind(last_outcome_kind.map(RadrootsTransportOutcomeKind::as_str))
         .execute(&mut **tx)
         .await?;
     }
@@ -1830,7 +1857,7 @@ async fn delivery_targets_for_event_pool(
     outbox_event_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.target_scope, target.target_label, target.endpoint_fingerprint, target.status, target.last_outcome_kind, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
@@ -1870,7 +1897,7 @@ async fn reticulum_preview_targets_for_event_pool(
     outbox_event_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status IN ('queued', 'preview_unavailable', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.target_scope, target.target_label, target.endpoint_fingerprint, target.status, target.last_outcome_kind, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status IN ('queued', 'preview_unavailable', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'preview_unavailable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
@@ -1883,7 +1910,7 @@ async fn delivery_targets_for_event_tx(
     outbox_event_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.endpoint_fingerprint, target.status, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.target_scope, target.target_label, target.endpoint_fingerprint, target.status, target.last_outcome_kind, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(&mut **tx)
@@ -1909,7 +1936,7 @@ async fn ready_delivery_targets_for_plan_tx(
     delivery_plan_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT delivery_target_id, delivery_plan_id, transport_kind, endpoint_uri, endpoint_fingerprint, status, attempt_count, last_attempt_at_ms, completed_at_ms, last_error FROM outbox_delivery_target WHERE delivery_plan_id = ? AND status IN ('pending', 'failed_retryable') ORDER BY delivery_target_id",
+        "SELECT delivery_target_id, delivery_plan_id, transport_kind, endpoint_uri, target_scope, target_label, endpoint_fingerprint, status, last_outcome_kind, attempt_count, last_attempt_at_ms, completed_at_ms, last_error FROM outbox_delivery_target WHERE delivery_plan_id = ? AND status IN ('pending', 'failed_retryable') ORDER BY delivery_target_id",
     )
     .bind(delivery_plan_id)
     .fetch_all(&mut **tx)
@@ -1922,7 +1949,7 @@ async fn delivery_targets_for_plan_tx(
     delivery_plan_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT delivery_target_id, delivery_plan_id, transport_kind, endpoint_uri, endpoint_fingerprint, status, attempt_count, last_attempt_at_ms, completed_at_ms, last_error FROM outbox_delivery_target WHERE delivery_plan_id = ? ORDER BY delivery_target_id",
+        "SELECT delivery_target_id, delivery_plan_id, transport_kind, endpoint_uri, target_scope, target_label, endpoint_fingerprint, status, last_outcome_kind, attempt_count, last_attempt_at_ms, completed_at_ms, last_error FROM outbox_delivery_target WHERE delivery_plan_id = ? ORDER BY delivery_target_id",
     )
     .bind(delivery_plan_id)
     .fetch_all(&mut **tx)
@@ -1935,7 +1962,7 @@ async fn delivery_attempts_for_pool(
     delivery_target_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryAttemptRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT delivery_attempt_id, delivery_plan_id, delivery_target_id, status, attempted_at_ms, message FROM outbox_delivery_attempt WHERE delivery_target_id = ? ORDER BY delivery_attempt_id",
+        "SELECT delivery_attempt_id, delivery_plan_id, delivery_target_id, status, outcome_kind, attempted_at_ms, message FROM outbox_delivery_attempt WHERE delivery_target_id = ? ORDER BY delivery_attempt_id",
     )
     .bind(delivery_target_id)
     .fetch_all(pool)
@@ -1956,20 +1983,7 @@ async fn evaluate_delivery_plans(
     let mut any_deferred_until_implemented = false;
     for plan in plans {
         let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
-        let satisfied_count = plan
-            .satisfaction_policy
-            .target_satisfaction_class()
-            .map(|satisfaction_class| {
-                targets
-                    .iter()
-                    .filter(|target| {
-                        target
-                            .status
-                            .counts_as_transport_satisfaction(satisfaction_class)
-                    })
-                    .count() as i64
-            })
-            .unwrap_or(0);
+        let satisfied_count = outbox_satisfied_target_count(&plan.satisfaction_policy, &targets);
         let ready_count = targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
@@ -2034,6 +2048,33 @@ async fn evaluate_delivery_plans(
         any_preview_unavailable,
         any_deferred_until_implemented,
     })
+}
+
+fn outbox_satisfied_target_count(
+    policy: &RadrootsTransportSatisfactionPolicy,
+    targets: &[RadrootsOutboxDeliveryTargetRecord],
+) -> i64 {
+    match policy {
+        RadrootsTransportSatisfactionPolicy::NoWait => 0,
+        RadrootsTransportSatisfactionPolicy::Any { class }
+        | RadrootsTransportSatisfactionPolicy::All { class }
+        | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => targets
+            .iter()
+            .filter(|target| target.status.counts_as_transport_satisfaction(*class))
+            .count() as i64,
+        RadrootsTransportSatisfactionPolicy::RequiredTargets {
+            class,
+            targets: required_targets,
+        } => required_targets
+            .iter()
+            .filter(|required| {
+                targets.iter().any(|target| {
+                    target.endpoint_fingerprint == **required
+                        && target.status.counts_as_transport_satisfaction(*class)
+                })
+            })
+            .count() as i64,
+    }
 }
 
 fn operation_from_row(
@@ -2122,18 +2163,35 @@ fn delivery_target_from_row(
     let transport_kind = RadrootsTransportKind::parse(row.try_get::<String, _>("transport_kind")?)?;
     let endpoint_uri =
         RadrootsTransportTargetUri::parse(row.try_get::<String, _>("endpoint_uri")?)?;
+    let target_scope = row
+        .try_get::<Option<String>, _>("target_scope")?
+        .map(RadrootsTransportMeshScopeId::parse)
+        .transpose()?;
+    let target_label = row
+        .try_get::<Option<String>, _>("target_label")?
+        .map(RadrootsTransportTargetLabel::parse)
+        .transpose()?;
     let endpoint_fingerprint = RadrootsTransportTargetFingerprint::parse(
         row.try_get::<String, _>("endpoint_fingerprint")?,
     )?;
     let status =
         RadrootsOutboxDeliveryTargetStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
+    let last_outcome_kind = row
+        .try_get::<Option<String>, _>("last_outcome_kind")?
+        .map(|value| {
+            parse_transport_outcome_kind(value.as_str(), "outbox_delivery_target.last_outcome_kind")
+        })
+        .transpose()?;
     Ok(RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id: row.try_get("delivery_target_id")?,
         delivery_plan_id: row.try_get("delivery_plan_id")?,
         transport_kind,
         endpoint_uri,
+        target_scope,
+        target_label,
         endpoint_fingerprint,
         status,
+        last_outcome_kind,
         attempt_count: row.try_get("attempt_count")?,
         last_attempt_at_ms: row.try_get("last_attempt_at_ms")?,
         completed_at_ms: row.try_get("completed_at_ms")?,
@@ -2146,14 +2204,77 @@ fn delivery_attempt_from_row(
 ) -> Result<RadrootsOutboxDeliveryAttemptRecord, RadrootsOutboxError> {
     let status =
         RadrootsOutboxDeliveryTargetStatus::parse(row.try_get::<String, _>("status")?.as_str())?;
+    let outcome_kind = parse_transport_outcome_kind(
+        row.try_get::<String, _>("outcome_kind")?.as_str(),
+        "outbox_delivery_attempt.outcome_kind",
+    )?;
     Ok(RadrootsOutboxDeliveryAttemptRecord {
         delivery_attempt_id: row.try_get("delivery_attempt_id")?,
         delivery_plan_id: row.try_get("delivery_plan_id")?,
         delivery_target_id: row.try_get("delivery_target_id")?,
         status,
+        outcome_kind,
         attempted_at_ms: row.try_get("attempted_at_ms")?,
         message: row.try_get("message")?,
     })
+}
+
+fn outcome_kind_for_status(
+    status: RadrootsOutboxDeliveryTargetStatus,
+) -> RadrootsTransportOutcomeKind {
+    match status {
+        RadrootsOutboxDeliveryTargetStatus::Pending => {
+            RadrootsTransportOutcomeKind::TransportUnavailable
+        }
+        RadrootsOutboxDeliveryTargetStatus::Accepted => RadrootsTransportOutcomeKind::Accepted,
+        RadrootsOutboxDeliveryTargetStatus::Delivered => RadrootsTransportOutcomeKind::Delivered,
+        RadrootsOutboxDeliveryTargetStatus::Forwarded => RadrootsTransportOutcomeKind::Forwarded,
+        RadrootsOutboxDeliveryTargetStatus::StoredByGateway => {
+            RadrootsTransportOutcomeKind::StoredByGateway
+        }
+        RadrootsOutboxDeliveryTargetStatus::Seen => RadrootsTransportOutcomeKind::Seen,
+        RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented => {
+            RadrootsTransportOutcomeKind::DeferredUntilImplemented
+        }
+        RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable => {
+            RadrootsTransportOutcomeKind::TransportUnavailable
+        }
+        RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied => {
+            RadrootsTransportOutcomeKind::PolicyDenied
+        }
+        RadrootsOutboxDeliveryTargetStatus::FailedRetryable => {
+            RadrootsTransportOutcomeKind::TransportUnavailable
+        }
+        RadrootsOutboxDeliveryTargetStatus::FailedTerminal => {
+            RadrootsTransportOutcomeKind::Rejected
+        }
+    }
+}
+
+fn parse_transport_outcome_kind(
+    value: &str,
+    field: &'static str,
+) -> Result<RadrootsTransportOutcomeKind, RadrootsOutboxError> {
+    match value {
+        "accepted" => Ok(RadrootsTransportOutcomeKind::Accepted),
+        "duplicate_accepted" => Ok(RadrootsTransportOutcomeKind::DuplicateAccepted),
+        "delivered" => Ok(RadrootsTransportOutcomeKind::Delivered),
+        "forwarded" => Ok(RadrootsTransportOutcomeKind::Forwarded),
+        "stored_by_gateway" => Ok(RadrootsTransportOutcomeKind::StoredByGateway),
+        "seen" => Ok(RadrootsTransportOutcomeKind::Seen),
+        "deferred_until_implemented" => Ok(RadrootsTransportOutcomeKind::DeferredUntilImplemented),
+        "rejected" => Ok(RadrootsTransportOutcomeKind::Rejected),
+        "route_unavailable" => Ok(RadrootsTransportOutcomeKind::RouteUnavailable),
+        "payload_too_large" => Ok(RadrootsTransportOutcomeKind::PayloadTooLarge),
+        "policy_denied" => Ok(RadrootsTransportOutcomeKind::PolicyDenied),
+        "timeout" => Ok(RadrootsTransportOutcomeKind::Timeout),
+        "connection_failed" => Ok(RadrootsTransportOutcomeKind::ConnectionFailed),
+        "transport_unavailable" => Ok(RadrootsTransportOutcomeKind::TransportUnavailable),
+        _ => Err(RadrootsOutboxError::InvalidStoredEnum {
+            field,
+            value: value.to_owned(),
+        }),
+    }
 }
 
 fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {
@@ -2410,6 +2531,26 @@ mod tests {
         RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, uri).expect("nostr target")
     }
 
+    fn scoped_nostr_target(uri: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
+        RadrootsTransportTarget::new_with_metadata(
+            RadrootsTransportKind::Nostr,
+            uri,
+            Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
+            Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+        )
+        .expect("scoped nostr target")
+    }
+
+    fn scoped_reticulum_target(scope: &str, label: &str) -> RadrootsTransportTarget {
+        RadrootsTransportTarget::new_with_metadata(
+            RadrootsTransportKind::Reticulum,
+            RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+            Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
+            Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+        )
+        .expect("scoped reticulum target")
+    }
+
     fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
         RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, uri)
             .expect("reticulum target")
@@ -2519,6 +2660,17 @@ mod tests {
             .fetch_one(outbox.pool())
             .await
             .expect("table count")
+    }
+
+    async fn table_columns(outbox: &RadrootsOutbox, table_name: &str) -> Vec<String> {
+        let sql = format!("PRAGMA table_info({table_name})");
+        sqlx::query(sql.as_str())
+            .fetch_all(outbox.pool())
+            .await
+            .expect("table columns")
+            .into_iter()
+            .map(|row| row.try_get("name").expect("column name"))
+            .collect()
     }
 
     async fn mark_target_status_for_test(
@@ -2650,6 +2802,15 @@ mod tests {
         .await
         .expect("old table query");
         assert!(old.is_none());
+        let target_columns = table_columns(&outbox, "outbox_delivery_target").await;
+        for column in ["target_scope", "target_label", "last_outcome_kind"] {
+            assert!(target_columns.iter().any(|name| name == column), "{column}");
+        }
+        let attempt_columns = table_columns(&outbox, "outbox_delivery_attempt").await;
+        assert!(
+            attempt_columns.iter().any(|name| name == "outcome_kind"),
+            "outcome_kind"
+        );
 
         outbox.migrate_down().await.expect("migrate down");
         let row = sqlx::query(
@@ -2825,6 +2986,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn delivery_targets_persist_scope_label_and_identity_rules() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "target metadata");
+        let scoped = scoped_nostr_target(NOSTR_PRIMARY_WSS, "farm.alpha", "North greenhouse");
+        let relabeled = scoped_nostr_target(NOSTR_PRIMARY_WSS, "farm.alpha", "Renamed greenhouse");
+        let rescaled = scoped_nostr_target(NOSTR_PRIMARY_WSS, "farm.beta", "North greenhouse");
+        assert_eq!(scoped.fingerprint, relabeled.fingerprint);
+        assert_ne!(scoped.fingerprint, rescaled.fingerprint);
+
+        let first_prepared = prepare_delivery_plan(
+            draft.expected_event_id.as_str(),
+            &RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+                vec![scoped.clone()],
+            ),
+        )
+        .expect("first plan");
+        let relabeled_prepared = prepare_delivery_plan(
+            draft.expected_event_id.as_str(),
+            &RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+                vec![relabeled],
+            ),
+        )
+        .expect("relabeled plan");
+        let rescaled_prepared = prepare_delivery_plan(
+            draft.expected_event_id.as_str(),
+            &RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+                vec![rescaled],
+            ),
+        )
+        .expect("rescaled plan");
+        assert_eq!(
+            first_prepared.target_policy_fingerprint,
+            relabeled_prepared.target_policy_fingerprint
+        );
+        assert_ne!(
+            first_prepared.target_policy_fingerprint,
+            rescaled_prepared.target_policy_fingerprint
+        );
+
+        let receipt = outbox
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
+                "publish_post",
+                draft,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![scoped.clone()],
+                ),
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].target_scope.as_ref().map(|scope| scope.as_str()),
+            Some("farm.alpha")
+        );
+        assert_eq!(
+            targets[0].target_label.as_ref().map(|label| label.as_str()),
+            Some("North greenhouse")
+        );
+        assert_eq!(targets[0].endpoint_fingerprint, scoped.fingerprint);
+        assert_eq!(targets[0].last_outcome_kind, None);
+    }
+
+    #[tokio::test]
     async fn enqueue_rejects_duplicate_delivery_targets_before_persistence() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(hex_64('a').as_str(), "duplicate targets");
@@ -2991,6 +3232,132 @@ mod tests {
         assert_eq!(
             attempts[0].status,
             RadrootsOutboxDeliveryTargetStatus::Accepted
+        );
+        assert_eq!(
+            attempts[0].outcome_kind,
+            RadrootsTransportOutcomeKind::Accepted
+        );
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(
+            targets
+                .iter()
+                .find(|target| {
+                    target.delivery_target_id == claimed.delivery_targets[0].delivery_target_id
+                })
+                .expect("accepted target")
+                .last_outcome_kind,
+            Some(RadrootsTransportOutcomeKind::Accepted)
+        );
+    }
+
+    #[tokio::test]
+    async fn required_target_plan_evaluation_uses_persisted_fingerprints() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "required target");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let optional = nostr_target(NOSTR_PRIMARY_WSS);
+        let required = nostr_target(NOSTR_SECONDARY_WSS);
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::required_targets(
+                        RadrootsTransportSatisfactionClass::Accepted,
+                        vec![required.fingerprint.clone()],
+                    )
+                    .expect("required target policy"),
+                    vec![optional.clone(), required.clone()],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let optional_claim = claimed
+            .delivery_targets
+            .iter()
+            .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+            .expect("optional target");
+        outbox
+            .mark_delivery_target_accepted(
+                receipt.outbox_event_id,
+                "claim-a",
+                optional_claim.delivery_target_id,
+                1_100,
+            )
+            .await
+            .expect("optional accepted");
+
+        let state = outbox
+            .complete_publish_attempt(
+                receipt.outbox_event_id,
+                "claim-a",
+                "retryable",
+                "terminal",
+                2_500,
+                1_200,
+            )
+            .await
+            .expect("complete");
+
+        assert_eq!(state, RadrootsOutboxEventState::PublishRetryable);
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Queued);
+        assert_eq!(plans[0].required_success_count, 1);
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
+        assert_eq!(event.claim_token, None);
+        assert_eq!(event.next_attempt_after_ms, 2_500);
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.endpoint_fingerprint == optional.fingerprint
+                && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+        }));
+        assert!(targets.iter().any(|target| {
+            target.endpoint_fingerprint == required.fingerprint
+                && target.status == RadrootsOutboxDeliveryTargetStatus::Pending
+        }));
+        assert_eq!(
+            outbox
+                .status_summary(3_000)
+                .await
+                .expect("summary")
+                .ready_signed_events,
+            1
+        );
+        let retry_claim = outbox
+            .claim_next_ready_signed_event("publisher", "claim-b", 4_000, 3_000)
+            .await
+            .expect("retry claim")
+            .expect("retry claimed");
+        assert_eq!(retry_claim.delivery_targets.len(), 1);
+        assert_eq!(
+            retry_claim.delivery_targets[0].endpoint_fingerprint,
+            required.fingerprint
         );
     }
 
@@ -3772,7 +4139,7 @@ mod tests {
                     "transport.reticulum.preview",
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
-                    vec![reticulum_target("reticulum:preview-unavailable")],
+                    vec![scoped_reticulum_target("farm.preview", "Preview mesh")],
                 ),
                 true,
                 1_007,
@@ -3793,7 +4160,7 @@ mod tests {
                     "transport.reticulum.preview",
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
-                    vec![reticulum_target("reticulum:preview-unavailable")],
+                    vec![scoped_reticulum_target("farm.deferred", "Deferred mesh")],
                 )
                 .with_reticulum_preview_behavior(
                     RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans,
@@ -3820,6 +4187,24 @@ mod tests {
             records[0].targets[0].status,
             RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
         );
+        assert_eq!(
+            records[0].targets[0]
+                .target_scope
+                .as_ref()
+                .map(|scope| scope.as_str()),
+            Some("farm.preview")
+        );
+        assert_eq!(
+            records[0].targets[0]
+                .target_label
+                .as_ref()
+                .map(|label| label.as_str()),
+            Some("Preview mesh")
+        );
+        assert_eq!(
+            records[0].targets[0].last_outcome_kind,
+            Some(RadrootsTransportOutcomeKind::TransportUnavailable)
+        );
         assert_eq!(records[0].targets[0].attempt_count, 0);
         assert_eq!(records[1].event.outbox_event_id, deferred.outbox_event_id);
         assert_eq!(
@@ -3830,6 +4215,24 @@ mod tests {
         assert_eq!(
             records[1].targets[0].status,
             RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+        );
+        assert_eq!(
+            records[1].targets[0]
+                .target_scope
+                .as_ref()
+                .map(|scope| scope.as_str()),
+            Some("farm.deferred")
+        );
+        assert_eq!(
+            records[1].targets[0]
+                .target_label
+                .as_ref()
+                .map(|label| label.as_str()),
+            Some("Deferred mesh")
+        );
+        assert_eq!(
+            records[1].targets[0].last_outcome_kind,
+            Some(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
         );
         assert_eq!(records[1].targets[0].attempt_count, 0);
 
@@ -4222,8 +4625,18 @@ mod tests {
                 .await
                 .expect("targets");
             assert_eq!(targets[0].status, expected_status);
+            assert_eq!(
+                targets[0].last_outcome_kind,
+                Some(outcome_kind_for_status(expected_status))
+            );
             assert_eq!(targets[0].completed_at_ms, Some(1_100));
             assert_eq!(targets[0].attempt_count, 1);
+            let attempts = outbox.delivery_attempts(target_id).await.expect("attempts");
+            assert_eq!(attempts.len(), 1);
+            assert_eq!(
+                attempts[0].outcome_kind,
+                outcome_kind_for_status(expected_status)
+            );
             let plans = outbox
                 .delivery_plans(receipt.outbox_event_id)
                 .await
