@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_transport::{RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome};
+use radroots_transport::{RadrootsTransportOutcome, RadrootsTransportOutcomeKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +78,27 @@ impl RadrootsRelayOutcomeKind {
                 | Self::PaymentRequired
                 | Self::RelayUrlRejected
         )
+    }
+
+    pub fn transport_outcome_kind(self) -> RadrootsTransportOutcomeKind {
+        match self {
+            Self::Accepted => RadrootsTransportOutcomeKind::Accepted,
+            Self::DuplicateAccepted | Self::SkippedAlreadyAccepted => {
+                RadrootsTransportOutcomeKind::DuplicateAccepted
+            }
+            Self::Blocked | Self::Invalid | Self::Restricted | Self::Muted | Self::Unsupported => {
+                RadrootsTransportOutcomeKind::Rejected
+            }
+            Self::RelayUrlRejected => RadrootsTransportOutcomeKind::RouteUnavailable,
+            Self::PaymentRequired | Self::PowRequired | Self::AuthRequired => {
+                RadrootsTransportOutcomeKind::PolicyDenied
+            }
+            Self::RateLimited | Self::Error | Self::Unknown => {
+                RadrootsTransportOutcomeKind::TransportUnavailable
+            }
+            Self::Timeout => RadrootsTransportOutcomeKind::Timeout,
+            Self::ConnectionFailed => RadrootsTransportOutcomeKind::ConnectionFailed,
+        }
     }
 }
 
@@ -179,16 +200,11 @@ impl RadrootsRelayOutcome {
     }
 
     pub fn to_transport_outcome(&self) -> RadrootsTransportOutcome {
-        let status = if self.counts_toward_quorum() {
-            RadrootsTransportDeliveryTargetStatus::Accepted
-        } else if self.is_retryable() {
-            RadrootsTransportDeliveryTargetStatus::FailedRetryable
-        } else {
-            RadrootsTransportDeliveryTargetStatus::FailedTerminal
-        };
-        let mut outcome = RadrootsTransportOutcome::new(status);
-        outcome.code = Some(self.kind.as_str().to_owned());
-        outcome.message = self.message.clone();
+        let mut outcome = RadrootsTransportOutcome::new(self.kind.transport_outcome_kind())
+            .with_code(self.kind.as_str());
+        if let Some(message) = &self.message {
+            outcome = outcome.with_message(message.clone());
+        }
         outcome
     }
 }

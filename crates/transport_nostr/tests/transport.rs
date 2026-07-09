@@ -17,7 +17,8 @@ use radroots_outbox::{
     RadrootsOutboxOperationStatus,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget,
 };
 use radroots_transport_nostr::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
@@ -50,6 +51,23 @@ impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
             Err(RadrootsRelayTransportError::Transport(
                 "adapter boundary unavailable".to_owned(),
             ))
+        })
+    }
+}
+
+struct PartialPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for PartialPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
+                RELAY_PRIMARY_WSS,
+                RadrootsRelayOutcome::accepted(),
+            )])
         })
     }
 }
@@ -573,10 +591,20 @@ fn outcome_prefix_classification_covers_required_kinds() {
     assert!(RadrootsRelayOutcome::relay_url_rejected("unsafe relay").is_terminal_failure());
     assert!(RadrootsRelayOutcome::classify("mute: pubkey muted").is_terminal_failure());
     assert_eq!(
+        RadrootsRelayOutcome::accepted().to_transport_outcome().kind,
+        radroots_transport::RadrootsTransportOutcomeKind::Accepted
+    );
+    assert_eq!(
         RadrootsRelayOutcome::accepted()
             .to_transport_outcome()
             .status,
         radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
+    );
+    assert_eq!(
+        RadrootsRelayOutcome::timeout("timeout: no OK")
+            .to_transport_outcome()
+            .kind,
+        radroots_transport::RadrootsTransportOutcomeKind::Timeout
     );
     assert_eq!(
         RadrootsRelayOutcome::timeout("timeout: no OK")
@@ -587,8 +615,20 @@ fn outcome_prefix_classification_covers_required_kinds() {
     assert_eq!(
         RadrootsRelayOutcome::classify("restricted: denied")
             .to_transport_outcome()
+            .kind,
+        radroots_transport::RadrootsTransportOutcomeKind::Rejected
+    );
+    assert_eq!(
+        RadrootsRelayOutcome::classify("restricted: denied")
+            .to_transport_outcome()
             .status,
         radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedTerminal
+    );
+    assert_eq!(
+        RadrootsRelayOutcome::relay_url_rejected("unsafe")
+            .to_transport_outcome()
+            .kind,
+        radroots_transport::RadrootsTransportOutcomeKind::RouteUnavailable
     );
     assert_eq!(
         RadrootsRelayOutcome::connection_failed("offline")
@@ -699,6 +739,65 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     .await
     .expect_err("transport failure");
     assert!(matches!(error, RadrootsRelayTransportError::Transport(_)));
+}
+
+#[tokio::test]
+async fn publish_required_target_policy_uses_relay_fingerprints() {
+    let signed = signed_post("required relay");
+    let required_target =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, RELAY_PRIMARY_WSS)
+            .expect("required target");
+    let targets = RadrootsRelayTargetSet::new(
+        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("targets");
+    let adapter = RadrootsMockRelayPublishAdapter::new()
+        .with_outcome(
+            RELAY_PRIMARY_WSS,
+            RadrootsRelayOutcome::classify("restricted: required relay rejected"),
+        )
+        .with_outcome(RELAY_SECONDARY_WSS, RadrootsRelayOutcome::accepted());
+
+    let receipt = publish_signed_event(
+        &adapter,
+        RadrootsRelayPublishRequest::new(signed, targets, 1_070).with_satisfaction_policy(
+            RadrootsTransportSatisfactionPolicy::required_targets(
+                RadrootsTransportSatisfactionClass::Accepted,
+                vec![required_target.fingerprint],
+            )
+            .expect("required relay policy"),
+        ),
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(receipt.accepted_count, 1);
+    assert_eq!(receipt.quorum, 1);
+    assert!(!receipt.quorum_met);
+}
+
+#[tokio::test]
+async fn publish_all_policy_uses_requested_target_count() {
+    let signed = signed_post("partial adapter");
+    let targets = RadrootsRelayTargetSet::new(
+        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("targets");
+
+    let receipt = publish_signed_event(
+        &PartialPublishAdapter,
+        RadrootsRelayPublishRequest::new(signed, targets, 1_080)
+            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(receipt.attempted_count, 1);
+    assert_eq!(receipt.accepted_count, 1);
+    assert_eq!(receipt.quorum, 2);
+    assert!(!receipt.quorum_met);
 }
 
 #[test]

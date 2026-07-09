@@ -1,7 +1,8 @@
 use crate::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportOutcome,
-    RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
 };
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -25,6 +26,10 @@ pub enum RadrootsTransportSatisfactionPolicy {
     Quorum {
         class: RadrootsTransportSatisfactionClass,
         threshold: u16,
+    },
+    RequiredTargets {
+        class: RadrootsTransportSatisfactionClass,
+        targets: Vec<RadrootsTransportTargetFingerprint>,
     },
 }
 
@@ -71,10 +76,28 @@ impl RadrootsTransportSatisfactionPolicy {
         }
     }
 
+    pub fn required_targets(
+        class: RadrootsTransportSatisfactionClass,
+        targets: Vec<RadrootsTransportTargetFingerprint>,
+    ) -> Result<Self, RadrootsTransportError> {
+        validate_required_targets(&targets)?;
+        Ok(Self::RequiredTargets { class, targets })
+    }
+
     pub fn target_satisfaction_class(&self) -> Option<RadrootsTransportSatisfactionClass> {
         match self {
             Self::NoWait => None,
-            Self::Any { class } | Self::All { class } | Self::Quorum { class, .. } => Some(*class),
+            Self::Any { class }
+            | Self::All { class }
+            | Self::Quorum { class, .. }
+            | Self::RequiredTargets { class, .. } => Some(*class),
+        }
+    }
+
+    pub fn required_target_fingerprints(&self) -> Option<&[RadrootsTransportTargetFingerprint]> {
+        match self {
+            Self::RequiredTargets { targets, .. } => Some(targets),
+            Self::NoWait | Self::Any { .. } | Self::All { .. } | Self::Quorum { .. } => None,
         }
     }
 
@@ -98,6 +121,13 @@ impl RadrootsTransportSatisfactionPolicy {
                 Ok(usize::from(*threshold))
             }
             Self::Quorum { .. } => Err(RadrootsTransportError::InvalidSatisfactionPolicy),
+            Self::RequiredTargets { targets, .. } => {
+                validate_required_targets(targets)?;
+                if targets.len() > total_targets {
+                    return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
+                }
+                Ok(targets.len())
+            }
         }
     }
 
@@ -106,9 +136,27 @@ impl RadrootsTransportSatisfactionPolicy {
         total_targets: usize,
         satisfied_targets: usize,
     ) -> Result<bool, RadrootsTransportError> {
+        if matches!(self, Self::RequiredTargets { .. }) {
+            return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
+        }
         let required = self.required_target_count(total_targets)?;
         Ok(satisfied_targets >= required)
     }
+}
+
+fn validate_required_targets(
+    targets: &[RadrootsTransportTargetFingerprint],
+) -> Result<(), RadrootsTransportError> {
+    if targets.is_empty() {
+        return Err(RadrootsTransportError::EmptyRequiredTargetSet);
+    }
+    let mut fingerprints = BTreeSet::new();
+    for target in targets {
+        if !fingerprints.insert(target.as_str()) {
+            return Err(RadrootsTransportError::DuplicateRequiredTargetFingerprint);
+        }
+    }
+    Ok(())
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -170,5 +218,29 @@ impl RadrootsTransportDeliveryReceipt {
             .iter()
             .filter(|receipt| receipt.status.counts_as_satisfied(satisfaction_class))
             .count()
+    }
+
+    pub fn is_satisfied_by(
+        &self,
+        policy: &RadrootsTransportSatisfactionPolicy,
+    ) -> Result<bool, RadrootsTransportError> {
+        match policy {
+            RadrootsTransportSatisfactionPolicy::NoWait => Ok(true),
+            RadrootsTransportSatisfactionPolicy::Any { class }
+            | RadrootsTransportSatisfactionPolicy::All { class }
+            | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => policy.is_satisfied_by(
+                self.target_receipts.len(),
+                self.satisfied_target_count(*class),
+            ),
+            RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
+                validate_required_targets(targets)?;
+                Ok(targets.iter().all(|required| {
+                    self.target_receipts.iter().any(|receipt| {
+                        receipt.target.fingerprint == *required
+                            && receipt.status.counts_as_satisfied(*class)
+                    })
+                }))
+            }
+        }
     }
 }

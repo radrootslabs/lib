@@ -1,12 +1,13 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError,
-    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
-    RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -231,9 +232,7 @@ fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
         request_id: "reticulum-preview".to_owned(),
         target_receipts: vec![RadrootsTransportTargetReceipt::new(
             target,
-            RadrootsTransportOutcome::new(
-                RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
-            ),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented),
         )],
     };
 
@@ -333,6 +332,14 @@ fn transport_errors_have_stable_display_strings() {
         (
             RadrootsTransportError::InvalidSatisfactionPolicy,
             "transport satisfaction policy is invalid",
+        ),
+        (
+            RadrootsTransportError::EmptyRequiredTargetSet,
+            "transport required target set is empty",
+        ),
+        (
+            RadrootsTransportError::DuplicateRequiredTargetFingerprint,
+            "transport required target set contains duplicate fingerprints",
         ),
     ];
 
@@ -570,4 +577,289 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
     assert!(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable.is_deferred_preview());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_retryable_failure());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedTerminal.is_terminal_failure());
+}
+
+#[test]
+fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
+    let cases = [
+        (
+            RadrootsTransportOutcomeKind::Accepted,
+            "accepted",
+            RadrootsTransportDeliveryTargetStatus::Accepted,
+            true,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::DuplicateAccepted,
+            "duplicate_accepted",
+            RadrootsTransportDeliveryTargetStatus::Accepted,
+            true,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::Delivered,
+            "delivered",
+            RadrootsTransportDeliveryTargetStatus::Delivered,
+            true,
+            true,
+        ),
+        (
+            RadrootsTransportOutcomeKind::Forwarded,
+            "forwarded",
+            RadrootsTransportDeliveryTargetStatus::Forwarded,
+            true,
+            true,
+        ),
+        (
+            RadrootsTransportOutcomeKind::StoredByGateway,
+            "stored_by_gateway",
+            RadrootsTransportDeliveryTargetStatus::StoredByGateway,
+            true,
+            true,
+        ),
+        (
+            RadrootsTransportOutcomeKind::Seen,
+            "seen",
+            RadrootsTransportDeliveryTargetStatus::Seen,
+            true,
+            true,
+        ),
+        (
+            RadrootsTransportOutcomeKind::DeferredUntilImplemented,
+            "deferred_until_implemented",
+            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::Rejected,
+            "rejected",
+            RadrootsTransportDeliveryTargetStatus::FailedTerminal,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::RouteUnavailable,
+            "route_unavailable",
+            RadrootsTransportDeliveryTargetStatus::FailedTerminal,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::PayloadTooLarge,
+            "payload_too_large",
+            RadrootsTransportDeliveryTargetStatus::FailedTerminal,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::PolicyDenied,
+            "policy_denied",
+            RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::Timeout,
+            "timeout",
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::ConnectionFailed,
+            "connection_failed",
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+            false,
+            false,
+        ),
+        (
+            RadrootsTransportOutcomeKind::TransportUnavailable,
+            "transport_unavailable",
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+            false,
+            false,
+        ),
+    ];
+
+    for (kind, label, status, accepted, delivered) in cases {
+        let outcome = RadrootsTransportOutcome::new(kind).with_message("transport detail");
+        assert_eq!(kind.as_str(), label);
+        assert_eq!(outcome.kind, kind);
+        assert_eq!(outcome.status, status);
+        assert_eq!(
+            kind.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted),
+            accepted
+        );
+        assert_eq!(
+            kind.counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered),
+            delivered
+        );
+        assert_eq!(outcome.message.as_deref(), Some("transport detail"));
+    }
+
+    let preview_unavailable =
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
+            .with_target_status(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable);
+    assert_eq!(
+        preview_unavailable.status,
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
+    );
+}
+
+#[test]
+fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
+    let required = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://one.example")
+        .expect("required target");
+    let optional = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://two.example")
+        .expect("optional target");
+    let policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![required.fingerprint.clone()],
+    )
+    .expect("required target policy");
+    assert_eq!(policy.required_target_count(2).expect("required count"), 1);
+    assert_eq!(
+        policy
+            .is_satisfied_by(2, 1)
+            .expect_err("count-only required targets are invalid"),
+        RadrootsTransportError::InvalidSatisfactionPolicy
+    );
+    assert_eq!(
+        policy
+            .required_target_count(0)
+            .expect_err("required target count exceeds total targets"),
+        RadrootsTransportError::InvalidSatisfactionPolicy
+    );
+    assert_eq!(
+        policy.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Accepted)
+    );
+    assert_eq!(
+        policy
+            .required_target_fingerprints()
+            .expect("required targets"),
+        &[required.fingerprint.clone()]
+    );
+
+    let optional_only = RadrootsTransportDeliveryReceipt {
+        request_id: "required-target".to_owned(),
+        target_receipts: vec![RadrootsTransportTargetReceipt::new(
+            optional.clone(),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+        )],
+    };
+    assert!(
+        !optional_only
+            .is_satisfied_by(&policy)
+            .expect("missing required target")
+    );
+
+    let required_delivered = RadrootsTransportDeliveryReceipt {
+        request_id: "required-target".to_owned(),
+        target_receipts: vec![
+            RadrootsTransportTargetReceipt::new(
+                optional,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected),
+            ),
+            RadrootsTransportTargetReceipt::new(
+                required.clone(),
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+            ),
+        ],
+    };
+    assert!(
+        required_delivered
+            .is_satisfied_by(&policy)
+            .expect("required target accepted")
+    );
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            Vec::new(),
+        )
+        .expect_err("empty required targets"),
+        RadrootsTransportError::EmptyRequiredTargetSet
+    );
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            vec![required.fingerprint.clone(), required.fingerprint],
+        )
+        .expect_err("duplicate required target"),
+        RadrootsTransportError::DuplicateRequiredTargetFingerprint
+    );
+}
+
+#[test]
+fn neutral_transport_trait_covers_status_delivery_and_fetch() {
+    struct MemoryTransport {
+        target: RadrootsTransportTarget,
+    }
+
+    impl RadrootsTransport for MemoryTransport {
+        fn status(&self) -> Result<RadrootsTransportStatus, RadrootsTransportError> {
+            Ok(RadrootsTransportStatus::new(
+                RadrootsTransportKind::Local,
+                true,
+                RadrootsTransportImplementationState::Real,
+                true,
+                "ready",
+            ))
+        }
+
+        fn deliver(
+            &self,
+            request: RadrootsTransportDeliveryRequest,
+        ) -> Result<RadrootsTransportDeliveryReceipt, RadrootsTransportError> {
+            Ok(RadrootsTransportDeliveryReceipt {
+                request_id: request.request_id,
+                target_receipts: vec![RadrootsTransportTargetReceipt::new(
+                    self.target.clone(),
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
+                )],
+            })
+        }
+
+        fn fetch(
+            &self,
+            request: RadrootsTransportFetchRequest,
+        ) -> Result<RadrootsTransportFetchReceipt, RadrootsTransportError> {
+            Ok(RadrootsTransportFetchReceipt::new(
+                request.request_id,
+                vec![RadrootsTransportTargetReceipt::new(
+                    self.target.clone(),
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+                )],
+                1,
+            ))
+        }
+    }
+
+    let target = RadrootsTransportTarget::new(RadrootsTransportKind::Local, "local:memory")
+        .expect("local target");
+    let target_set = RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set");
+    let transport = MemoryTransport { target };
+    let status = transport.status().expect("status");
+    assert_eq!(status.kind, RadrootsTransportKind::Local);
+    let delivery = transport
+        .deliver(RadrootsTransportDeliveryRequest::new(
+            "deliver-1",
+            "sha256:payload",
+            target_set.clone(),
+            RadrootsTransportSatisfactionPolicy::all_delivered(),
+        ))
+        .expect("deliver");
+    assert_eq!(
+        delivery.target_receipts[0].outcome.kind,
+        RadrootsTransportOutcomeKind::Delivered
+    );
+    let fetch = transport
+        .fetch(RadrootsTransportFetchRequest::new("fetch-1", target_set))
+        .expect("fetch");
+    assert_eq!(fetch.fetched_count, 1);
+    assert_eq!(
+        fetch.target_receipts[0].outcome.kind,
+        RadrootsTransportOutcomeKind::Seen
+    );
 }

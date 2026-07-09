@@ -9,6 +9,7 @@ mod kind;
 mod message;
 mod status;
 mod target;
+mod transport;
 
 pub use delivery::{
     RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
@@ -22,9 +23,13 @@ pub use message::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
 pub use status::{
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome, RadrootsTransportStatus,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportStatus,
 };
 pub use target::{
     RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+};
+pub use transport::{
+    RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
 };

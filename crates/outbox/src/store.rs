@@ -2270,6 +2270,17 @@ fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolic
                 satisfaction_class_storage_value(*class)
             )
         }
+        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
+            let fingerprints = targets
+                .iter()
+                .map(RadrootsTransportTargetFingerprint::as_str)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                "required_{}:{fingerprints}",
+                satisfaction_class_storage_value(*class)
+            )
+        }
     }
 }
 
@@ -2302,11 +2313,51 @@ fn parse_satisfaction_policy(
                 required_count_u16(required_success_count)?,
             ))
         }
+        stored if stored.starts_with("required_accepted:") => parse_required_target_policy(
+            stored,
+            "required_accepted:",
+            RadrootsTransportSatisfactionClass::Accepted,
+            required_success_count,
+        ),
+        stored if stored.starts_with("required_delivered:") => parse_required_target_policy(
+            stored,
+            "required_delivered:",
+            RadrootsTransportSatisfactionClass::Delivered,
+            required_success_count,
+        ),
         _ => Err(RadrootsOutboxError::InvalidStoredEnum {
             field: "outbox_delivery_plan.satisfaction_policy",
             value: value.to_owned(),
         }),
     }
+}
+
+fn parse_required_target_policy(
+    stored: &str,
+    prefix: &str,
+    class: RadrootsTransportSatisfactionClass,
+    required_success_count: i64,
+) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
+    let targets = stored
+        .strip_prefix(prefix)
+        .expect("stored required target policy prefix")
+        .split(',')
+        .map(RadrootsTransportTargetFingerprint::parse)
+        .collect::<Result<Vec<_>, _>>()?;
+    if required_success_count
+        != i64::try_from(targets.len()).map_err(|_| RadrootsOutboxError::IntegerRange {
+            field: "required_success_count",
+            value: required_success_count,
+        })?
+    {
+        return Err(RadrootsOutboxError::InvalidStoredEnum {
+            field: "outbox_delivery_plan.satisfaction_policy",
+            value: stored.to_owned(),
+        });
+    }
+    Ok(RadrootsTransportSatisfactionPolicy::required_targets(
+        class, targets,
+    )?)
 }
 
 fn required_count_u16(required_success_count: i64) -> Result<u16, RadrootsOutboxError> {
@@ -2366,6 +2417,35 @@ mod tests {
 
     fn proxy_target(uri: &str) -> RadrootsTransportTarget {
         RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, uri).expect("proxy target")
+    }
+
+    #[test]
+    fn required_target_satisfaction_policy_storage_round_trips() {
+        let first = nostr_target("wss://required-one.example");
+        let second = nostr_target("wss://required-two.example");
+        let policy = RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Delivered,
+            vec![first.fingerprint.clone(), second.fingerprint.clone()],
+        )
+        .expect("required targets policy");
+
+        let stored = satisfaction_policy_storage_value(&policy);
+        assert_eq!(
+            stored,
+            format!(
+                "required_delivered:{},{}",
+                first.fingerprint.as_str(),
+                second.fingerprint.as_str()
+            )
+        );
+        assert_eq!(
+            parse_satisfaction_policy(stored.as_str(), 2).expect("parse required targets"),
+            policy
+        );
+        assert!(matches!(
+            parse_satisfaction_policy(stored.as_str(), 1),
+            Err(RadrootsOutboxError::InvalidStoredEnum { .. })
+        ));
     }
 
     fn malformed_reticulum_target(uri: &str) -> RadrootsTransportTarget {

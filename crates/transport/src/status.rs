@@ -68,20 +68,106 @@ impl RadrootsTransportDeliveryTargetStatus {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportOutcomeKind {
+    Accepted,
+    DuplicateAccepted,
+    Delivered,
+    Forwarded,
+    StoredByGateway,
+    Seen,
+    DeferredUntilImplemented,
+    Rejected,
+    RouteUnavailable,
+    PayloadTooLarge,
+    PolicyDenied,
+    Timeout,
+    ConnectionFailed,
+    TransportUnavailable,
+}
+
+impl RadrootsTransportOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateAccepted => "duplicate_accepted",
+            Self::Delivered => "delivered",
+            Self::Forwarded => "forwarded",
+            Self::StoredByGateway => "stored_by_gateway",
+            Self::Seen => "seen",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::Rejected => "rejected",
+            Self::RouteUnavailable => "route_unavailable",
+            Self::PayloadTooLarge => "payload_too_large",
+            Self::PolicyDenied => "policy_denied",
+            Self::Timeout => "timeout",
+            Self::ConnectionFailed => "connection_failed",
+            Self::TransportUnavailable => "transport_unavailable",
+        }
+    }
+
+    pub fn target_status(self) -> RadrootsTransportDeliveryTargetStatus {
+        match self {
+            Self::Accepted | Self::DuplicateAccepted => {
+                RadrootsTransportDeliveryTargetStatus::Accepted
+            }
+            Self::Delivered => RadrootsTransportDeliveryTargetStatus::Delivered,
+            Self::Forwarded => RadrootsTransportDeliveryTargetStatus::Forwarded,
+            Self::StoredByGateway => RadrootsTransportDeliveryTargetStatus::StoredByGateway,
+            Self::Seen => RadrootsTransportDeliveryTargetStatus::Seen,
+            Self::DeferredUntilImplemented => {
+                RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+            }
+            Self::PolicyDenied => RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+            Self::Timeout | Self::ConnectionFailed | Self::TransportUnavailable => {
+                RadrootsTransportDeliveryTargetStatus::FailedRetryable
+            }
+            Self::Rejected | Self::RouteUnavailable | Self::PayloadTooLarge => {
+                RadrootsTransportDeliveryTargetStatus::FailedTerminal
+            }
+        }
+    }
+
+    pub fn counts_as_satisfied(
+        self,
+        satisfaction_class: RadrootsTransportSatisfactionClass,
+    ) -> bool {
+        self.target_status().counts_as_satisfied(satisfaction_class)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportOutcome {
+    pub kind: RadrootsTransportOutcomeKind,
     pub status: RadrootsTransportDeliveryTargetStatus,
     pub code: Option<String>,
     pub message: Option<String>,
 }
 
 impl RadrootsTransportOutcome {
-    pub fn new(status: RadrootsTransportDeliveryTargetStatus) -> Self {
+    pub fn new(kind: RadrootsTransportOutcomeKind) -> Self {
         Self {
-            status,
+            kind,
+            status: kind.target_status(),
             code: None,
             message: None,
         }
+    }
+
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+
+    pub fn with_target_status(mut self, status: RadrootsTransportDeliveryTargetStatus) -> Self {
+        self.status = status;
+        self
     }
 }
 

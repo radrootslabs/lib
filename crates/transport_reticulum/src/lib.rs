@@ -12,8 +12,8 @@ use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
     RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportOutcome, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt,
+    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
+    RadrootsTransportTarget, RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
@@ -359,11 +359,12 @@ fn ensure_reticulum_targets(
 fn preview_outcome(behavior: RadrootsReticulumPreviewBehavior) -> RadrootsTransportOutcome {
     let mut outcome = match behavior {
         RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts => {
-            RadrootsTransportOutcome::new(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable)
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
+                .with_target_status(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable)
         }
-        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans => RadrootsTransportOutcome::new(
-            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
-        ),
+        RadrootsReticulumPreviewBehavior::DeferDeliveryPlans => {
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
+        }
     };
     outcome.code = Some(
         match behavior {

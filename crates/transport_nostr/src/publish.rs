@@ -5,7 +5,9 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 use core::time::Duration;
 use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
-use radroots_transport::RadrootsTransportSatisfactionPolicy;
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -110,9 +112,9 @@ where
     A: RadrootsRelayPublishAdapter,
 {
     let event_id = request.signed_event.id.clone();
-    let quorum = request
-        .satisfaction_policy
-        .required_target_count(request.targets.len())?;
+    let satisfaction_policy = request.satisfaction_policy.clone();
+    let target_count = request.targets.len();
+    let quorum = satisfaction_policy.required_target_count(target_count)?;
     let relays = adapter.publish(request).await?;
     let attempted_count = relays.iter().filter(|receipt| receipt.attempted).count();
     let accepted_count = relays
@@ -127,6 +129,7 @@ where
         .iter()
         .filter(|receipt| receipt.outcome.is_terminal_failure())
         .count();
+    let quorum_met = relay_publish_satisfies_policy(&satisfaction_policy, target_count, &relays)?;
     Ok(RadrootsRelayPublishReceipt {
         event_id,
         attempted_count,
@@ -134,9 +137,54 @@ where
         retryable_count,
         terminal_count,
         quorum,
-        quorum_met: accepted_count >= quorum,
+        quorum_met,
         relays,
     })
+}
+
+fn relay_publish_satisfies_policy(
+    policy: &RadrootsTransportSatisfactionPolicy,
+    target_count: usize,
+    relays: &[RadrootsRelayPublishRelayReceipt],
+) -> Result<bool, RadrootsRelayTransportError> {
+    match policy {
+        RadrootsTransportSatisfactionPolicy::NoWait => Ok(true),
+        RadrootsTransportSatisfactionPolicy::Any { class }
+        | RadrootsTransportSatisfactionPolicy::All { class }
+        | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => {
+            let satisfied_count = relays
+                .iter()
+                .filter(|receipt| {
+                    receipt
+                        .outcome
+                        .to_transport_outcome()
+                        .status
+                        .counts_as_satisfied(*class)
+                })
+                .count();
+            Ok(policy.is_satisfied_by(target_count, satisfied_count)?)
+        }
+        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
+            policy.required_target_count(target_count)?;
+            let mut satisfied_required_targets = BTreeSet::new();
+            for receipt in relays {
+                let target =
+                    RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, &receipt.relay_url)?;
+                if targets.contains(&target.fingerprint)
+                    && receipt
+                        .outcome
+                        .to_transport_outcome()
+                        .status
+                        .counts_as_satisfied(*class)
+                {
+                    satisfied_required_targets.insert(target.fingerprint);
+                }
+            }
+            Ok(targets
+                .iter()
+                .all(|target| satisfied_required_targets.contains(target)))
+        }
+    }
 }
 
 #[derive(Clone, Default)]

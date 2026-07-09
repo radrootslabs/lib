@@ -27,6 +27,8 @@ const GENERIC_TRANSPORT_STATUS_SOURCE_ROOTS: &[&str] = &[
 
 const CORE_STATUS_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src", "transport_reticulum/src"];
 
+const CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src"];
+
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "\"radrootsd_proxy\"",
@@ -160,6 +162,21 @@ const FORBIDDEN_GENERIC_TRANSPORT_STATUS_CONCEPTS: &[ForbiddenConcept] = &[
     },
 ];
 
+const FORBIDDEN_CORE_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: concat!("Radroots", "Relay"),
+        reason: "core transport contracts must not expose Nostr relay-shaped APIs",
+    },
+    ForbiddenConcept {
+        pattern: concat!("Relay", "Transport"),
+        reason: "core transport contracts must use transport-neutral names",
+    },
+    ForbiddenConcept {
+        pattern: concat!("relay", "_transport"),
+        reason: "core transport contracts must use transport-neutral names",
+    },
+];
+
 #[test]
 fn transport_hardening_sources_reject_removed_protocol_identifiers() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -255,6 +272,37 @@ fn generic_transport_status_sources_reject_retired_relay_shaped_names() {
     assert!(
         findings.is_empty(),
         "generic transport status source-boundary violations:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn core_transport_sources_reject_relay_shaped_public_contracts() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let mut findings = Vec::new();
+
+    for relative_root in CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS {
+        for path in rust_source_files(crates_root.join(relative_root).as_path()) {
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
+            let relative_path = relative_path(crates_root, path.as_path());
+
+            for concept in FORBIDDEN_CORE_TRANSPORT_CONCEPTS {
+                if contains_forbidden_concept(source, concept.pattern) {
+                    findings.push(format!(
+                        "{} contains relay-shaped core transport concept `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "core transport public contract source-boundary violations:\n{}",
         findings.join("\n")
     );
 }

@@ -14,6 +14,8 @@ pub enum RadrootsTransportError {
     DuplicateTargetFingerprint,
     InvalidTargetFingerprint,
     InvalidSatisfactionPolicy,
+    EmptyRequiredTargetSet,
+    DuplicateRequiredTargetFingerprint,
 }
 
 impl fmt::Display for RadrootsTransportError {
@@ -36,6 +38,10 @@ impl fmt::Display for RadrootsTransportError {
             }
             Self::InvalidSatisfactionPolicy => {
                 f.write_str("transport satisfaction policy is invalid")
+            }
+            Self::EmptyRequiredTargetSet => f.write_str("transport required target set is empty"),
+            Self::DuplicateRequiredTargetFingerprint => {
+                f.write_str("transport required target set contains duplicate fingerprints")
             }
         }
     }
