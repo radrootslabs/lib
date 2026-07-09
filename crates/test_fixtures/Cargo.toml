@@ -1,11 +1,11 @@
 [package]
 name = "radroots_test_fixtures"
-version.workspace = true
+version = "0.1.0-alpha.2"
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/radrootslabs/lib"
+homepage = "https://radroots.org"
 readme = "README"
 publish = false
 description = "Shared fixture library for Radroots"
