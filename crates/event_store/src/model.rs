@@ -196,7 +196,7 @@ impl RadrootsTransportObservation {
     ) -> Result<Self, RadrootsEventStoreError> {
         let endpoint_uri = RadrootsTransportTargetUri::parse(endpoint_uri)?;
         let endpoint_fingerprint =
-            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri, None);
         Ok(Self {
             transport_kind,
             endpoint_uri,

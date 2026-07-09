@@ -2373,10 +2373,13 @@ mod tests {
         let endpoint_fingerprint = RadrootsTransportTargetFingerprint::from_target(
             &RadrootsTransportKind::Reticulum,
             &endpoint_uri,
+            None,
         );
         RadrootsTransportTarget {
             kind: RadrootsTransportKind::Reticulum,
             uri: endpoint_uri,
+            scope: None,
+            label: None,
             fingerprint: endpoint_fingerprint,
         }
     }

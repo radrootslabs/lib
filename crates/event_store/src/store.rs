@@ -222,7 +222,7 @@ impl RadrootsEventStore {
     ) -> Result<Vec<RadrootsTransportObservationRow>, RadrootsEventStoreError> {
         let endpoint_uri = RadrootsTransportTargetUri::parse(endpoint_uri)?;
         let endpoint_fingerprint =
-            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri, None);
         let rows = sqlx::query(
             "SELECT event_id, transport_kind, endpoint_uri, endpoint_fingerprint, observation_type, first_observed_at_ms, last_observed_at_ms, observation_count, redacted_message FROM event_transport_observation WHERE transport_kind = ? AND endpoint_fingerprint = ? ORDER BY last_observed_at_ms, event_id, observation_type",
         )
@@ -828,7 +828,7 @@ fn transport_observation_from_row(
     let endpoint_fingerprint =
         RadrootsTransportTargetFingerprint::parse(&endpoint_fingerprint_raw)?;
     let expected_fingerprint =
-        RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri);
+        RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri, None);
     if endpoint_fingerprint != expected_fingerprint {
         return Err(
             RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint {
