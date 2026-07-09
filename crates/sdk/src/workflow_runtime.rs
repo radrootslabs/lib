@@ -18,8 +18,6 @@ use radroots_outbox::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
 use radroots_transport::{RadrootsTransportKind, RadrootsTransportSatisfactionPolicy};
-#[cfg(test)]
-use sha2::{Digest, Sha256};
 
 const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
 
@@ -82,7 +80,6 @@ async fn enqueue_signed_workflow_event(
             request.operation_kind,
             request.frozen_draft.expected_event_id.as_str(),
             request.frozen_draft.expected_pubkey.as_str(),
-            delivery_plan.canonical_targets.as_slice(),
         ),
     };
     let observed_at_ms = sdk_now_ms(sdk)?;
@@ -161,7 +158,6 @@ async fn enqueue_signed_workflow_event(
 
 struct SdkResolvedDeliveryPlan {
     delivery_plan: RadrootsOutboxDeliveryPlanInput,
-    canonical_targets: Vec<String>,
 }
 
 fn resolved_delivery_plan(
@@ -197,7 +193,6 @@ fn delivery_plan_from_target_set(
     satisfaction_policy: SatisfactionPolicy,
     reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
-    let canonical_targets = target_set.canonical_targets().to_vec();
     let delivery_plan = RadrootsOutboxDeliveryPlanInput::new(
         transport_profile_id,
         1,
@@ -205,10 +200,7 @@ fn delivery_plan_from_target_set(
         target_set.into_targets(),
     )
     .with_reticulum_preview_behavior(reticulum_preview_behavior);
-    Ok(SdkResolvedDeliveryPlan {
-        delivery_plan,
-        canonical_targets,
-    })
+    Ok(SdkResolvedDeliveryPlan { delivery_plan })
 }
 
 fn transport_satisfaction_policy(
@@ -254,31 +246,6 @@ fn reticulum_preview_behavior(
             RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans
         }
     }
-}
-
-#[derive(serde::Serialize)]
-#[cfg(test)]
-struct SdkWorkflowOutboxDigestInput<'a> {
-    operation_kind: &'static str,
-    expected_pubkey: &'a str,
-    draft: &'a RadrootsFrozenEventDraft,
-    target_policy: &'a [String],
-}
-
-#[cfg(test)]
-fn outbox_idempotency_digest_prefix(
-    operation_kind: &'static str,
-    frozen_draft: &RadrootsFrozenEventDraft,
-    target_policy: &[String],
-) -> String {
-    let input = SdkWorkflowOutboxDigestInput {
-        operation_kind,
-        expected_pubkey: frozen_draft.expected_pubkey.as_str(),
-        draft: frozen_draft,
-        target_policy,
-    };
-    let bytes = serde_json::to_vec(&input).expect("workflow digest input serializes");
-    digest_prefix(hex::encode(Sha256::digest(bytes)).as_str())
 }
 
 fn digest_prefix(digest: &str) -> String {

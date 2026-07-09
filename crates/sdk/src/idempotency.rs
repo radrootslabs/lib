@@ -45,13 +45,11 @@ impl SdkIdempotencyKey {
         operation_kind: &'static str,
         expected_event_id: &str,
         expected_pubkey: &str,
-        target_policy: &[String],
     ) -> Self {
         let input = SdkIdempotencyDerivationInput {
             operation_kind,
             expected_event_id,
             expected_pubkey,
-            target_policy,
         };
         let bytes = serde_json::to_vec(&input).expect("idempotency derivation input serializes");
         let digest = hex::encode(Sha256::digest(bytes));
@@ -86,7 +84,6 @@ struct SdkIdempotencyDerivationInput<'a> {
     operation_kind: &'static str,
     expected_event_id: &'a str,
     expected_pubkey: &'a str,
-    target_policy: &'a [String],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]

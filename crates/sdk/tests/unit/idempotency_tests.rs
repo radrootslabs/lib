@@ -33,12 +33,8 @@ fn empty_key_is_rejected_before_redacted_storage() {
 
 #[test]
 fn derived_key_is_deterministic_and_consumable() {
-    let relays = vec![
-        "wss://relay-b.example.com".to_owned(),
-        "wss://relay-a.example.com".to_owned(),
-    ];
-    let first = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a", &relays);
-    let second = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a", &relays);
+    let first = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a");
+    let second = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a");
 
     assert_eq!(first.as_str(), second.as_str());
     assert!(first.into_string().starts_with("listing.publish.v1:"));

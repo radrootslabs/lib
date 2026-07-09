@@ -119,12 +119,6 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     ));
 
     let draft = frozen_draft();
-    let digest = outbox_idempotency_digest_prefix(
-        "workflow.test.v1",
-        &draft,
-        &["wss://relay.example.com".to_owned()],
-    );
-    assert_eq!(digest.len(), 12);
 
     let signed = signed_event();
     let event = event_from_signed(&signed);
@@ -147,6 +141,101 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         "wss://relay.example.com"
     );
     assert!(input.event_store_inserted);
+}
+
+#[tokio::test]
+async fn default_operation_idempotency_ignores_target_policy() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_012,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let signer = WorkflowSigner::new();
+    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-target-policy");
+    let first_target_policy = TargetPolicy::try_nostr_relays(
+        ["wss://relay-a.example.com"],
+        crate::NostrRelayUrlPolicy::Public,
+    )
+    .expect("first target policy");
+    let second_target_policy = TargetPolicy::try_nostr_relays(
+        ["wss://relay-b.example.com"],
+        crate::NostrRelayUrlPolicy::Public,
+    )
+    .expect("second target policy");
+
+    let first = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: first_target_policy,
+            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            idempotency_key: None,
+        },
+        &signer,
+    )
+    .await
+    .expect("first enqueue");
+    let second = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: second_target_policy,
+            satisfaction_policy: SatisfactionPolicy::AllTargets,
+            idempotency_key: None,
+        },
+        &signer,
+    )
+    .await
+    .expect("second enqueue");
+
+    assert_eq!(
+        first.state,
+        radroots_outbox::RadrootsOutboxEnqueueStatus::Inserted
+    );
+    assert_eq!(
+        second.state,
+        radroots_outbox::RadrootsOutboxEnqueueStatus::Inserted
+    );
+    assert_eq!(first.outbox_operation_id, second.outbox_operation_id);
+    assert_eq!(first.outbox_event_id, second.outbox_event_id);
+    assert_eq!(
+        first.idempotency_digest_prefix,
+        second.idempotency_digest_prefix
+    );
+    let plans = sdk
+        ._outbox
+        .delivery_plans(first.outbox_event_id)
+        .await
+        .expect("delivery plans");
+    assert_eq!(plans.len(), 2);
+    assert_ne!(
+        plans[0].delivery_plan_idempotency_digest,
+        plans[1].delivery_plan_idempotency_digest
+    );
+    let targets = sdk
+        ._outbox
+        .delivery_targets(first.outbox_event_id)
+        .await
+        .expect("delivery targets");
+    let target_uris = targets
+        .iter()
+        .map(|target| target.endpoint_uri.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        target_uris,
+        std::collections::BTreeSet::from([
+            "wss://relay-a.example.com",
+            "wss://relay-b.example.com",
+        ])
+    );
 }
 
 #[tokio::test]
