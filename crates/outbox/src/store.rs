@@ -1300,9 +1300,7 @@ fn prepare_delivery_plan(
             RadrootsTransportError::InvalidTransportKind,
         ));
     }
-    let required_success_count = input
-        .satisfaction_policy
-        .required_target_count(targets.len())? as i64;
+    let total_target_count = targets.len();
     let prepared_targets = targets
         .into_iter()
         .map(|target| {
@@ -1315,6 +1313,13 @@ fn prepare_delivery_plan(
             })
         })
         .collect::<Result<Vec<_>, RadrootsOutboxError>>()?;
+    let required_success_count =
+        input
+            .satisfaction_policy
+            .required_target_count(satisfaction_target_count(
+                &prepared_targets,
+                total_target_count,
+            ))? as i64;
     let initial_status = initial_delivery_plan_status(&prepared_targets);
     let target_policy_fingerprint = target_policy_fingerprint(
         &input.satisfaction_policy,
@@ -1337,6 +1342,20 @@ fn prepare_delivery_plan(
         initial_status,
         targets: prepared_targets,
     })
+}
+
+fn satisfaction_target_count(
+    prepared_targets: &[PreparedDeliveryTarget],
+    total_target_count: usize,
+) -> usize {
+    let delivery_capable_target_count = prepared_targets
+        .iter()
+        .filter(|target| !target.initial_status.is_deferred_preview())
+        .count();
+    if delivery_capable_target_count == 0 {
+        return total_target_count;
+    }
+    delivery_capable_target_count
 }
 
 fn validate_delivery_target(target: &RadrootsTransportTarget) -> Result<(), RadrootsOutboxError> {
@@ -3540,6 +3559,145 @@ mod tests {
                 .expect("claim")
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn hybrid_all_targets_completes_after_nostr_success_with_reticulum_preview_preserved() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "hybrid all targets");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.hybrid",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_accepted(),
+                    vec![
+                        nostr_target(NOSTR_PRIMARY_WSS),
+                        reticulum_target("reticulum:preview-unavailable"),
+                    ],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].required_success_count, 1);
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Queued);
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(targets.len(), 2);
+        assert!(
+            targets
+                .iter()
+                .any(|target| target.status == RadrootsOutboxDeliveryTargetStatus::Pending)
+        );
+        assert!(targets.iter().any(|target| {
+            target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        }));
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        assert_eq!(claimed.delivery_targets.len(), 1);
+        outbox
+            .mark_delivery_target_accepted(
+                receipt.outbox_event_id,
+                "claim-a",
+                claimed.delivery_targets[0].delivery_target_id,
+                1_100,
+            )
+            .await
+            .expect("accepted");
+
+        let state = outbox
+            .complete_publish_attempt(
+                receipt.outbox_event_id,
+                "claim-a",
+                "retryable",
+                "terminal",
+                2_500,
+                1_200,
+            )
+            .await
+            .expect("complete");
+
+        assert_eq!(state, RadrootsOutboxEventState::Published);
+        let operation = outbox
+            .get_operation(receipt.operation_id)
+            .await
+            .expect("operation")
+            .expect("operation");
+        assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Complete);
+        assert_eq!(plans[0].satisfied_at_ms, Some(1_200));
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+                && target.attempt_count == 1
+        }));
+        assert!(targets.iter().any(|target| {
+            target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+                && target.attempt_count == 0
+                && target.completed_at_ms.is_none()
+        }));
+    }
+
+    #[tokio::test]
+    async fn hybrid_quorum_rejects_preview_targets_as_required_success_capacity() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "hybrid quorum");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let err = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.hybrid",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    vec![
+                        nostr_target(NOSTR_PRIMARY_WSS),
+                        reticulum_target("reticulum:preview-unavailable"),
+                    ],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect_err("quorum exceeds delivery-capable targets");
+
+        assert!(matches!(
+            err,
+            RadrootsOutboxError::Transport(RadrootsTransportError::InvalidSatisfactionPolicy)
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_target").await, 0);
     }
 
     #[tokio::test]
