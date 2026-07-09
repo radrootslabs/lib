@@ -260,7 +260,7 @@ fn generic_transport_status_sources_reject_retired_relay_shaped_names() {
 }
 
 #[test]
-fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
+fn transport_publish_capabilities_keep_canonical_status_fields() {
     let source_raw = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -271,16 +271,29 @@ fn transport_publish_capabilities_keep_readiness_and_usability_fields() {
     let source = production_source(source_raw.as_str());
 
     for required in [
-        "pub implementation_state: TransportPublishImplementationState,",
+        "pub transport: String,",
+        "pub configured: bool,",
+        "pub implementation: TransportPublishImplementation,",
         "pub usable_for_delivery: bool,",
-        "TransportPublishImplementationState::Available",
-        "TransportPublishImplementationState::PreviewUnavailable",
+        "TransportPublishImplementation::Real",
+        "TransportPublishImplementation::PreviewUnavailable",
+        "configured: true",
         "usable_for_delivery: true",
         "usable_for_delivery: false",
     ] {
         assert!(
             source.contains(required),
-            "transport publish capabilities must retain readiness/usability field `{required}`"
+            "transport publish capabilities must retain canonical status field `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub implementation_state: TransportPublishImplementationState,",
+        "TransportPublishImplementationState",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "transport publish capabilities must not retain retired status field `{forbidden}`"
         );
     }
 }
