@@ -11,17 +11,21 @@ use radroots_events::{
     ids::RadrootsAddressableCoordinate,
     kinds::{KIND_FARM, KIND_PROFILE},
 };
-use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
+use radroots_outbox::{
+    RadrootsOutbox, RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetStatus,
+    RadrootsOutboxEventState,
+};
 use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
     FarmPrivateLocationClearRequest, FarmPrivateLocationInput, FarmPrivateLocationLookupCandidate,
     FarmPrivateLocationLookupReceipt, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
-    GeocoderLocalityQuery, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
+    GeocoderLocalityQuery, HybridProfile, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
     PushOutboxRequest, PushOutboxTargetOutcomeKind, RadrootsClient, RadrootsSdkError,
     RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, SdkExactLocation, SdkIdempotencyKey, SdkMutationState, SdkPublicLocality,
-    StorageStatusRequest, TargetPolicy, TargetSet, TransportProfile,
+    RadrootsSdkTimestamp, ReticulumPreviewProfile, SdkExactLocation, SdkIdempotencyKey,
+    SdkMutationState, SdkPublicLocality, StorageStatusRequest, TargetPolicy, TargetSet,
+    TransportProfile,
 };
 use radroots_transport_nostr::RadrootsMockRelayPublishAdapter;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -145,6 +149,21 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
         ));
     }
     let sdk = builder.build().await.expect("sdk");
+    (tempdir, sdk)
+}
+
+async fn hybrid_directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .transport_profile(TransportProfile::hybrid(HybridProfile::new(
+            NostrProfile::new([RELAY], NostrRelayUrlPolicy::Public).expect("Nostr profile"),
+            ReticulumPreviewProfile::preview_unavailable(),
+        )))
+        .build()
+        .await
+        .expect("sdk");
     (tempdir, sdk)
 }
 
@@ -824,6 +843,78 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum_preview() {
+    let (_tempdir, sdk) = hybrid_directory_sdk().await;
+    let enqueue_receipt = sdk
+        .farms()
+        .enqueue_publish_with_explicit_signer(
+            FarmEnqueuePublishRequest::new(
+                farmer_actor(),
+                farm(FARM_E_D_TAG, "Hybrid Farm"),
+                TargetPolicy::use_transport_profile(),
+            ),
+            &FixtureSigner::new(FARMER),
+        )
+        .await
+        .expect("enqueue");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let push_receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("push");
+
+    assert_eq!(push_receipt.attempted_events, 1);
+    assert_eq!(push_receipt.published_events, 1);
+    assert_eq!(push_receipt.retryable_events, 0);
+    assert_eq!(push_receipt.terminal_events, 0);
+    let event = &push_receipt.events[0];
+    assert_eq!(event.outbox_event_id, enqueue_receipt.outbox_event_id);
+    assert_eq!(event.final_state, PushOutboxEventState::Published);
+    assert_eq!(event.quorum, 1);
+    assert!(event.quorum_met);
+    assert_eq!(event.targets.len(), 1);
+    assert_eq!(event.targets[0].endpoint_uri, RELAY);
+    assert_eq!(
+        event.targets[0].outcome_kind,
+        PushOutboxTargetOutcomeKind::Accepted
+    );
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stored = outbox
+        .get_event(enqueue_receipt.outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+    let plans = outbox
+        .delivery_plans(enqueue_receipt.outbox_event_id)
+        .await
+        .expect("delivery plans");
+    assert_eq!(plans.len(), 1);
+    assert_eq!(plans[0].required_success_count, 1);
+    assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Complete);
+    let targets = outbox
+        .delivery_targets(enqueue_receipt.outbox_event_id)
+        .await
+        .expect("delivery targets");
+    assert_eq!(targets.len(), 2);
+    assert!(targets.iter().any(|target| {
+        target.endpoint_uri.to_string() == RELAY
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+    }));
+    assert!(targets.iter().any(|target| {
+        target.endpoint_uri.to_string() == "reticulum:preview-unavailable"
+            && target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+            && target.attempt_count == 0
+    }));
 }
 
 #[tokio::test]
