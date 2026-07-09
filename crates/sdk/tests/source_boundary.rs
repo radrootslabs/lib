@@ -143,10 +143,15 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeEvidenceQueryBranch",
     "TradeEvidenceQueryBranchKind",
     "TradeEvidenceQueryPlan",
-    "TradeEvidenceRelayFilter",
-    "TradeEvidenceRelayTagFilter",
+    "TradeEvidenceNostrRelayFilter",
+    "TradeEvidenceNostrRelayTagFilter",
     "TradeRequestEvidenceIngestReceipt",
     "TradeRequestEvidenceIngestRequest",
+    "TradeResyncEventImportReceipt",
+    "TradeResyncEvidenceReceipt",
+    "TradeResyncNostrRelayOutcomeKind",
+    "TradeResyncNostrRelayOutcomeReceipt",
+    "TradeResyncNostrRelayTransportOutcomeKind",
     "TradeResyncReceipt",
     "TradeResyncRequest",
     "TradeSellerInboxReceipt",
@@ -164,10 +169,10 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeValidationReceiptInvalidCandidate",
     "TradeValidationReceiptListReceipt",
     "TradeValidationReceiptListRequest",
-    "TradeValidationReceiptRelayEvidenceReceipt",
-    "TradeValidationReceiptRelayOutcomeKind",
-    "TradeValidationReceiptRelayOutcomeReceipt",
-    "TradeValidationReceiptRelayTransportOutcomeKind",
+    "TradeValidationReceiptNostrEvidenceReceipt",
+    "TradeValidationReceiptNostrRelayOutcomeKind",
+    "TradeValidationReceiptNostrRelayOutcomeReceipt",
+    "TradeValidationReceiptNostrRelayTransportOutcomeKind",
     "TradeValidationReceiptTags",
     "TradeValidationReceiptVerifyRequest",
     "TradeValidationTrustDecision",
@@ -859,6 +864,53 @@ fn order_runtime_public_exports_are_explicit() {
         assert!(
             !source.contains(forbidden),
             "src/lib.rs must not expose low-level trade mutation request export `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn trade_resync_and_validation_receipts_use_nostr_scoped_public_evidence_names() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let orders_source = read_source(manifest_dir.join("src/orders_runtime.rs").as_path());
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
+
+    for required in [
+        "pub nostr_relay_urls: Vec<String>,",
+        "pub nostr_evidence: TradeValidationReceiptNostrEvidenceReceipt,",
+        "pub nostr_relay_outcomes: Vec<TradeResyncNostrRelayOutcomeReceipt>,",
+        "pub nostr_relay_outcomes: Vec<TradeValidationReceiptNostrRelayOutcomeReceipt>,",
+        "pub nostr_relay_url: String,",
+        "TradeResyncNostrRelayOutcomeReceipt",
+        "TradeResyncNostrRelayOutcomeKind",
+        "TradeResyncNostrRelayTransportOutcomeKind",
+        "TradeValidationReceiptNostrEvidenceReceipt",
+        "TradeValidationReceiptNostrRelayOutcomeReceipt",
+        "TradeValidationReceiptNostrRelayOutcomeKind",
+        "TradeValidationReceiptNostrRelayTransportOutcomeKind",
+    ] {
+        assert!(
+            orders_source.contains(required) || lib_source.contains(required),
+            "SDK trade evidence source must retain Nostr-scoped public witness `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "TradeResyncRelayOutcomeReceipt",
+        "TradeResyncRelayOutcomeKind",
+        "TradeResyncRelayTransportOutcomeKind",
+        "TradeValidationReceiptRelayEvidenceReceipt",
+        "TradeValidationReceiptRelayOutcomeReceipt",
+        "TradeValidationReceiptRelayOutcomeKind",
+        "TradeValidationReceiptRelayTransportOutcomeKind",
+        "pub relay_targets:",
+        "pub relay_evidence:",
+        "pub relay_url:",
+        "pub relays:",
+        "relay_transport",
+    ] {
+        assert!(
+            !orders_source.contains(forbidden) && !lib_source.contains(forbidden),
+            "SDK trade evidence public source must not retain generic relay-shaped name `{forbidden}`"
         );
     }
 }

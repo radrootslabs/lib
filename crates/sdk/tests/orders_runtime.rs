@@ -40,10 +40,10 @@ use radroots_nostr::prelude::{
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_sdk::{
-    DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind, TradeResyncRelayOutcomeKind,
-    TradeResyncRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxRequest,
-    TradeValidationReceiptInspectRequest, TradeValidationReceiptListRequest,
-    TradeValidationReceiptVerifyRequest,
+    DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind,
+    TradeResyncNostrRelayOutcomeKind, TradeResyncNostrRelayTransportOutcomeKind,
+    TradeResyncRequest, TradeSellerInboxRequest, TradeValidationReceiptInspectRequest,
+    TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
 };
 use radroots_sdk::{
     NostrProfile, NostrRelayUrlPolicy, PublishMode, RadrootsClient, RadrootsSdkError,
@@ -1095,7 +1095,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         )
         .await
         .expect("facade resync");
-    assert_eq!(resync.relay_targets, vec![RELAY.to_owned()]);
+    assert_eq!(resync.nostr_relay_urls, vec![RELAY.to_owned()]);
     assert_eq!(resync.evidence.eose_count, 1);
     assert_eq!(resync.status.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(
@@ -1672,7 +1672,7 @@ async fn trade_product_revision_status_resync_imports_pending_revision_proposal(
     feature = "transport-nostr-runtime"
 ))]
 #[tokio::test]
-async fn trade_product_accept_local_only_does_not_fetch_relay_evidence() {
+async fn trade_product_accept_local_only_does_not_fetch_nostr_evidence() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let buyer_storage_root = tempdir.path().join("buyer-sdk");
     let seller_storage_root = tempdir.path().join("seller-sdk");
@@ -1941,10 +1941,10 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
         .await
         .expect("validation receipt list");
 
-    assert_eq!(list.relay_targets, vec![RELAY.to_owned()]);
+    assert_eq!(list.nostr_relay_urls, vec![RELAY.to_owned()]);
     assert_eq!(list.receipts.len(), 1);
     assert!(list.invalid_receipts.is_empty());
-    assert_eq!(list.relay_evidence.out_of_filter_count, 2);
+    assert_eq!(list.nostr_evidence.out_of_filter_count, 2);
     assert_eq!(
         list.receipts[0].event.id.as_str(),
         receipt_event_id.as_str()
@@ -2132,9 +2132,9 @@ async fn trade_validation_receipt_list_rejects_out_of_filter_order_receipts() {
 
     assert!(list.receipts.is_empty());
     assert!(list.invalid_receipts.is_empty());
-    assert_eq!(list.relay_evidence.inserted_count, 0);
-    assert_eq!(list.relay_evidence.out_of_filter_count, 1);
-    assert!(list.relay_evidence.events[0].out_of_filter);
+    assert_eq!(list.nostr_evidence.inserted_count, 0);
+    assert_eq!(list.nostr_evidence.out_of_filter_count, 1);
+    assert!(list.nostr_evidence.events[0].out_of_filter);
     assert!(
         store
             .get_event(unrelated_receipt_id.as_str())
@@ -2184,9 +2184,9 @@ async fn trade_validation_receipt_inspect_rejects_unrequested_relay_receipts() {
     assert_eq!(inspect.receipt_event_id, requested_receipt_id);
     assert!(inspect.receipt.is_none());
     assert!(inspect.invalid_receipt.is_none());
-    assert_eq!(inspect.relay_evidence.inserted_count, 0);
-    assert_eq!(inspect.relay_evidence.out_of_filter_count, 1);
-    assert!(inspect.relay_evidence.events[0].out_of_filter);
+    assert_eq!(inspect.nostr_evidence.inserted_count, 0);
+    assert_eq!(inspect.nostr_evidence.out_of_filter_count, 1);
+    assert!(inspect.nostr_evidence.events[0].out_of_filter);
     assert!(
         store
             .get_event(unrelated_receipt_id.as_str())
@@ -2236,20 +2236,20 @@ async fn trade_validation_receipt_inspect_skips_noise_before_exact_receipt_match
     assert_eq!(inspect.receipt_event_id, requested_receipt_id);
     assert!(inspect.receipt.is_some());
     assert!(inspect.invalid_receipt.is_none());
-    assert_eq!(inspect.relay_evidence.inserted_count, 1);
-    assert_eq!(inspect.relay_evidence.malformed_count, 1);
-    assert_eq!(inspect.relay_evidence.out_of_filter_count, 1);
-    assert_eq!(inspect.relay_evidence.skipped_over_limit_count, 0);
+    assert_eq!(inspect.nostr_evidence.inserted_count, 1);
+    assert_eq!(inspect.nostr_evidence.malformed_count, 1);
+    assert_eq!(inspect.nostr_evidence.out_of_filter_count, 1);
+    assert_eq!(inspect.nostr_evidence.skipped_over_limit_count, 0);
     assert!(
         inspect
-            .relay_evidence
+            .nostr_evidence
             .events
             .iter()
             .any(|event| event.malformed)
     );
     assert!(
         inspect
-            .relay_evidence
+            .nostr_evidence
             .events
             .iter()
             .any(|event| event.out_of_filter)
@@ -2265,7 +2265,7 @@ async fn trade_validation_receipt_inspect_skips_noise_before_exact_receipt_match
 
 #[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
-async fn trade_resync_imports_relay_evidence_into_empty_local_store() {
+async fn trade_resync_imports_nostr_evidence_into_empty_local_store() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
     let request_event = signed_raw_order_request_event("resync-empty-local-import", 41);
     let request_event_id =
@@ -2618,12 +2618,12 @@ async fn trade_resync_reports_partial_relay_failure() {
     assert_eq!(resync.evidence.closed_count, 1);
     assert_eq!(resync.evidence.eose_count, 1);
     assert_eq!(
-        resync.evidence.relays[0].outcome_kind,
-        TradeResyncRelayOutcomeKind::Closed
+        resync.evidence.nostr_relay_outcomes[0].outcome_kind,
+        TradeResyncNostrRelayOutcomeKind::Closed
     );
     assert_eq!(
-        resync.evidence.relays[0].transport_outcome_kind,
-        Some(TradeResyncRelayTransportOutcomeKind::Timeout)
+        resync.evidence.nostr_relay_outcomes[0].transport_outcome_kind,
+        Some(TradeResyncNostrRelayTransportOutcomeKind::Timeout)
     );
 }
 

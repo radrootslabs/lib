@@ -1563,7 +1563,7 @@ impl TradeResyncRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeResyncReceipt {
-    pub relay_targets: Vec<String>,
+    pub nostr_relay_urls: Vec<String>,
     pub evidence: TradeResyncEvidenceReceipt,
     pub refresh: SyncProjectionRefreshReceipt,
     pub status: TradeStatusReceipt,
@@ -1584,7 +1584,7 @@ pub struct TradeResyncEvidenceReceipt {
     pub notice_count: usize,
     pub branches: Vec<TradeEvidenceBranchReceipt>,
     pub events: Vec<TradeResyncEventImportReceipt>,
-    pub relays: Vec<TradeResyncRelayOutcomeReceipt>,
+    pub nostr_relay_outcomes: Vec<TradeResyncNostrRelayOutcomeReceipt>,
 }
 
 #[cfg(feature = "runtime")]
@@ -1599,7 +1599,7 @@ pub struct TradeEvidenceQueryPlan {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeEvidenceQueryBranch {
     pub kind: TradeEvidenceQueryBranchKind,
-    pub filter: TradeEvidenceRelayFilter,
+    pub filter: TradeEvidenceNostrRelayFilter,
 }
 
 #[cfg(feature = "runtime")]
@@ -1617,17 +1617,17 @@ pub enum TradeEvidenceQueryBranchKind {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct TradeEvidenceRelayFilter {
+pub struct TradeEvidenceNostrRelayFilter {
     pub active: bool,
     pub event_kinds: Vec<u32>,
     pub author_pubkey: Option<String>,
-    pub tag: Option<TradeEvidenceRelayTagFilter>,
+    pub tag: Option<TradeEvidenceNostrRelayTagFilter>,
     pub limit: u32,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct TradeEvidenceRelayTagFilter {
+pub struct TradeEvidenceNostrRelayTagFilter {
     pub tag_name: String,
     pub values: Vec<String>,
 }
@@ -1643,16 +1643,16 @@ pub struct TradeEvidenceBranchReceipt {
     pub out_of_filter_count: usize,
     pub skipped_over_limit_count: usize,
     pub unsupported_count: usize,
-    pub relay_failure_count: usize,
+    pub nostr_relay_failure_count: usize,
     pub empty_result: bool,
     pub events: Vec<TradeResyncEventImportReceipt>,
-    pub relays: Vec<TradeResyncRelayOutcomeReceipt>,
+    pub nostr_relay_outcomes: Vec<TradeResyncNostrRelayOutcomeReceipt>,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeResyncEventImportReceipt {
-    pub relay_url: String,
+    pub nostr_relay_url: String,
     pub event_id: Option<String>,
     pub inserted: bool,
     pub duplicate: bool,
@@ -1667,10 +1667,10 @@ pub struct TradeResyncEventImportReceipt {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct TradeResyncRelayOutcomeReceipt {
-    pub relay_url: String,
-    pub outcome_kind: TradeResyncRelayOutcomeKind,
-    pub transport_outcome_kind: Option<TradeResyncRelayTransportOutcomeKind>,
+pub struct TradeResyncNostrRelayOutcomeReceipt {
+    pub nostr_relay_url: String,
+    pub outcome_kind: TradeResyncNostrRelayOutcomeKind,
+    pub transport_outcome_kind: Option<TradeResyncNostrRelayTransportOutcomeKind>,
     pub message: Option<String>,
 }
 
@@ -1678,7 +1678,7 @@ pub struct TradeResyncRelayOutcomeReceipt {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum TradeResyncRelayOutcomeKind {
+pub enum TradeResyncNostrRelayOutcomeKind {
     Eose,
     Closed,
     Notice,
@@ -1688,7 +1688,7 @@ pub enum TradeResyncRelayOutcomeKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum TradeResyncRelayTransportOutcomeKind {
+pub enum TradeResyncNostrRelayTransportOutcomeKind {
     Accepted,
     DuplicateAccepted,
     Blocked,
@@ -1839,8 +1839,8 @@ impl TradeValidationReceiptVerifyRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeValidationReceiptListReceipt {
-    pub relay_targets: Vec<String>,
-    pub relay_evidence: TradeValidationReceiptRelayEvidenceReceipt,
+    pub nostr_relay_urls: Vec<String>,
+    pub nostr_evidence: TradeValidationReceiptNostrEvidenceReceipt,
     pub order_id: RadrootsOrderId,
     pub receipts: Vec<TradeValidationReceiptEvent>,
     pub invalid_receipts: Vec<TradeValidationReceiptInvalidCandidate>,
@@ -1849,8 +1849,8 @@ pub struct TradeValidationReceiptListReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeValidationReceiptInspectReceipt {
-    pub relay_targets: Vec<String>,
-    pub relay_evidence: TradeValidationReceiptRelayEvidenceReceipt,
+    pub nostr_relay_urls: Vec<String>,
+    pub nostr_evidence: TradeValidationReceiptNostrEvidenceReceipt,
     pub receipt_event_id: RadrootsEventId,
     pub receipt: Option<TradeValidationReceiptEvent>,
     pub invalid_receipt: Option<TradeValidationReceiptInvalidCandidate>,
@@ -1914,7 +1914,7 @@ pub struct TradeValidationReceiptWorkerEvidence {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct TradeValidationReceiptRelayEvidenceReceipt {
+pub struct TradeValidationReceiptNostrEvidenceReceipt {
     pub inserted_count: usize,
     pub duplicate_count: usize,
     pub malformed_count: usize,
@@ -1925,15 +1925,15 @@ pub struct TradeValidationReceiptRelayEvidenceReceipt {
     pub closed_count: usize,
     pub notice_count: usize,
     pub events: Vec<TradeResyncEventImportReceipt>,
-    pub relays: Vec<TradeValidationReceiptRelayOutcomeReceipt>,
+    pub nostr_relay_outcomes: Vec<TradeValidationReceiptNostrRelayOutcomeReceipt>,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct TradeValidationReceiptRelayOutcomeReceipt {
-    pub relay_url: String,
-    pub outcome_kind: TradeValidationReceiptRelayOutcomeKind,
-    pub transport_outcome_kind: Option<TradeValidationReceiptRelayTransportOutcomeKind>,
+pub struct TradeValidationReceiptNostrRelayOutcomeReceipt {
+    pub nostr_relay_url: String,
+    pub outcome_kind: TradeValidationReceiptNostrRelayOutcomeKind,
+    pub transport_outcome_kind: Option<TradeValidationReceiptNostrRelayTransportOutcomeKind>,
     pub message: Option<String>,
 }
 
@@ -1941,7 +1941,7 @@ pub struct TradeValidationReceiptRelayOutcomeReceipt {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum TradeValidationReceiptRelayOutcomeKind {
+pub enum TradeValidationReceiptNostrRelayOutcomeKind {
     Eose,
     Closed,
     Notice,
@@ -1951,7 +1951,7 @@ pub enum TradeValidationReceiptRelayOutcomeKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum TradeValidationReceiptRelayTransportOutcomeKind {
+pub enum TradeValidationReceiptNostrRelayTransportOutcomeKind {
     Accepted,
     DuplicateAccepted,
     Blocked,
@@ -3590,7 +3590,7 @@ impl<'sdk> TradeResyncClient<'sdk> {
             });
         }
         Ok(TradeResyncReceipt {
-            relay_targets: execution.relay_targets,
+            nostr_relay_urls: execution.nostr_relay_urls,
             evidence: execution.evidence,
             refresh: execution.refresh,
             status,
@@ -3600,7 +3600,7 @@ impl<'sdk> TradeResyncClient<'sdk> {
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 struct TradeResyncExecution {
-    relay_targets: Vec<String>,
+    nostr_relay_urls: Vec<String>,
     evidence: TradeResyncEvidenceReceipt,
     refresh: SyncProjectionRefreshReceipt,
 }
@@ -3616,15 +3616,15 @@ async fn execute_trade_resync_with_fetch_adapter<A>(
 where
     A: RadrootsRelayFetchAdapter,
 {
-    let relay_targets = sdk.configured_nostr_relay_urls().to_vec();
-    if relay_targets.is_empty() {
+    let nostr_relay_urls = sdk.configured_nostr_relay_urls().to_vec();
+    if nostr_relay_urls.is_empty() {
         return Err(RadrootsSdkError::empty_transport_targets(operation));
     }
     let query_plan = trade_evidence_query_plan(locator, limit)?;
-    let fetch_request = trade_evidence_fetch_request(sdk, &query_plan, &relay_targets)?;
+    let fetch_request = trade_evidence_fetch_request(sdk, &query_plan, &nostr_relay_urls)?;
     let fetch_receipt =
         fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
-    if trade_resync_total_relay_failure(&fetch_receipt, relay_targets.len()) {
+    if trade_resync_total_relay_failure(&fetch_receipt, nostr_relay_urls.len()) {
         return Err(RadrootsSdkError::ProductSyncTransportSetupFailure {
             message: trade_resync_total_failure_message(operation, &fetch_receipt),
         });
@@ -3636,7 +3636,7 @@ where
     )
     .await?;
     Ok(TradeResyncExecution {
-        relay_targets,
+        nostr_relay_urls,
         evidence,
         refresh,
     })
@@ -3646,7 +3646,7 @@ where
 fn trade_evidence_fetch_request(
     sdk: &crate::RadrootsClient,
     query_plan: &TradeEvidenceQueryPlan,
-    relay_targets: &[String],
+    nostr_relay_urls: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
     let mut filters = Vec::new();
     for branch in query_plan
@@ -3663,7 +3663,7 @@ fn trade_evidence_fetch_request(
     }
     Ok(
         RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, query_plan.limit as usize, filters)?
-            .with_relay_urls(relay_targets.iter().cloned()),
+            .with_relay_urls(nostr_relay_urls.iter().cloned()),
     )
 }
 
@@ -3751,11 +3751,11 @@ fn trade_evidence_branch(
 ) -> TradeEvidenceQueryBranch {
     TradeEvidenceQueryBranch {
         kind,
-        filter: TradeEvidenceRelayFilter {
+        filter: TradeEvidenceNostrRelayFilter {
             active,
             event_kinds,
             author_pubkey,
-            tag: tag.map(|(tag_name, values)| TradeEvidenceRelayTagFilter {
+            tag: tag.map(|(tag_name, values)| TradeEvidenceNostrRelayTagFilter {
                 tag_name: tag_name.to_owned(),
                 values,
             }),
@@ -3859,14 +3859,18 @@ impl TradeResyncEvidenceReceipt {
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>();
-        let relays = receipt
+        let nostr_relay_outcomes = receipt
             .relay_outcomes
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>();
-        let branches =
-            trade_evidence_branch_receipts(sdk, &query_plan, events.as_slice(), relays.as_slice())
-                .await?;
+        let branches = trade_evidence_branch_receipts(
+            sdk,
+            &query_plan,
+            events.as_slice(),
+            nostr_relay_outcomes.as_slice(),
+        )
+        .await?;
         Ok(Self {
             query_plan,
             inserted_count: receipt.inserted_count,
@@ -3880,7 +3884,7 @@ impl TradeResyncEvidenceReceipt {
             notice_count: receipt.notice_count,
             branches,
             events,
-            relays,
+            nostr_relay_outcomes,
         })
     }
 }
@@ -3890,7 +3894,7 @@ async fn trade_evidence_branch_receipts(
     sdk: &crate::RadrootsClient,
     query_plan: &TradeEvidenceQueryPlan,
     events: &[TradeResyncEventImportReceipt],
-    relays: &[TradeResyncRelayOutcomeReceipt],
+    nostr_relay_outcomes: &[TradeResyncNostrRelayOutcomeReceipt],
 ) -> Result<Vec<TradeEvidenceBranchReceipt>, RadrootsSdkError> {
     let mut branch_events = query_plan
         .branches
@@ -3905,9 +3909,9 @@ async fn trade_evidence_branch_receipts(
         let branch = trade_evidence_event_branch(sdk, query_plan, event).await?;
         branch_events.entry(branch).or_default().push(event.clone());
     }
-    let relay_failure_count = relays
+    let nostr_relay_failure_count = nostr_relay_outcomes
         .iter()
-        .filter(|relay| relay.outcome_kind != TradeResyncRelayOutcomeKind::Eose)
+        .filter(|relay| relay.outcome_kind != TradeResyncNostrRelayOutcomeKind::Eose)
         .count();
     Ok(branch_events
         .into_iter()
@@ -3915,8 +3919,8 @@ async fn trade_evidence_branch_receipts(
             TradeEvidenceBranchReceipt::from_parts(
                 branch,
                 events,
-                relays.to_vec(),
-                relay_failure_count,
+                nostr_relay_outcomes.to_vec(),
+                nostr_relay_failure_count,
             )
         })
         .collect())
@@ -3991,8 +3995,8 @@ impl TradeEvidenceBranchReceipt {
     fn from_parts(
         branch: TradeEvidenceQueryBranchKind,
         events: Vec<TradeResyncEventImportReceipt>,
-        relays: Vec<TradeResyncRelayOutcomeReceipt>,
-        relay_failure_count: usize,
+        nostr_relay_outcomes: Vec<TradeResyncNostrRelayOutcomeReceipt>,
+        nostr_relay_failure_count: usize,
     ) -> Self {
         let inserted_count = events.iter().filter(|event| event.inserted).count();
         let duplicate_count = events.iter().filter(|event| event.duplicate).count();
@@ -4028,10 +4032,10 @@ impl TradeEvidenceBranchReceipt {
             out_of_filter_count,
             skipped_over_limit_count,
             unsupported_count,
-            relay_failure_count,
+            nostr_relay_failure_count,
             empty_result,
             events,
-            relays,
+            nostr_relay_outcomes,
         }
     }
 }
@@ -4040,7 +4044,7 @@ impl TradeEvidenceBranchReceipt {
 impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
     fn from(receipt: RadrootsRelayFetchEventReceipt) -> Self {
         Self {
-            relay_url: receipt.relay_url,
+            nostr_relay_url: receipt.relay_url,
             event_id: receipt.event_id,
             inserted: receipt.inserted,
             duplicate: receipt.duplicate,
@@ -4056,10 +4060,10 @@ impl From<RadrootsRelayFetchEventReceipt> for TradeResyncEventImportReceipt {
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncRelayOutcomeReceipt {
+impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncNostrRelayOutcomeReceipt {
     fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
         Self {
-            relay_url: receipt.relay_url,
+            nostr_relay_url: receipt.relay_url,
             outcome_kind: receipt.kind.into(),
             transport_outcome_kind: receipt.relay_outcome.map(|outcome| outcome.kind.into()),
             message: receipt.message,
@@ -4068,7 +4072,7 @@ impl From<RadrootsRelayFetchRelayOutcome> for TradeResyncRelayOutcomeReceipt {
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncRelayOutcomeKind {
+impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncNostrRelayOutcomeKind {
     fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
         match kind {
             RadrootsRelayFetchOutcomeKind::Eose => Self::Eose,
@@ -4079,7 +4083,7 @@ impl From<RadrootsRelayFetchOutcomeKind> for TradeResyncRelayOutcomeKind {
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayOutcomeKind> for TradeResyncRelayTransportOutcomeKind {
+impl From<RadrootsRelayOutcomeKind> for TradeResyncNostrRelayTransportOutcomeKind {
     fn from(kind: RadrootsRelayOutcomeKind) -> Self {
         match kind {
             RadrootsRelayOutcomeKind::Accepted => Self::Accepted,
@@ -4135,16 +4139,16 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         A: RadrootsRelayFetchAdapter,
     {
         request.validate()?;
-        let relay_targets =
-            validation_receipt_relay_targets(self.sdk, "trade.validation_receipts.list")?;
+        let nostr_relay_urls =
+            validation_receipt_nostr_relay_urls(self.sdk, "trade.validation_receipts.list")?;
         let fetch_request =
-            validation_receipt_list_fetch_request(self.sdk, &request, &relay_targets)?;
+            validation_receipt_list_fetch_request(self.sdk, &request, &nostr_relay_urls)?;
         let fetch_receipt =
             fetch_and_ingest_relay_events(adapter, &self.sdk._event_store, fetch_request).await?;
-        let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+        let nostr_evidence = TradeValidationReceiptNostrEvidenceReceipt::from_fetch(fetch_receipt);
         let events = validation_receipt_events_from_fetch(
             self.sdk,
-            &relay_evidence.events,
+            &nostr_evidence.events,
             KIND_TRADE_VALIDATION_RECEIPT,
         )
         .await?;
@@ -4153,7 +4157,7 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         attach_worker_evidence(
             self.sdk,
             adapter,
-            &relay_targets,
+            &nostr_relay_urls,
             &request.trusted_worker_pubkeys,
             &mut receipts,
         )
@@ -4161,8 +4165,8 @@ impl<'sdk> TradeValidationReceiptsClient<'sdk> {
         receipts.sort_by(validation_receipt_event_order);
         invalid_receipts.sort_by(validation_receipt_invalid_order);
         Ok(TradeValidationReceiptListReceipt {
-            relay_targets,
-            relay_evidence,
+            nostr_relay_urls,
+            nostr_evidence,
             order_id: request.order_id,
             receipts,
             invalid_receipts,
@@ -4259,15 +4263,15 @@ async fn validation_receipt_inspect<A>(
 where
     A: RadrootsRelayFetchAdapter,
 {
-    let relay_targets = validation_receipt_relay_targets(sdk, operation)?;
+    let nostr_relay_urls = validation_receipt_nostr_relay_urls(sdk, operation)?;
     let fetch_request =
-        validation_receipt_inspect_fetch_request(sdk, &receipt_event_id, &relay_targets)?;
+        validation_receipt_inspect_fetch_request(sdk, &receipt_event_id, &nostr_relay_urls)?;
     let fetch_receipt =
         fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
-    let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+    let nostr_evidence = TradeValidationReceiptNostrEvidenceReceipt::from_fetch(fetch_receipt);
     let events = validation_receipt_events_from_fetch(
         sdk,
-        &relay_evidence.events,
+        &nostr_evidence.events,
         KIND_TRADE_VALIDATION_RECEIPT,
     )
     .await?;
@@ -4277,7 +4281,7 @@ where
     attach_worker_evidence(
         sdk,
         adapter,
-        &relay_targets,
+        &nostr_relay_urls,
         &trusted_worker_pubkeys,
         &mut receipts,
     )
@@ -4285,8 +4289,8 @@ where
     receipts.sort_by(validation_receipt_event_order);
     invalid_receipts.sort_by(validation_receipt_invalid_order);
     Ok(TradeValidationReceiptInspectReceipt {
-        relay_targets,
-        relay_evidence,
+        nostr_relay_urls,
+        nostr_evidence,
         receipt_event_id,
         receipt: receipts.into_iter().next(),
         invalid_receipt: invalid_receipts.into_iter().next(),
@@ -4294,22 +4298,22 @@ where
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-fn validation_receipt_relay_targets(
+fn validation_receipt_nostr_relay_urls(
     sdk: &crate::RadrootsClient,
     operation: impl Into<String>,
 ) -> Result<Vec<String>, RadrootsSdkError> {
-    let relay_targets = sdk.configured_nostr_relay_urls().to_vec();
-    if relay_targets.is_empty() {
+    let nostr_relay_urls = sdk.configured_nostr_relay_urls().to_vec();
+    if nostr_relay_urls.is_empty() {
         return Err(RadrootsSdkError::empty_transport_targets(operation));
     }
-    Ok(relay_targets)
+    Ok(nostr_relay_urls)
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 fn validation_receipt_list_fetch_request(
     sdk: &crate::RadrootsClient,
     request: &TradeValidationReceiptListRequest,
-    relay_targets: &[String],
+    nostr_relay_urls: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
     let filter = RadrootsNostrFilter::new()
         .kind(RadrootsNostrKind::Custom(
@@ -4323,7 +4327,7 @@ fn validation_receipt_list_fetch_request(
             })?;
     Ok(
         RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, request.limit as usize, [filter])?
-            .with_relay_urls(relay_targets.iter().cloned()),
+            .with_relay_urls(nostr_relay_urls.iter().cloned()),
     )
 }
 
@@ -4331,7 +4335,7 @@ fn validation_receipt_list_fetch_request(
 fn validation_receipt_inspect_fetch_request(
     sdk: &crate::RadrootsClient,
     receipt_event_id: &RadrootsEventId,
-    relay_targets: &[String],
+    nostr_relay_urls: &[String],
 ) -> Result<RadrootsRelayFetchRequest, RadrootsSdkError> {
     let nostr_event_id =
         RadrootsNostrEventId::parse(receipt_event_id.as_str()).map_err(|error| {
@@ -4345,7 +4349,7 @@ fn validation_receipt_inspect_fetch_request(
     let filter = RadrootsNostrFilter::new().id(nostr_event_id);
     Ok(
         RadrootsRelayFetchRequest::fetch(sdk_now_ms(sdk)?, 1, [filter])?
-            .with_relay_urls(relay_targets.iter().cloned()),
+            .with_relay_urls(nostr_relay_urls.iter().cloned()),
     )
 }
 
@@ -4353,7 +4357,7 @@ fn validation_receipt_inspect_fetch_request(
 fn validation_receipt_worker_fetch_request(
     sdk: &crate::RadrootsClient,
     receipts: &[TradeValidationReceiptEvent],
-    relay_targets: &[String],
+    nostr_relay_urls: &[String],
 ) -> Result<Option<RadrootsRelayFetchRequest>, RadrootsSdkError> {
     let root_event_ids = receipts
         .iter()
@@ -4380,7 +4384,7 @@ fn validation_receipt_worker_fetch_request(
             receipts.len().saturating_mul(4).max(1),
             [filter],
         )?
-        .with_relay_urls(relay_targets.iter().cloned()),
+        .with_relay_urls(nostr_relay_urls.iter().cloned()),
     ))
 }
 
@@ -4457,7 +4461,7 @@ fn classify_validation_receipts(
 async fn attach_worker_evidence<A>(
     sdk: &crate::RadrootsClient,
     adapter: &A,
-    relay_targets: &[String],
+    nostr_relay_urls: &[String],
     trusted_worker_pubkeys: &[RadrootsPublicKey],
     receipts: &mut [TradeValidationReceiptEvent],
 ) -> Result<(), RadrootsSdkError>
@@ -4468,16 +4472,16 @@ where
         return Ok(());
     }
     let Some(fetch_request) =
-        validation_receipt_worker_fetch_request(sdk, receipts, relay_targets)?
+        validation_receipt_worker_fetch_request(sdk, receipts, nostr_relay_urls)?
     else {
         return Ok(());
     };
     let fetch_receipt =
         fetch_and_ingest_relay_events(adapter, &sdk._event_store, fetch_request).await?;
-    let relay_evidence = TradeValidationReceiptRelayEvidenceReceipt::from_fetch(fetch_receipt);
+    let nostr_evidence = TradeValidationReceiptNostrEvidenceReceipt::from_fetch(fetch_receipt);
     let events = validation_receipt_events_from_fetch(
         sdk,
-        &relay_evidence.events,
+        &nostr_evidence.events,
         KIND_TRADE_TRANSITION_PROOF_RESULT,
     )
     .await?;
@@ -5099,7 +5103,7 @@ struct RawTradeValidationReceiptWorkerResult {
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl TradeValidationReceiptRelayEvidenceReceipt {
+impl TradeValidationReceiptNostrEvidenceReceipt {
     fn from_fetch(receipt: RadrootsRelayFetchReceipt) -> Self {
         Self {
             inserted_count: receipt.inserted_count,
@@ -5112,16 +5116,16 @@ impl TradeValidationReceiptRelayEvidenceReceipt {
             closed_count: receipt.closed_count,
             notice_count: receipt.notice_count,
             events: receipt.events.into_iter().map(Into::into).collect(),
-            relays: receipt.relay_outcomes.into_iter().map(Into::into).collect(),
+            nostr_relay_outcomes: receipt.relay_outcomes.into_iter().map(Into::into).collect(),
         }
     }
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptRelayOutcomeReceipt {
+impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptNostrRelayOutcomeReceipt {
     fn from(receipt: RadrootsRelayFetchRelayOutcome) -> Self {
         Self {
-            relay_url: receipt.relay_url,
+            nostr_relay_url: receipt.relay_url,
             outcome_kind: receipt.kind.into(),
             transport_outcome_kind: receipt.relay_outcome.map(|outcome| outcome.kind.into()),
             message: receipt.message,
@@ -5130,7 +5134,7 @@ impl From<RadrootsRelayFetchRelayOutcome> for TradeValidationReceiptRelayOutcome
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptRelayOutcomeKind {
+impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptNostrRelayOutcomeKind {
     fn from(kind: RadrootsRelayFetchOutcomeKind) -> Self {
         match kind {
             RadrootsRelayFetchOutcomeKind::Eose => Self::Eose,
@@ -5141,7 +5145,7 @@ impl From<RadrootsRelayFetchOutcomeKind> for TradeValidationReceiptRelayOutcomeK
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-impl From<RadrootsRelayOutcomeKind> for TradeValidationReceiptRelayTransportOutcomeKind {
+impl From<RadrootsRelayOutcomeKind> for TradeValidationReceiptNostrRelayTransportOutcomeKind {
     fn from(kind: RadrootsRelayOutcomeKind) -> Self {
         match kind {
             RadrootsRelayOutcomeKind::Accepted => Self::Accepted,
