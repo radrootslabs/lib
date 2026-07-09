@@ -86,42 +86,34 @@ impl RadrootsTransportOutcome {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RadrootsTransportReadinessState {
-    Ready,
-    Disabled,
-    Misconfigured,
-    PreviewUnavailable,
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportStatus {
+    #[cfg_attr(feature = "serde", serde(rename = "transport"))]
     pub kind: RadrootsTransportKind,
     pub profile_id: Option<String>,
     pub endpoint_uri: Option<String>,
-    pub implementation_state: RadrootsTransportImplementationState,
-    pub readiness: RadrootsTransportReadinessState,
-    pub publish_usable: bool,
-    pub fetch_usable: bool,
-    pub redacted_message: Option<String>,
+    pub configured: bool,
+    pub implementation: RadrootsTransportImplementationState,
+    pub usable_for_delivery: bool,
+    pub message: String,
 }
 
 impl RadrootsTransportStatus {
     pub fn new(
         kind: RadrootsTransportKind,
-        implementation_state: RadrootsTransportImplementationState,
-        readiness: RadrootsTransportReadinessState,
+        configured: bool,
+        implementation: RadrootsTransportImplementationState,
+        usable_for_delivery: bool,
+        message: impl Into<String>,
     ) -> Self {
         Self {
             kind,
             profile_id: None,
             endpoint_uri: None,
-            implementation_state,
-            readiness,
-            publish_usable: false,
-            fetch_usable: false,
-            redacted_message: None,
+            configured,
+            implementation,
+            usable_for_delivery,
+            message: message.into(),
         }
     }
 
@@ -132,21 +124,6 @@ impl RadrootsTransportStatus {
 
     pub fn with_endpoint_uri(mut self, endpoint_uri: impl Into<String>) -> Self {
         self.endpoint_uri = Some(endpoint_uri.into());
-        self
-    }
-
-    pub fn with_publish_usable(mut self, publish_usable: bool) -> Self {
-        self.publish_usable = publish_usable;
-        self
-    }
-
-    pub fn with_fetch_usable(mut self, fetch_usable: bool) -> Self {
-        self.fetch_usable = fetch_usable;
-        self
-    }
-
-    pub fn with_redacted_message(mut self, redacted_message: impl Into<String>) -> Self {
-        self.redacted_message = Some(redacted_message.into());
         self
     }
 }

@@ -1,5 +1,6 @@
 use crate::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
+    RadrootsTransportError, RadrootsTransportKind,
 };
 use alloc::collections::BTreeSet;
 use alloc::format;
@@ -30,14 +31,85 @@ impl core::fmt::Display for RadrootsTransportTargetUri {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsTransportMeshScopeId(String);
+
+impl RadrootsTransportMeshScopeId {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        let value = raw.as_ref();
+        if value.is_empty() {
+            return Err(RadrootsTransportError::EmptyTargetScope);
+        }
+        if value != value.trim()
+            || value
+                .chars()
+                .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.')))
+        {
+            return Err(RadrootsTransportError::InvalidTargetScope);
+        }
+        Ok(Self(value.to_string()))
+    }
+
+    pub fn local_preview() -> Self {
+        Self::parse(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+            .expect("default Reticulum preview scope id")
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::fmt::Display for RadrootsTransportMeshScopeId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsTransportTargetLabel(String);
+
+impl RadrootsTransportTargetLabel {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        let trimmed = raw.as_ref().trim();
+        if trimmed.is_empty() {
+            return Err(RadrootsTransportError::EmptyTargetLabel);
+        }
+        if trimmed.chars().any(char::is_control) {
+            return Err(RadrootsTransportError::InvalidTargetLabel);
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::fmt::Display for RadrootsTransportTargetLabel {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportTargetFingerprint(String);
 
 impl RadrootsTransportTargetFingerprint {
-    pub fn from_target(kind: &RadrootsTransportKind, uri: &RadrootsTransportTargetUri) -> Self {
+    pub fn from_target(
+        kind: &RadrootsTransportKind,
+        uri: &RadrootsTransportTargetUri,
+        scope: Option<&RadrootsTransportMeshScopeId>,
+    ) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(kind.canonical_label().as_bytes());
         hasher.update([0]);
         hasher.update(uri.as_str().as_bytes());
+        if let Some(scope) = scope {
+            hasher.update([0]);
+            hasher.update(scope.as_str().as_bytes());
+        }
         let digest = hasher.finalize();
         Self(hex_encode(&digest))
     }
@@ -76,6 +148,8 @@ impl core::fmt::Display for RadrootsTransportTargetFingerprint {
 pub struct RadrootsTransportTarget {
     pub kind: RadrootsTransportKind,
     pub uri: RadrootsTransportTargetUri,
+    pub scope: Option<RadrootsTransportMeshScopeId>,
+    pub label: Option<RadrootsTransportTargetLabel>,
     pub fingerprint: RadrootsTransportTargetFingerprint,
 }
 
@@ -84,6 +158,15 @@ impl RadrootsTransportTarget {
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
+        Self::new_with_metadata(kind, uri, None, None)
+    }
+
+    pub fn new_with_metadata(
+        kind: RadrootsTransportKind,
+        uri: impl AsRef<str>,
+        scope: Option<RadrootsTransportMeshScopeId>,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
         let raw_uri = uri.as_ref();
         if kind == RadrootsTransportKind::Reticulum
             && raw_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
@@ -91,13 +174,21 @@ impl RadrootsTransportTarget {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         let uri = RadrootsTransportTargetUri::parse(raw_uri)?;
-        let fingerprint = RadrootsTransportTargetFingerprint::from_target(&kind, &uri);
+        let scope = scope.or_else(|| default_scope_for_kind(&kind));
+        let fingerprint =
+            RadrootsTransportTargetFingerprint::from_target(&kind, &uri, scope.as_ref());
         Ok(Self {
             kind,
             uri,
+            scope,
+            label,
             fingerprint,
         })
     }
+}
+
+fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<RadrootsTransportMeshScopeId> {
+    (*kind == RadrootsTransportKind::Reticulum).then(RadrootsTransportMeshScopeId::local_preview)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

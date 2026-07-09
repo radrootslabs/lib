@@ -8,11 +8,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportReadinessState,
-    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportOutcome, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetReceipt,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.preview";
@@ -74,9 +75,49 @@ impl fmt::Display for RadrootsReticulumPreviewEndpoint {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsReticulumPreviewAgentEndpoint {
+    uri: String,
+}
+
+impl RadrootsReticulumPreviewAgentEndpoint {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsReticulumPreviewError> {
+        let uri = raw.as_ref();
+        if uri.is_empty()
+            || uri != uri.trim()
+            || uri
+                .chars()
+                .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
+            || uri.find(':').is_none()
+        {
+            return Err(RadrootsReticulumPreviewError::InvalidAgentEndpoint);
+        }
+        Ok(Self {
+            uri: uri.to_owned(),
+        })
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.uri.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.uri
+    }
+}
+
+impl fmt::Display for RadrootsReticulumPreviewAgentEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.uri.as_str())
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumPreviewProfile {
     profile_id: String,
     endpoint: RadrootsReticulumPreviewEndpoint,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumPreviewAgentEndpoint>,
     behavior: RadrootsReticulumPreviewBehavior,
 }
 
@@ -84,6 +125,8 @@ impl RadrootsReticulumPreviewProfile {
     pub fn new(
         profile_id: impl Into<String>,
         endpoint: RadrootsReticulumPreviewEndpoint,
+        scope: RadrootsTransportMeshScopeId,
+        agent_endpoint: Option<RadrootsReticulumPreviewAgentEndpoint>,
         behavior: RadrootsReticulumPreviewBehavior,
     ) -> Result<Self, RadrootsReticulumPreviewError> {
         let profile_id = profile_id.into();
@@ -93,6 +136,8 @@ impl RadrootsReticulumPreviewProfile {
         Ok(Self {
             profile_id,
             endpoint,
+            scope,
+            agent_endpoint,
             behavior,
         })
     }
@@ -101,6 +146,8 @@ impl RadrootsReticulumPreviewProfile {
         Self {
             profile_id: DEFAULT_PROFILE_ID.to_owned(),
             endpoint: RadrootsReticulumPreviewEndpoint::default(),
+            scope: RadrootsTransportMeshScopeId::local_preview(),
+            agent_endpoint: None,
             behavior: RadrootsReticulumPreviewBehavior::RejectDeliveryAttempts,
         }
     }
@@ -118,6 +165,22 @@ impl RadrootsReticulumPreviewProfile {
         &self.endpoint
     }
 
+    pub fn scope(&self) -> &RadrootsTransportMeshScopeId {
+        &self.scope
+    }
+
+    pub fn agent_endpoint(&self) -> Option<&RadrootsReticulumPreviewAgentEndpoint> {
+        self.agent_endpoint.as_ref()
+    }
+
+    pub fn with_agent_endpoint(
+        mut self,
+        agent_endpoint: RadrootsReticulumPreviewAgentEndpoint,
+    ) -> Self {
+        self.agent_endpoint = Some(agent_endpoint);
+        self
+    }
+
     pub fn behavior(&self) -> RadrootsReticulumPreviewBehavior {
         self.behavior
     }
@@ -125,14 +188,17 @@ impl RadrootsReticulumPreviewProfile {
     pub fn status(&self) -> RadrootsReticulumPreviewStatus {
         RadrootsReticulumPreviewStatus {
             behavior: self.behavior,
+            scope: self.scope.clone(),
+            agent_endpoint: self.agent_endpoint.clone(),
             transport_status: RadrootsTransportStatus::new(
                 RadrootsTransportKind::Reticulum,
+                true,
                 RadrootsTransportImplementationState::PreviewUnavailable,
-                RadrootsTransportReadinessState::PreviewUnavailable,
+                false,
+                RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
             )
             .with_profile_id(self.profile_id.clone())
-            .with_endpoint_uri(self.endpoint.as_str())
-            .with_redacted_message(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE),
+            .with_endpoint_uri(self.endpoint.as_str()),
         }
     }
 }
@@ -147,6 +213,8 @@ impl Default for RadrootsReticulumPreviewProfile {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumPreviewStatus {
     pub behavior: RadrootsReticulumPreviewBehavior,
+    pub scope: RadrootsTransportMeshScopeId,
+    pub agent_endpoint: Option<RadrootsReticulumPreviewAgentEndpoint>,
     pub transport_status: RadrootsTransportStatus,
 }
 
@@ -197,9 +265,11 @@ impl RadrootsReticulumPreviewTransport {
         Ok(RadrootsReticulumPreviewFetchReceipt {
             request_id: request.request_id,
             endpoint_uri: self.profile.endpoint.as_str().to_owned(),
+            scope: self.profile.scope.clone(),
+            agent_endpoint: self.profile.agent_endpoint.clone(),
             outcome: preview_outcome(self.profile.behavior),
             observed_event_count: 0,
-            implementation_state: RadrootsTransportImplementationState::PreviewUnavailable,
+            implementation: RadrootsTransportImplementationState::PreviewUnavailable,
         })
     }
 }
@@ -237,14 +307,17 @@ impl RadrootsReticulumPreviewFetchRequest {
 pub struct RadrootsReticulumPreviewFetchReceipt {
     pub request_id: String,
     pub endpoint_uri: String,
+    pub scope: RadrootsTransportMeshScopeId,
+    pub agent_endpoint: Option<RadrootsReticulumPreviewAgentEndpoint>,
     pub outcome: RadrootsTransportOutcome,
     pub observed_event_count: usize,
-    pub implementation_state: RadrootsTransportImplementationState,
+    pub implementation: RadrootsTransportImplementationState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsReticulumPreviewError {
     InvalidEndpoint,
+    InvalidAgentEndpoint,
     InvalidProfileId,
     InvalidFetchLimit,
     NonReticulumTarget,
@@ -254,6 +327,7 @@ impl fmt::Display for RadrootsReticulumPreviewError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::InvalidEndpoint => "invalid Reticulum preview endpoint",
+            Self::InvalidAgentEndpoint => "invalid Reticulum preview agent endpoint",
             Self::InvalidProfileId => "invalid Reticulum preview profile id",
             Self::InvalidFetchLimit => "Reticulum preview fetch limit must be greater than zero",
             Self::NonReticulumTarget => {
@@ -271,6 +345,11 @@ fn ensure_reticulum_targets(
             return Err(RadrootsReticulumPreviewError::NonReticulumTarget);
         }
         if target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
+            return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
+        }
+        if target.scope.as_ref().map(|scope| scope.as_str())
+            != Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+        {
             return Err(RadrootsReticulumPreviewError::InvalidEndpoint);
         }
     }

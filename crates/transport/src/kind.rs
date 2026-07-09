@@ -1,7 +1,6 @@
 use crate::RadrootsTransportError;
 use alloc::string::{String, ToString};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsTransportKind {
     Nostr,
@@ -74,6 +73,27 @@ impl RadrootsTransportKind {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for RadrootsTransportKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.canonical_label().as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::parse_canonical(value).map_err(serde::de::Error::custom)
+    }
+}
+
 fn removed_first_party_kind(canonical: &str) -> bool {
     const RADROOTSD_PROXY_PREFIX: &str = "radrootsd";
     const RADROOTSD_PROXY_SUFFIX: &str = "_proxy";
@@ -83,10 +103,10 @@ fn removed_first_party_kind(canonical: &str) -> bool {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsTransportImplementationState {
-    Available,
-    Disabled,
-    Misconfigured,
+    Real,
+    Mock,
     PreviewUnavailable,
 }

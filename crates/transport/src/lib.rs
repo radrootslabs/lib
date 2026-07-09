@@ -18,13 +18,13 @@ pub use delivery::{
 pub use error::RadrootsTransportError;
 pub use kind::{RadrootsTransportImplementationState, RadrootsTransportKind};
 pub use message::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
 pub use status::{
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
-    RadrootsTransportReadinessState, RadrootsTransportStatus,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome, RadrootsTransportStatus,
 };
 pub use target::{
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
-    RadrootsTransportTargetUri,
+    RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };

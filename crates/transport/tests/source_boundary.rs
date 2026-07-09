@@ -25,6 +25,8 @@ const GENERIC_TRANSPORT_STATUS_SOURCE_ROOTS: &[&str] = &[
     "transport_reticulum/src",
 ];
 
+const CORE_STATUS_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src", "transport_reticulum/src"];
+
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "\"radrootsd_proxy\"",
@@ -92,6 +94,41 @@ const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     },
 ];
 
+const FORBIDDEN_CORE_STATUS_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: "implementation_state",
+        reason: "public transport status must use implementation",
+    },
+    ForbiddenConcept {
+        pattern: "readiness",
+        reason: "public transport status must use configured, usable_for_delivery, and message",
+    },
+    ForbiddenConcept {
+        pattern: "publish_usable",
+        reason: "public transport status must use usable_for_delivery",
+    },
+    ForbiddenConcept {
+        pattern: "fetch_usable",
+        reason: "public transport status must use usable_for_delivery",
+    },
+    ForbiddenConcept {
+        pattern: "redacted_message",
+        reason: "public transport status must use message",
+    },
+    ForbiddenConcept {
+        pattern: "RadrootsTransportReadinessState",
+        reason: "readiness state is no longer a public transport status contract",
+    },
+    ForbiddenConcept {
+        pattern: "Misconfigured",
+        reason: "configuration is modeled by configured and message",
+    },
+    ForbiddenConcept {
+        pattern: "Disabled",
+        reason: "disabled state is modeled by configured, usable_for_delivery, and message",
+    },
+];
+
 const FORBIDDEN_GENERIC_TRANSPORT_STATUS_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: concat!("configured_nostr", "_relay", "_count"),
@@ -156,6 +193,37 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
     assert!(
         findings.is_empty(),
         "transport hardening source-boundary violations:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn core_status_contract_sources_reject_retired_public_status_fields() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let mut findings = Vec::new();
+
+    for relative_root in CORE_STATUS_CONTRACT_SOURCE_ROOTS {
+        for path in rust_source_files(crates_root.join(relative_root).as_path()) {
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
+            let relative_path = relative_path(crates_root, path.as_path());
+
+            for concept in FORBIDDEN_CORE_STATUS_CONCEPTS {
+                if contains_forbidden_concept(source, concept.pattern) {
+                    findings.push(format!(
+                        "{} contains retired core transport status concept `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "core transport status source-boundary violations:\n{}",
         findings.join("\n")
     );
 }

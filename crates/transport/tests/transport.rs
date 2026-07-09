@@ -1,11 +1,12 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportReadinessState, RadrootsTransportSatisfactionClass,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
-    RadrootsTransportTargetUri,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -23,6 +24,11 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
     .expect("reticulum target");
 
     assert_eq!(nostr_upper.uri.as_str(), "wss://relay.example/Events");
+    assert_eq!(nostr_upper.scope, None);
+    assert_eq!(
+        reticulum.scope.as_ref().map(|scope| scope.as_str()),
+        Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+    );
     assert_eq!(nostr_upper.fingerprint, nostr_lower.fingerprint);
     assert_ne!(nostr_upper.fingerprint, reticulum.fingerprint);
     assert_eq!(
@@ -168,17 +174,16 @@ fn satisfaction_policy_counts_target_statuses() {
 }
 
 #[test]
-fn transport_status_models_generic_readiness_and_usability() {
+fn transport_status_models_canonical_configuration_and_delivery_usability() {
     let status = RadrootsTransportStatus::new(
         RadrootsTransportKind::Nostr,
-        RadrootsTransportImplementationState::Available,
-        RadrootsTransportReadinessState::Ready,
+        true,
+        RadrootsTransportImplementationState::Real,
+        true,
+        "ready",
     )
     .with_profile_id("transport.nostr.default")
-    .with_endpoint_uri("wss://relay.example")
-    .with_publish_usable(true)
-    .with_fetch_usable(true)
-    .with_redacted_message("ready");
+    .with_endpoint_uri("wss://relay.example");
 
     assert_eq!(status.kind, RadrootsTransportKind::Nostr);
     assert_eq!(
@@ -186,14 +191,33 @@ fn transport_status_models_generic_readiness_and_usability() {
         Some("transport.nostr.default")
     );
     assert_eq!(status.endpoint_uri.as_deref(), Some("wss://relay.example"));
+    assert!(status.configured);
     assert_eq!(
-        status.implementation_state,
-        RadrootsTransportImplementationState::Available
+        status.implementation,
+        RadrootsTransportImplementationState::Real
     );
-    assert_eq!(status.readiness, RadrootsTransportReadinessState::Ready);
-    assert!(status.publish_usable);
-    assert!(status.fetch_usable);
-    assert_eq!(status.redacted_message.as_deref(), Some("ready"));
+    assert!(status.usable_for_delivery);
+    assert_eq!(status.message, "ready");
+
+    let json = serde_json::to_value(&status).expect("status json");
+    assert_eq!(json["transport"], "nostr");
+    assert_eq!(json["implementation"], "real");
+    assert_eq!(json["configured"], true);
+    assert_eq!(json["usable_for_delivery"], true);
+    assert_eq!(json["message"], "ready");
+    for retired in [
+        "kind",
+        "implementation_state",
+        "readiness",
+        "publish_usable",
+        "fetch_usable",
+        "redacted_message",
+    ] {
+        assert!(
+            json.get(retired).is_none(),
+            "retired status field {retired}"
+        );
+    }
 }
 
 #[test]
@@ -279,6 +303,22 @@ fn transport_errors_have_stable_display_strings() {
             "transport target URI is invalid",
         ),
         (
+            RadrootsTransportError::EmptyTargetScope,
+            "transport target scope is empty",
+        ),
+        (
+            RadrootsTransportError::InvalidTargetScope,
+            "transport target scope is invalid",
+        ),
+        (
+            RadrootsTransportError::EmptyTargetLabel,
+            "transport target label is empty",
+        ),
+        (
+            RadrootsTransportError::InvalidTargetLabel,
+            "transport target label is invalid",
+        ),
+        (
             RadrootsTransportError::EmptyTargetSet,
             "transport target set is empty",
         ),
@@ -354,6 +394,10 @@ fn reticulum_transport_targets_require_exact_preview_endpoint() {
     )
     .expect("exact Reticulum preview endpoint");
     assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+    assert_eq!(
+        target.scope.as_ref().map(|scope| scope.as_str()),
+        Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+    );
 
     for invalid in [
         " reticulum:preview-unavailable",
@@ -395,6 +439,60 @@ fn target_fingerprints_and_sets_cover_accessors_and_validation() {
     assert_eq!(target_set.len(), 1);
     assert!(!target_set.is_empty());
     assert_eq!(target_set.targets().len(), 1);
+}
+
+#[test]
+fn target_scope_participates_in_identity_and_label_does_not() {
+    let local_scope = RadrootsTransportMeshScopeId::parse("local_preview").expect("local scope");
+    let remote_scope = RadrootsTransportMeshScopeId::parse("remote_preview").expect("remote scope");
+    let local = RadrootsTransportTarget::new_with_metadata(
+        RadrootsTransportKind::Mesh,
+        "mesh://node.example",
+        Some(local_scope.clone()),
+        Some(RadrootsTransportTargetLabel::parse("Local mesh node").expect("label")),
+    )
+    .expect("local mesh target");
+    let relabeled = RadrootsTransportTarget::new_with_metadata(
+        RadrootsTransportKind::Mesh,
+        "mesh://node.example",
+        Some(local_scope),
+        Some(RadrootsTransportTargetLabel::parse("Renamed node").expect("label")),
+    )
+    .expect("relabeled mesh target");
+    let remote = RadrootsTransportTarget::new_with_metadata(
+        RadrootsTransportKind::Mesh,
+        "mesh://node.example",
+        Some(remote_scope),
+        None,
+    )
+    .expect("remote mesh target");
+
+    assert_eq!(local.fingerprint, relabeled.fingerprint);
+    assert_ne!(local.fingerprint, remote.fingerprint);
+    assert_eq!(
+        local.scope.as_ref().map(|scope| scope.as_str()),
+        Some("local_preview")
+    );
+    assert_eq!(
+        local.label.as_ref().map(|label| label.as_str()),
+        Some("Local mesh node")
+    );
+    assert_eq!(
+        RadrootsTransportMeshScopeId::parse("").expect_err("empty scope"),
+        RadrootsTransportError::EmptyTargetScope
+    );
+    assert_eq!(
+        RadrootsTransportMeshScopeId::parse("bad scope").expect_err("invalid scope"),
+        RadrootsTransportError::InvalidTargetScope
+    );
+    assert_eq!(
+        RadrootsTransportTargetLabel::parse(" ").expect_err("empty label"),
+        RadrootsTransportError::EmptyTargetLabel
+    );
+    assert_eq!(
+        RadrootsTransportTargetLabel::parse("bad\nlabel").expect_err("invalid label"),
+        RadrootsTransportError::InvalidTargetLabel
+    );
 }
 
 #[test]
