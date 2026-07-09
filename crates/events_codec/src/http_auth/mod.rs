@@ -143,6 +143,26 @@ mod tests {
     }
 
     #[test]
+    fn http_auth_rejects_duplicate_security_tags() {
+        let auth = RadrootsHttpAuth {
+            url: "https://media.example.invalid/upload".to_string(),
+            method: "POST".to_string(),
+            payload_sha256: Some(PAYLOAD.to_string()),
+        };
+        let parts = to_wire_parts(&auth).expect("http auth wire parts");
+
+        for key in ["u", "method", "payload"] {
+            let mut duplicate = parts.tags.clone();
+            duplicate.push(tag(key, "duplicate"));
+            let err = http_auth_from_event(parts.kind, &duplicate, "").unwrap_err();
+            assert!(
+                matches!(err, EventParseError::DuplicateTag(tag) if tag == key),
+                "expected duplicate {key}, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
     fn http_auth_wrappers_preserve_event_metadata() {
         let auth = RadrootsHttpAuth {
             url: "https://media.example.invalid/upload".to_string(),

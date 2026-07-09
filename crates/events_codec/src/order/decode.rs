@@ -363,7 +363,8 @@ fn map_tag_parse_error_for_order_envelope(
         crate::error::EventParseError::MissingTag(tag) => {
             RadrootsOrderEnvelopeParseError::MissingTag(tag)
         }
-        crate::error::EventParseError::InvalidTag(tag) => {
+        crate::error::EventParseError::InvalidTag(tag)
+        | crate::error::EventParseError::DuplicateTag(tag) => {
             RadrootsOrderEnvelopeParseError::InvalidTag(tag)
         }
         crate::error::EventParseError::InvalidKind { expected: _, got } => {

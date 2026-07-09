@@ -184,6 +184,13 @@ pub(crate) fn required_tag_value(
         })
 }
 
+pub(crate) fn required_unique_tag_value(
+    tags: &[Vec<String>],
+    key: &'static str,
+) -> Result<String, EventParseError> {
+    unique_tag_value(tags, key)?.ok_or(EventParseError::MissingTag(key))
+}
+
 pub(crate) fn optional_tag_value(
     tags: &[Vec<String>],
     key: &'static str,
@@ -194,6 +201,34 @@ pub(crate) fn optional_tag_value(
     else {
         return Ok(None);
     };
+    let value = tag
+        .get(1)
+        .map(ToString::to_string)
+        .ok_or(EventParseError::InvalidTag(key))?;
+    validate_non_empty_tag_value(&value, key)?;
+    Ok(Some(value))
+}
+
+pub(crate) fn optional_unique_tag_value(
+    tags: &[Vec<String>],
+    key: &'static str,
+) -> Result<Option<String>, EventParseError> {
+    unique_tag_value(tags, key)
+}
+
+fn unique_tag_value(
+    tags: &[Vec<String>],
+    key: &'static str,
+) -> Result<Option<String>, EventParseError> {
+    let mut matches = tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(key));
+    let Some(tag) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(EventParseError::DuplicateTag(key));
+    }
     let value = tag
         .get(1)
         .map(ToString::to_string)
