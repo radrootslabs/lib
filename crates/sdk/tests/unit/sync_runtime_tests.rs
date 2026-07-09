@@ -671,6 +671,11 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
 
     assert_eq!(receipt.attempted_events, 0);
     assert_eq!(
+        proxy_delivery_policy_from_remaining(0, 0, &RadrootsTransportSatisfactionPolicy::no_wait())
+            .expect("no-wait proxy policy"),
+        TransportPublishDeliveryPolicy::Any
+    );
+    assert_eq!(
         proxy_delivery_policy_from_remaining(
             0,
             0,

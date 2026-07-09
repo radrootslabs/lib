@@ -1047,14 +1047,20 @@ async fn proxy_delivery_policy(
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
         .collect::<Vec<_>>();
-    let satisfied_count = active_targets
-        .iter()
-        .filter(|target| {
-            target
-                .status
-                .counts_as_transport_satisfaction(plan.satisfaction_policy.class())
+    let satisfied_count = plan
+        .satisfaction_policy
+        .target_satisfaction_class()
+        .map(|satisfaction_class| {
+            active_targets
+                .iter()
+                .filter(|target| {
+                    target
+                        .status
+                        .counts_as_transport_satisfaction(satisfaction_class)
+                })
+                .count()
         })
-        .count();
+        .unwrap_or(0);
     let ready_target_count = active_targets
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
@@ -1077,6 +1083,7 @@ fn proxy_delivery_policy_from_remaining(
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
     Ok(match satisfaction_policy {
+        RadrootsTransportSatisfactionPolicy::NoWait => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
         RadrootsTransportSatisfactionPolicy::Quorum { .. } => {

@@ -239,6 +239,80 @@ async fn default_operation_idempotency_ignores_target_policy() {
 }
 
 #[tokio::test]
+async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_profile() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_013,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let signer = WorkflowSigner::new();
+    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-no-wait");
+
+    let receipt = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: TargetPolicy::use_transport_profile(),
+            satisfaction_policy: SatisfactionPolicy::NoWait,
+            idempotency_key: None,
+        },
+        &signer,
+    )
+    .await
+    .expect("no-wait enqueue");
+
+    let event = sdk
+        ._outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    let plans = sdk
+        ._outbox
+        .delivery_plans(receipt.outbox_event_id)
+        .await
+        .expect("plans");
+    let targets = sdk
+        ._outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+
+    assert_eq!(
+        event.state,
+        radroots_outbox::RadrootsOutboxEventState::Published
+    );
+    assert_eq!(plans.len(), 1);
+    assert_eq!(
+        plans[0].satisfaction_policy,
+        radroots_transport::RadrootsTransportSatisfactionPolicy::no_wait()
+    );
+    assert_ne!(
+        plans[0].satisfaction_policy,
+        radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted()
+    );
+    assert_eq!(plans[0].required_success_count, 0);
+    assert_eq!(
+        plans[0].status,
+        radroots_outbox::RadrootsOutboxDeliveryPlanStatus::Complete
+    );
+    assert!(targets.is_empty());
+    assert!(
+        sdk._outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_conflicts() {
     let sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
