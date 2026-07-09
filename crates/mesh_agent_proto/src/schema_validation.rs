@@ -20,6 +20,16 @@ struct RequiredVariant {
     ordinal: u16,
 }
 
+struct ForbiddenField {
+    owner: &'static str,
+    name: &'static str,
+}
+
+struct ForbiddenVariant {
+    owner: &'static str,
+    name: &'static str,
+}
+
 const REQUEST_FIELDS: &[RequiredField] = &[
     field("MeshAgentRequest", "requestId", 0, "Text"),
     field("MeshAgentRequest", "action", 1, "MeshAgentAction"),
@@ -80,62 +90,54 @@ const STATUS_FIELDS: &[RequiredField] = &[
     field("MeshAgentStatusRequest", "includeTransports", 0, "Bool"),
     field(
         "MeshAgentStatusResponse",
-        "readiness",
-        0,
-        "MeshAgentReadinessState",
-    ),
-    field(
-        "MeshAgentStatusResponse",
-        "implementationState",
-        1,
-        "MeshAgentImplementationState",
-    ),
-    field(
-        "MeshAgentStatusResponse",
         "transports",
-        2,
+        0,
         "List(MeshAgentTransportStatus)",
     ),
     field(
         "MeshAgentTransportStatus",
-        "transportKind",
+        "transport",
         0,
         "MeshAgentTransportKind",
     ),
     field("MeshAgentTransportStatus", "profileId", 1, "Text"),
     field("MeshAgentTransportStatus", "endpointUri", 2, "Text"),
+    field("MeshAgentTransportStatus", "configured", 3, "Bool"),
     field(
         "MeshAgentTransportStatus",
-        "readiness",
-        3,
-        "MeshAgentReadinessState",
-    ),
-    field(
-        "MeshAgentTransportStatus",
-        "implementationState",
+        "implementation",
         4,
-        "MeshAgentImplementationState",
+        "MeshAgentImplementation",
     ),
-    field("MeshAgentTransportStatus", "publishUsable", 5, "Bool"),
-    field("MeshAgentTransportStatus", "fetchUsable", 6, "Bool"),
-    field("MeshAgentTransportStatus", "redactedMessage", 7, "Text"),
-];
-
-const READINESS_VARIANTS: &[RequiredVariant] = &[
-    variant("MeshAgentReadinessState", "ready", 0),
-    variant("MeshAgentReadinessState", "disabled", 1),
-    variant("MeshAgentReadinessState", "misconfigured", 2),
-    variant("MeshAgentReadinessState", "previewUnavailable", 3),
+    field("MeshAgentTransportStatus", "usableForDelivery", 5, "Bool"),
+    field("MeshAgentTransportStatus", "message", 6, "Text"),
 ];
 
 const IMPLEMENTATION_VARIANTS: &[RequiredVariant] = &[
-    variant("MeshAgentImplementationState", "previewNoop", 0),
-    variant("MeshAgentImplementationState", "mock", 1),
-    variant("MeshAgentImplementationState", "real", 2),
+    variant("MeshAgentImplementation", "real", 0),
+    variant("MeshAgentImplementation", "mock", 1),
+    variant("MeshAgentImplementation", "previewUnavailable", 2),
 ];
 
 const TRANSPORT_KIND_VARIANTS: &[RequiredVariant] =
     &[variant("MeshAgentTransportKind", "reticulum", 0)];
+
+const FORBIDDEN_STATUS_FIELDS: &[ForbiddenField] = &[
+    forbidden_field("MeshAgentStatusResponse", "readiness"),
+    forbidden_field("MeshAgentStatusResponse", "implementationState"),
+    forbidden_field("MeshAgentTransportStatus", "transportKind"),
+    forbidden_field("MeshAgentTransportStatus", "readiness"),
+    forbidden_field("MeshAgentTransportStatus", "implementationState"),
+    forbidden_field("MeshAgentTransportStatus", "publishUsable"),
+    forbidden_field("MeshAgentTransportStatus", "fetchUsable"),
+    forbidden_field("MeshAgentTransportStatus", "redactedMessage"),
+];
+
+const FORBIDDEN_STATUS_VARIANTS: &[ForbiddenVariant] =
+    &[forbidden_variant("MeshAgentImplementation", "previewNoop")];
+
+const FORBIDDEN_STATUS_ENUMS: &[&str] =
+    &["MeshAgentReadinessState", "MeshAgentImplementationState"];
 
 const TRANSPORT_OUTCOME_VARIANTS: &[RequiredVariant] = &[
     variant("MeshAgentTransportOutcome", "accepted", 0),
@@ -181,8 +183,13 @@ const PUBLISH_FIELDS: &[RequiredField] = &[
         2,
         "MeshAgentTransportOutcome",
     ),
-    field("MeshAgentTransportReceipt", "redactedMessage", 3, "Text"),
+    field("MeshAgentTransportReceipt", "message", 3, "Text"),
 ];
+
+const FORBIDDEN_PUBLISH_FIELDS: &[ForbiddenField] = &[forbidden_field(
+    "MeshAgentTransportReceipt",
+    "redactedMessage",
+)];
 
 const ERROR_FIELDS: &[RequiredField] = &[
     field("MeshAgentError", "code", 0, "Text"),
@@ -209,6 +216,14 @@ const fn variant(owner: &'static str, name: &'static str, ordinal: u16) -> Requi
         name,
         ordinal,
     }
+}
+
+const fn forbidden_field(owner: &'static str, name: &'static str) -> ForbiddenField {
+    ForbiddenField { owner, name }
+}
+
+const fn forbidden_variant(owner: &'static str, name: &'static str) -> ForbiddenVariant {
+    ForbiddenVariant { owner, name }
 }
 
 pub(crate) fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgentProtoError> {
@@ -251,17 +266,27 @@ pub(crate) fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgent
     )?;
     validate_variants(
         &parsed,
-        READINESS_VARIANTS,
-        RadrootsMeshAgentProtoError::MissingStatusSurface,
-    )?;
-    validate_variants(
-        &parsed,
         IMPLEMENTATION_VARIANTS,
         RadrootsMeshAgentProtoError::MissingStatusSurface,
     )?;
     validate_variants(
         &parsed,
         TRANSPORT_KIND_VARIANTS,
+        RadrootsMeshAgentProtoError::MissingStatusSurface,
+    )?;
+    reject_fields(
+        &parsed,
+        FORBIDDEN_STATUS_FIELDS,
+        RadrootsMeshAgentProtoError::MissingStatusSurface,
+    )?;
+    reject_variants(
+        &parsed,
+        FORBIDDEN_STATUS_VARIANTS,
+        RadrootsMeshAgentProtoError::MissingStatusSurface,
+    )?;
+    reject_enums(
+        &parsed,
+        FORBIDDEN_STATUS_ENUMS,
         RadrootsMeshAgentProtoError::MissingStatusSurface,
     )?;
     validate_fields(
@@ -272,6 +297,11 @@ pub(crate) fn validate_schema_text(schema: &str) -> Result<(), RadrootsMeshAgent
     validate_variants(
         &parsed,
         TRANSPORT_OUTCOME_VARIANTS,
+        RadrootsMeshAgentProtoError::MissingPublishSurface,
+    )?;
+    reject_fields(
+        &parsed,
+        FORBIDDEN_PUBLISH_FIELDS,
         RadrootsMeshAgentProtoError::MissingPublishSurface,
     )?;
     validate_fields(
@@ -697,6 +727,53 @@ fn validate_variants(
             .get(required.name)
             .is_some_and(|ordinal| *ordinal == required.ordinal);
         if !variant_matches {
+            return Err(error.clone());
+        }
+    }
+    Ok(())
+}
+
+fn reject_fields(
+    ast: &SchemaAst,
+    fields: &[ForbiddenField],
+    error: RadrootsMeshAgentProtoError,
+) -> Result<(), RadrootsMeshAgentProtoError> {
+    for forbidden in fields {
+        if ast
+            .structs
+            .get(forbidden.owner)
+            .is_some_and(|decl| decl.fields.contains_key(forbidden.name))
+        {
+            return Err(error.clone());
+        }
+    }
+    Ok(())
+}
+
+fn reject_variants(
+    ast: &SchemaAst,
+    variants: &[ForbiddenVariant],
+    error: RadrootsMeshAgentProtoError,
+) -> Result<(), RadrootsMeshAgentProtoError> {
+    for forbidden in variants {
+        if ast
+            .enums
+            .get(forbidden.owner)
+            .is_some_and(|decl| decl.variants.contains_key(forbidden.name))
+        {
+            return Err(error.clone());
+        }
+    }
+    Ok(())
+}
+
+fn reject_enums(
+    ast: &SchemaAst,
+    enums: &[&str],
+    error: RadrootsMeshAgentProtoError,
+) -> Result<(), RadrootsMeshAgentProtoError> {
+    for forbidden in enums {
+        if ast.enums.contains_key(*forbidden) {
             return Err(error.clone());
         }
     }

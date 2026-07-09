@@ -45,33 +45,23 @@ struct MeshAgentStatusRequest {
 }
 
 struct MeshAgentStatusResponse {
-  readiness @0 :MeshAgentReadinessState;
-  implementationState @1 :MeshAgentImplementationState;
-  transports @2 :List(MeshAgentTransportStatus);
+  transports @0 :List(MeshAgentTransportStatus);
 }
 
 struct MeshAgentTransportStatus {
-  transportKind @0 :MeshAgentTransportKind;
+  transport @0 :MeshAgentTransportKind;
   profileId @1 :Text;
   endpointUri @2 :Text;
-  readiness @3 :MeshAgentReadinessState;
-  implementationState @4 :MeshAgentImplementationState;
-  publishUsable @5 :Bool;
-  fetchUsable @6 :Bool;
-  redactedMessage @7 :Text;
+  configured @3 :Bool;
+  implementation @4 :MeshAgentImplementation;
+  usableForDelivery @5 :Bool;
+  message @6 :Text;
 }
 
-enum MeshAgentReadinessState {
-  ready @0;
-  disabled @1;
-  misconfigured @2;
-  previewUnavailable @3;
-}
-
-enum MeshAgentImplementationState {
-  previewNoop @0;
+enum MeshAgentImplementation {
+  real @0;
   mock @1;
-  real @2;
+  previewUnavailable @2;
 }
 
 enum MeshAgentTransportKind {
@@ -96,7 +86,7 @@ struct MeshAgentTransportReceipt {
   transportKind @0 :MeshAgentTransportKind;
   endpointUri @1 :Text;
   outcome @2 :MeshAgentTransportOutcome;
-  redactedMessage @3 :Text;
+  message @3 :Text;
 }
 
 enum MeshAgentTransportOutcome {
