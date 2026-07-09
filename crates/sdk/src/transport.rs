@@ -361,6 +361,11 @@ impl ReticulumPreviewProfile {
         self
     }
 
+    pub fn with_scope(mut self, scope: MeshScopeId) -> Self {
+        self.scope = scope;
+        self
+    }
+
     pub fn behavior(&self) -> ReticulumPreviewBehavior {
         self.behavior
     }

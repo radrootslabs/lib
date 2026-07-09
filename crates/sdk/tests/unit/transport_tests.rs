@@ -1,6 +1,7 @@
 use super::{
-    NostrProfile, NostrRelayUrlPolicy, PublishMode, ReticulumPreviewBehavior,
-    ReticulumPreviewProfile, SatisfactionPolicy, TargetPolicy, TargetSet, TransportProfile,
+    MeshScopeId, NostrProfile, NostrRelayUrlPolicy, PublishMode, ReticulumPreviewAgentEndpoint,
+    ReticulumPreviewBehavior, ReticulumPreviewProfile, SatisfactionPolicy, TargetPolicy, TargetSet,
+    TransportProfile,
 };
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
 use radroots_transport::{
@@ -231,6 +232,30 @@ fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
             "endpoint_uri": "reticulum:preview-unavailable",
             "scope": "local_preview",
             "agent_endpoint": null,
+            "behavior": "reject_delivery_attempts"
+        })
+    );
+}
+
+#[test]
+fn reticulum_preview_profile_preserves_explicit_scope_and_agent_endpoint() {
+    let profile = ReticulumPreviewProfile::preview_unavailable()
+        .with_scope(MeshScopeId::parse("farmers_market").expect("scope"))
+        .with_agent_endpoint(
+            ReticulumPreviewAgentEndpoint::parse("reticulum-agent:local").expect("agent endpoint"),
+        );
+
+    assert_eq!(profile.scope().as_str(), "farmers_market");
+    assert_eq!(
+        profile.agent_endpoint().expect("agent endpoint").as_str(),
+        "reticulum-agent:local"
+    );
+    assert_eq!(
+        serde_json::to_value(profile).expect("profile json"),
+        serde_json::json!({
+            "endpoint_uri": "reticulum:preview-unavailable",
+            "scope": "farmers_market",
+            "agent_endpoint": "reticulum-agent:local",
             "behavior": "reject_delivery_attempts"
         })
     );
