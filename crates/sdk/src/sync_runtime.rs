@@ -554,6 +554,33 @@ pub enum PushOutboxTargetOutcomeKind {
 }
 
 #[cfg(feature = "runtime")]
+impl PushOutboxTargetOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateAccepted => "duplicate_accepted",
+            Self::Blocked => "blocked",
+            Self::RateLimited => "rate_limited",
+            Self::Invalid => "invalid",
+            Self::PowRequired => "pow_required",
+            Self::Restricted => "restricted",
+            Self::AuthRequired => "auth_required",
+            Self::Muted => "muted",
+            Self::Unsupported => "unsupported",
+            Self::PaymentRequired => "payment_required",
+            Self::Error => "error",
+            Self::Timeout => "timeout",
+            Self::ConnectionFailed => "connection_failed",
+            Self::TargetUriRejected => "target_uri_rejected",
+            Self::SkippedAlreadyAccepted => "skipped_already_accepted",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::PreviewUnavailable => "preview_unavailable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -572,6 +599,28 @@ pub enum PushOutboxTransportOutcomeKind {
     Timeout,
     ConnectionFailed,
     TransportUnavailable,
+}
+
+#[cfg(feature = "runtime")]
+impl PushOutboxTransportOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateAccepted => "duplicate_accepted",
+            Self::Delivered => "delivered",
+            Self::Forwarded => "forwarded",
+            Self::StoredByGateway => "stored_by_gateway",
+            Self::Seen => "seen",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+            Self::Rejected => "rejected",
+            Self::RouteUnavailable => "route_unavailable",
+            Self::PayloadTooLarge => "payload_too_large",
+            Self::PolicyDenied => "policy_denied",
+            Self::Timeout => "timeout",
+            Self::ConnectionFailed => "connection_failed",
+            Self::TransportUnavailable => "transport_unavailable",
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]

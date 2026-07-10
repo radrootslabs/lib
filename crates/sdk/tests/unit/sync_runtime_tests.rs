@@ -7,8 +7,8 @@ use super::{
 };
 use super::{
     PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxTargetOutcomeKind,
-    SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus, push_event_final_state,
-    push_event_receipt, push_outbox_claim_token,
+    PushOutboxTransportOutcomeKind, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
+    push_event_final_state, push_event_receipt, push_outbox_claim_token,
 };
 use crate::RadrootsSdkError;
 #[cfg(feature = "radrootsd-proxy")]
@@ -651,6 +651,97 @@ fn relay_outcome_kind_mapping_covers_all_transport_outcomes() {
         PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Unknown),
         PushOutboxTargetOutcomeKind::Unknown
     );
+}
+
+#[test]
+fn push_outbox_outcome_kind_labels_cover_all_public_variants() {
+    for (kind, label) in [
+        (PushOutboxTargetOutcomeKind::Accepted, "accepted"),
+        (
+            PushOutboxTargetOutcomeKind::DuplicateAccepted,
+            "duplicate_accepted",
+        ),
+        (PushOutboxTargetOutcomeKind::Blocked, "blocked"),
+        (PushOutboxTargetOutcomeKind::RateLimited, "rate_limited"),
+        (PushOutboxTargetOutcomeKind::Invalid, "invalid"),
+        (PushOutboxTargetOutcomeKind::PowRequired, "pow_required"),
+        (PushOutboxTargetOutcomeKind::Restricted, "restricted"),
+        (PushOutboxTargetOutcomeKind::AuthRequired, "auth_required"),
+        (PushOutboxTargetOutcomeKind::Muted, "muted"),
+        (PushOutboxTargetOutcomeKind::Unsupported, "unsupported"),
+        (
+            PushOutboxTargetOutcomeKind::PaymentRequired,
+            "payment_required",
+        ),
+        (PushOutboxTargetOutcomeKind::Error, "error"),
+        (PushOutboxTargetOutcomeKind::Timeout, "timeout"),
+        (
+            PushOutboxTargetOutcomeKind::ConnectionFailed,
+            "connection_failed",
+        ),
+        (
+            PushOutboxTargetOutcomeKind::TargetUriRejected,
+            "target_uri_rejected",
+        ),
+        (
+            PushOutboxTargetOutcomeKind::SkippedAlreadyAccepted,
+            "skipped_already_accepted",
+        ),
+        (
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
+            "deferred_until_implemented",
+        ),
+        (
+            PushOutboxTargetOutcomeKind::PreviewUnavailable,
+            "preview_unavailable",
+        ),
+        (PushOutboxTargetOutcomeKind::Unknown, "unknown"),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
+
+    for (kind, label) in [
+        (PushOutboxTransportOutcomeKind::Accepted, "accepted"),
+        (
+            PushOutboxTransportOutcomeKind::DuplicateAccepted,
+            "duplicate_accepted",
+        ),
+        (PushOutboxTransportOutcomeKind::Delivered, "delivered"),
+        (PushOutboxTransportOutcomeKind::Forwarded, "forwarded"),
+        (
+            PushOutboxTransportOutcomeKind::StoredByGateway,
+            "stored_by_gateway",
+        ),
+        (PushOutboxTransportOutcomeKind::Seen, "seen"),
+        (
+            PushOutboxTransportOutcomeKind::DeferredUntilImplemented,
+            "deferred_until_implemented",
+        ),
+        (PushOutboxTransportOutcomeKind::Rejected, "rejected"),
+        (
+            PushOutboxTransportOutcomeKind::RouteUnavailable,
+            "route_unavailable",
+        ),
+        (
+            PushOutboxTransportOutcomeKind::PayloadTooLarge,
+            "payload_too_large",
+        ),
+        (
+            PushOutboxTransportOutcomeKind::PolicyDenied,
+            "policy_denied",
+        ),
+        (PushOutboxTransportOutcomeKind::Timeout, "timeout"),
+        (
+            PushOutboxTransportOutcomeKind::ConnectionFailed,
+            "connection_failed",
+        ),
+        (
+            PushOutboxTransportOutcomeKind::TransportUnavailable,
+            "transport_unavailable",
+        ),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
 }
 
 #[tokio::test]

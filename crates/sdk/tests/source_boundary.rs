@@ -1556,6 +1556,144 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
 }
 
 #[test]
+fn sdk_public_outcome_label_contracts_are_explicit() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    let orders_runtime_source = read_source(manifest_dir.join("src/orders_runtime.rs").as_path());
+
+    for (source, enum_name, required_labels) in [
+        (
+            sync_runtime_source.as_str(),
+            "PushOutboxTargetOutcomeKind",
+            &[
+                r#"Self::Accepted => "accepted""#,
+                r#"Self::DuplicateAccepted => "duplicate_accepted""#,
+                r#"Self::Blocked => "blocked""#,
+                r#"Self::RateLimited => "rate_limited""#,
+                r#"Self::Invalid => "invalid""#,
+                r#"Self::PowRequired => "pow_required""#,
+                r#"Self::Restricted => "restricted""#,
+                r#"Self::AuthRequired => "auth_required""#,
+                r#"Self::Muted => "muted""#,
+                r#"Self::Unsupported => "unsupported""#,
+                r#"Self::PaymentRequired => "payment_required""#,
+                r#"Self::Error => "error""#,
+                r#"Self::Timeout => "timeout""#,
+                r#"Self::ConnectionFailed => "connection_failed""#,
+                r#"Self::TargetUriRejected => "target_uri_rejected""#,
+                r#"Self::SkippedAlreadyAccepted => "skipped_already_accepted""#,
+                r#"Self::DeferredUntilImplemented => "deferred_until_implemented""#,
+                r#"Self::PreviewUnavailable => "preview_unavailable""#,
+                r#"Self::Unknown => "unknown""#,
+            ][..],
+        ),
+        (
+            sync_runtime_source.as_str(),
+            "PushOutboxTransportOutcomeKind",
+            &[
+                r#"Self::Accepted => "accepted""#,
+                r#"Self::DuplicateAccepted => "duplicate_accepted""#,
+                r#"Self::Delivered => "delivered""#,
+                r#"Self::Forwarded => "forwarded""#,
+                r#"Self::StoredByGateway => "stored_by_gateway""#,
+                r#"Self::Seen => "seen""#,
+                r#"Self::DeferredUntilImplemented => "deferred_until_implemented""#,
+                r#"Self::Rejected => "rejected""#,
+                r#"Self::RouteUnavailable => "route_unavailable""#,
+                r#"Self::PayloadTooLarge => "payload_too_large""#,
+                r#"Self::PolicyDenied => "policy_denied""#,
+                r#"Self::Timeout => "timeout""#,
+                r#"Self::ConnectionFailed => "connection_failed""#,
+                r#"Self::TransportUnavailable => "transport_unavailable""#,
+            ][..],
+        ),
+        (
+            orders_runtime_source.as_str(),
+            "TradeResyncNostrRelayOutcomeKind",
+            &[
+                r#"Self::Eose => "eose""#,
+                r#"Self::Closed => "closed""#,
+                r#"Self::Notice => "notice""#,
+            ][..],
+        ),
+        (
+            orders_runtime_source.as_str(),
+            "TradeResyncNostrRelayTransportOutcomeKind",
+            &[
+                r#"Self::Accepted => "accepted""#,
+                r#"Self::DuplicateAccepted => "duplicate_accepted""#,
+                r#"Self::Blocked => "blocked""#,
+                r#"Self::RateLimited => "rate_limited""#,
+                r#"Self::Invalid => "invalid""#,
+                r#"Self::PowRequired => "pow_required""#,
+                r#"Self::Restricted => "restricted""#,
+                r#"Self::AuthRequired => "auth_required""#,
+                r#"Self::Muted => "muted""#,
+                r#"Self::Unsupported => "unsupported""#,
+                r#"Self::PaymentRequired => "payment_required""#,
+                r#"Self::Error => "error""#,
+                r#"Self::Timeout => "timeout""#,
+                r#"Self::ConnectionFailed => "connection_failed""#,
+                r#"Self::RelayUrlRejected => "relay_url_rejected""#,
+                r#"Self::SkippedAlreadyAccepted => "skipped_already_accepted""#,
+                r#"Self::Unknown => "unknown""#,
+            ][..],
+        ),
+        (
+            orders_runtime_source.as_str(),
+            "TradeValidationReceiptNostrRelayOutcomeKind",
+            &[
+                r#"Self::Eose => "eose""#,
+                r#"Self::Closed => "closed""#,
+                r#"Self::Notice => "notice""#,
+            ][..],
+        ),
+        (
+            orders_runtime_source.as_str(),
+            "TradeValidationReceiptNostrRelayTransportOutcomeKind",
+            &[
+                r#"Self::Accepted => "accepted""#,
+                r#"Self::DuplicateAccepted => "duplicate_accepted""#,
+                r#"Self::Blocked => "blocked""#,
+                r#"Self::RateLimited => "rate_limited""#,
+                r#"Self::Invalid => "invalid""#,
+                r#"Self::PowRequired => "pow_required""#,
+                r#"Self::Restricted => "restricted""#,
+                r#"Self::AuthRequired => "auth_required""#,
+                r#"Self::Muted => "muted""#,
+                r#"Self::Unsupported => "unsupported""#,
+                r#"Self::PaymentRequired => "payment_required""#,
+                r#"Self::Error => "error""#,
+                r#"Self::Timeout => "timeout""#,
+                r#"Self::ConnectionFailed => "connection_failed""#,
+                r#"Self::RelayUrlRejected => "relay_url_rejected""#,
+                r#"Self::SkippedAlreadyAccepted => "skipped_already_accepted""#,
+                r#"Self::Unknown => "unknown""#,
+            ][..],
+        ),
+    ] {
+        let marker = format!("impl {enum_name} {{");
+        let block = impl_block(source, marker.as_str());
+        assert!(
+            block.contains("pub fn as_str(self) -> &'static str"),
+            "{enum_name} must expose an SDK-owned public label helper"
+        );
+        for required in required_labels {
+            assert!(
+                block.contains(required),
+                "{enum_name} label helper must explicitly cover `{required}`"
+            );
+        }
+        for forbidden in ["serde_json::to_value", "panic!(", "_ =>"] {
+            assert!(
+                !block.contains(forbidden),
+                "{enum_name} label helper must not contain forbidden conversion token `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     for relative_path in [

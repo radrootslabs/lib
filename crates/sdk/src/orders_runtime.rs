@@ -1685,6 +1685,17 @@ pub enum TradeResyncNostrRelayOutcomeKind {
 }
 
 #[cfg(feature = "runtime")]
+impl TradeResyncNostrRelayOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Eose => "eose",
+            Self::Closed => "closed",
+            Self::Notice => "notice",
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -1706,6 +1717,31 @@ pub enum TradeResyncNostrRelayTransportOutcomeKind {
     RelayUrlRejected,
     SkippedAlreadyAccepted,
     Unknown,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeResyncNostrRelayTransportOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateAccepted => "duplicate_accepted",
+            Self::Blocked => "blocked",
+            Self::RateLimited => "rate_limited",
+            Self::Invalid => "invalid",
+            Self::PowRequired => "pow_required",
+            Self::Restricted => "restricted",
+            Self::AuthRequired => "auth_required",
+            Self::Muted => "muted",
+            Self::Unsupported => "unsupported",
+            Self::PaymentRequired => "payment_required",
+            Self::Error => "error",
+            Self::Timeout => "timeout",
+            Self::ConnectionFailed => "connection_failed",
+            Self::RelayUrlRejected => "relay_url_rejected",
+            Self::SkippedAlreadyAccepted => "skipped_already_accepted",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -1948,6 +1984,17 @@ pub enum TradeValidationReceiptNostrRelayOutcomeKind {
 }
 
 #[cfg(feature = "runtime")]
+impl TradeValidationReceiptNostrRelayOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Eose => "eose",
+            Self::Closed => "closed",
+            Self::Notice => "notice",
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -1969,6 +2016,31 @@ pub enum TradeValidationReceiptNostrRelayTransportOutcomeKind {
     RelayUrlRejected,
     SkippedAlreadyAccepted,
     Unknown,
+}
+
+#[cfg(feature = "runtime")]
+impl TradeValidationReceiptNostrRelayTransportOutcomeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateAccepted => "duplicate_accepted",
+            Self::Blocked => "blocked",
+            Self::RateLimited => "rate_limited",
+            Self::Invalid => "invalid",
+            Self::PowRequired => "pow_required",
+            Self::Restricted => "restricted",
+            Self::AuthRequired => "auth_required",
+            Self::Muted => "muted",
+            Self::Unsupported => "unsupported",
+            Self::PaymentRequired => "payment_required",
+            Self::Error => "error",
+            Self::Timeout => "timeout",
+            Self::ConnectionFailed => "connection_failed",
+            Self::RelayUrlRejected => "relay_url_rejected",
+            Self::SkippedAlreadyAccepted => "skipped_already_accepted",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]

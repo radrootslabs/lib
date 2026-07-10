@@ -4171,6 +4171,171 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
     assert_struct_serialize_error_paths(&issue, 3);
 }
 
+#[test]
+fn relay_outcome_labels_cover_resync_and_validation_receipt_variants() {
+    for (kind, label) in [
+        (TradeResyncNostrRelayOutcomeKind::Eose, "eose"),
+        (TradeResyncNostrRelayOutcomeKind::Closed, "closed"),
+        (TradeResyncNostrRelayOutcomeKind::Notice, "notice"),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
+
+    for (kind, label) in [
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Accepted,
+            "accepted",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::DuplicateAccepted,
+            "duplicate_accepted",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Blocked,
+            "blocked",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::RateLimited,
+            "rate_limited",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Invalid,
+            "invalid",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::PowRequired,
+            "pow_required",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Restricted,
+            "restricted",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::AuthRequired,
+            "auth_required",
+        ),
+        (TradeResyncNostrRelayTransportOutcomeKind::Muted, "muted"),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Unsupported,
+            "unsupported",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::PaymentRequired,
+            "payment_required",
+        ),
+        (TradeResyncNostrRelayTransportOutcomeKind::Error, "error"),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Timeout,
+            "timeout",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::ConnectionFailed,
+            "connection_failed",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::RelayUrlRejected,
+            "relay_url_rejected",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::SkippedAlreadyAccepted,
+            "skipped_already_accepted",
+        ),
+        (
+            TradeResyncNostrRelayTransportOutcomeKind::Unknown,
+            "unknown",
+        ),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
+
+    for (kind, label) in [
+        (TradeValidationReceiptNostrRelayOutcomeKind::Eose, "eose"),
+        (
+            TradeValidationReceiptNostrRelayOutcomeKind::Closed,
+            "closed",
+        ),
+        (
+            TradeValidationReceiptNostrRelayOutcomeKind::Notice,
+            "notice",
+        ),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
+
+    for (kind, label) in [
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Accepted,
+            "accepted",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::DuplicateAccepted,
+            "duplicate_accepted",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Blocked,
+            "blocked",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::RateLimited,
+            "rate_limited",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Invalid,
+            "invalid",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::PowRequired,
+            "pow_required",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Restricted,
+            "restricted",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::AuthRequired,
+            "auth_required",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Muted,
+            "muted",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Unsupported,
+            "unsupported",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::PaymentRequired,
+            "payment_required",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Error,
+            "error",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Timeout,
+            "timeout",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::ConnectionFailed,
+            "connection_failed",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::RelayUrlRejected,
+            "relay_url_rejected",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::SkippedAlreadyAccepted,
+            "skipped_already_accepted",
+        ),
+        (
+            TradeValidationReceiptNostrRelayTransportOutcomeKind::Unknown,
+            "unknown",
+        ),
+    ] {
+        assert_eq!(kind.as_str(), label);
+    }
+}
+
 #[tokio::test]
 async fn closed_event_store_errors_are_mapped_for_ingest_and_prepared_lookup() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
