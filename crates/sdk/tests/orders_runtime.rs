@@ -564,7 +564,7 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
 
 fn explicit_trade_relays() -> TargetPolicy {
     TargetPolicy::explicit(
-        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("transport targets"),
+        TargetSet::nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("transport targets"),
     )
 }
 
@@ -3393,7 +3393,7 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         listing_event_ptr(),
         order_request("order-submit-idempotent"),
         TargetPolicy::explicit(
-            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+            TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second transport targets"),
         ),
         PublishMode::EnqueueOnly,

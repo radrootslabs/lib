@@ -1,8 +1,8 @@
 #[cfg(feature = "radrootsd-proxy")]
 use super::{
     CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_remaining,
-    proxy_error_message, proxy_outbox_idempotency_key, proxy_transport_error_receipt,
-    push_proxy_claimed_outbox_event, push_proxy_event_receipt,
+    proxy_error_message, proxy_outbox_idempotency_key, proxy_required_remaining_targets,
+    proxy_transport_error_receipt, push_proxy_claimed_outbox_event, push_proxy_event_receipt,
     transport_publish_target_from_outbox_target,
 };
 use super::{
@@ -48,7 +48,8 @@ use radroots_outbox::{
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetLabel,
 };
 use radroots_transport_nostr::{
     RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt, RadrootsRelayOutcomeKind,
@@ -812,14 +813,20 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
 
     assert_eq!(receipt.attempted_events, 0);
     assert_eq!(
-        proxy_delivery_policy_from_remaining(0, 0, &RadrootsTransportSatisfactionPolicy::no_wait())
-            .expect("no-wait proxy policy"),
+        proxy_delivery_policy_from_remaining(
+            0,
+            0,
+            None,
+            &RadrootsTransportSatisfactionPolicy::no_wait()
+        )
+        .expect("no-wait proxy policy"),
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
         proxy_delivery_policy_from_remaining(
             0,
             0,
+            None,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
         .expect("zero-target proxy policy"),
@@ -829,6 +836,7 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         proxy_delivery_policy_from_remaining(
             2,
             2,
+            None,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
         .expect("all-target proxy policy"),
@@ -838,11 +846,49 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         proxy_delivery_policy_from_remaining(
             2,
             1,
+            None,
             &RadrootsTransportSatisfactionPolicy::any_accepted()
         )
         .expect("any-target proxy policy"),
         TransportPublishDeliveryPolicy::Any
     );
+    let first_required =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://required-a.example.com")
+            .expect("first required target");
+    let second_required =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://required-b.example.com")
+            .expect("second required target");
+    let optional =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://optional.example.com")
+            .expect("optional target");
+    let policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![
+            first_required.fingerprint.clone(),
+            second_required.fingerprint.clone(),
+        ],
+    )
+    .expect("required target policy");
+    let mut first_record = delivery_target_record(1, 7, &first_required);
+    first_record.status = RadrootsOutboxDeliveryTargetStatus::Accepted;
+    let second_record = delivery_target_record(2, 7, &second_required);
+    let mut optional_record = delivery_target_record(3, 7, &optional);
+    optional_record.status = RadrootsOutboxDeliveryTargetStatus::Accepted;
+    let active_targets = vec![&first_record, &second_record, &optional_record];
+    let remaining = proxy_required_remaining_targets(&policy, &active_targets)
+        .expect("required remaining targets")
+        .expect("required target policy");
+    assert_eq!(remaining, vec![second_required.fingerprint]);
+    assert_eq!(
+        proxy_delivery_policy_from_remaining(2, remaining.len(), Some(&remaining), &policy)
+            .expect("required target proxy policy"),
+        TransportPublishDeliveryPolicy::RequiredTargets { targets: remaining }
+    );
+    assert!(matches!(
+        proxy_delivery_policy_from_remaining(0, 1, Some(&[]), &policy),
+        Err(RadrootsSdkError::InvalidRequest { message })
+            if message.contains("unsatisfied required targets")
+    ));
     assert_eq!(
         proxy_outbox_idempotency_key(7, 3, "event-id", 5),
         "radroots-sdk-outbox-7-3-event-id-5"
@@ -1699,6 +1745,14 @@ impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
             .push(RadrootsOutboxPublishTargetReceipt {
                 delivery_target_id: 10,
                 endpoint_uri: "wss://relay.example.com".to_owned(),
+                endpoint_fingerprint: RadrootsTransportTarget::new_with_metadata(
+                    RadrootsTransportKind::Nostr,
+                    "wss://relay.example.com",
+                    Some(RadrootsTransportMeshScopeId::parse("farm.local").expect("scope")),
+                    Some(RadrootsTransportTargetLabel::parse("Farm relay").expect("label")),
+                )
+                .expect("target")
+                .fingerprint,
                 target_scope: Some("farm.local".to_owned()),
                 target_label: Some("Farm relay".to_owned()),
                 attempted: true,

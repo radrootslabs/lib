@@ -31,6 +31,8 @@ use radroots_trade::projection::{
     RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
     refresh_product_projections,
 };
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use radroots_transport::RadrootsTransportTargetFingerprint;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
@@ -1193,28 +1195,36 @@ async fn proxy_delivery_policy(
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
         .collect::<Vec<_>>();
-    let satisfied_count = plan
-        .satisfaction_policy
-        .target_satisfaction_class()
-        .map(|satisfaction_class| {
-            active_targets
-                .iter()
-                .filter(|target| {
-                    target
-                        .status
-                        .counts_as_transport_satisfaction(satisfaction_class)
-                })
-                .count()
-        })
-        .unwrap_or(0);
+    reject_delivered_proxy_satisfaction(&plan.satisfaction_policy)?;
     let ready_target_count = active_targets
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
         .count();
-    let required_remaining = (plan.required_success_count as usize).saturating_sub(satisfied_count);
+    let required_remaining_targets =
+        proxy_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;
+    let required_remaining = if let Some(targets) = required_remaining_targets.as_ref() {
+        targets.len()
+    } else {
+        let satisfied_count = plan
+            .satisfaction_policy
+            .target_satisfaction_class()
+            .map(|satisfaction_class| {
+                active_targets
+                    .iter()
+                    .filter(|target| {
+                        target
+                            .status
+                            .counts_as_transport_satisfaction(satisfaction_class)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+        (plan.required_success_count as usize).saturating_sub(satisfied_count)
+    };
     proxy_delivery_policy_from_remaining(
         ready_target_count,
         required_remaining,
+        required_remaining_targets.as_deref(),
         &plan.satisfaction_policy,
     )
 }
@@ -1223,10 +1233,24 @@ async fn proxy_delivery_policy(
 fn proxy_delivery_policy_from_remaining(
     ready_target_count: usize,
     required_remaining: usize,
+    required_remaining_targets: Option<&[RadrootsTransportTargetFingerprint]>,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
     reject_delivered_proxy_satisfaction(satisfaction_policy)?;
-    if ready_target_count == 0 || required_remaining == 0 {
+    if required_remaining == 0 {
+        return Ok(TransportPublishDeliveryPolicy::Any);
+    }
+    if ready_target_count == 0 {
+        if matches!(
+            satisfaction_policy,
+            RadrootsTransportSatisfactionPolicy::RequiredTargets { .. }
+        ) {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message:
+                    "radrootsd proxy publish has unsatisfied required targets but no ready target"
+                        .to_owned(),
+            });
+        }
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
     Ok(match satisfaction_policy {
@@ -1234,7 +1258,17 @@ fn proxy_delivery_policy_from_remaining(
         RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
         RadrootsTransportSatisfactionPolicy::RequiredTargets { .. } => {
-            TransportPublishDeliveryPolicy::All
+            TransportPublishDeliveryPolicy::required_targets(
+                required_remaining_targets
+                    .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                        message: "radrootsd proxy publish missing required target fingerprints"
+                            .to_owned(),
+                    })?
+                    .to_vec(),
+            )
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: error.to_string(),
+            })?
         }
         RadrootsTransportSatisfactionPolicy::Quorum { .. } => {
             if required_remaining >= ready_target_count {
@@ -1248,6 +1282,41 @@ fn proxy_delivery_policy_from_remaining(
             }
         }
     })
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn proxy_required_remaining_targets(
+    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
+    active_targets: &[&RadrootsOutboxDeliveryTargetRecord],
+) -> Result<Option<Vec<RadrootsTransportTargetFingerprint>>, RadrootsSdkError> {
+    let RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =
+        satisfaction_policy
+    else {
+        return Ok(None);
+    };
+    let mut remaining = Vec::new();
+    for required in targets {
+        let target = active_targets
+            .iter()
+            .find(|target| target.endpoint_fingerprint == *required)
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "radrootsd proxy publish required target {required} is not present in active delivery plan"
+                ),
+            })?;
+        if target.status.counts_as_transport_satisfaction(*class) {
+            continue;
+        }
+        if !target.status.is_ready_for_attempt() {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "radrootsd proxy publish required target {required} is not ready for publish"
+                ),
+            });
+        }
+        remaining.push(required.clone());
+    }
+    Ok(Some(remaining))
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]

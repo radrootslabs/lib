@@ -581,6 +581,90 @@ fn sdk_transport_nostr_features_do_not_retain_relay_named_aliases() {
 }
 
 #[test]
+fn sdk_transport_public_api_rejects_removed_relay_aliases_and_neutral_target_constructor() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let nostr_adapter = read_source(manifest_dir.join("src/adapters/nostr.rs").as_path());
+    let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
+    let target_set_impl = source_between(
+        transport_source.as_str(),
+        "impl TargetSet {",
+        "\n}\n\nimpl serde::Serialize for TargetSet",
+    );
+
+    for required in [
+        "RadrootsNostrClient",
+        "RadrootsNostrClientOptions",
+        "RadrootsNostrError",
+        "RadrootsNostrEventId",
+        "RadrootsNostrOutput",
+        "pub fn nostr_relays",
+        "pub fn transport_targets",
+    ] {
+        assert!(
+            nostr_adapter.contains(required) || transport_source.contains(required),
+            "SDK public transport API must retain explicit target-state witness `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "pub type RelayClient",
+        "pub type RelayClientOptions",
+        "pub type RelayError",
+        "pub type RelayEventId",
+        "pub type RelayOutput",
+        "RelayClient::",
+        "RelayOutput<",
+        "pub fn new<I, S>",
+    ] {
+        assert!(
+            !nostr_adapter.contains(forbidden) && !target_set_impl.contains(forbidden),
+            "SDK transport public API must not retain removed alias or constructor `{forbidden}`"
+        );
+    }
+
+    for relative_root in ["src", "tests", "examples"] {
+        let root = manifest_dir.join(relative_root);
+        if !root.exists() {
+            continue;
+        }
+        for path in rust_source_files(root.as_path()) {
+            if path.file_name().and_then(|file_name| file_name.to_str())
+                == Some("source_boundary.rs")
+            {
+                continue;
+            }
+            let source = read_source(path.as_path());
+            let relative_path = relative_manifest_path(manifest_dir, path.as_path());
+            assert!(
+                !contains_sdk_target_set_new(source.as_str()),
+                "{relative_path} must use TargetSet::nostr_relays or TargetSet::transport_targets explicitly"
+            );
+            for forbidden in [
+                "RelayClient",
+                "RelayClientOptions",
+                "RelayError",
+                "RelayEventId",
+                "RelayOutput",
+            ] {
+                assert!(
+                    !source.contains(forbidden),
+                    "{relative_path} must not retain removed SDK Nostr adapter alias `{forbidden}`"
+                );
+            }
+        }
+    }
+}
+
+fn contains_sdk_target_set_new(source: &str) -> bool {
+    source.match_indices("TargetSet::new(").any(|(index, _)| {
+        source[..index]
+            .chars()
+            .next_back()
+            .is_none_or(|character| !is_rust_identifier_character(character))
+    })
+}
+
+#[test]
 fn sdk_readme_documents_current_public_product_surface() {
     let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README");
     let readme = read_source(readme_path.as_path());

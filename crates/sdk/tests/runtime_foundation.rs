@@ -79,7 +79,7 @@ async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
 
 #[test]
 fn invalid_relay_url_errors_redact_userinfo() {
-    let error = TargetSet::new(
+    let error = TargetSet::nostr_relays(
         ["wss://user:password@relay.example.com/path?token=secret#frag"],
         NostrRelayUrlPolicy::Public,
     )
@@ -408,7 +408,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets],
         ),
         (
-            TargetSet::new(["wss://u:p@relay.example.com"], NostrRelayUrlPolicy::Public)
+            TargetSet::nostr_relays(["wss://u:p@relay.example.com"], NostrRelayUrlPolicy::Public)
                 .expect_err("invalid relay"),
             "invalid_relay_url",
             RadrootsSdkErrorClass::Configuration,
@@ -622,7 +622,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
 
 #[test]
 fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
-    let targets = TargetSet::new(
+    let targets = TargetSet::nostr_relays(
         [" wss://relay-b.example.com/ ", "wss://relay-a.example.com"],
         NostrRelayUrlPolicy::Public,
     )
@@ -671,7 +671,7 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
     );
 
     assert!(matches!(
-        TargetSet::new(
+        TargetSet::nostr_relays(
             ["wss://relay-a.example.com", "WSS://RELAY-A.EXAMPLE.COM/"],
             NostrRelayUrlPolicy::Public,
         ),
@@ -680,7 +680,7 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
     ));
 
     assert!(matches!(
-        TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        TargetSet::nostr_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::EmptyTransportTargets { .. })
     ));
 
@@ -688,7 +688,7 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     assert!(matches!(
-        TargetSet::new(too_many, NostrRelayUrlPolicy::Public),
+        TargetSet::nostr_relays(too_many, NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::TransportTargetLimitExceeded {
             max: SDK_TRANSPORT_TARGET_MAX_COUNT,
             actual

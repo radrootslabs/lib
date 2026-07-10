@@ -748,7 +748,7 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
         TargetPolicy::explicit(
-            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+            TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second transport targets"),
         ),
     );

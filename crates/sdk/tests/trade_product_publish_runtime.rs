@@ -226,7 +226,7 @@ fn trade_propose_request(
 
 fn explicit_trade_relays() -> TargetPolicy {
     TargetPolicy::explicit(
-        TargetSet::new([RELAY], NostrRelayUrlPolicy::Public).expect("target relays"),
+        TargetSet::nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("target relays"),
     )
 }
 

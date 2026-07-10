@@ -121,7 +121,7 @@ fn target_set_accessors_and_configured_relays_cover_empty_paths() {
             .is_empty()
     );
 
-    let targets = TargetSet::new(
+    let targets = TargetSet::nostr_relays(
         ["wss://relay-a.example.com", "wss://relay-b.example.com"],
         NostrRelayUrlPolicy::Public,
     )
@@ -158,7 +158,7 @@ fn target_set_accessors_and_configured_relays_cover_empty_paths() {
         )
         .expect("explicit policy"),
         TargetPolicy::Explicit(
-            TargetSet::new(["wss://relay-c.example.com"], NostrRelayUrlPolicy::Public)
+            TargetSet::nostr_relays(["wss://relay-c.example.com"], NostrRelayUrlPolicy::Public)
                 .expect("target set"),
         )
     );
@@ -196,7 +196,7 @@ fn target_set_accessors_and_configured_relays_cover_empty_paths() {
 
 #[test]
 fn target_sets_reject_duplicate_transport_fingerprints() {
-    let duplicate_relays = TargetSet::new(
+    let duplicate_relays = TargetSet::nostr_relays(
         [
             "wss://relay-a.example.com/path",
             "WSS://RELAY-A.EXAMPLE.COM/path",
@@ -369,7 +369,7 @@ fn explicit_target_sets_reject_mixed_proxy_delegate_targets() {
 #[test]
 fn normalized_relays_reject_empty_and_over_limit_sets() {
     assert!(matches!(
-        TargetSet::new(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
+        TargetSet::nostr_relays(Vec::<String>::new(), NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::EmptyTransportTargets { .. })
     ));
 
@@ -377,7 +377,7 @@ fn normalized_relays_reject_empty_and_over_limit_sets() {
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     assert!(matches!(
-        TargetSet::new(too_many, NostrRelayUrlPolicy::Public),
+        TargetSet::nostr_relays(too_many, NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::TransportTargetLimitExceeded { actual, .. })
             if actual == SDK_TRANSPORT_TARGET_MAX_COUNT + 1
     ));
@@ -391,12 +391,12 @@ fn local_ws_authority_parser_handles_ipv6_ports_and_non_ws_values() {
     assert!(!is_local_ws_relay("wss://relay.example.com"));
     assert!(!is_local_ws_relay("ws://relay.example.com"));
     assert!(matches!(
-        TargetSet::new(["ws://relay.example.com"], NostrRelayUrlPolicy::Localhost),
+        TargetSet::nostr_relays(["ws://relay.example.com"], NostrRelayUrlPolicy::Localhost),
         Err(RadrootsSdkError::InvalidRelayUrl { reason, .. })
             if reason.contains("localhost")
     ));
     assert!(matches!(
-        TargetSet::new(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
+        TargetSet::nostr_relays(["ws://relay.example.com"], NostrRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRelayUrl { reason, .. })
             if reason.contains("localhost")
     ));

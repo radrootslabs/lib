@@ -773,7 +773,7 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
         TargetPolicy::explicit(
-            TargetSet::new([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
+            TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second transport targets"),
         ),
     );

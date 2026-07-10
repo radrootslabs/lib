@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
     let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
-    let targets = TargetSet::new([LOCAL_RELAY], NostrRelayUrlPolicy::Localhost)?;
+    let targets = TargetSet::nostr_relays([LOCAL_RELAY], NostrRelayUrlPolicy::Localhost)?;
     let target_policy = TargetPolicy::explicit(targets);
 
     let prepared = sdk

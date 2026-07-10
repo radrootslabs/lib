@@ -6,6 +6,7 @@ use crate::adapters::signing::sign_parts_with_identity;
 use crate::identity::RadrootsIdentity;
 use core::time::Duration;
 use radroots_events_codec::wire::WireEventParts;
+use radroots_nostr::prelude::RadrootsNostrClientOptions;
 use tokio::runtime::Runtime;
 
 #[test]
@@ -13,8 +14,9 @@ fn client_constructors_build_without_runtime_net() {
     let identity = RadrootsIdentity::generate();
     let _client = client_from_identity(&identity);
     let _signerless = signerless_client();
-    let _signerless_with_options = signerless_client_with_options(super::RelayClientOptions::new())
-        .expect("signerless client with options");
+    let _signerless_with_options =
+        signerless_client_with_options(RadrootsNostrClientOptions::new())
+            .expect("signerless client with options");
 }
 
 #[test]

@@ -268,7 +268,10 @@ pub struct TargetSet {
 }
 
 impl TargetSet {
-    pub fn new<I, S>(relays: I, policy: NostrRelayUrlPolicy) -> Result<Self, RadrootsSdkError>
+    pub fn nostr_relays<I, S>(
+        relays: I,
+        policy: NostrRelayUrlPolicy,
+    ) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -282,17 +285,6 @@ impl TargetSet {
             )?);
         }
         Self::from_transport_targets(targets)
-    }
-
-    pub fn nostr_relays<I, S>(
-        relays: I,
-        policy: NostrRelayUrlPolicy,
-    ) -> Result<Self, RadrootsSdkError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        Self::new(relays, policy)
     }
 
     pub fn transport_targets(
