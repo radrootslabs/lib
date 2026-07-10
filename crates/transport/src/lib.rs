@@ -32,4 +32,5 @@ pub use target::{
 };
 pub use transport::{
     RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture,
 };

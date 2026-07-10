@@ -1,9 +1,10 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchRequest,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumPreviewAgentEndpoint, RadrootsReticulumPreviewBehavior,
@@ -269,6 +270,49 @@ fn direct_preview_delivery_accepts_any_typed_reticulum_scope_as_inert_metadata()
     assert_eq!(
         deferred.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
         0
+    );
+}
+
+#[test]
+fn core_transport_trait_reports_preview_status_delivery_and_fetch() {
+    let transport = RadrootsReticulumPreviewTransport::default();
+    let target_set = RadrootsTransportTargetSet::new(vec![reticulum_target(
+        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )])
+    .expect("target set");
+    let status = futures::executor::block_on(RadrootsTransport::status(&transport))
+        .expect("transport status");
+    assert_eq!(status.kind, RadrootsTransportKind::Reticulum);
+    assert_eq!(
+        status.implementation,
+        RadrootsTransportImplementationState::PreviewUnavailable
+    );
+    assert!(!status.usable_for_delivery);
+
+    let delivery = futures::executor::block_on(RadrootsTransport::deliver(
+        &transport,
+        RadrootsTransportDeliveryRequest::new(
+            "core-delivery",
+            "sha256:preview-payload",
+            target_set.clone(),
+            RadrootsTransportSatisfactionPolicy::any_accepted(),
+        ),
+    ))
+    .expect("delivery receipt");
+    assert_eq!(
+        delivery.target_receipts[0].status,
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
+    );
+
+    let fetch = futures::executor::block_on(RadrootsTransport::fetch(
+        &transport,
+        RadrootsTransportFetchRequest::new("core-fetch", target_set),
+    ))
+    .expect("fetch receipt");
+    assert_eq!(fetch.fetched_count, 0);
+    assert_eq!(
+        fetch.target_receipts[0].status,
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
     );
 }
 

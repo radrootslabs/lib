@@ -1,22 +1,31 @@
 use crate::{
     RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest, RadrootsTransportError,
-    RadrootsTransportStatus, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportKind, RadrootsTransportStatus, RadrootsTransportTargetReceipt,
+    RadrootsTransportTargetSet,
 };
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::future::Future;
+use core::pin::Pin;
 
-pub trait RadrootsTransport {
-    fn status(&self) -> Result<RadrootsTransportStatus, RadrootsTransportError>;
+pub type RadrootsTransportFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, RadrootsTransportError>> + Send + 'a>>;
 
-    fn deliver(
-        &self,
+pub trait RadrootsTransport: Send + Sync {
+    fn transport_kind(&self) -> RadrootsTransportKind;
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus>;
+
+    fn deliver<'a>(
+        &'a self,
         request: RadrootsTransportDeliveryRequest,
-    ) -> Result<RadrootsTransportDeliveryReceipt, RadrootsTransportError>;
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt>;
 
-    fn fetch(
-        &self,
+    fn fetch<'a>(
+        &'a self,
         request: RadrootsTransportFetchRequest,
-    ) -> Result<RadrootsTransportFetchReceipt, RadrootsTransportError>;
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt>;
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

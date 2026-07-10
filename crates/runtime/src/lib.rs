@@ -42,13 +42,11 @@ pub use signals::shutdown_signal;
 pub use tracing::{
     default_shared_runtime_logs_dir, default_shared_runtime_logs_dir_for, init, init_with_logs_dir,
 };
-#[cfg(feature = "transport-reticulum")]
-pub use transport::RadrootsRuntimeReticulumPreviewTransport;
 #[cfg(feature = "transport")]
 pub use transport::{
     RadrootsRuntimeBoundedQueue, RadrootsRuntimeQueueStatus, RadrootsRuntimeQueueTask,
-    RadrootsRuntimeTransportAdapter, RadrootsRuntimeTransportDispatchRequest,
-    RadrootsRuntimeTransportError, RadrootsRuntimeTransportFuture, RadrootsRuntimeTransportPayload,
+    RadrootsRuntimeTransportDispatchRequest, RadrootsRuntimeTransportError,
+    RadrootsRuntimeTransportFuture, RadrootsRuntimeTransportPayload,
     RadrootsRuntimeTransportRegistry,
 };
 #[cfg(feature = "transport-workers")]

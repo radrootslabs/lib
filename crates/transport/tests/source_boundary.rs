@@ -308,6 +308,45 @@ fn core_transport_sources_reject_relay_shaped_public_contracts() {
 }
 
 #[test]
+fn runtime_transport_registry_uses_core_transport_contract() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let runtime_source_raw = read_source(crates_root.join("runtime/src/transport.rs").as_path());
+    let runtime_source = production_source(runtime_source_raw.as_str());
+    let reticulum_source_raw =
+        read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
+    let reticulum_source = production_source(reticulum_source_raw.as_str());
+
+    assert!(
+        runtime_source.contains("Arc<dyn RadrootsTransport>"),
+        "runtime registry must store the core RadrootsTransport trait object"
+    );
+    assert!(
+        runtime_source.contains("T: RadrootsTransport + 'static"),
+        "runtime registry registration must accept the core RadrootsTransport trait"
+    );
+    assert!(
+        runtime_source.contains("transport.transport_kind()"),
+        "runtime registry must key transports through the core trait transport_kind"
+    );
+    for forbidden in [
+        "pub trait RadrootsRuntimeTransportAdapter",
+        "dyn RadrootsRuntimeTransportAdapter",
+        "RadrootsRuntimeReticulumPreviewTransport",
+    ] {
+        assert!(
+            !runtime_source.contains(forbidden),
+            "runtime transport source must not retain split adapter contract `{forbidden}`"
+        );
+    }
+    assert!(
+        reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumPreviewTransport"),
+        "Reticulum preview transport must implement the core transport contract"
+    );
+}
+
+#[test]
 fn transport_publish_capabilities_keep_canonical_status_fields() {
     let source_raw = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))

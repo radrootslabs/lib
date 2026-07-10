@@ -20,6 +20,7 @@ radroots_transport = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true, features = ["derive"] }
 
 [dev-dependencies]
+futures = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
 [lints.rust]

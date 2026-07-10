@@ -4,13 +4,15 @@
 extern crate alloc;
 
 use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportImplementationState,
+    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetReceipt,
@@ -282,6 +284,49 @@ impl Default for RadrootsReticulumPreviewTransport {
     }
 }
 
+impl RadrootsTransport for RadrootsReticulumPreviewTransport {
+    fn transport_kind(&self) -> RadrootsTransportKind {
+        RadrootsTransportKind::Reticulum
+    }
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        Box::pin(async move { Ok(self.profile.status().transport_status) })
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        Box::pin(async move {
+            self.deliver(request)
+                .map_err(reticulum_preview_error_to_transport_error)
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        request: RadrootsTransportFetchRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        Box::pin(async move {
+            ensure_reticulum_targets(request.target_set.targets())
+                .map_err(reticulum_preview_error_to_transport_error)?;
+            let outcome = preview_outcome(self.profile.behavior);
+            let target_receipts = request
+                .target_set
+                .targets()
+                .iter()
+                .cloned()
+                .map(|target| RadrootsTransportTargetReceipt::new(target, outcome.clone()))
+                .collect::<Vec<_>>();
+            Ok(RadrootsTransportFetchReceipt::new(
+                request.request_id,
+                target_receipts,
+                0,
+            ))
+        })
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumPreviewFetchRequest {
@@ -336,6 +381,22 @@ impl fmt::Display for RadrootsReticulumPreviewError {
                 "Reticulum preview transport received a non-Reticulum target"
             }
         })
+    }
+}
+
+fn reticulum_preview_error_to_transport_error(
+    error: RadrootsReticulumPreviewError,
+) -> RadrootsTransportError {
+    match error {
+        RadrootsReticulumPreviewError::InvalidEndpoint
+        | RadrootsReticulumPreviewError::NonReticulumTarget => {
+            RadrootsTransportError::InvalidTargetUri
+        }
+        RadrootsReticulumPreviewError::InvalidAgentEndpoint
+        | RadrootsReticulumPreviewError::InvalidProfileId
+        | RadrootsReticulumPreviewError::InvalidFetchLimit => {
+            RadrootsTransportError::InvalidTransportKind
+        }
     }
 }
 

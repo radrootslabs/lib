@@ -2,12 +2,12 @@ use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
-    RadrootsTransportTargetUri,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
 
 #[test]
@@ -812,41 +812,51 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     }
 
     impl RadrootsTransport for MemoryTransport {
-        fn status(&self) -> Result<RadrootsTransportStatus, RadrootsTransportError> {
-            Ok(RadrootsTransportStatus::new(
-                RadrootsTransportKind::Local,
-                true,
-                RadrootsTransportImplementationState::Real,
-                true,
-                "ready",
-            ))
+        fn transport_kind(&self) -> RadrootsTransportKind {
+            RadrootsTransportKind::Local
         }
 
-        fn deliver(
-            &self,
-            request: RadrootsTransportDeliveryRequest,
-        ) -> Result<RadrootsTransportDeliveryReceipt, RadrootsTransportError> {
-            Ok(RadrootsTransportDeliveryReceipt {
-                request_id: request.request_id,
-                target_receipts: vec![RadrootsTransportTargetReceipt::new(
-                    self.target.clone(),
-                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
-                )],
+        fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+            Box::pin(async move {
+                Ok(RadrootsTransportStatus::new(
+                    RadrootsTransportKind::Local,
+                    true,
+                    RadrootsTransportImplementationState::Real,
+                    true,
+                    "ready",
+                ))
             })
         }
 
-        fn fetch(
-            &self,
+        fn deliver<'a>(
+            &'a self,
+            request: RadrootsTransportDeliveryRequest,
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+            Box::pin(async move {
+                Ok(RadrootsTransportDeliveryReceipt {
+                    request_id: request.request_id,
+                    target_receipts: vec![RadrootsTransportTargetReceipt::new(
+                        self.target.clone(),
+                        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
+                    )],
+                })
+            })
+        }
+
+        fn fetch<'a>(
+            &'a self,
             request: RadrootsTransportFetchRequest,
-        ) -> Result<RadrootsTransportFetchReceipt, RadrootsTransportError> {
-            Ok(RadrootsTransportFetchReceipt::new(
-                request.request_id,
-                vec![RadrootsTransportTargetReceipt::new(
-                    self.target.clone(),
-                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
-                )],
-                1,
-            ))
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+            Box::pin(async move {
+                Ok(RadrootsTransportFetchReceipt::new(
+                    request.request_id,
+                    vec![RadrootsTransportTargetReceipt::new(
+                        self.target.clone(),
+                        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+                    )],
+                    1,
+                ))
+            })
         }
     }
 
@@ -854,23 +864,25 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
         .expect("local target");
     let target_set = RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set");
     let transport = MemoryTransport { target };
-    let status = transport.status().expect("status");
+    assert_eq!(transport.transport_kind(), RadrootsTransportKind::Local);
+    let status = futures::executor::block_on(transport.status()).expect("status");
     assert_eq!(status.kind, RadrootsTransportKind::Local);
-    let delivery = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
+    let delivery =
+        futures::executor::block_on(transport.deliver(RadrootsTransportDeliveryRequest::new(
             "deliver-1",
             "sha256:payload",
             target_set.clone(),
             RadrootsTransportSatisfactionPolicy::all_delivered(),
-        ))
+        )))
         .expect("deliver");
     assert_eq!(
         delivery.target_receipts[0].outcome.kind,
         RadrootsTransportOutcomeKind::Delivered
     );
-    let fetch = transport
-        .fetch(RadrootsTransportFetchRequest::new("fetch-1", target_set))
-        .expect("fetch");
+    let fetch = futures::executor::block_on(
+        transport.fetch(RadrootsTransportFetchRequest::new("fetch-1", target_set)),
+    )
+    .expect("fetch");
     assert_eq!(fetch.fetched_count, 1);
     assert_eq!(
         fetch.target_receipts[0].outcome.kind,

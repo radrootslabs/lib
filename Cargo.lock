@@ -4848,6 +4848,7 @@ dependencies = [
 name = "radroots_transport"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "futures",
  "serde",
  "serde_json",
  "sha2",
@@ -4884,6 +4885,7 @@ dependencies = [
 name = "radroots_transport_reticulum"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "futures",
  "radroots_transport",
  "serde",
  "serde_json",

@@ -7,9 +7,9 @@ use radroots_events::draft::RadrootsSignedNostrEvent;
 #[cfg(feature = "transport-workers")]
 use radroots_transport::RadrootsTransportTargetReceipt;
 use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransport, RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use thiserror::Error;
 
@@ -18,11 +18,11 @@ pub type RadrootsRuntimeTransportFuture<'a, T> =
 
 #[derive(Debug, Error)]
 pub enum RadrootsRuntimeTransportError {
-    #[error("transport adapter for `{0}` is not registered")]
-    AdapterNotRegistered(String),
+    #[error("transport `{0}` is not registered")]
+    TransportNotRegistered(String),
 
-    #[error("transport adapter for `{0}` is already registered")]
-    AdapterAlreadyRegistered(String),
+    #[error("transport `{0}` is already registered")]
+    TransportAlreadyRegistered(String),
 
     #[error("transport dispatch received no targets")]
     EmptyDispatchTargets,
@@ -44,8 +44,8 @@ pub enum RadrootsRuntimeTransportError {
         signed_event_id: String,
     },
 
-    #[error("transport adapter `{kind}` failed: {message}")]
-    Adapter { kind: String, message: String },
+    #[error("transport `{kind}` failed: {message}")]
+    Transport { kind: String, message: String },
 }
 
 impl From<RadrootsTransportError> for RadrootsRuntimeTransportError {
@@ -109,18 +109,9 @@ impl RadrootsRuntimeTransportDispatchRequest {
     }
 }
 
-pub trait RadrootsRuntimeTransportAdapter: Send + Sync {
-    fn transport_kind(&self) -> RadrootsTransportKind;
-
-    fn deliver<'a>(
-        &'a self,
-        request: RadrootsRuntimeTransportDispatchRequest,
-    ) -> RadrootsRuntimeTransportFuture<'a, RadrootsTransportDeliveryReceipt>;
-}
-
 #[derive(Clone, Default)]
 pub struct RadrootsRuntimeTransportRegistry {
-    adapters: BTreeMap<RadrootsTransportKind, Arc<dyn RadrootsRuntimeTransportAdapter>>,
+    transports: BTreeMap<RadrootsTransportKind, Arc<dyn RadrootsTransport>>,
 }
 
 impl RadrootsRuntimeTransportRegistry {
@@ -128,72 +119,31 @@ impl RadrootsRuntimeTransportRegistry {
         Self::default()
     }
 
-    pub fn register<A>(&mut self, adapter: A) -> Result<(), RadrootsRuntimeTransportError>
+    pub fn register<T>(&mut self, transport: T) -> Result<(), RadrootsRuntimeTransportError>
     where
-        A: RadrootsRuntimeTransportAdapter + 'static,
+        T: RadrootsTransport + 'static,
     {
-        let kind = adapter.transport_kind();
-        if self.adapters.contains_key(&kind) {
-            return Err(RadrootsRuntimeTransportError::AdapterAlreadyRegistered(
+        let kind = transport.transport_kind();
+        if self.transports.contains_key(&kind) {
+            return Err(RadrootsRuntimeTransportError::TransportAlreadyRegistered(
                 kind.canonical_label(),
             ));
         }
-        self.adapters.insert(kind, Arc::new(adapter));
+        self.transports.insert(kind, Arc::new(transport));
         Ok(())
     }
 
-    pub fn adapter(
+    pub fn transport(
         &self,
         kind: &RadrootsTransportKind,
-    ) -> Result<Arc<dyn RadrootsRuntimeTransportAdapter>, RadrootsRuntimeTransportError> {
-        self.adapters.get(kind).cloned().ok_or_else(|| {
-            RadrootsRuntimeTransportError::AdapterNotRegistered(kind.canonical_label())
+    ) -> Result<Arc<dyn RadrootsTransport>, RadrootsRuntimeTransportError> {
+        self.transports.get(kind).cloned().ok_or_else(|| {
+            RadrootsRuntimeTransportError::TransportNotRegistered(kind.canonical_label())
         })
     }
 
     pub fn registered_kinds(&self) -> Vec<RadrootsTransportKind> {
-        self.adapters.keys().cloned().collect()
-    }
-}
-
-#[cfg(feature = "transport-reticulum")]
-#[derive(Clone, Debug)]
-pub struct RadrootsRuntimeReticulumPreviewTransport {
-    transport: radroots_transport_reticulum::RadrootsReticulumPreviewTransport,
-}
-
-#[cfg(feature = "transport-reticulum")]
-impl RadrootsRuntimeReticulumPreviewTransport {
-    pub fn new(transport: radroots_transport_reticulum::RadrootsReticulumPreviewTransport) -> Self {
-        Self { transport }
-    }
-}
-
-#[cfg(feature = "transport-reticulum")]
-impl Default for RadrootsRuntimeReticulumPreviewTransport {
-    fn default() -> Self {
-        Self::new(radroots_transport_reticulum::RadrootsReticulumPreviewTransport::default())
-    }
-}
-
-#[cfg(feature = "transport-reticulum")]
-impl RadrootsRuntimeTransportAdapter for RadrootsRuntimeReticulumPreviewTransport {
-    fn transport_kind(&self) -> RadrootsTransportKind {
-        RadrootsTransportKind::Reticulum
-    }
-
-    fn deliver<'a>(
-        &'a self,
-        request: RadrootsRuntimeTransportDispatchRequest,
-    ) -> RadrootsRuntimeTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
-        Box::pin(async move {
-            self.transport
-                .deliver(request.transport_delivery_request())
-                .map_err(|error| RadrootsRuntimeTransportError::Adapter {
-                    kind: RadrootsTransportKind::Reticulum.canonical_label(),
-                    message: error.to_string(),
-                })
-        })
+        self.transports.keys().cloned().collect()
     }
 }
 
@@ -504,7 +454,7 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
             }
             let mut plan_target_receipts = Vec::new();
             for (kind, targets) in by_kind {
-                let adapter = self.registry.adapter(&kind)?;
+                let transport = self.registry.transport(&kind)?;
                 let transport_targets = targets
                     .iter()
                     .map(|target| target.target.clone())
@@ -519,7 +469,13 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     satisfaction_policy.clone(),
                     job.now_ms,
                 )?;
-                let receipt = adapter.deliver(request).await?;
+                let receipt = transport
+                    .deliver(request.transport_delivery_request())
+                    .await
+                    .map_err(|error| RadrootsRuntimeTransportError::Transport {
+                        kind: kind.canonical_label(),
+                        message: error.to_string(),
+                    })?;
                 for target_receipt in receipt.target_receipts {
                     target_states.insert(
                         target_receipt.target.fingerprint.as_str().to_owned(),
@@ -654,10 +610,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        RadrootsRuntimeBoundedQueue, RadrootsRuntimeTransportAdapter,
-        RadrootsRuntimeTransportDispatchRequest, RadrootsRuntimeTransportError,
-        RadrootsRuntimeTransportFuture, RadrootsRuntimeTransportPayload,
-        RadrootsRuntimeTransportRegistry,
+        RadrootsRuntimeBoundedQueue, RadrootsRuntimeTransportDispatchRequest,
+        RadrootsRuntimeTransportError, RadrootsRuntimeTransportFuture,
+        RadrootsRuntimeTransportPayload, RadrootsRuntimeTransportRegistry,
     };
     #[cfg(feature = "transport-workers")]
     use super::{
@@ -670,26 +625,41 @@ mod tests {
     #[cfg(feature = "transport-workers")]
     use radroots_events::draft::{RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts};
     use radroots_transport::{
-        RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+        RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+        RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchReceipt,
+        RadrootsTransportFetchRequest, RadrootsTransportFuture,
+        RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportOutcome,
+        RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+        RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+        RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     };
 
-    struct StaticAdapter {
+    struct StaticTransport {
         kind: RadrootsTransportKind,
         outcome_kind: RadrootsTransportOutcomeKind,
     }
 
-    impl RadrootsRuntimeTransportAdapter for StaticAdapter {
+    impl RadrootsTransport for StaticTransport {
         fn transport_kind(&self) -> RadrootsTransportKind {
             self.kind.clone()
         }
 
+        fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+            Box::pin(async move {
+                Ok(RadrootsTransportStatus::new(
+                    self.kind.clone(),
+                    true,
+                    RadrootsTransportImplementationState::Real,
+                    true,
+                    "ready",
+                ))
+            })
+        }
+
         fn deliver<'a>(
             &'a self,
-            request: RadrootsRuntimeTransportDispatchRequest,
-        ) -> RadrootsRuntimeTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+            request: RadrootsTransportDeliveryRequest,
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
             Box::pin(async move {
                 Ok(RadrootsTransportDeliveryReceipt {
                     request_id: request.request_id,
@@ -706,6 +676,30 @@ mod tests {
                         })
                         .collect(),
                 })
+            })
+        }
+
+        fn fetch<'a>(
+            &'a self,
+            request: RadrootsTransportFetchRequest,
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+            Box::pin(async move {
+                Ok(RadrootsTransportFetchReceipt::new(
+                    request.request_id,
+                    request
+                        .target_set
+                        .targets()
+                        .iter()
+                        .cloned()
+                        .map(|target| {
+                            RadrootsTransportTargetReceipt::new(
+                                target,
+                                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+                            )
+                        })
+                        .collect(),
+                    0,
+                ))
             })
         }
     }
@@ -751,10 +745,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn registry_dispatches_nostr_adapter_by_transport_kind() {
+    async fn registry_dispatches_transport_by_transport_kind() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticAdapter {
+            .register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             })
@@ -764,29 +758,42 @@ mod tests {
             vec![RadrootsTransportKind::Nostr]
         );
         assert!(matches!(
-            registry.register(StaticAdapter {
+            registry.register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             }),
-            Err(RadrootsRuntimeTransportError::AdapterAlreadyRegistered(_))
+            Err(RadrootsRuntimeTransportError::TransportAlreadyRegistered(_))
         ));
 
-        let adapter = registry
-            .adapter(&RadrootsTransportKind::Nostr)
-            .expect("nostr adapter");
-        let receipt = adapter
-            .deliver(
-                RadrootsRuntimeTransportDispatchRequest::new(
-                    "nostr-delivery",
-                    RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
-                    vec![target(RadrootsTransportKind::Nostr, "wss://relay.example")],
-                    RadrootsTransportSatisfactionPolicy::any_accepted(),
-                    1_000,
-                )
-                .expect("request"),
-            )
+        let transport = registry
+            .transport(&RadrootsTransportKind::Nostr)
+            .expect("nostr transport");
+        let request = RadrootsRuntimeTransportDispatchRequest::new(
+            "nostr-delivery",
+            RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+            vec![target(RadrootsTransportKind::Nostr, "wss://relay.example")],
+            RadrootsTransportSatisfactionPolicy::any_accepted(),
+            1_000,
+        )
+        .expect("request");
+        let receipt = transport
+            .deliver(request.transport_delivery_request())
             .await
             .expect("receipt");
+        let status = transport.status().await.expect("status");
+        assert_eq!(status.kind, RadrootsTransportKind::Nostr);
+        let fetch = transport
+            .fetch(RadrootsTransportFetchRequest::new(
+                "nostr-fetch",
+                RadrootsTransportTargetSet::new(vec![target(
+                    RadrootsTransportKind::Nostr,
+                    "wss://relay.example",
+                )])
+                .expect("target set"),
+            ))
+            .await
+            .expect("fetch");
+        assert_eq!(fetch.fetched_count, 0);
 
         assert_eq!(
             receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
@@ -800,30 +807,46 @@ mod tests {
 
     #[cfg(feature = "transport-reticulum")]
     #[tokio::test]
-    async fn registry_dispatches_reticulum_preview_without_success() {
+    async fn registry_dispatches_reticulum_preview_transport_without_success() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(super::RadrootsRuntimeReticulumPreviewTransport::default())
+            .register(radroots_transport_reticulum::RadrootsReticulumPreviewTransport::default())
             .expect("register");
-        let adapter = registry
-            .adapter(&RadrootsTransportKind::Reticulum)
-            .expect("reticulum adapter");
-        let receipt = adapter
-            .deliver(
-                RadrootsRuntimeTransportDispatchRequest::new(
-                    "reticulum-delivery",
-                    RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
-                    vec![target(
-                        RadrootsTransportKind::Reticulum,
-                        "reticulum:preview-unavailable",
-                    )],
-                    RadrootsTransportSatisfactionPolicy::any_accepted(),
-                    1_000,
-                )
-                .expect("request"),
-            )
+        let transport = registry
+            .transport(&RadrootsTransportKind::Reticulum)
+            .expect("reticulum transport");
+        let request = RadrootsRuntimeTransportDispatchRequest::new(
+            "reticulum-delivery",
+            RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+            vec![target(
+                RadrootsTransportKind::Reticulum,
+                "reticulum:preview-unavailable",
+            )],
+            RadrootsTransportSatisfactionPolicy::any_accepted(),
+            1_000,
+        )
+        .expect("request");
+        let receipt = transport
+            .deliver(request.transport_delivery_request())
             .await
             .expect("receipt");
+        let status = transport.status().await.expect("status");
+        assert_eq!(
+            status.implementation,
+            RadrootsTransportImplementationState::PreviewUnavailable
+        );
+        let fetch = transport
+            .fetch(RadrootsTransportFetchRequest::new(
+                "reticulum-fetch",
+                RadrootsTransportTargetSet::new(vec![target(
+                    RadrootsTransportKind::Reticulum,
+                    "reticulum:preview-unavailable",
+                )])
+                .expect("target set"),
+            ))
+            .await
+            .expect("fetch");
+        assert_eq!(fetch.fetched_count, 0);
 
         assert_eq!(
             receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
@@ -855,7 +878,7 @@ mod tests {
     async fn delivery_worker_dispatches_ready_targets_and_skips_deferred() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticAdapter {
+            .register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             })
@@ -952,7 +975,7 @@ mod tests {
     async fn delivery_worker_required_targets_use_fingerprints() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticAdapter {
+            .register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             })
@@ -1012,7 +1035,7 @@ mod tests {
     async fn delivery_worker_keeps_accepted_and_delivered_satisfaction_distinct() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticAdapter {
+            .register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             })
@@ -1055,7 +1078,7 @@ mod tests {
     async fn delivery_worker_reports_quorum_satisfaction() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticAdapter {
+            .register(StaticTransport {
                 kind: RadrootsTransportKind::Nostr,
                 outcome_kind: RadrootsTransportOutcomeKind::Accepted,
             })
