@@ -1,21 +1,17 @@
 use crate::RadrootsSdkError;
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportSatisfactionClass,
+    RadrootsTransportImplementationState, RadrootsTransportMeshScopeId,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
 use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeSet;
 
 pub use radroots_transport::{
-    RadrootsTransportDeliveryReceipt as TransportDeliveryReceipt,
-    RadrootsTransportDeliveryTargetStatus as TransportDeliveryTargetStatus,
-    RadrootsTransportKind as TransportKind, RadrootsTransportOutcome as TransportOutcome,
-    RadrootsTransportSatisfactionClass as TransportSatisfactionClass,
-    RadrootsTransportTargetReceipt as TransportTargetReceipt,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass, RadrootsTransportTargetReceipt,
 };
 
 pub const SDK_TRANSPORT_TARGET_MAX_COUNT: usize = 20;
@@ -790,7 +786,10 @@ pub struct TransportReceipt {
 }
 
 impl TransportReceipt {
-    pub fn satisfied_target_count(&self, satisfaction_class: TransportSatisfactionClass) -> usize {
+    pub fn satisfied_target_count(
+        &self,
+        satisfaction_class: RadrootsTransportSatisfactionClass,
+    ) -> usize {
         self.target_receipts
             .iter()
             .filter(|receipt| receipt.status.counts_as_satisfied(satisfaction_class))

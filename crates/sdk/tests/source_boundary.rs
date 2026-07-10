@@ -583,6 +583,7 @@ fn sdk_transport_nostr_features_do_not_retain_relay_named_aliases() {
 #[test]
 fn sdk_transport_public_api_rejects_removed_relay_aliases_and_neutral_target_constructor() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
     let nostr_adapter = read_source(manifest_dir.join("src/adapters/nostr.rs").as_path());
     let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
     let target_set_impl = source_between(
@@ -597,11 +598,19 @@ fn sdk_transport_public_api_rejects_removed_relay_aliases_and_neutral_target_con
         "RadrootsNostrError",
         "RadrootsNostrEventId",
         "RadrootsNostrOutput",
+        "RadrootsTransportDeliveryReceipt",
+        "RadrootsTransportDeliveryTargetStatus",
+        "RadrootsTransportKind",
+        "RadrootsTransportOutcome",
+        "RadrootsTransportSatisfactionClass",
+        "RadrootsTransportTargetReceipt",
         "pub fn nostr_relays",
         "pub fn transport_targets",
     ] {
         assert!(
-            nostr_adapter.contains(required) || transport_source.contains(required),
+            nostr_adapter.contains(required)
+                || transport_source.contains(required)
+                || lib_source.contains(required),
             "SDK public transport API must retain explicit target-state witness `{required}`"
         );
     }
@@ -619,6 +628,20 @@ fn sdk_transport_public_api_rejects_removed_relay_aliases_and_neutral_target_con
         assert!(
             !nostr_adapter.contains(forbidden) && !target_set_impl.contains(forbidden),
             "SDK transport public API must not retain removed alias or constructor `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "RadrootsTransportDeliveryReceipt as TransportDeliveryReceipt",
+        "RadrootsTransportDeliveryTargetStatus as TransportDeliveryTargetStatus",
+        "RadrootsTransportKind as TransportKind",
+        "RadrootsTransportOutcome as TransportOutcome",
+        "RadrootsTransportSatisfactionClass as TransportSatisfactionClass",
+        "RadrootsTransportTargetReceipt as TransportTargetReceipt",
+    ] {
+        assert!(
+            !transport_source.contains(forbidden) && !lib_source.contains(forbidden),
+            "SDK transport public API must not retain removed transport alias `{forbidden}`"
         );
     }
 
