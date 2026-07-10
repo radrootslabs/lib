@@ -33,7 +33,10 @@ use radroots_sdk::{
     ReticulumPreviewTryNowRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
     StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
-use radroots_transport::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
+use radroots_transport::{
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
+};
 use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
@@ -531,6 +534,36 @@ async fn enqueue_listing(sdk: &RadrootsClient, d_tag: &str, title: &str, relays:
     enqueue_listing_with_policy(sdk, d_tag, title, relays, NostrRelayUrlPolicy::Public).await
 }
 
+async fn enqueue_scoped_duplicate_listing(sdk: &RadrootsClient, d_tag: &str, title: &str) -> i64 {
+    let plan = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor(),
+            listing(d_tag, title),
+        ))
+        .expect("prepared listing");
+    let signer = FixtureSigner::new(SELLER);
+    let signed_event = signer
+        .sign_frozen_draft(&plan.frozen_draft)
+        .expect("signed listing");
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    outbox
+        .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+            LISTING_PUBLISH_OPERATION_KIND,
+            plan.frozen_draft,
+            signed_event,
+            scoped_duplicate_relay_delivery_plan(RELAY_A),
+            true,
+            1_700_000_000_000,
+            1_700_000_000_000,
+        ))
+        .await
+        .expect("scoped duplicate enqueue")
+        .outbox_event_id
+}
+
 async fn assert_local_import_observation(sdk: &RadrootsClient, outbox_event_id: i64) {
     let paths = sdk.storage_paths().expect("paths");
     let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
@@ -576,6 +609,30 @@ where
         radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
         target_set.into_targets(),
     )
+}
+
+fn scoped_duplicate_relay_delivery_plan(
+    relay: &str,
+) -> radroots_outbox::RadrootsOutboxDeliveryPlanInput {
+    radroots_outbox::RadrootsOutboxDeliveryPlanInput::new(
+        "explicit.scoped",
+        2,
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+        vec![
+            scoped_nostr_target(relay, "farm.a", "Farm A"),
+            scoped_nostr_target(relay, "farm.b", "Farm B"),
+        ],
+    )
+}
+
+fn scoped_nostr_target(relay: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
+    RadrootsTransportTarget::new_with_metadata(
+        RadrootsTransportKind::Nostr,
+        relay,
+        Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
+        Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+    )
+    .expect("scoped Nostr target")
 }
 
 async fn backup_source(sdk: &RadrootsClient, root: &Path, name: &str) -> PathBuf {
@@ -2389,6 +2446,149 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_preserves_scoped_duplicate_target_metadata() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+    let outbox_event_id =
+        enqueue_scoped_duplicate_listing(&sdk, LISTING_A_D_TAG, "Scoped Coffee").await;
+    let adapter = RecordingPublishAdapter::new(Duration::ZERO);
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(adapter.relay_batches(), vec![vec![RELAY_A.to_owned()]]);
+    let event = &receipt.events[0];
+    assert_eq!(event.outbox_event_id, outbox_event_id);
+    assert_eq!(event.final_state, PushOutboxEventState::Published);
+    assert_eq!(event.attempted_count, 2);
+    assert_eq!(event.accepted_count, 2);
+    assert_eq!(event.retryable_count, 0);
+    assert_eq!(event.terminal_count, 0);
+    assert_eq!(event.quorum, 2);
+    assert!(event.quorum_met);
+    assert_eq!(event.targets.len(), 2);
+    assert!(event.targets.iter().all(|target| {
+        target.transport_kind == "nostr"
+            && target.endpoint_uri == RELAY_A
+            && target.attempted
+            && target.outcome_kind == PushOutboxTargetOutcomeKind::Accepted
+    }));
+    assert!(event.targets.iter().any(|target| {
+        target.target_scope.as_deref() == Some("farm.a")
+            && target.target_label.as_deref() == Some("Farm A")
+    }));
+    assert!(event.targets.iter().any(|target| {
+        target.target_scope.as_deref() == Some("farm.b")
+            && target.target_label.as_deref() == Some("Farm B")
+    }));
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stored = outbox
+        .get_event(outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+    let targets = outbox
+        .delivery_targets(outbox_event_id)
+        .await
+        .expect("targets");
+    assert_eq!(targets.len(), 2);
+    assert!(targets.iter().all(|target| {
+        target.endpoint_uri.as_str() == RELAY_A
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+    }));
+    assert!(targets.iter().any(|target| {
+        target.target_scope.as_ref().map(|scope| scope.as_str()) == Some("farm.a")
+            && target.target_label.as_ref().map(|label| label.as_str()) == Some("Farm A")
+    }));
+    assert!(targets.iter().any(|target| {
+        target.target_scope.as_ref().map(|scope| scope.as_str()) == Some("farm.b")
+            && target.target_label.as_ref().map(|label| label.as_str()) == Some("Farm B")
+    }));
+}
+
+#[tokio::test]
+async fn push_outbox_adapter_transport_failure_preserves_scoped_target_metadata() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+    let outbox_event_id =
+        enqueue_scoped_duplicate_listing(&sdk, LISTING_B_D_TAG, "Scoped Retry Coffee").await;
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(
+            &TransportFailurePublishAdapter,
+            PushOutboxRequest::new().with_limit(1),
+        )
+        .await
+        .expect("push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 0);
+    assert_eq!(receipt.retryable_events, 1);
+    assert_eq!(receipt.terminal_events, 0);
+    let event = &receipt.events[0];
+    assert_eq!(event.outbox_event_id, outbox_event_id);
+    assert_eq!(event.final_state, PushOutboxEventState::PublishRetryable);
+    assert_eq!(event.attempted_count, 2);
+    assert_eq!(event.accepted_count, 0);
+    assert_eq!(event.retryable_count, 2);
+    assert_eq!(event.terminal_count, 0);
+    assert_eq!(event.quorum, 2);
+    assert!(!event.quorum_met);
+    assert_eq!(event.targets.len(), 2);
+    assert!(event.targets.iter().all(|target| {
+        target.transport_kind == "nostr"
+            && target.endpoint_uri == RELAY_A
+            && target.attempted
+            && target.outcome_kind == PushOutboxTargetOutcomeKind::ConnectionFailed
+            && target.message.as_deref() == Some("adapter boundary unavailable")
+    }));
+    assert!(event.targets.iter().any(|target| {
+        target.target_scope.as_deref() == Some("farm.a")
+            && target.target_label.as_deref() == Some("Farm A")
+    }));
+    assert!(event.targets.iter().any(|target| {
+        target.target_scope.as_deref() == Some("farm.b")
+            && target.target_label.as_deref() == Some("Farm B")
+    }));
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stored = outbox
+        .get_event(outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::PublishRetryable);
+    assert!(stored.claim_token.is_none());
+    let targets = outbox
+        .delivery_targets(outbox_event_id)
+        .await
+        .expect("targets");
+    assert_eq!(targets.len(), 2);
+    assert!(targets.iter().all(|target| {
+        target.endpoint_uri.as_str() == RELAY_A
+            && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+    }));
+    assert!(targets.iter().any(|target| {
+        target.target_scope.as_ref().map(|scope| scope.as_str()) == Some("farm.a")
+            && target.target_label.as_ref().map(|label| label.as_str()) == Some("Farm A")
+    }));
+    assert!(targets.iter().any(|target| {
+        target.target_scope.as_ref().map(|scope| scope.as_str()) == Some("farm.b")
+            && target.target_label.as_ref().map(|label| label.as_str()) == Some("Farm B")
+    }));
 }
 
 #[tokio::test]

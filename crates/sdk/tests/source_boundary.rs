@@ -1556,6 +1556,66 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
 }
 
 #[test]
+fn sdk_direct_nostr_push_receipts_preserve_outbox_target_metadata() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+
+    for required in [
+        "RadrootsOutboxPublishReceipt",
+        "RadrootsOutboxPublishTargetReceipt",
+        "push_event_final_state(&publish)",
+        ".target_receipts",
+        "target_scope: target.target_scope",
+        "target_label: target.target_label",
+    ] {
+        assert!(
+            sync_runtime_source.contains(required),
+            "src/sync_runtime.rs must preserve direct Nostr target-aware receipt witness `{required}`"
+        );
+    }
+
+    let direct_event_receipt_source = source_between(
+        sync_runtime_source.as_str(),
+        "fn push_event_receipt",
+        "fn push_receipt_event_id",
+    );
+    assert!(
+        !direct_event_receipt_source.contains(".relays"),
+        "push_event_receipt must not derive SDK direct publish targets from URL-level relay receipts"
+    );
+
+    let direct_target_receipt_source = source_between(
+        sync_runtime_source.as_str(),
+        "fn push_target_receipt",
+        "#[cfg(all(test",
+    );
+    for forbidden in [
+        "target_scope: None",
+        "target_label: None",
+        "RadrootsRelayPublishRelayReceipt",
+    ] {
+        assert!(
+            !direct_target_receipt_source.contains(forbidden),
+            "push_target_receipt must not hard-code or relay-derive direct Nostr metadata token `{forbidden}`"
+        );
+    }
+
+    let sync_runtime_test_source =
+        read_source(manifest_dir.join("tests/sync_runtime.rs").as_path());
+    for required in [
+        "push_outbox_with_adapter_preserves_scoped_duplicate_target_metadata",
+        "push_outbox_adapter_transport_failure_preserves_scoped_target_metadata",
+        "target.target_scope.as_deref() == Some(\"farm.a\")",
+        "target.target_scope.as_deref() == Some(\"farm.b\")",
+    ] {
+        assert!(
+            sync_runtime_test_source.contains(required),
+            "tests/sync_runtime.rs must retain SDK direct Nostr metadata coverage `{required}`"
+        );
+    }
+}
+
+#[test]
 fn sdk_public_outcome_label_contracts_are_explicit() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());

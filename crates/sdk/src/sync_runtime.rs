@@ -43,8 +43,8 @@ use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSa
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
 use radroots_transport_nostr::{
-    RadrootsOutboxPublishPolicy, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, publish_claimed_outbox_event,
+    RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
+    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, publish_claimed_outbox_event,
 };
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_transport_publish_protocol::{
@@ -821,10 +821,11 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
+            let final_state = push_event_final_state(&publish);
             receipt.push_attempted_event(push_event_receipt(
                 claimed.outbox_event_id,
-                push_event_final_state(&publish.publish),
-                publish.publish,
+                final_state,
+                publish,
             )?);
         }
         Ok(receipt)
@@ -1780,7 +1781,7 @@ fn push_outbox_claim_token() -> String {
 }
 
 #[cfg(feature = "runtime")]
-fn push_event_final_state(publish: &RadrootsRelayPublishReceipt) -> PushOutboxEventState {
+fn push_event_final_state(publish: &RadrootsOutboxPublishReceipt) -> PushOutboxEventState {
     if publish.quorum_met {
         PushOutboxEventState::Published
     } else if publish.retryable_count > 0 {
@@ -1794,11 +1795,11 @@ fn push_event_final_state(publish: &RadrootsRelayPublishReceipt) -> PushOutboxEv
 fn push_event_receipt(
     outbox_event_id: i64,
     final_state: PushOutboxEventState,
-    publish: RadrootsRelayPublishReceipt,
+    publish: RadrootsOutboxPublishReceipt,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
     let event_id = push_receipt_event_id(
         publish.event_id.as_str(),
-        "relay transport publish receipt event id",
+        "direct Nostr outbox publish receipt event id",
     )?;
     Ok(PushOutboxEventReceipt {
         event_id,
@@ -1811,7 +1812,7 @@ fn push_event_receipt(
         quorum: publish.quorum,
         quorum_met: publish.quorum_met,
         targets: publish
-            .relays
+            .target_receipts
             .into_iter()
             .map(push_target_receipt)
             .collect(),
@@ -1826,16 +1827,16 @@ fn push_receipt_event_id(value: &str, field: &str) -> Result<RadrootsEventId, Ra
 }
 
 #[cfg(feature = "runtime")]
-fn push_target_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxTargetReceipt {
+fn push_target_receipt(target: RadrootsOutboxPublishTargetReceipt) -> PushOutboxTargetReceipt {
     PushOutboxTargetReceipt {
         transport_kind: RadrootsTransportKind::Nostr.canonical_label(),
-        endpoint_uri: relay.relay_url,
-        target_scope: None,
-        target_label: None,
-        outcome_kind: relay.outcome.kind.into(),
-        transport_outcome_kind: Some(relay.outcome.kind.transport_outcome_kind().into()),
-        attempted: relay.attempted,
-        message: relay.outcome.message,
+        endpoint_uri: target.endpoint_uri,
+        target_scope: target.target_scope,
+        target_label: target.target_label,
+        outcome_kind: target.outcome.kind.into(),
+        transport_outcome_kind: Some(target.outcome.kind.transport_outcome_kind().into()),
+        attempted: target.attempted,
+        message: target.outcome.message,
     }
 }
 

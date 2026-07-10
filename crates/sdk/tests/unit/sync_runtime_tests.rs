@@ -42,15 +42,18 @@ use radroots_outbox::{
     RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
     RadrootsOutboxOperationInput, RadrootsOutboxSignedOperationInput,
 };
-use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
+use radroots_outbox::{
+    RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt, RadrootsOutboxStatusSummary,
+};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
 };
 use radroots_transport_nostr::{
-    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
+    RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt, RadrootsRelayOutcomeKind,
+    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTransportError,
 };
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport_publish_protocol::{
@@ -379,7 +382,7 @@ fn push_event_receipt_parses_typed_event_id() {
     let receipt = push_event_receipt(
         1,
         PushOutboxEventState::Published,
-        relay_publish_receipt(event_id.as_str()).with_relay(),
+        outbox_publish_receipt(event_id.as_str()).with_target(),
     )
     .expect("receipt");
 
@@ -390,6 +393,14 @@ fn push_event_receipt_parses_typed_event_id() {
     assert_eq!(receipt.targets.len(), 1);
     assert_eq!(receipt.targets[0].transport_kind, "nostr");
     assert_eq!(receipt.targets[0].endpoint_uri, "wss://relay.example.com");
+    assert_eq!(
+        receipt.targets[0].target_scope.as_deref(),
+        Some("farm.local")
+    );
+    assert_eq!(
+        receipt.targets[0].target_label.as_deref(),
+        Some("Farm relay")
+    );
     assert!(receipt.targets[0].attempted);
 }
 
@@ -398,19 +409,19 @@ fn push_event_receipt_returns_typed_error_for_invalid_internal_event_id() {
     let error = push_event_receipt(
         1,
         PushOutboxEventState::Published,
-        relay_publish_receipt("not-a-valid-event-id"),
+        outbox_publish_receipt("not-a-valid-event-id"),
     )
     .expect_err("invalid event id");
     assert!(matches!(
         error,
         RadrootsSdkError::InvalidRequest { message }
-            if message.contains("relay transport publish receipt event id is invalid")
+            if message.contains("direct Nostr outbox publish receipt event id is invalid")
     ));
 }
 
 #[test]
 fn push_event_final_state_follows_publish_quorum_and_retryability() {
-    let published = relay_publish_receipt("a".repeat(64).as_str())
+    let published = outbox_publish_receipt("a".repeat(64).as_str())
         .with_quorum_met(true)
         .with_retryable_count(1);
     assert_eq!(
@@ -418,13 +429,13 @@ fn push_event_final_state_follows_publish_quorum_and_retryability() {
         PushOutboxEventState::Published
     );
 
-    let retryable = relay_publish_receipt("b".repeat(64).as_str()).with_retryable_count(1);
+    let retryable = outbox_publish_receipt("b".repeat(64).as_str()).with_retryable_count(1);
     assert_eq!(
         push_event_final_state(&retryable),
         PushOutboxEventState::PublishRetryable
     );
 
-    let terminal = relay_publish_receipt("c".repeat(64).as_str());
+    let terminal = outbox_publish_receipt("c".repeat(64).as_str());
     assert_eq!(
         push_event_final_state(&terminal),
         PushOutboxEventState::FailedTerminal
@@ -1656,8 +1667,14 @@ fn push_proxy_event_receipt_returns_typed_error_for_invalid_daemon_event_id() {
     ));
 }
 
-fn relay_publish_receipt(event_id: &str) -> RadrootsRelayPublishReceipt {
-    RadrootsRelayPublishReceipt {
+fn outbox_publish_receipt(event_id: &str) -> RadrootsOutboxPublishReceipt {
+    RadrootsOutboxPublishReceipt {
+        local_ingest: RadrootsOutboxEventStoreIngestReceipt {
+            outbox_event_id: 1,
+            event_id: event_id.to_owned(),
+            already_ingested: false,
+            event_store_inserted: true,
+        },
         event_id: event_id.to_owned(),
         attempted_count: 0,
         accepted_count: 0,
@@ -1665,24 +1682,28 @@ fn relay_publish_receipt(event_id: &str) -> RadrootsRelayPublishReceipt {
         terminal_count: 0,
         quorum: 0,
         quorum_met: false,
-        relays: Vec::new(),
+        target_receipts: Vec::new(),
+        relay_receipts: Vec::new(),
     }
 }
 
-trait RelayReceiptFixture {
-    fn with_relay(self) -> Self;
+trait OutboxPublishReceiptFixture {
+    fn with_target(self) -> Self;
     fn with_quorum_met(self, quorum_met: bool) -> Self;
     fn with_retryable_count(self, retryable_count: usize) -> Self;
 }
 
-impl RelayReceiptFixture for RadrootsRelayPublishReceipt {
-    fn with_relay(mut self) -> Self {
-        self.relays.push(
-            radroots_transport_nostr::RadrootsRelayPublishRelayReceipt::attempted(
-                "wss://relay.example.com",
-                radroots_transport_nostr::RadrootsRelayOutcome::accepted(),
-            ),
-        );
+impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
+    fn with_target(mut self) -> Self {
+        self.target_receipts
+            .push(RadrootsOutboxPublishTargetReceipt {
+                delivery_target_id: 10,
+                endpoint_uri: "wss://relay.example.com".to_owned(),
+                target_scope: Some("farm.local".to_owned()),
+                target_label: Some("Farm relay".to_owned()),
+                attempted: true,
+                outcome: radroots_transport_nostr::RadrootsRelayOutcome::accepted(),
+            });
         self
     }
 
