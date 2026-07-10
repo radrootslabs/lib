@@ -168,6 +168,8 @@ fn job(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
         targets: vec![TransportPublishTargetOutcome {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: "wss://relay.example.com".to_owned(),
+            target_scope: None,
+            target_label: None,
             source: TransportPublishTargetSource::Request,
             attempted: true,
             outcome_kind,
@@ -186,6 +188,8 @@ fn explicit_nostr_job(
         .map(|endpoint| TransportPublishTargetOutcome {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: endpoint.clone(),
+            target_scope: None,
+            target_label: None,
             source: TransportPublishTargetSource::Request,
             attempted: true,
             outcome_kind: TransportPublishOutcomeKind::Accepted,
@@ -244,6 +248,8 @@ fn reticulum_deferred_job() -> TransportPublishJobView {
         targets: vec![TransportPublishTargetOutcome {
             transport_kind: "reticulum".to_owned(),
             endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            target_scope: None,
+            target_label: None,
             source: TransportPublishTargetSource::ReticulumPreview,
             attempted: false,
             outcome_kind: TransportPublishOutcomeKind::DeferredUntilImplemented,
@@ -251,13 +257,6 @@ fn reticulum_deferred_job() -> TransportPublishJobView {
             latency_ms: None,
         }],
     }
-}
-
-fn explicit_nostr_response_json(
-    endpoints: Vec<String>,
-    delivery_policy: TransportPublishDeliveryPolicy,
-) -> String {
-    publish_response_json_for_job(explicit_nostr_job(endpoints, delivery_policy))
 }
 
 fn publish_response_json_for_job(job: TransportPublishJobView) -> String {
@@ -473,10 +472,18 @@ async fn publish_event_posts_transport_publish_jsonrpc() {
 
 #[tokio::test]
 async fn publish_signed_event_posts_typed_proxy_request() {
-    let response_json = explicit_nostr_response_json(
+    let mut response_job = explicit_nostr_job(
         vec!["wss://relay.example.com".to_owned()],
         TransportPublishDeliveryPolicy::All,
     );
+    response_job.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+        TransportPublishTarget::nostr("wss://relay.example.com")
+            .with_scope("farm.local")
+            .with_label("Farm relay"),
+    ]);
+    response_job.targets[0].target_scope = Some("farm.local".to_owned());
+    response_job.targets[0].target_label = Some("Farm relay".to_owned());
+    let response_json = publish_response_json_for_job(response_job);
     let (endpoint, handle) = spawn_http_server("200 OK", response_json.as_str());
     let adapter = RadrootsdProxyPublishAdapter::new(
         RadrootsdProxyConfig::new(endpoint)
@@ -488,7 +495,9 @@ async fn publish_signed_event_posts_typed_proxy_request() {
         .publish_signed_event(RadrootsdProxyPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::nostr("wss://relay.example.com"),
+                TransportPublishTarget::nostr("wss://relay.example.com")
+                    .with_scope("farm.local")
+                    .with_label("Farm relay"),
             ]),
             delivery_policy: TransportPublishDeliveryPolicy::All,
             idempotency_key: Some("idem-typed".to_owned()),
@@ -498,6 +507,14 @@ async fn publish_signed_event_posts_typed_proxy_request() {
         .expect("typed publish");
 
     assert!(receipt.job.delivery_satisfied);
+    assert_eq!(
+        receipt.job.targets[0].target_scope.as_deref(),
+        Some("farm.local")
+    );
+    assert_eq!(
+        receipt.job.targets[0].target_label.as_deref(),
+        Some("Farm relay")
+    );
     let recorded = handle.join().expect("server thread");
     assert!(
         recorded
@@ -511,6 +528,14 @@ async fn publish_signed_event_posts_typed_proxy_request() {
     assert_eq!(
         body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
         "wss://relay.example.com"
+    );
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["target_scope"],
+        "farm.local"
+    );
+    assert_eq!(
+        body["params"]["target_policy"]["targets"][0]["target_label"],
+        "Farm relay"
     );
     assert_eq!(body["params"]["idempotency_key"], "idem-typed");
     assert_eq!(body["params"]["timeout_ms"], 7_000);
@@ -740,6 +765,37 @@ async fn publish_signed_event_rejects_mismatched_explicit_target_outcomes() {
 }
 
 #[tokio::test]
+async fn publish_signed_event_rejects_mismatched_scoped_explicit_target_outcomes() {
+    let mut response_job = explicit_nostr_job(
+        vec!["wss://relay.example.com".to_owned()],
+        TransportPublishDeliveryPolicy::Any,
+    );
+    response_job.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+        TransportPublishTarget::nostr("wss://relay.example.com").with_scope("farm.local"),
+    ]);
+    response_job.targets[0].target_scope = Some("farm.remote".to_owned());
+    let response_json = publish_response_json_for_job(response_job);
+    let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
+    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+
+    let error = adapter
+        .publish_signed_event(RadrootsdProxyPublishRequest {
+            signed_event: signed_event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com").with_scope("farm.local"),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: Some("idem-scoped-explicit-outcome-mismatch".to_owned()),
+            timeout_ms: None,
+        })
+        .await
+        .expect_err("scoped explicit target outcome mismatch");
+
+    assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
+    assert_message(error, "explicit target policy");
+}
+
+#[tokio::test]
 async fn publish_event_http_errors_omit_body_and_token_material() {
     let body = "{\"error\":\"token-secret content carrots\"}";
     let (endpoint, _handle) = spawn_http_server("503 Service Unavailable", body);
@@ -814,6 +870,8 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
         TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: "wss://relay.example.com".to_owned(),
+            target_scope: None,
+            target_label: None,
             preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
         }]);
     let mut explicit_proxy_target = base.clone();
@@ -821,6 +879,8 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
         TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
             transport_kind: "proxy".to_owned(),
             endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+            target_scope: None,
+            target_label: None,
             preview_behavior: None,
         }]);
     let proxy_error = adapter

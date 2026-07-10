@@ -31,14 +31,14 @@ use radroots_trade::projection::{
     RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
     refresh_product_projections,
 };
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-use radroots_transport::RadrootsTransportSatisfactionPolicy;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
     RadrootsTransportTarget,
 };
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
@@ -1175,6 +1175,7 @@ fn proxy_delivery_policy_from_remaining(
     required_remaining: usize,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
+    reject_delivered_proxy_satisfaction(satisfaction_policy)?;
     if ready_target_count == 0 || required_remaining == 0 {
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
@@ -1197,6 +1198,21 @@ fn proxy_delivery_policy_from_remaining(
             }
         }
     })
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn reject_delivered_proxy_satisfaction(
+    satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
+) -> Result<(), RadrootsSdkError> {
+    if satisfaction_policy.target_satisfaction_class()
+        == Some(RadrootsTransportSatisfactionClass::Delivered)
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "radrootsd proxy publish only supports accepted-class satisfaction policies"
+                .to_owned(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -1344,6 +1360,14 @@ fn transport_publish_target_from_outbox_target(
     Ok(TransportPublishTarget {
         transport_kind: target.transport_kind.canonical_label(),
         endpoint_uri: target.endpoint_uri.as_str().to_owned(),
+        target_scope: target
+            .target_scope
+            .as_ref()
+            .map(|scope| scope.as_str().to_owned()),
+        target_label: target
+            .target_label
+            .as_ref()
+            .map(|label| label.as_str().to_owned()),
         preview_behavior: None,
     })
 }
@@ -1355,6 +1379,8 @@ fn proxy_target_matches_outcome(
 ) -> bool {
     target.transport_kind.canonical_label() == outcome.transport_kind
         && target.endpoint_uri.as_str() == outcome.endpoint_uri
+        && target.target_scope.as_ref().map(|scope| scope.as_str())
+            == outcome.target_scope.as_deref()
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -1614,8 +1640,8 @@ fn push_proxy_target_receipt(outcome: TransportPublishTargetOutcome) -> PushOutb
     PushOutboxTargetReceipt {
         transport_kind: outcome.transport_kind,
         endpoint_uri: outcome.endpoint_uri,
-        target_scope: None,
-        target_label: None,
+        target_scope: outcome.target_scope,
+        target_label: outcome.target_label,
         outcome_kind: push_proxy_target_outcome_kind(outcome.outcome_kind),
         transport_outcome_kind: Some(push_proxy_transport_outcome_kind(outcome.outcome_kind)),
         attempted: outcome.attempted,

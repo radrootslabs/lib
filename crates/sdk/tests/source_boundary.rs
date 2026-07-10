@@ -1477,6 +1477,10 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         "assert!(!stored_before.event_store_ingested)",
         "assert!(!stored.event_store_ingested)",
         "with_timeout(Duration::from_millis(50))",
+        "proxy_delivery_policy_rejects_delivered_satisfaction_before_daemon_publish",
+        "proxy_outbox_target_conversion_preserves_nostr_scope_and_label",
+        "proxy_completion_matches_duplicate_endpoint_targets_by_scope",
+        "push_proxy_event_receipt_preserves_daemon_target_metadata",
         "proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation",
     ] {
         assert!(
@@ -1509,6 +1513,12 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         "PushOutboxEventState::PreviewUnavailable",
         "PushOutboxTargetOutcomeKind::DeferredUntilImplemented",
         "PushOutboxTargetOutcomeKind::PreviewUnavailable",
+        "reject_delivered_proxy_satisfaction",
+        "RadrootsTransportSatisfactionClass::Delivered",
+        "target.target_scope.as_ref()",
+        "outcome.target_scope.as_deref()",
+        "target_scope: outcome.target_scope",
+        "target_label: outcome.target_label",
     ] {
         assert!(
             sync_runtime_source.contains(required),
@@ -1529,6 +1539,18 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         assert!(
             !receipt_source.contains(forbidden),
             "push_proxy_event_receipt must not use production panic path `{forbidden}`"
+        );
+    }
+
+    let proxy_target_receipt_source = source_between(
+        sync_runtime_source.as_str(),
+        "fn push_proxy_target_receipt",
+        "fn push_proxy_target_outcome_kind",
+    );
+    for forbidden in ["target_scope: None", "target_label: None"] {
+        assert!(
+            !proxy_target_receipt_source.contains(forbidden),
+            "push_proxy_target_receipt must not hard-code daemon metadata field `{forbidden}`"
         );
     }
 }
