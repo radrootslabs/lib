@@ -419,7 +419,7 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI",
         "reticulum:preview-unavailable",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
-        "Reticulum transport is configured for future compatibility, ",
+        "Reticulum transport is configured in preview mode, ",
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
@@ -427,7 +427,13 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
             "transport message source must retain Reticulum unavailable message witness `{required}`"
         );
     }
-    for forbidden in ["Reticulum preview transport is registered, "] {
+    for forbidden in [
+        "Reticulum preview transport is registered, ",
+        "future compatibility",
+        "compatibility mode",
+        "fallback behavior",
+        "hidden transport substitution",
+    ] {
         assert!(
             !transport_message_source.contains(forbidden),
             "transport message source must not retain superseded Reticulum unavailable copy `{forbidden}`"
@@ -449,8 +455,12 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "Reticulum preview source must consume the shared unavailable message constant"
     );
     assert!(
-        !reticulum_source.contains("Reticulum transport is configured for future compatibility"),
+        !reticulum_source.contains("Reticulum transport is configured in preview mode"),
         "Reticulum preview source must not duplicate the shared unavailable message"
+    );
+    assert!(
+        !reticulum_source.contains("future compatibility"),
+        "Reticulum preview source must not duplicate compatibility copy"
     );
 
     let protocol_source_raw = read_source(
@@ -472,8 +482,12 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         "transport publish capabilities must consume the shared Reticulum unavailable message"
     );
     assert!(
-        !protocol_source.contains("Reticulum transport is configured for future compatibility"),
+        !protocol_source.contains("Reticulum transport is configured in preview mode"),
         "transport publish protocol must not duplicate the shared unavailable message"
+    );
+    assert!(
+        !protocol_source.contains("future compatibility"),
+        "transport publish protocol must not duplicate compatibility copy"
     );
 }
 
