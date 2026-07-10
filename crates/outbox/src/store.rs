@@ -1346,17 +1346,14 @@ fn prepare_delivery_plan(
             })
         })
         .collect::<Result<Vec<_>, RadrootsOutboxError>>()?;
-    let required_success_count =
-        input
-            .satisfaction_policy
-            .required_target_count(satisfaction_target_count(
-                &prepared_targets,
-                total_target_count,
-            ))? as i64;
-    let initial_status =
-        initial_delivery_plan_status(&input.satisfaction_policy, &prepared_targets);
+    let satisfaction_policy = canonical_satisfaction_policy(&input.satisfaction_policy)?;
+    validate_required_targets_belong_to_plan(&satisfaction_policy, &prepared_targets)?;
+    let required_success_count = satisfaction_policy.required_target_count(
+        satisfaction_target_count(&prepared_targets, total_target_count),
+    )? as i64;
+    let initial_status = initial_delivery_plan_status(&satisfaction_policy, &prepared_targets);
     let target_policy_fingerprint = target_policy_fingerprint(
-        &input.satisfaction_policy,
+        &satisfaction_policy,
         input.reticulum_preview_behavior,
         &prepared_targets,
     );
@@ -1370,12 +1367,46 @@ fn prepare_delivery_plan(
         transport_profile_id: input.transport_profile_id.trim().to_owned(),
         target_policy_fingerprint,
         target_policy_version: input.target_policy_version,
-        satisfaction_policy: input.satisfaction_policy.clone(),
+        satisfaction_policy,
         required_success_count,
         delivery_plan_idempotency_digest,
         initial_status,
         targets: prepared_targets,
     })
+}
+
+fn canonical_satisfaction_policy(
+    policy: &RadrootsTransportSatisfactionPolicy,
+) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
+    match policy {
+        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => Ok(
+            RadrootsTransportSatisfactionPolicy::required_targets(*class, targets.clone())?,
+        ),
+        RadrootsTransportSatisfactionPolicy::NoWait
+        | RadrootsTransportSatisfactionPolicy::Any { .. }
+        | RadrootsTransportSatisfactionPolicy::All { .. }
+        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => Ok(policy.clone()),
+    }
+}
+
+fn validate_required_targets_belong_to_plan(
+    policy: &RadrootsTransportSatisfactionPolicy,
+    prepared_targets: &[PreparedDeliveryTarget],
+) -> Result<(), RadrootsOutboxError> {
+    let RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } = policy else {
+        return Ok(());
+    };
+    if targets.iter().all(|required| {
+        prepared_targets
+            .iter()
+            .any(|target| target.target.fingerprint == *required)
+    }) {
+        Ok(())
+    } else {
+        Err(RadrootsOutboxError::Transport(
+            RadrootsTransportError::InvalidSatisfactionPolicy,
+        ))
+    }
 }
 
 fn satisfaction_target_count(
@@ -1984,21 +2015,22 @@ async fn evaluate_delivery_plans(
     for plan in plans {
         let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
         let satisfied_count = outbox_satisfied_target_count(&plan.satisfaction_policy, &targets);
-        let ready_count = targets
+        let status_targets = delivery_plan_status_targets(&plan.satisfaction_policy, &targets);
+        let ready_count = status_targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
             .count();
-        let deferred_count = targets
+        let deferred_count = status_targets
             .iter()
             .filter(|target| target.status.is_deferred_preview())
             .count();
-        let preview_unavailable_count = targets
+        let preview_unavailable_count = status_targets
             .iter()
             .filter(|target| {
                 target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
             })
             .count();
-        let terminal_failure_count = targets
+        let terminal_failure_count = status_targets
             .iter()
             .filter(|target| target.status.is_terminal_failure())
             .count();
@@ -2048,6 +2080,29 @@ async fn evaluate_delivery_plans(
         any_preview_unavailable,
         any_deferred_until_implemented,
     })
+}
+
+fn delivery_plan_status_targets<'a>(
+    policy: &RadrootsTransportSatisfactionPolicy,
+    targets: &'a [RadrootsOutboxDeliveryTargetRecord],
+) -> Vec<&'a RadrootsOutboxDeliveryTargetRecord> {
+    match policy {
+        RadrootsTransportSatisfactionPolicy::RequiredTargets {
+            targets: required_targets,
+            ..
+        } => targets
+            .iter()
+            .filter(|target| {
+                required_targets
+                    .iter()
+                    .any(|required| target.endpoint_fingerprint == *required)
+            })
+            .collect(),
+        RadrootsTransportSatisfactionPolicy::NoWait
+        | RadrootsTransportSatisfactionPolicy::Any { .. }
+        | RadrootsTransportSatisfactionPolicy::All { .. }
+        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => targets.iter().collect(),
+    }
 }
 
 fn outbox_satisfied_target_count(
@@ -2392,11 +2447,12 @@ fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolic
             )
         }
         RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
-            let fingerprints = targets
+            let mut fingerprints = targets
                 .iter()
                 .map(RadrootsTransportTargetFingerprint::as_str)
-                .collect::<Vec<_>>()
-                .join(",");
+                .collect::<Vec<_>>();
+            fingerprints.sort();
+            let fingerprints = fingerprints.join(",");
             format!(
                 "required_{}:{fingerprints}",
                 satisfaction_class_storage_value(*class)
@@ -2571,13 +2627,11 @@ mod tests {
         .expect("required targets policy");
 
         let stored = satisfaction_policy_storage_value(&policy);
+        let mut fingerprints = vec![first.fingerprint.as_str(), second.fingerprint.as_str()];
+        fingerprints.sort();
         assert_eq!(
             stored,
-            format!(
-                "required_delivered:{},{}",
-                first.fingerprint.as_str(),
-                second.fingerprint.as_str()
-            )
+            format!("required_delivered:{},{}", fingerprints[0], fingerprints[1])
         );
         assert_eq!(
             parse_satisfaction_policy(stored.as_str(), 2).expect("parse required targets"),
@@ -2587,6 +2641,60 @@ mod tests {
             parse_satisfaction_policy(stored.as_str(), 1),
             Err(RadrootsOutboxError::InvalidStoredEnum { .. })
         ));
+    }
+
+    #[test]
+    fn required_target_policy_idempotency_is_order_independent() {
+        let first = nostr_target("wss://required-one.example");
+        let second = nostr_target("wss://required-two.example");
+        let first_policy = RadrootsTransportSatisfactionPolicy::RequiredTargets {
+            class: RadrootsTransportSatisfactionClass::Accepted,
+            targets: vec![second.fingerprint.clone(), first.fingerprint.clone()],
+        };
+        let second_policy = RadrootsTransportSatisfactionPolicy::RequiredTargets {
+            class: RadrootsTransportSatisfactionClass::Accepted,
+            targets: vec![first.fingerprint.clone(), second.fingerprint.clone()],
+        };
+        let targets = vec![first, second];
+
+        let first_prepared = prepare_delivery_plan(
+            "event-required-target-order",
+            &RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                first_policy,
+                targets.clone(),
+            ),
+        )
+        .expect("first delivery plan");
+        let second_prepared = prepare_delivery_plan(
+            "event-required-target-order",
+            &RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                second_policy,
+                targets,
+            ),
+        )
+        .expect("second delivery plan");
+
+        assert_eq!(
+            first_prepared.satisfaction_policy,
+            second_prepared.satisfaction_policy
+        );
+        assert_eq!(first_prepared.required_success_count, 2);
+        assert_eq!(
+            first_prepared.target_policy_fingerprint,
+            second_prepared.target_policy_fingerprint
+        );
+        assert_eq!(
+            first_prepared.delivery_plan_idempotency_digest,
+            second_prepared.delivery_plan_idempotency_digest
+        );
+        assert_eq!(
+            satisfaction_policy_storage_value(&first_prepared.satisfaction_policy),
+            satisfaction_policy_storage_value(&second_prepared.satisfaction_policy)
+        );
     }
 
     fn malformed_reticulum_target(uri: &str) -> RadrootsTransportTarget {
@@ -3359,6 +3467,135 @@ mod tests {
             retry_claim.delivery_targets[0].endpoint_fingerprint,
             required.fingerprint
         );
+    }
+
+    #[tokio::test]
+    async fn required_target_plan_evaluation_ignores_optional_retryable_failure() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(
+            FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            "required target optional failure",
+        );
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let optional = nostr_target(NOSTR_PRIMARY_WSS);
+        let required = nostr_target(NOSTR_SECONDARY_WSS);
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::required_targets(
+                        RadrootsTransportSatisfactionClass::Accepted,
+                        vec![required.fingerprint.clone()],
+                    )
+                    .expect("required target policy"),
+                    vec![optional.clone(), required.clone()],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let optional_claim = claimed
+            .delivery_targets
+            .iter()
+            .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+            .expect("optional target");
+        let required_claim = claimed
+            .delivery_targets
+            .iter()
+            .find(|target| target.endpoint_fingerprint == required.fingerprint)
+            .expect("required target");
+        outbox
+            .mark_delivery_target_failed_retryable(
+                receipt.outbox_event_id,
+                "claim-a",
+                optional_claim.delivery_target_id,
+                "optional relay timeout",
+                1_100,
+            )
+            .await
+            .expect("optional retryable");
+        outbox
+            .mark_delivery_target_accepted(
+                receipt.outbox_event_id,
+                "claim-a",
+                required_claim.delivery_target_id,
+                1_110,
+            )
+            .await
+            .expect("required accepted");
+
+        let state = outbox
+            .complete_publish_attempt(
+                receipt.outbox_event_id,
+                "claim-a",
+                "retryable",
+                "terminal",
+                2_500,
+                1_200,
+            )
+            .await
+            .expect("complete");
+
+        assert_eq!(state, RadrootsOutboxEventState::Published);
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.endpoint_fingerprint == optional.fingerprint
+                && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+        }));
+        assert!(targets.iter().any(|target| {
+            target.endpoint_fingerprint == required.fingerprint
+                && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+        }));
+    }
+
+    #[tokio::test]
+    async fn enqueue_rejects_required_targets_outside_delivery_plan_before_persistence() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "stale required target");
+        let missing = nostr_target(NOSTR_SECONDARY_WSS);
+
+        let err = outbox
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
+                "publish_post",
+                draft,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::required_targets(
+                        RadrootsTransportSatisfactionClass::Accepted,
+                        vec![missing.fingerprint],
+                    )
+                    .expect("required target policy"),
+                    vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                ),
+                1_000,
+            ))
+            .await
+            .expect_err("missing required target");
+
+        assert!(matches!(
+            err,
+            RadrootsOutboxError::Transport(RadrootsTransportError::InvalidSatisfactionPolicy)
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_target").await, 0);
     }
 
     #[tokio::test]

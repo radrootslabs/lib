@@ -17,6 +17,7 @@ use radroots_outbox::{
 };
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTargetFingerprint,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,6 +65,7 @@ pub struct RadrootsOutboxPublishReceipt {
 pub struct RadrootsOutboxPublishTargetReceipt {
     pub delivery_target_id: i64,
     pub endpoint_uri: String,
+    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
     pub target_scope: Option<String>,
     pub target_label: Option<String>,
     pub attempted: bool,
@@ -128,6 +130,7 @@ where
     let satisfaction_policy = satisfaction_policy_for_required_accept_count(
         publishable.required_accept_count,
         targets.len(),
+        publishable.required_targets.is_some(),
     )?;
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
@@ -240,11 +243,8 @@ where
             .filter(|receipt| receipt.outcome.is_terminal_failure())
             .count(),
         quorum: publishable.required_accept_count,
-        quorum_met: target_receipts
-            .iter()
-            .filter(|receipt| receipt.outcome.counts_toward_quorum())
-            .count()
-            >= publishable.required_accept_count,
+        quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
+            >= publishable.satisfaction_required_count,
         target_receipts,
         relay_receipts: publish.relays,
     })
@@ -283,6 +283,7 @@ struct PublishableRelays {
     accepted_count: usize,
     satisfaction_required_count: usize,
     required_accept_count: usize,
+    required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
 }
 
 impl PublishableRelays {
@@ -294,11 +295,30 @@ impl PublishableRelays {
             .iter()
             .filter(move |target| target.relay_url == relay_url)
     }
+
+    fn satisfied_count_after_receipts(
+        &self,
+        target_receipts: &[RadrootsOutboxPublishTargetReceipt],
+    ) -> usize {
+        self.accepted_count
+            + target_receipts
+                .iter()
+                .filter(|receipt| {
+                    receipt.outcome.counts_toward_quorum()
+                        && self.required_targets.as_ref().is_none_or(|required| {
+                            required
+                                .iter()
+                                .any(|fingerprint| receipt.endpoint_fingerprint == *fingerprint)
+                        })
+                })
+                .count()
+    }
 }
 
 struct PublishableRelay {
     delivery_target_id: i64,
     relay_url: String,
+    endpoint_fingerprint: RadrootsTransportTargetFingerprint,
     target_scope: Option<String>,
     target_label: Option<String>,
 }
@@ -313,6 +333,7 @@ fn target_receipts_from_relay_receipts(
             target_receipts.push(RadrootsOutboxPublishTargetReceipt {
                 delivery_target_id: target.delivery_target_id,
                 endpoint_uri: target.relay_url.clone(),
+                endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                 target_scope: target.target_scope.clone(),
                 target_label: target.target_label.clone(),
                 attempted: relay_receipt.attempted,
@@ -346,6 +367,15 @@ async fn publishable_relays(
             ))
         })?;
     let satisfaction_required_count = plan.required_success_count as usize;
+    let required_targets = match &plan.satisfaction_policy {
+        RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } => {
+            Some(targets.clone())
+        }
+        RadrootsTransportSatisfactionPolicy::NoWait
+        | RadrootsTransportSatisfactionPolicy::Any { .. }
+        | RadrootsTransportSatisfactionPolicy::All { .. }
+        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => None,
+    };
     let active_targets = targets
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
@@ -368,7 +398,11 @@ async fn publishable_relays(
             active_targets
                 .iter()
                 .filter(|target| {
-                    target
+                    required_targets.as_ref().is_none_or(|required| {
+                        required
+                            .iter()
+                            .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
+                    }) && target
                         .status
                         .counts_as_transport_satisfaction(satisfaction_class)
                 })
@@ -379,17 +413,26 @@ async fn publishable_relays(
         (plan.required_success_count as usize).saturating_sub(satisfied_count);
     let mut relays = Vec::new();
     let mut accepted_count = 0usize;
-    for target in active_targets {
+    for target in &active_targets {
         if !is_nostr_target(target) {
             continue;
         }
+        let required_for_satisfaction = required_targets.as_ref().is_some_and(|required| {
+            required
+                .iter()
+                .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
+        });
         if target
             .status
             .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
+            && (required_targets.is_none() || required_for_satisfaction)
         {
             accepted_count += 1;
         }
+        let can_contribute_to_satisfaction =
+            required_targets.is_none() || required_for_satisfaction;
         if required_accept_count > 0
+            && can_contribute_to_satisfaction
             && (target.status.is_ready_for_attempt()
                 || (republish_accepted_relays
                     && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted))
@@ -397,6 +440,41 @@ async fn publishable_relays(
             relays.push(PublishableRelay {
                 delivery_target_id: target.delivery_target_id,
                 relay_url: target.endpoint_uri.as_str().to_owned(),
+                endpoint_fingerprint: target.endpoint_fingerprint.clone(),
+                target_scope: target
+                    .target_scope
+                    .as_ref()
+                    .map(|scope| scope.as_str().to_owned()),
+                target_label: target
+                    .target_label
+                    .as_ref()
+                    .map(|label| label.as_str().to_owned()),
+            });
+        }
+    }
+    if required_targets.is_some() {
+        let selected_relay_urls = relays
+            .iter()
+            .map(|relay| relay.relay_url.clone())
+            .collect::<Vec<_>>();
+        for target in &active_targets {
+            if !is_nostr_target(target)
+                || !selected_relay_urls
+                    .iter()
+                    .any(|relay_url| relay_url == target.endpoint_uri.as_str())
+                || relays
+                    .iter()
+                    .any(|relay| relay.delivery_target_id == target.delivery_target_id)
+                || !(target.status.is_ready_for_attempt()
+                    || (republish_accepted_relays
+                        && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted))
+            {
+                continue;
+            }
+            relays.push(PublishableRelay {
+                delivery_target_id: target.delivery_target_id,
+                relay_url: target.endpoint_uri.as_str().to_owned(),
+                endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                 target_scope: target
                     .target_scope
                     .as_ref()
@@ -414,6 +492,7 @@ async fn publishable_relays(
         accepted_count,
         satisfaction_required_count,
         required_accept_count,
+        required_targets,
     })
 }
 
@@ -435,7 +514,11 @@ fn is_nostr_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
 fn satisfaction_policy_for_required_accept_count(
     required_accept_count: usize,
     target_count: usize,
+    exact_required_targets: bool,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
+    if exact_required_targets {
+        return Ok(RadrootsTransportSatisfactionPolicy::no_wait());
+    }
     if required_accept_count >= target_count {
         return Ok(RadrootsTransportSatisfactionPolicy::all_accepted());
     }
@@ -500,17 +583,23 @@ mod tests {
     #[test]
     fn internal_outbox_publish_helpers_cover_policy_edges() {
         assert_eq!(
-            satisfaction_policy_for_required_accept_count(2, 2).expect("all targets"),
+            satisfaction_policy_for_required_accept_count(2, 2, false).expect("all targets"),
             RadrootsTransportSatisfactionPolicy::all_accepted()
         );
         assert_eq!(
-            satisfaction_policy_for_required_accept_count(1, 3).expect("at least one"),
+            satisfaction_policy_for_required_accept_count(1, 3, false).expect("at least one"),
             RadrootsTransportSatisfactionPolicy::any_accepted()
+        );
+        assert_eq!(
+            satisfaction_policy_for_required_accept_count(1, 3, true)
+                .expect("exact required targets"),
+            RadrootsTransportSatisfactionPolicy::no_wait()
         );
         assert!(
             satisfaction_policy_for_required_accept_count(
                 usize::from(u16::MAX) + 1,
                 usize::from(u16::MAX) + 2,
+                false,
             )
             .is_err()
         );

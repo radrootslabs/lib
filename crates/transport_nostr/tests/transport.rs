@@ -1662,6 +1662,305 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
 }
 
 #[tokio::test]
+async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_success() {
+    let signed = signed_post("required target optional success");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let optional = nostr_target(RELAY_PRIMARY_WSS);
+    let required = nostr_target(RELAY_SECONDARY_WSS);
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::required_targets(
+                    RadrootsTransportSatisfactionClass::Accepted,
+                    vec![required.fingerprint.clone()],
+                )
+                .expect("required target policy"),
+                vec![optional.clone(), required.clone()],
+            ),
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    let optional_target_id = publish_claim
+        .delivery_targets
+        .iter()
+        .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+        .expect("optional target")
+        .delivery_target_id;
+    outbox
+        .mark_delivery_target_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            optional_target_id,
+            2_000,
+        )
+        .await
+        .expect("optional accepted");
+
+    let adapter = RadrootsMockRelayPublishAdapter::new().with_outcome(
+        RELAY_SECONDARY_WSS,
+        RadrootsRelayOutcome::timeout("required relay timeout"),
+    );
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.attempted_count, 1);
+    assert_eq!(published.accepted_count, 0);
+    assert_eq!(published.retryable_count, 1);
+    assert_eq!(published.quorum, 1);
+    assert!(!published.quorum_met);
+    assert_eq!(published.relay_receipts.len(), 1);
+    assert_eq!(published.relay_receipts[0].relay_url, RELAY_SECONDARY_WSS);
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
+    let targets = outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+    assert!(targets.iter().any(|target| {
+        target.endpoint_fingerprint == optional.fingerprint
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+    }));
+    assert!(targets.iter().any(|target| {
+        target.endpoint_fingerprint == required.fingerprint
+            && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+    }));
+}
+
+#[tokio::test]
+async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retryable_failure() {
+    let signed = signed_post("required target optional failure");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let optional = nostr_target(RELAY_PRIMARY_WSS);
+    let required = nostr_target(RELAY_SECONDARY_WSS);
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::required_targets(
+                    RadrootsTransportSatisfactionClass::Accepted,
+                    vec![required.fingerprint.clone()],
+                )
+                .expect("required target policy"),
+                vec![optional.clone(), required.clone()],
+            ),
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    let optional_target_id = publish_claim
+        .delivery_targets
+        .iter()
+        .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+        .expect("optional target")
+        .delivery_target_id;
+    outbox
+        .mark_delivery_target_failed_retryable(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            optional_target_id,
+            "optional relay timeout",
+            2_000,
+        )
+        .await
+        .expect("optional retryable");
+
+    let adapter = RadrootsMockRelayPublishAdapter::new()
+        .with_outcome(RELAY_SECONDARY_WSS, RadrootsRelayOutcome::accepted());
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.local_ingest.event_id, signed.id);
+    assert_eq!(published.attempted_count, 1);
+    assert_eq!(published.accepted_count, 1);
+    assert_eq!(published.retryable_count, 0);
+    assert_eq!(published.quorum, 1);
+    assert!(published.quorum_met);
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    let targets = outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+    assert!(targets.iter().any(|target| {
+        target.endpoint_fingerprint == optional.fingerprint
+            && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+    }));
+    assert!(targets.iter().any(|target| {
+        target.endpoint_fingerprint == required.fingerprint
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+    }));
+    let observations = store
+        .observations_for_event(signed.id.as_str())
+        .await
+        .expect("observations");
+    assert_outbox_publish_observations(&observations, 1);
+}
+
+#[tokio::test]
+async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts() {
+    let signed = signed_post("required target scoped duplicate relay");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let required = scoped_nostr_target(RELAY_PRIMARY_WSS, "foodshed.west", "West foodshed");
+    let optional = scoped_nostr_target(RELAY_PRIMARY_WSS, "foodshed.east", "East foodshed");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                1,
+                RadrootsTransportSatisfactionPolicy::required_targets(
+                    RadrootsTransportSatisfactionClass::Accepted,
+                    vec![required.fingerprint.clone()],
+                )
+                .expect("required target policy"),
+                vec![required.clone(), optional.clone()],
+            ),
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    let adapter = RadrootsMockRelayPublishAdapter::new()
+        .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted());
+
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.attempted_count, 2);
+    assert_eq!(published.accepted_count, 2);
+    assert_eq!(published.quorum, 1);
+    assert!(published.quorum_met);
+    assert_eq!(published.relay_receipts.len(), 1);
+    assert_eq!(published.target_receipts.len(), 2);
+    assert!(published.target_receipts.iter().any(|target| {
+        target.endpoint_fingerprint == required.fingerprint
+            && target.target_scope.as_deref() == Some("foodshed.west")
+    }));
+    assert!(published.target_receipts.iter().any(|target| {
+        target.endpoint_fingerprint == optional.fingerprint
+            && target.target_scope.as_deref() == Some("foodshed.east")
+    }));
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    let targets = outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+    assert_eq!(targets.len(), 2);
+    assert!(targets.iter().all(|target| {
+        target.endpoint_uri.as_str() == RELAY_PRIMARY_WSS
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+    }));
+}
+
+#[tokio::test]
 async fn outbox_transport_publish_failure_releases_retryable_claim() {
     let signed = signed_post("adapter transport failure");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
