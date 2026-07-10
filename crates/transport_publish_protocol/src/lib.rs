@@ -12,11 +12,11 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };
 
-pub const API_VERSION: &str = "radrootsd.transport_publish.v3";
+pub const API_VERSION: &str = "radrootsd.transport_publish.v4";
 pub const DAEMON_NAME: &str = "radrootsd";
 pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
 pub const METHOD_EVENT: &str = "transport.publish.event";
@@ -44,6 +44,18 @@ pub enum TransportPublishProtocolError {
         index: usize,
     },
     InvalidEndpointUri {
+        index: usize,
+    },
+    EmptyTargetScope {
+        index: usize,
+    },
+    InvalidTargetScope {
+        index: usize,
+    },
+    EmptyTargetLabel {
+        index: usize,
+    },
+    InvalidTargetLabel {
         index: usize,
     },
     InvalidPreviewBehavior {
@@ -127,6 +139,18 @@ impl fmt::Display for TransportPublishProtocolError {
             }
             Self::InvalidEndpointUri { index } => {
                 write!(f, "transport target {index} endpoint_uri is invalid")
+            }
+            Self::EmptyTargetScope { index } => {
+                write!(f, "transport target {index} target_scope must not be empty")
+            }
+            Self::InvalidTargetScope { index } => {
+                write!(f, "transport target {index} target_scope must be canonical")
+            }
+            Self::EmptyTargetLabel { index } => {
+                write!(f, "transport target {index} target_label must not be empty")
+            }
+            Self::InvalidTargetLabel { index } => {
+                write!(f, "transport target {index} target_label is invalid")
             }
             Self::InvalidPreviewBehavior { index } => write!(
                 f,
@@ -256,6 +280,16 @@ pub struct TransportPublishTarget {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
+    pub target_scope: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub target_label: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub preview_behavior: Option<TransportPublishPreviewBehavior>,
 }
 
@@ -264,6 +298,8 @@ impl TransportPublishTarget {
         Self {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: endpoint_uri.into(),
+            target_scope: None,
+            target_label: None,
             preview_behavior: None,
         }
     }
@@ -272,8 +308,20 @@ impl TransportPublishTarget {
         Self {
             transport_kind: "reticulum".to_owned(),
             endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            target_scope: None,
+            target_label: None,
             preview_behavior: Some(behavior),
         }
+    }
+
+    pub fn with_scope(mut self, target_scope: impl Into<String>) -> Self {
+        self.target_scope = Some(target_scope.into());
+        self
+    }
+
+    pub fn with_label(mut self, target_label: impl Into<String>) -> Self {
+        self.target_label = Some(target_label.into());
+        self
     }
 
     fn validate(&self, index: usize) -> Result<(), TransportPublishProtocolError> {
@@ -296,6 +344,11 @@ impl TransportPublishTarget {
         {
             return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
         }
+        validate_target_metadata(
+            self.target_scope.as_deref(),
+            self.target_label.as_deref(),
+            index,
+        )?;
         Ok(())
     }
 
@@ -305,10 +358,37 @@ impl TransportPublishTarget {
     ) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
         let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
+        validate_target_metadata(
+            self.target_scope.as_deref(),
+            self.target_label.as_deref(),
+            index,
+        )?;
         let target = RadrootsTransportTarget::new(transport_kind, self.endpoint_uri.as_str())
             .map_err(|error| target_fingerprint_error(error, index))?;
         Ok(target.fingerprint)
     }
+
+    fn identity_eq(&self, outcome: &TransportPublishTargetOutcome) -> bool {
+        self.transport_kind == outcome.transport_kind
+            && self.endpoint_uri == outcome.endpoint_uri
+            && self.target_scope == outcome.target_scope
+    }
+}
+
+fn validate_target_metadata(
+    target_scope: Option<&str>,
+    target_label: Option<&str>,
+    index: usize,
+) -> Result<(), TransportPublishProtocolError> {
+    if let Some(scope) = target_scope {
+        RadrootsTransportMeshScopeId::parse(scope)
+            .map_err(|error| target_metadata_error(error, index))?;
+    }
+    if let Some(label) = target_label {
+        RadrootsTransportTargetLabel::parse(label)
+            .map_err(|error| target_metadata_error(error, index))?;
+    }
+    Ok(())
 }
 
 fn transport_kind_error(
@@ -330,6 +410,27 @@ fn target_fingerprint_error(
     match error {
         RadrootsTransportError::EmptyTargetUri => {
             TransportPublishProtocolError::EmptyEndpointUri { index }
+        }
+        _ => TransportPublishProtocolError::InvalidEndpointUri { index },
+    }
+}
+
+fn target_metadata_error(
+    error: RadrootsTransportError,
+    index: usize,
+) -> TransportPublishProtocolError {
+    match error {
+        RadrootsTransportError::EmptyTargetScope => {
+            TransportPublishProtocolError::EmptyTargetScope { index }
+        }
+        RadrootsTransportError::InvalidTargetScope => {
+            TransportPublishProtocolError::InvalidTargetScope { index }
+        }
+        RadrootsTransportError::EmptyTargetLabel => {
+            TransportPublishProtocolError::EmptyTargetLabel { index }
+        }
+        RadrootsTransportError::InvalidTargetLabel => {
+            TransportPublishProtocolError::InvalidTargetLabel { index }
         }
         _ => TransportPublishProtocolError::InvalidEndpointUri { index },
     }
@@ -406,13 +507,19 @@ impl TransportPublishTargetPolicy {
 fn validate_explicit_target_uniqueness(
     targets: &[TransportPublishTarget],
 ) -> Result<(), TransportPublishProtocolError> {
-    let mut fingerprints = Vec::new();
+    let mut identities = Vec::new();
     for (index, target) in targets.iter().enumerate() {
         let fingerprint = target.fingerprint(index)?;
-        if fingerprints.iter().any(|existing| existing == &fingerprint) {
+        let target_scope = target.target_scope.as_deref();
+        if identities
+            .iter()
+            .any(|(existing_fingerprint, existing_scope)| {
+                existing_fingerprint == &fingerprint && *existing_scope == target_scope
+            })
+        {
             return Err(TransportPublishProtocolError::DuplicateTarget { index });
         }
-        fingerprints.push(fingerprint);
+        identities.push((fingerprint, target_scope));
     }
     Ok(())
 }
@@ -579,6 +686,16 @@ pub enum TransportPublishTargetSource {
 pub struct TransportPublishTargetOutcome {
     pub transport_kind: String,
     pub endpoint_uri: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub target_scope: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub target_label: Option<String>,
     pub source: TransportPublishTargetSource,
     pub attempted: bool,
     pub outcome_kind: TransportPublishOutcomeKind,
@@ -726,7 +843,7 @@ pub struct TransportPublishCapabilities {
 }
 
 impl TransportPublishCapabilities {
-    pub fn v3(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
+    pub fn v4(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
         Self {
             daemon: DAEMON_NAME.to_owned(),
             api_version: API_VERSION.to_owned(),
@@ -905,6 +1022,11 @@ fn validate_target_outcome(
     if target.endpoint_uri.trim().is_empty() {
         return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
     }
+    validate_target_metadata(
+        target.target_scope.as_deref(),
+        target.target_label.as_deref(),
+        index,
+    )?;
     if transport_kind == RadrootsTransportKind::Reticulum {
         if target.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
             return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
@@ -947,9 +1069,7 @@ fn validate_job_target_policy_outcomes(
     matched_targets.resize(targets.len(), false);
     for (outcome_index, outcome) in outcomes.iter().enumerate() {
         let Some((target_index, _)) = targets.iter().enumerate().find(|(target_index, target)| {
-            !matched_targets[*target_index]
-                && target.transport_kind == outcome.transport_kind
-                && target.endpoint_uri == outcome.endpoint_uri
+            !matched_targets[*target_index] && target.identity_eq(outcome)
         }) else {
             return Err(
                 TransportPublishProtocolError::InvalidExplicitTargetOutcome {
@@ -1053,6 +1173,8 @@ mod tests {
         TransportPublishTargetOutcome {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: endpoint_uri.into(),
+            target_scope: None,
+            target_label: None,
             source: TransportPublishTargetSource::Request,
             attempted: true,
             outcome_kind,
@@ -1061,12 +1183,24 @@ mod tests {
         }
     }
 
+    fn nostr_outcome_for_scope(
+        endpoint_uri: impl Into<String>,
+        target_scope: impl Into<String>,
+        outcome_kind: TransportPublishOutcomeKind,
+    ) -> TransportPublishTargetOutcome {
+        let mut outcome = nostr_outcome_for(endpoint_uri, outcome_kind);
+        outcome.target_scope = Some(target_scope.into());
+        outcome
+    }
+
     fn reticulum_outcome(
         outcome_kind: TransportPublishOutcomeKind,
     ) -> TransportPublishTargetOutcome {
         TransportPublishTargetOutcome {
             transport_kind: "reticulum".to_owned(),
             endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            target_scope: None,
+            target_label: None,
             source: TransportPublishTargetSource::ReticulumPreview,
             attempted: false,
             outcome_kind,
@@ -1146,10 +1280,10 @@ mod tests {
     }
 
     #[test]
-    fn transport_publish_capabilities_match_v3_surface() {
-        let capabilities = TransportPublishCapabilities::v3(1024, 10);
+    fn transport_publish_capabilities_match_v4_surface() {
+        let capabilities = TransportPublishCapabilities::v4(1024, 10);
 
-        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v3");
+        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v4");
         assert_eq!(
             capabilities.methods,
             vec![
@@ -1246,6 +1380,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "reticulum".to_owned(),
                 endpoint_uri: "reticulum:preview-unavailable-alt".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
@@ -1258,6 +1394,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "Reticulum".to_owned(),
                 endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
@@ -1270,6 +1408,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "nostr".to_owned(),
                 endpoint_uri: "wss://relay.example.com".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
@@ -1290,6 +1430,8 @@ mod tests {
                 TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                     transport_kind: "reticulum".to_owned(),
                     endpoint_uri: invalid.to_owned(),
+                    target_scope: None,
+                    target_label: None,
                     preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
                 }]);
             assert_eq!(
@@ -1303,6 +1445,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: removed_proxy_kind_string(),
                 endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: None,
             }]);
         assert_eq!(
@@ -1315,6 +1459,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "proxy".to_owned(),
                 endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: None,
             }]);
         assert_eq!(
@@ -1330,6 +1476,52 @@ mod tests {
         assert_eq!(
             duplicate_targets.validate(2),
             Err(TransportPublishProtocolError::DuplicateTarget { index: 1 })
+        );
+
+        let mut scoped_targets = request.clone();
+        scoped_targets.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example.com/a")
+                .with_scope("farm.local")
+                .with_label("Farm relay"),
+            TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a")
+                .with_scope("farm.remote")
+                .with_label("Farm relay"),
+        ]);
+        scoped_targets
+            .validate(2)
+            .expect("scope participates in target identity");
+
+        let mut relabeled_duplicate_targets = request.clone();
+        relabeled_duplicate_targets.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com/a")
+                    .with_scope("farm.local")
+                    .with_label("Primary"),
+                TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a")
+                    .with_scope("farm.local")
+                    .with_label("Secondary"),
+            ]);
+        assert_eq!(
+            relabeled_duplicate_targets.validate(2),
+            Err(TransportPublishProtocolError::DuplicateTarget { index: 1 })
+        );
+
+        let mut invalid_scope = request.clone();
+        invalid_scope.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example.com").with_scope("bad scope"),
+        ]);
+        assert_eq!(
+            invalid_scope.validate(1),
+            Err(TransportPublishProtocolError::InvalidTargetScope { index: 0 })
+        );
+
+        let mut invalid_label = request.clone();
+        invalid_label.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            TransportPublishTarget::nostr("wss://relay.example.com").with_label("bad\nlabel"),
+        ]);
+        assert_eq!(
+            invalid_label.validate(1),
+            Err(TransportPublishProtocolError::InvalidTargetLabel { index: 0 })
         );
 
         let mut empty_key = request.clone();
@@ -1466,6 +1658,48 @@ mod tests {
         assert_eq!(
             mismatched_count.validate(),
             Err(TransportPublishProtocolError::InvalidExplicitTargetOutcome { index: 1 })
+        );
+
+        job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com")
+                    .with_scope("farm.a")
+                    .with_label("Farm A"),
+                TransportPublishTarget::nostr("wss://relay.example.com")
+                    .with_scope("farm.b")
+                    .with_label("Farm B"),
+            ]),
+            vec![
+                nostr_outcome_for_scope(
+                    "wss://relay.example.com",
+                    "farm.b",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+                nostr_outcome_for_scope(
+                    "wss://relay.example.com",
+                    "farm.a",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+            ],
+        )
+        .validate()
+        .expect("explicit target outcomes match by scoped identity");
+
+        let mismatched_scope = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com").with_scope("farm.a"),
+            ]),
+            vec![nostr_outcome_for_scope(
+                "wss://relay.example.com",
+                "farm.b",
+                TransportPublishOutcomeKind::Accepted,
+            )],
+        );
+        assert_eq!(
+            mismatched_scope.validate(),
+            Err(TransportPublishProtocolError::InvalidExplicitTargetOutcome { index: 0 })
         );
     }
 
@@ -1619,6 +1853,27 @@ mod tests {
     }
 
     #[test]
+    fn serde_round_trip_preserves_target_metadata() {
+        let request = TransportPublishEventRequest {
+            event: event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                TransportPublishTarget::nostr("wss://relay.example.com")
+                    .with_scope("farm.local")
+                    .with_label("Farm local relay"),
+            ]),
+            delivery_policy: TransportPublishDeliveryPolicy::All,
+            idempotency_key: None,
+            timeout_ms: None,
+        };
+        let encoded = serde_json::to_string(&request).expect("encode");
+        assert!(encoded.contains("\"target_scope\":\"farm.local\""));
+        assert!(encoded.contains("\"target_label\":\"Farm local relay\""));
+        let decoded: TransportPublishEventRequest =
+            serde_json::from_str(encoded.as_str()).expect("decode");
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
     fn protocol_errors_have_stable_display_strings() {
         let cases = [
             (
@@ -1655,6 +1910,22 @@ mod tests {
             (
                 TransportPublishProtocolError::InvalidEndpointUri { index: 3 },
                 "transport target 3 endpoint_uri is invalid",
+            ),
+            (
+                TransportPublishProtocolError::EmptyTargetScope { index: 3 },
+                "transport target 3 target_scope must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidTargetScope { index: 3 },
+                "transport target 3 target_scope must be canonical",
+            ),
+            (
+                TransportPublishProtocolError::EmptyTargetLabel { index: 3 },
+                "transport target 3 target_label must not be empty",
+            ),
+            (
+                TransportPublishProtocolError::InvalidTargetLabel { index: 3 },
+                "transport target 3 target_label is invalid",
             ),
             (
                 TransportPublishProtocolError::InvalidPreviewBehavior { index: 4 },
@@ -1781,6 +2052,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: " ".to_owned(),
                 endpoint_uri: "wss://relay.example".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: None,
             }]);
         assert_eq!(
@@ -1792,6 +2065,8 @@ mod tests {
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "Nostr".to_owned(),
                 endpoint_uri: "wss://relay.example".to_owned(),
+                target_scope: None,
+                target_label: None,
                 preview_behavior: None,
             }]);
         assert_eq!(
