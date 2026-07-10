@@ -49,7 +49,25 @@ impl RadrootsOutboxPublishPolicy {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishReceipt {
     pub local_ingest: RadrootsOutboxEventStoreIngestReceipt,
-    pub publish: RadrootsRelayPublishReceipt,
+    pub event_id: String,
+    pub attempted_count: usize,
+    pub accepted_count: usize,
+    pub retryable_count: usize,
+    pub terminal_count: usize,
+    pub quorum: usize,
+    pub quorum_met: bool,
+    pub target_receipts: Vec<RadrootsOutboxPublishTargetReceipt>,
+    pub relay_receipts: Vec<RadrootsRelayPublishRelayReceipt>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxPublishTargetReceipt {
+    pub delivery_target_id: i64,
+    pub endpoint_uri: String,
+    pub target_scope: Option<String>,
+    pub target_label: Option<String>,
+    pub attempted: bool,
+    pub outcome: RadrootsRelayOutcome,
 }
 
 pub async fn publish_claimed_outbox_event<A>(
@@ -86,7 +104,8 @@ where
                 now_ms,
             )
             .await?;
-        let publish = RadrootsRelayPublishReceipt {
+        return Ok(RadrootsOutboxPublishReceipt {
+            local_ingest,
             event_id: signed_event.id,
             attempted_count: 0,
             accepted_count: publishable.accepted_count,
@@ -94,11 +113,8 @@ where
             terminal_count: 0,
             quorum: publishable.satisfaction_required_count,
             quorum_met: publishable.accepted_count >= publishable.satisfaction_required_count,
-            relays: Vec::new(),
-        };
-        return Ok(RadrootsOutboxPublishReceipt {
-            local_ingest,
-            publish,
+            target_receipts: Vec::new(),
+            relay_receipts: Vec::new(),
         });
     }
     let targets = RadrootsRelayTargetSet::new(
@@ -111,7 +127,7 @@ where
     let target_strings = targets.relay_strings();
     let satisfaction_policy = satisfaction_policy_for_required_accept_count(
         publishable.required_accept_count,
-        publishable.relays.len(),
+        targets.len(),
     )?;
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
@@ -132,55 +148,64 @@ where
         ),
         Err(error) => return Err(error),
     };
+    let target_receipts = target_receipts_from_relay_receipts(&publishable, &publish.relays);
 
-    for relay in &publish.relays {
-        if let Some(target) = publishable.target_for_relay(relay.relay_url.as_str()) {
-            if relay.outcome.counts_toward_quorum() {
-                outbox
-                    .mark_delivery_target_accepted(
-                        claimed.outbox_event_id,
-                        claimed.claim_token.as_str(),
-                        target.delivery_target_id,
-                        now_ms,
-                    )
-                    .await?;
-                ingest_publish_observation(
-                    event_store,
-                    &signed_event,
-                    relay.relay_url.as_str(),
-                    relay.outcome.message.as_deref(),
+    for target_receipt in &target_receipts {
+        if target_receipt.outcome.counts_toward_quorum() {
+            outbox
+                .mark_delivery_target_accepted(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    target_receipt.delivery_target_id,
                     now_ms,
                 )
                 .await?;
-            } else if relay.outcome.is_retryable() {
-                outbox
-                    .mark_delivery_target_failed_retryable(
-                        claimed.outbox_event_id,
-                        claimed.claim_token.as_str(),
-                        target.delivery_target_id,
-                        relay
-                            .outcome
-                            .message
-                            .as_deref()
-                            .unwrap_or("relay publish retryable"),
-                        now_ms,
-                    )
-                    .await?;
-            } else {
-                outbox
-                    .mark_delivery_target_failed_terminal(
-                        claimed.outbox_event_id,
-                        claimed.claim_token.as_str(),
-                        target.delivery_target_id,
-                        relay
-                            .outcome
-                            .message
-                            .as_deref()
-                            .unwrap_or("relay publish terminal"),
-                        now_ms,
-                    )
-                    .await?;
-            }
+        } else if target_receipt.outcome.is_retryable() {
+            outbox
+                .mark_delivery_target_failed_retryable(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    target_receipt.delivery_target_id,
+                    target_receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish retryable"),
+                    now_ms,
+                )
+                .await?;
+        } else {
+            outbox
+                .mark_delivery_target_failed_terminal(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    target_receipt.delivery_target_id,
+                    target_receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish terminal"),
+                    now_ms,
+                )
+                .await?;
+        }
+    }
+
+    for relay in &publish.relays {
+        if relay.outcome.counts_toward_quorum()
+            && publishable
+                .targets_for_relay(relay.relay_url.as_str())
+                .next()
+                .is_some()
+        {
+            ingest_publish_observation(
+                event_store,
+                &signed_event,
+                relay.relay_url.as_str(),
+                relay.outcome.message.as_deref(),
+                now_ms,
+            )
+            .await?;
         }
     }
 
@@ -197,7 +222,31 @@ where
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
-        publish,
+        event_id: publish.event_id,
+        attempted_count: target_receipts
+            .iter()
+            .filter(|receipt| receipt.attempted)
+            .count(),
+        accepted_count: target_receipts
+            .iter()
+            .filter(|receipt| receipt.outcome.counts_toward_quorum())
+            .count(),
+        retryable_count: target_receipts
+            .iter()
+            .filter(|receipt| receipt.outcome.is_retryable())
+            .count(),
+        terminal_count: target_receipts
+            .iter()
+            .filter(|receipt| receipt.outcome.is_terminal_failure())
+            .count(),
+        quorum: publishable.required_accept_count,
+        quorum_met: target_receipts
+            .iter()
+            .filter(|receipt| receipt.outcome.counts_toward_quorum())
+            .count()
+            >= publishable.required_accept_count,
+        target_receipts,
+        relay_receipts: publish.relays,
     })
 }
 
@@ -237,16 +286,41 @@ struct PublishableRelays {
 }
 
 impl PublishableRelays {
-    fn target_for_relay(&self, relay_url: &str) -> Option<&PublishableRelay> {
+    fn targets_for_relay<'a>(
+        &'a self,
+        relay_url: &'a str,
+    ) -> impl Iterator<Item = &'a PublishableRelay> + 'a {
         self.relays
             .iter()
-            .find(|target| target.relay_url == relay_url)
+            .filter(move |target| target.relay_url == relay_url)
     }
 }
 
 struct PublishableRelay {
     delivery_target_id: i64,
     relay_url: String,
+    target_scope: Option<String>,
+    target_label: Option<String>,
+}
+
+fn target_receipts_from_relay_receipts(
+    publishable: &PublishableRelays,
+    relay_receipts: &[RadrootsRelayPublishRelayReceipt],
+) -> Vec<RadrootsOutboxPublishTargetReceipt> {
+    let mut target_receipts = Vec::new();
+    for relay_receipt in relay_receipts {
+        for target in publishable.targets_for_relay(relay_receipt.relay_url.as_str()) {
+            target_receipts.push(RadrootsOutboxPublishTargetReceipt {
+                delivery_target_id: target.delivery_target_id,
+                endpoint_uri: target.relay_url.clone(),
+                target_scope: target.target_scope.clone(),
+                target_label: target.target_label.clone(),
+                attempted: relay_receipt.attempted,
+                outcome: relay_receipt.outcome.clone(),
+            });
+        }
+    }
+    target_receipts
 }
 
 async fn publishable_relays(
@@ -323,6 +397,14 @@ async fn publishable_relays(
             relays.push(PublishableRelay {
                 delivery_target_id: target.delivery_target_id,
                 relay_url: target.endpoint_uri.as_str().to_owned(),
+                target_scope: target
+                    .target_scope
+                    .as_ref()
+                    .map(|scope| scope.as_str().to_owned()),
+                target_label: target
+                    .target_label
+                    .as_ref()
+                    .map(|label| label.as_str().to_owned()),
             });
         }
     }

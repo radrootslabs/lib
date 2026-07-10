@@ -24,7 +24,8 @@ pub use fetch::{
 };
 #[cfg(feature = "storage")]
 pub use outbox::{
-    RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, publish_claimed_outbox_event,
+    RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
+    publish_claimed_outbox_event,
 };
 pub use outcome::{RadrootsRelayOutcome, RadrootsRelayOutcomeKind};
 #[cfg(feature = "client")]
