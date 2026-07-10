@@ -665,6 +665,43 @@ fn contains_sdk_target_set_new(source: &str) -> bool {
 }
 
 #[test]
+fn sdk_proxy_required_targets_stay_fingerprint_exact() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+
+    for required in [
+        "let required_remaining_targets =\n        proxy_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;",
+        "required_remaining_targets.as_deref()",
+        "fn proxy_required_remaining_targets",
+        "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets }",
+        "target.endpoint_fingerprint == *required",
+        "target.status.counts_as_transport_satisfaction(*class)",
+        "target.status.is_ready_for_attempt()",
+    ] {
+        assert!(
+            sync_runtime.contains(required),
+            "SDK proxy publish must retain exact required-target witness `{required}`"
+        );
+    }
+
+    let required_targets_arm = source_between(
+        sync_runtime.as_str(),
+        "RadrootsTransportSatisfactionPolicy::RequiredTargets { .. } => {\n            TransportPublishDeliveryPolicy::required_targets(",
+        "        RadrootsTransportSatisfactionPolicy::Quorum { .. } => {",
+    );
+    for forbidden in [
+        "TransportPublishDeliveryPolicy::All",
+        "TransportPublishDeliveryPolicy::Any",
+        "TransportPublishDeliveryPolicy::Quorum",
+    ] {
+        assert!(
+            !required_targets_arm.contains(forbidden),
+            "SDK RequiredTargets proxy arm must not lower to count policy `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn sdk_readme_documents_current_public_product_surface() {
     let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README");
     let readme = read_source(readme_path.as_path());
