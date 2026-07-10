@@ -5,9 +5,9 @@
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{collections::BTreeSet, string::String, vec::Vec};
 #[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
+use std::{collections::BTreeSet, string::String, vec::Vec};
 
 use core::fmt;
 use radroots_transport::{
@@ -77,6 +77,16 @@ pub enum TransportPublishProtocolError {
     },
     EmptyTargetSet,
     InvalidQuorum,
+    EmptyRequiredTargetSet,
+    InvalidRequiredTargetFingerprint {
+        index: usize,
+    },
+    DuplicateRequiredTargetFingerprint {
+        index: usize,
+    },
+    RequiredTargetNotInTargetSet {
+        index: usize,
+    },
     EmptyPrincipalId,
     EmptyJobId,
     InvalidJobTargetCount {
@@ -173,6 +183,24 @@ impl fmt::Display for TransportPublishProtocolError {
             }
             Self::EmptyTargetSet => f.write_str("transport publish target set must not be empty"),
             Self::InvalidQuorum => f.write_str("delivery quorum must be greater than zero"),
+            Self::EmptyRequiredTargetSet => {
+                f.write_str("delivery required target set must not be empty")
+            }
+            Self::InvalidRequiredTargetFingerprint { index } => {
+                write!(f, "delivery required target {index} fingerprint is invalid")
+            }
+            Self::DuplicateRequiredTargetFingerprint { index } => {
+                write!(
+                    f,
+                    "delivery required target {index} duplicates an earlier fingerprint"
+                )
+            }
+            Self::RequiredTargetNotInTargetSet { index } => {
+                write!(
+                    f,
+                    "delivery required target {index} is not in the target set"
+                )
+            }
             Self::EmptyPrincipalId => f.write_str("principal id must not be empty"),
             Self::EmptyJobId => f.write_str("job id must not be empty"),
             Self::InvalidJobTargetCount { expected, actual } => write!(
@@ -358,13 +386,25 @@ impl TransportPublishTarget {
     ) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
         let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
-        validate_target_metadata(
-            self.target_scope.as_deref(),
-            self.target_label.as_deref(),
-            index,
-        )?;
-        let target = RadrootsTransportTarget::new(transport_kind, self.endpoint_uri.as_str())
-            .map_err(|error| target_fingerprint_error(error, index))?;
+        let scope = self
+            .target_scope
+            .as_deref()
+            .map(RadrootsTransportMeshScopeId::parse)
+            .transpose()
+            .map_err(|error| target_metadata_error(error, index))?;
+        let label = self
+            .target_label
+            .as_deref()
+            .map(RadrootsTransportTargetLabel::parse)
+            .transpose()
+            .map_err(|error| target_metadata_error(error, index))?;
+        let target = RadrootsTransportTarget::new_with_metadata(
+            transport_kind,
+            self.endpoint_uri.as_str(),
+            scope,
+            label,
+        )
+        .map_err(|error| target_fingerprint_error(error, index))?;
         Ok(target.fingerprint)
     }
 
@@ -530,15 +570,27 @@ fn validate_explicit_target_uniqueness(
 pub enum TransportPublishDeliveryPolicy {
     Any,
     All,
-    Quorum { quorum: usize },
+    Quorum {
+        quorum: usize,
+    },
+    RequiredTargets {
+        targets: Vec<RadrootsTransportTargetFingerprint>,
+    },
 }
 
 impl TransportPublishDeliveryPolicy {
+    pub fn required_targets(
+        targets: Vec<RadrootsTransportTargetFingerprint>,
+    ) -> Result<Self, TransportPublishProtocolError> {
+        validate_required_target_fingerprints(&targets)?;
+        Ok(Self::RequiredTargets { targets })
+    }
+
     pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
-        if matches!(self, Self::Quorum { quorum: 0 }) {
-            Err(TransportPublishProtocolError::InvalidQuorum)
-        } else {
-            Ok(())
+        match self {
+            Self::Quorum { quorum: 0 } => Err(TransportPublishProtocolError::InvalidQuorum),
+            Self::RequiredTargets { targets } => validate_required_target_fingerprints(targets),
+            Self::Any | Self::All | Self::Quorum { .. } => Ok(()),
         }
     }
 
@@ -547,8 +599,48 @@ impl TransportPublishDeliveryPolicy {
             Self::Any => usize::from(target_count > 0),
             Self::All => target_count,
             Self::Quorum { quorum } => *quorum,
+            Self::RequiredTargets { targets } => targets.len(),
         }
     }
+
+    pub fn validate_target_membership(
+        &self,
+        target_fingerprints: &[RadrootsTransportTargetFingerprint],
+    ) -> Result<(), TransportPublishProtocolError> {
+        let Self::RequiredTargets { targets } = self else {
+            return Ok(());
+        };
+        validate_required_target_fingerprints(targets)?;
+        for (index, required) in targets.iter().enumerate() {
+            if !target_fingerprints
+                .iter()
+                .any(|fingerprint| fingerprint == required)
+            {
+                return Err(TransportPublishProtocolError::RequiredTargetNotInTargetSet { index });
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_required_target_fingerprints(
+    targets: &[RadrootsTransportTargetFingerprint],
+) -> Result<(), TransportPublishProtocolError> {
+    if targets.is_empty() {
+        return Err(TransportPublishProtocolError::EmptyRequiredTargetSet);
+    }
+    let mut seen = BTreeSet::new();
+    for (index, target) in targets.iter().enumerate() {
+        if RadrootsTransportTargetFingerprint::parse(target.as_str()).is_err() {
+            return Err(TransportPublishProtocolError::InvalidRequiredTargetFingerprint { index });
+        }
+        if !seen.insert(target.as_str()) {
+            return Err(
+                TransportPublishProtocolError::DuplicateRequiredTargetFingerprint { index },
+            );
+        }
+    }
+    Ok(())
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -575,6 +667,15 @@ impl TransportPublishEventRequest {
         self.event.validate()?;
         self.target_policy.validate(max_targets)?;
         self.delivery_policy.validate()?;
+        if let TransportPublishTargetPolicy::ExplicitTargets { targets } = &self.target_policy {
+            let target_fingerprints = targets
+                .iter()
+                .enumerate()
+                .map(|(index, target)| target.fingerprint(index))
+                .collect::<Result<Vec<_>, _>>()?;
+            self.delivery_policy
+                .validate_target_membership(&target_fingerprints)?;
+        }
         if self
             .idempotency_key
             .as_ref()
@@ -784,6 +885,19 @@ impl TransportPublishJobView {
                     actual: self.target_count,
                 });
             }
+            if matches!(
+                self.delivery_policy,
+                TransportPublishDeliveryPolicy::RequiredTargets { .. }
+            ) {
+                let target_fingerprints = self
+                    .targets
+                    .iter()
+                    .enumerate()
+                    .map(|(index, target)| target_outcome_fingerprint(target, index))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.delivery_policy
+                    .validate_target_membership(&target_fingerprints)?;
+            }
         }
         let acknowledged_count = self
             .targets
@@ -866,6 +980,7 @@ impl TransportPublishCapabilities {
                     TransportPublishDeliveryPolicyName::Any,
                     TransportPublishDeliveryPolicyName::Quorum,
                     TransportPublishDeliveryPolicyName::All,
+                    TransportPublishDeliveryPolicyName::RequiredTargets,
                 ],
                 target_policy_modes: vec![
                     TransportPublishTargetPolicyName::ExplicitTargets,
@@ -948,6 +1063,7 @@ pub enum TransportPublishDeliveryPolicyName {
     Any,
     Quorum,
     All,
+    RequiredTargets,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1048,6 +1164,58 @@ fn validate_target_outcome(
     Ok(())
 }
 
+fn target_outcome_fingerprint(
+    target: &TransportPublishTargetOutcome,
+    index: usize,
+) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
+    let transport_kind = RadrootsTransportKind::parse_canonical(target.transport_kind.as_str())
+        .map_err(|error| transport_kind_error(error, index))?;
+    let scope = target
+        .target_scope
+        .as_deref()
+        .map(RadrootsTransportMeshScopeId::parse)
+        .transpose()
+        .map_err(|error| target_metadata_error(error, index))?;
+    let label = target
+        .target_label
+        .as_deref()
+        .map(RadrootsTransportTargetLabel::parse)
+        .transpose()
+        .map_err(|error| target_metadata_error(error, index))?;
+    let target = RadrootsTransportTarget::new_with_metadata(
+        transport_kind,
+        target.endpoint_uri.as_str(),
+        scope,
+        label,
+    )
+    .map_err(|error| target_fingerprint_error(error, index))?;
+    Ok(target.fingerprint)
+}
+
+fn required_policy_outcomes<'a>(
+    required_targets: &[RadrootsTransportTargetFingerprint],
+    outcomes: &'a [TransportPublishTargetOutcome],
+) -> Result<Vec<&'a TransportPublishTargetOutcome>, TransportPublishProtocolError> {
+    required_targets
+        .iter()
+        .enumerate()
+        .map(|(required_index, required)| {
+            outcomes
+                .iter()
+                .enumerate()
+                .find_map(|(outcome_index, outcome)| {
+                    let fingerprint = target_outcome_fingerprint(outcome, outcome_index).ok()?;
+                    (fingerprint == *required).then_some(outcome)
+                })
+                .ok_or(
+                    TransportPublishProtocolError::RequiredTargetNotInTargetSet {
+                        index: required_index,
+                    },
+                )
+        })
+        .collect()
+}
+
 fn validate_job_target_policy_outcomes(
     target_policy: &TransportPublishTargetPolicy,
     outcomes: &[TransportPublishTargetOutcome],
@@ -1109,36 +1277,76 @@ fn validate_job_status_state(
         return Err(TransportPublishProtocolError::InvalidJobStatusState);
     }
     let required_count = job.delivery_policy.required_target_count(job.target_count);
-    let satisfied = required_count > 0 && acknowledged_count >= required_count;
+    let (satisfied, retryable_status_count, terminal_status_count, has_deferred, has_preview) =
+        match &job.delivery_policy {
+            TransportPublishDeliveryPolicy::RequiredTargets { targets } => {
+                let required_outcomes = required_policy_outcomes(targets, &job.targets)?;
+                let satisfied = targets.iter().all(|required| {
+                    required_outcomes.iter().any(|outcome| {
+                        target_outcome_fingerprint(outcome, 0).is_ok_and(|fingerprint| {
+                            fingerprint == *required
+                                && outcome.outcome_kind.counts_toward_satisfaction()
+                        })
+                    })
+                });
+                (
+                    satisfied,
+                    required_outcomes
+                        .iter()
+                        .filter(|outcome| outcome.outcome_kind.is_retryable())
+                        .count(),
+                    required_outcomes
+                        .iter()
+                        .filter(|outcome| outcome.outcome_kind.is_terminal_failure())
+                        .count(),
+                    required_outcomes.iter().any(|outcome| {
+                        outcome.outcome_kind
+                            == TransportPublishOutcomeKind::DeferredUntilImplemented
+                    }),
+                    required_outcomes.iter().any(|outcome| {
+                        outcome.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
+                    }),
+                )
+            }
+            TransportPublishDeliveryPolicy::Any
+            | TransportPublishDeliveryPolicy::All
+            | TransportPublishDeliveryPolicy::Quorum { .. } => (
+                required_count > 0 && acknowledged_count >= required_count,
+                retryable_count,
+                terminal_count,
+                job.targets.iter().any(|target| {
+                    target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
+                }),
+                job.targets.iter().any(|target| {
+                    target.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
+                }),
+            ),
+        };
     match job.status {
         TransportPublishJobStatus::DeliverySatisfied if satisfied => Ok(()),
         TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
-            if !satisfied && retryable_count > 0 =>
+            if !satisfied && retryable_status_count > 0 =>
         {
             Ok(())
         }
         TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
-            if !satisfied && retryable_count == 0 && terminal_count > 0 =>
+            if !satisfied && retryable_status_count == 0 && terminal_status_count > 0 =>
         {
             Ok(())
         }
         TransportPublishJobStatus::DeliveryDeferred
             if !satisfied
-                && terminal_count == 0
-                && retryable_count == 0
-                && job.targets.iter().any(|target| {
-                    target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
-                }) =>
+                && terminal_status_count == 0
+                && retryable_status_count == 0
+                && has_deferred =>
         {
             Ok(())
         }
         TransportPublishJobStatus::DeliveryPreviewUnavailable
             if !satisfied
-                && terminal_count == 0
-                && retryable_count == 0
-                && job.targets.iter().any(|target| {
-                    target.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
-                }) =>
+                && terminal_status_count == 0
+                && retryable_status_count == 0
+                && has_preview =>
         {
             Ok(())
         }
@@ -1605,6 +1813,72 @@ mod tests {
         .validate()
         .expect("preview unavailable job");
         rejected_job().validate().expect("rejected job");
+    }
+
+    #[test]
+    fn required_target_job_status_uses_required_membership() {
+        let required_target = TransportPublishTarget::nostr("wss://required.example");
+        let optional_target = TransportPublishTarget::nostr("wss://optional.example");
+        let required_fingerprint = required_target
+            .fingerprint(0)
+            .expect("required fingerprint");
+        let target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
+            required_target.clone(),
+            optional_target,
+        ]);
+
+        let mut optional_success = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            target_policy.clone(),
+            vec![
+                nostr_outcome_for(
+                    "wss://required.example",
+                    TransportPublishOutcomeKind::ConnectionFailed,
+                ),
+                nostr_outcome_for(
+                    "wss://optional.example",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+            ],
+        );
+        optional_success.delivery_policy =
+            TransportPublishDeliveryPolicy::required_targets(vec![required_fingerprint.clone()])
+                .expect("required policy");
+        optional_success.acknowledged_count = 1;
+        optional_success.retryable_count = 1;
+        assert_eq!(
+            optional_success.validate(),
+            Err(TransportPublishProtocolError::InvalidJobStatusState)
+        );
+        optional_success.status = TransportPublishJobStatus::DeliveryUnsatisfiedRetryable;
+        optional_success.terminal = false;
+        optional_success.delivery_satisfied = false;
+        optional_success
+            .validate()
+            .expect("required target retryable remains unsatisfied");
+
+        let mut optional_failure = job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            target_policy,
+            vec![
+                nostr_outcome_for(
+                    "wss://required.example",
+                    TransportPublishOutcomeKind::Accepted,
+                ),
+                nostr_outcome_for(
+                    "wss://optional.example",
+                    TransportPublishOutcomeKind::Timeout,
+                ),
+            ],
+        );
+        optional_failure.delivery_policy =
+            TransportPublishDeliveryPolicy::required_targets(vec![required_fingerprint])
+                .expect("required policy");
+        optional_failure.acknowledged_count = 1;
+        optional_failure.retryable_count = 1;
+        optional_failure
+            .validate()
+            .expect("optional retryable target does not block required satisfaction");
     }
 
     #[test]
@@ -2105,6 +2379,54 @@ mod tests {
         assert_eq!(
             TransportPublishDeliveryPolicy::Quorum { quorum: 2 }.required_target_count(3),
             2
+        );
+
+        let required_target =
+            TransportPublishTarget::nostr("wss://relay.example").with_scope("farm.local");
+        let required_fingerprint = required_target
+            .fingerprint(0)
+            .expect("required fingerprint");
+        let required_policy =
+            TransportPublishDeliveryPolicy::required_targets(vec![required_fingerprint.clone()])
+                .expect("required policy");
+        assert_eq!(required_policy.required_target_count(3), 1);
+        let required_request = TransportPublishEventRequest {
+            event: event(),
+            target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
+                required_target.clone(),
+                TransportPublishTarget::nostr("wss://relay.example").with_scope("farm.remote"),
+            ]),
+            delivery_policy: required_policy,
+            idempotency_key: None,
+            timeout_ms: None,
+        };
+        required_request
+            .validate(2)
+            .expect("required target belongs to scoped target set");
+
+        let unscoped_fingerprint = TransportPublishTarget::nostr("wss://relay.example")
+            .fingerprint(0)
+            .expect("unscoped fingerprint");
+        assert_ne!(required_fingerprint, unscoped_fingerprint);
+        let mut stale_required = required_request;
+        stale_required.delivery_policy =
+            TransportPublishDeliveryPolicy::required_targets(vec![unscoped_fingerprint])
+                .expect("stale required policy");
+        assert_eq!(
+            stale_required.validate(2),
+            Err(TransportPublishProtocolError::RequiredTargetNotInTargetSet { index: 0 })
+        );
+
+        assert_eq!(
+            TransportPublishDeliveryPolicy::required_targets(Vec::new()),
+            Err(TransportPublishProtocolError::EmptyRequiredTargetSet)
+        );
+        assert_eq!(
+            TransportPublishDeliveryPolicy::required_targets(vec![
+                required_fingerprint.clone(),
+                required_fingerprint
+            ]),
+            Err(TransportPublishProtocolError::DuplicateRequiredTargetFingerprint { index: 1 })
         );
     }
 

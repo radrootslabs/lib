@@ -14,7 +14,7 @@ readme = "README"
 [features]
 default = ["std", "serde"]
 std = []
-serde = ["dep:serde"]
+serde = ["dep:serde", "radroots_transport/serde"]
 
 [dependencies]
 radroots_transport = { workspace = true, default-features = false }

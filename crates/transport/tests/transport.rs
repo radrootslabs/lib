@@ -741,6 +741,20 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
             .expect("required targets"),
         &[required.fingerprint.clone()]
     );
+    let unordered_policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![optional.fingerprint.clone(), required.fingerprint.clone()],
+    )
+    .expect("unordered required targets");
+    let mut expected_required_targets =
+        vec![required.fingerprint.clone(), optional.fingerprint.clone()];
+    expected_required_targets.sort();
+    assert_eq!(
+        unordered_policy
+            .required_target_fingerprints()
+            .expect("canonical required targets"),
+        expected_required_targets.as_slice()
+    );
 
     let optional_only = RadrootsTransportDeliveryReceipt {
         request_id: "required-target".to_owned(),

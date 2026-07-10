@@ -78,9 +78,10 @@ impl RadrootsTransportSatisfactionPolicy {
 
     pub fn required_targets(
         class: RadrootsTransportSatisfactionClass,
-        targets: Vec<RadrootsTransportTargetFingerprint>,
+        mut targets: Vec<RadrootsTransportTargetFingerprint>,
     ) -> Result<Self, RadrootsTransportError> {
         validate_required_targets(&targets)?;
+        targets.sort();
         Ok(Self::RequiredTargets { class, targets })
     }
 
