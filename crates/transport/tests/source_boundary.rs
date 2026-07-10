@@ -397,6 +397,68 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
 }
 
 #[test]
+fn required_target_semantics_stay_fingerprint_exact() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+
+    let protocol_source = read_source(
+        crates_root
+            .join("transport_publish_protocol/src/lib.rs")
+            .as_path(),
+    );
+    for required in [
+        "Self::RequiredTargets { targets } => targets.len()",
+        "pub fn validate_target_membership",
+        "TransportPublishProtocolError::RequiredTargetNotInTargetSet { index }",
+        "let required_outcomes = required_policy_outcomes(targets, &job.targets)?;",
+        "required_outcomes.iter().any(|outcome|",
+        "fingerprint == *required",
+    ] {
+        assert!(
+            protocol_source.contains(required),
+            "transport publish protocol must retain exact required-target witness `{required}`"
+        );
+    }
+
+    let nostr_publish_source =
+        read_source(crates_root.join("transport_nostr/src/publish.rs").as_path());
+    for required in [
+        "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =>",
+        "let mut satisfied_required_targets = BTreeSet::new();",
+        "targets.contains(&target.fingerprint)",
+        "counts_as_satisfied(*class)",
+        "targets\n                .iter()\n                .all(|target| satisfied_required_targets.contains(target))",
+    ] {
+        assert!(
+            nostr_publish_source.contains(required),
+            "direct Nostr publish must retain exact required-target witness `{required}`"
+        );
+    }
+
+    let nostr_outbox_source =
+        read_source(crates_root.join("transport_nostr/src/outbox.rs").as_path());
+    let publishable_relays_source = source_between(
+        nostr_outbox_source.as_str(),
+        "let required_targets = match &plan.satisfaction_policy",
+        "Ok(PublishableRelays {",
+    );
+    for required in [
+        "RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } =>",
+        "required_targets.as_ref().is_none_or(|required|",
+        "target.endpoint_fingerprint == *fingerprint",
+        "let required_for_satisfaction = required_targets.as_ref().is_some_and(|required|",
+        "required_targets.is_none() || required_for_satisfaction",
+        "required_targets.is_some()",
+    ] {
+        assert!(
+            publishable_relays_source.contains(required),
+            "direct Nostr outbox publish must retain exact required-target witness `{required}`"
+        );
+    }
+}
+
+#[test]
 fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -528,6 +590,21 @@ fn relative_path(root: &Path, path: &Path) -> String {
         .expect("source path is under crate root")
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+fn source_between<'source>(
+    source: &'source str,
+    start_marker: &str,
+    end_marker: &str,
+) -> &'source str {
+    let start = source
+        .find(start_marker)
+        .unwrap_or_else(|| panic!("failed to find source marker `{start_marker}`"));
+    let source_after_start = &source[start..];
+    let end = source_after_start
+        .find(end_marker)
+        .unwrap_or_else(|| panic!("failed to find source marker `{end_marker}`"));
+    &source_after_start[..end]
 }
 
 fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
