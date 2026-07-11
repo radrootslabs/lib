@@ -14,10 +14,9 @@ use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
-use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 #[cfg(feature = "transport-nostr-runtime")]
-use radroots_events::ids::RadrootsPublicKey;
-use radroots_events::{
+use radroots_event::ids::RadrootsPublicKey;
+use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
     contract::RadrootsActorRole,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId},
@@ -32,7 +31,8 @@ use radroots_events::{
         RadrootsOrderRevisionOutcome,
     },
 };
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
+use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event,
@@ -428,14 +428,14 @@ impl FixtureSigner {
 
 #[cfg(any())]
 impl radroots_authority::RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 
     fn sign_frozen_draft(
         &self,
-        draft: &radroots_events::draft::RadrootsEventDraft,
-    ) -> Result<radroots_events::draft::RadrootsSignedEvent, radroots_authority::RadrootsSignerError>
+        draft: &radroots_event::draft::RadrootsEventDraft,
+    ) -> Result<radroots_event::draft::RadrootsSignedEvent, radroots_authority::RadrootsSignerError>
     {
         radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(
             |error| radroots_authority::RadrootsSignerError::SigningFailed {
@@ -4202,7 +4202,7 @@ fn signed_raw_event(secret_key_hex: &str, created_at: u32, parts: WireEventParts
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsEventEnvelope {
-    let draft = radroots_events_codec::order::order_request_event_build(
+    let draft = radroots_event_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
@@ -4212,7 +4212,7 @@ fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsEv
 
 #[cfg(feature = "transport-nostr-runtime")]
 fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr::Event {
-    let draft = radroots_events_codec::order::order_request_event_build(
+    let draft = radroots_event_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
@@ -4255,7 +4255,7 @@ fn signed_order_decision_event(
     root_event_id: &RadrootsEventId,
     created_at: u32,
 ) -> RadrootsEventEnvelope {
-    let draft = radroots_events_codec::order::order_decision_event_build(
+    let draft = radroots_event_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
         &order_decision(raw_order_id),

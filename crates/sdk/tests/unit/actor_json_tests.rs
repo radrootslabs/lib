@@ -1,6 +1,6 @@
 use super::{SdkActorContextJson, actor_role_code, actor_source_code};
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
-use radroots_events::contract::RadrootsActorRole;
+use radroots_event::contract::RadrootsActorRole;
 
 #[path = "../support/serializer_failure.rs"]
 mod serializer_failure;

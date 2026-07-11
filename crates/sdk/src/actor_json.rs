@@ -1,5 +1,5 @@
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
-use radroots_events::contract::RadrootsActorRole;
+use radroots_event::contract::RadrootsActorRole;
 use serde::{Serialize, ser::SerializeStruct};
 
 pub(crate) struct SdkActorContextJson<'a>(pub(crate) &'a RadrootsActorContext);

@@ -22,16 +22,16 @@ use futures::future::BoxFuture;
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_event::contract::RadrootsActorRole;
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::RadrootsEventId;
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_event::kinds::KIND_FARM;
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_event_store::RadrootsEventStoreStatusSummary;
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_events::contract::RadrootsActorRole;
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_events::ids::RadrootsEventId;
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_events::kinds::KIND_FARM;
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
@@ -103,7 +103,7 @@ impl ProxyFixtureSigner {
 
 #[cfg(feature = "radrootsd-proxy")]
 impl RadrootsEventSigner for ProxyFixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

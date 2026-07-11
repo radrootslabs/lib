@@ -1,9 +1,9 @@
 use super::*;
 use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
-use radroots_events::contract::RadrootsActorRole;
-use radroots_events::kinds::{KIND_COOP, KIND_FARM};
-use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
+use radroots_event::contract::RadrootsActorRole;
+use radroots_event::kinds::{KIND_COOP, KIND_FARM};
+use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,

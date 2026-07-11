@@ -7,7 +7,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::{
+use radroots_event::{
     contract::RadrootsActorRole,
     draft::{RadrootsEventDraft, RadrootsSignedEvent},
     farm::RadrootsFarmRef,
@@ -54,7 +54,7 @@ impl FixtureSigner {
 }
 
 impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

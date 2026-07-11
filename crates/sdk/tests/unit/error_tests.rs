@@ -5,7 +5,7 @@ use super::{
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumPreviewBehavior;
 use radroots_authority::RadrootsAuthorityError;
-use radroots_events::contract::RadrootsActorRole;
+use radroots_event::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
 
 #[test]
@@ -102,7 +102,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 
     let draft_fallback = RadrootsSdkError::from(
         radroots_trade::listing::RadrootsListingDraftError::InvalidFarmPubkey(
-            radroots_events::ids::RadrootsIdParseError::InvalidCharacter,
+            radroots_event::ids::RadrootsIdParseError::InvalidCharacter,
         ),
     );
     assert!(matches!(

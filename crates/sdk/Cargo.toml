@@ -13,22 +13,22 @@ readme = "README"
 
 [features]
 default = ["std", "serde", "serde_json", "identity-models"]
-std = ["radroots_events/std", "radroots_events_codec/std", "radroots_trade/std"]
-serde = ["dep:serde", "radroots_events/serde", "radroots_trade/serde"]
+std = ["radroots_event/std", "radroots_event_codec/std", "radroots_trade/std"]
+serde = ["dep:serde", "radroots_event/serde", "radroots_trade/serde"]
 serde_json = [
   "dep:serde_json",
   "serde",
   "nostr",
-  "radroots_events_codec/serde_json",
+  "radroots_event_codec/serde_json",
   "radroots_trade/serde_json",
 ]
-nostr = ["radroots_events_codec/nostr"]
+nostr = ["radroots_event_codec/nostr"]
 knowledge = [
   "serde",
   "serde_json",
-  "radroots_events/knowledge-nip54",
-  "radroots_events_codec/contract-manifest",
-  "radroots_events_codec/knowledge-nip54",
+  "radroots_event/knowledge-nip54",
+  "radroots_event_codec/contract-manifest",
+  "radroots_event_codec/knowledge-nip54",
 ]
 identity-models = [
   "dep:radroots_identity",
@@ -121,8 +121,8 @@ test-fixture-geonames-asset = [
 futures = { workspace = true, optional = true }
 radroots_authority = { workspace = true, optional = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
-radroots_events = { workspace = true, default-features = false }
-radroots_events_codec = { workspace = true, default-features = false }
+radroots_event = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false }
 radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
 radroots_transport = { workspace = true, optional = true, default-features = false }

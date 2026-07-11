@@ -8,7 +8,7 @@ use crate::{
     SyncProjectionRefreshRequest, TargetPolicy,
 };
 use radroots_authority::RadrootsActorContext;
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     contract::RadrootsActorRole,
     ids::{RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},

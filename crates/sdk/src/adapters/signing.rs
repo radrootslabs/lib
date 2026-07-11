@@ -1,5 +1,5 @@
 use crate::identity::RadrootsIdentity;
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
 use radroots_nostr::prelude::{RadrootsNostrError, radroots_nostr_build_event};
 
 pub type SignedNostrEvent = radroots_nostr::prelude::RadrootsNostrEvent;

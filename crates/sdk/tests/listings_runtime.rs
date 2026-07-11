@@ -7,8 +7,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_event_store::RadrootsEventStore;
-use radroots_events::{
+use radroots_event::{
     contract::RadrootsActorRole,
     draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarmRef,
@@ -16,6 +15,7 @@ use radroots_events::{
     kinds::KIND_LISTING,
     listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
 };
+use radroots_event_store::RadrootsEventStore;
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetStatus,
     RadrootsOutboxEventState,
@@ -66,7 +66,7 @@ impl FixtureSigner {
 }
 
 impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

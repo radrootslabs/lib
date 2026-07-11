@@ -1,6 +1,6 @@
 use crate::RadrootsSdkError;
 use core::fmt;
-use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 use serde::ser::SerializeStruct;
 use sha2::{Digest, Sha256};
 

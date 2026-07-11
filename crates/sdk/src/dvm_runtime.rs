@@ -12,16 +12,16 @@ use crate::{
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, authorize_actor_for_draft};
 #[cfg(feature = "runtime")]
-use radroots_event_store::RadrootsEventIngest;
-#[cfg(feature = "runtime")]
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     draft::RadrootsEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
 };
 #[cfg(feature = "runtime")]
-use radroots_events_codec::wire::{WireEventParts, canonicalize_tags, to_frozen_draft};
+use radroots_event_codec::wire::{WireEventParts, canonicalize_tags, to_frozen_draft};
+#[cfg(feature = "runtime")]
+use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
 use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
 #[cfg(feature = "runtime")]

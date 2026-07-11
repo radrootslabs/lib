@@ -6,9 +6,9 @@ use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, authorize_actor_for_draft,
     authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
 };
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_events::ids::RadrootsPublicKey;
-use radroots_events::kinds::{
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::RadrootsPublicKey;
+use radroots_event::kinds::{
     KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
     KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
 };

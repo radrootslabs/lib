@@ -6,8 +6,7 @@ use radroots_authority::{
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
-use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
     contract::RadrootsActorRole,
     draft::{RadrootsEventDraft, RadrootsSignedEvent},
@@ -22,6 +21,7 @@ use radroots_events::{
         RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
     },
 };
+use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event, radroots_nostr_sign_frozen_draft,
@@ -783,7 +783,7 @@ fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsEventEnvelope {
-    let draft = radroots_events_codec::order::order_request_event_build(
+    let draft = radroots_event_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
@@ -796,7 +796,7 @@ fn signed_order_decision_event(
     root_event_id: &RadrootsEventId,
     created_at: u32,
 ) -> RadrootsEventEnvelope {
-    let draft = radroots_events_codec::order::order_decision_event_build(
+    let draft = radroots_event_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
         &order_decision(raw_order_id),
@@ -845,7 +845,7 @@ fn signed_validation_receipt_event(
 fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
-    parts: radroots_events_codec::wire::WireEventParts,
+    parts: radroots_event_codec::wire::WireEventParts,
 ) -> RadrootsEventEnvelope {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);

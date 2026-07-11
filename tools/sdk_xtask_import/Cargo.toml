@@ -17,12 +17,11 @@ path = "src/main.rs"
 dto_bindgen_backend_ts = { workspace = true }
 dto_bindgen_core = { workspace = true }
 radroots_core = { workspace = true, features = ["dto-bindgen"] }
-radroots_events = { workspace = true, features = ["dto-bindgen"] }
+radroots_event = { workspace = true, features = ["dto-bindgen"] }
 radroots_events_bindings = { path = "../../crates/events_bindings" }
-radroots_events_indexed = { workspace = true, features = ["dto-bindgen"] }
+radroots_event_index = { workspace = true, features = ["dto-bindgen"] }
 radroots_identity_bindings = { path = "../../crates/identity_bindings" }
 radroots_replica_db_schema_bindings = { path = "../../crates/replica_db_schema_bindings" }
-radroots_types_bindings = { path = "../../crates/types_bindings" }
 radroots_trade_bindings = { path = "../../crates/trade_bindings" }
 flate2 = "1"
 serde_json = "1"

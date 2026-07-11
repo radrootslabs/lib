@@ -9,7 +9,7 @@ use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
-use radroots_events::{
+use radroots_event::{
     RadrootsEventPtr,
     contract::RadrootsActorRole,
     ids::RadrootsListingAddress,

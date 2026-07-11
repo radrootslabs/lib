@@ -119,23 +119,13 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             types_ts: Some(TsSource::DtoRegistry(
                 dto_roots::replica_db_schema_types_module()?,
             )),
-            types_imports: vec![TypeScriptImport::type_only(
-                ["IResult", "IResultList", "IResultPass"],
-                "@radroots/types-bindings",
-            )],
+            types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
         },
         PackageOutput {
             spec: spec_by_key("trade"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::trade_types_module()?)),
-            types_imports: Vec::new(),
-            constants_ts: None,
-            kinds_ts: None,
-        },
-        PackageOutput {
-            spec: spec_by_key("types"),
-            types_ts: Some(TsSource::DtoRegistry(dto_roots::types_types_module()?)),
             types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
@@ -239,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn includes_core_and_types_outputs() {
+    fn includes_core_and_schema_outputs() {
         let package_names = package_outputs()
             .expect("package outputs")
             .into_iter()
@@ -251,7 +241,6 @@ mod tests {
         assert!(package_names.contains(&"@radroots/identity-bindings"));
         assert!(package_names.contains(&"@radroots/replica-db-schema-bindings"));
         assert!(package_names.contains(&"@radroots/trade-bindings"));
-        assert!(package_names.contains(&"@radroots/types-bindings"));
     }
 
     #[test]
@@ -335,7 +324,7 @@ mod tests {
             .expect("replica_db_schema output");
 
         assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
-        assert_eq!(output.types_imports.len(), 1);
+        assert!(output.types_imports.is_empty());
 
         let types = output
             .files()

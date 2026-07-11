@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 
 #[cfg(feature = "runtime")]
-use radroots_events::ids::{RadrootsEventId, RadrootsOrderId};
+use radroots_event::ids::{RadrootsEventId, RadrootsOrderId};
 #[cfg(feature = "runtime")]
 use radroots_trade::{
     identity::{RadrootsTradeId, RadrootsTradeLocator, RadrootsTradeLocatorCandidate},
@@ -83,10 +83,10 @@ mod tests {
         SDK_TRADE_PROJECTION_CACHE_VERSION, SdkTradeProjectionCache, SdkTradeProjectionCacheKey,
         SdkTradeProjectionCacheRecord,
     };
-    use radroots_events::ids::{
+    use radroots_event::ids::{
         RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey,
     };
-    use radroots_events::kinds::KIND_LISTING;
+    use radroots_event::kinds::KIND_LISTING;
     use radroots_trade::{identity::RadrootsTradeLocator, workflow::RadrootsTradeWorkflowState};
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

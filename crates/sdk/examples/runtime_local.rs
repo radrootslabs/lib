@@ -3,10 +3,10 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::contract::RadrootsActorRole;
-use radroots_events::farm::RadrootsFarmRef;
-use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
+use radroots_event::contract::RadrootsActorRole;
+use radroots_event::farm::RadrootsFarmRef;
+use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::{
     ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,

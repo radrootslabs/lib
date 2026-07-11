@@ -1,7 +1,7 @@
 #![cfg(feature = "runtime")]
 
 use crate::RadrootsSdkError;
-use radroots_events::ids::RadrootsAddressableCoordinate;
+use radroots_event::ids::RadrootsAddressableCoordinate;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::path::Path;

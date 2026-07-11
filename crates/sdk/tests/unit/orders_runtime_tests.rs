@@ -4,8 +4,7 @@ use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
-use radroots_event_store::RadrootsEventStoreError;
-use radroots_events::{
+use radroots_event::{
     draft::RadrootsSignedEvent,
     kinds::KIND_LISTING,
     order::{
@@ -14,6 +13,7 @@ use radroots_events::{
         RadrootsOrderRevisionOutcome,
     },
 };
+use radroots_event_store::RadrootsEventStoreError;
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };

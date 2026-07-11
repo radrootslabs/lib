@@ -20,7 +20,7 @@ pub struct WasmPackageSpec {
     pub out_dir: &'static str,
 }
 
-pub const PACKAGE_SPECS: [PackageSpec; 7] = [
+pub const PACKAGE_SPECS: [PackageSpec; 6] = [
     PackageSpec {
         key: "core",
         crate_name: "radroots_core_bindings",
@@ -62,13 +62,6 @@ pub const PACKAGE_SPECS: [PackageSpec; 7] = [
         crate_dir: "crates/trade_bindings",
         package_name: "@radroots/trade-bindings",
         package_dir: "packages/trade-bindings",
-    },
-    PackageSpec {
-        key: "types",
-        crate_name: "radroots_types_bindings",
-        crate_dir: "crates/types_bindings",
-        package_name: "@radroots/types-bindings",
-        package_dir: "packages/types-bindings",
     },
 ];
 
@@ -179,7 +172,7 @@ mod tests {
 
     #[test]
     fn approved_package_count_is_stable() {
-        assert_eq!(package_specs().len(), 7);
+        assert_eq!(package_specs().len(), 6);
         assert_eq!(wasm_package_specs().len(), 3);
     }
 

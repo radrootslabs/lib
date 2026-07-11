@@ -1,6 +1,6 @@
 #![cfg(feature = "runtime")]
 
-use radroots_events::ids::RadrootsOrderId;
+use radroots_event::ids::RadrootsOrderId;
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, NostrProfile,
     NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass,

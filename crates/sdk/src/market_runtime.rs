@@ -5,7 +5,7 @@ use crate::{
     MarketClient, RadrootsSdkError, SyncProjectionRefreshReceipt, SyncProjectionRefreshRequest,
 };
 #[cfg(feature = "runtime")]
-use radroots_events::ids::{RadrootsEventId, RadrootsListingAddress, RadrootsPublicKey};
+use radroots_event::ids::{RadrootsEventId, RadrootsListingAddress, RadrootsPublicKey};
 #[cfg(feature = "runtime")]
 use radroots_trade::projection::{
     RadrootsListingProjectionRow, RadrootsListingSearchRequest, search_listing_projection,

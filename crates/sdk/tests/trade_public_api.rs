@@ -1,7 +1,7 @@
 #![cfg(feature = "runtime")]
 
 use radroots_authority::RadrootsActorContext;
-use radroots_events::contract::RadrootsActorRole;
+use radroots_event::contract::RadrootsActorRole;
 use radroots_sdk::{
     RadrootsClient, TradeResyncRequest, TradeSellerInboxRequest, TradeStatusKind,
     TradeStatusRequest, TradeValidationReceiptListRequest,

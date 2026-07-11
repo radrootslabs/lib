@@ -3,14 +3,14 @@
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
-use radroots_event_store::RadrootsEventStore;
-use radroots_events::{
+use radroots_event::{
     contract::RadrootsActorRole,
     draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarm,
     ids::RadrootsAddressableCoordinate,
     kinds::{KIND_FARM, KIND_PROFILE},
 };
+use radroots_event_store::RadrootsEventStore;
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetStatus,
     RadrootsOutboxEventState,
@@ -60,7 +60,7 @@ impl FixtureSigner {
 }
 
 impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

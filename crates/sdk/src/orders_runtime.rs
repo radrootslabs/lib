@@ -25,12 +25,8 @@ use crate::{
 use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
-#[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-use radroots_event_store::RadrootsStoredEventTag;
 #[cfg(feature = "runtime")]
-use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
-#[cfg(feature = "runtime")]
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     contract::RadrootsActorRole,
     ids::RadrootsEventId,
@@ -42,7 +38,7 @@ use radroots_events::{
     tags::TAG_P,
 };
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_events::{
+use radroots_event::{
     RadrootsEventPtr,
     draft::RadrootsEventDraft,
     ids::RadrootsOrderRevisionId,
@@ -53,22 +49,26 @@ use radroots_events::{
     },
 };
 #[cfg(any(feature = "runtime", feature = "signer-adapters", test))]
-use radroots_events::{
+use radroots_event::{
     ids::{RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     order::RadrootsOrderEconomics,
 };
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-use radroots_events::{
+use radroots_event::{
     kinds::KIND_LISTING,
     tags::{TAG_D, TAG_E},
 };
 #[cfg(feature = "runtime")]
-use radroots_events_codec::order::{
+use radroots_event_codec::order::{
     order_cancellation_from_event, order_decision_from_event, order_request_from_event,
     order_revision_decision_from_event, order_revision_proposal_from_event,
 };
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
+use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
+#[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
+use radroots_event_store::RadrootsStoredEventTag;
+#[cfg(feature = "runtime")]
+use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_nostr::prelude::{
     RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKey,
@@ -6440,7 +6440,7 @@ fn parse_order_evidence(
 
 #[cfg(feature = "runtime")]
 fn order_evidence_parse_error(
-    error: radroots_events_codec::order::RadrootsOrderEnvelopeParseError,
+    error: radroots_event_codec::order::RadrootsOrderEnvelopeParseError,
 ) -> RadrootsSdkError {
     RadrootsSdkError::InvalidRequest {
         message: format!("order evidence event is invalid: {error}"),
@@ -7167,14 +7167,14 @@ where
 trait OrderPayloadValidate {
     fn validate_order_payload(
         &self,
-    ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError>;
+    ) -> Result<(), radroots_event::order::RadrootsOrderPayloadError>;
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl OrderPayloadValidate for RadrootsOrderDecision {
     fn validate_order_payload(
         &self,
-    ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError> {
+    ) -> Result<(), radroots_event::order::RadrootsOrderPayloadError> {
         self.validate()
     }
 }
@@ -7183,7 +7183,7 @@ impl OrderPayloadValidate for RadrootsOrderDecision {
 impl OrderPayloadValidate for RadrootsOrderRevisionProposal {
     fn validate_order_payload(
         &self,
-    ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError> {
+    ) -> Result<(), radroots_event::order::RadrootsOrderPayloadError> {
         self.validate()
     }
 }
@@ -7192,7 +7192,7 @@ impl OrderPayloadValidate for RadrootsOrderRevisionProposal {
 impl OrderPayloadValidate for RadrootsOrderRevisionDecision {
     fn validate_order_payload(
         &self,
-    ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError> {
+    ) -> Result<(), radroots_event::order::RadrootsOrderPayloadError> {
         self.validate()
     }
 }
@@ -7201,7 +7201,7 @@ impl OrderPayloadValidate for RadrootsOrderRevisionDecision {
 impl OrderPayloadValidate for RadrootsOrderCancellation {
     fn validate_order_payload(
         &self,
-    ) -> Result<(), radroots_events::order::RadrootsOrderPayloadError> {
+    ) -> Result<(), radroots_event::order::RadrootsOrderPayloadError> {
         self.validate()
     }
 }

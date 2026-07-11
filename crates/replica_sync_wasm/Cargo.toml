@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 base64 = { workspace = true }
-radroots_events = { workspace = true, default-features = false, features = [
+radroots_event = { workspace = true, default-features = false, features = [
   "serde",
 ] }
 radroots_sdk_sql_wasm_runtime = { workspace = true }

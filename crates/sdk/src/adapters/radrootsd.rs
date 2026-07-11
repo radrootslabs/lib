@@ -1,7 +1,7 @@
 use core::fmt;
 use core::time::Duration;
 
-use radroots_events::draft::RadrootsSignedEvent;
+use radroots_event::draft::RadrootsSignedEvent;
 use radroots_transport_publish_protocol::{
     METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
     TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishProtocolError,

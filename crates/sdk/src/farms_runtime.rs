@@ -14,7 +14,7 @@ use crate::{
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
-use radroots_events::{
+use radroots_event::{
     contract::RadrootsActorRole,
     draft::RadrootsEventDraft,
     farm::{RadrootsFarm, RadrootsFarmPublicLocation},
@@ -23,7 +23,7 @@ use radroots_events::{
     listing::RadrootsListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
-use radroots_events_codec::wire::to_frozen_draft;
+use radroots_event_codec::wire::to_frozen_draft;
 #[cfg(feature = "runtime")]
 pub const FARM_PUBLISH_OPERATION_KIND: &str = "farm.publish.v1";
 

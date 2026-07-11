@@ -2,10 +2,10 @@ use super::*;
 #[cfg(feature = "signer-adapters")]
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_events::contract::RadrootsActorRole;
-use radroots_events::draft::RadrootsSignedEvent;
-use radroots_events::kinds::KIND_FARM;
-use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
+use radroots_event::contract::RadrootsActorRole;
+use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::kinds::KIND_FARM;
+use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
@@ -33,7 +33,7 @@ impl WorkflowSigner {
 }
 
 impl RadrootsEventSigner for WorkflowSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

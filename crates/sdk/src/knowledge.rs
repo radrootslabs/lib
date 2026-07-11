@@ -11,7 +11,7 @@ use std::{
 
 use core::fmt;
 
-pub use radroots_events::{
+pub use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventRef,
     draft::{RadrootsDraftError, RadrootsEventDraft},
     kinds::{
@@ -37,7 +37,7 @@ pub use radroots_events::{
         validate_knowledge_claim, validate_wiki_article, validate_wiki_d_tag,
     },
 };
-pub use radroots_events_codec::{
+pub use radroots_event_codec::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,
     error::RadrootsEncodeError,
     manifest::{
@@ -52,11 +52,11 @@ pub use radroots_events_codec::{
     wire::WireEventParts,
 };
 
-use radroots_events::knowledge::{
+use radroots_event::knowledge::{
     validate_knowledge_field_report, validate_knowledge_relation, validate_knowledge_review,
     validate_knowledge_source, validate_wiki_merge_request, validate_wiki_redirect,
 };
-use radroots_events_codec::{
+use radroots_event_codec::{
     contract_manifest_json as codec_contract_manifest_json,
     contract_manifest_sha256 as codec_contract_manifest_sha256,
     knowledge::{

@@ -9,7 +9,7 @@ use crate::{
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
-use radroots_events::{
+use radroots_event::{
     draft::RadrootsEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress},
     listing::RadrootsListing,

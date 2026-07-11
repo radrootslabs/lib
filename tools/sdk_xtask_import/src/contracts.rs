@@ -575,12 +575,11 @@ repository = "sdk-typescript"
 
 [packages]
 "radroots_core" = "@radroots/core-bindings"
-"radroots_events" = "@radroots/events-bindings"
-"radroots_events_indexed" = "@radroots/events-indexed-bindings"
+"radroots_event" = "@radroots/events-bindings"
+"radroots_event_index" = "@radroots/events-indexed-bindings"
 "radroots_identity" = "@radroots/identity-bindings"
 "radroots_replica_db_schema" = "@radroots/replica-db-schema-bindings"
 "radroots_trade" = "@radroots/trade-bindings"
-"radroots_types" = "@radroots/types-bindings"
 "radroots_events_codec_wasm" = "@radroots/events-codec-wasm"
 "radroots_replica_db_wasm" = "@radroots/replica-db-wasm"
 "radroots_replica_sync_wasm" = "@radroots/replica-sync-wasm"
@@ -649,13 +648,6 @@ crate_name = "radroots_trade_bindings"
 crate_dir = "crates/trade_bindings"
 package = "@radroots/trade-bindings"
 package_dir = "packages/trade-bindings"
-
-[npm_packages.types]
-kind = "bindings"
-crate_name = "radroots_types_bindings"
-crate_dir = "crates/types_bindings"
-package = "@radroots/types-bindings"
-package_dir = "packages/types-bindings"
 
 [npm_packages.events_codec]
 kind = "wasm"

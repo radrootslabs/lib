@@ -5,7 +5,7 @@ use super::{
 use crate::adapters::signing::sign_parts_with_identity;
 use crate::identity::RadrootsIdentity;
 use core::time::Duration;
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
 use radroots_nostr::prelude::RadrootsNostrClientOptions;
 use tokio::runtime::Runtime;
 

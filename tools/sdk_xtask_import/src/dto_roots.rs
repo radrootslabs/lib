@@ -66,10 +66,6 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         package_key: "trade",
         roots: trade_roots,
     },
-    DtoPackageRootSet {
-        package_key: "types",
-        roots: types_roots,
-    },
 ];
 
 pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
@@ -103,11 +99,6 @@ pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
         source_family: "untagged query wrappers and serde_json value fields",
         reason: "schema query shapes are generated and not all source fields map to derive-supported DTOs",
     },
-    ManualDescriptorFamily {
-        package_key: "types",
-        source_family: "generic result wrapper types",
-        reason: "generic export instantiations must be explicit and package-scoped",
-    },
 ];
 
 pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
@@ -122,13 +113,8 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
         reason: "schema operation inputs are generated package shapes rather than source-owned public DTO structs",
     },
     SdkLocalWrapperAllowance {
-        package_key: "types",
-        shape_family: "IResult, IResultList, and IResultPass generic envelopes",
-        reason: "generic helper envelopes are SDK package contracts used across generated schema packages",
-    },
-    SdkLocalWrapperAllowance {
         package_key: "events_indexed",
-        shape_family: "RadrootsEventsIndexedShardId package alias",
+        shape_family: "RadrootsEventIndexShardId package alias",
         reason: "source descriptors correctly describe the shard id newtype as a string, while package roots still need a stable named TypeScript alias",
     },
     SdkLocalWrapperAllowance {
@@ -226,31 +212,20 @@ pub fn trade_types_module() -> Result<DtoTypesModule, String> {
     Ok(rendered)
 }
 
-pub fn types_types_module() -> Result<DtoTypesModule, String> {
-    let root_set = package_root_set("types").ok_or_else(|| "missing types DTO roots".to_owned())?;
-    render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())
-}
-
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
 
 fn events_roots() -> Vec<RootDescriptor> {
-    radroots_events::dto::dto_roots().into_iter().collect()
+    radroots_event::dto::dto_roots().into_iter().collect()
 }
 
 fn events_indexed_roots() -> Vec<RootDescriptor> {
-    radroots_events_indexed::dto::dto_roots()
-        .into_iter()
-        .collect()
+    radroots_event_index::dto::dto_roots().into_iter().collect()
 }
 
 fn trade_roots() -> Vec<RootDescriptor> {
     radroots_trade_bindings::dto_roots()
-}
-
-fn types_roots() -> Vec<RootDescriptor> {
-    radroots_types_bindings::dto_roots()
 }
 
 fn core_import_options(
@@ -491,16 +466,16 @@ fn with_events_indexed_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
         .map(str::to_owned)
         .collect::<Vec<_>>();
     declarations.push(type_alias(
-        "RadrootsEventsIndexedShardId",
+        "RadrootsEventIndexShardId",
         TypeScriptType::String,
     ));
     let order = [
-        "RadrootsEventsIndexedShardId",
-        "RadrootsEventsIndexedIdRange",
-        "RadrootsEventsIndexedShardMetadata",
-        "RadrootsEventsIndexedManifest",
-        "RadrootsEventsIndexedShardCheckpoint",
-        "RadrootsEventsIndexedIndexCheckpoint",
+        "RadrootsEventIndexShardId",
+        "RadrootsEventIndexIdRange",
+        "RadrootsEventIndexShardMetadata",
+        "RadrootsEventIndexManifest",
+        "RadrootsEventIndexShardCheckpoint",
+        "RadrootsEventIndexIndexCheckpoint",
     ];
     declarations.sort_by_key(|declaration| {
         order
@@ -600,6 +575,9 @@ mod tests {
         "RadrootsCoopRef",
         "RadrootsDocument",
         "RadrootsDocumentSubject",
+        "RadrootsEventEnvelope",
+        "RadrootsEventPtr",
+        "RadrootsEventRef",
         "RadrootsEvidenceBounty",
         "RadrootsFarm",
         "RadrootsFarmPublicLocation",
@@ -651,9 +629,6 @@ mod tests {
         "RadrootsMessageFile",
         "RadrootsMessageFileDimensions",
         "RadrootsMessageRecipient",
-        "RadrootsEventEnvelope",
-        "RadrootsEventPtr",
-        "RadrootsEventRef",
         "RadrootsOrderCancellation",
         "RadrootsOrderDecision",
         "RadrootsOrderDecisionOutcome",
@@ -702,12 +677,12 @@ mod tests {
         "RadrootsWikiRedirect",
     ];
     const EVENTS_INDEXED_TYPE_INVENTORY: &[&str] = &[
-        "RadrootsEventsIndexedShardId",
-        "RadrootsEventsIndexedIdRange",
-        "RadrootsEventsIndexedShardMetadata",
-        "RadrootsEventsIndexedManifest",
-        "RadrootsEventsIndexedShardCheckpoint",
-        "RadrootsEventsIndexedIndexCheckpoint",
+        "RadrootsEventIndexShardId",
+        "RadrootsEventIndexIdRange",
+        "RadrootsEventIndexShardMetadata",
+        "RadrootsEventIndexManifest",
+        "RadrootsEventIndexShardCheckpoint",
+        "RadrootsEventIndexIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
         "RadrootsOrderIssue",
@@ -765,7 +740,6 @@ mod tests {
         assert!(package_root_set("events").is_some());
         assert!(package_root_set("events_indexed").is_some());
         assert!(package_root_set("trade").is_some());
-        assert!(package_root_set("types").is_some());
     }
 
     #[test]
@@ -776,11 +750,6 @@ mod tests {
                 .any(|family| family.source_family.contains("GeoJSON"))
         );
         assert!(
-            MANUAL_DESCRIPTOR_FAMILIES
-                .iter()
-                .any(|family| family.source_family.contains("generic result"))
-        );
-        assert!(
             SDK_LOCAL_WRAPPER_ALLOWANCES
                 .iter()
                 .any(|allowance| allowance.shape_family.contains("RadrootsCoreDecimal"))
@@ -788,13 +757,8 @@ mod tests {
         assert!(
             SDK_LOCAL_WRAPPER_ALLOWANCES
                 .iter()
-                .any(|allowance| allowance.shape_family.contains("IResult"))
+                .any(|allowance| { allowance.shape_family.contains("RadrootsEventIndexShardId") })
         );
-        assert!(SDK_LOCAL_WRAPPER_ALLOWANCES.iter().any(|allowance| {
-            allowance
-                .shape_family
-                .contains("RadrootsEventsIndexedShardId")
-        }));
         assert!(SDK_LOCAL_WRAPPER_ALLOWANCES.iter().any(|allowance| {
             allowance
                 .shape_family
@@ -972,8 +936,12 @@ mod tests {
         ));
         assert!(
             REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS
-                .contains("export type IFarmFindOneResolve = IResult<Farm | null>;")
+                .contains("export type IFarmFindOneResolve = ReplicaSchemaResult<Farm | null>;")
         );
+        assert!(actual.contains(&"ReplicaSchemaResult"));
+        assert!(actual.contains(&"ReplicaSchemaResultList"));
+        assert!(actual.contains(&"ReplicaSchemaResultPass"));
+        assert!(actual.contains(&"ReplicaSchemaError"));
         assert!(trade_product_filter.contains("year?: bigint"));
         assert!(trade_product_filter.contains("qty_avail?: bigint"));
         assert!(trade_product_partial.contains("year?: ReplicaDbJsonValue | null"));

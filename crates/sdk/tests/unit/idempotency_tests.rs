@@ -1,6 +1,6 @@
 use super::{SdkIdempotencyKey, SdkTradeIdempotencyRecord};
 use crate::RadrootsSdkError;
-use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 
 #[path = "../support/serializer_failure.rs"]
 mod serializer_failure;

@@ -4,7 +4,7 @@
 use base64::Engine;
 #[cfg(target_arch = "wasm32")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use radroots_events::RadrootsEventEnvelope;
+use radroots_event::RadrootsEventEnvelope;
 use radroots_replica_sync::RadrootsReplicaSyncRequest;
 #[cfg(target_arch = "wasm32")]
 use radroots_replica_sync::{

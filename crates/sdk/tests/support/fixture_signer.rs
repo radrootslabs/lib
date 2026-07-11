@@ -1,5 +1,5 @@
 use radroots_authority::{RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
 
 #[derive(Clone)]
 pub struct FixtureSigner {
@@ -15,7 +15,7 @@ impl FixtureSigner {
 }
 
 impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
 

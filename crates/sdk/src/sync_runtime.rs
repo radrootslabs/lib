@@ -12,9 +12,9 @@ use crate::{
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use crate::{ProxyAuth, ProxyProfile};
 #[cfg(feature = "runtime")]
-use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
+use radroots_event::ids::RadrootsEventId;
 #[cfg(feature = "runtime")]
-use radroots_events::ids::RadrootsEventId;
+use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
@@ -1663,7 +1663,7 @@ fn proxy_error_message(error: &RadrootsdError) -> String {
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 fn proxy_transport_error_receipt(
     claimed: &RadrootsOutboxClaimedEvent,
-    event: &radroots_events::draft::RadrootsSignedEvent,
+    event: &radroots_event::draft::RadrootsSignedEvent,
     delivery_policy: &TransportPublishDeliveryPolicy,
     message: String,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {

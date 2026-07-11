@@ -1,6 +1,6 @@
 use super::{event_builder_from_parts, sign_parts_with_identity};
 use crate::identity::RadrootsIdentity;
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
 
 #[test]
 fn event_builder_from_parts_preserves_kind_and_content() {

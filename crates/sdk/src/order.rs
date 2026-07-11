@@ -1,13 +1,13 @@
-pub use radroots_events::order::*;
+pub use radroots_event::order::*;
 #[cfg(any(feature = "signer-adapters", test))]
-pub use radroots_events_codec::error::EventEncodeError;
-pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
+pub use radroots_event_codec::error::EventEncodeError;
+pub use radroots_event_codec::order::RadrootsOrderEnvelopeParseError;
 
-use radroots_events::RadrootsEventEnvelope;
+use radroots_event::RadrootsEventEnvelope;
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_events::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
+use radroots_event::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
@@ -91,7 +91,7 @@ pub fn build_order_request_draft(
     payload: &RadrootsOrderRequest,
 ) -> Result<RadrootsOrderRequestDraft, EventEncodeError> {
     Ok(RadrootsOrderRequestDraft {
-        parts: radroots_events_codec::order::order_request_event_build(listing_event, payload)?,
+        parts: radroots_event_codec::order::order_request_event_build(listing_event, payload)?,
     })
 }
 
@@ -103,7 +103,7 @@ pub fn build_order_decision_draft(
 ) -> Result<RadrootsOrderDecisionDraft, EventEncodeError> {
     Ok(RadrootsOrderDecisionDraft {
         parts: with_contract_root_event_tag(
-            radroots_events_codec::order::order_decision_event_build(
+            radroots_event_codec::order::order_decision_event_build(
                 root_event_id,
                 prev_event_id,
                 payload,
@@ -121,7 +121,7 @@ pub fn build_order_revision_proposal_draft(
 ) -> Result<RadrootsOrderRevisionProposalDraft, EventEncodeError> {
     Ok(RadrootsOrderRevisionProposalDraft {
         parts: with_contract_root_event_tag(
-            radroots_events_codec::order::order_revision_proposal_event_build(
+            radroots_event_codec::order::order_revision_proposal_event_build(
                 root_event_id,
                 prev_event_id,
                 payload,
@@ -139,7 +139,7 @@ pub fn build_order_revision_decision_draft(
 ) -> Result<RadrootsOrderRevisionDecisionDraft, EventEncodeError> {
     Ok(RadrootsOrderRevisionDecisionDraft {
         parts: with_contract_root_event_tag(
-            radroots_events_codec::order::order_revision_decision_event_build(
+            radroots_event_codec::order::order_revision_decision_event_build(
                 root_event_id,
                 prev_event_id,
                 payload,
@@ -157,7 +157,7 @@ pub fn build_order_cancellation_draft(
 ) -> Result<RadrootsOrderCancellationDraft, EventEncodeError> {
     Ok(RadrootsOrderCancellationDraft {
         parts: with_contract_root_event_tag(
-            radroots_events_codec::order::order_cancellation_event_build(
+            radroots_event_codec::order::order_cancellation_event_build(
                 root_event_id,
                 prev_event_id,
                 payload,
@@ -170,5 +170,5 @@ pub fn build_order_cancellation_draft(
 pub fn parse_order_request(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_request_from_event(event)
+    radroots_event_codec::order::order_request_from_event(event)
 }
