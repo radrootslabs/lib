@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     comment::RadrootsComment,
     kinds::{KIND_COMMENT, KIND_POST},
     social::RadrootsSocialTarget,
@@ -248,7 +248,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

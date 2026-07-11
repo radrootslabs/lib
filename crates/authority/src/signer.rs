@@ -2,8 +2,8 @@
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
 #[cfg(test)]
-use radroots_events::draft::RadrootsSignedNostrEventParts;
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::RadrootsSignedEventParts;
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_events::ids::RadrootsPublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,8 +28,8 @@ pub trait RadrootsEventSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError>;
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError>;
 }
 
 #[cfg(test)]
@@ -45,8 +45,8 @@ mod tests {
         std::iter::repeat_n(character, 128).collect()
     }
 
-    fn draft_for(pubkey: &str) -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn draft_for(pubkey: &str) -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -85,8 +85,8 @@ mod tests {
 
         fn sign_frozen_draft(
             &self,
-            draft: &RadrootsFrozenEventDraft,
-        ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+            draft: &RadrootsEventDraft,
+        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
             if let Some(failure) = &self.failure {
                 return Err(match failure {
                     RadrootsSignerError::Unavailable => RadrootsSignerError::Unavailable,
@@ -98,7 +98,7 @@ mod tests {
                     }
                 });
             }
-            RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            RadrootsSignedEvent::new(RadrootsSignedEventParts {
                 id: draft.expected_event_id.to_string(),
                 pubkey: self.pubkey.to_string(),
                 created_at: draft.created_at,

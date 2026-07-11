@@ -1,6 +1,6 @@
 #![cfg(all(feature = "knowledge", feature = "nostr"))]
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::contract::validate_event_contract_shape;
 use radroots_events::kinds::{
     KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
@@ -41,8 +41,8 @@ fn hex_64(character: char) -> String {
     core::iter::repeat_n(character, 64).collect()
 }
 
-fn event_ref(character: char, kind: u32) -> radroots_events::RadrootsNostrEventRef {
-    radroots_events::RadrootsNostrEventRef {
+fn event_ref(character: char, kind: u32) -> radroots_events::RadrootsEventRef {
+    radroots_events::RadrootsEventRef {
         id: hex_64(character),
         author: hex_64('a'),
         kind,
@@ -73,8 +73,8 @@ fn article_version_ref_for(event_id_character: char, d_tag: &str) -> RadrootsWik
     }
 }
 
-fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: hex_64('0'),
         author: hex_64('a'),
         created_at: 1_800_000_000,
@@ -85,7 +85,7 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
     }
 }
 
-fn replace_first_tag_value(event: &mut RadrootsNostrEvent, name: &str, value: String) {
+fn replace_first_tag_value(event: &mut RadrootsEventEnvelope, name: &str, value: String) {
     let tag = event
         .tags
         .iter_mut()
@@ -99,7 +99,7 @@ fn marked_tag(tag: &[String], name: &str, marker: &str) -> bool {
     tag.first().map(String::as_str) == Some(name) && tag.last().map(String::as_str) == Some(marker)
 }
 
-fn marked_tag_index(event: &RadrootsNostrEvent, name: &str, marker: &str) -> usize {
+fn marked_tag_index(event: &RadrootsEventEnvelope, name: &str, marker: &str) -> usize {
     event
         .tags
         .iter()
@@ -145,7 +145,7 @@ fn invalid_relay() -> String {
     "http://relay.radroots.example".to_string()
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
+fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -160,7 +160,7 @@ fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
         .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsNostrEvent {
+    RadrootsEventEnvelope {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs() as u32,

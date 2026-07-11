@@ -3,9 +3,9 @@
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
 use radroots_events::contract::{RadrootsEventContract, event_contract};
 #[cfg(test)]
-use radroots_events::draft::RadrootsSignedNostrEventParts;
+use radroots_events::draft::RadrootsSignedEventParts;
 use radroots_events::draft::{
-    RadrootsDraftError, RadrootsFrozenEventDraft, RadrootsSignedNostrEvent,
+    RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent,
     validate_signed_nostr_event_matches_draft,
 };
 
@@ -30,7 +30,7 @@ pub fn authorize_actor_for_contract(
 
 pub fn authorize_actor_for_draft(
     actor: &RadrootsActorContext,
-    draft: &RadrootsFrozenEventDraft,
+    draft: &RadrootsEventDraft,
 ) -> Result<&'static RadrootsEventContract, RadrootsAuthorityError> {
     let contract = event_contract(draft.contract_id.as_str()).ok_or_else(|| {
         RadrootsAuthorityError::UnknownContract {
@@ -56,7 +56,7 @@ pub fn authorize_actor_for_draft(
 
 pub fn authorize_signer_for_draft<S>(
     signer: &S,
-    draft: &RadrootsFrozenEventDraft,
+    draft: &RadrootsEventDraft,
 ) -> Result<(), RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
@@ -74,8 +74,8 @@ where
 pub fn sign_authorized_draft<S>(
     actor: &RadrootsActorContext,
     signer: &S,
-    draft: &RadrootsFrozenEventDraft,
-) -> Result<RadrootsSignedNostrEvent, RadrootsAuthorityError>
+    draft: &RadrootsEventDraft,
+) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
 {
@@ -87,8 +87,8 @@ where
 }
 
 pub fn validate_signed_event_matches_draft(
-    signed_event: &RadrootsSignedNostrEvent,
-    draft: &RadrootsFrozenEventDraft,
+    signed_event: &RadrootsSignedEvent,
+    draft: &RadrootsEventDraft,
 ) -> Result<(), RadrootsAuthorityError> {
     validate_signed_nostr_event_matches_draft(signed_event, draft)
         .map_err(authority_error_from_draft_validation)
@@ -175,8 +175,8 @@ mod tests {
         RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
     }
 
-    fn listing_draft(pubkey: &str) -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn listing_draft(pubkey: &str) -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.listing.published.v1",
             KIND_LISTING,
             1_700_000_000,
@@ -234,9 +234,9 @@ mod tests {
 
         fn sign_frozen_draft(
             &self,
-            draft: &RadrootsFrozenEventDraft,
-        ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
-            RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            draft: &RadrootsEventDraft,
+        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            RadrootsSignedEvent::new(RadrootsSignedEventParts {
                 id: self
                     .overrides
                     .event_id
@@ -265,8 +265,8 @@ mod tests {
         }
     }
 
-    fn signed_event_from_draft(draft: &RadrootsFrozenEventDraft) -> RadrootsSignedNostrEvent {
-        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+    fn signed_event_from_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
+        RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: draft.expected_event_id.clone(),
             pubkey: draft.expected_pubkey.clone(),
             created_at: draft.created_at,
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn unknown_contract_and_kind_mismatch_fail() {
         let actor = seller_actor(hex_64('a').as_str());
-        let unknown = RadrootsFrozenEventDraft {
+        let unknown = RadrootsEventDraft {
             contract_id: "radroots.unknown.v1".to_owned(),
             contract_registry_version: 1,
             kind: KIND_LISTING,
@@ -361,7 +361,7 @@ mod tests {
             Err(RadrootsAuthorityError::UnknownContract { .. })
         ));
 
-        let wrong_kind = RadrootsFrozenEventDraft {
+        let wrong_kind = RadrootsEventDraft {
             contract_id: "radroots.listing.published.v1".to_owned(),
             contract_registry_version: 1,
             kind: KIND_POST,
@@ -500,7 +500,7 @@ mod tests {
     fn signed_event_pubkey_mismatch_fails() {
         let pubkey = hex_64('a');
         let draft = listing_draft(pubkey.as_str());
-        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        let signed = RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: draft.expected_event_id.clone(),
             pubkey: hex_64('b'),
             created_at: draft.created_at,
@@ -533,7 +533,7 @@ mod tests {
     #[test]
     fn signed_event_computed_id_mismatch_fails() {
         let pubkey = hex_64('a');
-        let inconsistent_draft = RadrootsFrozenEventDraft {
+        let inconsistent_draft = RadrootsEventDraft {
             contract_id: "radroots.listing.published.v1".to_owned(),
             contract_registry_version: 1,
             kind: KIND_LISTING,
@@ -554,7 +554,7 @@ mod tests {
     #[test]
     fn sign_authorized_draft_calls_full_integrity_check() {
         let pubkey = hex_64('a');
-        let inconsistent_draft = RadrootsFrozenEventDraft {
+        let inconsistent_draft = RadrootsEventDraft {
             contract_id: "radroots.listing.published.v1".to_owned(),
             contract_registry_version: 1,
             kind: KIND_LISTING,
@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn order_request_draft_requires_buyer_role() {
         let pubkey = hex_64('a');
-        let draft = RadrootsFrozenEventDraft::new(
+        let draft = RadrootsEventDraft::new(
             "radroots.order.request.v1",
             KIND_ORDER_REQUEST,
             1_700_000_000,

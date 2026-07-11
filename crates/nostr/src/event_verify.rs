@@ -8,7 +8,7 @@ use crate::types::{
     RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 use nostr::secp256k1::schnorr::Signature;
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsNostrEventVerification {
@@ -19,7 +19,9 @@ pub enum RadrootsNostrEventVerification {
     MalformedEnvelope,
 }
 
-pub fn radroots_nostr_verify_event(event: &RadrootsNostrEvent) -> RadrootsNostrEventVerification {
+pub fn radroots_nostr_verify_event(
+    event: &RadrootsEventEnvelope,
+) -> RadrootsNostrEventVerification {
     let Some(raw_event) = raw_event_from_radroots(event) else {
         return RadrootsNostrEventVerification::MalformedEnvelope;
     };
@@ -33,7 +35,7 @@ pub fn radroots_nostr_verify_event(event: &RadrootsNostrEvent) -> RadrootsNostrE
 }
 
 pub fn radroots_nostr_verify_event_id(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> RadrootsNostrEventVerification {
     let Some(raw_event) = raw_event_from_radroots(event) else {
         return RadrootsNostrEventVerification::MalformedEnvelope;
@@ -45,7 +47,7 @@ pub fn radroots_nostr_verify_event_id(
     }
 }
 
-fn raw_event_from_radroots(event: &RadrootsNostrEvent) -> Option<RadrootsNostrRawEvent> {
+fn raw_event_from_radroots(event: &RadrootsEventEnvelope) -> Option<RadrootsNostrRawEvent> {
     let id = RadrootsNostrEventId::from_hex(event.id.as_str()).ok()?;
     let public_key = RadrootsNostrPublicKey::from_hex(event.author.as_str()).ok()?;
     let kind_u16 = u16::try_from(event.kind).ok()?;
@@ -80,7 +82,7 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn signed_event() -> RadrootsNostrEvent {
+    fn signed_event() -> RadrootsEventEnvelope {
         let raw_event = radroots_nostr_build_event(
             KIND_POST,
             "hello",

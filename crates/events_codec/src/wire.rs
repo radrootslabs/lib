@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::draft::{RadrootsDraftError, RadrootsFrozenEventDraft};
+use radroots_events::draft::{RadrootsDraftError, RadrootsEventDraft};
 
 #[derive(Debug, Clone)]
 pub struct WireEventParts {
@@ -18,8 +18,8 @@ pub fn to_frozen_draft(
     contract_id: impl Into<String>,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsFrozenEventDraft, RadrootsDraftError> {
-    RadrootsFrozenEventDraft::new(
+) -> Result<RadrootsEventDraft, RadrootsDraftError> {
+    RadrootsEventDraft::new(
         contract_id,
         parts.kind,
         created_at,

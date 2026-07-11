@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef};
+use radroots_events::{RadrootsEventEnvelope, RadrootsEventPtr, RadrootsEventRef};
 
-pub fn event_ref(id: &str, author: &str, kind: u32) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+pub fn event_ref(id: &str, author: &str, kind: u32) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: id.to_string(),
         author: author.to_string(),
         kind,
@@ -18,8 +18,8 @@ pub fn event_ref_with_d(
     kind: u32,
     d_tag: &str,
     relays: Option<Vec<String>>,
-) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: id.to_string(),
         author: author.to_string(),
         kind,
@@ -28,15 +28,15 @@ pub fn event_ref_with_d(
     }
 }
 
-pub fn event_ptr(id: &str, relays: Option<&str>) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+pub fn event_ptr(id: &str, relays: Option<&str>) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: id.to_string(),
         relays: relays.map(|s| s.to_string()),
     }
 }
 
-pub fn nostr_event(kind: u32, content: &str, tags: Vec<Vec<String>>) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+pub fn nostr_event(kind: u32, content: &str, tags: Vec<Vec<String>>) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: "id".to_string(),
         author: "author".to_string(),
         created_at: 123,

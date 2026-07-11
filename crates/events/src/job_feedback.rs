@@ -1,5 +1,5 @@
 use crate::{
-    RadrootsNostrEventPtr,
+    RadrootsEventPtr,
     job::{JobFeedbackStatus, JobPaymentRequest},
 };
 
@@ -14,7 +14,7 @@ pub struct RadrootsJobFeedback {
     pub kind: u16,
     pub status: JobFeedbackStatus,
     pub extra_info: Option<String>,
-    pub request_event: RadrootsNostrEventPtr,
+    pub request_event: RadrootsEventPtr,
     pub customer_pubkey: Option<String>,
     pub payment: Option<JobPaymentRequest>,
     pub content: Option<String>,

@@ -1,4 +1,4 @@
-use radroots_events::RadrootsNostrEventRef;
+use radroots_events::RadrootsEventRef;
 use radroots_events::kinds::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_EVIDENCE_BOUNTY, KIND_FILE_METADATA,
     KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
@@ -140,8 +140,8 @@ pub fn hex_64(character: char) -> String {
     core::iter::repeat_n(character, 64).collect()
 }
 
-pub fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+pub fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: hex_64(character),
         author: hex_64('a'),
         kind,

@@ -5,7 +5,7 @@ use core::fmt;
 #[cfg(feature = "nostr")]
 use core::str::FromStr;
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::contract::{
     RadrootsContractValidationError, RadrootsEventContract,
     validate_event_contract as validate_radroots_event_contract,
@@ -31,30 +31,30 @@ use crate::parsed::RadrootsParsedEvent;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsIdVerifiedEvent {
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 }
 
 impl RadrootsIdVerifiedEvent {
-    pub fn event(&self) -> &RadrootsNostrEvent {
+    pub fn event(&self) -> &RadrootsEventEnvelope {
         &self.event
     }
 
-    pub fn into_event(self) -> RadrootsNostrEvent {
+    pub fn into_event(self) -> RadrootsEventEnvelope {
         self.event
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignatureVerifiedEvent {
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 }
 
 impl RadrootsSignatureVerifiedEvent {
-    pub fn event(&self) -> &RadrootsNostrEvent {
+    pub fn event(&self) -> &RadrootsEventEnvelope {
         &self.event
     }
 
-    pub fn into_event(self) -> RadrootsNostrEvent {
+    pub fn into_event(self) -> RadrootsEventEnvelope {
         self.event
     }
 }
@@ -67,12 +67,12 @@ impl RadrootsSignatureVerifiedEvent {
 /// checked by `decode_validated_event`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsContractValidatedEvent {
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
     contract: &'static RadrootsEventContract,
 }
 
 impl RadrootsContractValidatedEvent {
-    pub fn event(&self) -> &RadrootsNostrEvent {
+    pub fn event(&self) -> &RadrootsEventEnvelope {
         &self.event
     }
 
@@ -84,7 +84,7 @@ impl RadrootsContractValidatedEvent {
         self.contract.id
     }
 
-    pub fn into_event(self) -> RadrootsNostrEvent {
+    pub fn into_event(self) -> RadrootsEventEnvelope {
         self.event
     }
 }
@@ -205,7 +205,7 @@ pub enum RadrootsDecodedEvent {
 }
 
 impl RadrootsDecodedEvent {
-    pub fn event(&self) -> &RadrootsNostrEvent {
+    pub fn event(&self) -> &RadrootsEventEnvelope {
         match self {
             Self::WikiArticle(parsed) => &parsed.event,
             Self::WikiRedirect(parsed) => &parsed.event,
@@ -223,7 +223,7 @@ impl RadrootsDecodedEvent {
 }
 
 pub fn verify_event_id(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsIdVerifiedEvent, RadrootsNip01VerificationError> {
     RadrootsEventId::parse(event.id.as_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
@@ -337,12 +337,12 @@ pub fn decode_validated_event(
 /// Verify NIP-01 identity, validate the Radroots contract, and decode the event.
 ///
 /// The pipeline is:
-/// `RadrootsNostrEvent -> verify_event_id -> RadrootsIdVerifiedEvent ->
+/// `RadrootsEventEnvelope -> verify_event_id -> RadrootsIdVerifiedEvent ->
 /// verify_event_signature -> RadrootsSignatureVerifiedEvent ->
 /// validate_event_contract -> RadrootsContractValidatedEvent ->
 /// decode_validated_event -> RadrootsDecodedEvent`.
 pub fn verify_and_decode_radroots_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
     let id_verified = verify_event_id(event)?;
     let signature_verified = verify_event_signature(id_verified)?;
@@ -352,7 +352,7 @@ pub fn verify_and_decode_radroots_event(
 
 #[cfg(feature = "nostr")]
 fn raw_event_from_radroots(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<nostr::Event, RadrootsNip01VerificationError> {
     let id = nostr::EventId::from_hex(event.id.as_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;

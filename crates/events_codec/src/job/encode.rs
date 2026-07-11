@@ -4,7 +4,7 @@ use core::fmt;
 use alloc::{string::String, vec, vec::Vec};
 
 pub use crate::wire::{WireEventParts, canonicalize_tags, empty_content, to_frozen_draft};
-pub use radroots_events::draft::RadrootsFrozenEventDraft;
+pub use radroots_events::draft::RadrootsEventDraft;
 
 #[derive(Debug)]
 pub enum JobEncodeError {

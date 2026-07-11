@@ -9,8 +9,8 @@ use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
 };
-use radroots_events::RadrootsNostrEvent;
-use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
+use radroots_events::draft::RadrootsSignedEvent;
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventStoreIngestReceipt,
@@ -541,7 +541,7 @@ fn satisfaction_policy_for_required_accept_count(
 
 async fn ingest_publish_observation(
     event_store: &RadrootsEventStore,
-    signed_event: &RadrootsSignedNostrEvent,
+    signed_event: &RadrootsSignedEvent,
     relay_url: &str,
     message: Option<&str>,
     observed_at_ms: i64,
@@ -563,8 +563,8 @@ async fn ingest_publish_observation(
     Ok(())
 }
 
-fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: signed_event.id.clone(),
         author: signed_event.pubkey.clone(),
         created_at: signed_event.created_at,

@@ -17,9 +17,9 @@ use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
 };
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::draft::{
-    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
+    RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
@@ -613,9 +613,9 @@ impl RadrootsOutbox {
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        signed_event: RadrootsSignedNostrEvent,
+        signed_event: RadrootsSignedEvent,
         now_ms: i64,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsOutboxError> {
+    ) -> Result<RadrootsSignedEvent, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
         let stored = record.claim_token.as_deref();
@@ -1716,7 +1716,7 @@ async fn signed_event_lifecycle_for_plans(
 async fn ensure_event_signed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     outbox_event_id: i64,
-    signed_event: &RadrootsSignedNostrEvent,
+    signed_event: &RadrootsSignedEvent,
     event_store_inserted: bool,
     event_store_ingested_at_ms: i64,
 ) -> Result<(), RadrootsOutboxError> {
@@ -2152,7 +2152,7 @@ fn operation_from_row(
 fn event_from_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
-    let draft: RadrootsFrozenEventDraft =
+    let draft: RadrootsEventDraft =
         serde_json::from_str(row.try_get::<String, _>("draft_json")?.as_str())?;
     let signed_event = row
         .try_get::<Option<String>, _>("signed_event_json")?
@@ -2332,8 +2332,8 @@ fn parse_transport_outcome_kind(
     }
 }
 
-fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: signed_event.id.clone(),
         author: signed_event.pubkey.clone(),
         created_at: signed_event.created_at,
@@ -2348,13 +2348,13 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
 struct OperationDigestInput<'a> {
     operation_kind: &'a str,
     expected_pubkey: &'a str,
-    draft: &'a RadrootsFrozenEventDraft,
+    draft: &'a RadrootsEventDraft,
 }
 
 fn operation_idempotency_digest(
     operation_kind: &str,
     expected_pubkey: &str,
-    draft: &RadrootsFrozenEventDraft,
+    draft: &RadrootsEventDraft,
 ) -> String {
     let input = OperationDigestInput {
         operation_kind,
@@ -2571,8 +2571,8 @@ mod tests {
         std::iter::repeat_n(character, 64).collect()
     }
 
-    fn post_draft(expected_pubkey: &str, content: &str) -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn post_draft(expected_pubkey: &str, content: &str) -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -2723,7 +2723,7 @@ mod tests {
     }
 
     fn operation_input(
-        draft: RadrootsFrozenEventDraft,
+        draft: RadrootsEventDraft,
         created_at_ms: i64,
     ) -> RadrootsOutboxOperationInput {
         RadrootsOutboxOperationInput::new(
@@ -2738,8 +2738,8 @@ mod tests {
     }
 
     fn signed_operation_input(
-        draft: RadrootsFrozenEventDraft,
-        signed_event: RadrootsSignedNostrEvent,
+        draft: RadrootsEventDraft,
+        signed_event: RadrootsSignedEvent,
         created_at_ms: i64,
     ) -> RadrootsOutboxSignedOperationInput {
         RadrootsOutboxSignedOperationInput::new(

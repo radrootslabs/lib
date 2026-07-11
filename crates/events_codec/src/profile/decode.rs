@@ -6,7 +6,7 @@ use alloc::{
 
 use super::RadrootsProfileData;
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     kinds::KIND_PROFILE,
     profile::{
         RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
@@ -113,7 +113,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

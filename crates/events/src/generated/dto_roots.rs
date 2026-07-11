@@ -3,9 +3,9 @@
 
 pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescriptor> {
     ::std::vec![
-        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsNostrEvent>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsNostrEventPtr>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsNostrEventRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventEnvelope>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventPtr>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventRef>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::account::RadrootsAccountClaim>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::app_data::RadrootsAppData>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::comment::RadrootsComment>(),

@@ -1,5 +1,5 @@
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr, job::JobPaymentRequest,
+    RadrootsEventEnvelope, RadrootsEventPtr, job::JobPaymentRequest,
     job_feedback::RadrootsJobFeedback, kinds::KIND_JOB_FEEDBACK,
 };
 
@@ -59,7 +59,7 @@ pub fn job_feedback_from_tags(
         kind: kind as u16,
         status,
         extra_info,
-        request_event: RadrootsNostrEventPtr {
+        request_event: RadrootsEventPtr {
             id: req_id,
             relays: relay_hint,
         },
@@ -113,7 +113,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

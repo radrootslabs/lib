@@ -1,4 +1,4 @@
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
 use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::kinds::{
@@ -183,8 +183,8 @@ fn unwrap_sql_panics_on_error() {
     assert!(result.is_err());
 }
 
-fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: format!("{:064x}", index as u64 + 1),
         author: draft.author.clone(),
         created_at: 1_720_000_000 + index,
@@ -551,7 +551,7 @@ fn sync_all_selector_and_options_paths_are_supported() {
 fn ingest_rejects_unsupported_kind() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: format!("{:064x}", 1u64),
         author: "a".repeat(64),
         created_at: 1_720_000_001,
@@ -773,7 +773,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let assert_query_fail = |needle: &'static str, event: &RadrootsNostrEvent| {
+    let assert_query_fail = |needle: &'static str, event: &RadrootsEventEnvelope| {
         let fail = QueryFailExecutor {
             inner: &exec,
             needle,
@@ -922,8 +922,8 @@ fn event_with_parts(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: format!("{id:064x}"),
         author: author.to_string(),
         created_at,
@@ -983,7 +983,7 @@ fn profile_event(
     created_at: u32,
     profile_type: Option<RadrootsProfileType>,
     name: &str,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let profile = RadrootsProfile {
         name: name.to_string(),
         display_name: Some(format!("{name}_display")),
@@ -1021,7 +1021,7 @@ fn farm_event(
     name: &str,
     location: Option<RadrootsFarmPublicLocation>,
     tags: Option<Vec<String>>,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let farm = RadrootsFarm {
         d_tag: d_tag.to_string(),
         name: name.to_string(),
@@ -1053,7 +1053,7 @@ fn plot_event(
     name: &str,
     location: Option<RadrootsPlotLocation>,
     tags: Option<Vec<String>>,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let plot = RadrootsPlot {
         d_tag: d_tag.to_string(),
         farm: farm_ref,
@@ -1079,7 +1079,7 @@ fn list_set_event(
     created_at: u32,
     kind: u32,
     list_set: &RadrootsListSet,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let parts = list_set_encode::to_wire_parts_with_kind(list_set, kind).expect("list set parts");
     event_with_parts(id, author, created_at, kind, parts.content, parts.tags)
 }

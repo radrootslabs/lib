@@ -14,7 +14,7 @@ use std::{
     vec::Vec,
 };
 
-use crate::RadrootsNostrEvent;
+use crate::RadrootsEventEnvelope;
 use crate::contract::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError, event_contract,
     validate_event_contract_parts,
@@ -160,7 +160,7 @@ impl From<serde_json::Error> for RadrootsDraftError {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFrozenEventDraft {
+pub struct RadrootsEventDraft {
     pub contract_id: String,
     pub contract_registry_version: u32,
     pub kind: u32,
@@ -171,7 +171,7 @@ pub struct RadrootsFrozenEventDraft {
     pub expected_event_id: String,
 }
 
-impl RadrootsFrozenEventDraft {
+impl RadrootsEventDraft {
     pub fn new(
         contract_id: impl Into<String>,
         kind: u32,
@@ -228,7 +228,7 @@ impl RadrootsFrozenEventDraft {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsSignedNostrEventParts {
+pub struct RadrootsSignedEventParts {
     pub id: String,
     pub pubkey: String,
     pub created_at: u32,
@@ -241,7 +241,7 @@ pub struct RadrootsSignedNostrEventParts {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsSignedNostrEvent {
+pub struct RadrootsSignedEvent {
     pub id: String,
     pub pubkey: String,
     pub created_at: u32,
@@ -252,8 +252,8 @@ pub struct RadrootsSignedNostrEvent {
     pub raw_json: String,
 }
 
-impl RadrootsSignedNostrEvent {
-    pub fn new(parts: RadrootsSignedNostrEventParts) -> Result<Self, RadrootsDraftError> {
+impl RadrootsSignedEvent {
+    pub fn new(parts: RadrootsSignedEventParts) -> Result<Self, RadrootsDraftError> {
         let id = RadrootsEventId::parse(parts.id)?.into_string();
         let pubkey = RadrootsPublicKey::parse(parts.pubkey)?.into_string();
         let sig = RadrootsEventSignature::parse(parts.sig)?.into_string();
@@ -270,10 +270,10 @@ impl RadrootsSignedNostrEvent {
     }
 
     pub fn from_event(
-        event: RadrootsNostrEvent,
+        event: RadrootsEventEnvelope,
         raw_json: impl Into<String>,
     ) -> Result<Self, RadrootsDraftError> {
-        Self::new(RadrootsSignedNostrEventParts {
+        Self::new(RadrootsSignedEventParts {
             id: event.id,
             pubkey: event.author,
             created_at: event.created_at,
@@ -287,8 +287,8 @@ impl RadrootsSignedNostrEvent {
 }
 
 pub fn validate_signed_nostr_event_matches_draft(
-    signed_event: &RadrootsSignedNostrEvent,
-    draft: &RadrootsFrozenEventDraft,
+    signed_event: &RadrootsSignedEvent,
+    draft: &RadrootsEventDraft,
 ) -> Result<(), RadrootsDraftError> {
     if signed_event.pubkey.as_str() != draft.expected_pubkey.as_str() {
         return Err(RadrootsDraftError::SignedEventPubkeyMismatch {
@@ -405,8 +405,8 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
-    fn signed_event_for_draft(draft: &RadrootsFrozenEventDraft) -> RadrootsSignedNostrEvent {
-        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+    fn signed_event_for_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
+        RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: draft.expected_event_id.clone(),
             pubkey: draft.expected_pubkey.clone(),
             created_at: draft.created_at,
@@ -419,8 +419,8 @@ mod tests {
         .expect("signed event")
     }
 
-    fn post_draft() -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn post_draft() -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn frozen_draft_computes_expected_event_id() {
-        let draft = RadrootsFrozenEventDraft::new(
+        let draft = RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -509,12 +509,11 @@ mod tests {
 
     #[test]
     fn draft_constructor_rejects_unknown_contract_and_kind_mismatch() {
-        let unknown =
-            RadrootsFrozenEventDraft::new("missing", KIND_POST, 1, Vec::new(), "", hex_64('a'))
-                .expect_err("unknown contract");
+        let unknown = RadrootsEventDraft::new("missing", KIND_POST, 1, Vec::new(), "", hex_64('a'))
+            .expect_err("unknown contract");
         assert!(matches!(unknown, RadrootsDraftError::UnknownContract(_)));
 
-        let mismatch = RadrootsFrozenEventDraft::new(
+        let mismatch = RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_PROFILE,
             1,
@@ -528,7 +527,7 @@ mod tests {
             RadrootsDraftError::ContractKindMismatch { .. }
         ));
 
-        let invalid_pubkey = RadrootsFrozenEventDraft::new(
+        let invalid_pubkey = RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1,
@@ -542,7 +541,7 @@ mod tests {
 
     #[test]
     fn draft_constructor_rejects_contract_shape_errors() {
-        let missing_contract = RadrootsFrozenEventDraft::new(
+        let missing_contract = RadrootsEventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -562,7 +561,7 @@ mod tests {
             }
         ));
 
-        let invalid_event_pointer = RadrootsFrozenEventDraft::new(
+        let invalid_event_pointer = RadrootsEventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -591,7 +590,7 @@ mod tests {
             }
         ));
 
-        let invalid_relay = RadrootsFrozenEventDraft::new(
+        let invalid_relay = RadrootsEventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -621,7 +620,7 @@ mod tests {
             }
         ));
 
-        let invalid_json = RadrootsFrozenEventDraft::new(
+        let invalid_json = RadrootsEventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -644,7 +643,7 @@ mod tests {
 
     #[test]
     fn signed_event_validates_ids_and_roundtrips_with_serde() {
-        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        let signed = RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: hex_64('d'),
             pubkey: hex_64('e'),
             created_at: 10,
@@ -656,7 +655,7 @@ mod tests {
         })
         .expect("signed event");
         let json = serde_json::to_string(&signed).expect("serialize");
-        let decoded: RadrootsSignedNostrEvent = serde_json::from_str(&json).expect("deserialize");
+        let decoded: RadrootsSignedEvent = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(decoded, signed);
         assert_eq!(decoded.pubkey, hex_64('e'));
@@ -664,7 +663,7 @@ mod tests {
 
     #[test]
     fn signed_event_from_nostr_event_validates_parts() {
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: hex_64('1'),
             author: hex_64('2'),
             created_at: 42,
@@ -673,15 +672,15 @@ mod tests {
             content: "hello".to_owned(),
             sig: "3".repeat(128),
         };
-        let signed = RadrootsSignedNostrEvent::from_event(event, "{\"id\":\"fixture\"}")
-            .expect("signed event");
+        let signed =
+            RadrootsSignedEvent::from_event(event, "{\"id\":\"fixture\"}").expect("signed event");
 
         assert_eq!(signed.id, hex_64('1'));
         assert_eq!(signed.pubkey, hex_64('2'));
         assert_eq!(signed.sig, "3".repeat(128));
         assert_eq!(signed.raw_json, "{\"id\":\"fixture\"}");
 
-        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: "not-hex".to_owned(),
             pubkey: hex_64('e'),
             created_at: 10,
@@ -694,7 +693,7 @@ mod tests {
         .expect_err("invalid id");
         assert!(matches!(invalid, RadrootsDraftError::IdParse(_)));
 
-        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: hex_64('d'),
             pubkey: "not-hex".to_owned(),
             created_at: 10,
@@ -707,7 +706,7 @@ mod tests {
         .expect_err("invalid pubkey");
         assert!(matches!(invalid, RadrootsDraftError::IdParse(_)));
 
-        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: hex_64('d'),
             pubkey: hex_64('e'),
             created_at: 10,

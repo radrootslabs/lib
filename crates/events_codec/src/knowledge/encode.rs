@@ -6,7 +6,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::RadrootsNostrEventRef;
+use radroots_events::RadrootsEventRef;
 use radroots_events::kinds::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_EVIDENCE_BOUNTY, KIND_KNOWLEDGE_CHANGE_PROPOSAL,
     KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION,
@@ -62,7 +62,7 @@ fn push_topics(tags: &mut Vec<Vec<String>>, topics: &[String]) {
     }
 }
 
-fn push_event_refs(tags: &mut Vec<Vec<String>>, tag_name: &str, refs: &[RadrootsNostrEventRef]) {
+fn push_event_refs(tags: &mut Vec<Vec<String>>, tag_name: &str, refs: &[RadrootsEventRef]) {
     for event_ref in refs {
         tags.push(build_event_ref_tag(tag_name, event_ref));
     }
@@ -118,8 +118,8 @@ fn push_wiki_version_ref_tags(
     tags.push(marker_event_tag(version_ref, marker));
 }
 
-fn review_target_ref(target: &RadrootsKnowledgeReviewTarget) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+fn review_target_ref(target: &RadrootsKnowledgeReviewTarget) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: target.event_id.clone(),
         author: target.author_pubkey.clone(),
         kind: target.kind,

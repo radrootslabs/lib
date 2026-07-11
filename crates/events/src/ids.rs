@@ -204,12 +204,12 @@ impl RadrootsAddressableCoordinateParts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsNostrEventPointer {
+pub struct RadrootsEventEnvelopePointer {
     pub event_id: RadrootsEventId,
     pub relays: Vec<String>,
 }
 
-impl RadrootsNostrEventPointer {
+impl RadrootsEventEnvelopePointer {
     pub fn new<I, S>(event_id: RadrootsEventId, relays: I) -> Result<Self, RadrootsIdParseError>
     where
         I: IntoIterator<Item = S>,
@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn nostr_event_pointers_validate_relay_values() {
         let event_id = RadrootsEventId::parse(hex_64('e')).expect("event id");
-        let pointer = RadrootsNostrEventPointer::new(
+        let pointer = RadrootsEventEnvelopePointer::new(
             event_id.clone(),
             ["wss://relay.one.example", "wss://relay.two.example"],
         )
@@ -645,7 +645,7 @@ mod tests {
         );
 
         assert_eq!(
-            RadrootsNostrEventPointer::new(
+            RadrootsEventEnvelopePointer::new(
                 RadrootsEventId::parse(hex_64('e')).expect("event id"),
                 [""],
             )
@@ -653,7 +653,7 @@ mod tests {
             RadrootsIdParseError::Empty
         );
         assert_eq!(
-            RadrootsNostrEventPointer::new(
+            RadrootsEventEnvelopePointer::new(
                 RadrootsEventId::parse(hex_64('e')).expect("event id"),
                 ["http://relay.example"],
             )
@@ -661,7 +661,7 @@ mod tests {
             RadrootsIdParseError::InvalidFormat
         );
         assert_eq!(
-            RadrootsNostrEventPointer::new(
+            RadrootsEventEnvelopePointer::new(
                 RadrootsEventId::parse(hex_64('e')).expect("event id"),
                 [" wss://relay.example"],
             )
@@ -669,7 +669,7 @@ mod tests {
             RadrootsIdParseError::InvalidCharacter
         );
         assert_eq!(
-            RadrootsNostrEventPointer::new(
+            RadrootsEventEnvelopePointer::new(
                 RadrootsEventId::parse(hex_64('e')).expect("event id"),
                 ["wss://relay.example\n"],
             )

@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsNostrEventPtr;
+use crate::RadrootsEventPtr;
 use crate::message::RadrootsMessageRecipient;
 
 #[cfg(not(feature = "std"))]
@@ -13,7 +13,7 @@ use alloc::{string::String, vec::Vec};
 pub struct RadrootsMessageFile {
     pub recipients: Vec<RadrootsMessageRecipient>,
     pub file_url: String,
-    pub reply_to: Option<RadrootsNostrEventPtr>,
+    pub reply_to: Option<RadrootsEventPtr>,
     pub subject: Option<String>,
     pub file_type: String,
     pub encryption_algorithm: String,

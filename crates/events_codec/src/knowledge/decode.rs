@@ -26,7 +26,7 @@ use radroots_events::knowledge::{
     validate_wiki_redirect,
 };
 use radroots_events::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T};
-use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventRef};
+use radroots_events::{RadrootsEventEnvelope, RadrootsEventRef};
 use serde::de::DeserializeOwned;
 
 use crate::error::EventParseError;
@@ -174,7 +174,7 @@ fn ensure_mirrored_tags(
 fn event_refs(
     tags: &[Vec<String>],
     name: &'static str,
-) -> Result<Vec<RadrootsNostrEventRef>, EventParseError> {
+) -> Result<Vec<RadrootsEventRef>, EventParseError> {
     matching_tags(tags, name)
         .into_iter()
         .map(|tag| parse_event_ref_tag(tag, name))
@@ -375,7 +375,7 @@ fn json_content<T: DeserializeOwned>(content: &str) -> Result<T, EventParseError
     serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))
 }
 
-fn parsed<T>(event: RadrootsNostrEvent, data: T) -> RadrootsParsedEvent<T> {
+fn parsed<T>(event: RadrootsEventEnvelope, data: T) -> RadrootsParsedEvent<T> {
     let parsed_data = RadrootsParsedData::new(
         event.id.clone(),
         event.author.clone(),
@@ -442,7 +442,7 @@ fn contains_private_coordinate_key(value: &serde_json::Value) -> bool {
 }
 
 pub fn wiki_article_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsWikiArticle>, EventParseError> {
     ensure_kind(event.kind, KIND_WIKI_ARTICLE, "wiki article")?;
     let d_tag = required_one_value(&event.tags, TAG_D)?;
@@ -472,7 +472,7 @@ pub fn wiki_article_from_event(
 }
 
 pub fn wiki_redirect_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsWikiRedirect>, EventParseError> {
     ensure_kind(event.kind, KIND_WIKI_REDIRECT, "wiki redirect")?;
     if !event.content.is_empty() {
@@ -490,7 +490,7 @@ pub fn wiki_redirect_from_event(
 }
 
 pub fn wiki_merge_request_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsWikiMergeRequest>, EventParseError> {
     ensure_kind(event.kind, KIND_WIKI_MERGE_REQUEST, "wiki merge request")?;
     let target_article = address_from_a_tag(&event.tags, TAG_A)?;
@@ -517,7 +517,7 @@ pub fn wiki_merge_request_from_event(
 }
 
 pub fn knowledge_source_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeSource>, EventParseError> {
     ensure_kind(event.kind, KIND_KNOWLEDGE_SOURCE, "knowledge source")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA)?;
@@ -534,7 +534,7 @@ pub fn knowledge_source_from_event(
 }
 
 pub fn evidence_bounty_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsEvidenceBounty>, EventParseError> {
     ensure_kind(event.kind, KIND_EVIDENCE_BOUNTY, "evidence bounty")?;
     require_contract_tag(&event.tags, RADROOTS_EVIDENCE_BOUNTY_SCHEMA)?;
@@ -551,7 +551,7 @@ pub fn evidence_bounty_from_event(
 }
 
 pub fn knowledge_claim_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeClaim>, EventParseError> {
     ensure_kind(event.kind, KIND_KNOWLEDGE_CLAIM, "knowledge claim")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA)?;
@@ -568,7 +568,7 @@ pub fn knowledge_claim_from_event(
 }
 
 pub fn knowledge_relation_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeRelation>, EventParseError> {
     ensure_kind(event.kind, KIND_KNOWLEDGE_RELATION, "knowledge relation")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_RELATION_SCHEMA)?;
@@ -581,7 +581,7 @@ pub fn knowledge_relation_from_event(
 }
 
 pub fn knowledge_review_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeReview>, EventParseError> {
     ensure_kind(event.kind, KIND_KNOWLEDGE_REVIEW, "knowledge review")?;
     require_contract_tag(&event.tags, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA)?;
@@ -599,7 +599,7 @@ pub fn knowledge_review_from_event(
 }
 
 pub fn knowledge_field_report_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeFieldReport>, EventParseError> {
     ensure_kind(
         event.kind,
@@ -617,7 +617,7 @@ pub fn knowledge_field_report_from_event(
 }
 
 pub fn knowledge_change_proposal_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsKnowledgeChangeProposal>, EventParseError> {
     ensure_kind(
         event.kind,
@@ -634,7 +634,7 @@ pub fn knowledge_change_proposal_from_event(
 }
 
 pub fn contribution_attestation_from_event(
-    event: RadrootsNostrEvent,
+    event: RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsContributionAttestation>, EventParseError> {
     ensure_kind(
         event.kind,

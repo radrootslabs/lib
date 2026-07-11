@@ -1,7 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
@@ -40,7 +40,7 @@ fn borrowed_event_adapter_builds_request_metadata() {
     let req = sample_request();
     let parts = to_request_wire_parts(&req, "payload").unwrap();
 
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: "id".to_string(),
         author: "author".to_string(),
         created_at: 42,
@@ -63,7 +63,7 @@ fn borrowed_event_adapter_builds_request_metadata() {
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {
         kind: (KIND_JOB_RESULT_MIN + 1) as u16,
-        request_event: radroots_events::RadrootsNostrEventPtr {
+        request_event: radroots_events::RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -89,7 +89,7 @@ fn sample_feedback() -> RadrootsJobFeedback {
         kind: KIND_JOB_FEEDBACK as u16,
         status: JobFeedbackStatus::Processing,
         extra_info: Some("processing".to_string()),
-        request_event: radroots_events::RadrootsNostrEventPtr {
+        request_event: radroots_events::RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -107,7 +107,7 @@ fn sample_feedback() -> RadrootsJobFeedback {
 fn borrowed_event_adapter_builds_request_metadata_and_index() {
     let req = sample_request();
     let parts = to_request_wire_parts(&req, "payload").unwrap();
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: "id".to_string(),
         author: "author".to_string(),
         created_at: 42,
@@ -139,7 +139,7 @@ fn borrowed_event_adapter_builds_request_metadata_and_index() {
 fn borrowed_event_adapter_builds_result_metadata_and_index() {
     let result = sample_result();
     let parts = to_result_wire_parts(&result, "payload").unwrap();
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: "id".to_string(),
         author: "author".to_string(),
         created_at: 42,
@@ -172,7 +172,7 @@ fn borrowed_event_adapter_builds_result_metadata_and_index() {
 fn borrowed_event_adapter_builds_feedback_metadata_and_index() {
     let feedback = sample_feedback();
     let parts = to_feedback_wire_parts(&feedback, "payload").unwrap();
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: "id".to_string(),
         author: "author".to_string(),
         created_at: 42,

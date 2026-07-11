@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::RadrootsCoreDecimal;
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
     RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_event,
@@ -154,14 +154,14 @@ impl RadrootsReplicaIdFactory for RadrootsReplicaDefaultIdFactory {
 #[cfg(feature = "std")]
 pub fn radroots_replica_ingest_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     radroots_replica_ingest_event_with_factory(exec, event, &RadrootsReplicaDefaultIdFactory)
 }
 
 pub fn radroots_replica_ingest_event_with_factory(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     if let Err(err) = exec.begin() {
@@ -188,7 +188,7 @@ pub fn radroots_replica_ingest_event_with_factory(
 
 fn ingest_event_inner(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     match event.kind {
@@ -206,7 +206,7 @@ fn ingest_event_inner(
 
 fn ingest_profile_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
         event.id.clone(),
@@ -297,7 +297,7 @@ fn ingest_profile_event(
 
 fn ingest_farm_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     _factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let farm = farm_decode::farm_from_event(event.kind, &event.tags, &event.content)?;
@@ -380,7 +380,7 @@ fn ingest_farm_event(
 
 fn ingest_plot_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let plot = plot_decode::plot_from_event(event.kind, &event.tags, &event.content)?;
@@ -456,7 +456,7 @@ fn ingest_plot_event(
 
 fn ingest_listing_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let listing = listing_decode::listing_from_event(event.kind, &event.tags, &event.content)?;
     let decision = event_head_decision(exec, event)?;
@@ -478,7 +478,7 @@ fn ingest_listing_event(
 
 fn ingest_list_set_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     if event.kind != radroots_events::kinds::KIND_LIST_SET_GENERIC {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -539,7 +539,7 @@ fn ingest_list_set_event(
     ))
 }
 
-fn listing_event_addr(event: &RadrootsNostrEvent, listing: &RadrootsListing) -> String {
+fn listing_event_addr(event: &RadrootsEventEnvelope, listing: &RadrootsListing) -> String {
     format!("{}:{}:{}", event.kind, event.author, listing.d_tag)
 }
 
@@ -819,7 +819,7 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
 
 pub fn radroots_replica_ingest_event_head(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
@@ -882,7 +882,7 @@ fn upsert_event_head(
 
 fn event_head_decision(
     exec: &dyn SqlExecutor,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<EventHeadDecision, RadrootsReplicaEventsError> {
     let candidate_result = match event_head_candidate_for_event(event) {
         Ok(candidate) => candidate,
@@ -1726,7 +1726,7 @@ mod tests {
         created_at: u32,
         profile_type: Option<RadrootsProfileType>,
         name: &str,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let profile = RadrootsProfile {
             name: name.to_string(),
             display_name: Some(format!("{name}-display")),
@@ -1746,7 +1746,7 @@ mod tests {
                 radroots_profile_type_tag_value(profile_type).to_string(),
             ]);
         }
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -1765,7 +1765,7 @@ mod tests {
         name: &str,
         location: Option<RadrootsFarmPublicLocation>,
         tags: Option<Vec<String>>,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let farm = RadrootsFarm {
             d_tag: d_tag.to_string(),
             name: name.to_string(),
@@ -1777,7 +1777,7 @@ mod tests {
             tags,
         };
         let tags = farm_encode::farm_build_tags(&farm).expect("farm tags");
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -1798,7 +1798,7 @@ mod tests {
         name: &str,
         location: Option<RadrootsPlotLocation>,
         tags: Option<Vec<String>>,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let plot = RadrootsPlot {
             d_tag: d_tag.to_string(),
             farm: farm_ref,
@@ -1808,7 +1808,7 @@ mod tests {
             tags,
         };
         let tags = plot_encode::plot_build_tags(&plot).expect("plot tags");
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -1825,9 +1825,9 @@ mod tests {
         created_at: u32,
         kind: u32,
         list_set: &RadrootsListSet,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let parts = list_set_encode::to_wire_parts_with_kind(list_set, kind).expect("list set");
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -1845,9 +1845,9 @@ mod tests {
         d_tag: &str,
         status: &str,
         title: &str,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -2132,7 +2132,7 @@ mod tests {
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: format!("{:064x}", 1u64),
             author: "a".repeat(64),
             created_at: 1,
@@ -2180,7 +2180,7 @@ mod tests {
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
-        let unsupported = RadrootsNostrEvent {
+        let unsupported = RadrootsEventEnvelope {
             id: format!("{:064x}", 2u64),
             author: "a".repeat(64),
             created_at: 2,

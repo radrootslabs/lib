@@ -5,12 +5,12 @@ use crate::event_convert::radroots_event_from_nostr;
 use crate::events::radroots_nostr_build_event;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
-    draft: &RadrootsFrozenEventDraft,
-) -> Result<RadrootsSignedNostrEvent, RadrootsNostrError> {
+    draft: &RadrootsEventDraft,
+) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
     let actual_pubkey = keys.public_key().to_hex();
     if actual_pubkey != draft.expected_pubkey {
         return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
@@ -33,8 +33,7 @@ pub fn radroots_nostr_sign_frozen_draft(
     }
 
     let raw_json = event.as_json();
-    RadrootsSignedNostrEvent::from_event(radroots_event_from_nostr(&event), raw_json)
-        .map_err(Into::into)
+    RadrootsSignedEvent::from_event(radroots_event_from_nostr(&event), raw_json).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -44,7 +43,7 @@ mod tests {
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
     use nostr::JsonUtil;
-    use radroots_events::draft::RadrootsFrozenEventDraft;
+    use radroots_events::draft::RadrootsEventDraft;
     use radroots_events::kinds::KIND_POST;
 
     fn fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
@@ -52,8 +51,8 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn post_draft(expected_pubkey: &str) -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn post_draft(expected_pubkey: &str) -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,

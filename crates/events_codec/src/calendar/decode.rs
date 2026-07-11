@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     calendar::{
         RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
         RadrootsCalendarTimeEvent,
@@ -282,7 +282,7 @@ pub fn date_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,
@@ -313,7 +313,7 @@ pub fn time_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,
@@ -344,7 +344,7 @@ pub fn calendar_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,
@@ -375,7 +375,7 @@ pub fn rsvp_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

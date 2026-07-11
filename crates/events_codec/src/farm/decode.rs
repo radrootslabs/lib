@@ -7,7 +7,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     farm::RadrootsFarm,
     kinds::KIND_FARM,
     location::{has_textual_locality, is_public_geohash5},
@@ -185,7 +185,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

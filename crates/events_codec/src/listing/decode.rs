@@ -11,7 +11,7 @@ use radroots_core::{
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, is_listing_kind},
@@ -627,7 +627,7 @@ pub fn parsed_from_event(
 }
 
 pub fn data_from_nostr_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedData<RadrootsListing>, EventParseError> {
     data_from_event(
         event.id.clone(),
@@ -640,7 +640,7 @@ pub fn data_from_nostr_event(
 }
 
 pub fn parsed_from_nostr_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsListing>, EventParseError> {
     parsed_from_event(
         event.id.clone(),

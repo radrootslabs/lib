@@ -4,7 +4,7 @@ use radroots_event_store::{
     RadrootsEventStore, RadrootsEventVerificationStatus, RadrootsTransportObservationRow,
     RadrootsTransportObservationType,
 };
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_events::kinds::KIND_POST;
 use radroots_nostr::prelude::{
     RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
@@ -124,7 +124,7 @@ fn fixture_keys() -> RadrootsNostrKeys {
     RadrootsNostrKeys::new(secret_key)
 }
 
-fn signed_post(content: &str) -> RadrootsSignedNostrEvent {
+fn signed_post(content: &str) -> RadrootsSignedEvent {
     signed_event_with_kind_and_hashtag(content, KIND_POST, "soil")
 }
 
@@ -156,8 +156,8 @@ fn signed_event_with_kind_and_hashtag(
     content: &str,
     kind: u32,
     hashtag: &str,
-) -> RadrootsSignedNostrEvent {
-    let draft = RadrootsFrozenEventDraft::new(
+) -> RadrootsSignedEvent {
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         kind,
         1_700_000_000,
@@ -185,7 +185,7 @@ async fn complete_claimed_signing(
     outbox: &RadrootsOutbox,
     claimed: &RadrootsOutboxClaimedEvent,
     now_ms: i64,
-) -> RadrootsSignedNostrEvent {
+) -> RadrootsSignedEvent {
     if let Some(signed_event) = claimed.signed_event.clone() {
         return signed_event;
     }
@@ -217,7 +217,7 @@ fn scoped_nostr_target(relay_url: &str, scope: &str, label: &str) -> RadrootsTra
 }
 
 fn outbox_operation_input<I, S>(
-    draft: RadrootsFrozenEventDraft,
+    draft: RadrootsEventDraft,
     relays: I,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
 ) -> RadrootsOutboxOperationInput
@@ -243,7 +243,7 @@ where
 }
 
 fn all_accepted_outbox_operation_input<I, S>(
-    draft: RadrootsFrozenEventDraft,
+    draft: RadrootsEventDraft,
     relays: I,
 ) -> RadrootsOutboxOperationInput
 where
@@ -1412,7 +1412,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     let signed = signed_post("hello");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -1552,7 +1552,7 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
     let signed = signed_post("scoped duplicate relay");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -1666,7 +1666,7 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
     let signed = signed_post("required target optional success");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -1769,7 +1769,7 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
     let signed = signed_post("required target optional failure");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -1875,7 +1875,7 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
     let signed = signed_post("required target scoped duplicate relay");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -1965,7 +1965,7 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
     let signed = signed_post("adapter transport failure");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2056,7 +2056,7 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
     let signed = signed_post("already accepted");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2145,7 +2145,7 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
     let signed = signed_post("unknown receipt");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2211,7 +2211,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
     let signed = signed_post("mixed target");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2289,7 +2289,7 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
     let signed = signed_post("quorum");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2394,7 +2394,7 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
     let signed = signed_post("republish accepted");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2477,7 +2477,7 @@ async fn outbox_publish_republish_policy_keeps_terminal_targets_excluded() {
     let signed = signed_post("republish terminal excluded");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2557,7 +2557,7 @@ async fn outbox_publish_requires_claimed_signed_event() {
     let signed = signed_post("missing signature");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2604,7 +2604,7 @@ async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_fil
     let signed = signed_post("adapter non transport failure");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,
@@ -2661,7 +2661,7 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
     let signed = signed_post("invalid relay target");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = RadrootsFrozenEventDraft::new(
+    let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
         signed.created_at,

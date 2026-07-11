@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use crate::{RadrootsNostrEventPtr, order::RadrootsListingParseError};
+use crate::{RadrootsEventPtr, order::RadrootsListingParseError};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -87,7 +87,7 @@ impl std::error::Error for RadrootsTradeValidationListingError {}
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeValidationListingRequest {
-    pub listing_event: Option<RadrootsNostrEventPtr>,
+    pub listing_event: Option<RadrootsEventPtr>,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]

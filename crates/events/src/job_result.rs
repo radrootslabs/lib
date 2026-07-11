@@ -1,4 +1,4 @@
-use crate::{RadrootsNostrEventPtr, job::JobPaymentRequest, job_request::RadrootsJobInput};
+use crate::{RadrootsEventPtr, job::JobPaymentRequest, job_request::RadrootsJobInput};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -9,7 +9,7 @@ use alloc::{string::String, vec::Vec};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsJobResult {
     pub kind: u16,
-    pub request_event: RadrootsNostrEventPtr,
+    pub request_event: RadrootsEventPtr,
     pub request_json: Option<String>,
     pub inputs: Vec<RadrootsJobInput>,
     pub customer_pubkey: Option<String>,

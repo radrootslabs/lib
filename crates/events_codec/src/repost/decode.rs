@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     kinds::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
     repost::{RadrootsGenericRepost, RadrootsRepost},
     social::RadrootsSocialTarget,
@@ -153,7 +153,7 @@ pub fn repost_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,
@@ -184,7 +184,7 @@ pub fn generic_repost_parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

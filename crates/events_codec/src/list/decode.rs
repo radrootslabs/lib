@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_list_set_kind, is_nip51_standard_list_kind},
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
@@ -126,7 +126,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

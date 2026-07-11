@@ -6,13 +6,13 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEventRef,
+    RadrootsEventRef,
     ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl},
 };
 
 use crate::error::EventParseError;
 
-pub fn build_event_ref_tag(tag: &str, event: &RadrootsNostrEventRef) -> Vec<String> {
+pub fn build_event_ref_tag(tag: &str, event: &RadrootsEventRef) -> Vec<String> {
     let relays_len = event.relays.as_ref().map(|r| r.len()).unwrap_or(0);
     let mut out = Vec::with_capacity(5 + relays_len);
     out.push(tag.to_string());
@@ -29,7 +29,7 @@ pub fn build_event_ref_tag(tag: &str, event: &RadrootsNostrEventRef) -> Vec<Stri
 pub fn parse_event_ref_tag(
     tag: &[String],
     tag_name: &'static str,
-) -> Result<RadrootsNostrEventRef, EventParseError> {
+) -> Result<RadrootsEventRef, EventParseError> {
     if tag.first().map(|s| s.as_str()) != Some(tag_name) {
         return Err(EventParseError::InvalidTag(tag_name));
     }
@@ -65,7 +65,7 @@ pub fn parse_event_ref_tag(
         None
     };
 
-    Ok(RadrootsNostrEventRef {
+    Ok(RadrootsEventRef {
         id: id.clone(),
         author: author.clone(),
         kind,
@@ -84,7 +84,7 @@ pub fn find_event_ref_tag<'a>(
 
 pub fn push_nip10_ref_tags(
     tags: &mut Vec<Vec<String>>,
-    event: &RadrootsNostrEventRef,
+    event: &RadrootsEventRef,
     tag_e: &'static str,
     tag_p: &'static str,
     tag_k: &'static str,
@@ -131,7 +131,7 @@ pub fn parse_nip10_ref_tags(
     tag_p: &'static str,
     tag_k: &'static str,
     tag_a: &'static str,
-) -> Result<RadrootsNostrEventRef, EventParseError> {
+) -> Result<RadrootsEventRef, EventParseError> {
     let e_tag = find_event_ref_tag(tags, tag_e).ok_or(EventParseError::MissingTag(tag_e))?;
     let id = e_tag.get(1).ok_or(EventParseError::InvalidTag(tag_e))?;
     if id.trim().is_empty() {
@@ -185,7 +185,7 @@ pub fn parse_nip10_ref_tags(
 
     let relays = relays.or(addr_relays);
 
-    Ok(RadrootsNostrEventRef {
+    Ok(RadrootsEventRef {
         id: id.clone(),
         author: author.clone(),
         kind,

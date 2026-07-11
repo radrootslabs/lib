@@ -1,6 +1,6 @@
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr, job::JobPaymentRequest,
-    job_request::RadrootsJobInput, job_result::RadrootsJobResult, kinds::is_result_kind,
+    RadrootsEventEnvelope, RadrootsEventPtr, job::JobPaymentRequest, job_request::RadrootsJobInput,
+    job_result::RadrootsJobResult, kinds::is_result_kind,
 };
 
 #[cfg(not(feature = "std"))]
@@ -53,7 +53,7 @@ pub fn job_result_from_tags(
 
     Ok(RadrootsJobResult {
         kind: kind as u16,
-        request_event: RadrootsNostrEventPtr {
+        request_event: RadrootsEventPtr {
             id: req_id,
             relays: relay_hint,
         },
@@ -109,7 +109,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

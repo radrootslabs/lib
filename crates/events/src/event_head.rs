@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use crate::RadrootsNostrEvent;
+use crate::RadrootsEventEnvelope;
 use crate::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
@@ -73,7 +73,7 @@ pub enum RadrootsEventHeadDecision {
 }
 
 pub fn event_head_candidate_for_class(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     class: RadrootsEventClass,
 ) -> RadrootsEventHeadCandidateResult {
     match class {
@@ -131,14 +131,14 @@ pub fn event_head_candidate_for_class(
 }
 
 pub fn event_head_candidate_for_contract(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     contract: &RadrootsEventContract,
 ) -> RadrootsEventHeadCandidateResult {
     event_head_candidate_for_class(event, contract.class)
 }
 
 pub fn event_head_candidate_for_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsEventHeadCandidateResult, RadrootsContractMatchError> {
     let contract = identify_event_contract(event.kind, &event.tags, &event.content)?;
     Ok(event_head_candidate_for_contract(event, contract))
@@ -195,8 +195,8 @@ mod tests {
         author: &str,
         created_at: u32,
         tags: Vec<Vec<String>>,
-    ) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: id.to_string(),
             author: author.to_string(),
             created_at,
@@ -214,7 +214,7 @@ mod tests {
         created_at: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let mut event = event(kind, id, author, created_at, tags);
         event.content = content.to_string();
         event

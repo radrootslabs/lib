@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,13 +29,13 @@ impl<T> RadrootsParsedData<T> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsParsedEvent<T> {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub data: RadrootsParsedData<T>,
 }
 
 impl<T> RadrootsParsedEvent<T> {
     #[inline]
-    pub fn new(event: RadrootsNostrEvent, data: RadrootsParsedData<T>) -> Self {
+    pub fn new(event: RadrootsEventEnvelope, data: RadrootsParsedData<T>) -> Self {
         Self { event, data }
     }
 
@@ -51,7 +51,7 @@ impl<T> RadrootsParsedEvent<T> {
         data: T,
     ) -> Self {
         Self {
-            event: RadrootsNostrEvent {
+            event: RadrootsEventEnvelope {
                 id: id.clone(),
                 author: author.clone(),
                 created_at: published_at,
@@ -68,7 +68,7 @@ impl<T> RadrootsParsedEvent<T> {
 #[cfg(test)]
 mod tests {
     use super::{RadrootsParsedData, RadrootsParsedEvent};
-    use radroots_events::RadrootsNostrEvent;
+    use radroots_events::RadrootsEventEnvelope;
 
     #[test]
     fn parsed_data_constructor_maps_fields() {
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn parsed_event_constructor_maps_event_and_data() {
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: "id".to_string(),
             author: "author".to_string(),
             created_at: 22,

@@ -66,7 +66,7 @@ pub mod trade_validation;
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNostrEvent {
+pub struct RadrootsEventEnvelope {
     pub id: String,
     pub author: String,
     pub created_at: u32,
@@ -80,7 +80,7 @@ pub struct RadrootsNostrEvent {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNostrEventRef {
+pub struct RadrootsEventRef {
     pub id: String,
     pub author: String,
     pub kind: u32,
@@ -92,7 +92,7 @@ pub struct RadrootsNostrEventRef {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNostrEventPtr {
+pub struct RadrootsEventPtr {
     pub id: String,
     pub relays: Option<String>,
 }

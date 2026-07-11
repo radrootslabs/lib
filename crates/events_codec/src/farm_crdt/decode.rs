@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     farm_crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
     farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
@@ -73,7 +73,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

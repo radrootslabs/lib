@@ -1,7 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_events::RadrootsNostrEventPtr;
+use radroots_events::RadrootsEventPtr;
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_events::message::RadrootsMessageRecipient;
 use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
@@ -32,7 +32,7 @@ fn sample_message_file() -> RadrootsMessageFile {
             },
         ],
         file_url: file_url("encrypted.bin"),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
@@ -147,7 +147,7 @@ fn message_file_build_tags_requires_crypto_fields() {
 #[test]
 fn message_file_build_tags_rejects_invalid_reply_subject_and_fallbacks() {
     let mut message = sample_message_file();
-    message.reply_to = Some(RadrootsNostrEventPtr {
+    message.reply_to = Some(RadrootsEventPtr {
         id: " ".to_string(),
         relays: None,
     });

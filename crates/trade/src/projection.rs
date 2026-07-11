@@ -7,7 +7,7 @@ use radroots_event_store::{
     RadrootsProjectionCursor, RadrootsStoredEvent,
 };
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId},
     kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_listing_kind, is_order_event_kind},
     listing::{RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingStatus},
@@ -709,7 +709,7 @@ fn push_order_record(
 }
 
 fn request_listing_event_id(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<Option<RadrootsEventId>, RadrootsTradeProjectionError> {
     let context =
         order_event_context_from_tags(RadrootsOrderEventType::OrderRequested, &event.tags)
@@ -752,14 +752,14 @@ async fn current_listing_event_id(
 
 fn stored_event_to_nostr_event(
     stored_event: &RadrootsStoredEvent,
-) -> Result<RadrootsNostrEvent, RadrootsTradeProjectionError> {
+) -> Result<RadrootsEventEnvelope, RadrootsTradeProjectionError> {
     let tags = serde_json::from_str(&stored_event.tags_json).map_err(|source| {
         RadrootsTradeProjectionError::InvalidStoredTagsJson {
             event_id: stored_event.event_id.clone(),
             source,
         }
     })?;
-    Ok(RadrootsNostrEvent {
+    Ok(RadrootsEventEnvelope {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -912,7 +912,7 @@ mod tests {
         RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
     };
     use radroots_events::{
-        RadrootsNostrEventPtr,
+        RadrootsEventPtr,
         farm::RadrootsFarmRef,
         ids::RadrootsOrderQuoteId,
         kinds::KIND_LISTING,
@@ -1005,7 +1005,7 @@ mod tests {
         }
     }
 
-    fn signed_listing_event() -> RadrootsNostrEvent {
+    fn signed_listing_event() -> RadrootsEventEnvelope {
         let parts = radroots_events_codec::listing::encode::to_wire_parts(&listing())
             .expect("listing parts");
         sign_parts(
@@ -1017,7 +1017,7 @@ mod tests {
         )
     }
 
-    fn listing_addr(event: &RadrootsNostrEvent) -> RadrootsListingAddress {
+    fn listing_addr(event: &RadrootsEventEnvelope) -> RadrootsListingAddress {
         RadrootsListingAddress::parse(format!(
             "{}:{}:{}",
             KIND_LISTING,
@@ -1056,7 +1056,7 @@ mod tests {
         }
     }
 
-    fn order_request(listing_event: &RadrootsNostrEvent) -> RadrootsOrderRequest {
+    fn order_request(listing_event: &RadrootsEventEnvelope) -> RadrootsOrderRequest {
         RadrootsOrderRequest {
             order_id: order_id(),
             listing_addr: listing_addr(listing_event),
@@ -1070,16 +1070,16 @@ mod tests {
         }
     }
 
-    fn signed_order_request_event(listing_event: &RadrootsNostrEvent) -> RadrootsNostrEvent {
+    fn signed_order_request_event(listing_event: &RadrootsEventEnvelope) -> RadrootsEventEnvelope {
         signed_order_request_event_at(listing_event, 1_700_000_010)
     }
 
     fn signed_order_request_event_at(
-        listing_event: &RadrootsNostrEvent,
+        listing_event: &RadrootsEventEnvelope,
         created_at: u32,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let parts = order_request_event_build(
-            &RadrootsNostrEventPtr {
+            &RadrootsEventPtr {
                 id: listing_event.id.clone(),
                 relays: Some("wss://relay.example.test".to_owned()),
             },
@@ -1096,9 +1096,9 @@ mod tests {
     }
 
     fn signed_order_decision_event(
-        request: &RadrootsNostrEvent,
-        listing_event: &RadrootsNostrEvent,
-    ) -> RadrootsNostrEvent {
+        request: &RadrootsEventEnvelope,
+        listing_event: &RadrootsEventEnvelope,
+    ) -> RadrootsEventEnvelope {
         let decision = RadrootsOrderDecision {
             order_id: order_id(),
             listing_addr: listing_addr(listing_event),
@@ -1123,11 +1123,11 @@ mod tests {
     }
 
     fn signed_receipt_event(
-        listing_event: &RadrootsNostrEvent,
-        request: &RadrootsNostrEvent,
-        decision: &RadrootsNostrEvent,
+        listing_event: &RadrootsEventEnvelope,
+        request: &RadrootsEventEnvelope,
+        decision: &RadrootsEventEnvelope,
         result: RadrootsValidationReceiptResult,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let request_id = RadrootsEventId::parse(request.id.as_str()).expect("request");
         let listing_event_id = RadrootsEventId::parse(listing_event.id.as_str()).expect("listing");
         let decision_id = RadrootsEventId::parse(decision.id.as_str()).expect("decision");
@@ -1182,7 +1182,7 @@ mod tests {
         tags: Vec<Vec<String>>,
         created_at: u32,
         keys: &RadrootsNostrKeys,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let raw_event = radroots_nostr_build_event(kind, content, tags)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))

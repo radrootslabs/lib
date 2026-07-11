@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{RadrootsNostrEvent, geochat::RadrootsGeoChat, kinds::KIND_GEOCHAT};
+use radroots_events::{RadrootsEventEnvelope, geochat::RadrootsGeoChat, kinds::KIND_GEOCHAT};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -121,7 +121,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

@@ -7,7 +7,7 @@ use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
 };
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     ids::RadrootsListingAddress,
     kinds::is_listing_kind,
     listing::{
@@ -42,7 +42,7 @@ pub struct RadrootsTradeListing {
 }
 
 pub fn validate_listing_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsTradeListing, TradeListingValidationError> {
     if !is_listing_kind(event.kind) {
         return Err(TradeListingValidationError::InvalidKind { kind: event.kind });
@@ -188,7 +188,7 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::{
-        RadrootsNostrEvent,
+        RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
@@ -270,8 +270,8 @@ mod tests {
         }
     }
 
-    fn base_event(listing: &RadrootsListing) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn base_event(listing: &RadrootsListing) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: "evt".into(),
             author: SELLER.into(),
             created_at: 0,

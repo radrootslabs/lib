@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{RadrootsNostrEvent, kinds::KIND_SEAL, seal::RadrootsSeal};
+use radroots_events::{RadrootsEventEnvelope, kinds::KIND_SEAL, seal::RadrootsSeal};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -69,7 +69,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

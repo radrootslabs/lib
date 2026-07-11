@@ -1,5 +1,5 @@
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
     kinds::is_request_kind,
 };
@@ -96,7 +96,7 @@ pub fn parsed_from_event(
 ) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
     let data = data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

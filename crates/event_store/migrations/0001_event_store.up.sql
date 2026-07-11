@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS nostr_events (
+CREATE TABLE IF NOT EXISTS event_envelopes (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT NOT NULL UNIQUE,
   pubkey TEXT NOT NULL,
@@ -17,14 +17,14 @@ CREATE TABLE IF NOT EXISTS nostr_events (
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS nostr_event_kind_created_idx ON nostr_events(kind, created_at, event_id);
-CREATE INDEX IF NOT EXISTS nostr_event_contract_idx ON nostr_events(contract_id, seq);
-CREATE INDEX IF NOT EXISTS nostr_event_projection_idx ON nostr_events(projection_eligible, seq);
-CREATE INDEX IF NOT EXISTS nostr_event_verification_contract_idx
-ON nostr_events(verification_status, contract_status, seq);
+CREATE INDEX IF NOT EXISTS event_envelope_kind_created_idx ON event_envelopes(kind, created_at, event_id);
+CREATE INDEX IF NOT EXISTS event_envelope_contract_idx ON event_envelopes(contract_id, seq);
+CREATE INDEX IF NOT EXISTS event_envelope_projection_idx ON event_envelopes(projection_eligible, seq);
+CREATE INDEX IF NOT EXISTS event_envelope_verification_contract_idx
+ON event_envelopes(verification_status, contract_status, seq);
 
-CREATE TABLE IF NOT EXISTS nostr_event_tags (
-  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS event_envelope_tags (
+  event_id TEXT NOT NULL REFERENCES event_envelopes(event_id) ON DELETE CASCADE,
   tag_index INTEGER NOT NULL,
   tag_name TEXT NOT NULL,
   tag_value TEXT,
@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS nostr_event_tags (
   PRIMARY KEY (event_id, tag_index)
 );
 
-CREATE INDEX IF NOT EXISTS nostr_event_tag_lookup_idx ON nostr_event_tags(tag_name, tag_value, event_id);
-CREATE INDEX IF NOT EXISTS nostr_event_tag_relay_idx ON nostr_event_tags(relay_indexed, tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS event_envelope_tag_lookup_idx ON event_envelope_tags(tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS event_envelope_tag_relay_idx ON event_envelope_tags(relay_indexed, tag_name, tag_value, event_id);
 
 CREATE TABLE IF NOT EXISTS event_transport_observation (
-  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL REFERENCES event_envelopes(event_id) ON DELETE CASCADE,
   transport_kind TEXT NOT NULL,
   endpoint_uri TEXT NOT NULL,
   endpoint_fingerprint TEXT NOT NULL,
@@ -54,12 +54,12 @@ CREATE TABLE IF NOT EXISTS event_transport_observation (
 CREATE INDEX IF NOT EXISTS event_transport_observation_endpoint_idx
 ON event_transport_observation(transport_kind, endpoint_fingerprint, last_observed_at_ms, event_id);
 
-CREATE TABLE IF NOT EXISTS nostr_event_head (
+CREATE TABLE IF NOT EXISTS event_envelope_head (
   coordinate_type TEXT NOT NULL,
   kind INTEGER NOT NULL,
   pubkey TEXT NOT NULL,
   d_tag TEXT,
-  event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL REFERENCES event_envelopes(event_id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
   CHECK (
@@ -68,15 +68,15 @@ CREATE TABLE IF NOT EXISTS nostr_event_head (
   )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS nostr_event_head_replaceable_idx
-ON nostr_event_head(kind, pubkey)
+CREATE UNIQUE INDEX IF NOT EXISTS event_envelope_head_replaceable_idx
+ON event_envelope_head(kind, pubkey)
 WHERE coordinate_type = 'replaceable';
 
-CREATE UNIQUE INDEX IF NOT EXISTS nostr_event_head_addressable_idx
-ON nostr_event_head(kind, pubkey, d_tag)
+CREATE UNIQUE INDEX IF NOT EXISTS event_envelope_head_addressable_idx
+ON event_envelope_head(kind, pubkey, d_tag)
 WHERE coordinate_type = 'addressable';
 
-CREATE INDEX IF NOT EXISTS nostr_event_head_event_idx ON nostr_event_head(event_id);
+CREATE INDEX IF NOT EXISTS event_envelope_head_event_idx ON event_envelope_head(event_id);
 
 CREATE TABLE IF NOT EXISTS projection_cursor (
   projection_id TEXT PRIMARY KEY NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS projection_cursor (
 
 CREATE TABLE IF NOT EXISTS listing_projection (
   listing_addr TEXT PRIMARY KEY NOT NULL,
-  listing_event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+  listing_event_id TEXT NOT NULL REFERENCES event_envelopes(event_id) ON DELETE CASCADE,
   seller_pubkey TEXT NOT NULL,
   farm_pubkey TEXT NOT NULL,
   farm_d_tag TEXT NOT NULL,
@@ -132,7 +132,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS listing_search_fts USING fts5(
 
 CREATE TABLE IF NOT EXISTS trade_projection (
   order_id TEXT NOT NULL,
-  root_event_id TEXT NOT NULL REFERENCES nostr_events(event_id) ON DELETE CASCADE,
+  root_event_id TEXT NOT NULL REFERENCES event_envelopes(event_id) ON DELETE CASCADE,
   projection_version INTEGER NOT NULL,
   status TEXT NOT NULL,
   lifecycle_terminal INTEGER NOT NULL,
@@ -140,15 +140,15 @@ CREATE TABLE IF NOT EXISTS trade_projection (
   listing_addr TEXT,
   buyer_pubkey TEXT,
   seller_pubkey TEXT,
-  request_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  decision_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  agreement_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  pending_revision_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  cancellation_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  validation_receipt_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
-  last_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
+  request_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  decision_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  agreement_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  pending_revision_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  cancellation_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  validation_receipt_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
+  last_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   expected_listing_event_id TEXT,
-  current_listing_event_id TEXT REFERENCES nostr_events(event_id) ON DELETE SET NULL,
+  current_listing_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   economics_json TEXT,
   pending_inventory_json TEXT NOT NULL,
   committed_inventory_json TEXT NOT NULL,

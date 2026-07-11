@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     file_metadata::RadrootsFileMetadata,
     kinds::KIND_PUBLIC_FILE_METADATA,
     social::RadrootsSocialMediaThumbnail,
@@ -123,7 +123,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

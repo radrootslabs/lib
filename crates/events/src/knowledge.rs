@@ -5,7 +5,7 @@ use alloc::{string::String, vec::Vec};
 
 use core::fmt;
 
-use crate::RadrootsNostrEventRef;
+use crate::RadrootsEventRef;
 use crate::ids::{
     RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
     RadrootsRelayUrl,
@@ -203,7 +203,7 @@ fn validate_relays(
 }
 
 fn validate_event_ref(
-    event_ref: &RadrootsNostrEventRef,
+    event_ref: &RadrootsEventRef,
     field: &'static str,
 ) -> Result<(), RadrootsKnowledgeValidationError> {
     validate_event_id(&event_ref.id, field)?;
@@ -220,7 +220,7 @@ fn validate_event_ref(
 }
 
 fn validate_event_refs(
-    refs: &[RadrootsNostrEventRef],
+    refs: &[RadrootsEventRef],
     field: &'static str,
 ) -> Result<(), RadrootsKnowledgeValidationError> {
     for event_ref in refs {
@@ -556,7 +556,7 @@ pub struct RadrootsWikiArticle {
     pub content_djot: String,
     pub summary: Option<String>,
     pub topics: Vec<String>,
-    pub references: Vec<RadrootsNostrEventRef>,
+    pub references: Vec<RadrootsEventRef>,
     pub forked_from: Vec<RadrootsWikiArticleVersionRef>,
     pub deferred_to: Option<RadrootsWikiArticleVersionRef>,
 }
@@ -606,7 +606,7 @@ pub struct RadrootsKnowledgeSource {
     pub publication_year: Option<u16>,
     pub edition: Option<String>,
     pub canonical_url: Option<String>,
-    pub artifact_refs: Vec<RadrootsNostrEventRef>,
+    pub artifact_refs: Vec<RadrootsEventRef>,
     pub author_asserted_rights: Option<RadrootsRightsAssertion>,
     pub topics: Vec<String>,
     pub summary: Option<String>,
@@ -625,7 +625,7 @@ pub struct RadrootsKnowledgeClaim {
     pub topics: Vec<String>,
     pub applies_to: Vec<String>,
     pub author_asserted_confidence: Option<String>,
-    pub supersedes: Vec<RadrootsNostrEventRef>,
+    pub supersedes: Vec<RadrootsEventRef>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -633,8 +633,8 @@ pub struct RadrootsKnowledgeClaim {
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeCitationSpan {
-    pub source_ref: RadrootsNostrEventRef,
-    pub artifact_ref: Option<RadrootsNostrEventRef>,
+    pub source_ref: RadrootsEventRef,
+    pub artifact_ref: Option<RadrootsEventRef>,
     pub page_start: Option<u32>,
     pub page_end: Option<u32>,
     pub section_path: Vec<String>,
@@ -648,7 +648,7 @@ pub struct RadrootsKnowledgeCitationSpan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeNodeRef {
     pub node_type: String,
-    pub event_ref: Option<RadrootsNostrEventRef>,
+    pub event_ref: Option<RadrootsEventRef>,
     pub address_ref: Option<RadrootsAddressableRef>,
     pub external_id: Option<String>,
     pub label: Option<String>,
@@ -664,9 +664,9 @@ pub struct RadrootsKnowledgeRelation {
     pub subject: RadrootsKnowledgeNodeRef,
     pub predicate: String,
     pub object: RadrootsKnowledgeNodeRef,
-    pub support_refs: Vec<RadrootsNostrEventRef>,
+    pub support_refs: Vec<RadrootsEventRef>,
     pub author_asserted_confidence: Option<String>,
-    pub supersedes: Vec<RadrootsNostrEventRef>,
+    pub supersedes: Vec<RadrootsEventRef>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -681,7 +681,7 @@ pub struct RadrootsKnowledgeReview {
     pub verdict: String,
     pub scores: Vec<RadrootsKnowledgeReviewScore>,
     pub notes: Option<String>,
-    pub evidence_refs: Vec<RadrootsNostrEventRef>,
+    pub evidence_refs: Vec<RadrootsEventRef>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -730,8 +730,8 @@ pub struct RadrootsKnowledgeFieldReport {
     pub summary: Option<String>,
     pub context: RadrootsKnowledgeFieldContext,
     pub observations: Vec<RadrootsKnowledgeObservation>,
-    pub artifact_refs: Vec<RadrootsNostrEventRef>,
-    pub related_refs: Vec<RadrootsNostrEventRef>,
+    pub artifact_refs: Vec<RadrootsEventRef>,
+    pub related_refs: Vec<RadrootsEventRef>,
     pub limitations: Vec<String>,
 }
 
@@ -742,7 +742,7 @@ pub struct RadrootsKnowledgeFieldReport {
 pub struct RadrootsKnowledgeFieldContext {
     pub location_precision: RadrootsKnowledgeLocationPrecision,
     pub public_location: Option<RadrootsKnowledgeLocation>,
-    pub private_location_ref: Option<RadrootsNostrEventRef>,
+    pub private_location_ref: Option<RadrootsEventRef>,
     pub topics: Vec<String>,
     pub context_tags: Vec<String>,
 }
@@ -804,7 +804,7 @@ pub struct RadrootsEvidenceBounty {
     pub title: String,
     pub summary: Option<String>,
     pub topics: Vec<String>,
-    pub target_refs: Vec<RadrootsNostrEventRef>,
+    pub target_refs: Vec<RadrootsEventRef>,
     pub reward_note: Option<String>,
     pub closes_at: Option<String>,
 }
@@ -816,12 +816,12 @@ pub struct RadrootsEvidenceBounty {
 pub struct RadrootsKnowledgeChangeProposal {
     pub schema: String,
     pub schema_version: u16,
-    pub target: RadrootsNostrEventRef,
+    pub target: RadrootsEventRef,
     pub proposal_type: String,
     pub summary: String,
     pub rationale: Option<String>,
-    pub evidence_refs: Vec<RadrootsNostrEventRef>,
-    pub supersedes: Vec<RadrootsNostrEventRef>,
+    pub evidence_refs: Vec<RadrootsEventRef>,
+    pub supersedes: Vec<RadrootsEventRef>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -833,9 +833,9 @@ pub struct RadrootsContributionAttestation {
     pub schema_version: u16,
     pub contributor_pubkey: String,
     pub contribution_type: String,
-    pub subject_refs: Vec<RadrootsNostrEventRef>,
+    pub subject_refs: Vec<RadrootsEventRef>,
     pub summary: String,
-    pub evidence_refs: Vec<RadrootsNostrEventRef>,
+    pub evidence_refs: Vec<RadrootsEventRef>,
 }
 
 #[cfg(test)]
@@ -846,12 +846,12 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
-    fn event_ref() -> RadrootsNostrEventRef {
+    fn event_ref() -> RadrootsEventRef {
         event_ref_with_kind(1)
     }
 
-    fn event_ref_with_kind(kind: u32) -> RadrootsNostrEventRef {
-        RadrootsNostrEventRef {
+    fn event_ref_with_kind(kind: u32) -> RadrootsEventRef {
+        RadrootsEventRef {
             id: "0".repeat(64),
             author: "1".repeat(64),
             kind,

@@ -13,7 +13,7 @@ use std::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     ids::{
         RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress,
         RadrootsOrderId, RadrootsPublicKey,
@@ -319,7 +319,7 @@ pub struct RadrootsTradeTransitionProofResultBinding {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeTransitionProofResultTags {
-    pub request_event: RadrootsNostrEvent,
+    pub request_event: RadrootsEventEnvelope,
     pub request_event_id: RadrootsEventId,
     pub customer_pubkey: RadrootsPublicKey,
     pub inputs: Vec<RadrootsTradeDvmInputTag>,
@@ -399,7 +399,7 @@ pub fn build_transition_proof_request_tags(
 }
 
 pub fn parse_transition_proof_request_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsTradeTransitionProofRequestEnvelope, RadrootsTradeDvmError> {
     if event.kind != KIND_TRADE_TRANSITION_PROOF_REQUEST {
         return Err(RadrootsTradeDvmError::UnsupportedKind {
@@ -432,7 +432,7 @@ pub fn parse_transition_proof_request_tags(
 }
 
 pub fn build_transition_proof_result_tags(
-    request_event: &RadrootsNostrEvent,
+    request_event: &RadrootsEventEnvelope,
     customer_pubkey: &RadrootsPublicKey,
     inputs: &[RadrootsTradeDvmInputTag],
     binding: &RadrootsTradeTransitionProofResultBinding,
@@ -496,7 +496,7 @@ pub fn build_transition_proof_result_tags(
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn serialize_request_event(
-    request_event: &RadrootsNostrEvent,
+    request_event: &RadrootsEventEnvelope,
 ) -> Result<String, RadrootsTradeDvmError> {
     serde_json::to_string(request_event).map_err(RadrootsTradeDvmError::SerializeRequestEvent)
 }
@@ -512,7 +512,7 @@ pub fn parse_transition_proof_result_tags(
         });
     }
     let request_event_json = required_tag_value(tags, RADROOTS_DVM_TAG_REQUEST)?;
-    let request_event: RadrootsNostrEvent = serde_json::from_str(request_event_json)
+    let request_event: RadrootsEventEnvelope = serde_json::from_str(request_event_json)
         .map_err(RadrootsTradeDvmError::InvalidRequestEvent)?;
     if request_event.kind != KIND_TRADE_TRANSITION_PROOF_REQUEST {
         return Err(RadrootsTradeDvmError::RequestEventKind {
@@ -859,8 +859,8 @@ mod tests {
         }
     }
 
-    fn request_event(content: &RadrootsTradeTransitionProofRequestV1) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn request_event(content: &RadrootsTradeTransitionProofRequestV1) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: event_id(10).into_string(),
             author: BUYER.to_string(),
             created_at: 1,

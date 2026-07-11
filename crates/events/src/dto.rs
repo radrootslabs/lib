@@ -19,7 +19,7 @@ mod tests {
         assert_eq!(registry.roots.len(), dto_roots().len());
         let export_names = registry_export_names(&registry);
 
-        assert!(export_names.contains("RadrootsNostrEvent"));
+        assert!(export_names.contains("RadrootsEventEnvelope"));
         assert!(export_names.contains("RadrootsListingImageSize"));
     }
 
@@ -34,7 +34,7 @@ mod tests {
         assert!(summary.nullable);
 
         let d_tag = registry
-            .struct_field_presence("RadrootsNostrEventRef", "d_tag")
+            .struct_field_presence("RadrootsEventRef", "d_tag")
             .expect("d_tag field exists");
         assert!(!d_tag.required_on_deserialize);
         assert!(d_tag.nullable);

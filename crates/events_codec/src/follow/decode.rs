@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     follow::{RadrootsFollow, RadrootsFollowProfile},
     kinds::KIND_FOLLOW,
 };
@@ -102,7 +102,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

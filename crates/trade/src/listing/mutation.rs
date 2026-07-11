@@ -17,7 +17,7 @@ use std::string::{String, ToString};
 use radroots_events::ids::RadrootsListingAddress;
 #[cfg(feature = "serde_json")]
 use radroots_events::{
-    draft::{RadrootsDraftError, RadrootsFrozenEventDraft},
+    draft::{RadrootsDraftError, RadrootsEventDraft},
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
 };
 #[cfg(feature = "serde_json")]
@@ -121,7 +121,7 @@ impl RadrootsListingMutation {
 pub fn build_listing_mutation_draft(
     mutation: &RadrootsListingMutation,
     created_at: u32,
-) -> Result<RadrootsFrozenEventDraft, RadrootsListingMutationError> {
+) -> Result<RadrootsEventDraft, RadrootsListingMutationError> {
     let (draft, kind, contract_id) = match mutation {
         RadrootsListingMutation::Publish { draft } | RadrootsListingMutation::Update { draft } => {
             (draft, KIND_LISTING, LISTING_PUBLISHED_CONTRACT_ID)
@@ -151,7 +151,7 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::{
-        RadrootsNostrEvent,
+        RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
@@ -446,7 +446,7 @@ mod tests {
         let publish = RadrootsListingMutation::publish(canonical_draft());
         let draft = build_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
 
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: String::new(),
             author: draft.expected_pubkey.clone(),
             created_at: draft.created_at,

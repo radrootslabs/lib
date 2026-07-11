@@ -1,6 +1,6 @@
 #[cfg(feature = "serde_json")]
 use radroots_events::{
-    RadrootsNostrEventPtr,
+    RadrootsEventPtr,
     ids::RadrootsEventId,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
@@ -77,7 +77,7 @@ struct OrderEnvelopeEventBuildParts<'a, T> {
     message_type: RadrootsOrderEventType,
     listing_addr: &'a str,
     order_id: &'a str,
-    listing_event: Option<&'a RadrootsNostrEventPtr>,
+    listing_event: Option<&'a RadrootsEventPtr>,
     root_event_id: Option<&'a RadrootsEventId>,
     prev_event_id: Option<&'a RadrootsEventId>,
     payload: &'a T,
@@ -124,7 +124,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
 
 #[cfg(feature = "serde_json")]
 pub fn order_request_event_build(
-    listing_event: &RadrootsNostrEventPtr,
+    listing_event: &RadrootsEventPtr,
     payload: &RadrootsOrderRequest,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
@@ -236,7 +236,7 @@ mod tests {
     };
     use crate::error::EventEncodeError;
     use radroots_events::{
-        RadrootsNostrEventPtr,
+        RadrootsEventPtr,
         ids::RadrootsEventId,
         order::{RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError},
     };
@@ -402,7 +402,7 @@ mod tests {
             message_type: RadrootsOrderEventType::OrderRequested,
             listing_addr: "listing-address",
             order_id: "order-1",
-            listing_event: Some(&RadrootsNostrEventPtr {
+            listing_event: Some(&RadrootsEventPtr {
                 id: String::new(),
                 relays: None,
             }),

@@ -4,7 +4,7 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_events::draft::RadrootsSignedEvent;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
 };
@@ -24,7 +24,7 @@ const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayPublishRequest {
-    pub signed_event: RadrootsSignedNostrEvent,
+    pub signed_event: RadrootsSignedEvent,
     pub targets: RadrootsRelayTargetSet,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     pub idempotency_key: Option<String>,
@@ -33,7 +33,7 @@ pub struct RadrootsRelayPublishRequest {
 
 impl RadrootsRelayPublishRequest {
     pub fn new(
-        signed_event: RadrootsSignedNostrEvent,
+        signed_event: RadrootsSignedEvent,
         targets: RadrootsRelayTargetSet,
         now_ms: i64,
     ) -> Self {
@@ -386,7 +386,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
 #[cfg(feature = "client")]
 fn ensure_raw_event_matches_signed_event(
     event: &RadrootsNostrEvent,
-    signed_event: &RadrootsSignedNostrEvent,
+    signed_event: &RadrootsSignedEvent,
 ) -> Result<(), RadrootsRelayTransportError> {
     let mismatches = [
         ("id", event.id.to_hex(), signed_event.id.clone()),
@@ -432,7 +432,7 @@ fn ensure_raw_event_matches_signed_event(
 mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
-    use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+    use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
     use radroots_events::kinds::KIND_POST;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
@@ -443,11 +443,11 @@ mod tests {
     const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
         "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
-    fn signed_post(content: &str) -> (RadrootsNostrEvent, RadrootsSignedNostrEvent) {
+    fn signed_post(content: &str) -> (RadrootsNostrEvent, RadrootsSignedEvent) {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         let keys = RadrootsNostrKeys::new(secret_key);
-        let draft = RadrootsFrozenEventDraft::new(
+        let draft = RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -462,7 +462,7 @@ mod tests {
         (raw_event, signed_event)
     }
 
-    fn assert_mismatch(raw_event: &RadrootsNostrEvent, signed_event: RadrootsSignedNostrEvent) {
+    fn assert_mismatch(raw_event: &RadrootsNostrEvent, signed_event: RadrootsSignedEvent) {
         assert!(ensure_raw_event_matches_signed_event(raw_event, &signed_event).is_err());
     }
 

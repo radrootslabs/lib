@@ -7,8 +7,8 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent, kinds::KIND_RESOURCE_HARVEST_CAP, resource_cap::RadrootsResourceHarvestCap,
-    tags::TAG_D,
+    RadrootsEventEnvelope, kinds::KIND_RESOURCE_HARVEST_CAP,
+    resource_cap::RadrootsResourceHarvestCap, tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -90,7 +90,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

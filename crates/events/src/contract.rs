@@ -4,7 +4,7 @@
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     ids::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
         relay_url_is_valid,
@@ -3169,7 +3169,7 @@ pub fn identify_event_contract(
 }
 
 pub fn validate_event_contract(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
     let contract = match identify_event_contract(event.kind, &event.tags, &event.content) {
         Ok(contract) => contract,
@@ -3180,7 +3180,7 @@ pub fn validate_event_contract(
 }
 
 pub fn validate_event_contract_shape(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     contract_id: &str,
 ) -> Result<(), RadrootsContractValidationError> {
     validate_event_contract_parts(event.kind, &event.tags, event.content.as_str(), contract_id)
@@ -3727,8 +3727,8 @@ mod tests {
         }
     }
 
-    fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: "0".repeat(64),
             author: "1".repeat(64),
             created_at: 1_700_000_000,
@@ -3746,8 +3746,8 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: "0".repeat(64),
             author: "1".repeat(64),
             created_at: 1_700_000_000,

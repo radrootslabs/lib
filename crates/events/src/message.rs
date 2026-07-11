@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsNostrEventPtr;
+use crate::RadrootsEventPtr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -12,7 +12,7 @@ use alloc::{string::String, vec::Vec};
 pub struct RadrootsMessage {
     pub recipients: Vec<RadrootsMessageRecipient>,
     pub content: String,
-    pub reply_to: Option<RadrootsNostrEventPtr>,
+    pub reply_to: Option<RadrootsEventPtr>,
     pub subject: Option<String>,
 }
 

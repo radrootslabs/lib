@@ -2,7 +2,7 @@
 mod test_fixtures;
 
 use radroots_events::{
-    RadrootsNostrEventPtr,
+    RadrootsEventPtr,
     kinds::{KIND_MESSAGE, KIND_POST},
     message::{RadrootsMessage, RadrootsMessageRecipient},
 };
@@ -96,7 +96,7 @@ fn message_to_wire_parts_sets_tags() {
             },
         ],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
@@ -149,7 +149,7 @@ fn message_to_wire_parts_supports_reply_without_relay() {
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: None,
         }),
@@ -330,7 +330,7 @@ fn message_build_tags_rejects_invalid_optional_fields() {
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: " ".to_string(),
             relays: None,
         }),
@@ -348,7 +348,7 @@ fn message_build_tags_rejects_invalid_optional_fields() {
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: Some(" ".to_string()),
         }),

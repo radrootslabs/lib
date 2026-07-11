@@ -6,7 +6,7 @@ pub mod price_ext;
 pub mod validation;
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     ids::{
         RadrootsAddressableCoordinateParts, RadrootsDTag, RadrootsIdParseError,
         RadrootsListingAddress, RadrootsPublicKey,
@@ -127,7 +127,7 @@ fn ensure_public_listing_kind(kind: u32) -> Result<(), RadrootsPublicListingAddr
 }
 
 pub fn parse_listing_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsListing, ListingParseError> {
     if !is_listing_kind(event.kind) {
         return Err(ListingParseError::InvalidKind(event.kind));
@@ -143,7 +143,7 @@ mod tests {
         parse_public_listing_address,
     };
     use radroots_events::{
-        RadrootsNostrEvent,
+        RadrootsEventEnvelope,
         ids::RadrootsListingAddress,
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE},
         order::RadrootsListingParseError,
@@ -151,8 +151,8 @@ mod tests {
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    fn listing_event() -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn listing_event() -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: "event-1".into(),
             author: SELLER.into(),
             created_at: 1,
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn parse_listing_event_rejects_non_listing_kind() {
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: "event-1".into(),
             author: "seller".into(),
             created_at: 1,

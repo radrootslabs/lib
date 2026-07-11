@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     kinds::KIND_REPORT,
     report::RadrootsReport,
     social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
@@ -89,7 +89,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

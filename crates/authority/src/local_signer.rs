@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsEventSigner, RadrootsSignerError};
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_events::ids::RadrootsPublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 
@@ -25,8 +25,8 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -38,10 +38,10 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::RadrootsNostrEvent;
+    use radroots_events::RadrootsEventEnvelope;
     use radroots_events::kinds::KIND_POST;
     use radroots_nostr::prelude::{
-        RadrootsNostrEventVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
+        RadrootsEventEnvelopeVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
     };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -55,8 +55,8 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn post_draft() -> RadrootsFrozenEventDraft {
-        RadrootsFrozenEventDraft::new(
+    fn post_draft() -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
             1_700_000_000,
@@ -67,8 +67,8 @@ mod tests {
         .expect("draft")
     }
 
-    fn verification_event(signed: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn verification_event(signed: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: signed.id.clone(),
             author: signed.pubkey.clone(),
             created_at: signed.created_at,
@@ -97,7 +97,7 @@ mod tests {
         assert_eq!(signed.pubkey, draft.expected_pubkey);
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),
-            RadrootsNostrEventVerification::Verified
+            RadrootsEventEnvelopeVerification::Verified
         );
     }
 }

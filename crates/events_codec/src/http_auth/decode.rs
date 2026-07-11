@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},
     tags::{TAG_METHOD, TAG_PAYLOAD, TAG_URL_AUTH},
 };
@@ -75,7 +75,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

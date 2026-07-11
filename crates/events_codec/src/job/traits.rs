@@ -171,7 +171,7 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     }
 }
 
-impl<'a> JobEventBorrow<'a> for radroots_events::RadrootsNostrEvent {
+impl<'a> JobEventBorrow<'a> for radroots_events::RadrootsEventEnvelope {
     #[inline]
     fn raw_id(&'a self) -> &'a str {
         &self.id

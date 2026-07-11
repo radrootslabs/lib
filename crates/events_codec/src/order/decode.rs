@@ -3,7 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    RadrootsEventEnvelope, RadrootsEventPtr,
     ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsPublicKey},
     kinds::is_order_event_kind,
     order::{
@@ -94,14 +94,14 @@ impl std::error::Error for RadrootsOrderEnvelopeParseError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEventContext {
     pub counterparty_pubkey: RadrootsPublicKey,
-    pub listing_event: Option<RadrootsNostrEventPtr>,
+    pub listing_event: Option<RadrootsEventPtr>,
     pub root_event_id: Option<RadrootsEventId>,
     pub prev_event_id: Option<RadrootsEventId>,
 }
 
 #[cfg(feature = "serde_json")]
 pub fn order_envelope_from_event<T: DeserializeOwned>(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<T>, RadrootsOrderEnvelopeParseError> {
     if !is_order_event_kind(event.kind) {
         return Err(RadrootsOrderEnvelopeParseError::InvalidKind(event.kind));
@@ -136,7 +136,7 @@ pub fn order_envelope_from_event<T: DeserializeOwned>(
 
 #[cfg(feature = "serde_json")]
 pub fn order_request_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {
     let envelope = order_envelope_from_event::<RadrootsOrderRequest>(event)?;
     if envelope.message_type != RadrootsOrderEventType::OrderRequested {
@@ -162,7 +162,7 @@ pub fn order_request_from_event(
 
 #[cfg(feature = "serde_json")]
 pub fn order_decision_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderDecision>, RadrootsOrderEnvelopeParseError> {
     let envelope = order_envelope_from_event::<RadrootsOrderDecision>(event)?;
     if envelope.message_type != RadrootsOrderEventType::OrderDecision {
@@ -188,7 +188,7 @@ pub fn order_decision_from_event(
 
 #[cfg(feature = "serde_json")]
 pub fn order_revision_proposal_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionProposal>, RadrootsOrderEnvelopeParseError> {
     let envelope = order_envelope_from_event::<RadrootsOrderRevisionProposal>(event)?;
     if envelope.message_type != RadrootsOrderEventType::OrderRevisionProposed {
@@ -225,7 +225,7 @@ pub fn order_revision_proposal_from_event(
 
 #[cfg(feature = "serde_json")]
 pub fn order_revision_decision_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionDecision>, RadrootsOrderEnvelopeParseError> {
     let envelope = order_envelope_from_event::<RadrootsOrderRevisionDecision>(event)?;
     if envelope.message_type != RadrootsOrderEventType::OrderRevisionDecision {
@@ -262,7 +262,7 @@ pub fn order_revision_decision_from_event(
 
 #[cfg(feature = "serde_json")]
 pub fn order_cancellation_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderCancellation>, RadrootsOrderEnvelopeParseError> {
     let envelope = order_envelope_from_event::<RadrootsOrderCancellation>(event)?;
     if envelope.message_type != RadrootsOrderEventType::OrderCancelled {
@@ -379,7 +379,7 @@ fn map_tag_parse_error_for_order_envelope(
 
 #[cfg(feature = "serde_json")]
 fn validate_order_binding<T>(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     envelope: &RadrootsOrderEnvelope<T>,
     payload_order_id: &str,
     payload_listing_addr: &str,
@@ -426,7 +426,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
     use radroots_events::{
-        RadrootsNostrEvent, RadrootsNostrEventPtr,
+        RadrootsEventEnvelope, RadrootsEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
             RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
@@ -618,8 +618,8 @@ mod tests {
         }
     }
 
-    fn listing_event_ptr() -> RadrootsNostrEventPtr {
-        RadrootsNostrEventPtr {
+    fn listing_event_ptr() -> RadrootsEventPtr {
+        RadrootsEventPtr {
             id: event_id_wire('a'),
             relays: Some("wss://relay.example.com".into()),
         }
@@ -652,9 +652,9 @@ mod tests {
         order_id: impl Into<String>,
         payload: &T,
         tags: Vec<Vec<String>>,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let envelope = RadrootsOrderEnvelope::new(message_type, listing_addr, order_id, payload);
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author,
             created_at: 1,
@@ -891,7 +891,7 @@ mod tests {
     fn order_request_parse_roundtrips_and_validates_tags() {
         let payload = order_request();
         let built = order_request_event_build(&listing_event_ptr(), &payload).unwrap();
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -920,7 +920,7 @@ mod tests {
             payload.order_id.clone(),
             payload,
         );
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -946,7 +946,7 @@ mod tests {
         let root_event_id = event_id('1');
         let prev_event_id = event_id('9');
         let built = order_decision_event_build(&root_event_id, &prev_event_id, &payload).unwrap();
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -968,7 +968,7 @@ mod tests {
         let prev_event_id = event_id('9');
         let built =
             order_cancellation_event_build(&root_event_id, &prev_event_id, &payload).unwrap();
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -995,7 +995,7 @@ mod tests {
             &payload,
         )
         .unwrap();
-        let mut event = RadrootsNostrEvent {
+        let mut event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1023,7 +1023,7 @@ mod tests {
             &payload,
         )
         .unwrap();
-        let mut event = RadrootsNostrEvent {
+        let mut event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -1089,7 +1089,7 @@ mod tests {
     #[test]
     fn order_envelope_parse_rejects_content_tag_and_envelope_mismatches() {
         let payload = serde_json::json!({});
-        let invalid_json = RadrootsNostrEvent {
+        let invalid_json = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -1110,7 +1110,7 @@ mod tests {
             &payload,
         );
         invalid_version_envelope.version = 99;
-        let invalid_version = RadrootsNostrEvent {
+        let invalid_version = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -1303,7 +1303,7 @@ mod tests {
         request_payload.order_id = order_id("other-order");
         let request_built =
             order_request_event_build(&listing_event_ptr(), &order_request()).unwrap();
-        let mut request_event = RadrootsNostrEvent {
+        let mut request_event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -1347,7 +1347,7 @@ mod tests {
             &proposal_payload,
         )
         .unwrap();
-        let mut proposal_event = RadrootsNostrEvent {
+        let mut proposal_event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1385,7 +1385,7 @@ mod tests {
             &revision_decision_payload,
         )
         .unwrap();
-        let mut revision_decision_event = RadrootsNostrEvent {
+        let mut revision_decision_event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: buyer_pubkey_wire(),
             created_at: 1,
@@ -1495,7 +1495,7 @@ mod tests {
             let payload = serde_json::json!({});
             let envelope =
                 RadrootsOrderEnvelope::new(message_type, listing_addr_wire(), "order-1", &payload);
-            let event = RadrootsNostrEvent {
+            let event = RadrootsEventEnvelope {
                 id: event_id_wire('e'),
                 author: seller_pubkey_wire(),
                 created_at: 1,
@@ -1519,7 +1519,7 @@ mod tests {
 
     #[test]
     fn order_parse_rejects_forbidden_kind() {
-        let event = RadrootsNostrEvent {
+        let event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1538,7 +1538,7 @@ mod tests {
         let root_event_id = event_id('1');
         let prev_event_id = event_id('9');
         let built = order_decision_event_build(&root_event_id, &prev_event_id, &payload).unwrap();
-        let mut event = RadrootsNostrEvent {
+        let mut event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1559,7 +1559,7 @@ mod tests {
     fn order_parse_rejects_author_and_counterparty_mismatch() {
         let payload = order_request();
         let built = order_request_event_build(&listing_event_ptr(), &payload).unwrap();
-        let mut event = RadrootsNostrEvent {
+        let mut event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1587,7 +1587,7 @@ mod tests {
         let prev_event_id = event_id('9');
         let cancellation_parts =
             order_cancellation_event_build(&root_event_id, &prev_event_id, &cancellation).unwrap();
-        let cancellation_event = RadrootsNostrEvent {
+        let cancellation_event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,
@@ -1606,7 +1606,7 @@ mod tests {
         let root_event_id = event_id('1');
         let prev_event_id = event_id('9');
         let built = order_decision_event_build(&root_event_id, &prev_event_id, &payload).unwrap();
-        let mut event = RadrootsNostrEvent {
+        let mut event = RadrootsEventEnvelope {
             id: event_id_wire('e'),
             author: seller_pubkey_wire(),
             created_at: 1,

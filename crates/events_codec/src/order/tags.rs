@@ -2,8 +2,8 @@
 use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEventPtr,
-    ids::{RadrootsEventId, RadrootsNostrEventPointer},
+    RadrootsEventPtr,
+    ids::{RadrootsEventEnvelopePointer, RadrootsEventId},
     tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
 };
 
@@ -21,7 +21,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, name: &'static str, value: impl Into<St
 
 fn build_event_ptr_tag(
     name: &'static str,
-    ptr: &RadrootsNostrEventPtr,
+    ptr: &RadrootsEventPtr,
     field_prefix: &'static str,
 ) -> Result<Vec<String>, EventEncodeError> {
     if ptr.id.trim().is_empty() {
@@ -36,7 +36,7 @@ fn build_event_ptr_tag(
         if relay.trim().is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("listing_event.relays"));
         }
-        RadrootsNostrEventPointer::new(event_id, [relay.as_str()])
+        RadrootsEventEnvelopePointer::new(event_id, [relay.as_str()])
             .map_err(|_| EventEncodeError::InvalidField("listing_event.relays"))?;
         tag.push(relay.clone());
     }
@@ -46,7 +46,7 @@ fn build_event_ptr_tag(
 fn parse_event_ptr_tag(
     tags: &[Vec<String>],
     name: &'static str,
-) -> Result<Option<RadrootsNostrEventPtr>, EventParseError> {
+) -> Result<Option<RadrootsEventPtr>, EventParseError> {
     let Some(tag) = tags
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(name))
@@ -65,10 +65,10 @@ fn parse_event_ptr_tag(
         None => None,
     };
     if let Some(relay) = relay.as_ref() {
-        RadrootsNostrEventPointer::new(event_id.clone(), [relay.as_str()])
+        RadrootsEventEnvelopePointer::new(event_id.clone(), [relay.as_str()])
             .map_err(|_| EventParseError::InvalidTag(name))?;
     }
-    Ok(Some(RadrootsNostrEventPtr {
+    Ok(Some(RadrootsEventPtr {
         id: event_id.as_str().to_owned(),
         relays: relay,
     }))
@@ -79,7 +79,7 @@ pub fn order_envelope_tags<P, A, D>(
     recipient_pubkey: P,
     listing_addr: A,
     order_id: Option<D>,
-    listing_event: Option<&RadrootsNostrEventPtr>,
+    listing_event: Option<&RadrootsEventPtr>,
     root_event_id: Option<&str>,
     prev_event_id: Option<&str>,
 ) -> Result<Vec<Vec<String>>, EventEncodeError>
@@ -147,7 +147,7 @@ pub fn parse_order_counterparty_tag(tags: &[Vec<String>]) -> Result<String, Even
 #[inline]
 pub fn parse_order_listing_event_tag(
     tags: &[Vec<String>],
-) -> Result<Option<RadrootsNostrEventPtr>, EventParseError> {
+) -> Result<Option<RadrootsEventPtr>, EventParseError> {
     parse_event_ptr_tag(tags, TAG_LISTING_EVENT)
 }
 
@@ -253,7 +253,7 @@ mod tests {
         job::error::JobParseError,
     };
     use radroots_events::{
-        RadrootsNostrEventPtr,
+        RadrootsEventPtr,
         kinds::KIND_LISTING,
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
@@ -290,7 +290,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             Some("order-1"),
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: listing_event_id.clone(),
                 relays: Some("wss://relay.example".into()),
             }),
@@ -324,7 +324,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             None::<&str>,
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: listing_event_id.clone(),
                 relays: None,
             }),
@@ -350,7 +350,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             Some("order-1"),
-            None::<&RadrootsNostrEventPtr>,
+            None::<&RadrootsEventPtr>,
             Some("root-event"),
             Some("prev-event"),
         )
@@ -375,7 +375,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             None::<&str>,
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: listing_event_id.clone(),
                 relays: None,
             }),
@@ -422,7 +422,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             None::<&str>,
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: " ".into(),
                 relays: None,
             }),
@@ -439,7 +439,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             None::<&str>,
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: "not-an-event-id".into(),
                 relays: None,
             }),
@@ -456,7 +456,7 @@ mod tests {
             "buyer",
             listing_addr.as_str(),
             None::<&str>,
-            Some(&RadrootsNostrEventPtr {
+            Some(&RadrootsEventPtr {
                 id: event_id('d'),
                 relays: Some(" ".into()),
             }),
@@ -517,7 +517,7 @@ mod tests {
         );
         assert_eq!(
             parse_order_listing_event_tag(&tags).expect("snapshot"),
-            Some(RadrootsNostrEventPtr {
+            Some(RadrootsEventPtr {
                 id: listing_event_id,
                 relays: Some("wss://relay".into()),
             })
@@ -591,7 +591,7 @@ mod tests {
         assert_eq!(
             parse_order_listing_event_tag(&[vec![String::from(TAG_LISTING_EVENT), event_id('a'),]])
                 .expect("snapshot without relay"),
-            Some(RadrootsNostrEventPtr {
+            Some(RadrootsEventPtr {
                 id: event_id('a'),
                 relays: None,
             })

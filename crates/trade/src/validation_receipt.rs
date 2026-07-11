@@ -9,7 +9,8 @@ use alloc::{
 
 use base64::Engine as _;
 use radroots_events::{
-    RadrootsNostrEvent, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D,
+    RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
+    tags::TAG_D,
 };
 use radroots_events_codec::wire::WireEventParts;
 use serde::{Deserialize, Serialize};
@@ -574,13 +575,13 @@ pub fn validation_receipt_event_build(
 }
 
 pub fn validation_receipt_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
     verify_validation_receipt_event(event, RadrootsValidationReceiptExpectedBinding::default())
 }
 
 pub fn verify_validation_receipt_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
     if event.kind != KIND_TRADE_VALIDATION_RECEIPT {
@@ -863,7 +864,7 @@ mod tests {
         verify_validation_receipt_event,
     };
     use radroots_events::{
-        RadrootsNostrEvent, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
+        RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
         tags::TAG_D,
     };
 
@@ -919,10 +920,10 @@ mod tests {
         receipt
     }
 
-    fn sample_validation_receipt_event() -> RadrootsNostrEvent {
+    fn sample_validation_receipt_event() -> RadrootsEventEnvelope {
         let receipt = sample_validation_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
-        RadrootsNostrEvent {
+        RadrootsEventEnvelope {
             id: event_id('9'),
             author: event_id('a'),
             created_at: 1,

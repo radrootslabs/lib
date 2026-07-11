@@ -1,5 +1,5 @@
 use crate::RadrootsEventStoreError;
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsTagSemantic, RadrootsTagValueType,
 };
@@ -215,14 +215,14 @@ impl RadrootsTransportObservation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventIngest {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub raw_json: Option<String>,
     pub observed_at_ms: i64,
     pub transport_observation: Option<RadrootsTransportObservation>,
 }
 
 impl RadrootsEventIngest {
-    pub fn new(event: RadrootsNostrEvent, observed_at_ms: i64) -> Self {
+    pub fn new(event: RadrootsEventEnvelope, observed_at_ms: i64) -> Self {
         Self {
             event,
             raw_json: None,

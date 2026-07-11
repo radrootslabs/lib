@@ -7,7 +7,7 @@ use crate::model::{
     RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
     tag_semantic_name, tag_value_type_name,
 };
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::contract::{
     RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
@@ -83,7 +83,7 @@ impl RadrootsEventStore {
         &self,
     ) -> Result<RadrootsEventStoreStatusSummary, RadrootsEventStoreError> {
         let row = sqlx::query(
-            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM nostr_events",
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM event_envelopes",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -138,7 +138,7 @@ impl RadrootsEventStore {
                     projection_eligible = head.projection_eligible;
                     head_decision = head.decision;
                     sqlx::query(
-                        "UPDATE nostr_events SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
+                        "UPDATE event_envelopes SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
                     )
                     .bind(bool_i64(projection_eligible))
                     .bind(ingest.observed_at_ms)
@@ -179,7 +179,7 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Option<RadrootsStoredEvent>, RadrootsEventStoreError> {
         let row = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events WHERE event_id = ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes WHERE event_id = ?",
         )
         .bind(event_id)
         .fetch_optional(&self.pool)
@@ -192,7 +192,7 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Vec<RadrootsStoredEventTag>, RadrootsEventStoreError> {
         let rows = sqlx::query(
-            "SELECT event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed FROM nostr_event_tags WHERE event_id = ? ORDER BY tag_index",
+            "SELECT event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed FROM event_envelope_tags WHERE event_id = ? ORDER BY tag_index",
         )
         .bind(event_id)
         .fetch_all(&self.pool)
@@ -242,7 +242,7 @@ impl RadrootsEventStore {
         let row = match coordinate {
             RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
                 sqlx::query(
-                    "SELECT coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms FROM nostr_event_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
+                    "SELECT coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms FROM event_envelope_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
                 )
                 .bind(i64::from(*kind))
                 .bind(pubkey.as_str())
@@ -255,7 +255,7 @@ impl RadrootsEventStore {
                 d_tag,
             } => {
                 sqlx::query(
-                    "SELECT coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms FROM nostr_event_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
+                    "SELECT coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms FROM event_envelope_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
                 )
                 .bind(i64::from(*kind))
                 .bind(pubkey.as_str())
@@ -307,7 +307,7 @@ impl RadrootsEventStore {
             .map(|cursor| cursor.last_event_seq)
             .unwrap_or(0);
         let rows = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events WHERE projection_eligible = 1 AND seq > ? ORDER BY seq ASC LIMIT ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes WHERE projection_eligible = 1 AND seq > ? ORDER BY seq ASC LIMIT ?",
         )
         .bind(last_event_seq)
         .bind(i64::from(limit))
@@ -324,7 +324,7 @@ impl RadrootsEventStore {
     ) -> Result<Vec<RadrootsStoredEvent>, RadrootsEventStoreError> {
         validate_tag_query(tag_name, limit)?;
         let rows = sqlx::query(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events AS event WHERE projection_eligible = 1 AND EXISTS (SELECT 1 FROM nostr_event_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?",
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes AS event WHERE projection_eligible = 1 AND EXISTS (SELECT 1 FROM event_envelope_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?",
         )
         .bind(tag_name)
         .bind(tag_value)
@@ -349,7 +349,7 @@ impl RadrootsEventStore {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_events AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM nostr_event_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM event_envelope_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
         );
         let mut query = sqlx::query(sql.as_str());
         for contract_id in contract_ids {
@@ -449,14 +449,14 @@ async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsEv
     Ok(row.try_get(0)?)
 }
 
-fn validate_event_identity(event: &RadrootsNostrEvent) -> Result<(), RadrootsEventStoreError> {
+fn validate_event_identity(event: &RadrootsEventEnvelope) -> Result<(), RadrootsEventStoreError> {
     RadrootsEventId::parse(event.id.as_str())?;
     RadrootsPublicKey::parse(event.author.as_str())?;
     RadrootsEventSignature::parse(event.sig.as_str())?;
     Ok(())
 }
 
-fn classify_event(event: &RadrootsNostrEvent) -> EventClassification {
+fn classify_event(event: &RadrootsEventEnvelope) -> EventClassification {
     match identify_event_contract(event.kind, &event.tags, &event.content) {
         Ok(contract) => EventClassification {
             contract_status: RadrootsEventContractStatus::Supported,
@@ -469,7 +469,7 @@ fn classify_event(event: &RadrootsNostrEvent) -> EventClassification {
     }
 }
 
-fn verify_event(event: &RadrootsNostrEvent) -> RadrootsEventVerificationStatus {
+fn verify_event(event: &RadrootsEventEnvelope) -> RadrootsEventVerificationStatus {
     verification_status_from_nostr(radroots_nostr_verify_event(event))
 }
 
@@ -504,7 +504,7 @@ async fn insert_raw_event(
         .map(|contract| StoredEventClass::from_event_class(contract.class).as_str());
     let projection_eligible = classification.base_projection_eligible(verification_status);
     let result = sqlx::query(
-        "INSERT OR IGNORE INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(event.id.as_str())
     .bind(event.author.as_str())
@@ -533,7 +533,7 @@ async fn event_seq(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
 ) -> Result<i64, RadrootsEventStoreError> {
-    let row = sqlx::query("SELECT seq FROM nostr_events WHERE event_id = ?")
+    let row = sqlx::query("SELECT seq FROM event_envelopes WHERE event_id = ?")
         .bind(event_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -543,7 +543,7 @@ async fn event_seq(
 #[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_tags(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     contract: Option<&'static RadrootsEventContract>,
 ) -> Result<(), RadrootsEventStoreError> {
     for (index, tag) in event.tags.iter().enumerate() {
@@ -560,7 +560,7 @@ async fn insert_tags(
         let contract_value_type = tag_contract.map(|tag| tag_value_type_name(tag.value_type));
         let relay_indexed = tag_contract.map(|tag| tag.relay_indexed).unwrap_or(false);
         sqlx::query(
-            "INSERT INTO nostr_event_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(event.id.as_str())
         .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
@@ -603,7 +603,7 @@ async fn upsert_observation(
 
 async fn apply_event_head(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
     contract: &RadrootsEventContract,
     updated_at_ms: i64,
 ) -> Result<AppliedHead, RadrootsEventStoreError> {
@@ -647,7 +647,7 @@ async fn current_event_head(
     let row = match coordinate {
         RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
             sqlx::query(
-                "SELECT event_id, created_at FROM nostr_event_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
+                "SELECT event_id, created_at FROM event_envelope_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
@@ -660,7 +660,7 @@ async fn current_event_head(
             d_tag,
         } => {
             sqlx::query(
-                "SELECT event_id, created_at FROM nostr_event_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
+                "SELECT event_id, created_at FROM event_envelope_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
@@ -691,14 +691,14 @@ async fn upsert_head(
     match &head.coordinate {
         RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
             sqlx::query(
-                "DELETE FROM nostr_event_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
+                "DELETE FROM event_envelope_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
             .execute(&mut **tx)
             .await?;
             sqlx::query(
-                "INSERT INTO nostr_event_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', ?, ?, NULL, ?, ?, ?)",
+                "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', ?, ?, NULL, ?, ?, ?)",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
@@ -714,7 +714,7 @@ async fn upsert_head(
             d_tag,
         } => {
             sqlx::query(
-                "DELETE FROM nostr_event_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
+                "DELETE FROM event_envelope_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
@@ -722,7 +722,7 @@ async fn upsert_head(
             .execute(&mut **tx)
             .await?;
             sqlx::query(
-                "INSERT INTO nostr_event_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('addressable', ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('addressable', ?, ?, ?, ?, ?, ?)",
             )
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
@@ -929,7 +929,7 @@ mod tests {
         created_at: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsNostrEvent {
+    ) -> RadrootsEventEnvelope {
         let raw_event = radroots_nostr_build_event(kind, content, tags)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
@@ -938,7 +938,7 @@ mod tests {
         radroots_event_from_nostr(&raw_event)
     }
 
-    fn tamper_signature(event: &mut RadrootsNostrEvent) {
+    fn tamper_signature(event: &mut RadrootsEventEnvelope) {
         let replacement = if event.sig.starts_with('0') { "1" } else { "0" };
         event.sig.replace_range(0..1, replacement);
     }
@@ -947,7 +947,7 @@ mod tests {
         vec![vec!["d".to_owned(), d_tag.to_owned()]]
     }
 
-    fn head_coordinate_for_event(event: &RadrootsNostrEvent) -> RadrootsEventHeadCoordinate {
+    fn head_coordinate_for_event(event: &RadrootsEventEnvelope) -> RadrootsEventHeadCoordinate {
         let RadrootsEventHeadCandidateResult::Candidate(candidate) =
             event_head_candidate_for_event(event).expect("head candidate")
         else {
@@ -1136,12 +1136,12 @@ mod tests {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store.migrate_down().await.expect("down");
 
-        let missing = sqlx::query("SELECT COUNT(*) FROM nostr_events")
+        let missing = sqlx::query("SELECT COUNT(*) FROM event_envelopes")
             .fetch_one(store.pool())
             .await
             .err()
             .expect("table should be removed");
-        assert!(missing.to_string().contains("nostr_events"));
+        assert!(missing.to_string().contains("event_envelopes"));
     }
 
     #[tokio::test]

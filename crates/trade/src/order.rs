@@ -9,7 +9,7 @@ use alloc::{
 #[cfg(feature = "event_store")]
 use radroots_event_store::{RadrootsEventStore, RadrootsEventStoreError, RadrootsStoredEvent};
 #[cfg(feature = "serde_json")]
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::ids::{
     RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress,
     RadrootsOrderId, RadrootsPublicKey,
@@ -167,7 +167,7 @@ pub enum RadrootsOrderEventDecodeError {
 
 #[cfg(feature = "serde_json")]
 pub fn order_event_record_from_event(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEventRecord, RadrootsOrderEventDecodeError> {
     let message_type = RadrootsOrderEventType::from_kind(event.kind)
         .ok_or(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind })?;
@@ -357,14 +357,14 @@ pub async fn order_projection_query_for_trade_locator(
 #[cfg(feature = "event_store")]
 fn stored_order_event_to_nostr_event(
     stored_event: &RadrootsStoredEvent,
-) -> Result<RadrootsNostrEvent, RadrootsOrderStoreQueryError> {
+) -> Result<RadrootsEventEnvelope, RadrootsOrderStoreQueryError> {
     let tags = serde_json::from_str(&stored_event.tags_json).map_err(|source| {
         RadrootsOrderStoreQueryError::InvalidStoredTagsJson {
             event_id: stored_event.event_id.clone(),
             source,
         }
     })?;
-    Ok(RadrootsNostrEvent {
+    Ok(RadrootsEventEnvelope {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -2666,7 +2666,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
     use radroots_events::{
-        RadrootsNostrEvent, RadrootsNostrEventPtr,
+        RadrootsEventEnvelope, RadrootsEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
             RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
@@ -2735,16 +2735,16 @@ mod tests {
     }
 
     #[cfg(feature = "serde_json")]
-    fn listing_event_ptr() -> RadrootsNostrEventPtr {
-        RadrootsNostrEventPtr {
+    fn listing_event_ptr() -> RadrootsEventPtr {
+        RadrootsEventPtr {
             id: event_id(80).into_string(),
             relays: Some("wss://relay.example.test".into()),
         }
     }
 
     #[cfg(feature = "serde_json")]
-    fn event_from_parts(raw_id: u8, author: &str, parts: WireEventParts) -> RadrootsNostrEvent {
-        RadrootsNostrEvent {
+    fn event_from_parts(raw_id: u8, author: &str, parts: WireEventParts) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope {
             id: event_id(raw_id).into_string(),
             author: author.into(),
             created_at: 1,
@@ -3356,7 +3356,7 @@ mod tests {
                     && record.payload.reason == "changed plans"
         ));
 
-        let unsupported = RadrootsNostrEvent {
+        let unsupported = RadrootsEventEnvelope {
             id: event_id(16).into_string(),
             author: BUYER.into(),
             created_at: 1,

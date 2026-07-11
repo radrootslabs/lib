@@ -6,7 +6,7 @@ use radroots_core::{
     RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::RadrootsNostrEventPtr;
+use radroots_events::RadrootsEventPtr;
 use radroots_events::app_data::RadrootsAppData;
 use radroots_events::comment::RadrootsComment;
 use radroots_events::coop::RadrootsCoop;
@@ -196,7 +196,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         }),
@@ -380,7 +380,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
 
     let job_result = RadrootsJobResult {
         kind: (KIND_JOB_RESULT_MIN + 1) as u16,
-        request_event: RadrootsNostrEventPtr {
+        request_event: RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -405,7 +405,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         kind: KIND_JOB_FEEDBACK as u16,
         status: JobFeedbackStatus::Processing,
         extra_info: Some("queued".to_string()),
-        request_event: RadrootsNostrEventPtr {
+        request_event: RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -628,7 +628,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: "reply".to_string(),
             relays: None,
         }),
@@ -642,7 +642,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsNostrEventPtr {
+        reply_to: Some(RadrootsEventPtr {
             id: " ".to_string(),
             relays: None,
         }),

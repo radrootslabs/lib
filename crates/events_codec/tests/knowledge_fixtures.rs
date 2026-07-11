@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_events::contract::{
     RadrootsContractValidationError, RadrootsEventClass, all_event_contracts,
     validate_event_contract_shape,
@@ -36,8 +36,8 @@ use radroots_test_fixtures::knowledge::{
     wiki_redirect,
 };
 
-fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: hex_64('0'),
         author: hex_64('a'),
         created_at: 1_800_000_000,
@@ -48,7 +48,7 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsNostrEvent {
     }
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
+fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -63,7 +63,7 @@ fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
         .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsNostrEvent {
+    RadrootsEventEnvelope {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs() as u32,

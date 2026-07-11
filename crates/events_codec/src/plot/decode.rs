@@ -7,7 +7,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     farm::RadrootsFarmRef,
     kinds::{KIND_FARM, KIND_PLOT},
     plot::RadrootsPlot,
@@ -159,7 +159,7 @@ pub fn parsed_from_event(
         tags.clone(),
     )?;
     Ok(RadrootsParsedEvent {
-        event: RadrootsNostrEvent {
+        event: RadrootsEventEnvelope {
             id,
             author,
             created_at: published_at,

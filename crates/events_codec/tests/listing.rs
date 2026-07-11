@@ -6,7 +6,7 @@ use radroots_core::{
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{
@@ -928,7 +928,7 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     assert_eq!(parsed.event.sig, "sig");
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 
-    let event = RadrootsNostrEvent {
+    let event = RadrootsEventEnvelope {
         id: "event-id".to_string(),
         author: "author-pubkey".to_string(),
         created_at: 7,
