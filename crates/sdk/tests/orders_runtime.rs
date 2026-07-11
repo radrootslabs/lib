@@ -3485,7 +3485,10 @@ async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
 
     let push_receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 

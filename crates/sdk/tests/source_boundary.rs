@@ -1747,7 +1747,7 @@ fn sdk_direct_nostr_push_receipts_preserve_outbox_target_metadata() {
     let sync_runtime_test_source =
         read_source(manifest_dir.join("tests/sync_runtime.rs").as_path());
     for required in [
-        "push_outbox_with_adapter_preserves_scoped_duplicate_target_metadata",
+        "push_outbox_with_transport_preserves_scoped_duplicate_target_metadata",
         "push_outbox_adapter_transport_failure_preserves_scoped_target_metadata",
         "target.target_scope.as_deref() == Some(\"farm.a\")",
         "target.target_scope.as_deref() == Some(\"farm.b\")",

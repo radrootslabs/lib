@@ -28,7 +28,7 @@ use radroots_sdk::{
     SdkMutationState, TargetPolicy, TargetSet, TransportProfile,
 };
 use radroots_trade::listing::RadrootsListingDraftDocumentV1;
-use radroots_transport_nostr::RadrootsMockRelayPublishAdapter;
+use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 
 #[path = "support/serializer_failure.rs"]
 mod serializer_failure;
@@ -832,7 +832,10 @@ async fn listing_hybrid_profile_publishes_after_nostr_success_and_retains_reticu
 
     let push_receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 

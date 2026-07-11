@@ -38,8 +38,9 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
 };
 use radroots_transport_nostr::{
-    RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
+    RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayOutcome,
+    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTransportError,
 };
 #[cfg(feature = "radrootsd-proxy")]
 use std::io::{Read, Write};
@@ -849,8 +850,8 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
     let retryable_event_id =
         enqueue_listing(&sdk, LISTING_A_D_TAG, "Retryable Coffee", &[RELAY_A]).await;
     sdk.sync()
-        .push_outbox_with_adapter(
-            &TransportFailurePublishAdapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(TransportFailurePublishAdapter),
             PushOutboxRequest::new().with_limit(1),
         )
         .await
@@ -858,8 +859,8 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
     let published_event_id =
         enqueue_listing(&sdk, LISTING_B_D_TAG, "Published Coffee", &[RELAY_B]).await;
     sdk.sync()
-        .push_outbox_with_adapter(
-            &RadrootsMockRelayPublishAdapter::new(),
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(RadrootsMockRelayPublishAdapter::new()),
             PushOutboxRequest::new().with_limit(1),
         )
         .await
@@ -1699,7 +1700,7 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, request)
+        .push_outbox_with_transport(&RadrootsNostrTransport::new(&adapter), request)
         .await
         .expect("push");
 
@@ -2369,26 +2370,32 @@ async fn push_outbox_rejects_invalid_limits_before_claiming() {
 
     let zero = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(0))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(0),
+        )
         .await
         .expect_err("zero limit");
     let too_large = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &adapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
             PushOutboxRequest::new().with_limit(PUSH_OUTBOX_MAX_LIMIT + 1),
         )
         .await
         .expect_err("too large");
     let zero_ttl = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_claim_ttl_ms(0))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_claim_ttl_ms(0),
+        )
         .await
         .expect_err("zero ttl");
     let zero_delay = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &adapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
             PushOutboxRequest::new().with_next_attempt_delay_ms(0),
         )
         .await
@@ -2405,14 +2412,17 @@ async fn push_outbox_rejects_invalid_limits_before_claiming() {
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
+async fn push_outbox_with_transport_uses_queued_targets_without_builder_relays() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let outbox_event_id = enqueue_listing(&sdk, LISTING_A_D_TAG, "Coffee", &[RELAY_A]).await;
     let adapter = RadrootsMockRelayPublishAdapter::new();
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 
@@ -2449,7 +2459,7 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_preserves_scoped_duplicate_target_metadata() {
+async fn push_outbox_with_transport_preserves_scoped_duplicate_target_metadata() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let outbox_event_id =
         enqueue_scoped_duplicate_listing(&sdk, LISTING_A_D_TAG, "Scoped Coffee").await;
@@ -2457,7 +2467,10 @@ async fn push_outbox_with_adapter_preserves_scoped_duplicate_target_metadata() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 
@@ -2525,8 +2538,8 @@ async fn push_outbox_adapter_transport_failure_preserves_scoped_target_metadata(
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &TransportFailurePublishAdapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(TransportFailurePublishAdapter),
             PushOutboxRequest::new().with_limit(1),
         )
         .await
@@ -2592,7 +2605,7 @@ async fn push_outbox_adapter_transport_failure_preserves_scoped_target_metadata(
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_recovers_expired_publishing_claim_before_selecting_work() {
+async fn push_outbox_with_transport_recovers_expired_publishing_claim_before_selecting_work() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
     let sdk = RadrootsClient::builder()
@@ -2642,7 +2655,10 @@ async fn push_outbox_with_adapter_recovers_expired_publishing_claim_before_selec
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("recovered push");
 
@@ -2670,7 +2686,7 @@ async fn push_outbox_with_adapter_recovers_expired_publishing_claim_before_selec
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
+async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
     let sdk = RadrootsClient::builder()
@@ -2760,8 +2776,8 @@ async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
 
     let first_receipt = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &adapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
             PushOutboxRequest::new()
                 .with_limit(1)
                 .with_next_attempt_delay_ms(1),
@@ -2804,7 +2820,10 @@ async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
 
     let second_receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("second push");
 
@@ -2847,7 +2866,7 @@ async fn push_outbox_with_adapter_scopes_duplicate_endpoint_sibling_plans() {
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_can_publish_targeted_ready_event() {
+async fn push_outbox_with_transport_can_publish_targeted_ready_event() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let older_outbox_event_id =
         enqueue_listing(&sdk, LISTING_A_D_TAG, "Earlier Coffee", &[RELAY_A]).await;
@@ -2857,8 +2876,8 @@ async fn push_outbox_with_adapter_can_publish_targeted_ready_event() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &adapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
             PushOutboxRequest::new().with_outbox_event_id(targeted_outbox_event_id),
         )
         .await
@@ -2901,7 +2920,10 @@ async fn push_outbox_default_public_policy_rejects_queued_localhost_ws_targets()
 
     let error = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect_err("public push should reject ws target");
 
@@ -2910,7 +2932,7 @@ async fn push_outbox_default_public_policy_rejects_queued_localhost_ws_targets()
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets() {
+async fn push_outbox_with_transport_accepts_explicit_queued_localhost_ws_targets() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let outbox_event_id = enqueue_listing_with_policy(
         &sdk,
@@ -2924,8 +2946,8 @@ async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets()
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &adapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
             PushOutboxRequest::new()
                 .with_limit(1)
                 .with_nostr_relay_url_policy(NostrRelayUrlPolicy::Localhost),
@@ -3015,7 +3037,10 @@ async fn push_outbox_preserves_retryable_and_terminal_relay_outcomes() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 
@@ -3071,8 +3096,8 @@ async fn push_outbox_continues_after_adapter_transport_failure_and_releases_clai
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &TransportFailurePublishAdapter,
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(TransportFailurePublishAdapter),
             PushOutboxRequest::new().with_limit(2),
         )
         .await
@@ -3129,10 +3154,12 @@ async fn concurrent_push_outbox_claims_do_not_publish_the_same_event_twice() {
     let adapter = RecordingPublishAdapter::new(Duration::from_millis(50));
     let request = PushOutboxRequest::new().with_limit(1);
     let sync = sdk.sync();
+    let left_transport = RadrootsNostrTransport::new(&adapter);
+    let right_transport = RadrootsNostrTransport::new(&adapter);
 
     let (left, right) = tokio::join!(
-        sync.push_outbox_with_adapter(&adapter, request.clone()),
-        sync.push_outbox_with_adapter(&adapter, request)
+        sync.push_outbox_with_transport(&left_transport, request.clone()),
+        sync.push_outbox_with_transport(&right_transport, request)
     );
     let left = left.expect("left push");
     let right = right.expect("right push");
@@ -3151,7 +3178,10 @@ async fn push_outbox_computes_publish_time_for_each_iteration() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(2))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(2),
+        )
         .await
         .expect("push");
 
@@ -3186,7 +3216,10 @@ async fn push_outbox_returns_fatal_error_for_malformed_signed_event_data() {
 
     let error = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(2))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(2),
+        )
         .await
         .expect_err("fatal malformed outbox data");
 
@@ -3227,7 +3260,10 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(
+            &RadrootsNostrTransport::new(&adapter),
+            PushOutboxRequest::new().with_limit(1),
+        )
         .await
         .expect("push");
 

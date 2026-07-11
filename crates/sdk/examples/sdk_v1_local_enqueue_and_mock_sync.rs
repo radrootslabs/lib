@@ -13,7 +13,7 @@ use radroots_sdk::{
     RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
     TargetPolicy, TargetSet, TradeStatusRequest,
 };
-use radroots_transport_nostr::RadrootsMockRelayPublishAdapter;
+use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 
 const LOCAL_RELAY: &str = "ws://localhost:7777";
 
@@ -47,9 +47,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
     let adapter = RadrootsMockRelayPublishAdapter::new();
+    let transport = RadrootsNostrTransport::new(&adapter);
     let push = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_transport(&transport, PushOutboxRequest::new().with_limit(1))
         .await?;
     let order_status = sdk
         .trades()

@@ -42,11 +42,11 @@ use radroots_transport::{
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
-use radroots_transport_nostr::RadrootsNostrClientPublishAdapter;
+use radroots_transport_nostr::{RadrootsNostrClientPublishAdapter, RadrootsNostrTransport};
 #[cfg(feature = "runtime")]
 use radroots_transport_nostr::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
-    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, publish_claimed_outbox_event,
+    RadrootsRelayOutcomeKind, publish_claimed_outbox_event_with_transport,
 };
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_transport_publish_protocol::{
@@ -712,7 +712,8 @@ impl<'sdk> SyncClient<'sdk> {
                     let adapter = RadrootsNostrClientPublishAdapter::new(
                         RadrootsNostrClient::new_signerless(),
                     );
-                    self.push_outbox_with_adapter(&adapter, request).await
+                    let transport = RadrootsNostrTransport::new(adapter);
+                    self.push_outbox_with_transport(&transport, request).await
                 }
 
                 #[cfg(not(feature = "transport-nostr-runtime"))]
@@ -779,13 +780,13 @@ impl<'sdk> SyncClient<'sdk> {
         Ok(summary.ready_signed_events == 0)
     }
 
-    pub async fn push_outbox_with_adapter<A>(
+    pub async fn push_outbox_with_transport<T>(
         &self,
-        adapter: &A,
+        transport: &T,
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError>
     where
-        A: RadrootsRelayPublishAdapter,
+        T: radroots_transport::RadrootsTransport + ?Sized,
     {
         request.validate()?;
         let recovery_now_ms = sdk_now_ms(self.sdk)?;
@@ -814,10 +815,10 @@ impl<'sdk> SyncClient<'sdk> {
             )
             .republish_accepted_relays(request.republish_accepted_targets)
             .relay_url_policy(request.nostr_relay_url_policy.nostr_transport_policy());
-            let publish = publish_claimed_outbox_event(
+            let publish = publish_claimed_outbox_event_with_transport(
                 &self.sdk._outbox,
                 &self.sdk._event_store,
-                adapter,
+                transport,
                 &claimed,
                 policy,
                 publish_now_ms,

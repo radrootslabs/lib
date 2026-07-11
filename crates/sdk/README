@@ -42,8 +42,8 @@ queued outbox event, so already queued work does not require a configured builde
 preview work reports explicit preview-unavailable or deferred receipt state with zero network
 attempts; it does not deliver and does not fall back to another transport. Nostr transport publishing
 and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither transport
-owns signing. `push_outbox_with_adapter(...)` remains available for tests and controlled
-adapter-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
+owns signing. `push_outbox_with_transport(...)` remains available for tests and controlled
+transport-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
 `publish.event`.
 
 `sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
@@ -98,7 +98,7 @@ cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features r
 preparation, signed-event verification, decoded event matching, and manifest hash access without
 local runtime storage.
 `sdk_v1_local_enqueue_and_mock_sync` shows localhost Nostr target selection, configured local-key
-signing, prepared listing enqueue, `push_outbox_with_adapter(...)` with a mock relay adapter, and
+signing, prepared listing enqueue, `push_outbox_with_transport(...)` with a Nostr transport facade, and
 `TradeStatusRequest`. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
 product permission derivation at the SDK boundary. The examples stay on product APIs and do not use
 wire-event internals.

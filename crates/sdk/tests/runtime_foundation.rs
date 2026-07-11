@@ -1067,7 +1067,7 @@ fn sdk_examples_stay_on_product_api_boundary() {
     assert!(local_enqueue.contains("RadrootsSdkSignerProvider::LocalKey"));
     assert!(local_enqueue.contains("enqueue_prepared_publish"));
     assert!(!local_enqueue.contains("enqueue_prepared_publish_with_explicit_signer"));
-    assert!(local_enqueue.contains("push_outbox_with_adapter"));
+    assert!(local_enqueue.contains("push_outbox_with_transport"));
     assert!(local_enqueue.contains("TradeStatusRequest"));
 
     let myc_setup = include_str!("../examples/sdk_v1_myc_nip46_signer_setup.rs");

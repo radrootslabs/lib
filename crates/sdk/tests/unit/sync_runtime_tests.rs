@@ -47,14 +47,17 @@ use radroots_outbox::{
 };
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetLabel,
+    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy,
+};
+use radroots_transport::{
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
+    RadrootsTransportTargetLabel,
 };
 use radroots_transport_nostr::{
-    RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt, RadrootsRelayOutcomeKind,
-    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
-    RadrootsRelayTransportError,
+    RadrootsNostrTransport, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
+    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
+    RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_transport_publish_protocol::{
@@ -792,7 +795,10 @@ async fn sync_runtime_reports_clock_errors_before_store_or_relay_work() {
     ));
     assert!(matches!(
         sdk.sync()
-            .push_outbox_with_adapter(&UnusedPublishAdapter, super::PushOutboxRequest::new())
+            .push_outbox_with_transport(
+                &RadrootsNostrTransport::new(UnusedPublishAdapter),
+                super::PushOutboxRequest::new()
+            )
             .await,
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
     ));
