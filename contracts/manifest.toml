@@ -49,6 +49,7 @@ deferred_publication = [
   "radroots_transport_reticulum",
   "radroots_transport",
   "radroots_mesh",
+  "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
   "radroots_net",
   "radroots_nostr_runtime",

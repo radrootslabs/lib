@@ -42,6 +42,7 @@ crates = [
   "radroots_local_events",
   "radroots_log",
   "radroots_mesh",
+  "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
   "radroots_net",
   "radroots_nostr",
