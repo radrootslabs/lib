@@ -666,10 +666,10 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     );
 
     let event_store_summary_error = RadrootsClient::builder().build().await.expect("sdk");
-    sqlx::query("DROP TABLE nostr_events")
+    sqlx::query("DROP TABLE event_envelopes")
         .execute(event_store_summary_error._event_store.pool())
         .await
-        .expect("drop nostr events");
+        .expect("drop event envelopes");
     assert!(matches!(
         event_store_summary_error
             .storage_status(StorageStatusRequest::new())
@@ -1607,7 +1607,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     populated_sdk
         ._event_store
         .ingest_event(radroots_event_store::RadrootsEventIngest::new(
-            radroots_events::RadrootsNostrEvent {
+            radroots_events::RadrootsEventEnvelope {
                 id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
                 author: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     .to_owned(),

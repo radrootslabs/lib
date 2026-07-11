@@ -26,7 +26,7 @@ use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_events::contract::RadrootsActorRole;
 #[cfg(feature = "radrootsd-proxy")]
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_events::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_events::kinds::KIND_FARM;
@@ -106,8 +106,8 @@ impl RadrootsEventSigner for ProxyFixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -133,7 +133,7 @@ fn proxy_actor() -> RadrootsActorContext {
 }
 
 #[cfg(feature = "radrootsd-proxy")]
-fn proxy_frozen_draft(d_tag: &str) -> RadrootsFrozenEventDraft {
+fn proxy_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
     to_frozen_draft(
         WireEventParts {
             kind: KIND_FARM,
@@ -1111,7 +1111,7 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
         state: RadrootsOutboxEventState::Signed,
         claim_token: "claim-token".to_owned(),
         active_delivery_plan_id: Some(1),
-        draft: RadrootsFrozenEventDraft {
+        draft: RadrootsEventDraft {
             contract_id: "radroots.test".to_owned(),
             contract_registry_version: 1,
             kind: 1,

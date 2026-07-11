@@ -9,7 +9,7 @@ use radroots_core::{
 };
 use radroots_events::{
     contract::RadrootsActorRole,
-    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
+    draft::{RadrootsEventDraft, RadrootsSignedEvent},
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     listing::{
@@ -60,8 +60,8 @@ impl RadrootsEventSigner for FixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),

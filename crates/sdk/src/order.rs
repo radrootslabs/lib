@@ -3,9 +3,9 @@ pub use radroots_events::order::*;
 pub use radroots_events_codec::error::EventEncodeError;
 pub use radroots_events_codec::order::RadrootsOrderEnvelopeParseError;
 
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_events::{RadrootsNostrEventPtr, ids::RadrootsEventId, tags::TAG_E};
+use radroots_events::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events_codec::wire::WireEventParts;
 
@@ -87,7 +87,7 @@ fn with_contract_root_event_tag(
 
 #[cfg(any(feature = "signer-adapters", test))]
 pub fn build_order_request_draft(
-    listing_event: &RadrootsNostrEventPtr,
+    listing_event: &RadrootsEventPtr,
     payload: &RadrootsOrderRequest,
 ) -> Result<RadrootsOrderRequestDraft, EventEncodeError> {
     Ok(RadrootsOrderRequestDraft {
@@ -168,7 +168,7 @@ pub fn build_order_cancellation_draft(
 }
 
 pub fn parse_order_request(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderRequest>, RadrootsOrderEnvelopeParseError> {
     radroots_events_codec::order::order_request_from_event(event)
 }

@@ -6,7 +6,7 @@ use radroots_core::{
 };
 use radroots_event_store::RadrootsEventStoreError;
 use radroots_events::{
-    draft::RadrootsSignedNostrEvent,
+    draft::RadrootsSignedEvent,
     kinds::KIND_LISTING,
     order::{
         RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem, RadrootsOrderEconomicLine,
@@ -115,12 +115,12 @@ fn refs<'a>(
     }
 }
 
-fn ptr(id: String) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr { id, relays: None }
+fn ptr(id: String) -> RadrootsEventPtr {
+    RadrootsEventPtr { id, relays: None }
 }
 
-fn nostr_event(id: String, kind: u32) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn nostr_event(id: String, kind: u32) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id,
         author: hex_64('c'),
         created_at: 1_700_000_000,
@@ -289,8 +289,8 @@ impl RadrootsEventSigner for OrderFixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -314,15 +314,15 @@ fn fixture_listing_addr() -> RadrootsListingAddress {
     .expect("listing address")
 }
 
-fn fixture_event_ptr(character: char) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn fixture_event_ptr(character: char) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: hex_64(character),
         relays: Some(RELAY.to_owned()),
     }
 }
 
-fn fixture_order_event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn fixture_order_event_ptr(event_id: &RadrootsEventId) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: event_id.as_str().to_owned(),
         relays: Some(RELAY.to_owned()),
     }
@@ -597,10 +597,10 @@ fn event_from_parts(
     parts: WireEventParts,
     contract_id: &str,
     expected_pubkey: &RadrootsPublicKey,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let frozen = to_frozen_draft(parts, contract_id, expected_pubkey.as_str(), 1_700_000_000)
         .expect("frozen draft");
-    RadrootsNostrEvent {
+    RadrootsEventEnvelope {
         id: frozen.expected_event_id,
         author: expected_pubkey.as_str().to_owned(),
         created_at: frozen.created_at,
@@ -611,7 +611,7 @@ fn event_from_parts(
     }
 }
 
-fn request_event() -> RadrootsNostrEvent {
+fn request_event() -> RadrootsEventEnvelope {
     let listing_event = ptr(event_id('a').as_str().to_owned());
     let request = order_request_payload();
     event_from_parts(

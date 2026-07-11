@@ -10,7 +10,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
 use radroots_events::{
-    RadrootsNostrEventPtr,
+    RadrootsEventPtr,
     contract::RadrootsActorRole,
     ids::RadrootsListingAddress,
     kinds::KIND_LISTING,
@@ -151,8 +151,8 @@ fn listing_address() -> RadrootsListingAddress {
     .expect("listing address")
 }
 
-fn listing_event_ptr() -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn listing_event_ptr() -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: "6ccf12d1e56c21065d239bc3d46c0000cd000095d20000d9000073cd00009600".to_owned(),
         relays: Some(RELAY.to_owned()),
     }

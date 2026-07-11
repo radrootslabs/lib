@@ -15,8 +15,8 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, authorize_ac
 use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
 use radroots_events::{
-    RadrootsNostrEvent,
-    draft::RadrootsFrozenEventDraft,
+    RadrootsEventEnvelope,
+    draft::RadrootsEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
 };
@@ -301,7 +301,7 @@ pub struct DvmTradeTransitionProofPlan {
     pub proof_mode: DvmProofMode,
     pub expected_receipt_proof_system: RadrootsValidationReceiptProofSystem,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub payload: DvmTradeTransitionProofRequestPayload,
     pub created_at: RadrootsSdkTimestamp,
 }
@@ -329,7 +329,7 @@ pub struct DvmTradeTransitionProofReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct DvmValidationReceiptIngestRequest {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub observed_at: Option<RadrootsSdkTimestamp>,
     pub expected_order_id: Option<RadrootsOrderId>,
     pub expected_listing_event_id: Option<RadrootsEventId>,
@@ -340,7 +340,7 @@ pub struct DvmValidationReceiptIngestRequest {
 
 #[cfg(feature = "runtime")]
 impl DvmValidationReceiptIngestRequest {
-    pub fn new(event: RadrootsNostrEvent) -> Self {
+    pub fn new(event: RadrootsEventEnvelope) -> Self {
         Self {
             event,
             observed_at: None,

@@ -9,8 +9,8 @@ use radroots_event_store::{
     RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_events::{
-    RadrootsNostrEvent,
-    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
+    RadrootsEventEnvelope,
+    draft::{RadrootsEventDraft, RadrootsSignedEvent},
     ids::RadrootsEventId,
 };
 use radroots_outbox::{
@@ -26,7 +26,7 @@ const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
 pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
     pub(crate) actor: &'a RadrootsActorContext,
-    pub(crate) frozen_draft: &'a RadrootsFrozenEventDraft,
+    pub(crate) frozen_draft: &'a RadrootsEventDraft,
     pub(crate) target_policy: TargetPolicy,
     pub(crate) satisfaction_policy: SatisfactionPolicy,
     pub(crate) idempotency_key: Option<SdkIdempotencyKey>,
@@ -73,7 +73,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
 async fn enqueue_signed_workflow_event(
     sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
-    signed_event: RadrootsSignedNostrEvent,
+    signed_event: RadrootsSignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let idempotency_key = match request.idempotency_key {
@@ -303,8 +303,8 @@ fn parse_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsS
 
 fn signed_outbox_input(
     operation_kind: &'static str,
-    frozen_draft: &RadrootsFrozenEventDraft,
-    signed_event: RadrootsSignedNostrEvent,
+    frozen_draft: &RadrootsEventDraft,
+    signed_event: RadrootsSignedEvent,
     delivery_plan: RadrootsOutboxDeliveryPlanInput,
     idempotency_key: SdkIdempotencyKey,
     event_store_inserted: bool,
@@ -322,8 +322,8 @@ fn signed_outbox_input(
     .with_idempotency_key(idempotency_key.into_string())
 }
 
-fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: signed_event.id.clone(),
         author: signed_event.pubkey.clone(),
         created_at: signed_event.created_at,

@@ -174,8 +174,12 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     assert!(paths.outbox_path.exists());
     assert!(paths.private_store_path.exists());
     let event_tables = sqlite_table_names(&paths.event_store_path).await;
-    assert!(event_tables.iter().any(|name| name == "nostr_events"));
-    assert!(event_tables.iter().any(|name| name == "nostr_event_tags"));
+    assert!(event_tables.iter().any(|name| name == "event_envelopes"));
+    assert!(
+        event_tables
+            .iter()
+            .any(|name| name == "event_envelope_tags")
+    );
     assert!(event_tables.iter().any(|name| name == "listing_projection"));
     assert!(event_tables.iter().any(|name| name == "trade_projection"));
     assert!(event_tables.iter().any(|name| name == "listing_search_fts"));

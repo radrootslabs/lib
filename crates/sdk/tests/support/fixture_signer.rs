@@ -1,7 +1,5 @@
 use radroots_authority::{RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_events::draft::{
-    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts,
-};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
 
 #[derive(Clone)]
 pub struct FixtureSigner {
@@ -23,8 +21,8 @@ impl RadrootsEventSigner for FixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         if self.pubkey().as_str() != draft.expected_pubkey.as_str() {
             return Err(RadrootsSignerError::SigningFailed {
                 message: "wrong fixture signer".to_owned(),
@@ -41,7 +39,7 @@ impl RadrootsEventSigner for FixtureSigner {
             "sig": sig,
         })
         .to_string();
-        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: draft.expected_event_id.clone(),
             pubkey: self.pubkey().as_str().to_owned(),
             created_at: draft.created_at,

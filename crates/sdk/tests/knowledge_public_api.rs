@@ -394,7 +394,7 @@ fn knowledge_errors_expose_stable_codes() {
     assert_eq!(error.inner_code(), "invalid_field");
     assert!(!error.to_string().contains(article.content_djot.as_str()));
 
-    let draft_error: RadrootsSdkKnowledgeError = RadrootsFrozenEventDraft::new(
+    let draft_error: RadrootsSdkKnowledgeError = RadrootsEventDraft::new(
         KNOWLEDGE_CLAIM_CONTRACT_ID,
         KIND_KNOWLEDGE_CLAIM,
         CREATED_AT,
@@ -408,7 +408,7 @@ fn knowledge_errors_expose_stable_codes() {
     assert_eq!(draft_error.inner_code(), "missing_tag");
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
+fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -421,7 +421,7 @@ fn sign_parts(parts: WireEventParts) -> RadrootsNostrEvent {
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsNostrEvent {
+    RadrootsEventEnvelope {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs() as u32,
@@ -448,8 +448,8 @@ fn hex_64(character: char) -> String {
     character.to_string().repeat(64)
 }
 
-fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: hex_64(character),
         author: hex_64('a'),
         kind,
@@ -458,7 +458,7 @@ fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
     }
 }
 
-fn malformed_event_ref(kind: u32) -> RadrootsNostrEventRef {
+fn malformed_event_ref(kind: u32) -> RadrootsEventRef {
     let mut reference = event_ref('f', kind);
     reference.id = "bad".to_owned();
     reference

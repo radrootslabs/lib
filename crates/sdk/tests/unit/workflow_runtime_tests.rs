@@ -3,7 +3,7 @@ use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_events::contract::RadrootsActorRole;
-use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_events::draft::RadrootsSignedEvent;
 use radroots_events::kinds::KIND_FARM;
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{
@@ -39,8 +39,8 @@ impl RadrootsEventSigner for WorkflowSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -49,11 +49,11 @@ impl RadrootsEventSigner for WorkflowSigner {
     }
 }
 
-fn frozen_draft_for(pubkey: &str) -> RadrootsFrozenEventDraft {
+fn frozen_draft_for(pubkey: &str) -> RadrootsEventDraft {
     frozen_draft_for_d_tag(pubkey, "test")
 }
 
-fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsFrozenEventDraft {
+fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsEventDraft {
     to_frozen_draft(
         WireEventParts {
             kind: KIND_FARM,
@@ -67,12 +67,12 @@ fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsFrozenEventDraft
     .expect("frozen draft")
 }
 
-fn frozen_draft() -> RadrootsFrozenEventDraft {
+fn frozen_draft() -> RadrootsEventDraft {
     frozen_draft_for("a".repeat(64).as_str())
 }
 
-fn signed_event() -> RadrootsSignedNostrEvent {
-    RadrootsSignedNostrEvent {
+fn signed_event() -> RadrootsSignedEvent {
+    RadrootsSignedEvent {
         id: "b".repeat(64),
         pubkey: "a".repeat(64),
         created_at: 1_700_000_000,

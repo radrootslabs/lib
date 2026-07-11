@@ -6,7 +6,7 @@ use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, authorize_actor_for_draft,
     authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
 };
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
@@ -120,7 +120,7 @@ where
 pub struct RadrootsSdkSignRequest<'a> {
     pub operation_kind: &'a str,
     pub actor: &'a RadrootsActorContext,
-    pub frozen_draft: &'a RadrootsFrozenEventDraft,
+    pub frozen_draft: &'a RadrootsEventDraft,
     progress_sink: Option<&'a mut dyn RadrootsSdkSignerProgressSink>,
 }
 
@@ -128,7 +128,7 @@ impl<'a> RadrootsSdkSignRequest<'a> {
     pub fn new(
         operation_kind: &'a str,
         actor: &'a RadrootsActorContext,
-        frozen_draft: &'a RadrootsFrozenEventDraft,
+        frozen_draft: &'a RadrootsEventDraft,
     ) -> Self {
         Self {
             operation_kind,
@@ -164,7 +164,7 @@ pub struct RadrootsSdkSignReceipt {
     pub signer_pubkey: String,
     pub remote_signer_pubkey: Option<String>,
     pub signed_event_id: String,
-    pub signed_event: RadrootsSignedNostrEvent,
+    pub signed_event: RadrootsSignedEvent,
 }
 
 #[derive(Clone)]
@@ -518,8 +518,8 @@ impl RadrootsEventSigner for RadrootsSdkSignerIdentityOnly {
 
     fn sign_frozen_draft(
         &self,
-        _draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        _draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         Err(RadrootsSignerError::Unavailable)
     }
 }
@@ -544,7 +544,7 @@ impl RadrootsNostrConnectClientTransport for RadrootsSdkNip46TransportAdapter<'_
 }
 
 fn sign_event_request_from_frozen_draft(
-    draft: &RadrootsFrozenEventDraft,
+    draft: &RadrootsEventDraft,
 ) -> Result<RadrootsNostrConnectRequest, RadrootsSdkError> {
     let public_key = nip46_unsigned_event_pubkey(draft)?;
     let kind = nip46_unsigned_event_kind(draft)?;
@@ -560,9 +560,7 @@ fn sign_event_request_from_frozen_draft(
     Ok(RadrootsNostrConnectRequest::SignEvent(unsigned_event))
 }
 
-fn nip46_unsigned_event_pubkey(
-    draft: &RadrootsFrozenEventDraft,
-) -> Result<PublicKey, RadrootsSdkError> {
+fn nip46_unsigned_event_pubkey(draft: &RadrootsEventDraft) -> Result<PublicKey, RadrootsSdkError> {
     PublicKey::parse(draft.expected_pubkey.as_str()).map_err(|error| {
         nip46_sign_event_protocol_error(format!(
             "failed to parse frozen draft pubkey for NIP-46 unsigned event: {error}"
@@ -570,7 +568,7 @@ fn nip46_unsigned_event_pubkey(
     })
 }
 
-fn nip46_unsigned_event_kind(draft: &RadrootsFrozenEventDraft) -> Result<Kind, RadrootsSdkError> {
+fn nip46_unsigned_event_kind(draft: &RadrootsEventDraft) -> Result<Kind, RadrootsSdkError> {
     let kind = u16::try_from(draft.kind).map_err(|error| {
         nip46_sign_event_protocol_error(format!(
             "failed to convert frozen draft kind to NIP-46 unsigned event: {error}"
@@ -579,9 +577,7 @@ fn nip46_unsigned_event_kind(draft: &RadrootsFrozenEventDraft) -> Result<Kind, R
     Ok(Kind::from_u16(kind))
 }
 
-fn nip46_unsigned_event_tags(
-    draft: &RadrootsFrozenEventDraft,
-) -> Result<Vec<Tag>, RadrootsSdkError> {
+fn nip46_unsigned_event_tags(draft: &RadrootsEventDraft) -> Result<Vec<Tag>, RadrootsSdkError> {
     let mut tags = Vec::with_capacity(draft.tags.len());
     for raw_tag in &draft.tags {
         let tag = Tag::parse(raw_tag.clone()).map_err(|error| {
@@ -604,15 +600,16 @@ fn nip46_sign_event_protocol_error(reason: String) -> RadrootsSdkError {
 fn signed_event_from_nip46_response(
     operation_kind: &str,
     response: RadrootsNostrConnectResponse,
-) -> Result<RadrootsSignedNostrEvent, RadrootsSdkError> {
+) -> Result<RadrootsSignedEvent, RadrootsSdkError> {
     match response {
         RadrootsNostrConnectResponse::SignedEvent(event) => {
             let raw_json = event.as_json();
-            RadrootsSignedNostrEvent::from_event(radroots_event_from_nostr(&event), raw_json)
-                .map_err(|error| RadrootsSdkError::SignerProtocol {
+            RadrootsSignedEvent::from_event(radroots_event_from_nostr(&event), raw_json).map_err(
+                |error| RadrootsSdkError::SignerProtocol {
                     mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
                     reason: format!("remote signed event is invalid: {error}"),
-                })
+                },
+            )
         }
         RadrootsNostrConnectResponse::Error { error, .. } => {
             Err(RadrootsSdkError::SignerRequestRejected {
@@ -665,7 +662,7 @@ fn sign_receipt(
     mode: RadrootsSdkSignerMode,
     signer_pubkey: String,
     remote_signer_pubkey: Option<String>,
-    signed_event: RadrootsSignedNostrEvent,
+    signed_event: RadrootsSignedEvent,
 ) -> RadrootsSdkSignReceipt {
     RadrootsSdkSignReceipt {
         operation_kind: operation_kind.to_owned(),

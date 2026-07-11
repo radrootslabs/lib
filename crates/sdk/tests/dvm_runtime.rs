@@ -8,9 +8,9 @@ use radroots_core::{
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    RadrootsEventEnvelope, RadrootsEventPtr,
     contract::RadrootsActorRole,
-    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
+    draft::{RadrootsEventDraft, RadrootsSignedEvent},
     ids::{
         RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
         RadrootsPublicKey,
@@ -81,8 +81,8 @@ impl RadrootsEventSigner for FixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -696,8 +696,8 @@ fn listing_address() -> RadrootsListingAddress {
     .expect("listing address")
 }
 
-fn listing_event_ptr() -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn listing_event_ptr() -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: deterministic_event_id("listing-event").into_string(),
         relays: Some(RELAY.to_owned()),
     }
@@ -782,7 +782,7 @@ fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
     }
 }
 
-fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
+fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsEventEnvelope {
     let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
@@ -795,7 +795,7 @@ fn signed_order_decision_event(
     raw_order_id: &str,
     root_event_id: &RadrootsEventId,
     created_at: u32,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let draft = radroots_events_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
@@ -811,7 +811,7 @@ fn signed_validation_receipt_event(
     root_event_id: &RadrootsEventId,
     target_event_id: &RadrootsEventId,
     created_at: u32,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let receipt = RadrootsTradeValidationReceipt {
         changed_records_root: hash32('6'),
         domain: "radroots.receipt".to_owned(),
@@ -846,7 +846,7 @@ fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
     parts: radroots_events_codec::wire::WireEventParts,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);
     let event = radroots_nostr_build_event(parts.kind, parts.content, parts.tags)

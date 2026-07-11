@@ -4,7 +4,7 @@
 use base64::Engine;
 #[cfg(target_arch = "wasm32")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use radroots_events::RadrootsNostrEvent;
+use radroots_events::RadrootsEventEnvelope;
 use radroots_replica_sync::RadrootsReplicaSyncRequest;
 #[cfg(target_arch = "wasm32")]
 use radroots_replica_sync::{
@@ -53,7 +53,7 @@ pub fn parse_request_model(request_json: &str) -> Result<RadrootsReplicaSyncRequ
     serde_json::from_str(request_json).map_err(|error| error.to_string())
 }
 
-pub fn parse_event_model(event_json: &str) -> Result<RadrootsNostrEvent, String> {
+pub fn parse_event_model(event_json: &str) -> Result<RadrootsEventEnvelope, String> {
     let envelope: NostrEventEnvelope =
         serde_json::from_str(event_json).map_err(|error| error.to_string())?;
     let author = match (envelope.author, envelope.pubkey) {
@@ -64,7 +64,7 @@ pub fn parse_event_model(event_json: &str) -> Result<RadrootsNostrEvent, String>
         (None, Some(pubkey)) => pubkey,
         (None, None) => return Err("missing author/pubkey".to_owned()),
     };
-    Ok(RadrootsNostrEvent {
+    Ok(RadrootsEventEnvelope {
         id: envelope.id,
         author,
         created_at: envelope.created_at,

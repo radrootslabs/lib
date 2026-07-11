@@ -31,7 +31,7 @@ use radroots_event_store::RadrootsStoredEventTag;
 use radroots_event_store::{RadrootsEventIngest, RadrootsStoredEvent};
 #[cfg(feature = "runtime")]
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     contract::RadrootsActorRole,
     ids::RadrootsEventId,
     kinds::{
@@ -43,8 +43,8 @@ use radroots_events::{
 };
 #[cfg(any(feature = "signer-adapters", test))]
 use radroots_events::{
-    RadrootsNostrEventPtr,
-    draft::RadrootsFrozenEventDraft,
+    RadrootsEventPtr,
+    draft::RadrootsEventDraft,
     ids::RadrootsOrderRevisionId,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
@@ -244,7 +244,7 @@ pub struct TradeWorkflowRetryAdvice {
 pub struct TradeSubmitPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub listing_event: RadrootsNostrEventPtr,
+    pub listing_event: RadrootsEventPtr,
     pub order: RadrootsOrderRequest,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -254,7 +254,7 @@ pub struct TradeSubmitPrepareRequest {
 impl TradeSubmitPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        listing_event: RadrootsNostrEventPtr,
+        listing_event: RadrootsEventPtr,
         order: RadrootsOrderRequest,
     ) -> Self {
         Self {
@@ -278,7 +278,7 @@ impl TradeSubmitPrepareRequest {
 pub struct TradeSubmitEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub listing_event: RadrootsNostrEventPtr,
+    pub listing_event: RadrootsEventPtr,
     pub order: RadrootsOrderRequest,
     pub target_policy: TargetPolicy,
     pub publish_mode: PublishMode,
@@ -292,7 +292,7 @@ pub struct TradeSubmitEnqueueRequest {
 impl TradeSubmitEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        listing_event: RadrootsNostrEventPtr,
+        listing_event: RadrootsEventPtr,
         order: RadrootsOrderRequest,
         target_policy: TargetPolicy,
         publish_mode: PublishMode,
@@ -352,7 +352,7 @@ pub struct TradeSubmitPlan {
     pub seller_pubkey: RadrootsPublicKey,
     pub listing_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 
@@ -379,13 +379,13 @@ pub struct TradeSubmitReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRequestEvidenceIngestRequest {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl TradeRequestEvidenceIngestRequest {
-    pub fn new(event: RadrootsNostrEvent) -> Self {
+    pub fn new(event: RadrootsEventEnvelope) -> Self {
         Self {
             event,
             observed_at: None,
@@ -414,13 +414,13 @@ pub struct TradeRequestEvidenceIngestReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeEvidenceIngestRequest {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl TradeEvidenceIngestRequest {
-    pub fn new(event: RadrootsNostrEvent) -> Self {
+    pub fn new(event: RadrootsEventEnvelope) -> Self {
         Self {
             event,
             observed_at: None,
@@ -450,7 +450,7 @@ pub struct TradeEvidenceIngestReceipt {
 pub struct TradeDecisionPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub request_event: RadrootsNostrEventPtr,
+    pub request_event: RadrootsEventPtr,
     pub decision: RadrootsOrderDecision,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -460,7 +460,7 @@ pub struct TradeDecisionPrepareRequest {
 impl TradeDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        request_event: RadrootsNostrEventPtr,
+        request_event: RadrootsEventPtr,
         decision: RadrootsOrderDecision,
     ) -> Self {
         Self {
@@ -484,7 +484,7 @@ impl TradeDecisionPrepareRequest {
 pub struct TradeDecisionEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub request_event: RadrootsNostrEventPtr,
+    pub request_event: RadrootsEventPtr,
     pub decision: RadrootsOrderDecision,
     pub target_policy: TargetPolicy,
     pub publish_mode: PublishMode,
@@ -498,7 +498,7 @@ pub struct TradeDecisionEnqueueRequest {
 impl TradeDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        request_event: RadrootsNostrEventPtr,
+        request_event: RadrootsEventPtr,
         decision: RadrootsOrderDecision,
         target_policy: TargetPolicy,
         publish_mode: PublishMode,
@@ -558,7 +558,7 @@ pub struct TradeDecisionPlan {
     pub seller_pubkey: RadrootsPublicKey,
     pub request_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 
@@ -587,8 +587,8 @@ pub struct TradeDecisionReceipt {
 pub struct TradeRevisionProposalPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub proposal: RadrootsOrderRevisionProposal,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -598,8 +598,8 @@ pub struct TradeRevisionProposalPrepareRequest {
 impl TradeRevisionProposalPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         proposal: RadrootsOrderRevisionProposal,
     ) -> Self {
         Self {
@@ -624,8 +624,8 @@ impl TradeRevisionProposalPrepareRequest {
 pub struct TradeRevisionProposalEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub proposal: RadrootsOrderRevisionProposal,
     pub target_policy: TargetPolicy,
     pub publish_mode: PublishMode,
@@ -639,8 +639,8 @@ pub struct TradeRevisionProposalEnqueueRequest {
 impl TradeRevisionProposalEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         proposal: RadrootsOrderRevisionProposal,
         target_policy: TargetPolicy,
         publish_mode: PublishMode,
@@ -702,7 +702,7 @@ pub struct TradeRevisionProposalPlan {
     pub root_event_id: RadrootsEventId,
     pub previous_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 
@@ -732,8 +732,8 @@ pub struct TradeRevisionProposalReceipt {
 pub struct TradeRevisionDecisionPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub decision: RadrootsOrderRevisionDecision,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -743,8 +743,8 @@ pub struct TradeRevisionDecisionPrepareRequest {
 impl TradeRevisionDecisionPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         decision: RadrootsOrderRevisionDecision,
     ) -> Self {
         Self {
@@ -769,8 +769,8 @@ impl TradeRevisionDecisionPrepareRequest {
 pub struct TradeRevisionDecisionEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub decision: RadrootsOrderRevisionDecision,
     pub target_policy: TargetPolicy,
     pub publish_mode: PublishMode,
@@ -784,8 +784,8 @@ pub struct TradeRevisionDecisionEnqueueRequest {
 impl TradeRevisionDecisionEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         decision: RadrootsOrderRevisionDecision,
         target_policy: TargetPolicy,
         publish_mode: PublishMode,
@@ -847,7 +847,7 @@ pub struct TradeRevisionDecisionPlan {
     pub root_event_id: RadrootsEventId,
     pub previous_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 
@@ -877,8 +877,8 @@ pub struct TradeRevisionDecisionReceipt {
 pub struct TradeCancellationPrepareRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub cancellation: RadrootsOrderCancellation,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
@@ -888,8 +888,8 @@ pub struct TradeCancellationPrepareRequest {
 impl TradeCancellationPrepareRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         cancellation: RadrootsOrderCancellation,
     ) -> Self {
         Self {
@@ -914,8 +914,8 @@ impl TradeCancellationPrepareRequest {
 pub struct TradeCancellationEnqueueRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
+    pub root_event: RadrootsEventPtr,
+    pub previous_event: RadrootsEventPtr,
     pub cancellation: RadrootsOrderCancellation,
     pub target_policy: TargetPolicy,
     pub publish_mode: PublishMode,
@@ -929,8 +929,8 @@ pub struct TradeCancellationEnqueueRequest {
 impl TradeCancellationEnqueueRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
+        root_event: RadrootsEventPtr,
+        previous_event: RadrootsEventPtr,
         cancellation: RadrootsOrderCancellation,
         target_policy: TargetPolicy,
         publish_mode: PublishMode,
@@ -992,7 +992,7 @@ pub struct TradeCancellationPlan {
     pub root_event_id: RadrootsEventId,
     pub previous_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 
@@ -1061,7 +1061,7 @@ impl TradeEvidenceMode {
 pub struct TradeProposeRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub listing_event: RadrootsNostrEventPtr,
+    pub listing_event: RadrootsEventPtr,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub seller_pubkey: RadrootsPublicKey,
@@ -1080,7 +1080,7 @@ pub struct TradeProposeRequest {
 impl TradeProposeRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        listing_event: RadrootsNostrEventPtr,
+        listing_event: RadrootsEventPtr,
         order_id: RadrootsOrderId,
         listing_addr: RadrootsListingAddress,
         seller_pubkey: RadrootsPublicKey,
@@ -1895,7 +1895,7 @@ pub struct TradeValidationReceiptInspectReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeValidationReceiptEvent {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub receipt: RadrootsTradeValidationReceipt,
     pub tags: TradeValidationReceiptTags,
     pub worker_evidence: TradeValidationReceiptWorkerEvidenceSelection,
@@ -1904,7 +1904,7 @@ pub struct TradeValidationReceiptEvent {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeValidationReceiptInvalidCandidate {
-    pub event: RadrootsNostrEvent,
+    pub event: RadrootsEventEnvelope,
     pub reason_code: String,
     pub reason: String,
 }
@@ -4465,7 +4465,7 @@ async fn validation_receipt_events_from_fetch(
     sdk: &crate::RadrootsClient,
     events: &[TradeResyncEventImportReceipt],
     expected_kind: u32,
-) -> Result<Vec<RadrootsNostrEvent>, RadrootsSdkError> {
+) -> Result<Vec<RadrootsEventEnvelope>, RadrootsSdkError> {
     let mut event_ids = events
         .iter()
         .filter(|event| !event.malformed)
@@ -4496,7 +4496,7 @@ async fn validation_receipt_events_from_fetch(
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 fn classify_validation_receipts(
-    events: Vec<RadrootsNostrEvent>,
+    events: Vec<RadrootsEventEnvelope>,
     expected_order_id: Option<&str>,
 ) -> Result<
     (
@@ -4570,7 +4570,7 @@ where
 fn worker_evidence_for_receipts(
     trusted_worker_pubkeys: &[RadrootsPublicKey],
     receipts: &[TradeValidationReceiptEvent],
-    events: Vec<RadrootsNostrEvent>,
+    events: Vec<RadrootsEventEnvelope>,
 ) -> Result<BTreeMap<String, TradeValidationReceiptWorkerEvidenceSelection>, RadrootsSdkError> {
     let trusted_pubkeys = trusted_worker_pubkeys
         .iter()
@@ -4916,7 +4916,7 @@ async fn trade_status_validation_trust_decision(
 async fn validation_receipt_worker_result_events_for_receipt(
     sdk: &crate::RadrootsClient,
     receipt_event_id: &RadrootsEventId,
-) -> Result<Vec<RadrootsNostrEvent>, RadrootsSdkError> {
+) -> Result<Vec<RadrootsEventEnvelope>, RadrootsSdkError> {
     let events = sdk
         ._event_store
         .events_by_tag(
@@ -5261,7 +5261,7 @@ impl From<RadrootsValidationReceiptTags> for TradeValidationReceiptTags {
 #[cfg(feature = "runtime")]
 fn stored_event_to_nostr_event(
     stored_event: &RadrootsStoredEvent,
-) -> Result<RadrootsNostrEvent, RadrootsSdkError> {
+) -> Result<RadrootsEventEnvelope, RadrootsSdkError> {
     let tags = serde_json::from_str(&stored_event.tags_json).map_err(|error| {
         RadrootsSdkError::EventStore {
             message: format!(
@@ -5270,7 +5270,7 @@ fn stored_event_to_nostr_event(
             ),
         }
     })?;
-    Ok(RadrootsNostrEvent {
+    Ok(RadrootsEventEnvelope {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -5625,7 +5625,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                     ),
                 }
             })?;
-            let nostr_event = RadrootsNostrEvent {
+            let nostr_event = RadrootsEventEnvelope {
                 id: event.event_id,
                 author: event.pubkey,
                 created_at: event.created_at,
@@ -6185,8 +6185,8 @@ fn require_trade_mutation_online_evidence_clean(
 }
 
 #[cfg(feature = "signer-adapters")]
-fn event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn event_ptr(event_id: &RadrootsEventId) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: event_id.as_str().to_owned(),
         relays: None,
     }
@@ -6385,7 +6385,7 @@ struct ParsedOrderEvidence {
 #[cfg(feature = "runtime")]
 #[inline(never)]
 fn parse_order_evidence(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<ParsedOrderEvidence, RadrootsSdkError> {
     let event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
@@ -6660,7 +6660,7 @@ impl TradeStatusNextActionKind {
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_submit_plan(
     actor: &RadrootsActorContext,
-    listing_event: RadrootsNostrEventPtr,
+    listing_event: RadrootsEventPtr,
     order_request: RadrootsOrderRequest,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<TradeSubmitPlan, RadrootsSdkError> {
@@ -6709,7 +6709,7 @@ fn order_submit_plan(
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_decision_plan(
     actor: &RadrootsActorContext,
-    request_event: RadrootsNostrEventPtr,
+    request_event: RadrootsEventPtr,
     decision: RadrootsOrderDecision,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<TradeDecisionPlan, RadrootsSdkError> {
@@ -6761,8 +6761,8 @@ fn order_decision_plan(
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_proposal_plan(
     actor: &RadrootsActorContext,
-    root_event: RadrootsNostrEventPtr,
-    previous_event: RadrootsNostrEventPtr,
+    root_event: RadrootsEventPtr,
+    previous_event: RadrootsEventPtr,
     proposal: RadrootsOrderRevisionProposal,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<TradeRevisionProposalPlan, RadrootsSdkError> {
@@ -6819,8 +6819,8 @@ fn order_revision_proposal_plan(
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_revision_decision_plan(
     actor: &RadrootsActorContext,
-    root_event: RadrootsNostrEventPtr,
-    previous_event: RadrootsNostrEventPtr,
+    root_event: RadrootsEventPtr,
+    previous_event: RadrootsEventPtr,
     decision: RadrootsOrderRevisionDecision,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<TradeRevisionDecisionPlan, RadrootsSdkError> {
@@ -6877,8 +6877,8 @@ fn order_revision_decision_plan(
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_cancellation_plan(
     actor: &RadrootsActorContext,
-    root_event: RadrootsNostrEventPtr,
-    previous_event: RadrootsNostrEventPtr,
+    root_event: RadrootsEventPtr,
+    previous_event: RadrootsEventPtr,
     cancellation: RadrootsOrderCancellation,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<TradeCancellationPlan, RadrootsSdkError> {
@@ -7143,7 +7143,7 @@ fn freeze_order_workflow_draft(
     expected_pubkey: &str,
     created_at: u32,
     _operation: &'static str,
-) -> (RadrootsFrozenEventDraft, RadrootsEventId) {
+) -> (RadrootsEventDraft, RadrootsEventId) {
     let frozen_draft = to_frozen_draft(parts, contract_id, expected_pubkey, created_at)
         .expect("validated order workflow draft freezes");
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
@@ -7217,7 +7217,7 @@ struct TradeRequestEvidence {
 
 #[cfg(feature = "runtime")]
 fn parse_order_request_evidence(
-    event: &RadrootsNostrEvent,
+    event: &RadrootsEventEnvelope,
 ) -> Result<TradeRequestEvidence, RadrootsSdkError> {
     let request_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
@@ -7628,9 +7628,7 @@ fn require_seller_actor(
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
-fn listing_event_id(
-    listing_event: &RadrootsNostrEventPtr,
-) -> Result<RadrootsEventId, RadrootsSdkError> {
+fn listing_event_id(listing_event: &RadrootsEventPtr) -> Result<RadrootsEventId, RadrootsSdkError> {
     RadrootsEventId::parse(listing_event.id.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("listing evidence event id is invalid: {error}"),
@@ -7639,9 +7637,7 @@ fn listing_event_id(
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
-fn request_event_id(
-    request_event: &RadrootsNostrEventPtr,
-) -> Result<RadrootsEventId, RadrootsSdkError> {
+fn request_event_id(request_event: &RadrootsEventPtr) -> Result<RadrootsEventId, RadrootsSdkError> {
     RadrootsEventId::parse(request_event.id.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("order request evidence event id is invalid: {error}"),
@@ -7651,7 +7647,7 @@ fn request_event_id(
 
 #[cfg(any(feature = "signer-adapters", test))]
 fn order_reference_event_id(
-    event: &RadrootsNostrEventPtr,
+    event: &RadrootsEventPtr,
     label: &'static str,
 ) -> Result<RadrootsEventId, RadrootsSdkError> {
     RadrootsEventId::parse(event.id.as_str()).map_err(|error| RadrootsSdkError::InvalidRequest {

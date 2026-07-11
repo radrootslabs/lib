@@ -45,7 +45,7 @@ fn actor() -> RadrootsActorContext {
     RadrootsActorContext::test(USER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer]).expect("actor")
 }
 
-fn frozen_draft() -> RadrootsFrozenEventDraft {
+fn frozen_draft() -> RadrootsEventDraft {
     frozen_draft_with(
         "radroots.farm.profile.v1",
         USER_PUBLIC_KEY_HEX,
@@ -63,7 +63,7 @@ fn frozen_draft_with(
     created_at: u32,
     tags: Vec<Vec<String>>,
     content: &str,
-) -> RadrootsFrozenEventDraft {
+) -> RadrootsEventDraft {
     to_frozen_draft(
         WireEventParts {
             kind,
@@ -77,7 +77,7 @@ fn frozen_draft_with(
     .expect("frozen draft")
 }
 
-fn sign_event(keys: &RadrootsNostrKeys, draft: &RadrootsFrozenEventDraft) -> RadrootsNostrEvent {
+fn sign_event(keys: &RadrootsNostrKeys, draft: &RadrootsEventDraft) -> RadrootsNostrEvent {
     let signed =
         radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(keys, draft).expect("signed");
     RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event")

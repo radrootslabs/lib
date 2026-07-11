@@ -10,7 +10,7 @@ use radroots_core::{
 use radroots_event_store::RadrootsEventStore;
 use radroots_events::{
     contract::RadrootsActorRole,
-    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts},
+    draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::KIND_LISTING,
@@ -72,8 +72,8 @@ impl RadrootsEventSigner for FixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         if self.pubkey().as_str() != draft.expected_pubkey.as_str() {
             return Err(RadrootsSignerError::SigningFailed {
                 message: "wrong fixture signer".to_owned(),
@@ -90,7 +90,7 @@ impl RadrootsEventSigner for FixtureSigner {
             "sig": sig,
         })
         .to_string();
-        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+        RadrootsSignedEvent::new(RadrootsSignedEventParts {
             id: draft.expected_event_id.clone(),
             pubkey: self.pubkey().as_str().to_owned(),
             created_at: draft.created_at,

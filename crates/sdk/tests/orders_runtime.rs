@@ -18,7 +18,7 @@ use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    RadrootsEventEnvelope, RadrootsEventPtr,
     contract::RadrootsActorRole,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId},
     kinds::{
@@ -434,11 +434,9 @@ impl radroots_authority::RadrootsEventSigner for FixtureSigner {
 
     fn sign_frozen_draft(
         &self,
-        draft: &radroots_events::draft::RadrootsFrozenEventDraft,
-    ) -> Result<
-        radroots_events::draft::RadrootsSignedNostrEvent,
-        radroots_authority::RadrootsSignerError,
-    > {
+        draft: &radroots_events::draft::RadrootsEventDraft,
+    ) -> Result<radroots_events::draft::RadrootsSignedEvent, radroots_authority::RadrootsSignerError>
+    {
         radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(
             |error| radroots_authority::RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -555,8 +553,8 @@ fn listing_address() -> RadrootsListingAddress {
     .expect("listing address")
 }
 
-fn listing_event_ptr() -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn listing_event_ptr() -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: deterministic_event_id("listing-event").into_string(),
         relays: Some(RELAY.to_owned()),
     }
@@ -665,8 +663,8 @@ fn trade_propose_request(
 }
 
 #[cfg(any())]
-fn invalid_listing_event_ptr() -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn invalid_listing_event_ptr() -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: String::new(),
         relays: Some(RELAY.to_owned()),
     }
@@ -2649,7 +2647,7 @@ async fn relay_event_item_from_store(
 async fn event_from_store(
     source: &RadrootsEventStore,
     event_id: &RadrootsEventId,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let stored = source
         .get_event(event_id.as_str())
         .await
@@ -4098,7 +4096,7 @@ async fn insert_perf_non_trade_events(store: &RadrootsEventStore, base: i64, cou
         let batch = (count - inserted).min(1_000);
         sqlx::query(
             "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
-             INSERT INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
+             INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
              SELECT lower(printf('%064x', ? + n)), ?, 1700000000 + n, 1, json_array(), '{}', ?, '{}', 'verified', 'unsupported_kind', NULL, NULL, 0, 1700000000000 + n, 1700000000000 + n FROM seq",
         )
         .bind(batch)
@@ -4118,7 +4116,7 @@ async fn insert_perf_trade_background_events(store: &RadrootsEventStore, base: i
         let batch = (count - inserted).min(1_000);
         sqlx::query(
             "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
-             INSERT INTO nostr_events(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
+             INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms)
              SELECT lower(printf('%064x', ? + n)), ?, 1700000000 + n, ?, json_array(json_array('d', 'perf-bg-' || printf('%06d', ? + n))), '{}', ?, '{}', 'verified', 'supported', 'radroots.order.request.v1', 'regular', 1, 1700000000000 + n, 1700000000000 + n FROM seq",
         )
         .bind(batch)
@@ -4132,7 +4130,7 @@ async fn insert_perf_trade_background_events(store: &RadrootsEventStore, base: i
         .expect("trade perf event seed");
         sqlx::query(
             "WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n + 1 < ?)
-             INSERT INTO nostr_event_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed)
+             INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed)
              SELECT lower(printf('%064x', ? + n)), 0, 'd', 'perf-bg-' || printf('%06d', ? + n), json_array('d', 'perf-bg-' || printf('%06d', ? + n)), NULL, NULL, 0 FROM seq",
         )
         .bind(batch)
@@ -4185,7 +4183,7 @@ fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
     parts: WireEventParts,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let event = signed_raw_event(secret_key_hex, created_at, parts);
     radroots_event_from_nostr(&event)
 }
@@ -4200,7 +4198,7 @@ fn signed_raw_event(secret_key_hex: &str, created_at: u32, parts: WireEventParts
         .expect("signed event")
 }
 
-fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
+fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsEventEnvelope {
     let draft = radroots_events_codec::order::order_request_event_build(
         &listing_event_ptr(),
         &order_request(raw_order_id),
@@ -4220,16 +4218,16 @@ fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr:
 }
 
 #[cfg(any())]
-fn request_event_ptr(event: &RadrootsNostrEvent) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn request_event_ptr(event: &RadrootsEventEnvelope) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: event.id.clone(),
         relays: Some(RELAY.to_owned()),
     }
 }
 
 #[cfg(any())]
-fn order_event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
-    RadrootsNostrEventPtr {
+fn order_event_ptr(event_id: &RadrootsEventId) -> RadrootsEventPtr {
+    RadrootsEventPtr {
         id: event_id.as_str().to_owned(),
         relays: Some(RELAY.to_owned()),
     }
@@ -4253,7 +4251,7 @@ fn signed_order_decision_event(
     raw_order_id: &str,
     root_event_id: &RadrootsEventId,
     created_at: u32,
-) -> RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
     let draft = radroots_events_codec::order::order_decision_event_build(
         root_event_id,
         root_event_id,
@@ -4263,7 +4261,7 @@ fn signed_order_decision_event(
     signed_event(SELLER_SECRET_KEY_HEX, created_at, draft)
 }
 
-fn signed_status_noise_post_event(index: i64, created_at: u32) -> RadrootsNostrEvent {
+fn signed_status_noise_post_event(index: i64, created_at: u32) -> RadrootsEventEnvelope {
     signed_event(
         SELLER_SECRET_KEY_HEX,
         created_at,
@@ -4275,7 +4273,7 @@ fn signed_status_noise_post_event(index: i64, created_at: u32) -> RadrootsNostrE
     )
 }
 
-fn signed_non_order_event(created_at: u32) -> RadrootsNostrEvent {
+fn signed_non_order_event(created_at: u32) -> RadrootsEventEnvelope {
     signed_event(
         SELLER_SECRET_KEY_HEX,
         created_at,
@@ -4462,7 +4460,7 @@ async fn order_request_evidence_ingest_rejects_non_request_events() {
 async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event_id = deterministic_event_id("order-decision-prepare-request");
-    let request_event = RadrootsNostrEventPtr {
+    let request_event = RadrootsEventPtr {
         id: request_event_id.as_str().to_owned(),
         relays: Some(RELAY.to_owned()),
     };
@@ -4530,7 +4528,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
 #[tokio::test]
 async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let request_event = RadrootsNostrEventPtr {
+    let request_event = RadrootsEventPtr {
         id: deterministic_event_id("order-decision-invalid-request")
             .as_str()
             .to_owned(),
@@ -4567,7 +4565,7 @@ async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
         .trades()
         .prepare_decision(TradeDecisionPrepareRequest::new(
             seller_actor(),
-            RadrootsNostrEventPtr {
+            RadrootsEventPtr {
                 id: String::new(),
                 relays: Some(RELAY.to_owned()),
             },
@@ -4622,7 +4620,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     let prepare_event_id = deterministic_event_id("order-decision-serialized-request");
     let prepare_request = TradeDecisionPrepareRequest::new(
         seller_actor(),
-        RadrootsNostrEventPtr {
+        RadrootsEventPtr {
             id: prepare_event_id.as_str().to_owned(),
             relays: Some(RELAY.to_owned()),
         },
@@ -5238,7 +5236,7 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
 #[tokio::test]
 async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let missing_request = RadrootsNostrEventPtr {
+    let missing_request = RadrootsEventPtr {
         id: deterministic_event_id("missing-order-request")
             .as_str()
             .to_owned(),
@@ -6889,7 +6887,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 3_000))
         .await
         .expect("ingest");
-    sqlx::query("UPDATE nostr_events SET tags_json = '[' WHERE event_id = ?")
+    sqlx::query("UPDATE event_envelopes SET tags_json = '[' WHERE event_id = ?")
         .bind(request_event.id.as_str())
         .execute(store.pool())
         .await

@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sign_parts(parts: WireEventParts) -> Result<RadrootsNostrEvent, Box<dyn std::error::Error>> {
+fn sign_parts(parts: WireEventParts) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
     let tags = parts
         .tags
         .into_iter()
@@ -152,7 +152,7 @@ fn sign_parts(parts: WireEventParts) -> Result<RadrootsNostrEvent, Box<dyn std::
         .tags(tags)
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(&keys)?;
-    Ok(RadrootsNostrEvent {
+    Ok(RadrootsEventEnvelope {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs() as u32,
@@ -179,8 +179,8 @@ fn hex_64(character: char) -> String {
     character.to_string().repeat(64)
 }
 
-fn event_ref(character: char, kind: u32) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
+    RadrootsEventRef {
         id: hex_64(character),
         author: hex_64('a'),
         kind,

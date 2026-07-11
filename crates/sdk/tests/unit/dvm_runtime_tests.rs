@@ -9,7 +9,7 @@ use crate::{
 };
 use radroots_authority::RadrootsActorContext;
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsEventEnvelope,
     contract::RadrootsActorRole,
     ids::{RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
@@ -371,8 +371,8 @@ fn hash32(ch: char) -> String {
     format!("0x{}", ch.to_string().repeat(64))
 }
 
-fn dummy_event() -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+fn dummy_event() -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: event_id('9').into_string(),
         author: event_id('a').into_string(),
         created_at: 1,

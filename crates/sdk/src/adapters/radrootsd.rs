@@ -1,7 +1,7 @@
 use core::fmt;
 use core::time::Duration;
 
-use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_events::draft::RadrootsSignedEvent;
 use radroots_transport_publish_protocol::{
     METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
     TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishProtocolError,
@@ -100,7 +100,7 @@ impl RadrootsdProxyPublishAdapter {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsdProxyPublishRequest {
-    pub signed_event: RadrootsSignedNostrEvent,
+    pub signed_event: RadrootsSignedEvent,
     pub target_policy: TransportPublishTargetPolicy,
     pub delivery_policy: TransportPublishDeliveryPolicy,
     pub idempotency_key: Option<String>,
@@ -299,7 +299,7 @@ where
     decode_jsonrpc_response(method, request_id, body.as_str())
 }
 
-fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
+fn signed_event_wire(event: &RadrootsSignedEvent) -> SignedNostrEventWire {
     SignedNostrEventWire {
         id: event.id.clone(),
         pubkey: event.pubkey.clone(),

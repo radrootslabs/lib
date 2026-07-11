@@ -1,4 +1,4 @@
-use radroots_events::{RadrootsNostrEvent, farm::RadrootsFarm};
+use radroots_events::{RadrootsEventEnvelope, farm::RadrootsFarm};
 use radroots_replica_db::ReplicaSql;
 use radroots_replica_db_schema::farm::IFarmFindMany;
 use radroots_replica_sync::{RadrootsReplicaIngestOutcome, radroots_replica_ingest_event};
@@ -16,8 +16,8 @@ fn sdk_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> RadrootsNostrEvent {
-    RadrootsNostrEvent {
+) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope {
         id: format!("{id:064x}"),
         author: author.to_owned(),
         created_at,
@@ -53,7 +53,7 @@ fn open_replica() -> (TempDir, ReplicaSql<SqliteExecutor>) {
     (dir, replica)
 }
 
-fn ingest_farm(replica: &ReplicaSql<SqliteExecutor>) -> RadrootsNostrEvent {
+fn ingest_farm(replica: &ReplicaSql<SqliteExecutor>) -> RadrootsEventEnvelope {
     let farm_value = sample_farm();
     let author = seller_pubkey();
     let parts =

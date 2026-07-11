@@ -10,7 +10,7 @@ use crate::{
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_events::{
-    draft::RadrootsFrozenEventDraft,
+    draft::RadrootsEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress},
     listing::RadrootsListing,
 };
@@ -139,7 +139,7 @@ pub struct ListingPublishPlan {
     pub public_listing_addr: RadrootsListingAddress,
     pub draft_listing_addr: RadrootsListingAddress,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 

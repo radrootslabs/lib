@@ -16,7 +16,7 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_events::{
     contract::RadrootsActorRole,
-    draft::RadrootsFrozenEventDraft,
+    draft::RadrootsEventDraft,
     farm::{RadrootsFarm, RadrootsFarmPublicLocation},
     ids::{RadrootsAddressableCoordinate, RadrootsEventId},
     kinds::KIND_FARM,
@@ -127,7 +127,7 @@ impl FarmEnqueuePublishRequest {
 pub struct FarmPublishPlan {
     pub farm_addr: RadrootsAddressableCoordinate,
     pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
 }
 

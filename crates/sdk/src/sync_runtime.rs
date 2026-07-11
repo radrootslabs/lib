@@ -1662,7 +1662,7 @@ fn proxy_error_message(error: &RadrootsdError) -> String {
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 fn proxy_transport_error_receipt(
     claimed: &RadrootsOutboxClaimedEvent,
-    event: &radroots_events::draft::RadrootsSignedNostrEvent,
+    event: &radroots_events::draft::RadrootsSignedEvent,
     delivery_policy: &TransportPublishDeliveryPolicy,
     message: String,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {

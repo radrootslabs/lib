@@ -85,8 +85,8 @@ fn spawn_http_server(
     (endpoint, handle)
 }
 
-fn signed_event() -> RadrootsSignedNostrEvent {
-    RadrootsSignedNostrEvent {
+fn signed_event() -> RadrootsSignedEvent {
+    RadrootsSignedEvent {
         id: "a".repeat(64),
         pubkey: "b".repeat(64),
         created_at: 1_700_000_000,
