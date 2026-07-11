@@ -1,0 +1,17 @@
+# radroots_mesh_agent_client
+
+This is the README for `radroots_mesh_agent_client`, which provides the mesh
+agent client boundary for `radroots`.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_mesh_agent_client`
+distribution are
+
+    Copyright (c) 2025 Tyson Lupul
+
+## License
+
+This repository is licensed under either MIT or Apache-2.0, at your option. For
+WARRANTIES, see LICENSE included in the `radroots_mesh_agent_client`
+distribution.

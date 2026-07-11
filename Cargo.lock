@@ -4396,6 +4396,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_mesh_agent_client"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_mesh",
+ "radroots_mesh_agent_proto",
+ "radroots_transport",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots_mesh_agent_proto"
 version = "0.1.0-alpha.2"
 dependencies = [

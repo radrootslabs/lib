@@ -46,6 +46,7 @@ members = [
   "crates/transport",
   "crates/types",
   "crates/mesh",
+  "crates/mesh_agent_client",
   "crates/mesh_agent_proto",
   "crates/protected_store",
   "tools/xtask",
@@ -106,6 +107,7 @@ radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-fea
 radroots_transport = { path = "crates/transport", version = "0.1.0-alpha.2", default-features = false }
 radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh = { path = "crates/mesh", version = "0.1.0-alpha.2", default-features = false }
+radroots_mesh_agent_client = { path = "crates/mesh_agent_client", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh_agent_proto = { path = "crates/mesh_agent_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
