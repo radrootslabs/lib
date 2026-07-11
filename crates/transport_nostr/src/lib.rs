@@ -25,13 +25,14 @@ pub use fetch::{
 #[cfg(feature = "storage")]
 pub use outbox::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
-    publish_claimed_outbox_event,
+    publish_claimed_outbox_event, publish_claimed_outbox_event_with_transport,
 };
 pub use outcome::{RadrootsRelayOutcome, RadrootsRelayOutcomeKind};
 #[cfg(feature = "client")]
 pub use publish::RadrootsNostrClientPublishAdapter;
 pub use publish::{
-    RadrootsMockRelayPublishAdapter, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, publish_signed_event,
+    RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    publish_signed_event,
 };
 pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrl, RadrootsRelayUrlPolicy};

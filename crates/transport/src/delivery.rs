@@ -168,6 +168,7 @@ pub struct RadrootsTransportDeliveryRequest {
     pub payload: RadrootsTransportPayload,
     pub target_set: RadrootsTransportTargetSet,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
+    pub now_ms: i64,
 }
 
 impl RadrootsTransportDeliveryRequest {
@@ -182,7 +183,13 @@ impl RadrootsTransportDeliveryRequest {
             payload,
             target_set,
             satisfaction_policy,
+            now_ms: 0,
         }
+    }
+
+    pub fn with_now_ms(mut self, now_ms: i64) -> Self {
+        self.now_ms = now_ms;
+        self
     }
 }
 

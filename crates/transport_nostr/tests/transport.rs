@@ -17,17 +17,20 @@ use radroots_outbox::{
     RadrootsOutboxOperationStatus,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
+    RadrootsTransport, RadrootsTransportDeliveryRequest, RadrootsTransportError,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportPayload,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportTarget, RadrootsTransportTargetLabel, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{
-    RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
-    RadrootsRelayFetchFilters, RadrootsRelayFetchItem, RadrootsRelayFetchMode,
-    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest, RadrootsRelayOutcome,
-    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
-    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
-    RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
-    fetch_relay_events_blocking, publish_claimed_outbox_event, publish_signed_event,
+    RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsNostrTransport,
+    RadrootsOutboxPublishPolicy, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
+    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest,
+    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
+    RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
+    fetch_and_ingest_relay_events, fetch_relay_events, fetch_relay_events_blocking,
+    publish_claimed_outbox_event, publish_signed_event,
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -698,6 +701,101 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     assert_eq!(receipt.retryable_count, 1);
     assert!(receipt.quorum_met);
     serde_json::to_string(&receipt).expect("receipt json");
+}
+
+#[tokio::test]
+async fn nostr_transport_facade_delivers_signed_event_payloads() {
+    let signed = signed_post("facade payload");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+    let transport = RadrootsNostrTransport::new(&adapter);
+    let target = nostr_target(RELAY_PRIMARY_WSS);
+    let request = RadrootsTransportDeliveryRequest::new(
+        "facade-request-1",
+        RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
+            .expect("payload"),
+        RadrootsTransportTargetSet::new(vec![target.clone()]).expect("targets"),
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+    );
+
+    let receipt = transport.deliver(request).await.expect("delivery");
+
+    assert_eq!(adapter.captured_raw_events(), vec![signed.raw_json]);
+    assert_eq!(receipt.request_id, "facade-request-1");
+    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(receipt.target_receipts[0].target, target);
+    assert_eq!(
+        receipt.target_receipts[0].outcome.kind,
+        radroots_transport::RadrootsTransportOutcomeKind::Accepted
+    );
+    assert!(
+        receipt
+            .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::all_accepted())
+            .expect("satisfaction")
+    );
+}
+
+#[tokio::test]
+async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
+    let signed = signed_post("facade rejected");
+    let transport = RadrootsNostrTransport::new(RadrootsMockRelayPublishAdapter::new());
+    let target_set =
+        RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)]).expect("targets");
+    let payload_error = transport
+        .deliver(RadrootsTransportDeliveryRequest::new(
+            "facade-request-payload",
+            RadrootsTransportPayload::opaque_bytes("not-signed-event", [1, 2, 3]).expect("payload"),
+            target_set,
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
+        ))
+        .await
+        .expect_err("payload rejected");
+    assert_eq!(payload_error, RadrootsTransportError::InvalidPayloadBytes);
+
+    let non_nostr_target = RadrootsTransportTarget::new(
+        RadrootsTransportKind::Reticulum,
+        radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    )
+    .expect("reticulum target");
+    let target_error = transport
+        .deliver(RadrootsTransportDeliveryRequest::new(
+            "facade-request-target",
+            RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
+                .expect("payload"),
+            RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
+        ))
+        .await
+        .expect_err("target rejected");
+    assert_eq!(target_error, RadrootsTransportError::InvalidTargetUri);
+}
+
+#[tokio::test]
+async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
+    let signed = signed_post("facade scoped duplicate");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+    let transport = RadrootsNostrTransport::new(&adapter);
+    let first = scoped_nostr_target(RELAY_PRIMARY_WSS, "local_food_buyers", "buyers");
+    let second = scoped_nostr_target(RELAY_PRIMARY_WSS, "local_food_farmers", "farmers");
+    let policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![first.fingerprint.clone(), second.fingerprint.clone()],
+    )
+    .expect("required targets");
+    let request = RadrootsTransportDeliveryRequest::new(
+        "facade-request-scoped",
+        RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
+            .expect("payload"),
+        RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("targets"),
+        policy.clone(),
+    );
+
+    let receipt = transport.deliver(request).await.expect("delivery");
+
+    assert_eq!(receipt.target_receipts.len(), 2);
+    assert_eq!(receipt.target_receipts[0].target, first);
+    assert_eq!(receipt.target_receipts[1].target, second);
+    assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
+    assert_eq!(adapter.captured_raw_events().len(), 1);
 }
 
 #[tokio::test]

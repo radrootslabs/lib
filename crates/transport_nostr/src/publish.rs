@@ -4,9 +4,14 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_events::draft::RadrootsSignedEvent;
+use radroots_events::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetReceipt,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -102,6 +107,238 @@ pub trait RadrootsRelayPublishAdapter: Send + Sync {
         &'a self,
         request: RadrootsRelayPublishRequest,
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>;
+}
+
+impl<A> RadrootsRelayPublishAdapter for &A
+where
+    A: RadrootsRelayPublishAdapter + ?Sized,
+{
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        (*self).publish(request)
+    }
+}
+
+#[derive(Clone)]
+pub struct RadrootsNostrTransport<A> {
+    adapter: A,
+    status: RadrootsTransportStatus,
+}
+
+impl<A> RadrootsNostrTransport<A> {
+    pub fn new(adapter: A) -> Self {
+        Self {
+            adapter,
+            status: RadrootsTransportStatus::new(
+                RadrootsTransportKind::Nostr,
+                true,
+                RadrootsTransportImplementationState::Real,
+                true,
+                "ready",
+            ),
+        }
+    }
+
+    pub fn with_status(mut self, status: RadrootsTransportStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
+}
+
+impl<A> RadrootsTransport for RadrootsNostrTransport<A>
+where
+    A: RadrootsRelayPublishAdapter,
+{
+    fn transport_kind(&self) -> RadrootsTransportKind {
+        RadrootsTransportKind::Nostr
+    }
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        Box::pin(async move { Ok(self.status.clone()) })
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        Box::pin(async move {
+            let signed_event = signed_event_from_transport_payload(&request.payload)?;
+            let targets = relay_targets_from_transport_targets(request.target_set.targets())?;
+            let relay_receipts = match self
+                .adapter
+                .publish(
+                    RadrootsRelayPublishRequest::new(signed_event, targets, request.now_ms)
+                        .with_satisfaction_policy(request.satisfaction_policy.clone())
+                        .with_idempotency_key(request.request_id.clone()),
+                )
+                .await
+            {
+                Ok(receipts) => receipts,
+                Err(RadrootsRelayTransportError::Transport(message)) => {
+                    return Ok(RadrootsTransportDeliveryReceipt {
+                        request_id: request.request_id,
+                        target_receipts: transport_failure_target_receipts(
+                            request.target_set.targets(),
+                            message.as_str(),
+                        ),
+                    });
+                }
+                Err(error) => return Err(nostr_error_to_transport_error(error)),
+            };
+            Ok(RadrootsTransportDeliveryReceipt {
+                request_id: request.request_id,
+                target_receipts: target_receipts_from_relay_receipts(
+                    request.target_set.targets(),
+                    relay_receipts.as_slice(),
+                ),
+            })
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        _request: RadrootsTransportFetchRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        Box::pin(
+            async move { Err(radroots_transport::RadrootsTransportError::InvalidTransportKind) },
+        )
+    }
+}
+
+fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> RadrootsTransportError {
+    match error {
+        RadrootsRelayTransportError::TransportContract(_) => {
+            RadrootsTransportError::InvalidPayloadBytes
+        }
+        RadrootsRelayTransportError::RelayUrlParse { .. }
+        | RadrootsRelayTransportError::WsRequiresLocalhostPolicy { .. }
+        | RadrootsRelayTransportError::UnsupportedRelayScheme { .. }
+        | RadrootsRelayTransportError::EmptyRelayHost { .. }
+        | RadrootsRelayTransportError::RelayUrlUserinfo { .. }
+        | RadrootsRelayTransportError::RelayUrlQueryOrFragment { .. }
+        | RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. }
+        | RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination { .. }
+        | RadrootsRelayTransportError::EmptyTargetSet => RadrootsTransportError::InvalidTargetUri,
+        RadrootsRelayTransportError::NostrEventJson(_) | RadrootsRelayTransportError::Json(_) => {
+            RadrootsTransportError::InvalidPayloadBytes
+        }
+        RadrootsRelayTransportError::Transport(_) => RadrootsTransportError::InvalidTransportKind,
+        RadrootsRelayTransportError::EmptyFetchFilters
+        | RadrootsRelayTransportError::InvalidFetchLimit { .. } => {
+            RadrootsTransportError::InvalidTransportKind
+        }
+        #[cfg(feature = "storage")]
+        RadrootsRelayTransportError::EventStore(_)
+        | RadrootsRelayTransportError::Outbox(_)
+        | RadrootsRelayTransportError::MissingSignedOutboxEvent(_) => {
+            RadrootsTransportError::InvalidTransportKind
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct SignedEventJsonWire {
+    id: String,
+    pubkey: String,
+    created_at: u32,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
+fn signed_event_from_transport_payload(
+    payload: &RadrootsTransportPayload,
+) -> Result<RadrootsSignedEvent, RadrootsTransportError> {
+    let RadrootsTransportPayload::SignedEventJson {
+        event_id, raw_json, ..
+    } = payload
+    else {
+        return Err(RadrootsTransportError::InvalidPayloadBytes);
+    };
+    let wire: SignedEventJsonWire =
+        serde_json::from_str(raw_json).map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
+    if wire.id != *event_id {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        id: wire.id,
+        pubkey: wire.pubkey,
+        created_at: wire.created_at,
+        kind: wire.kind,
+        tags: wire.tags,
+        content: wire.content,
+        sig: wire.sig,
+        raw_json: raw_json.clone(),
+    })
+    .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)
+}
+
+fn relay_targets_from_transport_targets(
+    targets: &[RadrootsTransportTarget],
+) -> Result<RadrootsRelayTargetSet, RadrootsTransportError> {
+    let relays = targets
+        .iter()
+        .map(|target| {
+            if target.kind != RadrootsTransportKind::Nostr {
+                return Err(RadrootsTransportError::InvalidTargetUri);
+            }
+            let policy = if target.uri.as_str().starts_with("ws://") {
+                crate::RadrootsRelayUrlPolicy::Localhost
+            } else {
+                crate::RadrootsRelayUrlPolicy::Public
+            };
+            crate::RadrootsRelayUrl::parse(target.uri.as_str(), policy)
+                .map_err(nostr_error_to_transport_error)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    RadrootsRelayTargetSet::from_urls(relays).map_err(nostr_error_to_transport_error)
+}
+
+fn target_receipts_from_relay_receipts(
+    targets: &[RadrootsTransportTarget],
+    relay_receipts: &[RadrootsRelayPublishRelayReceipt],
+) -> Vec<RadrootsTransportTargetReceipt> {
+    targets
+        .iter()
+        .cloned()
+        .map(|target| {
+            let relay_url = target.uri.as_str().trim_end_matches('/');
+            let outcome = relay_receipts
+                .iter()
+                .find(|receipt| receipt.relay_url.trim_end_matches('/') == relay_url)
+                .map(|receipt| receipt.outcome.to_transport_outcome())
+                .unwrap_or_else(|| {
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::RouteUnavailable)
+                        .with_message("relay adapter omitted target receipt")
+                });
+            RadrootsTransportTargetReceipt::new(target, outcome)
+        })
+        .collect()
+}
+
+fn transport_failure_target_receipts(
+    targets: &[RadrootsTransportTarget],
+    message: &str,
+) -> Vec<RadrootsTransportTargetReceipt> {
+    targets
+        .iter()
+        .cloned()
+        .map(|target| {
+            RadrootsTransportTargetReceipt::new(
+                target,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::ConnectionFailed)
+                    .with_message(message.to_owned()),
+            )
+        })
+        .collect()
 }
 
 pub async fn publish_signed_event<A>(
