@@ -187,10 +187,10 @@ nostr = { workspace = true }
 radroots_core = { workspace = true, default-features = false, features = [
   "std",
 ] }
-radroots_replica_db = { workspace = true, default-features = false, features = [
+radroots_replica_store = { workspace = true, default-features = false, features = [
   "native",
 ] }
-radroots_replica_db_schema = { workspace = true }
+radroots_replica_schema = { workspace = true }
 radroots_replica_sync = { workspace = true, features = ["std"] }
 radroots_sql_core = { workspace = true, features = ["native"] }
 radroots_nostr = { workspace = true, default-features = false, features = [

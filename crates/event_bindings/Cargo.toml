@@ -1,0 +1,14 @@
+[package]
+name = "radroots_event_bindings"
+description = "Generated bindings for Radroots event contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+dto_bindgen_backend_ts = { workspace = true }
+radroots_event = { workspace = true }

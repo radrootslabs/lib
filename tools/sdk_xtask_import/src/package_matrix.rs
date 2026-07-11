@@ -29,18 +29,18 @@ pub const PACKAGE_SPECS: [PackageSpec; 6] = [
         package_dir: "packages/core-bindings",
     },
     PackageSpec {
-        key: "events",
-        crate_name: "radroots_events_bindings",
-        crate_dir: "crates/events_bindings",
-        package_name: "@radroots/events-bindings",
-        package_dir: "packages/events-bindings",
+        key: "event",
+        crate_name: "radroots_event_bindings",
+        crate_dir: "crates/event_bindings",
+        package_name: "@radroots/event-bindings",
+        package_dir: "packages/event-bindings",
     },
     PackageSpec {
-        key: "events_indexed",
-        crate_name: "radroots_events_indexed_bindings",
-        crate_dir: "crates/events_indexed_bindings",
-        package_name: "@radroots/events-indexed-bindings",
-        package_dir: "packages/events-indexed-bindings",
+        key: "event_index",
+        crate_name: "radroots_event_index_bindings",
+        crate_dir: "crates/event_index_bindings",
+        package_name: "@radroots/event-index-bindings",
+        package_dir: "packages/event-index-bindings",
     },
     PackageSpec {
         key: "identity",
@@ -50,11 +50,11 @@ pub const PACKAGE_SPECS: [PackageSpec; 6] = [
         package_dir: "packages/identity-bindings",
     },
     PackageSpec {
-        key: "replica_db_schema",
-        crate_name: "radroots_replica_db_schema_bindings",
-        crate_dir: "crates/replica_db_schema_bindings",
-        package_name: "@radroots/replica-db-schema-bindings",
-        package_dir: "packages/replica-db-schema-bindings",
+        key: "replica_schema",
+        crate_name: "radroots_replica_schema_bindings",
+        crate_dir: "crates/replica_schema_bindings",
+        package_name: "@radroots/replica-schema-bindings",
+        package_dir: "packages/replica-schema-bindings",
     },
     PackageSpec {
         key: "trade",
@@ -67,22 +67,22 @@ pub const PACKAGE_SPECS: [PackageSpec; 6] = [
 
 pub const WASM_PACKAGE_SPECS: [WasmPackageSpec; 3] = [
     WasmPackageSpec {
-        key: "events_codec",
-        crate_name: "radroots_events_codec_wasm",
-        crate_dir: "crates/events_codec_wasm",
-        package_name: "@radroots/events-codec-wasm",
-        package_dir: "packages/events-codec-wasm",
-        out_name: "radroots_events_codec_wasm",
-        out_dir: "../../packages/events-codec-wasm/dist",
+        key: "event_codec",
+        crate_name: "radroots_event_codec_wasm",
+        crate_dir: "crates/event_codec_wasm",
+        package_name: "@radroots/event-codec-wasm",
+        package_dir: "packages/event-codec-wasm",
+        out_name: "radroots_event_codec_wasm",
+        out_dir: "../../packages/event-codec-wasm/dist",
     },
     WasmPackageSpec {
-        key: "replica_db",
-        crate_name: "radroots_replica_db_wasm",
-        crate_dir: "crates/replica_db_wasm",
-        package_name: "@radroots/replica-db-wasm",
-        package_dir: "packages/replica-db-wasm",
-        out_name: "radroots_replica_db_wasm",
-        out_dir: "../../packages/replica-db-wasm/dist",
+        key: "replica_store",
+        crate_name: "radroots_replica_store_wasm",
+        crate_dir: "crates/replica_store_wasm",
+        package_name: "@radroots/replica-store-wasm",
+        package_dir: "packages/replica-store-wasm",
+        out_name: "radroots_replica_store_wasm",
+        out_dir: "../../packages/replica-store-wasm/dist",
     },
     WasmPackageSpec {
         key: "replica_sync",
@@ -191,7 +191,7 @@ mod tests {
         assert!(
             package_specs()
                 .iter()
-                .any(|spec| spec.package_name == "@radroots/replica-db-schema-bindings")
+                .any(|spec| spec.package_name == "@radroots/replica-schema-bindings")
         );
     }
 
@@ -200,7 +200,7 @@ mod tests {
         assert!(
             wasm_package_specs()
                 .iter()
-                .any(|spec| spec.package_name == "@radroots/replica-db-wasm")
+                .any(|spec| spec.package_name == "@radroots/replica-store-wasm")
         );
     }
 }

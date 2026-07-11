@@ -2141,13 +2141,13 @@ transport-reticulum-preview = []
     fn consumer_smoke_script_imports_package_roots() {
         let script = consumer_smoke_script(&[
             "@radroots/core-bindings".to_owned(),
-            "@radroots/events-codec-wasm".to_owned(),
+            "@radroots/event-codec-wasm".to_owned(),
         ])
         .expect("smoke script renders");
 
         assert_eq!(
             script,
-            "await import(\"@radroots/core-bindings\");\nawait import(\"@radroots/events-codec-wasm\");\n"
+            "await import(\"@radroots/core-bindings\");\nawait import(\"@radroots/event-codec-wasm\");\n"
         );
     }
 
@@ -2221,12 +2221,12 @@ transport-reticulum-preview = []
         let source = package_json_value(&package_json_with_dependencies(
             "trade-bindings",
             r#""@radroots/core-bindings": "workspace:^",
-    "@radroots/events-bindings": "workspace:^""#,
+    "@radroots/event-bindings": "workspace:^""#,
         ));
         let packed = package_json_value(&package_json_with_dependencies(
             "trade-bindings",
             r#""@radroots/core-bindings": "^0.1.0",
-    "@radroots/events-bindings": "^0.1.0""#,
+    "@radroots/event-bindings": "^0.1.0""#,
         ));
 
         check_packed_package_json(

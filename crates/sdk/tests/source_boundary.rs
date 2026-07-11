@@ -1904,8 +1904,8 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
         "src",
         "tests",
         "examples",
-        "packages/events-bindings/src",
-        "packages/events-codec-js/src",
+        "packages/event-bindings/src",
+        "packages/event-codec-js/src",
     ] {
         let root = manifest_dir.join(relative_path);
         if !root.exists() {

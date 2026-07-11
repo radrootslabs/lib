@@ -575,13 +575,13 @@ repository = "sdk-typescript"
 
 [packages]
 "radroots_core" = "@radroots/core-bindings"
-"radroots_event" = "@radroots/events-bindings"
-"radroots_event_index" = "@radroots/events-indexed-bindings"
+"radroots_event" = "@radroots/event-bindings"
+"radroots_event_index" = "@radroots/event-index-bindings"
 "radroots_identity" = "@radroots/identity-bindings"
-"radroots_replica_db_schema" = "@radroots/replica-db-schema-bindings"
+"radroots_replica_schema" = "@radroots/replica-schema-bindings"
 "radroots_trade" = "@radroots/trade-bindings"
-"radroots_events_codec_wasm" = "@radroots/events-codec-wasm"
-"radroots_replica_db_wasm" = "@radroots/replica-db-wasm"
+"radroots_event_codec_wasm" = "@radroots/event-codec-wasm"
+"radroots_replica_store_wasm" = "@radroots/replica-store-wasm"
 "radroots_replica_sync_wasm" = "@radroots/replica-sync-wasm"
 
 [artifacts]
@@ -614,19 +614,19 @@ crate_dir = "crates/core_bindings"
 package = "@radroots/core-bindings"
 package_dir = "packages/core-bindings"
 
-[npm_packages.events]
+[npm_packages.event]
 kind = "bindings"
-crate_name = "radroots_events_bindings"
-crate_dir = "crates/events_bindings"
-package = "@radroots/events-bindings"
-package_dir = "packages/events-bindings"
+crate_name = "radroots_event_bindings"
+crate_dir = "crates/event_bindings"
+package = "@radroots/event-bindings"
+package_dir = "packages/event-bindings"
 
-[npm_packages.events_indexed]
+[npm_packages.event_index]
 kind = "bindings"
-crate_name = "radroots_events_indexed_bindings"
-crate_dir = "crates/events_indexed_bindings"
-package = "@radroots/events-indexed-bindings"
-package_dir = "packages/events-indexed-bindings"
+crate_name = "radroots_event_index_bindings"
+crate_dir = "crates/event_index_bindings"
+package = "@radroots/event-index-bindings"
+package_dir = "packages/event-index-bindings"
 
 [npm_packages.identity]
 kind = "bindings"
@@ -635,12 +635,12 @@ crate_dir = "crates/identity_bindings"
 package = "@radroots/identity-bindings"
 package_dir = "packages/identity-bindings"
 
-[npm_packages.replica_db_schema]
+[npm_packages.replica_schema]
 kind = "bindings"
-crate_name = "radroots_replica_db_schema_bindings"
-crate_dir = "crates/replica_db_schema_bindings"
-package = "@radroots/replica-db-schema-bindings"
-package_dir = "packages/replica-db-schema-bindings"
+crate_name = "radroots_replica_schema_bindings"
+crate_dir = "crates/replica_schema_bindings"
+package = "@radroots/replica-schema-bindings"
+package_dir = "packages/replica-schema-bindings"
 
 [npm_packages.trade]
 kind = "bindings"
@@ -649,23 +649,23 @@ crate_dir = "crates/trade_bindings"
 package = "@radroots/trade-bindings"
 package_dir = "packages/trade-bindings"
 
-[npm_packages.events_codec]
+[npm_packages.event_codec]
 kind = "wasm"
-crate_name = "radroots_events_codec_wasm"
-crate_dir = "crates/events_codec_wasm"
-package = "@radroots/events-codec-wasm"
-package_dir = "packages/events-codec-wasm"
-out_name = "radroots_events_codec_wasm"
-out_dir = "../../packages/events-codec-wasm/dist"
+crate_name = "radroots_event_codec_wasm"
+crate_dir = "crates/event_codec_wasm"
+package = "@radroots/event-codec-wasm"
+package_dir = "packages/event-codec-wasm"
+out_name = "radroots_event_codec_wasm"
+out_dir = "../../packages/event-codec-wasm/dist"
 
-[npm_packages.replica_db]
+[npm_packages.replica_store]
 kind = "wasm"
-crate_name = "radroots_replica_db_wasm"
-crate_dir = "crates/replica_db_wasm"
-package = "@radroots/replica-db-wasm"
-package_dir = "packages/replica-db-wasm"
-out_name = "radroots_replica_db_wasm"
-out_dir = "../../packages/replica-db-wasm/dist"
+crate_name = "radroots_replica_store_wasm"
+crate_dir = "crates/replica_store_wasm"
+package = "@radroots/replica-store-wasm"
+package_dir = "packages/replica-store-wasm"
+out_name = "radroots_replica_store_wasm"
+out_dir = "../../packages/replica-store-wasm/dist"
 
 [npm_packages.replica_sync]
 kind = "wasm"

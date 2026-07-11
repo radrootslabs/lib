@@ -134,12 +134,12 @@ pub fn declaration_files(spec: WasmPackageSpec) -> Result<Vec<WasmDeclarationFil
 
 fn inventory(spec: WasmPackageSpec) -> Result<WasmDeclarationInventory, String> {
     match spec.key {
-        "events_codec" => Ok(WasmDeclarationInventory {
-            public_functions: EVENTS_CODEC_FUNCTIONS,
-            support_exports: EVENTS_CODEC_SUPPORT_EXPORTS,
+        "event_codec" => Ok(WasmDeclarationInventory {
+            public_functions: EVENT_CODEC_FUNCTIONS,
+            support_exports: EVENT_CODEC_SUPPORT_EXPORTS,
         }),
-        "replica_db" => Ok(WasmDeclarationInventory {
-            public_functions: REPLICA_DB_FUNCTIONS,
+        "replica_store" => Ok(WasmDeclarationInventory {
+            public_functions: REPLICA_STORE_FUNCTIONS,
             support_exports: SQL_WASM_SUPPORT_EXPORTS,
         }),
         "replica_sync" => Ok(WasmDeclarationInventory {
@@ -353,7 +353,7 @@ fn promise_of(type_expr: TypeScriptType) -> TypeScriptType {
     TypeScriptType::generic("Promise", vec![type_expr])
 }
 
-const EVENTS_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
+const EVENT_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("article_tags", Some("article_json"), String, 2, 4),
     public_function!("calendar_date_event_tags", Some("event_json"), String, 2, 4),
     public_function!("calendar_event_rsvp_tags", Some("rsvp_json"), String, 2, 4),
@@ -442,7 +442,7 @@ const EVENTS_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("contract_manifest_json", None, String, 0, 4),
 ];
 
-const EVENTS_CODEC_SUPPORT_EXPORTS: &[WasmSupportExport] = &[
+const EVENT_CODEC_SUPPORT_EXPORTS: &[WasmSupportExport] = &[
     memory_export!(),
     table_export!("__wbindgen_externrefs"),
     number_function_export!("__wbindgen_malloc", 2),
@@ -452,447 +452,513 @@ const EVENTS_CODEC_SUPPORT_EXPORTS: &[WasmSupportExport] = &[
     void_function_export!("__wbindgen_start", 0),
 ];
 
-const REPLICA_DB_FUNCTIONS: &[WasmPublicFunction] = &[
-    public_function!("replica_db_export_begin", None, Any, 0, 3),
-    public_function!("replica_db_export_finish", None, Void, 0, 2),
-    public_function!("replica_db_export_json", None, Any, 0, 3),
-    public_function!("replica_db_farm_create", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_farm_delete", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_farm_find_many", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_farm_find_one", Some("opts_json"), Any, 2, 3),
+const REPLICA_STORE_FUNCTIONS: &[WasmPublicFunction] = &[
+    public_function!("replica_store_export_begin", None, Any, 0, 3),
+    public_function!("replica_store_export_finish", None, Void, 0, 2),
+    public_function!("replica_store_export_json", None, Any, 0, 3),
+    public_function!("replica_store_farm_create", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_farm_delete", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_farm_find_many", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_farm_find_one", Some("opts_json"), Any, 2, 3),
     public_function!(
-        "replica_db_farm_gcs_location_create",
+        "replica_store_farm_gcs_location_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_gcs_location_delete",
+        "replica_store_farm_gcs_location_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_gcs_location_find_many",
+        "replica_store_farm_gcs_location_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_gcs_location_find_one",
+        "replica_store_farm_gcs_location_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_gcs_location_update",
+        "replica_store_farm_gcs_location_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_claim_create",
+        "replica_store_farm_member_claim_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_claim_delete",
+        "replica_store_farm_member_claim_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_claim_find_many",
+        "replica_store_farm_member_claim_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_claim_find_one",
+        "replica_store_farm_member_claim_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_claim_update",
+        "replica_store_farm_member_claim_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_create",
+        "replica_store_farm_member_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_delete",
+        "replica_store_farm_member_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_find_many",
+        "replica_store_farm_member_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_find_one",
+        "replica_store_farm_member_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_farm_member_update",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_farm_tag_create", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_farm_tag_delete", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_farm_tag_find_many",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_farm_tag_find_one", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_farm_tag_update", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_gcs_location_create",
+        "replica_store_farm_member_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_gcs_location_delete",
+        "replica_store_farm_tag_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_gcs_location_find_many",
+        "replica_store_farm_tag_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_gcs_location_find_one",
+        "replica_store_farm_tag_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_gcs_location_update",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_import_json", Some("dump_json"), Void, 2, 2),
-    public_function!("replica_db_log_error_create", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_log_error_delete", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_log_error_find_many",
+        "replica_store_farm_tag_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_log_error_find_one",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_log_error_update", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_media_image_create",
+        "replica_store_farm_tag_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_media_image_delete",
+        "replica_store_gcs_location_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_media_image_find_many",
+        "replica_store_gcs_location_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_media_image_find_one",
+        "replica_store_gcs_location_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_media_image_update",
+        "replica_store_gcs_location_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_event_head_create",
+        "replica_store_gcs_location_update",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!("replica_store_import_json", Some("dump_json"), Void, 2, 2),
+    public_function!(
+        "replica_store_log_error_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_event_head_delete",
+        "replica_store_log_error_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_event_head_find_many",
+        "replica_store_log_error_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_event_head_find_one",
+        "replica_store_log_error_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_event_head_update",
+        "replica_store_log_error_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_create",
+        "replica_store_media_image_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_delete",
+        "replica_store_media_image_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_find_many",
+        "replica_store_media_image_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_find_one",
+        "replica_store_media_image_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_relay_set",
+        "replica_store_media_image_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_relay_unset",
+        "replica_store_nostr_event_head_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_profile_update",
+        "replica_store_nostr_event_head_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_relay_create",
+        "replica_store_nostr_event_head_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_relay_delete",
+        "replica_store_nostr_event_head_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_relay_find_many",
+        "replica_store_nostr_event_head_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_relay_find_one",
+        "replica_store_nostr_profile_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_nostr_relay_update",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_plot_create", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_plot_delete", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_plot_find_many", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_plot_find_one", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_plot_gcs_location_create",
+        "replica_store_nostr_profile_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_plot_gcs_location_delete",
+        "replica_store_nostr_profile_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_plot_gcs_location_find_many",
+        "replica_store_nostr_profile_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_plot_gcs_location_find_one",
+        "replica_store_nostr_profile_relay_set",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_plot_gcs_location_update",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_plot_tag_create", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_plot_tag_delete", Some("opts_json"), Any, 2, 3),
-    public_function!(
-        "replica_db_plot_tag_find_many",
-        Some("opts_json"),
-        Any,
-        2,
-        3
-    ),
-    public_function!("replica_db_plot_tag_find_one", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_plot_tag_update", Some("opts_json"), Any, 2, 3),
-    public_function!("replica_db_reset_database", None, Void, 0, 2),
-    public_function!("replica_db_run_migrations", None, Void, 0, 2),
-    public_function!(
-        "replica_db_trade_product_create",
+        "replica_store_nostr_profile_relay_unset",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_delete",
+        "replica_store_nostr_profile_update",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_find_many",
+        "replica_store_nostr_relay_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_find_one",
+        "replica_store_nostr_relay_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_location_set",
+        "replica_store_nostr_relay_find_many",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_location_unset",
+        "replica_store_nostr_relay_find_one",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_media_set",
+        "replica_store_nostr_relay_update",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!("replica_store_plot_create", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_plot_delete", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_plot_find_many", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_plot_find_one", Some("opts_json"), Any, 2, 3),
+    public_function!(
+        "replica_store_plot_gcs_location_create",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_media_unset",
+        "replica_store_plot_gcs_location_delete",
         Some("opts_json"),
         Any,
         2,
         3
     ),
     public_function!(
-        "replica_db_trade_product_update",
+        "replica_store_plot_gcs_location_find_many",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_gcs_location_find_one",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_gcs_location_update",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_tag_create",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_tag_delete",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_tag_find_many",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_tag_find_one",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_plot_tag_update",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!("replica_store_reset_database", None, Void, 0, 2),
+    public_function!("replica_store_run_migrations", None, Void, 0, 2),
+    public_function!(
+        "replica_store_trade_product_create",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_delete",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_find_many",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_find_one",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_location_set",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_location_unset",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_media_set",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_media_unset",
+        Some("opts_json"),
+        Any,
+        2,
+        3
+    ),
+    public_function!(
+        "replica_store_trade_product_update",
         Some("opts_json"),
         Any,
         2,
@@ -948,7 +1014,7 @@ mod tests {
     #[test]
     fn generated_declarations_include_public_wasm_entrypoints() {
         let specs = wasm_package_specs();
-        let events = declaration_files(specs[0]).expect("events declarations");
+        let events = declaration_files(specs[0]).expect("event declarations");
         assert!(events[0].contents.contains("export function listing_tags"));
         assert!(
             events[1]
@@ -956,16 +1022,16 @@ mod tests {
                 .contains("export declare const listing_tags")
         );
 
-        let replica_db = declaration_files(specs[1]).expect("replica db declarations");
+        let replica_store = declaration_files(specs[1]).expect("replica store declarations");
         assert!(
-            replica_db[0]
+            replica_store[0]
                 .contents
-                .contains("export function replica_db_farm_create")
+                .contains("export function replica_store_farm_create")
         );
         assert!(
-            replica_db[1]
+            replica_store[1]
                 .contents
-                .contains("export declare const replica_db_farm_create")
+                .contains("export declare const replica_store_farm_create")
         );
 
         let replica_sync = declaration_files(specs[2]).expect("replica sync declarations");

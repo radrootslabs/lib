@@ -1,0 +1,38 @@
+[package]
+name = "radroots_event_codec_wasm"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "WASM boundary for Radroots event codecs"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+radroots_event = { workspace = true, default-features = false, features = [
+  "std",
+  "serde",
+  "knowledge-nip54",
+] }
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "std",
+  "serde_json",
+  "nostr",
+  "knowledge-nip54",
+  "contract-manifest",
+] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[dev-dependencies]
+nostr = { workspace = true }
+radroots_core = { workspace = true, default-features = false, features = [
+  "std",
+] }

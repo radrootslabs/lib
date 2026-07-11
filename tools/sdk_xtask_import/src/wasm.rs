@@ -219,7 +219,7 @@ fn selected_specs(args: &[String]) -> Result<Vec<WasmPackageSpec>, String> {
 }
 
 fn wasm_package_requires_c_compiler(spec: WasmPackageSpec) -> bool {
-    spec.key == "events_codec"
+    spec.key == "event_codec"
 }
 
 fn resolve_required_path_tool(name: &str) -> Result<PathBuf, String> {
@@ -708,9 +708,9 @@ mod tests {
 
     #[test]
     fn selects_one_spec_by_key() {
-        let specs = selected_specs(&["--package".to_owned(), "replica_db".to_owned()])
-            .expect("replica db spec");
-        assert_eq!(specs[0].package_name, "@radroots/replica-db-wasm");
+        let specs = selected_specs(&["--package".to_owned(), "replica_store".to_owned()])
+            .expect("replica store spec");
+        assert_eq!(specs[0].package_name, "@radroots/replica-store-wasm");
     }
 
     #[test]
@@ -957,7 +957,7 @@ channel = "1.92.0"
     }
 
     #[test]
-    fn events_codec_wasm_requires_c_compiler() {
+    fn event_codec_wasm_requires_c_compiler() {
         assert!(wasm_package_requires_c_compiler(wasm_package_specs()[0]));
         assert!(!wasm_package_requires_c_compiler(wasm_package_specs()[1]));
     }

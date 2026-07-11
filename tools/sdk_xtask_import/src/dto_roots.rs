@@ -46,8 +46,8 @@ struct DtoExternalOverride {
 
 const CORE_BINDINGS_PACKAGE_KEY: &str = "core";
 const CORE_BINDINGS_PACKAGE_NAME: &str = "@radroots/core-bindings";
-const EVENTS_BINDINGS_PACKAGE_KEY: &str = "events";
-const EVENTS_BINDINGS_PACKAGE_NAME: &str = "@radroots/events-bindings";
+const EVENT_BINDINGS_PACKAGE_KEY: &str = "event";
+const EVENT_BINDINGS_PACKAGE_NAME: &str = "@radroots/event-bindings";
 
 pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
     DtoPackageRootSet {
@@ -55,12 +55,12 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         roots: core_roots,
     },
     DtoPackageRootSet {
-        package_key: "events",
-        roots: events_roots,
+        package_key: "event",
+        roots: event_roots,
     },
     DtoPackageRootSet {
-        package_key: "events_indexed",
-        roots: events_indexed_roots,
+        package_key: "event_index",
+        roots: event_index_roots,
     },
     DtoPackageRootSet {
         package_key: "trade",
@@ -75,17 +75,17 @@ pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
         reason: "custom serde, string-backed newtypes, aliases, and tagged enum wire forms require source-owned manual descriptors",
     },
     ManualDescriptorFamily {
-        package_key: "events",
+        package_key: "event",
         source_family: "event timestamps, counters, and optional metadata fields",
         reason: "large integers and source-specific optional/null policy must be explicit",
     },
     ManualDescriptorFamily {
-        package_key: "events",
+        package_key: "event",
         source_family: "GeoJSON coordinate arrays",
         reason: "fixed-size Rust arrays must preserve tuple semantics in TypeScript",
     },
     ManualDescriptorFamily {
-        package_key: "events_indexed",
+        package_key: "event_index",
         source_family: "checkpoint and index cursor fields",
         reason: "custom deserialization and large integers require manual descriptor policy",
     },
@@ -95,7 +95,7 @@ pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
         reason: "core aliases, source-owned event imports, and count-family numeric policy require explicit descriptors",
     },
     ManualDescriptorFamily {
-        package_key: "replica_db_schema",
+        package_key: "replica_schema",
         source_family: "untagged query wrappers and serde_json value fields",
         reason: "schema query shapes are generated and not all source fields map to derive-supported DTOs",
     },
@@ -108,12 +108,12 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
         reason: "source descriptors correctly describe fields as strings, while package roots still need stable named TypeScript aliases",
     },
     SdkLocalWrapperAllowance {
-        package_key: "replica_db_schema",
+        package_key: "replica_schema",
         shape_family: "generated query argument wrappers",
         reason: "schema operation inputs are generated package shapes rather than source-owned public DTO structs",
     },
     SdkLocalWrapperAllowance {
-        package_key: "events_indexed",
+        package_key: "event_index",
         shape_family: "RadrootsEventIndexShardId package alias",
         reason: "source descriptors correctly describe the shard id newtype as a string, while package roots still need a stable named TypeScript alias",
     },
@@ -133,32 +133,32 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
     core_override("RadrootsCoreQuantity"),
     core_override("RadrootsCoreQuantityPrice"),
     core_override("RadrootsCoreUnit"),
-    events_override("RadrootsFarmRef"),
-    events_override("RadrootsListing"),
-    events_override("RadrootsListingAvailability"),
-    events_override("RadrootsListingBin"),
-    events_override("RadrootsListingDeliveryMethod"),
-    events_override("RadrootsListingImage"),
-    events_override("RadrootsListingProduct"),
-    events_override("RadrootsListingPublicLocation"),
-    events_override("RadrootsListingStatus"),
-    events_override("RadrootsEventPtr"),
-    events_override("RadrootsPlotRef"),
-    events_override("RadrootsResourceAreaRef"),
-    events_override("RadrootsOrderEconomicActor"),
-    events_override("RadrootsOrderEconomicEffect"),
-    events_override("RadrootsOrderEconomicItem"),
-    events_override("RadrootsOrderEconomicLine"),
-    events_override("RadrootsOrderEconomicLineKind"),
-    events_override("RadrootsOrderEconomics"),
-    events_override("RadrootsOrderEventType"),
-    events_override("RadrootsOrderInventoryCommitment"),
-    events_override("RadrootsOrderItem"),
-    events_override("RadrootsOrderPricingBasis"),
+    event_override("RadrootsFarmRef"),
+    event_override("RadrootsListing"),
+    event_override("RadrootsListingAvailability"),
+    event_override("RadrootsListingBin"),
+    event_override("RadrootsListingDeliveryMethod"),
+    event_override("RadrootsListingImage"),
+    event_override("RadrootsListingProduct"),
+    event_override("RadrootsListingPublicLocation"),
+    event_override("RadrootsListingStatus"),
+    event_override("RadrootsEventPtr"),
+    event_override("RadrootsPlotRef"),
+    event_override("RadrootsResourceAreaRef"),
+    event_override("RadrootsOrderEconomicActor"),
+    event_override("RadrootsOrderEconomicEffect"),
+    event_override("RadrootsOrderEconomicItem"),
+    event_override("RadrootsOrderEconomicLine"),
+    event_override("RadrootsOrderEconomicLineKind"),
+    event_override("RadrootsOrderEconomics"),
+    event_override("RadrootsOrderEventType"),
+    event_override("RadrootsOrderInventoryCommitment"),
+    event_override("RadrootsOrderItem"),
+    event_override("RadrootsOrderPricingBasis"),
 ];
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
-    &[CORE_BINDINGS_PACKAGE_NAME, EVENTS_BINDINGS_PACKAGE_NAME];
+    &[CORE_BINDINGS_PACKAGE_NAME, EVENT_BINDINGS_PACKAGE_NAME];
 
 pub fn package_root_set(package_key: &str) -> Option<&'static DtoPackageRootSet> {
     DTO_PACKAGE_ROOTS
@@ -179,26 +179,25 @@ pub fn core_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
-pub fn events_types_module() -> Result<DtoTypesModule, String> {
-    let root_set =
-        package_root_set("events").ok_or_else(|| "missing events DTO roots".to_owned())?;
+pub fn event_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("event").ok_or_else(|| "missing event DTO roots".to_owned())?;
     let registry = root_set.registry();
     let options = core_import_options(&registry, DtoRegistryRenderOptions::default())?;
     let rendered = render_registry_types(&registry, &options)?;
-    Ok(with_events_sdk_wrappers(rendered))
+    Ok(with_event_sdk_wrappers(rendered))
 }
 
-pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
-    let root_set = package_root_set("events_indexed")
-        .ok_or_else(|| "missing events-indexed DTO roots".to_owned())?;
+pub fn event_index_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("event_index")
+        .ok_or_else(|| "missing event-index DTO roots".to_owned())?;
     let rendered =
         render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
-    Ok(with_events_indexed_sdk_wrappers(rendered))
+    Ok(with_event_index_sdk_wrappers(rendered))
 }
 
-pub fn replica_db_schema_types_module() -> Result<DtoTypesModule, String> {
+pub fn replica_schema_types_module() -> Result<DtoTypesModule, String> {
     render_registry_types(
-        &radroots_replica_db_schema_bindings::dto_registry(),
+        &radroots_replica_schema_bindings::dto_registry(),
         &DtoRegistryRenderOptions::default(),
     )
 }
@@ -216,11 +215,11 @@ fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
 
-fn events_roots() -> Vec<RootDescriptor> {
+fn event_roots() -> Vec<RootDescriptor> {
     radroots_event::dto::dto_roots().into_iter().collect()
 }
 
-fn events_indexed_roots() -> Vec<RootDescriptor> {
+fn event_index_roots() -> Vec<RootDescriptor> {
     radroots_event_index::dto::dto_roots().into_iter().collect()
 }
 
@@ -295,8 +294,8 @@ fn generated_external_package_exports() -> Result<BTreeMap<&'static str, BTreeSe
             type_exports(core_types_module()?.body_ts()),
         ),
         (
-            EVENTS_BINDINGS_PACKAGE_KEY,
-            type_exports(events_types_module()?.body_ts()),
+            EVENT_BINDINGS_PACKAGE_KEY,
+            type_exports(event_types_module()?.body_ts()),
         ),
     ]))
 }
@@ -416,16 +415,16 @@ const fn core_override(export_name: &'static str) -> DtoExternalOverride {
     }
 }
 
-const fn events_override(export_name: &'static str) -> DtoExternalOverride {
+const fn event_override(export_name: &'static str) -> DtoExternalOverride {
     DtoExternalOverride {
         target_type: export_name,
         import_name: export_name,
-        from_package_key: EVENTS_BINDINGS_PACKAGE_KEY,
-        from: EVENTS_BINDINGS_PACKAGE_NAME,
+        from_package_key: EVENT_BINDINGS_PACKAGE_KEY,
+        from: EVENT_BINDINGS_PACKAGE_NAME,
     }
 }
 
-fn with_events_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
+fn with_event_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
     let mut declarations = module
         .body_ts()
         .split("\n\n")
@@ -458,7 +457,7 @@ fn declaration_name(declaration: &str) -> &str {
         .unwrap_or(declaration)
 }
 
-fn with_events_indexed_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
+fn with_event_index_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
     let mut declarations = module
         .body_ts()
         .split("\n\n")
@@ -524,43 +523,41 @@ mod tests {
     use super::{
         CORE_BINDINGS_PACKAGE_KEY, CORE_BINDINGS_PACKAGE_NAME, DTO_PACKAGE_ROOTS,
         DtoExternalOverride, MANUAL_DESCRIPTOR_FAMILIES, SDK_LOCAL_WRAPPER_ALLOWANCES,
-        events_override, imported_type_inventory, package_root_set, trade_import_options,
+        event_override, imported_type_inventory, package_root_set, trade_import_options,
         type_exports, validate_external_override_target, validate_external_override_usage,
         with_checked_external_type,
     };
     use dto_bindgen_backend_ts::{DtoRegistryRenderOptions, DtoTypesModule};
 
-    const EVENTS_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/events-bindings/src/generated/types.ts");
-    const EVENTS_INDEXED_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/events-indexed-bindings/src/generated/types.ts");
-    const REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/replica-db-schema-bindings/src/generated/types.ts");
+    const EVENT_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/event-bindings/src/generated/types.ts");
+    const EVENT_INDEX_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/event-index-bindings/src/generated/types.ts");
+    const REPLICA_SCHEMA_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/replica-schema-bindings/src/generated/types.ts");
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
     const REPLICA_SCHEMA_MODEL_SOURCES: &[&str] = &[
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_gcs_location.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_member.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_member_claim.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_tag.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/gcs_location.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/log_error.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/media_image.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_event_head.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_profile.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_profile_relay.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_relay.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot_gcs_location.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot_tag.rs"),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/trade_product.rs"),
-        include_str!(
-            "../../../../lib/crates/replica_db_schema/src/models/trade_product_location.rs"
-        ),
-        include_str!("../../../../lib/crates/replica_db_schema/src/models/trade_product_media.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/farm.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/farm_gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/farm_member.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/farm_member_claim.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/farm_tag.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/log_error.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/media_image.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/nostr_event_head.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/nostr_profile.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/nostr_profile_relay.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/nostr_relay.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/plot.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/plot_gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/plot_tag.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/trade_product.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/trade_product_location.rs"),
+        include_str!("../../../../lib/crates/replica_schema/src/models/trade_product_media.rs"),
     ];
-    const EVENTS_TYPE_INVENTORY: &[&str] = &[
+    const EVENT_TYPE_INVENTORY: &[&str] = &[
         "JobFeedbackStatus",
         "JobInputType",
         "JobPaymentRequest",
@@ -676,7 +673,7 @@ mod tests {
         "RadrootsWikiMergeRequest",
         "RadrootsWikiRedirect",
     ];
-    const EVENTS_INDEXED_TYPE_INVENTORY: &[&str] = &[
+    const EVENT_INDEX_TYPE_INVENTORY: &[&str] = &[
         "RadrootsEventIndexShardId",
         "RadrootsEventIndexIdRange",
         "RadrootsEventIndexShardMetadata",
@@ -737,8 +734,8 @@ mod tests {
     #[test]
     fn package_roots_are_explicit_not_discovered() {
         assert!(package_root_set("core").is_some());
-        assert!(package_root_set("events").is_some());
-        assert!(package_root_set("events_indexed").is_some());
+        assert!(package_root_set("event").is_some());
+        assert!(package_root_set("event_index").is_some());
         assert!(package_root_set("trade").is_some());
     }
 
@@ -855,16 +852,15 @@ mod tests {
     #[test]
     fn external_override_usage_rejects_local_emission_for_imported_type() {
         let module = DtoTypesModule::new(
-            "import type { RadrootsCoreDecimal } from \"@radroots/core-bindings\";\n\nimport type { RadrootsFarmRef } from \"@radroots/events-bindings\";\n\n",
+            "import type { RadrootsCoreDecimal } from \"@radroots/core-bindings\";\n\nimport type { RadrootsFarmRef } from \"@radroots/event-bindings\";\n\n",
             "export type RadrootsFarmRef = { pubkey: string, d_tag: string, };",
         );
-        let error =
-            validate_external_override_usage(&module, &[events_override("RadrootsFarmRef")])
-                .expect_err("local emission of imported type must fail");
+        let error = validate_external_override_usage(&module, &[event_override("RadrootsFarmRef")])
+            .expect_err("local emission of imported type must fail");
 
         assert_eq!(
             error,
-            "external DTO override `RadrootsFarmRef` from `@radroots/events-bindings` was emitted locally instead of imported"
+            "external DTO override `RadrootsFarmRef` from `@radroots/event-bindings` was emitted locally instead of imported"
         );
     }
 
@@ -893,17 +889,17 @@ mod tests {
     }
 
     #[test]
-    fn events_type_inventory_matches_current_package_surface() {
-        let actual = type_inventory(EVENTS_BINDINGS_TYPES_TS);
+    fn event_type_inventory_matches_current_package_surface() {
+        let actual = type_inventory(EVENT_BINDINGS_TYPES_TS);
 
-        assert_eq!(actual, EVENTS_TYPE_INVENTORY);
+        assert_eq!(actual, EVENT_TYPE_INVENTORY);
     }
 
     #[test]
-    fn events_indexed_type_inventory_matches_current_package_surface() {
-        let actual = type_inventory(EVENTS_INDEXED_BINDINGS_TYPES_TS);
+    fn event_index_type_inventory_matches_current_package_surface() {
+        let actual = type_inventory(EVENT_INDEX_BINDINGS_TYPES_TS);
 
-        assert_eq!(actual, EVENTS_INDEXED_TYPE_INVENTORY);
+        assert_eq!(actual, EVENT_INDEX_TYPE_INVENTORY);
     }
 
     #[test]
@@ -914,28 +910,28 @@ mod tests {
     }
 
     #[test]
-    fn replica_db_schema_generated_types_preserve_source_schema_contracts() {
-        let actual = type_inventory(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS);
+    fn replica_schema_generated_types_preserve_source_schema_contracts() {
+        let actual = type_inventory(REPLICA_SCHEMA_BINDINGS_TYPES_TS);
         let trade_product_filter = type_declaration(
-            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS,
+            REPLICA_SCHEMA_BINDINGS_TYPES_TS,
             "ITradeProductFieldsFilter",
         );
         let trade_product_partial = type_declaration(
-            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS,
+            REPLICA_SCHEMA_BINDINGS_TYPES_TS,
             "ITradeProductFieldsPartial",
         );
 
         assert!(actual.contains(&"Farm"));
         assert!(actual.contains(&"GcsLocation"));
         assert!(actual.contains(&"NostrEventHead"));
-        assert!(actual.contains(&"ReplicaDbJsonValue"));
+        assert!(actual.contains(&"ReplicaStoreJsonValue"));
         assert!(actual.contains(&"ITradeProductFieldsPartial"));
         assert!(!actual.contains(&"NostrEventState"));
-        assert!(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS.contains(
-            "export type ReplicaDbJsonValue = null | boolean | number | string | Array<ReplicaDbJsonValue> | { [key: string]: ReplicaDbJsonValue };"
+        assert!(REPLICA_SCHEMA_BINDINGS_TYPES_TS.contains(
+            "export type ReplicaStoreJsonValue = null | boolean | number | string | Array<ReplicaStoreJsonValue> | { [key: string]: ReplicaStoreJsonValue };"
         ));
         assert!(
-            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS
+            REPLICA_SCHEMA_BINDINGS_TYPES_TS
                 .contains("export type IFarmFindOneResolve = ReplicaSchemaResult<Farm | null>;")
         );
         assert!(actual.contains(&"ReplicaSchemaResult"));
@@ -944,13 +940,13 @@ mod tests {
         assert!(actual.contains(&"ReplicaSchemaError"));
         assert!(trade_product_filter.contains("year?: bigint"));
         assert!(trade_product_filter.contains("qty_avail?: bigint"));
-        assert!(trade_product_partial.contains("year?: ReplicaDbJsonValue | null"));
-        assert!(trade_product_partial.contains("qty_avail?: ReplicaDbJsonValue | null"));
+        assert!(trade_product_partial.contains("year?: ReplicaStoreJsonValue | null"));
+        assert!(trade_product_partial.contains("qty_avail?: ReplicaStoreJsonValue | null"));
     }
 
     #[test]
-    fn replica_db_schema_generated_types_match_source_public_inventory() {
-        let actual = type_inventory(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS)
+    fn replica_schema_generated_types_match_source_public_inventory() {
+        let actual = type_inventory(REPLICA_SCHEMA_BINDINGS_TYPES_TS)
             .into_iter()
             .collect::<BTreeSet<_>>();
         let missing = source_public_schema_type_inventory()
@@ -967,22 +963,22 @@ mod tests {
     #[test]
     fn trade_package_imports_source_owned_support_types() {
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/core-bindings\""));
-        assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/events-bindings\""));
+        assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/event-bindings\""));
 
         let imports = imported_type_inventory(TRADE_BINDINGS_TYPES_TS);
         assert!(
             imports
-                .get("@radroots/events-bindings")
+                .get("@radroots/event-bindings")
                 .is_some_and(|names| names.contains("RadrootsOrderEventType"))
         );
         assert!(
             imports
-                .get("@radroots/events-bindings")
+                .get("@radroots/event-bindings")
                 .is_some_and(|names| names.contains("RadrootsOrderEconomics"))
         );
         assert!(
             imports
-                .get("@radroots/events-bindings")
+                .get("@radroots/event-bindings")
                 .is_some_and(|names| names.contains("RadrootsOrderInventoryCommitment"))
         );
 

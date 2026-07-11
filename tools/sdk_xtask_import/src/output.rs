@@ -88,19 +88,15 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             kinds_ts: None,
         },
         PackageOutput {
-            spec: spec_by_key("events"),
-            types_ts: Some(TsSource::DtoRegistry(dto_roots::events_types_module()?)),
+            spec: spec_by_key("event"),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::event_types_module()?)),
             types_imports: Vec::new(),
-            constants_ts: Some(TsSource::Module(
-                radroots_events_bindings::constants_module(),
-            )),
-            kinds_ts: Some(TsSource::Module(radroots_events_bindings::kinds_module())),
+            constants_ts: Some(TsSource::Module(radroots_event_bindings::constants_module())),
+            kinds_ts: Some(TsSource::Module(radroots_event_bindings::kinds_module())),
         },
         PackageOutput {
-            spec: spec_by_key("events_indexed"),
-            types_ts: Some(TsSource::DtoRegistry(
-                dto_roots::events_indexed_types_module()?,
-            )),
+            spec: spec_by_key("event_index"),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::event_index_types_module()?)),
             types_imports: Vec::new(),
             constants_ts: None,
             kinds_ts: None,
@@ -115,9 +111,9 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             kinds_ts: None,
         },
         PackageOutput {
-            spec: spec_by_key("replica_db_schema"),
+            spec: spec_by_key("replica_schema"),
             types_ts: Some(TsSource::DtoRegistry(
-                dto_roots::replica_db_schema_types_module()?,
+                dto_roots::replica_schema_types_module()?,
             )),
             types_imports: Vec::new(),
             constants_ts: None,
@@ -194,12 +190,12 @@ mod tests {
 
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
-    const REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/replica-db-schema-bindings/src/generated/types.ts");
-    const EVENTS_BINDINGS_CONSTANTS_TS: &str =
-        include_str!("../../../packages/events-bindings/src/generated/constants.ts");
-    const EVENTS_BINDINGS_KINDS_TS: &str =
-        include_str!("../../../packages/events-bindings/src/generated/kinds.ts");
+    const REPLICA_SCHEMA_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/replica-schema-bindings/src/generated/types.ts");
+    const EVENT_BINDINGS_CONSTANTS_TS: &str =
+        include_str!("../../../packages/event-bindings/src/generated/constants.ts");
+    const EVENT_BINDINGS_KINDS_TS: &str =
+        include_str!("../../../packages/event-bindings/src/generated/kinds.ts");
     const IDENTITY_BINDINGS_CONSTANTS_TS: &str =
         include_str!("../../../packages/identity-bindings/src/generated/constants.ts");
 
@@ -236,10 +232,10 @@ mod tests {
             .map(|output| output.spec.package_name)
             .collect::<Vec<_>>();
         assert!(package_names.contains(&"@radroots/core-bindings"));
-        assert!(package_names.contains(&"@radroots/events-bindings"));
-        assert!(package_names.contains(&"@radroots/events-indexed-bindings"));
+        assert!(package_names.contains(&"@radroots/event-bindings"));
+        assert!(package_names.contains(&"@radroots/event-index-bindings"));
         assert!(package_names.contains(&"@radroots/identity-bindings"));
-        assert!(package_names.contains(&"@radroots/replica-db-schema-bindings"));
+        assert!(package_names.contains(&"@radroots/replica-schema-bindings"));
         assert!(package_names.contains(&"@radroots/trade-bindings"));
     }
 
@@ -316,12 +312,12 @@ mod tests {
     }
 
     #[test]
-    fn replica_db_schema_output_uses_dto_registry_and_matches_checked_in_types() {
+    fn replica_schema_output_uses_dto_registry_and_matches_checked_in_types() {
         let output = package_outputs()
             .expect("package outputs")
             .into_iter()
-            .find(|output| output.spec.key == "replica_db_schema")
-            .expect("replica_db_schema output");
+            .find(|output| output.spec.key == "replica_schema")
+            .expect("replica_schema output");
 
         assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
         assert!(output.types_imports.is_empty());
@@ -332,7 +328,7 @@ mod tests {
             .find(|file| file.relative_path == "src/generated/types.ts")
             .expect("types file");
 
-        assert_eq!(types.contents, REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS);
+        assert_eq!(types.contents, REPLICA_SCHEMA_BINDINGS_TYPES_TS);
     }
 
     #[test]
@@ -340,8 +336,8 @@ mod tests {
         let output = package_outputs()
             .expect("package outputs")
             .into_iter()
-            .find(|output| output.spec.key == "events")
-            .expect("events output");
+            .find(|output| output.spec.key == "event")
+            .expect("event output");
 
         assert!(matches!(output.constants_ts, Some(TsSource::Module(_))));
         assert!(matches!(output.kinds_ts, Some(TsSource::Module(_))));
@@ -356,8 +352,8 @@ mod tests {
             .find(|file| file.relative_path == "src/generated/kinds.ts")
             .expect("kinds file");
 
-        assert_eq!(constants.contents, EVENTS_BINDINGS_CONSTANTS_TS);
-        assert_eq!(kinds.contents, EVENTS_BINDINGS_KINDS_TS);
+        assert_eq!(constants.contents, EVENT_BINDINGS_CONSTANTS_TS);
+        assert_eq!(kinds.contents, EVENT_BINDINGS_KINDS_TS);
     }
 
     #[test]
