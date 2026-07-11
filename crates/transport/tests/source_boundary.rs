@@ -29,6 +29,9 @@ const CORE_STATUS_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src", "transport
 
 const CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src"];
 
+const DELIVERY_PAYLOAD_CONTRACT_SOURCE_ROOTS: &[&str] =
+    &["transport/src", "runtime/src", "transport_reticulum/src"];
+
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "\"radrootsd_proxy\"",
@@ -177,6 +180,17 @@ const FORBIDDEN_CORE_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     },
 ];
 
+const FORBIDDEN_DELIVERY_PAYLOAD_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: "payload_digest",
+        reason: "delivery requests must carry RadrootsTransportPayload instead of digest-only fields",
+    },
+    ForbiddenConcept {
+        pattern: "DigestOnly",
+        reason: "runtime dispatch must not retain a digest-only payload path",
+    },
+];
+
 #[test]
 fn transport_hardening_sources_reject_removed_protocol_identifiers() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -303,6 +317,37 @@ fn core_transport_sources_reject_relay_shaped_public_contracts() {
     assert!(
         findings.is_empty(),
         "core transport public contract source-boundary violations:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn delivery_request_sources_require_payload_objects() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let mut findings = Vec::new();
+
+    for relative_root in DELIVERY_PAYLOAD_CONTRACT_SOURCE_ROOTS {
+        for path in rust_source_files(crates_root.join(relative_root).as_path()) {
+            let source_raw = read_source(path.as_path());
+            let source = production_source(source_raw.as_str());
+            let relative_path = relative_path(crates_root, path.as_path());
+
+            for concept in FORBIDDEN_DELIVERY_PAYLOAD_CONCEPTS {
+                if contains_forbidden_concept(source, concept.pattern) {
+                    findings.push(format!(
+                        "{} contains digest-only delivery concept `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "delivery payload source-boundary violations:\n{}",
         findings.join("\n")
     );
 }

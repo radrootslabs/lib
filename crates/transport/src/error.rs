@@ -16,6 +16,14 @@ pub enum RadrootsTransportError {
     InvalidSatisfactionPolicy,
     EmptyRequiredTargetSet,
     DuplicateRequiredTargetFingerprint,
+    EmptyPayloadId,
+    InvalidPayloadId,
+    EmptyPayloadLabel,
+    InvalidPayloadLabel,
+    EmptyPayloadBytes,
+    InvalidPayloadBytes,
+    InvalidPayloadDigest,
+    PayloadDigestMismatch,
 }
 
 impl fmt::Display for RadrootsTransportError {
@@ -42,6 +50,16 @@ impl fmt::Display for RadrootsTransportError {
             Self::EmptyRequiredTargetSet => f.write_str("transport required target set is empty"),
             Self::DuplicateRequiredTargetFingerprint => {
                 f.write_str("transport required target set contains duplicate fingerprints")
+            }
+            Self::EmptyPayloadId => f.write_str("transport payload id is empty"),
+            Self::InvalidPayloadId => f.write_str("transport payload id is invalid"),
+            Self::EmptyPayloadLabel => f.write_str("transport payload label is empty"),
+            Self::InvalidPayloadLabel => f.write_str("transport payload label is invalid"),
+            Self::EmptyPayloadBytes => f.write_str("transport payload bytes are empty"),
+            Self::InvalidPayloadBytes => f.write_str("transport payload bytes are invalid"),
+            Self::InvalidPayloadDigest => f.write_str("transport payload digest is invalid"),
+            Self::PayloadDigestMismatch => {
+                f.write_str("transport payload digest does not match payload bytes")
             }
         }
     }

@@ -1,0 +1,204 @@
+use crate::RadrootsTransportError;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use sha2::{Digest, Sha256};
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsTransportPayload {
+    SignedEventJson {
+        event_id: String,
+        raw_json: String,
+        digest: String,
+    },
+    MeshFrameCbor {
+        message_id: String,
+        bytes: Vec<u8>,
+        digest: String,
+    },
+    OpaqueBytes {
+        label: String,
+        bytes: Vec<u8>,
+        digest: String,
+    },
+}
+
+impl RadrootsTransportPayload {
+    pub fn signed_event_json(
+        event_id: impl AsRef<str>,
+        raw_json: impl AsRef<str>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let event_id = validate_hex_id(event_id.as_ref())?;
+        let raw_json = validate_raw_json(raw_json.as_ref())?;
+        let digest = sha256_hex(raw_json.as_bytes());
+        Ok(Self::SignedEventJson {
+            event_id,
+            raw_json,
+            digest,
+        })
+    }
+
+    pub fn signed_event_json_with_digest(
+        event_id: impl AsRef<str>,
+        raw_json: impl AsRef<str>,
+        digest: impl AsRef<str>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::signed_event_json(event_id, raw_json)?;
+        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Ok(payload)
+    }
+
+    pub fn mesh_frame_cbor(
+        message_id: impl AsRef<str>,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let message_id = validate_token_id(message_id.as_ref())?;
+        let bytes = validate_bytes(bytes.as_ref())?;
+        let digest = sha256_hex(bytes.as_slice());
+        Ok(Self::MeshFrameCbor {
+            message_id,
+            bytes,
+            digest,
+        })
+    }
+
+    pub fn mesh_frame_cbor_with_digest(
+        message_id: impl AsRef<str>,
+        bytes: impl AsRef<[u8]>,
+        digest: impl AsRef<str>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::mesh_frame_cbor(message_id, bytes)?;
+        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Ok(payload)
+    }
+
+    pub fn opaque_bytes(
+        label: impl AsRef<str>,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let label = validate_label(label.as_ref())?;
+        let bytes = validate_bytes(bytes.as_ref())?;
+        let digest = sha256_hex(bytes.as_slice());
+        Ok(Self::OpaqueBytes {
+            label,
+            bytes,
+            digest,
+        })
+    }
+
+    pub fn opaque_bytes_with_digest(
+        label: impl AsRef<str>,
+        bytes: impl AsRef<[u8]>,
+        digest: impl AsRef<str>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::opaque_bytes(label, bytes)?;
+        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Ok(payload)
+    }
+
+    pub fn digest(&self) -> &str {
+        match self {
+            Self::SignedEventJson { digest, .. }
+            | Self::MeshFrameCbor { digest, .. }
+            | Self::OpaqueBytes { digest, .. } => digest.as_str(),
+        }
+    }
+
+    pub fn payload_kind(&self) -> &'static str {
+        match self {
+            Self::SignedEventJson { .. } => "signed_event_json",
+            Self::MeshFrameCbor { .. } => "mesh_frame_cbor",
+            Self::OpaqueBytes { .. } => "opaque_bytes",
+        }
+    }
+}
+
+fn validate_hex_id(raw: &str) -> Result<String, RadrootsTransportError> {
+    if raw.len() != 64 || !raw.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    let lowered = raw.to_ascii_lowercase();
+    if raw != lowered {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    Ok(lowered)
+}
+
+fn validate_token_id(raw: &str) -> Result<String, RadrootsTransportError> {
+    if raw.is_empty() {
+        return Err(RadrootsTransportError::EmptyPayloadId);
+    }
+    if raw != raw.trim()
+        || raw
+            .chars()
+            .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.')))
+    {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    Ok(raw.to_string())
+}
+
+fn validate_label(raw: &str) -> Result<String, RadrootsTransportError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(RadrootsTransportError::EmptyPayloadLabel);
+    }
+    if trimmed.chars().any(char::is_control) {
+        return Err(RadrootsTransportError::InvalidPayloadLabel);
+    }
+    Ok(trimmed.to_string())
+}
+
+fn validate_raw_json(raw: &str) -> Result<String, RadrootsTransportError> {
+    if raw.is_empty() {
+        return Err(RadrootsTransportError::EmptyPayloadBytes);
+    }
+    if raw != raw.trim()
+        || raw.chars().any(char::is_control)
+        || !raw.starts_with('{')
+        || !raw.ends_with('}')
+    {
+        return Err(RadrootsTransportError::InvalidPayloadBytes);
+    }
+    Ok(raw.to_string())
+}
+
+fn validate_bytes(raw: &[u8]) -> Result<Vec<u8>, RadrootsTransportError> {
+    if raw.is_empty() {
+        return Err(RadrootsTransportError::EmptyPayloadBytes);
+    }
+    Ok(raw.to_vec())
+}
+
+fn validate_supplied_digest(expected: &str, supplied: &str) -> Result<(), RadrootsTransportError> {
+    validate_digest(supplied)?;
+    if supplied != expected {
+        return Err(RadrootsTransportError::PayloadDigestMismatch);
+    }
+    Ok(())
+}
+
+fn validate_digest(raw: &str) -> Result<(), RadrootsTransportError> {
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(RadrootsTransportError::InvalidPayloadDigest);
+    }
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex_encode(Sha256::digest(bytes).as_slice())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}

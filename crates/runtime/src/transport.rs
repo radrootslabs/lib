@@ -8,8 +8,8 @@ use radroots_events::draft::RadrootsSignedEvent;
 use radroots_transport::RadrootsTransportTargetReceipt;
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransportError, RadrootsTransportKind, RadrootsTransportPayload,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use thiserror::Error;
 
@@ -57,14 +57,18 @@ impl From<RadrootsTransportError> for RadrootsRuntimeTransportError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsRuntimeTransportPayload {
     SignedNostrEvent(RadrootsSignedEvent),
-    DigestOnly(String),
+    OpaqueBytes { label: String, bytes: Vec<u8> },
 }
 
 impl RadrootsRuntimeTransportPayload {
-    pub fn digest(&self) -> String {
+    pub fn transport_payload(&self) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
         match self {
-            Self::SignedNostrEvent(event) => event.id.clone(),
-            Self::DigestOnly(value) => value.clone(),
+            Self::SignedNostrEvent(event) => {
+                RadrootsTransportPayload::signed_event_json(&event.id, &event.raw_json)
+            }
+            Self::OpaqueBytes { label, bytes } => {
+                RadrootsTransportPayload::opaque_bytes(label, bytes)
+            }
         }
     }
 }
@@ -99,13 +103,15 @@ impl RadrootsRuntimeTransportDispatchRequest {
         })
     }
 
-    pub fn transport_delivery_request(&self) -> RadrootsTransportDeliveryRequest {
-        RadrootsTransportDeliveryRequest::new(
+    pub fn transport_delivery_request(
+        &self,
+    ) -> Result<RadrootsTransportDeliveryRequest, RadrootsRuntimeTransportError> {
+        Ok(RadrootsTransportDeliveryRequest::new(
             self.request_id.clone(),
-            self.payload.digest(),
+            self.payload.transport_payload()?,
             self.target_set.clone(),
             self.satisfaction_policy.clone(),
-        )
+        ))
     }
 }
 
@@ -470,7 +476,7 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     job.now_ms,
                 )?;
                 let receipt = transport
-                    .deliver(request.transport_delivery_request())
+                    .deliver(request.transport_delivery_request()?)
                     .await
                     .map_err(|error| RadrootsRuntimeTransportError::Transport {
                         kind: kind.canonical_label(),
@@ -708,6 +714,13 @@ mod tests {
         RadrootsTransportTarget::new(kind, uri).expect("target")
     }
 
+    fn opaque_payload() -> RadrootsRuntimeTransportPayload {
+        RadrootsRuntimeTransportPayload::OpaqueBytes {
+            label: "runtime-test-payload".to_owned(),
+            bytes: b"runtime payload".to_vec(),
+        }
+    }
+
     #[cfg(feature = "transport-workers")]
     fn signed_event() -> RadrootsSignedEvent {
         RadrootsSignedEvent::new(RadrootsSignedEventParts {
@@ -770,14 +783,18 @@ mod tests {
             .expect("nostr transport");
         let request = RadrootsRuntimeTransportDispatchRequest::new(
             "nostr-delivery",
-            RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+            opaque_payload(),
             vec![target(RadrootsTransportKind::Nostr, "wss://relay.example")],
             RadrootsTransportSatisfactionPolicy::any_accepted(),
             1_000,
         )
         .expect("request");
         let receipt = transport
-            .deliver(request.transport_delivery_request())
+            .deliver(
+                request
+                    .transport_delivery_request()
+                    .expect("delivery request"),
+            )
             .await
             .expect("receipt");
         let status = transport.status().await.expect("status");
@@ -817,7 +834,7 @@ mod tests {
             .expect("reticulum transport");
         let request = RadrootsRuntimeTransportDispatchRequest::new(
             "reticulum-delivery",
-            RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+            opaque_payload(),
             vec![target(
                 RadrootsTransportKind::Reticulum,
                 "reticulum:preview-unavailable",
@@ -827,7 +844,11 @@ mod tests {
         )
         .expect("request");
         let receipt = transport
-            .deliver(request.transport_delivery_request())
+            .deliver(
+                request
+                    .transport_delivery_request()
+                    .expect("delivery request"),
+            )
             .await
             .expect("receipt");
         let status = transport.status().await.expect("status");
@@ -903,7 +924,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
@@ -947,7 +968,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::no_wait(),
@@ -994,7 +1015,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::required_targets(
@@ -1049,7 +1070,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_delivered(),
@@ -1092,7 +1113,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
@@ -1145,7 +1166,7 @@ mod tests {
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
-                payload: RadrootsRuntimeTransportPayload::DigestOnly("sha256:event".to_owned()),
+                payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),

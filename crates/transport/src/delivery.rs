@@ -1,6 +1,7 @@
 use crate::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportOutcome,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+    RadrootsTransportPayload, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetSet,
 };
 use alloc::collections::BTreeSet;
 use alloc::string::String;
@@ -164,7 +165,7 @@ fn validate_required_targets(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportDeliveryRequest {
     pub request_id: String,
-    pub payload_digest: String,
+    pub payload: RadrootsTransportPayload,
     pub target_set: RadrootsTransportTargetSet,
     pub satisfaction_policy: RadrootsTransportSatisfactionPolicy,
 }
@@ -172,13 +173,13 @@ pub struct RadrootsTransportDeliveryRequest {
 impl RadrootsTransportDeliveryRequest {
     pub fn new(
         request_id: impl Into<String>,
-        payload_digest: impl Into<String>,
+        payload: RadrootsTransportPayload,
         target_set: RadrootsTransportTargetSet,
         satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     ) -> Self {
         Self {
             request_id: request_id.into(),
-            payload_digest: payload_digest.into(),
+            payload,
             target_set,
             satisfaction_policy,
         }

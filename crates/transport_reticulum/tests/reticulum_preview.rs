@@ -3,8 +3,8 @@ use radroots_transport::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchRequest,
     RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetSet,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumPreviewAgentEndpoint, RadrootsReticulumPreviewBehavior,
@@ -35,10 +35,14 @@ fn nostr_target() -> RadrootsTransportTarget {
 fn delivery_request(targets: Vec<RadrootsTransportTarget>) -> RadrootsTransportDeliveryRequest {
     RadrootsTransportDeliveryRequest::new(
         "reticulum-preview-delivery",
-        "sha256:preview-payload",
+        preview_payload(),
         RadrootsTransportTargetSet::new(targets).expect("target set"),
         RadrootsTransportSatisfactionPolicy::any_accepted(),
     )
+}
+
+fn preview_payload() -> RadrootsTransportPayload {
+    RadrootsTransportPayload::mesh_frame_cbor("preview-message", [1_u8, 2, 3]).expect("payload")
 }
 
 #[test]
@@ -293,7 +297,7 @@ fn core_transport_trait_reports_preview_status_delivery_and_fetch() {
         &transport,
         RadrootsTransportDeliveryRequest::new(
             "core-delivery",
-            "sha256:preview-payload",
+            preview_payload(),
             target_set.clone(),
             RadrootsTransportSatisfactionPolicy::any_accepted(),
         ),

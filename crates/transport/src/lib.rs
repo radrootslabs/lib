@@ -7,6 +7,7 @@ mod delivery;
 mod error;
 mod kind;
 mod message;
+mod payload;
 mod status;
 mod target;
 mod transport;
@@ -22,6 +23,7 @@ pub use message::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
+pub use payload::RadrootsTransportPayload;
 pub use status::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
     RadrootsTransportStatus,

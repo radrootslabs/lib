@@ -4,11 +4,16 @@ use radroots_transport::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
     RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
+
+fn opaque_payload() -> RadrootsTransportPayload {
+    RadrootsTransportPayload::opaque_bytes("transport-test-payload", b"transport payload")
+        .expect("payload")
+}
 
 #[test]
 fn target_fingerprints_are_stable_and_transport_scoped() {
@@ -175,6 +180,7 @@ fn satisfaction_policy_counts_target_statuses() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn transport_status_models_canonical_configuration_and_delivery_usability() {
     let status = RadrootsTransportStatus::new(
         RadrootsTransportKind::Nostr,
@@ -252,13 +258,14 @@ fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn request_models_round_trip_with_serde() {
     let target = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
         .expect("target");
     let target_set = RadrootsTransportTargetSet::new(vec![target]).expect("target set");
     let request = RadrootsTransportDeliveryRequest::new(
         "req-1",
-        "sha256:payload",
+        opaque_payload(),
         target_set,
         RadrootsTransportSatisfactionPolicy::any_accepted(),
     );
@@ -268,6 +275,95 @@ fn request_models_round_trip_with_serde() {
         serde_json::from_str(&json).expect("decode request");
 
     assert_eq!(decoded, request);
+}
+
+#[test]
+fn payload_contract_derives_and_validates_digests() {
+    let event_id = "a".repeat(64);
+    let signed = RadrootsTransportPayload::signed_event_json(
+        event_id.as_str(),
+        "{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+    )
+    .expect("signed event payload");
+    assert_eq!(signed.payload_kind(), "signed_event_json");
+    assert_eq!(signed.digest().len(), 64);
+    assert!(
+        signed
+            .digest()
+            .bytes()
+            .all(|byte| { byte.is_ascii_digit() || matches!(byte, b'a'..=b'f') })
+    );
+    assert_eq!(
+        RadrootsTransportPayload::signed_event_json_with_digest(
+            event_id.as_str(),
+            "{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+            signed.digest(),
+        )
+        .expect("signed payload with digest"),
+        signed
+    );
+
+    let mesh =
+        RadrootsTransportPayload::mesh_frame_cbor("mesh.message-1", [1_u8, 2, 3]).expect("mesh");
+    assert_eq!(
+        RadrootsTransportPayload::mesh_frame_cbor_with_digest(
+            "mesh.message-1",
+            [1_u8, 2, 3],
+            mesh.digest(),
+        )
+        .expect("mesh with digest"),
+        mesh
+    );
+
+    let opaque = RadrootsTransportPayload::opaque_bytes("operator note", b"bytes").expect("opaque");
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes_with_digest(
+            "operator note",
+            b"bytes",
+            opaque.digest(),
+        )
+        .expect("opaque with digest"),
+        opaque
+    );
+}
+
+#[test]
+fn payload_contract_rejects_invalid_ids_bytes_labels_and_digests() {
+    assert_eq!(
+        RadrootsTransportPayload::signed_event_json("A".repeat(64), "{}")
+            .expect_err("uppercase event id"),
+        RadrootsTransportError::InvalidPayloadId
+    );
+    assert_eq!(
+        RadrootsTransportPayload::signed_event_json("a".repeat(64), " [] ")
+            .expect_err("non-object json"),
+        RadrootsTransportError::InvalidPayloadBytes
+    );
+    assert_eq!(
+        RadrootsTransportPayload::mesh_frame_cbor("mesh message", [1_u8])
+            .expect_err("space in message id"),
+        RadrootsTransportError::InvalidPayloadId
+    );
+    assert_eq!(
+        RadrootsTransportPayload::mesh_frame_cbor("mesh-message", [])
+            .expect_err("empty mesh bytes"),
+        RadrootsTransportError::EmptyPayloadBytes
+    );
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes("bad\u{0007}", b"bytes")
+            .expect_err("control character label"),
+        RadrootsTransportError::InvalidPayloadLabel
+    );
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes_with_digest("label", b"bytes", "f".repeat(64))
+            .expect_err("digest mismatch"),
+        RadrootsTransportError::PayloadDigestMismatch
+    );
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes_with_digest("label", b"bytes", "F".repeat(64))
+            .expect_err("uppercase digest"),
+        RadrootsTransportError::InvalidPayloadDigest
+    );
 }
 
 #[test]
@@ -870,7 +966,7 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     let delivery =
         futures::executor::block_on(transport.deliver(RadrootsTransportDeliveryRequest::new(
             "deliver-1",
-            "sha256:payload",
+            opaque_payload(),
             target_set.clone(),
             RadrootsTransportSatisfactionPolicy::all_delivered(),
         )))
