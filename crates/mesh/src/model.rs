@@ -4,6 +4,9 @@ use alloc::vec::Vec;
 use radroots_transport::{RadrootsTransportError, RadrootsTransportMeshScopeId};
 
 pub const RADROOTS_MESH_FRAME_VERSION: u16 = 1;
+pub const RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE: &str =
+    "Reticulum mesh preview is explicit and unavailable for real delivery";
+pub const RADROOTS_MESH_PREVIEW_POLICY_ID: &str = "reticulum_preview_delivery";
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -97,6 +100,173 @@ impl RadrootsMeshScope {
             }
             _ => self.label().to_string(),
         }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsMeshPrivacyClass {
+    PublicEvent,
+    PrivateEvent,
+}
+
+impl RadrootsMeshPrivacyClass {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::PublicEvent => "public_event",
+            Self::PrivateEvent => "private_event",
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsMeshCompressionPolicy {
+    Disabled,
+}
+
+impl RadrootsMeshCompressionPolicy {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsMeshPolicyDenyReason {
+    PreviewUnavailable,
+    PayloadBudgetExceeded,
+    CustomScopeUnavailable,
+}
+
+impl RadrootsMeshPolicyDenyReason {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::PreviewUnavailable => "preview_unavailable",
+            Self::PayloadBudgetExceeded => "payload_budget_exceeded",
+            Self::CustomScopeUnavailable => "custom_scope_unavailable",
+        }
+    }
+
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::PreviewUnavailable => RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE,
+            Self::PayloadBudgetExceeded => "mesh payload exceeds the configured delivery budget",
+            Self::CustomScopeUnavailable => {
+                "mesh custom scopes are not enabled for the configured policy"
+            }
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsMeshAdmissionDecision {
+    Accepted,
+    Denied {
+        reason: RadrootsMeshPolicyDenyReason,
+    },
+}
+
+impl RadrootsMeshAdmissionDecision {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Denied { .. } => "denied",
+        }
+    }
+
+    pub fn deny_reason(&self) -> Option<RadrootsMeshPolicyDenyReason> {
+        match self {
+            Self::Accepted => None,
+            Self::Denied { reason } => Some(*reason),
+        }
+    }
+
+    pub fn message(&self) -> &'static str {
+        match self {
+            Self::Accepted => "mesh payload delivery is admitted",
+            Self::Denied { reason } => reason.message(),
+        }
+    }
+
+    pub fn usable_for_delivery(&self) -> bool {
+        matches!(self, Self::Accepted)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsMeshAdmissionInput {
+    pub scope: RadrootsMeshScope,
+    pub privacy_class: RadrootsMeshPrivacyClass,
+    pub payload_bytes: u64,
+    pub frame_bytes: u64,
+}
+
+impl RadrootsMeshAdmissionInput {
+    pub fn new(
+        scope: RadrootsMeshScope,
+        privacy_class: RadrootsMeshPrivacyClass,
+        payload_bytes: u64,
+        frame_bytes: u64,
+    ) -> Self {
+        Self {
+            scope,
+            privacy_class,
+            payload_bytes,
+            frame_bytes,
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsMeshPayloadPolicy {
+    pub max_payload_bytes: u64,
+    pub max_frame_bytes: u64,
+    pub compression: RadrootsMeshCompressionPolicy,
+    pub custom_scopes_enabled: bool,
+}
+
+impl RadrootsMeshPayloadPolicy {
+    pub fn preview_unavailable() -> Self {
+        Self {
+            max_payload_bytes: 0,
+            max_frame_bytes: 0,
+            compression: RadrootsMeshCompressionPolicy::Disabled,
+            custom_scopes_enabled: false,
+        }
+    }
+
+    pub fn policy_id(&self) -> &'static str {
+        RADROOTS_MESH_PREVIEW_POLICY_ID
+    }
+
+    pub fn usable_for_delivery(&self) -> bool {
+        self.max_payload_bytes > 0 && self.max_frame_bytes > 0
+    }
+
+    pub fn evaluate(&self, input: &RadrootsMeshAdmissionInput) -> RadrootsMeshAdmissionDecision {
+        if !self.usable_for_delivery() {
+            return RadrootsMeshAdmissionDecision::Denied {
+                reason: RadrootsMeshPolicyDenyReason::PreviewUnavailable,
+            };
+        }
+        if matches!(input.scope, RadrootsMeshScope::Custom(_)) && !self.custom_scopes_enabled {
+            return RadrootsMeshAdmissionDecision::Denied {
+                reason: RadrootsMeshPolicyDenyReason::CustomScopeUnavailable,
+            };
+        }
+        if input.payload_bytes > self.max_payload_bytes || input.frame_bytes > self.max_frame_bytes
+        {
+            return RadrootsMeshAdmissionDecision::Denied {
+                reason: RadrootsMeshPolicyDenyReason::PayloadBudgetExceeded,
+            };
+        }
+        RadrootsMeshAdmissionDecision::Accepted
     }
 }
 

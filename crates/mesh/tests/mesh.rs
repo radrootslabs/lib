@@ -1,5 +1,8 @@
 use radroots_mesh::{
+    RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE, RADROOTS_MESH_PREVIEW_POLICY_ID,
+    RadrootsMeshAdmissionDecision, RadrootsMeshAdmissionInput, RadrootsMeshCompressionPolicy,
     RadrootsMeshError, RadrootsMeshFrame, RadrootsMeshFrameType, RadrootsMeshPayload,
+    RadrootsMeshPayloadPolicy, RadrootsMeshPolicyDenyReason, RadrootsMeshPrivacyClass,
     RadrootsMeshScope, decode_mesh_frame_cbor, encode_mesh_frame_cbor,
 };
 
@@ -73,6 +76,57 @@ fn all_frame_types_round_trip_with_stable_codes_and_labels() {
         assert_eq!(frame_type.code(), code);
         assert_eq!(frame_type.label(), label);
     }
+}
+
+#[test]
+fn preview_policy_has_zero_delivery_budgets_and_disabled_compression() {
+    let policy = RadrootsMeshPayloadPolicy::preview_unavailable();
+
+    assert_eq!(policy.policy_id(), RADROOTS_MESH_PREVIEW_POLICY_ID);
+    assert_eq!(policy.max_payload_bytes, 0);
+    assert_eq!(policy.max_frame_bytes, 0);
+    assert_eq!(policy.compression, RadrootsMeshCompressionPolicy::Disabled);
+    assert_eq!(policy.compression.label(), "disabled");
+    assert!(!policy.custom_scopes_enabled);
+    assert!(!policy.usable_for_delivery());
+}
+
+#[test]
+fn preview_policy_denies_real_payload_admission_deterministically() {
+    let policy = RadrootsMeshPayloadPolicy::preview_unavailable();
+    let input = RadrootsMeshAdmissionInput::new(
+        RadrootsMeshScope::Local,
+        RadrootsMeshPrivacyClass::PublicEvent,
+        256,
+        512,
+    );
+    let decision = policy.evaluate(&input);
+
+    assert_eq!(
+        decision,
+        RadrootsMeshAdmissionDecision::Denied {
+            reason: RadrootsMeshPolicyDenyReason::PreviewUnavailable
+        }
+    );
+    assert_eq!(decision.label(), "denied");
+    assert_eq!(
+        decision.deny_reason(),
+        Some(RadrootsMeshPolicyDenyReason::PreviewUnavailable)
+    );
+    assert_eq!(decision.message(), RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE);
+    assert!(!decision.usable_for_delivery());
+    assert_eq!(
+        RadrootsMeshPrivacyClass::PublicEvent.label(),
+        "public_event"
+    );
+    assert_eq!(
+        RadrootsMeshPrivacyClass::PrivateEvent.label(),
+        "private_event"
+    );
+    assert_eq!(
+        RadrootsMeshPolicyDenyReason::PreviewUnavailable.label(),
+        "preview_unavailable"
+    );
 }
 
 #[test]
