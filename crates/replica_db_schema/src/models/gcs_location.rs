@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -170,7 +170,7 @@ pub enum GcsLocationFindManyRel {
 pub struct IGcsLocationCreateTs;
 pub type IGcsLocationCreate = IGcsLocationFields;
 pub struct IGcsLocationCreateResolveTs;
-pub type IGcsLocationCreateResolve = IResult<GcsLocation>;
+pub type IGcsLocationCreateResolve = ReplicaSchemaResult<GcsLocation>;
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationFindOneArgs {
     pub on: GcsLocationQueryBindValues,
@@ -189,7 +189,7 @@ pub enum IGcsLocationFindOne {
 }
 
 pub struct IGcsLocationFindOneResolveTs;
-pub type IGcsLocationFindOneResolve = IResult<Option<GcsLocation>>;
+pub type IGcsLocationFindOneResolve = ReplicaSchemaResult<Option<GcsLocation>>;
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum IGcsLocationFindMany {
@@ -201,11 +201,11 @@ pub enum IGcsLocationFindMany {
     },
 }
 pub struct IGcsLocationFindManyResolveTs;
-pub type IGcsLocationFindManyResolve = IResultList<GcsLocation>;
+pub type IGcsLocationFindManyResolve = ReplicaSchemaResultList<GcsLocation>;
 pub struct IGcsLocationDeleteTs;
 pub type IGcsLocationDelete = IGcsLocationFindOne;
 pub struct IGcsLocationDeleteResolveTs;
-pub type IGcsLocationDeleteResolve = IResult<String>;
+pub type IGcsLocationDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationUpdateArgs {
     pub on: GcsLocationQueryBindValues,
@@ -213,4 +213,4 @@ pub struct IGcsLocationUpdateArgs {
 }
 pub type IGcsLocationUpdate = IGcsLocationUpdateArgs;
 pub struct IGcsLocationUpdateResolveTs;
-pub type IGcsLocationUpdateResolve = IResult<GcsLocation>;
+pub type IGcsLocationUpdateResolve = ReplicaSchemaResult<GcsLocation>;

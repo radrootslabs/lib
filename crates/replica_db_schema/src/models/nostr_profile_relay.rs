@@ -1,6 +1,6 @@
+use crate::models::ReplicaSchemaResultPass;
 use crate::nostr_profile::NostrProfileQueryBindValues;
 use crate::nostr_relay::NostrRelayQueryBindValues;
-use radroots_types::types::IResultPass;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -10,4 +10,4 @@ pub struct INostrProfileRelayRelation {
 }
 
 pub struct INostrProfileRelayResolveTs;
-pub type INostrProfileRelayResolve = IResultPass;
+pub type INostrProfileRelayResolve = ReplicaSchemaResultPass;

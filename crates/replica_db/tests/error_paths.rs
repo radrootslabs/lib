@@ -1,4 +1,5 @@
 use radroots_replica_db::ReplicaSql;
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_replica_db_schema::farm::{
     IFarmCreate, IFarmDelete, IFarmFindMany, IFarmFindOne, IFarmUpdate,
 };
@@ -58,7 +59,6 @@ use radroots_replica_db_schema::trade_product::{
 use radroots_replica_db_schema::trade_product_location::ITradeProductLocationRelation;
 use radroots_replica_db_schema::trade_product_media::ITradeProductMediaRelation;
 use radroots_sql_core::{SqlError, SqlExecutor, SqliteExecutor};
-use radroots_types::types::IError;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
@@ -82,7 +82,7 @@ fn drop_table(db: &ReplicaSql<SqliteExecutor>, table_name: &str) {
     db.executor().exec(&sql, "[]").expect("drop table");
 }
 
-fn assert_invalid_query<T>(result: Result<T, IError<SqlError>>) {
+fn assert_invalid_query<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
     let err = match result {
         Ok(_) => panic!("invalid query expected"),
         Err(err) => err,
@@ -90,7 +90,7 @@ fn assert_invalid_query<T>(result: Result<T, IError<SqlError>>) {
     assert!(matches!(err.err, SqlError::InvalidQuery(_)));
 }
 
-fn assert_not_found<T>(result: Result<T, IError<SqlError>>) {
+fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
     let err = match result {
         Ok(_) => panic!("not found expected"),
         Err(err) => err,

@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -69,7 +69,7 @@ impl FarmMemberClaimQueryBindValues {
 pub struct IFarmMemberClaimCreateTs;
 pub type IFarmMemberClaimCreate = IFarmMemberClaimFields;
 pub struct IFarmMemberClaimCreateResolveTs;
-pub type IFarmMemberClaimCreateResolve = IResult<FarmMemberClaim>;
+pub type IFarmMemberClaimCreateResolve = ReplicaSchemaResult<FarmMemberClaim>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberClaimFindOneArgs {
     pub on: FarmMemberClaimQueryBindValues,
@@ -82,18 +82,18 @@ pub enum IFarmMemberClaimFindOne {
 }
 
 pub struct IFarmMemberClaimFindOneResolveTs;
-pub type IFarmMemberClaimFindOneResolve = IResult<Option<FarmMemberClaim>>;
+pub type IFarmMemberClaimFindOneResolve = ReplicaSchemaResult<Option<FarmMemberClaim>>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberClaimFindManyArgs {
     pub filter: Option<IFarmMemberClaimFieldsFilter>,
 }
 pub type IFarmMemberClaimFindMany = IFarmMemberClaimFindManyArgs;
 pub struct IFarmMemberClaimFindManyResolveTs;
-pub type IFarmMemberClaimFindManyResolve = IResultList<FarmMemberClaim>;
+pub type IFarmMemberClaimFindManyResolve = ReplicaSchemaResultList<FarmMemberClaim>;
 pub struct IFarmMemberClaimDeleteTs;
 pub type IFarmMemberClaimDelete = IFarmMemberClaimFindOne;
 pub struct IFarmMemberClaimDeleteResolveTs;
-pub type IFarmMemberClaimDeleteResolve = IResult<String>;
+pub type IFarmMemberClaimDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberClaimUpdateArgs {
     pub on: FarmMemberClaimQueryBindValues,
@@ -101,4 +101,4 @@ pub struct IFarmMemberClaimUpdateArgs {
 }
 pub type IFarmMemberClaimUpdate = IFarmMemberClaimUpdateArgs;
 pub struct IFarmMemberClaimUpdateResolveTs;
-pub type IFarmMemberClaimUpdateResolve = IResult<FarmMemberClaim>;
+pub type IFarmMemberClaimUpdateResolve = ReplicaSchemaResult<FarmMemberClaim>;

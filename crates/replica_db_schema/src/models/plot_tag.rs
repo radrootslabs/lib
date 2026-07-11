@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -67,7 +67,7 @@ impl PlotTagQueryBindValues {
 pub struct IPlotTagCreateTs;
 pub type IPlotTagCreate = IPlotTagFields;
 pub struct IPlotTagCreateResolveTs;
-pub type IPlotTagCreateResolve = IResult<PlotTag>;
+pub type IPlotTagCreateResolve = ReplicaSchemaResult<PlotTag>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotTagFindOneArgs {
     pub on: PlotTagQueryBindValues,
@@ -80,18 +80,18 @@ pub enum IPlotTagFindOne {
 }
 
 pub struct IPlotTagFindOneResolveTs;
-pub type IPlotTagFindOneResolve = IResult<Option<PlotTag>>;
+pub type IPlotTagFindOneResolve = ReplicaSchemaResult<Option<PlotTag>>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotTagFindManyArgs {
     pub filter: Option<IPlotTagFieldsFilter>,
 }
 pub type IPlotTagFindMany = IPlotTagFindManyArgs;
 pub struct IPlotTagFindManyResolveTs;
-pub type IPlotTagFindManyResolve = IResultList<PlotTag>;
+pub type IPlotTagFindManyResolve = ReplicaSchemaResultList<PlotTag>;
 pub struct IPlotTagDeleteTs;
 pub type IPlotTagDelete = IPlotTagFindOne;
 pub struct IPlotTagDeleteResolveTs;
-pub type IPlotTagDeleteResolve = IResult<String>;
+pub type IPlotTagDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotTagUpdateArgs {
     pub on: PlotTagQueryBindValues,
@@ -99,4 +99,4 @@ pub struct IPlotTagUpdateArgs {
 }
 pub type IPlotTagUpdate = IPlotTagUpdateArgs;
 pub struct IPlotTagUpdateResolveTs;
-pub type IPlotTagUpdateResolve = IResult<PlotTag>;
+pub type IPlotTagUpdateResolve = ReplicaSchemaResult<PlotTag>;

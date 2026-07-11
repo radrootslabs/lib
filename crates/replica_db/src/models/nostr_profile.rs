@@ -5,9 +5,11 @@ use radroots_replica_db_schema::nostr_profile::{
     INostrProfileUpdate, INostrProfileUpdateResolve, NostrProfile, NostrProfileFindManyRel,
     NostrProfileQueryBindValues,
 };
+use radroots_replica_db_schema::{
+    ReplicaSchemaError, ReplicaSchemaResult, ReplicaSchemaResultList,
+};
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
-use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 
 const TABLE_NAME: &str = "nostr_profile";
@@ -15,7 +17,7 @@ const TABLE_NAME: &str = "nostr_profile";
 pub fn create(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileCreate,
-) -> Result<INostrProfileCreateResolve, IError<SqlError>> {
+) -> Result<INostrProfileCreateResolve, ReplicaSchemaError<SqlError>> {
     let field_map = utils::to_object_map(opts).expect("serialize object map");
     let id = utils::uuidv4();
     let now = utils::time_created_on();
@@ -28,36 +30,37 @@ pub fn create(
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let on = NostrProfileQueryBindValues::Id { id: id.clone() };
-    let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
-    Ok(IResult { result })
+    let result = find_one_by_on(exec, &on)?
+        .ok_or(ReplicaSchemaError::from(SqlError::NotFound(id.clone())))?;
+    Ok(ReplicaSchemaResult { result })
 }
 
 pub fn find_one(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileFindOne,
-) -> Result<INostrProfileFindOneResolve, IError<SqlError>> {
+) -> Result<INostrProfileFindOneResolve, ReplicaSchemaError<SqlError>> {
     let result = match opts {
         INostrProfileFindOne::On(args) => find_one_by_on(exec, &args.on)?,
         INostrProfileFindOne::Rel(args) => find_one_by_rel(exec, &args.rel)?,
     };
-    Ok(IResult { result })
+    Ok(ReplicaSchemaResult { result })
 }
 
 pub fn find_many(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileFindMany,
-) -> Result<INostrProfileFindManyResolve, IError<SqlError>> {
+) -> Result<INostrProfileFindManyResolve, ReplicaSchemaError<SqlError>> {
     let results = match opts {
         INostrProfileFindMany::Filter { filter } => find_many_filter(exec, filter)?,
         INostrProfileFindMany::Rel { rel } => find_many_by_rel(exec, rel)?,
     };
-    Ok(IResultList { results })
+    Ok(ReplicaSchemaResultList { results })
 }
 
 fn find_many_filter(
     exec: &dyn SqlExecutor,
     filter: &Option<INostrProfileFieldsFilter>,
-) -> Result<Vec<NostrProfile>, IError<SqlError>> {
+) -> Result<Vec<NostrProfile>, ReplicaSchemaError<SqlError>> {
     let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
@@ -68,7 +71,7 @@ fn find_many_filter(
 fn find_one_by_on(
     exec: &dyn SqlExecutor,
     on: &NostrProfileQueryBindValues,
-) -> Result<Option<NostrProfile>, IError<SqlError>> {
+) -> Result<Option<NostrProfile>, ReplicaSchemaError<SqlError>> {
     let (column, value) = on.to_filter_param();
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
     let params_json = utils::to_params_json(vec![value]).expect("serialize bind params");
@@ -93,7 +96,7 @@ fn rel_query(rel: &NostrProfileFindManyRel) -> (&'static str, Vec<Value>) {
 fn find_one_by_rel(
     exec: &dyn SqlExecutor,
     rel: &NostrProfileFindManyRel,
-) -> Result<Option<NostrProfile>, IError<SqlError>> {
+) -> Result<Option<NostrProfile>, ReplicaSchemaError<SqlError>> {
     let (sql, bind_values) = rel_query(rel);
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let sql = format!("{sql} LIMIT 1;");
@@ -105,7 +108,7 @@ fn find_one_by_rel(
 fn find_many_by_rel(
     exec: &dyn SqlExecutor,
     rel: &NostrProfileFindManyRel,
-) -> Result<Vec<NostrProfile>, IError<SqlError>> {
+) -> Result<Vec<NostrProfile>, ReplicaSchemaError<SqlError>> {
     let (sql, bind_values) = rel_query(rel);
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let sql = format!("{sql};");
@@ -114,26 +117,29 @@ fn find_many_by_rel(
     Ok(rows)
 }
 
-fn select_by_id(exec: &dyn SqlExecutor, id: &str) -> Result<NostrProfile, IError<SqlError>> {
+fn select_by_id(
+    exec: &dyn SqlExecutor,
+    id: &str,
+) -> Result<NostrProfile, ReplicaSchemaError<SqlError>> {
     let params_json =
         utils::to_params_json(vec![Value::from(id.to_owned())]).expect("serialize bind params");
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE id = ?;");
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<NostrProfile> = utils::parse_json(&json)?;
     rows.pop()
-        .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
+        .ok_or(ReplicaSchemaError::from(SqlError::NotFound(id.to_owned())))
 }
 
 pub fn update(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileUpdate,
-) -> Result<INostrProfileUpdateResolve, IError<SqlError>> {
+) -> Result<INostrProfileUpdateResolve, ReplicaSchemaError<SqlError>> {
     let mut updates =
         utils::to_partial_object_map(&opts.fields).expect("serialize partial object map");
     if updates.is_empty() {
-        return Err(IError::from(SqlError::InvalidArgument(String::from(
-            "no fields to update",
-        ))));
+        return Err(ReplicaSchemaError::from(SqlError::InvalidArgument(
+            String::from("no fields to update"),
+        )));
     }
     updates.insert(
         String::from("updated_at"),
@@ -149,7 +155,9 @@ pub fn update(
         Some(id) => id,
         None => {
             let found = find_one_by_on(exec, &opts.on)?;
-            let model = found.ok_or(IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let model = found.ok_or(ReplicaSchemaError::from(SqlError::NotFound(
+                opts.on.lookup_key(),
+            )))?;
             model.id
         }
     };
@@ -161,25 +169,29 @@ pub fn update(
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let updated = select_by_id(exec, &id_for_lookup)?;
-    Ok(IResult { result: updated })
+    Ok(ReplicaSchemaResult { result: updated })
 }
 
 pub fn delete(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileDelete,
-) -> Result<INostrProfileDeleteResolve, IError<SqlError>> {
+) -> Result<INostrProfileDeleteResolve, ReplicaSchemaError<SqlError>> {
     let id_for_lookup = match opts {
         INostrProfileDelete::On(args) => match args.on.primary_key() {
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;
-                let model = found.ok_or(IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                let model = found.ok_or(ReplicaSchemaError::from(SqlError::NotFound(
+                    args.on.lookup_key(),
+                )))?;
                 model.id
             }
         },
         INostrProfileDelete::Rel(args) => {
             let found = find_one_by_rel(exec, &args.rel)?;
-            let model = found.ok_or(IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
+            let model = found.ok_or(ReplicaSchemaError::from(SqlError::NotFound(
+                rel_lookup_key(&args.rel),
+            )))?;
             model.id
         }
     };
@@ -188,9 +200,11 @@ pub fn delete(
     let sql = format!("DELETE FROM {TABLE_NAME} WHERE id = ?;");
     let outcome = exec.exec(&sql, &params_json)?;
     if outcome.changes == 0 {
-        return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
+        return Err(ReplicaSchemaError::from(SqlError::NotFound(
+            id_for_lookup.clone(),
+        )));
     }
-    Ok(IResult {
+    Ok(ReplicaSchemaResult {
         result: id_for_lookup,
     })
 }

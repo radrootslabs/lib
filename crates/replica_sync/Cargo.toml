@@ -36,7 +36,6 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
 radroots_sql_core = { workspace = true }
 radroots_replica_db_schema = { workspace = true }
 radroots_replica_db = { workspace = true }
-radroots_types = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",

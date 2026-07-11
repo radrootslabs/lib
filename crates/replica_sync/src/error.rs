@@ -4,12 +4,12 @@ use alloc::string::{String, ToString};
 use core::fmt;
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_sql_core::error::SqlError;
-use radroots_types::types::IError;
 
 #[derive(Debug)]
 pub enum RadrootsReplicaEventsError {
-    Sql(IError<SqlError>),
+    Sql(ReplicaSchemaError<SqlError>),
     Encode(EventEncodeError),
     Parse(EventParseError),
     InvalidSelector(String),
@@ -31,8 +31,8 @@ impl fmt::Display for RadrootsReplicaEventsError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsReplicaEventsError {}
 
-impl From<IError<SqlError>> for RadrootsReplicaEventsError {
-    fn from(err: IError<SqlError>) -> Self {
+impl From<ReplicaSchemaError<SqlError>> for RadrootsReplicaEventsError {
+    fn from(err: ReplicaSchemaError<SqlError>) -> Self {
         Self::Sql(err)
     }
 }
@@ -53,12 +53,12 @@ impl From<EventParseError> for RadrootsReplicaEventsError {
 mod tests {
     use super::RadrootsReplicaEventsError;
     use radroots_event_codec::error::{EventEncodeError, EventParseError};
+    use radroots_replica_db_schema::ReplicaSchemaError;
     use radroots_sql_core::error::SqlError;
-    use radroots_types::types::IError;
 
     #[test]
     fn display_formats_all_error_variants() {
-        let sql_err = RadrootsReplicaEventsError::Sql(IError::from(SqlError::Internal));
+        let sql_err = RadrootsReplicaEventsError::Sql(ReplicaSchemaError::from(SqlError::Internal));
         assert!(sql_err.to_string().contains("replica_sync.sql"));
 
         let encode_err = RadrootsReplicaEventsError::Encode(EventEncodeError::InvalidField("name"));
@@ -77,7 +77,8 @@ mod tests {
 
     #[test]
     fn from_impls_map_into_expected_variants() {
-        let sql_from: RadrootsReplicaEventsError = IError::from(SqlError::Internal).into();
+        let sql_from: RadrootsReplicaEventsError =
+            ReplicaSchemaError::from(SqlError::Internal).into();
         assert!(sql_from.to_string().contains("replica_sync.sql"));
 
         let encode_from: RadrootsReplicaEventsError = EventEncodeError::Json.into();

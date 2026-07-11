@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -73,7 +73,7 @@ impl PlotGcsLocationQueryBindValues {
 pub struct IPlotGcsLocationCreateTs;
 pub type IPlotGcsLocationCreate = IPlotGcsLocationFields;
 pub struct IPlotGcsLocationCreateResolveTs;
-pub type IPlotGcsLocationCreateResolve = IResult<PlotGcsLocation>;
+pub type IPlotGcsLocationCreateResolve = ReplicaSchemaResult<PlotGcsLocation>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotGcsLocationFindOneArgs {
     pub on: PlotGcsLocationQueryBindValues,
@@ -86,18 +86,18 @@ pub enum IPlotGcsLocationFindOne {
 }
 
 pub struct IPlotGcsLocationFindOneResolveTs;
-pub type IPlotGcsLocationFindOneResolve = IResult<Option<PlotGcsLocation>>;
+pub type IPlotGcsLocationFindOneResolve = ReplicaSchemaResult<Option<PlotGcsLocation>>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotGcsLocationFindManyArgs {
     pub filter: Option<IPlotGcsLocationFieldsFilter>,
 }
 pub type IPlotGcsLocationFindMany = IPlotGcsLocationFindManyArgs;
 pub struct IPlotGcsLocationFindManyResolveTs;
-pub type IPlotGcsLocationFindManyResolve = IResultList<PlotGcsLocation>;
+pub type IPlotGcsLocationFindManyResolve = ReplicaSchemaResultList<PlotGcsLocation>;
 pub struct IPlotGcsLocationDeleteTs;
 pub type IPlotGcsLocationDelete = IPlotGcsLocationFindOne;
 pub struct IPlotGcsLocationDeleteResolveTs;
-pub type IPlotGcsLocationDeleteResolve = IResult<String>;
+pub type IPlotGcsLocationDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotGcsLocationUpdateArgs {
     pub on: PlotGcsLocationQueryBindValues,
@@ -105,4 +105,4 @@ pub struct IPlotGcsLocationUpdateArgs {
 }
 pub type IPlotGcsLocationUpdate = IPlotGcsLocationUpdateArgs;
 pub struct IPlotGcsLocationUpdateResolveTs;
-pub type IPlotGcsLocationUpdateResolve = IResult<PlotGcsLocation>;
+pub type IPlotGcsLocationUpdateResolve = ReplicaSchemaResult<PlotGcsLocation>;

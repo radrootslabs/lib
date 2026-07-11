@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[derive(Serialize, Deserialize)]
@@ -87,7 +87,7 @@ pub enum MediaImageFindManyRel {
 pub struct IMediaImageCreateTs;
 pub type IMediaImageCreate = IMediaImageFields;
 pub struct IMediaImageCreateResolveTs;
-pub type IMediaImageCreateResolve = IResult<MediaImage>;
+pub type IMediaImageCreateResolve = ReplicaSchemaResult<MediaImage>;
 #[derive(Deserialize, Serialize)]
 pub struct IMediaImageFindOneArgs {
     pub on: MediaImageQueryBindValues,
@@ -106,7 +106,7 @@ pub enum IMediaImageFindOne {
 }
 
 pub struct IMediaImageFindOneResolveTs;
-pub type IMediaImageFindOneResolve = IResult<Option<MediaImage>>;
+pub type IMediaImageFindOneResolve = ReplicaSchemaResult<Option<MediaImage>>;
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum IMediaImageFindMany {
@@ -118,11 +118,11 @@ pub enum IMediaImageFindMany {
     },
 }
 pub struct IMediaImageFindManyResolveTs;
-pub type IMediaImageFindManyResolve = IResultList<MediaImage>;
+pub type IMediaImageFindManyResolve = ReplicaSchemaResultList<MediaImage>;
 pub struct IMediaImageDeleteTs;
 pub type IMediaImageDelete = IMediaImageFindOne;
 pub struct IMediaImageDeleteResolveTs;
-pub type IMediaImageDeleteResolve = IResult<String>;
+pub type IMediaImageDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IMediaImageUpdateArgs {
     pub on: MediaImageQueryBindValues,
@@ -130,4 +130,4 @@ pub struct IMediaImageUpdateArgs {
 }
 pub type IMediaImageUpdate = IMediaImageUpdateArgs;
 pub struct IMediaImageUpdateResolveTs;
-pub type IMediaImageUpdateResolve = IResult<MediaImage>;
+pub type IMediaImageUpdateResolve = ReplicaSchemaResult<MediaImage>;

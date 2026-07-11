@@ -1,6 +1,6 @@
 use crate::media_image::MediaImageQueryBindValues;
+use crate::models::ReplicaSchemaResultPass;
 use crate::trade_product::TradeProductQueryBindValues;
-use radroots_types::types::IResultPass;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -10,4 +10,4 @@ pub struct ITradeProductMediaRelation {
 }
 
 pub struct ITradeProductMediaResolveTs;
-pub type ITradeProductMediaResolve = IResultPass;
+pub type ITradeProductMediaResolve = ReplicaSchemaResultPass;

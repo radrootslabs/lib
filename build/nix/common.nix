@@ -88,7 +88,6 @@ let
   coreContractCrates = [
     "xtask"
     "radroots_core"
-    "radroots_types"
     "radroots_event"
     "radroots_trade"
     "radroots_identity"

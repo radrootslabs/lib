@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[derive(Serialize, Deserialize)]
@@ -84,7 +84,7 @@ impl LogErrorQueryBindValues {
 pub struct ILogErrorCreateTs;
 pub type ILogErrorCreate = ILogErrorFields;
 pub struct ILogErrorCreateResolveTs;
-pub type ILogErrorCreateResolve = IResult<LogError>;
+pub type ILogErrorCreateResolve = ReplicaSchemaResult<LogError>;
 #[derive(Deserialize, Serialize)]
 pub struct ILogErrorFindOneArgs {
     pub on: LogErrorQueryBindValues,
@@ -97,18 +97,18 @@ pub enum ILogErrorFindOne {
 }
 
 pub struct ILogErrorFindOneResolveTs;
-pub type ILogErrorFindOneResolve = IResult<Option<LogError>>;
+pub type ILogErrorFindOneResolve = ReplicaSchemaResult<Option<LogError>>;
 #[derive(Deserialize, Serialize)]
 pub struct ILogErrorFindManyArgs {
     pub filter: Option<ILogErrorFieldsFilter>,
 }
 pub type ILogErrorFindMany = ILogErrorFindManyArgs;
 pub struct ILogErrorFindManyResolveTs;
-pub type ILogErrorFindManyResolve = IResultList<LogError>;
+pub type ILogErrorFindManyResolve = ReplicaSchemaResultList<LogError>;
 pub struct ILogErrorDeleteTs;
 pub type ILogErrorDelete = ILogErrorFindOne;
 pub struct ILogErrorDeleteResolveTs;
-pub type ILogErrorDeleteResolve = IResult<String>;
+pub type ILogErrorDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct ILogErrorUpdateArgs {
     pub on: LogErrorQueryBindValues,
@@ -116,4 +116,4 @@ pub struct ILogErrorUpdateArgs {
 }
 pub type ILogErrorUpdate = ILogErrorUpdateArgs;
 pub struct ILogErrorUpdateResolveTs;
-pub type ILogErrorUpdateResolve = IResult<LogError>;
+pub type ILogErrorUpdateResolve = ReplicaSchemaResult<LogError>;

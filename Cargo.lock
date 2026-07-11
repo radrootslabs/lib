@@ -4565,7 +4565,6 @@ dependencies = [
  "hex",
  "radroots_replica_db_schema",
  "radroots_sql_core",
- "radroots_types",
  "serde",
  "serde_json",
  "sha2",
@@ -4576,7 +4575,6 @@ name = "radroots_replica_db_schema"
 version = "0.1.0-alpha.2"
 dependencies = [
  "dto_bindgen_core",
- "radroots_types",
  "serde",
  "serde_json",
 ]
@@ -4593,7 +4591,6 @@ dependencies = [
  "radroots_replica_db",
  "radroots_replica_db_schema",
  "radroots_sql_core",
- "radroots_types",
  "serde",
  "serde_json",
  "sha2",
@@ -4898,14 +4895,6 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "futures",
  "radroots_transport",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "radroots_types"
-version = "0.1.0-alpha.2"
-dependencies = [
  "serde",
  "serde_json",
 ]

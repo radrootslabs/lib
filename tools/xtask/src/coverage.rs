@@ -3550,7 +3550,7 @@ features = ["rt"]
         assert_eq!(app_profile.features, vec!["rt".to_string()]);
         assert_eq!(app_profile.test_threads, Some(2));
 
-        let other_profile = read_coverage_profile(&root, "radroots_types").expect("other profile");
+        let other_profile = read_coverage_profile(&root, "radroots_core").expect("other profile");
         assert!(!other_profile.no_default_features);
         assert_eq!(other_profile.features, vec!["std".to_string()]);
         assert_eq!(other_profile.test_threads, Some(2));

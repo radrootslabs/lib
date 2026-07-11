@@ -44,7 +44,6 @@ members = [
   "crates/sp1_host_trade",
   "crates/trade",
   "crates/transport",
-  "crates/types",
   "crates/mesh",
   "crates/mesh_agent_client",
   "crates/mesh_agent_proto",
@@ -105,7 +104,6 @@ radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.2
 radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.2", default-features = false }
 radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-features = false }
 radroots_transport = { path = "crates/transport", version = "0.1.0-alpha.2", default-features = false }
-radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh = { path = "crates/mesh", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh_agent_client = { path = "crates/mesh_agent_client", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh_agent_proto = { path = "crates/mesh_agent_proto", version = "0.1.0-alpha.2", default-features = false }

@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[derive(Serialize, Deserialize)]
@@ -107,7 +107,7 @@ pub enum NostrProfileFindManyRel {
 pub struct INostrProfileCreateTs;
 pub type INostrProfileCreate = INostrProfileFields;
 pub struct INostrProfileCreateResolveTs;
-pub type INostrProfileCreateResolve = IResult<NostrProfile>;
+pub type INostrProfileCreateResolve = ReplicaSchemaResult<NostrProfile>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrProfileFindOneArgs {
     pub on: NostrProfileQueryBindValues,
@@ -126,7 +126,7 @@ pub enum INostrProfileFindOne {
 }
 
 pub struct INostrProfileFindOneResolveTs;
-pub type INostrProfileFindOneResolve = IResult<Option<NostrProfile>>;
+pub type INostrProfileFindOneResolve = ReplicaSchemaResult<Option<NostrProfile>>;
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum INostrProfileFindMany {
@@ -138,11 +138,11 @@ pub enum INostrProfileFindMany {
     },
 }
 pub struct INostrProfileFindManyResolveTs;
-pub type INostrProfileFindManyResolve = IResultList<NostrProfile>;
+pub type INostrProfileFindManyResolve = ReplicaSchemaResultList<NostrProfile>;
 pub struct INostrProfileDeleteTs;
 pub type INostrProfileDelete = INostrProfileFindOne;
 pub struct INostrProfileDeleteResolveTs;
-pub type INostrProfileDeleteResolve = IResult<String>;
+pub type INostrProfileDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrProfileUpdateArgs {
     pub on: NostrProfileQueryBindValues,
@@ -150,4 +150,4 @@ pub struct INostrProfileUpdateArgs {
 }
 pub type INostrProfileUpdate = INostrProfileUpdateArgs;
 pub struct INostrProfileUpdateResolveTs;
-pub type INostrProfileUpdateResolve = IResult<NostrProfile>;
+pub type INostrProfileUpdateResolve = ReplicaSchemaResult<NostrProfile>;

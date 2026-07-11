@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use radroots_replica_db::{ExecOutcome, ReplicaSql, SqlError, SqlExecutor};
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_replica_db_schema::farm::{
     IFarmCreate, IFarmDelete, IFarmFindMany, IFarmFindOne, IFarmUpdate,
 };
@@ -59,7 +60,6 @@ use radroots_replica_db_schema::plot_tag::{
 use radroots_replica_db_schema::trade_product::{
     ITradeProductCreate, ITradeProductFindMany, ITradeProductFindOne, ITradeProductUpdate,
 };
-use radroots_types::types::IError;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
@@ -190,7 +190,10 @@ fn db_with_scripts(
     ReplicaSql::new(ScriptedExecutor::new(exec_results, query_results))
 }
 
-fn assert_ierror_code<T>(result: Result<T, IError<SqlError>>, code: &str) {
+fn assert_replica_schema_error_code<T>(
+    result: Result<T, ReplicaSchemaError<SqlError>>,
+    code: &str,
+) {
     let err = match result {
         Ok(_) => panic!("expected ierror"),
         Err(err) => err,
@@ -212,33 +215,45 @@ macro_rules! assert_secondary_model_paths {
             let create_opts: $create_ty = parse_json($create_json);
 
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![ok_rows()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
 
             let find_many_opts: $find_many_ty = parse_json($find_many_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_many_call(&find_many_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_many_call(&find_many_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let find_one_opts: $find_one_ty = parse_json($find_one_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_one_call(&find_one_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_one_call(&find_one_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let update_id_opts: $update_ty = parse_json($update_id_json);
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$update_call(&update_id_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$update_call(&update_id_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![bad_json()]);
-            assert_ierror_code(db.$update_call(&update_id_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(db.$update_call(&update_id_opts), "ERR_SERIALIZATION");
 
             let update_lookup_opts: $update_ty = parse_json($update_lookup_json);
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$update_call(&update_lookup_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$update_call(&update_lookup_opts),
+                "ERR_INVALID_QUERY",
+            );
 
             let delete_lookup_opts: $delete_ty = parse_json($delete_lookup_json);
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$delete_call(&delete_lookup_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$delete_call(&delete_lookup_opts),
+                "ERR_INVALID_QUERY",
+            );
         }
     };
 }
@@ -257,52 +272,73 @@ macro_rules! assert_rel_model_paths {
             let create_opts: $create_ty = parse_json($create_json);
 
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![ok_rows()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
 
             let find_many_filter_opts: $find_many_ty = parse_json($find_many_filter_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(
+            assert_replica_schema_error_code(
                 db.$find_many_call(&find_many_filter_opts),
                 "ERR_SERIALIZATION",
             );
 
             let find_many_rel_opts: $find_many_ty = $find_many_rel_expr;
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_many_call(&find_many_rel_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_many_call(&find_many_rel_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let find_many_rel_opts: $find_many_ty = $find_many_rel_expr;
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$find_many_call(&find_many_rel_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$find_many_call(&find_many_rel_opts),
+                "ERR_INVALID_QUERY",
+            );
 
             let find_one_on_opts: $find_one_ty = parse_json($find_one_on_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_one_call(&find_one_on_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_one_call(&find_one_on_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let find_one_rel_opts: $find_one_ty = $find_one_rel_expr;
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_one_call(&find_one_rel_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_one_call(&find_one_rel_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let update_id_opts: $update_ty = parse_json($update_id_json);
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$update_call(&update_id_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$update_call(&update_id_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![bad_json()]);
-            assert_ierror_code(db.$update_call(&update_id_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(db.$update_call(&update_id_opts), "ERR_SERIALIZATION");
 
             let update_lookup_opts: $update_ty = parse_json($update_lookup_json);
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$update_call(&update_lookup_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$update_call(&update_lookup_opts),
+                "ERR_INVALID_QUERY",
+            );
 
             let delete_lookup_opts: $delete_ty = parse_json($delete_lookup_json);
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$delete_call(&delete_lookup_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$delete_call(&delete_lookup_opts),
+                "ERR_INVALID_QUERY",
+            );
 
             let delete_rel_opts: $delete_ty = $delete_rel_expr;
             let db = db_with_scripts(vec![], vec![err_query()]);
-            assert_ierror_code(db.$delete_call(&delete_rel_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(
+                db.$delete_call(&delete_rel_opts),
+                "ERR_INVALID_QUERY",
+            );
         }
     };
 }
@@ -320,25 +356,31 @@ macro_rules! assert_trade_product_paths {
             let create_opts: $create_ty = parse_json($create_json);
 
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![ok_rows()]);
-            assert_ierror_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
+            assert_replica_schema_error_code(db.$create_call(&create_opts), "ERR_NOT_FOUND");
 
             let find_many_opts: $find_many_ty = parse_json($find_many_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_many_call(&find_many_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_many_call(&find_many_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let find_one_opts: $find_one_ty = parse_json($find_one_json);
             let db = db_with_scripts(vec![], vec![bad_json()]);
-            assert_ierror_code(db.$find_one_call(&find_one_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(
+                db.$find_one_call(&find_one_opts),
+                "ERR_SERIALIZATION",
+            );
 
             let update_opts: $update_ty = parse_json($update_json);
             let db = db_with_scripts(vec![ok_exec()], vec![err_query()]);
-            assert_ierror_code(db.$update_call(&update_opts), "ERR_INVALID_QUERY");
+            assert_replica_schema_error_code(db.$update_call(&update_opts), "ERR_INVALID_QUERY");
 
             let db = db_with_scripts(vec![ok_exec()], vec![bad_json()]);
-            assert_ierror_code(db.$update_call(&update_opts), "ERR_SERIALIZATION");
+            assert_replica_schema_error_code(db.$update_call(&update_opts), "ERR_SERIALIZATION");
         }
     };
 }

@@ -13,6 +13,11 @@ pub mod nostr_relay;
 pub mod plot;
 pub mod plot_gcs_location;
 pub mod plot_tag;
+pub mod result;
 pub mod trade_product;
 pub mod trade_product_location;
 pub mod trade_product_media;
+
+pub use result::{
+    ReplicaSchemaError, ReplicaSchemaResult, ReplicaSchemaResultList, ReplicaSchemaResultPass,
+};

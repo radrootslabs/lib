@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -73,7 +73,7 @@ impl FarmMemberQueryBindValues {
 pub struct IFarmMemberCreateTs;
 pub type IFarmMemberCreate = IFarmMemberFields;
 pub struct IFarmMemberCreateResolveTs;
-pub type IFarmMemberCreateResolve = IResult<FarmMember>;
+pub type IFarmMemberCreateResolve = ReplicaSchemaResult<FarmMember>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberFindOneArgs {
     pub on: FarmMemberQueryBindValues,
@@ -86,18 +86,18 @@ pub enum IFarmMemberFindOne {
 }
 
 pub struct IFarmMemberFindOneResolveTs;
-pub type IFarmMemberFindOneResolve = IResult<Option<FarmMember>>;
+pub type IFarmMemberFindOneResolve = ReplicaSchemaResult<Option<FarmMember>>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberFindManyArgs {
     pub filter: Option<IFarmMemberFieldsFilter>,
 }
 pub type IFarmMemberFindMany = IFarmMemberFindManyArgs;
 pub struct IFarmMemberFindManyResolveTs;
-pub type IFarmMemberFindManyResolve = IResultList<FarmMember>;
+pub type IFarmMemberFindManyResolve = ReplicaSchemaResultList<FarmMember>;
 pub struct IFarmMemberDeleteTs;
 pub type IFarmMemberDelete = IFarmMemberFindOne;
 pub struct IFarmMemberDeleteResolveTs;
-pub type IFarmMemberDeleteResolve = IResult<String>;
+pub type IFarmMemberDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberUpdateArgs {
     pub on: FarmMemberQueryBindValues,
@@ -105,4 +105,4 @@ pub struct IFarmMemberUpdateArgs {
 }
 pub type IFarmMemberUpdate = IFarmMemberUpdateArgs;
 pub struct IFarmMemberUpdateResolveTs;
-pub type IFarmMemberUpdateResolve = IResult<FarmMember>;
+pub type IFarmMemberUpdateResolve = ReplicaSchemaResult<FarmMember>;

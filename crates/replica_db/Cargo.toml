@@ -24,7 +24,6 @@ native = ["std", "radroots_sql_core/native"]
 [dependencies]
 radroots_sql_core = { workspace = true }
 radroots_replica_db_schema = { workspace = true }
-radroots_types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hex = { workspace = true }

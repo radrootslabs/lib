@@ -5,9 +5,11 @@ use radroots_replica_db_schema::farm_member_claim::{
     IFarmMemberClaimFindOne, IFarmMemberClaimFindOneResolve, IFarmMemberClaimUpdate,
     IFarmMemberClaimUpdateResolve,
 };
+use radroots_replica_db_schema::{
+    ReplicaSchemaError, ReplicaSchemaResult, ReplicaSchemaResultList,
+};
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
-use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 
 const TABLE_NAME: &str = "farm_member_claim";
@@ -15,7 +17,7 @@ const TABLE_NAME: &str = "farm_member_claim";
 pub fn create(
     exec: &dyn SqlExecutor,
     opts: &IFarmMemberClaimCreate,
-) -> Result<IFarmMemberClaimCreateResolve, IError<SqlError>> {
+) -> Result<IFarmMemberClaimCreateResolve, ReplicaSchemaError<SqlError>> {
     let field_map = utils::to_object_map(opts).expect("serialize object map");
     let id = utils::uuidv4();
     let now = utils::time_created_on();
@@ -28,32 +30,33 @@ pub fn create(
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let on = FarmMemberClaimQueryBindValues::Id { id: id.clone() };
-    let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
-    Ok(IResult { result })
+    let result = find_one_by_on(exec, &on)?
+        .ok_or(ReplicaSchemaError::from(SqlError::NotFound(id.clone())))?;
+    Ok(ReplicaSchemaResult { result })
 }
 
 pub fn find_one(
     exec: &dyn SqlExecutor,
     opts: &IFarmMemberClaimFindOne,
-) -> Result<IFarmMemberClaimFindOneResolve, IError<SqlError>> {
+) -> Result<IFarmMemberClaimFindOneResolve, ReplicaSchemaError<SqlError>> {
     let result = match opts {
         IFarmMemberClaimFindOne::On(args) => find_one_by_on(exec, &args.on)?,
     };
-    Ok(IResult { result })
+    Ok(ReplicaSchemaResult { result })
 }
 
 pub fn find_many(
     exec: &dyn SqlExecutor,
     opts: &IFarmMemberClaimFindMany,
-) -> Result<IFarmMemberClaimFindManyResolve, IError<SqlError>> {
+) -> Result<IFarmMemberClaimFindManyResolve, ReplicaSchemaError<SqlError>> {
     let results = find_many_filter(exec, &opts.filter)?;
-    Ok(IResultList { results })
+    Ok(ReplicaSchemaResultList { results })
 }
 
 fn find_many_filter(
     exec: &dyn SqlExecutor,
     filter: &Option<IFarmMemberClaimFieldsFilter>,
-) -> Result<Vec<FarmMemberClaim>, IError<SqlError>> {
+) -> Result<Vec<FarmMemberClaim>, ReplicaSchemaError<SqlError>> {
     let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
@@ -64,7 +67,7 @@ fn find_many_filter(
 fn find_one_by_on(
     exec: &dyn SqlExecutor,
     on: &FarmMemberClaimQueryBindValues,
-) -> Result<Option<FarmMemberClaim>, IError<SqlError>> {
+) -> Result<Option<FarmMemberClaim>, ReplicaSchemaError<SqlError>> {
     let (column, value) = on.to_filter_param();
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
     let params_json = utils::to_params_json(vec![value]).expect("serialize bind params");
@@ -73,26 +76,29 @@ fn find_one_by_on(
     Ok(rows.pop())
 }
 
-fn select_by_id(exec: &dyn SqlExecutor, id: &str) -> Result<FarmMemberClaim, IError<SqlError>> {
+fn select_by_id(
+    exec: &dyn SqlExecutor,
+    id: &str,
+) -> Result<FarmMemberClaim, ReplicaSchemaError<SqlError>> {
     let params_json =
         utils::to_params_json(vec![Value::from(id.to_owned())]).expect("serialize bind params");
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE id = ?;");
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<FarmMemberClaim> = utils::parse_json(&json)?;
     rows.pop()
-        .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
+        .ok_or(ReplicaSchemaError::from(SqlError::NotFound(id.to_owned())))
 }
 
 pub fn update(
     exec: &dyn SqlExecutor,
     opts: &IFarmMemberClaimUpdate,
-) -> Result<IFarmMemberClaimUpdateResolve, IError<SqlError>> {
+) -> Result<IFarmMemberClaimUpdateResolve, ReplicaSchemaError<SqlError>> {
     let mut updates =
         utils::to_partial_object_map(&opts.fields).expect("serialize partial object map");
     if updates.is_empty() {
-        return Err(IError::from(SqlError::InvalidArgument(String::from(
-            "no fields to update",
-        ))));
+        return Err(ReplicaSchemaError::from(SqlError::InvalidArgument(
+            String::from("no fields to update"),
+        )));
     }
     updates.insert(
         String::from("updated_at"),
@@ -108,7 +114,9 @@ pub fn update(
         Some(id) => id,
         None => {
             let found = find_one_by_on(exec, &opts.on)?;
-            let model = found.ok_or(IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let model = found.ok_or(ReplicaSchemaError::from(SqlError::NotFound(
+                opts.on.lookup_key(),
+            )))?;
             model.id
         }
     };
@@ -120,19 +128,21 @@ pub fn update(
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let updated = select_by_id(exec, &id_for_lookup)?;
-    Ok(IResult { result: updated })
+    Ok(ReplicaSchemaResult { result: updated })
 }
 
 pub fn delete(
     exec: &dyn SqlExecutor,
     opts: &IFarmMemberClaimDelete,
-) -> Result<IFarmMemberClaimDeleteResolve, IError<SqlError>> {
+) -> Result<IFarmMemberClaimDeleteResolve, ReplicaSchemaError<SqlError>> {
     let id_for_lookup = match opts {
         IFarmMemberClaimDelete::On(args) => match args.on.primary_key() {
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;
-                let model = found.ok_or(IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                let model = found.ok_or(ReplicaSchemaError::from(SqlError::NotFound(
+                    args.on.lookup_key(),
+                )))?;
                 model.id
             }
         },
@@ -142,9 +152,11 @@ pub fn delete(
     let sql = format!("DELETE FROM {TABLE_NAME} WHERE id = ?;");
     let outcome = exec.exec(&sql, &params_json)?;
     if outcome.changes == 0 {
-        return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
+        return Err(ReplicaSchemaError::from(SqlError::NotFound(
+            id_for_lookup.clone(),
+        )));
     }
-    Ok(IResult {
+    Ok(ReplicaSchemaResult {
         result: id_for_lookup,
     })
 }

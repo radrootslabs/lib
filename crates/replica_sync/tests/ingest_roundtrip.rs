@@ -20,6 +20,7 @@ use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
     nostr_profile, plot, plot_gcs_location, plot_tag,
 };
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_replica_db_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
 use radroots_replica_db_schema::farm_gcs_location::IFarmGcsLocationFields;
 use radroots_replica_db_schema::farm_member::{
@@ -47,10 +48,9 @@ use radroots_replica_sync::{
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
-use radroots_types::types::IError;
 use std::panic;
 
-fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
+fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -> T {
     match result {
         Ok(value) => value,
         Err(err) => panic!("{label}: {}", err.err),
@@ -177,7 +177,7 @@ impl SqlExecutor for QueryFailExecutor<'_> {
 #[test]
 fn unwrap_sql_panics_on_error() {
     let result = panic::catch_unwind(|| {
-        let err = IError::from(SqlError::InvalidArgument("bad".to_string()));
+        let err = ReplicaSchemaError::from(SqlError::InvalidArgument("bad".to_string()));
         unwrap_sql::<()>(Err(err), "unwrap");
     });
     assert!(result.is_err());
@@ -2169,7 +2169,7 @@ fn sync_emit_reports_encode_error_for_invalid_farm_record() {
 
 #[test]
 fn error_conversion_paths_are_exercised() {
-    let sql: RadrootsReplicaEventsError = IError::from(SqlError::Internal).into();
+    let sql: RadrootsReplicaEventsError = ReplicaSchemaError::from(SqlError::Internal).into();
     assert!(sql.to_string().contains("replica_sync.sql"));
 
     let encode: RadrootsReplicaEventsError = EventEncodeError::Json.into();

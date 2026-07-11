@@ -1,9 +1,9 @@
 use radroots_replica_db_schema::nostr_profile_relay::{
     INostrProfileRelayRelation, INostrProfileRelayResolve,
 };
+use radroots_replica_db_schema::{ReplicaSchemaError, ReplicaSchemaResultPass};
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
-use radroots_types::types::{IError, IResultPass};
 use serde_json::Value;
 
 const TABLE_NAME: &str = "nostr_profile_relay";
@@ -11,7 +11,7 @@ const TABLE_NAME: &str = "nostr_profile_relay";
 pub fn set(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileRelayRelation,
-) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
+) -> Result<INostrProfileRelayResolve, ReplicaSchemaError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (nostr_profile_column, nostr_profile_value) = opts.nostr_profile.to_filter_param();
     query_vals.push(nostr_profile_value);
@@ -23,13 +23,13 @@ pub fn set(
     );
     let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
-    Ok(IResultPass { pass: true })
+    Ok(ReplicaSchemaResultPass { pass: true })
 }
 
 pub fn unset(
     exec: &dyn SqlExecutor,
     opts: &INostrProfileRelayRelation,
-) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
+) -> Result<INostrProfileRelayResolve, ReplicaSchemaError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (nostr_profile_column, nostr_profile_value) = opts.nostr_profile.to_filter_param();
     query_vals.push(nostr_profile_value);
@@ -41,5 +41,5 @@ pub fn unset(
     );
     let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
-    Ok(IResultPass { pass: true })
+    Ok(ReplicaSchemaResultPass { pass: true })
 }

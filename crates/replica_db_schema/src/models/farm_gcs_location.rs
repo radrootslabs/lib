@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -73,7 +73,7 @@ impl FarmGcsLocationQueryBindValues {
 pub struct IFarmGcsLocationCreateTs;
 pub type IFarmGcsLocationCreate = IFarmGcsLocationFields;
 pub struct IFarmGcsLocationCreateResolveTs;
-pub type IFarmGcsLocationCreateResolve = IResult<FarmGcsLocation>;
+pub type IFarmGcsLocationCreateResolve = ReplicaSchemaResult<FarmGcsLocation>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmGcsLocationFindOneArgs {
     pub on: FarmGcsLocationQueryBindValues,
@@ -86,18 +86,18 @@ pub enum IFarmGcsLocationFindOne {
 }
 
 pub struct IFarmGcsLocationFindOneResolveTs;
-pub type IFarmGcsLocationFindOneResolve = IResult<Option<FarmGcsLocation>>;
+pub type IFarmGcsLocationFindOneResolve = ReplicaSchemaResult<Option<FarmGcsLocation>>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmGcsLocationFindManyArgs {
     pub filter: Option<IFarmGcsLocationFieldsFilter>,
 }
 pub type IFarmGcsLocationFindMany = IFarmGcsLocationFindManyArgs;
 pub struct IFarmGcsLocationFindManyResolveTs;
-pub type IFarmGcsLocationFindManyResolve = IResultList<FarmGcsLocation>;
+pub type IFarmGcsLocationFindManyResolve = ReplicaSchemaResultList<FarmGcsLocation>;
 pub struct IFarmGcsLocationDeleteTs;
 pub type IFarmGcsLocationDelete = IFarmGcsLocationFindOne;
 pub struct IFarmGcsLocationDeleteResolveTs;
-pub type IFarmGcsLocationDeleteResolve = IResult<String>;
+pub type IFarmGcsLocationDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmGcsLocationUpdateArgs {
     pub on: FarmGcsLocationQueryBindValues,
@@ -105,4 +105,4 @@ pub struct IFarmGcsLocationUpdateArgs {
 }
 pub type IFarmGcsLocationUpdate = IFarmGcsLocationUpdateArgs;
 pub struct IFarmGcsLocationUpdateResolveTs;
-pub type IFarmGcsLocationUpdateResolve = IResult<FarmGcsLocation>;
+pub type IFarmGcsLocationUpdateResolve = ReplicaSchemaResult<FarmGcsLocation>;

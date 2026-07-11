@@ -40,7 +40,6 @@ published_support = [
   "radroots_replica_sync",
 ]
 deferred_publication = [
-  "radroots_types",
   "radroots_authority",
   "radroots_event_store",
   "radroots_outbox",

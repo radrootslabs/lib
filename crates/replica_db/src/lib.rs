@@ -1,6 +1,6 @@
+use radroots_replica_db_schema::ReplicaSchemaError;
 pub use radroots_sql_core::error::SqlError;
 pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
-use radroots_types::types::IError;
 
 use radroots_replica_db_schema::farm::{
     IFarmCreate, IFarmCreateResolve, IFarmDelete, IFarmDeleteResolve, IFarmFindMany,
@@ -163,552 +163,570 @@ impl<E: SqlExecutor> ReplicaSql<E> {
         crate::backup::restore_database_backup_json(self.executor(), backup_json)
     }
 
-    pub fn farm_create(&self, opts: &IFarmCreate) -> Result<IFarmCreateResolve, IError<SqlError>> {
+    pub fn farm_create(
+        &self,
+        opts: &IFarmCreate,
+    ) -> Result<IFarmCreateResolve, ReplicaSchemaError<SqlError>> {
         models::farm::create(self.executor(), opts)
     }
 
     pub fn farm_find_many(
         &self,
         opts: &IFarmFindMany,
-    ) -> Result<IFarmFindManyResolve, IError<SqlError>> {
+    ) -> Result<IFarmFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::farm::find_many(self.executor(), opts)
     }
 
     pub fn farm_find_one(
         &self,
         opts: &IFarmFindOne,
-    ) -> Result<IFarmFindOneResolve, IError<SqlError>> {
+    ) -> Result<IFarmFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::farm::find_one(self.executor(), opts)
     }
 
-    pub fn farm_update(&self, opts: &IFarmUpdate) -> Result<IFarmUpdateResolve, IError<SqlError>> {
+    pub fn farm_update(
+        &self,
+        opts: &IFarmUpdate,
+    ) -> Result<IFarmUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::farm::update(self.executor(), opts)
     }
 
-    pub fn farm_delete(&self, opts: &IFarmDelete) -> Result<IFarmDeleteResolve, IError<SqlError>> {
+    pub fn farm_delete(
+        &self,
+        opts: &IFarmDelete,
+    ) -> Result<IFarmDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::farm::delete(self.executor(), opts)
     }
 
-    pub fn plot_create(&self, opts: &IPlotCreate) -> Result<IPlotCreateResolve, IError<SqlError>> {
+    pub fn plot_create(
+        &self,
+        opts: &IPlotCreate,
+    ) -> Result<IPlotCreateResolve, ReplicaSchemaError<SqlError>> {
         models::plot::create(self.executor(), opts)
     }
 
     pub fn plot_find_many(
         &self,
         opts: &IPlotFindMany,
-    ) -> Result<IPlotFindManyResolve, IError<SqlError>> {
+    ) -> Result<IPlotFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::plot::find_many(self.executor(), opts)
     }
 
     pub fn plot_find_one(
         &self,
         opts: &IPlotFindOne,
-    ) -> Result<IPlotFindOneResolve, IError<SqlError>> {
+    ) -> Result<IPlotFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::plot::find_one(self.executor(), opts)
     }
 
-    pub fn plot_update(&self, opts: &IPlotUpdate) -> Result<IPlotUpdateResolve, IError<SqlError>> {
+    pub fn plot_update(
+        &self,
+        opts: &IPlotUpdate,
+    ) -> Result<IPlotUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::plot::update(self.executor(), opts)
     }
 
-    pub fn plot_delete(&self, opts: &IPlotDelete) -> Result<IPlotDeleteResolve, IError<SqlError>> {
+    pub fn plot_delete(
+        &self,
+        opts: &IPlotDelete,
+    ) -> Result<IPlotDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::plot::delete(self.executor(), opts)
     }
 
     pub fn gcs_location_create(
         &self,
         opts: &IGcsLocationCreate,
-    ) -> Result<IGcsLocationCreateResolve, IError<SqlError>> {
+    ) -> Result<IGcsLocationCreateResolve, ReplicaSchemaError<SqlError>> {
         models::gcs_location::create(self.executor(), opts)
     }
 
     pub fn gcs_location_find_many(
         &self,
         opts: &IGcsLocationFindMany,
-    ) -> Result<IGcsLocationFindManyResolve, IError<SqlError>> {
+    ) -> Result<IGcsLocationFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::gcs_location::find_many(self.executor(), opts)
     }
 
     pub fn gcs_location_find_one(
         &self,
         opts: &IGcsLocationFindOne,
-    ) -> Result<IGcsLocationFindOneResolve, IError<SqlError>> {
+    ) -> Result<IGcsLocationFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::gcs_location::find_one(self.executor(), opts)
     }
 
     pub fn gcs_location_update(
         &self,
         opts: &IGcsLocationUpdate,
-    ) -> Result<IGcsLocationUpdateResolve, IError<SqlError>> {
+    ) -> Result<IGcsLocationUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::gcs_location::update(self.executor(), opts)
     }
 
     pub fn gcs_location_delete(
         &self,
         opts: &IGcsLocationDelete,
-    ) -> Result<IGcsLocationDeleteResolve, IError<SqlError>> {
+    ) -> Result<IGcsLocationDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::gcs_location::delete(self.executor(), opts)
     }
 
     pub fn farm_gcs_location_create(
         &self,
         opts: &IFarmGcsLocationCreate,
-    ) -> Result<IFarmGcsLocationCreateResolve, IError<SqlError>> {
+    ) -> Result<IFarmGcsLocationCreateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_gcs_location::create(self.executor(), opts)
     }
 
     pub fn farm_gcs_location_find_many(
         &self,
         opts: &IFarmGcsLocationFindMany,
-    ) -> Result<IFarmGcsLocationFindManyResolve, IError<SqlError>> {
+    ) -> Result<IFarmGcsLocationFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::farm_gcs_location::find_many(self.executor(), opts)
     }
 
     pub fn farm_gcs_location_find_one(
         &self,
         opts: &IFarmGcsLocationFindOne,
-    ) -> Result<IFarmGcsLocationFindOneResolve, IError<SqlError>> {
+    ) -> Result<IFarmGcsLocationFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::farm_gcs_location::find_one(self.executor(), opts)
     }
 
     pub fn farm_gcs_location_update(
         &self,
         opts: &IFarmGcsLocationUpdate,
-    ) -> Result<IFarmGcsLocationUpdateResolve, IError<SqlError>> {
+    ) -> Result<IFarmGcsLocationUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_gcs_location::update(self.executor(), opts)
     }
 
     pub fn farm_gcs_location_delete(
         &self,
         opts: &IFarmGcsLocationDelete,
-    ) -> Result<IFarmGcsLocationDeleteResolve, IError<SqlError>> {
+    ) -> Result<IFarmGcsLocationDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::farm_gcs_location::delete(self.executor(), opts)
     }
 
     pub fn plot_gcs_location_create(
         &self,
         opts: &IPlotGcsLocationCreate,
-    ) -> Result<IPlotGcsLocationCreateResolve, IError<SqlError>> {
+    ) -> Result<IPlotGcsLocationCreateResolve, ReplicaSchemaError<SqlError>> {
         models::plot_gcs_location::create(self.executor(), opts)
     }
 
     pub fn plot_gcs_location_find_many(
         &self,
         opts: &IPlotGcsLocationFindMany,
-    ) -> Result<IPlotGcsLocationFindManyResolve, IError<SqlError>> {
+    ) -> Result<IPlotGcsLocationFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::plot_gcs_location::find_many(self.executor(), opts)
     }
 
     pub fn plot_gcs_location_find_one(
         &self,
         opts: &IPlotGcsLocationFindOne,
-    ) -> Result<IPlotGcsLocationFindOneResolve, IError<SqlError>> {
+    ) -> Result<IPlotGcsLocationFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::plot_gcs_location::find_one(self.executor(), opts)
     }
 
     pub fn plot_gcs_location_update(
         &self,
         opts: &IPlotGcsLocationUpdate,
-    ) -> Result<IPlotGcsLocationUpdateResolve, IError<SqlError>> {
+    ) -> Result<IPlotGcsLocationUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::plot_gcs_location::update(self.executor(), opts)
     }
 
     pub fn plot_gcs_location_delete(
         &self,
         opts: &IPlotGcsLocationDelete,
-    ) -> Result<IPlotGcsLocationDeleteResolve, IError<SqlError>> {
+    ) -> Result<IPlotGcsLocationDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::plot_gcs_location::delete(self.executor(), opts)
     }
 
     pub fn farm_tag_create(
         &self,
         opts: &IFarmTagCreate,
-    ) -> Result<IFarmTagCreateResolve, IError<SqlError>> {
+    ) -> Result<IFarmTagCreateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_tag::create(self.executor(), opts)
     }
 
     pub fn farm_tag_find_many(
         &self,
         opts: &IFarmTagFindMany,
-    ) -> Result<IFarmTagFindManyResolve, IError<SqlError>> {
+    ) -> Result<IFarmTagFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::farm_tag::find_many(self.executor(), opts)
     }
 
     pub fn farm_tag_find_one(
         &self,
         opts: &IFarmTagFindOne,
-    ) -> Result<IFarmTagFindOneResolve, IError<SqlError>> {
+    ) -> Result<IFarmTagFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::farm_tag::find_one(self.executor(), opts)
     }
 
     pub fn farm_tag_update(
         &self,
         opts: &IFarmTagUpdate,
-    ) -> Result<IFarmTagUpdateResolve, IError<SqlError>> {
+    ) -> Result<IFarmTagUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_tag::update(self.executor(), opts)
     }
 
     pub fn farm_tag_delete(
         &self,
         opts: &IFarmTagDelete,
-    ) -> Result<IFarmTagDeleteResolve, IError<SqlError>> {
+    ) -> Result<IFarmTagDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::farm_tag::delete(self.executor(), opts)
     }
 
     pub fn plot_tag_create(
         &self,
         opts: &IPlotTagCreate,
-    ) -> Result<IPlotTagCreateResolve, IError<SqlError>> {
+    ) -> Result<IPlotTagCreateResolve, ReplicaSchemaError<SqlError>> {
         models::plot_tag::create(self.executor(), opts)
     }
 
     pub fn plot_tag_find_many(
         &self,
         opts: &IPlotTagFindMany,
-    ) -> Result<IPlotTagFindManyResolve, IError<SqlError>> {
+    ) -> Result<IPlotTagFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::plot_tag::find_many(self.executor(), opts)
     }
 
     pub fn plot_tag_find_one(
         &self,
         opts: &IPlotTagFindOne,
-    ) -> Result<IPlotTagFindOneResolve, IError<SqlError>> {
+    ) -> Result<IPlotTagFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::plot_tag::find_one(self.executor(), opts)
     }
 
     pub fn plot_tag_update(
         &self,
         opts: &IPlotTagUpdate,
-    ) -> Result<IPlotTagUpdateResolve, IError<SqlError>> {
+    ) -> Result<IPlotTagUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::plot_tag::update(self.executor(), opts)
     }
 
     pub fn plot_tag_delete(
         &self,
         opts: &IPlotTagDelete,
-    ) -> Result<IPlotTagDeleteResolve, IError<SqlError>> {
+    ) -> Result<IPlotTagDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::plot_tag::delete(self.executor(), opts)
     }
 
     pub fn farm_member_create(
         &self,
         opts: &IFarmMemberCreate,
-    ) -> Result<IFarmMemberCreateResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberCreateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member::create(self.executor(), opts)
     }
 
     pub fn farm_member_find_many(
         &self,
         opts: &IFarmMemberFindMany,
-    ) -> Result<IFarmMemberFindManyResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member::find_many(self.executor(), opts)
     }
 
     pub fn farm_member_find_one(
         &self,
         opts: &IFarmMemberFindOne,
-    ) -> Result<IFarmMemberFindOneResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member::find_one(self.executor(), opts)
     }
 
     pub fn farm_member_update(
         &self,
         opts: &IFarmMemberUpdate,
-    ) -> Result<IFarmMemberUpdateResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member::update(self.executor(), opts)
     }
 
     pub fn farm_member_delete(
         &self,
         opts: &IFarmMemberDelete,
-    ) -> Result<IFarmMemberDeleteResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member::delete(self.executor(), opts)
     }
 
     pub fn farm_member_claim_create(
         &self,
         opts: &IFarmMemberClaimCreate,
-    ) -> Result<IFarmMemberClaimCreateResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberClaimCreateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member_claim::create(self.executor(), opts)
     }
 
     pub fn farm_member_claim_find_many(
         &self,
         opts: &IFarmMemberClaimFindMany,
-    ) -> Result<IFarmMemberClaimFindManyResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberClaimFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member_claim::find_many(self.executor(), opts)
     }
 
     pub fn farm_member_claim_find_one(
         &self,
         opts: &IFarmMemberClaimFindOne,
-    ) -> Result<IFarmMemberClaimFindOneResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberClaimFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member_claim::find_one(self.executor(), opts)
     }
 
     pub fn farm_member_claim_update(
         &self,
         opts: &IFarmMemberClaimUpdate,
-    ) -> Result<IFarmMemberClaimUpdateResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberClaimUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member_claim::update(self.executor(), opts)
     }
 
     pub fn farm_member_claim_delete(
         &self,
         opts: &IFarmMemberClaimDelete,
-    ) -> Result<IFarmMemberClaimDeleteResolve, IError<SqlError>> {
+    ) -> Result<IFarmMemberClaimDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::farm_member_claim::delete(self.executor(), opts)
     }
 
     pub fn log_error_create(
         &self,
         opts: &ILogErrorCreate,
-    ) -> Result<ILogErrorCreateResolve, IError<SqlError>> {
+    ) -> Result<ILogErrorCreateResolve, ReplicaSchemaError<SqlError>> {
         models::log_error::create(self.executor(), opts)
     }
 
     pub fn log_error_find_many(
         &self,
         opts: &ILogErrorFindMany,
-    ) -> Result<ILogErrorFindManyResolve, IError<SqlError>> {
+    ) -> Result<ILogErrorFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::log_error::find_many(self.executor(), opts)
     }
 
     pub fn log_error_find_one(
         &self,
         opts: &ILogErrorFindOne,
-    ) -> Result<ILogErrorFindOneResolve, IError<SqlError>> {
+    ) -> Result<ILogErrorFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::log_error::find_one(self.executor(), opts)
     }
 
     pub fn log_error_update(
         &self,
         opts: &ILogErrorUpdate,
-    ) -> Result<ILogErrorUpdateResolve, IError<SqlError>> {
+    ) -> Result<ILogErrorUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::log_error::update(self.executor(), opts)
     }
 
     pub fn log_error_delete(
         &self,
         opts: &ILogErrorDelete,
-    ) -> Result<ILogErrorDeleteResolve, IError<SqlError>> {
+    ) -> Result<ILogErrorDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::log_error::delete(self.executor(), opts)
     }
 
     pub fn media_image_create(
         &self,
         opts: &IMediaImageCreate,
-    ) -> Result<IMediaImageCreateResolve, IError<SqlError>> {
+    ) -> Result<IMediaImageCreateResolve, ReplicaSchemaError<SqlError>> {
         models::media_image::create(self.executor(), opts)
     }
 
     pub fn media_image_find_many(
         &self,
         opts: &IMediaImageFindMany,
-    ) -> Result<IMediaImageFindManyResolve, IError<SqlError>> {
+    ) -> Result<IMediaImageFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::media_image::find_many(self.executor(), opts)
     }
 
     pub fn media_image_find_one(
         &self,
         opts: &IMediaImageFindOne,
-    ) -> Result<IMediaImageFindOneResolve, IError<SqlError>> {
+    ) -> Result<IMediaImageFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::media_image::find_one(self.executor(), opts)
     }
 
     pub fn media_image_update(
         &self,
         opts: &IMediaImageUpdate,
-    ) -> Result<IMediaImageUpdateResolve, IError<SqlError>> {
+    ) -> Result<IMediaImageUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::media_image::update(self.executor(), opts)
     }
 
     pub fn media_image_delete(
         &self,
         opts: &IMediaImageDelete,
-    ) -> Result<IMediaImageDeleteResolve, IError<SqlError>> {
+    ) -> Result<IMediaImageDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::media_image::delete(self.executor(), opts)
     }
 
     pub fn nostr_profile_create(
         &self,
         opts: &INostrProfileCreate,
-    ) -> Result<INostrProfileCreateResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileCreateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile::create(self.executor(), opts)
     }
 
     pub fn nostr_profile_find_many(
         &self,
         opts: &INostrProfileFindMany,
-    ) -> Result<INostrProfileFindManyResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile::find_many(self.executor(), opts)
     }
 
     pub fn nostr_profile_find_one(
         &self,
         opts: &INostrProfileFindOne,
-    ) -> Result<INostrProfileFindOneResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile::find_one(self.executor(), opts)
     }
 
     pub fn nostr_profile_update(
         &self,
         opts: &INostrProfileUpdate,
-    ) -> Result<INostrProfileUpdateResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile::update(self.executor(), opts)
     }
 
     pub fn nostr_profile_delete(
         &self,
         opts: &INostrProfileDelete,
-    ) -> Result<INostrProfileDeleteResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile::delete(self.executor(), opts)
     }
 
     pub fn nostr_event_head_create(
         &self,
         opts: &INostrEventHeadCreate,
-    ) -> Result<INostrEventHeadCreateResolve, IError<SqlError>> {
+    ) -> Result<INostrEventHeadCreateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_event_head::create(self.executor(), opts)
     }
 
     pub fn nostr_event_head_find_many(
         &self,
         opts: &INostrEventHeadFindMany,
-    ) -> Result<INostrEventHeadFindManyResolve, IError<SqlError>> {
+    ) -> Result<INostrEventHeadFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_event_head::find_many(self.executor(), opts)
     }
 
     pub fn nostr_event_head_find_one(
         &self,
         opts: &INostrEventHeadFindOne,
-    ) -> Result<INostrEventHeadFindOneResolve, IError<SqlError>> {
+    ) -> Result<INostrEventHeadFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_event_head::find_one(self.executor(), opts)
     }
 
     pub fn nostr_event_head_update(
         &self,
         opts: &INostrEventHeadUpdate,
-    ) -> Result<INostrEventHeadUpdateResolve, IError<SqlError>> {
+    ) -> Result<INostrEventHeadUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_event_head::update(self.executor(), opts)
     }
 
     pub fn nostr_event_head_delete(
         &self,
         opts: &INostrEventHeadDelete,
-    ) -> Result<INostrEventHeadDeleteResolve, IError<SqlError>> {
+    ) -> Result<INostrEventHeadDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_event_head::delete(self.executor(), opts)
     }
 
     pub fn nostr_relay_create(
         &self,
         opts: &INostrRelayCreate,
-    ) -> Result<INostrRelayCreateResolve, IError<SqlError>> {
+    ) -> Result<INostrRelayCreateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_relay::create(self.executor(), opts)
     }
 
     pub fn nostr_relay_find_many(
         &self,
         opts: &INostrRelayFindMany,
-    ) -> Result<INostrRelayFindManyResolve, IError<SqlError>> {
+    ) -> Result<INostrRelayFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_relay::find_many(self.executor(), opts)
     }
 
     pub fn nostr_relay_find_one(
         &self,
         opts: &INostrRelayFindOne,
-    ) -> Result<INostrRelayFindOneResolve, IError<SqlError>> {
+    ) -> Result<INostrRelayFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_relay::find_one(self.executor(), opts)
     }
 
     pub fn nostr_relay_update(
         &self,
         opts: &INostrRelayUpdate,
-    ) -> Result<INostrRelayUpdateResolve, IError<SqlError>> {
+    ) -> Result<INostrRelayUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_relay::update(self.executor(), opts)
     }
 
     pub fn nostr_relay_delete(
         &self,
         opts: &INostrRelayDelete,
-    ) -> Result<INostrRelayDeleteResolve, IError<SqlError>> {
+    ) -> Result<INostrRelayDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_relay::delete(self.executor(), opts)
     }
 
     pub fn trade_product_create(
         &self,
         opts: &ITradeProductCreate,
-    ) -> Result<ITradeProductCreateResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductCreateResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product::create(self.executor(), opts)
     }
 
     pub fn trade_product_find_many(
         &self,
         opts: &ITradeProductFindMany,
-    ) -> Result<ITradeProductFindManyResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductFindManyResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product::find_many(self.executor(), opts)
     }
 
     pub fn trade_product_find_one(
         &self,
         opts: &ITradeProductFindOne,
-    ) -> Result<ITradeProductFindOneResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductFindOneResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product::find_one(self.executor(), opts)
     }
 
     pub fn trade_product_update(
         &self,
         opts: &ITradeProductUpdate,
-    ) -> Result<ITradeProductUpdateResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductUpdateResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product::update(self.executor(), opts)
     }
 
     pub fn trade_product_delete(
         &self,
         opts: &ITradeProductDelete,
-    ) -> Result<ITradeProductDeleteResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductDeleteResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product::delete(self.executor(), opts)
     }
 
     pub fn nostr_profile_relay_set(
         &self,
         opts: &INostrProfileRelayRelation,
-    ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileRelayResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile_relay::set(self.executor(), opts)
     }
 
     pub fn nostr_profile_relay_unset(
         &self,
         opts: &INostrProfileRelayRelation,
-    ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
+    ) -> Result<INostrProfileRelayResolve, ReplicaSchemaError<SqlError>> {
         models::nostr_profile_relay::unset(self.executor(), opts)
     }
 
     pub fn trade_product_location_set(
         &self,
         opts: &ITradeProductLocationRelation,
-    ) -> Result<ITradeProductLocationResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductLocationResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product_location::set(self.executor(), opts)
     }
 
     pub fn trade_product_location_unset(
         &self,
         opts: &ITradeProductLocationRelation,
-    ) -> Result<ITradeProductLocationResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductLocationResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product_location::unset(self.executor(), opts)
     }
 
     pub fn trade_product_media_set(
         &self,
         opts: &ITradeProductMediaRelation,
-    ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductMediaResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product_media::set(self.executor(), opts)
     }
 
     pub fn trade_product_media_unset(
         &self,
         opts: &ITradeProductMediaRelation,
-    ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
+    ) -> Result<ITradeProductMediaResolve, ReplicaSchemaError<SqlError>> {
         models::trade_product_media::unset(self.executor(), opts)
     }
 }

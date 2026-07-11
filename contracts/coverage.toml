@@ -70,6 +70,5 @@ crates = [
   "radroots_test_fixtures",
   "radroots_trade",
   "radroots_transport",
-  "radroots_types",
   "xtask",
 ]

@@ -36,6 +36,7 @@ use radroots_replica_db::{
     farm, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_event_head, nostr_profile,
     plot, plot_gcs_location, plot_tag, trade_product,
 };
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_replica_db_schema::farm::{
     FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
     IFarmUpdate,
@@ -165,17 +166,17 @@ pub fn radroots_replica_ingest_event_with_factory(
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     if let Err(err) = exec.begin() {
-        return Err(RadrootsReplicaEventsError::from(
-            radroots_types::types::IError::from(err),
-        ));
+        return Err(RadrootsReplicaEventsError::from(ReplicaSchemaError::from(
+            err,
+        )));
     }
 
     match ingest_event_inner(exec, event, factory) {
         Ok(outcome) => {
             if let Err(err) = exec.commit() {
-                return Err(RadrootsReplicaEventsError::from(
-                    radroots_types::types::IError::from(err),
-                ));
+                return Err(RadrootsReplicaEventsError::from(ReplicaSchemaError::from(
+                    err,
+                )));
             }
             Ok(outcome)
         }
@@ -1391,7 +1392,7 @@ fn upsert_member_claims(
 }
 
 fn handle_delete_result<T>(
-    result: Result<T, radroots_types::types::IError<SqlError>>,
+    result: Result<T, ReplicaSchemaError<SqlError>>,
 ) -> Result<(), RadrootsReplicaEventsError> {
     match result {
         Ok(_) => Ok(()),

@@ -1,7 +1,7 @@
 use dto_bindgen_core::{
-    BackendId, DefaultKind, EnumDef, EnumRepr, FieldDef, FieldPresence, IdentName, Registry,
-    RustTypeId, SerializePresence, SourceSpan, StructDef, TargetFieldNames, TargetOverride,
-    TypeDef, TypeRef, VariantDef, VariantShape, WireFieldNames,
+    BackendId, DefaultKind, EnumDef, EnumRepr, FieldDef, FieldPresence, GenericParam, IdentName,
+    Primitive, Registry, RustTypeId, SerializePresence, SourceSpan, StructDef, TargetFieldNames,
+    TargetOverride, TypeDef, TypeRef, VariantDef, VariantShape, WireFieldNames,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,6 +74,7 @@ impl FieldSpec {
 
 pub fn dto_registry() -> Registry {
     let mut registry = Registry::new();
+    register_result_contracts(&mut registry);
     for spec in TYPE_SPECS {
         let name = spec.name();
         let type_id = registry.register_type(
@@ -86,7 +87,11 @@ pub fn dto_registry() -> Registry {
 }
 
 pub fn type_inventory() -> Vec<&'static str> {
-    TYPE_SPECS.iter().map(TypeSpec::name).collect()
+    RESULT_CONTRACT_NAMES
+        .iter()
+        .copied()
+        .chain(TYPE_SPECS.iter().map(TypeSpec::name))
+        .collect()
 }
 
 impl TypeSpec {
@@ -111,6 +116,52 @@ fn object_def(name: &str, fields: &[FieldSpec]) -> StructDef {
         def = def.with_field(field_def(field));
     }
     def
+}
+
+fn register_result_contracts(registry: &mut Registry) {
+    for (name, field_name, field_ty) in [
+        (
+            "ReplicaSchemaError",
+            "err",
+            TypeRef::GenericParam("T".to_owned()),
+        ),
+        (
+            "ReplicaSchemaResult",
+            "result",
+            TypeRef::GenericParam("T".to_owned()),
+        ),
+        (
+            "ReplicaSchemaResultList",
+            "results",
+            TypeRef::vec(TypeRef::GenericParam("T".to_owned())),
+        ),
+    ] {
+        let mut def = StructDef::new(name, name, source_span())
+            .with_field(typed_field_def(field_name, field_ty));
+        def.generics.push(GenericParam::new("T"));
+        let type_id = registry.register_type(
+            RustTypeId::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_NAME"), name),
+            TypeDef::Struct(def),
+        );
+        registry.mark_root(type_id);
+    }
+
+    let type_id = registry.register_type(
+        RustTypeId::new(
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_NAME"),
+            "ReplicaSchemaResultPass",
+        ),
+        TypeDef::Struct(
+            StructDef::new(
+                "ReplicaSchemaResultPass",
+                "ReplicaSchemaResultPass",
+                source_span(),
+            )
+            .with_field(typed_field_def("pass", TypeRef::Primitive(Primitive::Bool))),
+        ),
+    );
+    registry.mark_root(type_id);
 }
 
 fn union_def(name: &str, variants: &[VariantSpec]) -> EnumDef {
@@ -144,14 +195,18 @@ fn alias_def(name: &str, target: &str) -> EnumDef {
 }
 
 fn field_def(field: &FieldSpec) -> FieldDef {
+    typed_field_def(field.name, ts_ref(field.target))
+        .with_presence(field_presence(field.optional, field.nullable))
+}
+
+fn typed_field_def(name: &str, ty: TypeRef) -> FieldDef {
     FieldDef::new(
-        IdentName::new(field.name),
-        WireFieldNames::same(field.name),
-        TargetFieldNames::new(field.name, field.name),
-        ts_ref(field.target),
+        IdentName::new(name),
+        WireFieldNames::same(name),
+        TargetFieldNames::new(name, name),
+        ty,
         source_span(),
     )
-    .with_presence(field_presence(field.optional, field.nullable))
 }
 
 fn field_presence(optional: bool, nullable: bool) -> FieldPresence {
@@ -175,6 +230,13 @@ fn ts_ref(target: &str) -> TypeRef {
 fn source_span() -> SourceSpan {
     SourceSpan::new(file!(), line!(), column!())
 }
+
+const RESULT_CONTRACT_NAMES: &[&str] = &[
+    "ReplicaSchemaError",
+    "ReplicaSchemaResult",
+    "ReplicaSchemaResultList",
+    "ReplicaSchemaResultPass",
+];
 
 const TYPE_SPECS: &[TypeSpec] = &[
     TypeSpec::Object {
@@ -349,7 +411,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmCreateResolve",
-        target: "IResult<Farm>",
+        target: "ReplicaSchemaResult<Farm>",
     },
     TypeSpec::Alias {
         name: "IFarmDelete",
@@ -357,7 +419,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IFarmFields",
@@ -420,7 +482,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmFindManyResolve",
-        target: "IResultList<Farm>",
+        target: "ReplicaSchemaResultList<Farm>",
     },
     TypeSpec::Union {
         name: "IFarmFindOne",
@@ -432,7 +494,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmFindOneResolve",
-        target: "IResult<Farm | null>",
+        target: "ReplicaSchemaResult<Farm | null>",
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationCreate",
@@ -440,7 +502,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationCreateResolve",
-        target: "IResult<FarmGcsLocation>",
+        target: "ReplicaSchemaResult<FarmGcsLocation>",
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationDelete",
@@ -448,7 +510,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IFarmGcsLocationFields",
@@ -490,7 +552,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationFindManyResolve",
-        target: "IResultList<FarmGcsLocation>",
+        target: "ReplicaSchemaResultList<FarmGcsLocation>",
     },
     TypeSpec::Union {
         name: "IFarmGcsLocationFindOne",
@@ -502,7 +564,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationFindOneResolve",
-        target: "IResult<FarmGcsLocation | null>",
+        target: "ReplicaSchemaResult<FarmGcsLocation | null>",
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationUpdate",
@@ -517,7 +579,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmGcsLocationUpdateResolve",
-        target: "IResult<FarmGcsLocation>",
+        target: "ReplicaSchemaResult<FarmGcsLocation>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimCreate",
@@ -525,7 +587,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimCreateResolve",
-        target: "IResult<FarmMemberClaim>",
+        target: "ReplicaSchemaResult<FarmMemberClaim>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimDelete",
@@ -533,7 +595,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IFarmMemberClaimFields",
@@ -572,7 +634,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimFindManyResolve",
-        target: "IResultList<FarmMemberClaim>",
+        target: "ReplicaSchemaResultList<FarmMemberClaim>",
     },
     TypeSpec::Union {
         name: "IFarmMemberClaimFindOne",
@@ -584,7 +646,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimFindOneResolve",
-        target: "IResult<FarmMemberClaim | null>",
+        target: "ReplicaSchemaResult<FarmMemberClaim | null>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimUpdate",
@@ -599,7 +661,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberClaimUpdateResolve",
-        target: "IResult<FarmMemberClaim>",
+        target: "ReplicaSchemaResult<FarmMemberClaim>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberCreate",
@@ -607,7 +669,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberCreateResolve",
-        target: "IResult<FarmMember>",
+        target: "ReplicaSchemaResult<FarmMember>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberDelete",
@@ -615,7 +677,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IFarmMemberFields",
@@ -654,7 +716,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberFindManyResolve",
-        target: "IResultList<FarmMember>",
+        target: "ReplicaSchemaResultList<FarmMember>",
     },
     TypeSpec::Union {
         name: "IFarmMemberFindOne",
@@ -666,7 +728,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberFindOneResolve",
-        target: "IResult<FarmMember | null>",
+        target: "ReplicaSchemaResult<FarmMember | null>",
     },
     TypeSpec::Alias {
         name: "IFarmMemberUpdate",
@@ -681,7 +743,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmMemberUpdateResolve",
-        target: "IResult<FarmMember>",
+        target: "ReplicaSchemaResult<FarmMember>",
     },
     TypeSpec::Alias {
         name: "IFarmTagCreate",
@@ -689,7 +751,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmTagCreateResolve",
-        target: "IResult<FarmTag>",
+        target: "ReplicaSchemaResult<FarmTag>",
     },
     TypeSpec::Alias {
         name: "IFarmTagDelete",
@@ -697,7 +759,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmTagDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IFarmTagFields",
@@ -733,7 +795,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmTagFindManyResolve",
-        target: "IResultList<FarmTag>",
+        target: "ReplicaSchemaResultList<FarmTag>",
     },
     TypeSpec::Union {
         name: "IFarmTagFindOne",
@@ -745,7 +807,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmTagFindOneResolve",
-        target: "IResult<FarmTag | null>",
+        target: "ReplicaSchemaResult<FarmTag | null>",
     },
     TypeSpec::Alias {
         name: "IFarmTagUpdate",
@@ -760,7 +822,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmTagUpdateResolve",
-        target: "IResult<FarmTag>",
+        target: "ReplicaSchemaResult<FarmTag>",
     },
     TypeSpec::Alias {
         name: "IFarmUpdate",
@@ -775,7 +837,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IFarmUpdateResolve",
-        target: "IResult<Farm>",
+        target: "ReplicaSchemaResult<Farm>",
     },
     TypeSpec::Alias {
         name: "IGcsLocationCreate",
@@ -783,7 +845,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IGcsLocationCreateResolve",
-        target: "IResult<GcsLocation>",
+        target: "ReplicaSchemaResult<GcsLocation>",
     },
     TypeSpec::Alias {
         name: "IGcsLocationDelete",
@@ -791,7 +853,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IGcsLocationDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IGcsLocationFields",
@@ -880,7 +942,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IGcsLocationFindManyResolve",
-        target: "IResultList<GcsLocation>",
+        target: "ReplicaSchemaResultList<GcsLocation>",
     },
     TypeSpec::Union {
         name: "IGcsLocationFindOne",
@@ -899,7 +961,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IGcsLocationFindOneResolve",
-        target: "IResult<GcsLocation | null>",
+        target: "ReplicaSchemaResult<GcsLocation | null>",
     },
     TypeSpec::Alias {
         name: "IGcsLocationUpdate",
@@ -914,7 +976,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IGcsLocationUpdateResolve",
-        target: "IResult<GcsLocation>",
+        target: "ReplicaSchemaResult<GcsLocation>",
     },
     TypeSpec::Alias {
         name: "ILogErrorCreate",
@@ -922,7 +984,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ILogErrorCreateResolve",
-        target: "IResult<LogError>",
+        target: "ReplicaSchemaResult<LogError>",
     },
     TypeSpec::Alias {
         name: "ILogErrorDelete",
@@ -930,7 +992,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ILogErrorDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "ILogErrorFields",
@@ -984,7 +1046,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ILogErrorFindManyResolve",
-        target: "IResultList<LogError>",
+        target: "ReplicaSchemaResultList<LogError>",
     },
     TypeSpec::Union {
         name: "ILogErrorFindOne",
@@ -996,7 +1058,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ILogErrorFindOneResolve",
-        target: "IResult<LogError | null>",
+        target: "ReplicaSchemaResult<LogError | null>",
     },
     TypeSpec::Alias {
         name: "ILogErrorUpdate",
@@ -1011,7 +1073,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ILogErrorUpdateResolve",
-        target: "IResult<LogError>",
+        target: "ReplicaSchemaResult<LogError>",
     },
     TypeSpec::Alias {
         name: "IMediaImageCreate",
@@ -1019,7 +1081,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IMediaImageCreateResolve",
-        target: "IResult<MediaImage>",
+        target: "ReplicaSchemaResult<MediaImage>",
     },
     TypeSpec::Alias {
         name: "IMediaImageDelete",
@@ -1027,7 +1089,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IMediaImageDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IMediaImageFields",
@@ -1074,7 +1136,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IMediaImageFindManyResolve",
-        target: "IResultList<MediaImage>",
+        target: "ReplicaSchemaResultList<MediaImage>",
     },
     TypeSpec::Union {
         name: "IMediaImageFindOne",
@@ -1093,7 +1155,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IMediaImageFindOneResolve",
-        target: "IResult<MediaImage | null>",
+        target: "ReplicaSchemaResult<MediaImage | null>",
     },
     TypeSpec::Alias {
         name: "IMediaImageUpdate",
@@ -1108,7 +1170,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IMediaImageUpdateResolve",
-        target: "IResult<MediaImage>",
+        target: "ReplicaSchemaResult<MediaImage>",
     },
     TypeSpec::Alias {
         name: "INostrEventHeadCreate",
@@ -1116,7 +1178,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrEventHeadCreateResolve",
-        target: "IResult<NostrEventHead>",
+        target: "ReplicaSchemaResult<NostrEventHead>",
     },
     TypeSpec::Alias {
         name: "INostrEventHeadDelete",
@@ -1124,7 +1186,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrEventHeadDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "INostrEventHeadFields",
@@ -1175,7 +1237,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrEventHeadFindManyResolve",
-        target: "IResultList<NostrEventHead>",
+        target: "ReplicaSchemaResultList<NostrEventHead>",
     },
     TypeSpec::Union {
         name: "INostrEventHeadFindOne",
@@ -1187,7 +1249,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrEventHeadFindOneResolve",
-        target: "IResult<NostrEventHead | null>",
+        target: "ReplicaSchemaResult<NostrEventHead | null>",
     },
     TypeSpec::Alias {
         name: "INostrEventHeadUpdate",
@@ -1202,7 +1264,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrEventHeadUpdateResolve",
-        target: "IResult<NostrEventHead>",
+        target: "ReplicaSchemaResult<NostrEventHead>",
     },
     TypeSpec::Alias {
         name: "INostrProfileCreate",
@@ -1210,7 +1272,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileCreateResolve",
-        target: "IResult<NostrProfile>",
+        target: "ReplicaSchemaResult<NostrProfile>",
     },
     TypeSpec::Alias {
         name: "INostrProfileDelete",
@@ -1218,7 +1280,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "INostrProfileFields",
@@ -1280,7 +1342,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileFindManyResolve",
-        target: "IResultList<NostrProfile>",
+        target: "ReplicaSchemaResultList<NostrProfile>",
     },
     TypeSpec::Union {
         name: "INostrProfileFindOne",
@@ -1299,7 +1361,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileFindOneResolve",
-        target: "IResult<NostrProfile | null>",
+        target: "ReplicaSchemaResult<NostrProfile | null>",
     },
     TypeSpec::Object {
         name: "INostrProfileRelayRelation",
@@ -1310,7 +1372,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileRelayResolve",
-        target: "IResultPass",
+        target: "ReplicaSchemaResultPass",
     },
     TypeSpec::Alias {
         name: "INostrProfileUpdate",
@@ -1325,7 +1387,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrProfileUpdateResolve",
-        target: "IResult<NostrProfile>",
+        target: "ReplicaSchemaResult<NostrProfile>",
     },
     TypeSpec::Alias {
         name: "INostrRelayCreate",
@@ -1333,7 +1395,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrRelayCreateResolve",
-        target: "IResult<NostrRelay>",
+        target: "ReplicaSchemaResult<NostrRelay>",
     },
     TypeSpec::Alias {
         name: "INostrRelayDelete",
@@ -1341,7 +1403,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrRelayDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "INostrRelayFields",
@@ -1400,7 +1462,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrRelayFindManyResolve",
-        target: "IResultList<NostrRelay>",
+        target: "ReplicaSchemaResultList<NostrRelay>",
     },
     TypeSpec::Union {
         name: "INostrRelayFindOne",
@@ -1419,7 +1481,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrRelayFindOneResolve",
-        target: "IResult<NostrRelay | null>",
+        target: "ReplicaSchemaResult<NostrRelay | null>",
     },
     TypeSpec::Alias {
         name: "INostrRelayUpdate",
@@ -1434,7 +1496,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "INostrRelayUpdateResolve",
-        target: "IResult<NostrRelay>",
+        target: "ReplicaSchemaResult<NostrRelay>",
     },
     TypeSpec::Alias {
         name: "IPlotCreate",
@@ -1442,7 +1504,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotCreateResolve",
-        target: "IResult<Plot>",
+        target: "ReplicaSchemaResult<Plot>",
     },
     TypeSpec::Alias {
         name: "IPlotDelete",
@@ -1450,7 +1512,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IPlotFields",
@@ -1504,7 +1566,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotFindManyResolve",
-        target: "IResultList<Plot>",
+        target: "ReplicaSchemaResultList<Plot>",
     },
     TypeSpec::Union {
         name: "IPlotFindOne",
@@ -1516,7 +1578,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotFindOneResolve",
-        target: "IResult<Plot | null>",
+        target: "ReplicaSchemaResult<Plot | null>",
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationCreate",
@@ -1524,7 +1586,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationCreateResolve",
-        target: "IResult<PlotGcsLocation>",
+        target: "ReplicaSchemaResult<PlotGcsLocation>",
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationDelete",
@@ -1532,7 +1594,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IPlotGcsLocationFields",
@@ -1574,7 +1636,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationFindManyResolve",
-        target: "IResultList<PlotGcsLocation>",
+        target: "ReplicaSchemaResultList<PlotGcsLocation>",
     },
     TypeSpec::Union {
         name: "IPlotGcsLocationFindOne",
@@ -1586,7 +1648,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationFindOneResolve",
-        target: "IResult<PlotGcsLocation | null>",
+        target: "ReplicaSchemaResult<PlotGcsLocation | null>",
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationUpdate",
@@ -1601,7 +1663,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotGcsLocationUpdateResolve",
-        target: "IResult<PlotGcsLocation>",
+        target: "ReplicaSchemaResult<PlotGcsLocation>",
     },
     TypeSpec::Alias {
         name: "IPlotTagCreate",
@@ -1609,7 +1671,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotTagCreateResolve",
-        target: "IResult<PlotTag>",
+        target: "ReplicaSchemaResult<PlotTag>",
     },
     TypeSpec::Alias {
         name: "IPlotTagDelete",
@@ -1617,7 +1679,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotTagDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "IPlotTagFields",
@@ -1653,7 +1715,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotTagFindManyResolve",
-        target: "IResultList<PlotTag>",
+        target: "ReplicaSchemaResultList<PlotTag>",
     },
     TypeSpec::Union {
         name: "IPlotTagFindOne",
@@ -1665,7 +1727,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotTagFindOneResolve",
-        target: "IResult<PlotTag | null>",
+        target: "ReplicaSchemaResult<PlotTag | null>",
     },
     TypeSpec::Alias {
         name: "IPlotTagUpdate",
@@ -1680,7 +1742,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotTagUpdateResolve",
-        target: "IResult<PlotTag>",
+        target: "ReplicaSchemaResult<PlotTag>",
     },
     TypeSpec::Alias {
         name: "IPlotUpdate",
@@ -1695,7 +1757,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "IPlotUpdateResolve",
-        target: "IResult<Plot>",
+        target: "ReplicaSchemaResult<Plot>",
     },
     TypeSpec::Alias {
         name: "ITradeProductCreate",
@@ -1703,7 +1765,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductCreateResolve",
-        target: "IResult<TradeProduct>",
+        target: "ReplicaSchemaResult<TradeProduct>",
     },
     TypeSpec::Alias {
         name: "ITradeProductDelete",
@@ -1711,7 +1773,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductDeleteResolve",
-        target: "IResult<string>",
+        target: "ReplicaSchemaResult<string>",
     },
     TypeSpec::Object {
         name: "ITradeProductFields",
@@ -1810,7 +1872,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductFindManyResolve",
-        target: "IResultList<TradeProduct>",
+        target: "ReplicaSchemaResultList<TradeProduct>",
     },
     TypeSpec::Union {
         name: "ITradeProductFindOne",
@@ -1822,7 +1884,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductFindOneResolve",
-        target: "IResult<TradeProduct | null>",
+        target: "ReplicaSchemaResult<TradeProduct | null>",
     },
     TypeSpec::Object {
         name: "ITradeProductLocationRelation",
@@ -1833,7 +1895,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductLocationResolve",
-        target: "IResultPass",
+        target: "ReplicaSchemaResultPass",
     },
     TypeSpec::Object {
         name: "ITradeProductMediaRelation",
@@ -1844,7 +1906,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductMediaResolve",
-        target: "IResultPass",
+        target: "ReplicaSchemaResultPass",
     },
     TypeSpec::Alias {
         name: "ITradeProductUpdate",
@@ -1859,7 +1921,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
     },
     TypeSpec::Alias {
         name: "ITradeProductUpdateResolve",
-        target: "IResult<TradeProduct>",
+        target: "ReplicaSchemaResult<TradeProduct>",
     },
     TypeSpec::Object {
         name: "LogError",
@@ -2138,7 +2200,7 @@ mod tests {
             spec,
             TypeSpec::Alias {
                 name: "IFarmFindOneResolve",
-                target: "IResult<Farm | null>"
+                target: "ReplicaSchemaResult<Farm | null>"
             }
         )));
     }

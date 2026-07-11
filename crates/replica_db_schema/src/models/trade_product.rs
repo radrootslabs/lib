@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[derive(Serialize, Deserialize)]
@@ -138,7 +138,7 @@ impl TradeProductQueryBindValues {
 pub struct ITradeProductCreateTs;
 pub type ITradeProductCreate = ITradeProductFields;
 pub struct ITradeProductCreateResolveTs;
-pub type ITradeProductCreateResolve = IResult<TradeProduct>;
+pub type ITradeProductCreateResolve = ReplicaSchemaResult<TradeProduct>;
 #[derive(Deserialize, Serialize)]
 pub struct ITradeProductFindOneArgs {
     pub on: TradeProductQueryBindValues,
@@ -151,18 +151,18 @@ pub enum ITradeProductFindOne {
 }
 
 pub struct ITradeProductFindOneResolveTs;
-pub type ITradeProductFindOneResolve = IResult<Option<TradeProduct>>;
+pub type ITradeProductFindOneResolve = ReplicaSchemaResult<Option<TradeProduct>>;
 #[derive(Deserialize, Serialize)]
 pub struct ITradeProductFindManyArgs {
     pub filter: Option<ITradeProductFieldsFilter>,
 }
 pub type ITradeProductFindMany = ITradeProductFindManyArgs;
 pub struct ITradeProductFindManyResolveTs;
-pub type ITradeProductFindManyResolve = IResultList<TradeProduct>;
+pub type ITradeProductFindManyResolve = ReplicaSchemaResultList<TradeProduct>;
 pub struct ITradeProductDeleteTs;
 pub type ITradeProductDelete = ITradeProductFindOne;
 pub struct ITradeProductDeleteResolveTs;
-pub type ITradeProductDeleteResolve = IResult<String>;
+pub type ITradeProductDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct ITradeProductUpdateArgs {
     pub on: TradeProductQueryBindValues,
@@ -170,4 +170,4 @@ pub struct ITradeProductUpdateArgs {
 }
 pub type ITradeProductUpdate = ITradeProductUpdateArgs;
 pub struct ITradeProductUpdateResolveTs;
-pub type ITradeProductUpdateResolve = IResult<TradeProduct>;
+pub type ITradeProductUpdateResolve = ReplicaSchemaResult<TradeProduct>;

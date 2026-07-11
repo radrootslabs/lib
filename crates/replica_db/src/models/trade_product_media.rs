@@ -1,9 +1,9 @@
 use radroots_replica_db_schema::trade_product_media::{
     ITradeProductMediaRelation, ITradeProductMediaResolve,
 };
+use radroots_replica_db_schema::{ReplicaSchemaError, ReplicaSchemaResultPass};
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
-use radroots_types::types::{IError, IResultPass};
 use serde_json::Value;
 
 const TABLE_NAME: &str = "trade_product_media";
@@ -11,7 +11,7 @@ const TABLE_NAME: &str = "trade_product_media";
 pub fn set(
     exec: &dyn SqlExecutor,
     opts: &ITradeProductMediaRelation,
-) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
+) -> Result<ITradeProductMediaResolve, ReplicaSchemaError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (trade_product_column, trade_product_value) = opts.trade_product.to_filter_param();
     query_vals.push(trade_product_value);
@@ -23,13 +23,13 @@ pub fn set(
     );
     let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
-    Ok(IResultPass { pass: true })
+    Ok(ReplicaSchemaResultPass { pass: true })
 }
 
 pub fn unset(
     exec: &dyn SqlExecutor,
     opts: &ITradeProductMediaRelation,
-) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
+) -> Result<ITradeProductMediaResolve, ReplicaSchemaError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (trade_product_column, trade_product_value) = opts.trade_product.to_filter_param();
     query_vals.push(trade_product_value);
@@ -41,5 +41,5 @@ pub fn unset(
     );
     let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
-    Ok(IResultPass { pass: true })
+    Ok(ReplicaSchemaResultPass { pass: true })
 }

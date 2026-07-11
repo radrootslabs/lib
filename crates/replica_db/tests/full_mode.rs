@@ -1,4 +1,5 @@
 use radroots_replica_db::{ReplicaSql, export_manifest};
+use radroots_replica_db_schema::ReplicaSchemaError;
 use radroots_replica_db_schema::farm::{
     IFarmCreate, IFarmDelete, IFarmFindMany, IFarmFindOne, IFarmUpdate,
 };
@@ -59,7 +60,6 @@ use radroots_replica_db_schema::trade_product::{
 use radroots_replica_db_schema::trade_product_location::ITradeProductLocationRelation;
 use radroots_replica_db_schema::trade_product_media::ITradeProductMediaRelation;
 use radroots_sql_core::{SqlError, SqliteExecutor};
-use radroots_types::types::IError;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
@@ -71,7 +71,7 @@ fn hex64(ch: char) -> String {
     std::iter::repeat_n(ch, 64).collect()
 }
 
-fn assert_invalid_argument<T>(result: Result<T, IError<SqlError>>) {
+fn assert_invalid_argument<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
     let err = match result {
         Ok(_) => panic!("invalid argument expected"),
         Err(err) => err,
@@ -79,7 +79,7 @@ fn assert_invalid_argument<T>(result: Result<T, IError<SqlError>>) {
     assert!(matches!(err.err, SqlError::InvalidArgument(_)));
 }
 
-fn assert_not_found<T>(result: Result<T, IError<SqlError>>) {
+fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
     let err = match result {
         Ok(_) => panic!("not found expected"),
         Err(err) => err,

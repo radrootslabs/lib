@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[derive(Serialize, Deserialize)]
@@ -103,7 +103,7 @@ pub enum NostrRelayFindManyRel {
 pub struct INostrRelayCreateTs;
 pub type INostrRelayCreate = INostrRelayFields;
 pub struct INostrRelayCreateResolveTs;
-pub type INostrRelayCreateResolve = IResult<NostrRelay>;
+pub type INostrRelayCreateResolve = ReplicaSchemaResult<NostrRelay>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrRelayFindOneArgs {
     pub on: NostrRelayQueryBindValues,
@@ -122,7 +122,7 @@ pub enum INostrRelayFindOne {
 }
 
 pub struct INostrRelayFindOneResolveTs;
-pub type INostrRelayFindOneResolve = IResult<Option<NostrRelay>>;
+pub type INostrRelayFindOneResolve = ReplicaSchemaResult<Option<NostrRelay>>;
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum INostrRelayFindMany {
@@ -134,11 +134,11 @@ pub enum INostrRelayFindMany {
     },
 }
 pub struct INostrRelayFindManyResolveTs;
-pub type INostrRelayFindManyResolve = IResultList<NostrRelay>;
+pub type INostrRelayFindManyResolve = ReplicaSchemaResultList<NostrRelay>;
 pub struct INostrRelayDeleteTs;
 pub type INostrRelayDelete = INostrRelayFindOne;
 pub struct INostrRelayDeleteResolveTs;
-pub type INostrRelayDeleteResolve = IResult<String>;
+pub type INostrRelayDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrRelayUpdateArgs {
     pub on: NostrRelayQueryBindValues,
@@ -146,4 +146,4 @@ pub struct INostrRelayUpdateArgs {
 }
 pub type INostrRelayUpdate = INostrRelayUpdateArgs;
 pub struct INostrRelayUpdateResolveTs;
-pub type INostrRelayUpdateResolve = IResult<NostrRelay>;
+pub type INostrRelayUpdateResolve = ReplicaSchemaResult<NostrRelay>;

@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -91,7 +91,7 @@ impl PlotQueryBindValues {
 pub struct IPlotCreateTs;
 pub type IPlotCreate = IPlotFields;
 pub struct IPlotCreateResolveTs;
-pub type IPlotCreateResolve = IResult<Plot>;
+pub type IPlotCreateResolve = ReplicaSchemaResult<Plot>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotFindOneArgs {
     pub on: PlotQueryBindValues,
@@ -104,18 +104,18 @@ pub enum IPlotFindOne {
 }
 
 pub struct IPlotFindOneResolveTs;
-pub type IPlotFindOneResolve = IResult<Option<Plot>>;
+pub type IPlotFindOneResolve = ReplicaSchemaResult<Option<Plot>>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotFindManyArgs {
     pub filter: Option<IPlotFieldsFilter>,
 }
 pub type IPlotFindMany = IPlotFindManyArgs;
 pub struct IPlotFindManyResolveTs;
-pub type IPlotFindManyResolve = IResultList<Plot>;
+pub type IPlotFindManyResolve = ReplicaSchemaResultList<Plot>;
 pub struct IPlotDeleteTs;
 pub type IPlotDelete = IPlotFindOne;
 pub struct IPlotDeleteResolveTs;
-pub type IPlotDeleteResolve = IResult<String>;
+pub type IPlotDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IPlotUpdateArgs {
     pub on: PlotQueryBindValues,
@@ -123,4 +123,4 @@ pub struct IPlotUpdateArgs {
 }
 pub type IPlotUpdate = IPlotUpdateArgs;
 pub struct IPlotUpdateResolveTs;
-pub type IPlotUpdateResolve = IResult<Plot>;
+pub type IPlotUpdateResolve = ReplicaSchemaResult<Plot>;

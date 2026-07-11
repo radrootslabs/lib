@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -84,7 +84,7 @@ impl NostrEventHeadQueryBindValues {
 pub struct INostrEventHeadCreateTs;
 pub type INostrEventHeadCreate = INostrEventHeadFields;
 pub struct INostrEventHeadCreateResolveTs;
-pub type INostrEventHeadCreateResolve = IResult<NostrEventHead>;
+pub type INostrEventHeadCreateResolve = ReplicaSchemaResult<NostrEventHead>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrEventHeadFindOneArgs {
     pub on: NostrEventHeadQueryBindValues,
@@ -97,18 +97,18 @@ pub enum INostrEventHeadFindOne {
 }
 
 pub struct INostrEventHeadFindOneResolveTs;
-pub type INostrEventHeadFindOneResolve = IResult<Option<NostrEventHead>>;
+pub type INostrEventHeadFindOneResolve = ReplicaSchemaResult<Option<NostrEventHead>>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrEventHeadFindManyArgs {
     pub filter: Option<INostrEventHeadFieldsFilter>,
 }
 pub type INostrEventHeadFindMany = INostrEventHeadFindManyArgs;
 pub struct INostrEventHeadFindManyResolveTs;
-pub type INostrEventHeadFindManyResolve = IResultList<NostrEventHead>;
+pub type INostrEventHeadFindManyResolve = ReplicaSchemaResultList<NostrEventHead>;
 pub struct INostrEventHeadDeleteTs;
 pub type INostrEventHeadDelete = INostrEventHeadFindOne;
 pub struct INostrEventHeadDeleteResolveTs;
-pub type INostrEventHeadDeleteResolve = IResult<String>;
+pub type INostrEventHeadDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct INostrEventHeadUpdateArgs {
     pub on: NostrEventHeadQueryBindValues,
@@ -116,4 +116,4 @@ pub struct INostrEventHeadUpdateArgs {
 }
 pub type INostrEventHeadUpdate = INostrEventHeadUpdateArgs;
 pub struct INostrEventHeadUpdateResolveTs;
-pub type INostrEventHeadUpdateResolve = IResult<NostrEventHead>;
+pub type INostrEventHeadUpdateResolve = ReplicaSchemaResult<NostrEventHead>;

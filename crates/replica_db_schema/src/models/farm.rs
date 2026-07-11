@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -103,7 +103,7 @@ impl FarmQueryBindValues {
 pub struct IFarmCreateTs;
 pub type IFarmCreate = IFarmFields;
 pub struct IFarmCreateResolveTs;
-pub type IFarmCreateResolve = IResult<Farm>;
+pub type IFarmCreateResolve = ReplicaSchemaResult<Farm>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmFindOneArgs {
     pub on: FarmQueryBindValues,
@@ -116,18 +116,18 @@ pub enum IFarmFindOne {
 }
 
 pub struct IFarmFindOneResolveTs;
-pub type IFarmFindOneResolve = IResult<Option<Farm>>;
+pub type IFarmFindOneResolve = ReplicaSchemaResult<Option<Farm>>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmFindManyArgs {
     pub filter: Option<IFarmFieldsFilter>,
 }
 pub type IFarmFindMany = IFarmFindManyArgs;
 pub struct IFarmFindManyResolveTs;
-pub type IFarmFindManyResolve = IResultList<Farm>;
+pub type IFarmFindManyResolve = ReplicaSchemaResultList<Farm>;
 pub struct IFarmDeleteTs;
 pub type IFarmDelete = IFarmFindOne;
 pub struct IFarmDeleteResolveTs;
-pub type IFarmDeleteResolve = IResult<String>;
+pub type IFarmDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmUpdateArgs {
     pub on: FarmQueryBindValues,
@@ -135,4 +135,4 @@ pub struct IFarmUpdateArgs {
 }
 pub type IFarmUpdate = IFarmUpdateArgs;
 pub struct IFarmUpdateResolveTs;
-pub type IFarmUpdateResolve = IResult<Farm>;
+pub type IFarmUpdateResolve = ReplicaSchemaResult<Farm>;

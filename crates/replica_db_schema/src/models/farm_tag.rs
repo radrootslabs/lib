@@ -1,4 +1,4 @@
-use radroots_types::types::{IResult, IResultList};
+use crate::models::{ReplicaSchemaResult, ReplicaSchemaResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -67,7 +67,7 @@ impl FarmTagQueryBindValues {
 pub struct IFarmTagCreateTs;
 pub type IFarmTagCreate = IFarmTagFields;
 pub struct IFarmTagCreateResolveTs;
-pub type IFarmTagCreateResolve = IResult<FarmTag>;
+pub type IFarmTagCreateResolve = ReplicaSchemaResult<FarmTag>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmTagFindOneArgs {
     pub on: FarmTagQueryBindValues,
@@ -80,18 +80,18 @@ pub enum IFarmTagFindOne {
 }
 
 pub struct IFarmTagFindOneResolveTs;
-pub type IFarmTagFindOneResolve = IResult<Option<FarmTag>>;
+pub type IFarmTagFindOneResolve = ReplicaSchemaResult<Option<FarmTag>>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmTagFindManyArgs {
     pub filter: Option<IFarmTagFieldsFilter>,
 }
 pub type IFarmTagFindMany = IFarmTagFindManyArgs;
 pub struct IFarmTagFindManyResolveTs;
-pub type IFarmTagFindManyResolve = IResultList<FarmTag>;
+pub type IFarmTagFindManyResolve = ReplicaSchemaResultList<FarmTag>;
 pub struct IFarmTagDeleteTs;
 pub type IFarmTagDelete = IFarmTagFindOne;
 pub struct IFarmTagDeleteResolveTs;
-pub type IFarmTagDeleteResolve = IResult<String>;
+pub type IFarmTagDeleteResolve = ReplicaSchemaResult<String>;
 #[derive(Deserialize, Serialize)]
 pub struct IFarmTagUpdateArgs {
     pub on: FarmTagQueryBindValues,
@@ -99,4 +99,4 @@ pub struct IFarmTagUpdateArgs {
 }
 pub type IFarmTagUpdate = IFarmTagUpdateArgs;
 pub struct IFarmTagUpdateResolveTs;
-pub type IFarmTagUpdateResolve = IResult<FarmTag>;
+pub type IFarmTagUpdateResolve = ReplicaSchemaResult<FarmTag>;
