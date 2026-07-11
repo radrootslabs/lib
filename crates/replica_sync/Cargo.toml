@@ -18,19 +18,19 @@ crate-type = ["rlib"]
 [features]
 default = ["std"]
 std = [
-  "radroots_events/std",
-  "radroots_events_codec/std",
+  "radroots_event/std",
+  "radroots_event_codec/std",
   "radroots_sql_core/std",
   "dep:base64",
   "dep:uuid",
 ]
 
 [dependencies]
-radroots_events = { workspace = true, default-features = false, features = [
+radroots_event = { workspace = true, default-features = false, features = [
   "serde",
 ] }
 radroots_core = { workspace = true, default-features = false }
-radroots_events_codec = { workspace = true, default-features = false, features = [
+radroots_event_codec = { workspace = true, default-features = false, features = [
   "serde_json",
 ] }
 radroots_sql_core = { workspace = true }

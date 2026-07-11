@@ -1,6 +1,6 @@
 use crate::error::{NetError, Result};
-use radroots_events_codec::parsed::RadrootsParsedData;
-use radroots_events_codec::profile::RadrootsProfileData;
+use radroots_event_codec::parsed::RadrootsParsedData;
+use radroots_event_codec::profile::RadrootsProfileData;
 use radroots_nostr::prelude::{
     RadrootsNostrMetadata, RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author,
     radroots_nostr_post_metadata_event,

@@ -1,10 +1,10 @@
 [workspace]
 members = [
   "crates/core",
-  "crates/events",
+  "crates/event",
   "crates/event_store",
-  "crates/events_codec",
-  "crates/events_indexed",
+  "crates/event_codec",
+  "crates/event_index",
   "crates/authority",
   "crates/geocoder",
   "crates/identity",
@@ -66,10 +66,10 @@ readme = "README"
 dto_bindgen = { git = "https://github.com/triesap/dto_bindgen", rev = "d323df81bba8aa2335c70c1fb039e5af5e40a98e", package = "dto_bindgen" }
 dto_bindgen_core = { git = "https://github.com/triesap/dto_bindgen", rev = "d323df81bba8aa2335c70c1fb039e5af5e40a98e", package = "dto_bindgen_core" }
 radroots_core = { path = "crates/core", version = "0.1.0-alpha.2", default-features = false }
-radroots_events = { path = "crates/events", version = "0.1.0-alpha.2", default-features = false }
+radroots_event = { path = "crates/event", version = "0.1.0-alpha.2", default-features = false }
 radroots_event_store = { path = "crates/event_store", version = "0.1.0-alpha.2", default-features = false }
-radroots_events_codec = { path = "crates/events_codec", version = "0.1.0-alpha.2", default-features = false }
-radroots_events_indexed = { path = "crates/events_indexed", version = "0.1.0-alpha.2", default-features = false }
+radroots_event_codec = { path = "crates/event_codec", version = "0.1.0-alpha.2", default-features = false }
+radroots_event_index = { path = "crates/event_index", version = "0.1.0-alpha.2", default-features = false }
 radroots_authority = { path = "crates/authority", version = "0.1.0-alpha.2", default-features = false }
 radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.2" }
 radroots_identity = { path = "crates/identity", version = "0.1.0-alpha.2", default-features = false }

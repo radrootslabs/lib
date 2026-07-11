@@ -7,16 +7,16 @@ use crate::model::{
     RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
     tag_semantic_name, tag_value_type_name,
 };
-use radroots_events::RadrootsEventEnvelope;
-use radroots_events::contract::{
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::contract::{
     RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
-use radroots_events::event_head::{
+use radroots_event::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
     RadrootsEventHeadCoordinate, RadrootsEventHeadDecision, event_head_candidate_for_contract,
     select_event_head,
 };
-use radroots_events::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsPublicKey};
+use radroots_event::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsPublicKey};
 use radroots_nostr::prelude::{RadrootsNostrEventVerification, radroots_nostr_verify_event};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
@@ -900,8 +900,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::event_head::event_head_candidate_for_event;
-    use radroots_events::kinds::{
+    use radroots_event::event_head::event_head_candidate_for_event;
+    use radroots_event::kinds::{
         KIND_GEOCHAT, KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE,
     };
     use radroots_nostr::prelude::{

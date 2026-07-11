@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::types::RadrootsNostrEvent as RadrootsNostrRawEvent;
-use radroots_events::{RadrootsEventEnvelope, RadrootsEventPtr};
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventPtr};
 
 use crate::util::event_created_at_u32_saturating;
 

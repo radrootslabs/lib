@@ -56,7 +56,7 @@ pub async fn radroots_nostr_fetch_post_events(
     limit: u16,
     since_unix: Option<u64>,
 ) -> Result<
-    Vec<radroots_events_codec::parsed::RadrootsParsedData<radroots_events::post::RadrootsPost>>,
+    Vec<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::post::RadrootsPost>>,
     RadrootsNostrError,
 > {
     let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);

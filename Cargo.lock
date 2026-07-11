@@ -4266,7 +4266,7 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 name = "radroots_authority"
 version = "0.1.0-alpha.2"
 dependencies = [
- "radroots_events",
+ "radroots_event",
  "radroots_nostr",
 ]
 
@@ -4285,7 +4285,7 @@ dependencies = [
 name = "radroots_event_store"
 version = "0.1.0-alpha.2"
 dependencies = [
- "radroots_events",
+ "radroots_event",
  "radroots_nostr",
  "radroots_transport",
  "serde",
@@ -4297,7 +4297,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_events"
+name = "radroots_event"
 version = "0.1.0-alpha.2"
 dependencies = [
  "dto_bindgen",
@@ -4309,13 +4309,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_events_codec"
+name = "radroots_event_codec"
 version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
  "nostr",
  "radroots_core",
- "radroots_events",
+ "radroots_event",
  "radroots_test_fixtures",
  "serde",
  "serde_json",
@@ -4323,7 +4323,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_events_indexed"
+name = "radroots_event_index"
 version = "0.1.0-alpha.2"
 dependencies = [
  "dto_bindgen",
@@ -4352,7 +4352,7 @@ name = "radroots_identity"
 version = "0.1.0-alpha.2"
 dependencies = [
  "nostr",
- "radroots_events",
+ "radroots_event",
  "radroots_protected_store",
  "radroots_runtime",
  "radroots_runtime_paths",
@@ -4420,8 +4420,8 @@ dependencies = [
  "directories",
  "futures",
  "hex",
- "radroots_events",
- "radroots_events_codec",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_identity",
  "radroots_log",
  "radroots_nostr",
@@ -4443,8 +4443,8 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "nostr",
  "nostr-sdk",
- "radroots_events",
- "radroots_events_codec",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_identity",
  "reqwest",
  "serde",
@@ -4533,7 +4533,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
  "radroots_event_store",
- "radroots_events",
+ "radroots_event",
  "radroots_nostr",
  "radroots_transport",
  "serde",
@@ -4588,8 +4588,8 @@ dependencies = [
  "base64 0.22.1",
  "hex",
  "radroots_core",
- "radroots_events",
- "radroots_events_codec",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_replica_db",
  "radroots_replica_db_schema",
  "radroots_sql_core",
@@ -4609,7 +4609,7 @@ dependencies = [
  "clap",
  "config",
  "getrandom 0.2.17",
- "radroots_events",
+ "radroots_event",
  "radroots_log",
  "radroots_protected_store",
  "radroots_runtime_paths",
@@ -4802,7 +4802,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "futures",
- "radroots_events",
+ "radroots_event",
  "radroots_sp1_guest_trade",
  "radroots_trade",
  "serde",
@@ -4829,7 +4829,7 @@ dependencies = [
 name = "radroots_test_fixtures"
 version = "0.1.0-alpha.2"
 dependencies = [
- "radroots_events",
+ "radroots_event",
 ]
 
 [[package]]
@@ -4843,8 +4843,8 @@ dependencies = [
  "radroots_authority",
  "radroots_core",
  "radroots_event_store",
- "radroots_events",
- "radroots_events_codec",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_nostr",
  "radroots_transport",
  "serde",
@@ -4872,7 +4872,7 @@ dependencies = [
  "futures",
  "nostr",
  "radroots_event_store",
- "radroots_events",
+ "radroots_event",
  "radroots_nostr",
  "radroots_outbox",
  "radroots_transport",
@@ -8651,7 +8651,7 @@ name = "xtask"
 version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
- "radroots_events_codec",
+ "radroots_event_codec",
  "serde",
  "serde_json",
  "sha2",

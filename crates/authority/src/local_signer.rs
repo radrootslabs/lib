@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsEventSigner, RadrootsSignerError};
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_events::ids::RadrootsPublicKey;
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::RadrootsPublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 
 pub struct RadrootsLocalEventSigner {
@@ -38,8 +38,8 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::RadrootsEventEnvelope;
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::RadrootsEventEnvelope;
+    use radroots_event::kinds::KIND_POST;
     use radroots_nostr::prelude::{
         RadrootsEventEnvelopeVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
     };

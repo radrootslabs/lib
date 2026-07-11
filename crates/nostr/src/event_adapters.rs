@@ -1,13 +1,13 @@
 #[cfg(feature = "events")]
-use radroots_events::post::RadrootsPost;
+use radroots_event::post::RadrootsPost;
 #[cfg(feature = "events")]
-use radroots_events::profile::{
+use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, radroots_profile_type_from_tag_value,
 };
 #[cfg(feature = "events")]
-use radroots_events_codec::parsed::RadrootsParsedData;
+use radroots_event_codec::parsed::RadrootsParsedData;
 #[cfg(feature = "events")]
-use radroots_events_codec::profile::RadrootsProfileData;
+use radroots_event_codec::profile::RadrootsProfileData;
 
 #[cfg(feature = "events")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};

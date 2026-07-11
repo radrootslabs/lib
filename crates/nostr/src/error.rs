@@ -25,7 +25,7 @@ pub enum RadrootsNostrError {
 
     #[cfg(feature = "events")]
     #[error("Draft error: {0}")]
-    DraftError(#[from] radroots_events::draft::RadrootsDraftError),
+    DraftError(#[from] radroots_event::draft::RadrootsDraftError),
 
     #[cfg(feature = "events")]
     #[error(
@@ -51,7 +51,7 @@ pub enum RadrootsNostrError {
 
     #[cfg(feature = "codec")]
     #[error("Profile encode error: {0}")]
-    ProfileEncodeError(#[from] radroots_events_codec::profile::error::ProfileEncodeError),
+    ProfileEncodeError(#[from] radroots_event_codec::profile::error::ProfileEncodeError),
 }
 
 #[derive(Debug, Error)]

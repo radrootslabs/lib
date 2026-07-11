@@ -13,8 +13,8 @@
         "required_fields": [
           "schema_version",
           "registry_version",
-          "radroots_events_version",
-          "radroots_events_codec_version",
+          "radroots_event_version",
+          "radroots_event_codec_version",
           "contract_id",
           "kind",
           "class",

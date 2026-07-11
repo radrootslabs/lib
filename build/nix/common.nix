@@ -89,11 +89,11 @@ let
     "xtask"
     "radroots_core"
     "radroots_types"
-    "radroots_events"
+    "radroots_event"
     "radroots_trade"
     "radroots_identity"
     "radroots_replica_db_schema"
-    "radroots_events_codec"
+    "radroots_event_codec"
     "radroots_nostr_connect"
     "radroots_nostr_signer"
   ];

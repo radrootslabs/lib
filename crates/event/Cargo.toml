@@ -1,0 +1,42 @@
+[package]
+name = "radroots_event"
+publish = ["crates-io"]
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Domain event model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/radroots_event"
+readme = "README"
+
+[features]
+default = ["std", "serde"]
+dto-bindgen = [
+  "std",
+  "serde",
+  "knowledge-nip54",
+  "dep:dto_bindgen",
+  "radroots_core/dto-bindgen",
+]
+knowledge = []
+knowledge-nip54 = ["knowledge"]
+std = ["radroots_core/std"]
+serde = ["dep:serde", "radroots_core/serde"]
+
+[dependencies]
+dto_bindgen = { workspace = true, optional = true }
+radroots_core = { workspace = true, default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }
+sha2 = { workspace = true, default-features = false }
+
+[dev-dependencies]

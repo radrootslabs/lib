@@ -7,20 +7,20 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::farm::RadrootsFarmRef;
-use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
-use radroots_events::listing::{
+use radroots_event::farm::RadrootsFarmRef;
+use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
+use radroots_event::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
     RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
 };
-use radroots_events::location::is_public_geohash5;
-pub(crate) use radroots_events::order::RadrootsListingParseError as ListingParseError;
-use radroots_events::plot::RadrootsPlotRef;
-use radroots_events::resource_area::RadrootsResourceAreaRef;
-use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
-use radroots_events_codec::d_tag::is_d_tag_base64url;
+use radroots_event::location::is_public_geohash5;
+pub(crate) use radroots_event::order::RadrootsListingParseError as ListingParseError;
+use radroots_event::plot::RadrootsPlotRef;
+use radroots_event::resource_area::RadrootsResourceAreaRef;
+use radroots_event::tags::{TAG_D, TAG_PUBLISHED_AT};
+use radroots_event_codec::d_tag::is_d_tag_base64url;
 
 const TAG_PRICE: &str = "price";
 const TAG_RADROOTS_BIN: &str = "radroots:bin";
@@ -664,10 +664,10 @@ mod tests {
         RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
         RadrootsCorePercent, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::farm::RadrootsFarmRef;
-    use radroots_events::listing::RadrootsListing;
-    use radroots_events_codec::error::EventEncodeError;
-    use radroots_events_codec::listing::tags::listing_tags_full;
+    use radroots_event::farm::RadrootsFarmRef;
+    use radroots_event::listing::RadrootsListing;
+    use radroots_event_codec::error::EventEncodeError;
+    use radroots_event_codec::listing::tags::listing_tags_full;
 
     fn listing_tags_build(
         listing: &RadrootsListing,

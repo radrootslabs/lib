@@ -6,7 +6,7 @@ use alloc::{format, string::String, vec::Vec};
 use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
 };
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     ids::RadrootsListingAddress,
     kinds::is_listing_kind,
@@ -187,7 +187,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
@@ -256,7 +256,7 @@ mod tests {
             discounts: None,
             inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
             availability: Some(RadrootsListingAvailability::Status {
-                status: radroots_events::listing::RadrootsListingStatus::Active,
+                status: radroots_event::listing::RadrootsListingStatus::Active,
             }),
             delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
             location: Some(RadrootsListingPublicLocation {

@@ -1,0 +1,160 @@
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
+use radroots_event::{
+    RadrootsEventEnvelope,
+    farm_workspace::{
+        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_TAG, RadrootsFarmWorkspaceManifest,
+    },
+    kinds::KIND_FARM,
+    tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
+};
+
+use crate::d_tag::validate_d_tag_tag;
+use crate::error::EventParseError;
+use crate::farm_workspace::encode::validate_manifest;
+use crate::field_helpers::{
+    optional_tag_value, parse_address_tag_with_kind, required_tag_value, tag_values,
+};
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+
+const EXPECTED_KIND: &str = "30078";
+
+pub fn farm_workspace_from_event(
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+) -> Result<RadrootsFarmWorkspaceManifest, EventParseError> {
+    if kind != KIND_FARM_WORKSPACE_MANIFEST {
+        return Err(EventParseError::InvalidKind {
+            expected: EXPECTED_KIND,
+            got: kind,
+        });
+    }
+    if content.trim().is_empty() {
+        return Err(EventParseError::InvalidJson("content"));
+    }
+    let d_tag = required_tag_value(tags, TAG_D)?;
+    validate_d_tag_tag(&d_tag, TAG_D)?;
+    let farm_group_id = required_tag_value(tags, TAG_H)?;
+    let manifest: RadrootsFarmWorkspaceManifest =
+        serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
+    validate_manifest(&manifest).map_err(encode_error_to_parse_error)?;
+
+    if manifest.d_tag != d_tag {
+        return Err(EventParseError::InvalidTag(TAG_D));
+    }
+    if manifest.farm_group_id != farm_group_id {
+        return Err(EventParseError::InvalidTag(TAG_H));
+    }
+    if let Some(owner_pubkey) = optional_tag_value(tags, TAG_P)?
+        && owner_pubkey != manifest.owner_pubkey
+    {
+        return Err(EventParseError::InvalidTag(TAG_P));
+    }
+    let marker_tags = tag_values(tags, TAG_T)?;
+    if !marker_tags
+        .iter()
+        .any(|value| value == RADROOTS_FARM_WORKSPACE_TAG)
+    {
+        return Err(EventParseError::MissingTag(TAG_T));
+    }
+    if let Some(farm) = manifest.farm.as_ref() {
+        let farm_address = optional_tag_value(tags, TAG_A)?;
+        if let Some(value) = farm_address {
+            let address = parse_address_tag_with_kind(&value, KIND_FARM, TAG_A)?;
+            if address.pubkey != farm.pubkey || address.d_tag != farm.d_tag {
+                return Err(EventParseError::InvalidTag(TAG_A));
+            }
+        }
+    }
+
+    Ok(manifest)
+}
+
+pub fn data_from_event(
+    id: String,
+    author: String,
+    published_at: u32,
+    kind: u32,
+    content: String,
+    tags: Vec<Vec<String>>,
+) -> Result<RadrootsParsedData<RadrootsFarmWorkspaceManifest>, EventParseError> {
+    let manifest = farm_workspace_from_event(kind, &tags, &content)?;
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        manifest,
+    ))
+}
+
+pub fn parsed_from_event(
+    id: String,
+    author: String,
+    published_at: u32,
+    kind: u32,
+    content: String,
+    tags: Vec<Vec<String>>,
+    sig: String,
+) -> Result<RadrootsParsedEvent<RadrootsFarmWorkspaceManifest>, EventParseError> {
+    let data = data_from_event(
+        id.clone(),
+        author.clone(),
+        published_at,
+        kind,
+        content.clone(),
+        tags.clone(),
+    )?;
+    Ok(RadrootsParsedEvent {
+        event: RadrootsEventEnvelope {
+            id,
+            author,
+            created_at: published_at,
+            kind,
+            content,
+            tags,
+            sig,
+        },
+        data,
+    })
+}
+
+fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventParseError {
+    match error {
+        crate::error::EventEncodeError::InvalidKind(kind) => EventParseError::InvalidKind {
+            expected: EXPECTED_KIND,
+            got: kind,
+        },
+        crate::error::EventEncodeError::EmptyRequiredField(field)
+        | crate::error::EventEncodeError::InvalidField(field) => match field {
+            "d_tag" | "farm.d_tag" => EventParseError::InvalidTag(TAG_D),
+            "farm_group_id" => EventParseError::InvalidTag(TAG_H),
+            "owner_pubkey" => EventParseError::InvalidTag(TAG_P),
+            _ => EventParseError::InvalidJson(field),
+        },
+        crate::error::EventEncodeError::Json => EventParseError::InvalidJson("content"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::EventEncodeError;
+
+    #[test]
+    fn encode_error_mapper_covers_kind_and_json_edges() {
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::InvalidKind(1)),
+            EventParseError::InvalidKind {
+                expected: EXPECTED_KIND,
+                got: 1
+            }
+        ));
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::Json),
+            EventParseError::InvalidJson("content")
+        ));
+    }
+}

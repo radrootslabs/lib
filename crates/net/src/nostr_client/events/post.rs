@@ -1,6 +1,6 @@
 use crate::error::{NetError, Result};
-use radroots_events::post::RadrootsPost;
-use radroots_events_codec::parsed::RadrootsParsedData;
+use radroots_event::post::RadrootsPost;
+use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
     radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
     radroots_nostr_fetch_post_events, radroots_nostr_send_event,

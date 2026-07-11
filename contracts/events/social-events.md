@@ -12,7 +12,7 @@ and trade workflows while keeping relay runtime behavior, application projection
 services, and private Field business documents outside this repository's event-contract boundary.
 
 The target implementation is standards-first and Radroots-named. Event models live in
-`radroots_events`, canonical encode/decode behavior lives in `radroots_events_codec`, and
+`radroots_event`, canonical encode/decode behavior lives in `radroots_event_codec`, and
 deterministic fixtures live under `contracts/conformance`.
 
 ## Implementation Inventory

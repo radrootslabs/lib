@@ -15,7 +15,7 @@ readme = "README"
 [features]
 default = []
 cli = ["dep:clap"]
-transport = ["dep:radroots_events", "dep:radroots_transport"]
+transport = ["dep:radroots_event", "dep:radroots_transport"]
 transport-nostr = ["transport"]
 transport-reticulum = ["transport", "dep:radroots_transport_reticulum"]
 transport-workers = ["transport"]
@@ -27,7 +27,7 @@ clap = { workspace = true, features = ["derive", "env"], optional = true }
 config = { workspace = true }
 getrandom = { workspace = true }
 radroots_log = { workspace = true, features = ["std"] }
-radroots_events = { workspace = true, optional = true, default-features = false, features = [
+radroots_event = { workspace = true, optional = true, default-features = false, features = [
   "std",
   "serde",
 ] }

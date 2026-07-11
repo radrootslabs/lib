@@ -5,7 +5,7 @@ pub mod mutation;
 pub mod price_ext;
 pub mod validation;
 
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     ids::{
         RadrootsAddressableCoordinateParts, RadrootsDTag, RadrootsIdParseError,
@@ -25,7 +25,7 @@ pub use self::mutation::build_listing_mutation_draft;
 pub use self::mutation::{
     RadrootsListingLifecycleState, RadrootsListingMutation, RadrootsListingMutationError,
 };
-pub use radroots_events::order::RadrootsListingParseError as ListingParseError;
+pub use radroots_event::order::RadrootsListingParseError as ListingParseError;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum RadrootsListingAddressError {
@@ -142,7 +142,7 @@ mod tests {
         RadrootsPublicListingAddressError, parse_listing_address, parse_listing_event,
         parse_public_listing_address,
     };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventEnvelope,
         ids::RadrootsListingAddress,
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE},

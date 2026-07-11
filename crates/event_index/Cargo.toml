@@ -1,0 +1,30 @@
+[package]
+name = "radroots_event_index"
+publish = ["crates-io"]
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Indexed event model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/radroots_event_index"
+readme = "README"
+
+[features]
+default = ["serde"]
+dto-bindgen = ["std", "serde", "dep:dto_bindgen", "dep:dto_bindgen_core"]
+serde = ["dep:serde"]
+std = []
+
+[dependencies]
+dto_bindgen = { workspace = true, optional = true }
+dto_bindgen_core = { workspace = true, optional = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

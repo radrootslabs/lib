@@ -15,7 +15,7 @@ pub enum RadrootsOutboxError {
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 
     #[error("Signed event does not match frozen draft: {0}")]
-    SignedEventDraftMismatch(#[from] radroots_events::draft::RadrootsDraftError),
+    SignedEventDraftMismatch(#[from] radroots_event::draft::RadrootsDraftError),
 
     #[error("delivery targets cannot be empty")]
     EmptyDeliveryTargets,

@@ -13,13 +13,13 @@ use crate::model::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxReticulumPreviewEventRecord,
     RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::draft::{
+    RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
+};
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
-};
-use radroots_events::RadrootsEventEnvelope;
-use radroots_events::draft::{
-    RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
@@ -2555,7 +2555,7 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_POST;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };

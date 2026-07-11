@@ -12,7 +12,7 @@ use std::{
     vec::Vec,
 };
 
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     ids::{
         RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress,
@@ -779,7 +779,7 @@ fn is_hash32(value: &str) -> bool {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use radroots_events::kinds::{KIND_LISTING, KIND_PROFILE};
+    use radroots_event::kinds::{KIND_LISTING, KIND_PROFILE};
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

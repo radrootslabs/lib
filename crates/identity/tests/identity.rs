@@ -1,7 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_events::profile::RadrootsProfile;
+use radroots_event::profile::RadrootsProfile;
 use radroots_identity::{
     DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,

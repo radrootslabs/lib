@@ -1,0 +1,110 @@
+#![cfg(feature = "serde_json")]
+
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+
+use radroots_event::{
+    RadrootsEventEnvelope, kinds::KIND_RESOURCE_AREA, resource_area::RadrootsResourceArea,
+    tags::TAG_D,
+};
+
+use crate::d_tag::validate_d_tag_tag;
+use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+
+const DEFAULT_KIND: u32 = KIND_RESOURCE_AREA;
+
+fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_D))
+        .ok_or(EventParseError::MissingTag(TAG_D))?;
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or(EventParseError::InvalidTag(TAG_D))?;
+    if value.trim().is_empty() {
+        return Err(EventParseError::InvalidTag(TAG_D));
+    }
+    validate_d_tag_tag(&value, TAG_D)?;
+    Ok(value)
+}
+
+pub fn resource_area_from_event(
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+) -> Result<RadrootsResourceArea, EventParseError> {
+    if kind != DEFAULT_KIND {
+        return Err(EventParseError::InvalidKind {
+            expected: "30370",
+            got: kind,
+        });
+    }
+    if content.trim().is_empty() {
+        return Err(EventParseError::InvalidJson("content"));
+    }
+    let d_tag = parse_d_tag(tags)?;
+    let mut area: RadrootsResourceArea =
+        serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
+
+    if area.d_tag.trim().is_empty() {
+        area.d_tag = d_tag;
+    } else if area.d_tag != d_tag {
+        return Err(EventParseError::InvalidTag(TAG_D));
+    }
+
+    Ok(area)
+}
+
+pub fn data_from_event(
+    id: String,
+    author: String,
+    published_at: u32,
+    kind: u32,
+    content: String,
+    tags: Vec<Vec<String>>,
+) -> Result<RadrootsParsedData<RadrootsResourceArea>, EventParseError> {
+    let area = resource_area_from_event(kind, &tags, &content)?;
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        area,
+    ))
+}
+
+pub fn parsed_from_event(
+    id: String,
+    author: String,
+    published_at: u32,
+    kind: u32,
+    content: String,
+    tags: Vec<Vec<String>>,
+    sig: String,
+) -> Result<RadrootsParsedEvent<RadrootsResourceArea>, EventParseError> {
+    let data = data_from_event(
+        id.clone(),
+        author.clone(),
+        published_at,
+        kind,
+        content.clone(),
+        tags.clone(),
+    )?;
+    Ok(RadrootsParsedEvent {
+        event: RadrootsEventEnvelope {
+            id,
+            author,
+            created_at: published_at,
+            kind,
+            content,
+            tags,
+            sig,
+        },
+        data,
+    })
+}

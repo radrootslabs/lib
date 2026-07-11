@@ -2,9 +2,9 @@
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
 #[cfg(test)]
-use radroots_events::draft::RadrootsSignedEventParts;
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_events::ids::RadrootsPublicKey;
+use radroots_event::draft::RadrootsSignedEventParts;
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::RadrootsPublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignerIdentity {
@@ -35,7 +35,7 @@ pub trait RadrootsEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_POST;
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()

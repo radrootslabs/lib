@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use radroots_events::post::RadrootsPost;
-use radroots_events_codec::parsed::RadrootsParsedData;
+use radroots_event::post::RadrootsPost;
+use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrRelayStatus,
     RadrootsNostrRelayUrl,

@@ -2,8 +2,8 @@
 
 use crate::RadrootsAuthorityError;
 use core::{fmt, str::FromStr};
-use radroots_events::contract::RadrootsActorRole;
-use radroots_events::ids::RadrootsPublicKey;
+use radroots_event::contract::RadrootsActorRole;
+use radroots_event::ids::RadrootsPublicKey;
 
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeSet, string::String};

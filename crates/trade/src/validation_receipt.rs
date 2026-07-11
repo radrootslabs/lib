@@ -8,11 +8,11 @@ use alloc::{
 };
 
 use base64::Engine as _;
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
     tags::TAG_D,
 };
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::wire::WireEventParts;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -863,7 +863,7 @@ mod tests {
         validation_receipt_tags, validation_receipt_tags_from_tags,
         verify_validation_receipt_event,
     };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
         tags::TAG_D,
     };

@@ -10,7 +10,7 @@ publish = false
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 
 [dependencies]
-radroots_events_codec = { workspace = true, features = [
+radroots_event_codec = { workspace = true, features = [
   "contract-manifest",
 ], default-features = false }
 serde = { workspace = true, features = ["derive"] }

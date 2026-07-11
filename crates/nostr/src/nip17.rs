@@ -10,16 +10,16 @@ use nostr::{
 };
 use thiserror::Error;
 
-use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_events::message::RadrootsMessage;
-use radroots_events::message_file::RadrootsMessageFile;
-use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::message::decode as message_decode;
-use radroots_events_codec::message::encode as message_encode;
-use radroots_events_codec::message_file::decode as message_file_decode;
-use radroots_events_codec::message_file::encode as message_file_encode;
-use radroots_events_codec::parsed::RadrootsParsedData;
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
+use radroots_event::message::RadrootsMessage;
+use radroots_event::message_file::RadrootsMessageFile;
+use radroots_event_codec::error::{EventEncodeError, EventParseError};
+use radroots_event_codec::message::decode as message_decode;
+use radroots_event_codec::message::encode as message_encode;
+use radroots_event_codec::message_file::decode as message_file_decode;
+use radroots_event_codec::message_file::encode as message_file_encode;
+use radroots_event_codec::parsed::RadrootsParsedData;
+use radroots_event_codec::wire::WireEventParts;
 
 use crate::util::created_at_u32_saturating;
 
@@ -99,7 +99,7 @@ fn rumor_from_parts(
 }
 
 fn parse_recipients(
-    recipients: &[radroots_events::message::RadrootsMessageRecipient],
+    recipients: &[radroots_event::message::RadrootsMessageRecipient],
 ) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
@@ -216,8 +216,8 @@ mod tests {
     use super::*;
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use nostr::{Keys, SecretKey};
-    use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
-    use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+    use radroots_event::message::{RadrootsMessage, RadrootsMessageRecipient};
+    use radroots_event::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
 
     fn sender_keys() -> Keys {
         Keys::new(SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).unwrap())

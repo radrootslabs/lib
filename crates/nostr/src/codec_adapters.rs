@@ -4,15 +4,15 @@ use alloc::{string::String, vec::Vec};
 use crate::types::RadrootsNostrEvent;
 
 use crate::util::created_at_u32_saturating;
-use radroots_events::{
+use radroots_event::{
     job_feedback::RadrootsJobFeedback, job_request::RadrootsJobRequest,
     job_result::RadrootsJobResult,
 };
-use radroots_events_codec::job::{
+use radroots_event_codec::job::{
     error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,
     result::decode as res_decode,
 };
-use radroots_events_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
+use radroots_event_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 fn event_id(e: &RadrootsNostrEvent) -> String {
     e.id.to_hex()

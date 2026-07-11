@@ -29,7 +29,7 @@ runtime-tokio = [
 ]
 
 [dependencies]
-radroots_events = { workspace = true, default-features = false, features = [
+radroots_event = { workspace = true, default-features = false, features = [
   "std",
   "serde",
 ] }

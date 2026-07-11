@@ -13,8 +13,8 @@ use crate::types::{
 };
 #[cfg(feature = "events")]
 use core::time::Duration;
-use radroots_events::profile::RadrootsProfileType;
-use radroots_events_codec::profile::encode::profile_build_tags;
+use radroots_event::profile::RadrootsProfileType;
+use radroots_event_codec::profile::encode::profile_build_tags;
 use radroots_identity::RadrootsIdentity;
 
 pub async fn radroots_nostr_publish_identity_profile(
@@ -32,7 +32,7 @@ pub async fn radroots_nostr_publish_identity_profile_with_type(
     let Some(profile) = identity.profile().and_then(|p| p.profile.as_ref()) else {
         return Ok(None);
     };
-    let metadata = radroots_events_codec::profile::encode::to_metadata(profile)?;
+    let metadata = radroots_event_codec::profile::encode::to_metadata(profile)?;
     let tags = profile_build_tags(profile_type);
     let mut tag_list: Vec<RadrootsNostrTag> = Vec::new();
     for mut tag in tags {

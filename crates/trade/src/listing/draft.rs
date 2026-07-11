@@ -15,7 +15,7 @@ use alloc::{format, string::ToString, vec::Vec};
 use std::{string::ToString, vec::Vec};
 
 use radroots_authority::RadrootsActorContext;
-use radroots_events::{
+use radroots_event::{
     contract::RadrootsActorRole,
     ids::{
         RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey,
@@ -173,7 +173,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::{
+    use radroots_event::{
         contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},

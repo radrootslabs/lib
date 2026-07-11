@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
     RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,

@@ -3,7 +3,7 @@ use alloc::string::{String, ToString};
 
 use core::fmt;
 
-use radroots_events_codec::error::{EventEncodeError, EventParseError};
+use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_sql_core::error::SqlError;
 use radroots_types::types::IError;
 
@@ -52,7 +52,7 @@ impl From<EventParseError> for RadrootsReplicaEventsError {
 #[cfg(test)]
 mod tests {
     use super::RadrootsReplicaEventsError;
-    use radroots_events_codec::error::{EventEncodeError, EventParseError};
+    use radroots_event_codec::error::{EventEncodeError, EventParseError};
     use radroots_sql_core::error::SqlError;
     use radroots_types::types::IError;
 

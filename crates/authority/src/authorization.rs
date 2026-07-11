@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
-use radroots_events::contract::{RadrootsEventContract, event_contract};
+use radroots_event::contract::{RadrootsEventContract, event_contract};
 #[cfg(test)]
-use radroots_events::draft::RadrootsSignedEventParts;
-use radroots_events::draft::{
+use radroots_event::draft::RadrootsSignedEventParts;
+use radroots_event::draft::{
     RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent,
     validate_signed_nostr_event_matches_draft,
 };
@@ -155,9 +155,9 @@ fn authority_error_from_draft_validation(error: RadrootsDraftError) -> RadrootsA
 mod tests {
     use super::*;
     use crate::RadrootsSignerError;
-    use radroots_events::contract::{RadrootsActorRole, event_contract};
-    use radroots_events::ids::RadrootsPublicKey;
-    use radroots_events::kinds::{KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST};
+    use radroots_event::contract::{RadrootsActorRole, event_contract};
+    use radroots_event::ids::RadrootsPublicKey;
+    use radroots_event::kinds::{KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST};
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()

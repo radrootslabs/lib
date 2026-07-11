@@ -1748,7 +1748,7 @@ mod tests {
         verify_order_acceptance_proof_artifact_structure,
     };
     use base64::Engine;
-    use radroots_events::{RadrootsEventEnvelope, kinds::KIND_TRADE_VALIDATION_RECEIPT};
+    use radroots_event::{RadrootsEventEnvelope, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
         RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
         RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,

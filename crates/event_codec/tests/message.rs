@@ -1,0 +1,468 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
+use radroots_event::{
+    RadrootsEventPtr,
+    kinds::{KIND_MESSAGE, KIND_POST},
+    message::{RadrootsMessage, RadrootsMessageRecipient},
+};
+use radroots_event_codec::error::{EventEncodeError, EventParseError};
+use radroots_event_codec::message::decode::{
+    data_from_event, message_from_tags, parsed_from_event,
+};
+use radroots_event_codec::message::encode::{message_build_tags, to_wire_parts};
+use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+
+#[test]
+fn message_build_tags_requires_recipients() {
+    let message = RadrootsMessage {
+        recipients: Vec::new(),
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients")
+    ));
+}
+
+#[test]
+fn message_build_tags_requires_recipient_pubkey() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "  ".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients.public_key")
+    ));
+}
+
+#[test]
+fn message_to_wire_parts_requires_content() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "   ".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+
+    let err = to_wire_parts(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("content")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: " ".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+    let err = to_wire_parts(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients.public_key")
+    ));
+}
+
+#[test]
+fn message_to_wire_parts_sets_tags() {
+    let message = RadrootsMessage {
+        recipients: vec![
+            RadrootsMessageRecipient {
+                public_key: "pub1".to_string(),
+                relay_url: None,
+            },
+            RadrootsMessageRecipient {
+                public_key: "pub2".to_string(),
+                relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
+            },
+        ],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsEventPtr {
+            id: "reply".to_string(),
+            relays: Some(RELAY_SECONDARY_WSS.to_string()),
+        }),
+        subject: Some("topic".to_string()),
+    };
+
+    let parts = to_wire_parts(&message).unwrap();
+    assert_eq!(parts.kind, KIND_MESSAGE);
+    assert_eq!(parts.content, "hello");
+    assert_eq!(
+        parts.tags,
+        vec![
+            vec!["p".to_string(), "pub1".to_string()],
+            vec![
+                "p".to_string(),
+                "pub2".to_string(),
+                RELAY_PRIMARY_WSS.to_string()
+            ],
+            vec![
+                "e".to_string(),
+                "reply".to_string(),
+                RELAY_SECONDARY_WSS.to_string()
+            ],
+            vec!["subject".to_string(), "topic".to_string()],
+        ]
+    );
+}
+
+#[test]
+fn message_to_wire_parts_handles_absent_optional_fields() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub1".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+
+    let parts = to_wire_parts(&message).unwrap();
+    assert_eq!(parts.tags, vec![vec!["p".to_string(), "pub1".to_string()]]);
+}
+
+#[test]
+fn message_to_wire_parts_supports_reply_without_relay() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub1".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsEventPtr {
+            id: "reply".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+
+    let parts = to_wire_parts(&message).unwrap();
+    assert_eq!(
+        parts.tags,
+        vec![
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ]
+    );
+}
+
+#[test]
+fn message_from_tags_requires_kind_content_and_recipients() {
+    let tags = vec![vec!["p".to_string(), "pub".to_string()]];
+    let err = message_from_tags(KIND_POST, &tags, "hello").unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "14",
+            got: KIND_POST
+        }
+    ));
+
+    let err = message_from_tags(KIND_MESSAGE, &tags, "  ").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
+
+    let err = message_from_tags(KIND_MESSAGE, &[], "hello").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("p")));
+}
+
+#[test]
+fn message_roundtrip_from_tags() {
+    let tags = vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec![
+            "p".to_string(),
+            "pub2".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
+        ],
+        vec![
+            "e".to_string(),
+            "reply".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
+        ],
+        vec!["subject".to_string(), "topic".to_string()],
+    ];
+
+    let message = message_from_tags(KIND_MESSAGE, &tags, "hello").unwrap();
+
+    assert_eq!(message.recipients.len(), 2);
+    assert_eq!(message.recipients[0].public_key, "pub1");
+    assert_eq!(message.recipients[0].relay_url, None);
+    assert_eq!(message.recipients[1].public_key, "pub2");
+    assert_eq!(
+        message.recipients[1].relay_url,
+        Some(RELAY_PRIMARY_WSS.to_string())
+    );
+    assert_eq!(message.content, "hello");
+    assert_eq!(
+        message.reply_to.as_ref().map(|r| r.id.as_str()),
+        Some("reply")
+    );
+    assert_eq!(
+        message.reply_to.as_ref().and_then(|r| r.relays.as_deref()),
+        Some(RELAY_SECONDARY_WSS)
+    );
+    assert_eq!(message.subject.as_deref(), Some("topic"));
+
+    let tags_without_reply_relay = vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec!["e".to_string(), "reply".to_string()],
+    ];
+    let no_relay_message = message_from_tags(KIND_MESSAGE, &tags_without_reply_relay, "hello")
+        .expect("message without reply relay");
+    assert_eq!(
+        no_relay_message
+            .reply_to
+            .as_ref()
+            .and_then(|reply| reply.relays.as_deref()),
+        None
+    );
+}
+
+#[test]
+fn message_metadata_and_index_from_event_roundtrip() {
+    let tags = vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec![
+            "p".to_string(),
+            "pub2".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
+        ],
+        vec![
+            "e".to_string(),
+            "reply".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
+        ],
+        vec!["subject".to_string(), "topic".to_string()],
+    ];
+    let metadata = data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_MESSAGE,
+        "hello".to_string(),
+        tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 77);
+    assert_eq!(metadata.kind, KIND_MESSAGE);
+    assert_eq!(metadata.data.recipients.len(), 2);
+    assert_eq!(metadata.data.content, "hello");
+    assert_eq!(metadata.data.subject.as_deref(), Some("topic"));
+
+    let index = parsed_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_MESSAGE,
+        "hello".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.kind, KIND_MESSAGE);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.data.data.recipients.len(), 2);
+}
+
+#[test]
+fn message_index_from_event_propagates_parse_errors() {
+    let err = parsed_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_POST,
+        "hello".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "14",
+            got: KIND_POST
+        }
+    ));
+}
+
+#[test]
+fn message_build_tags_rejects_invalid_optional_fields() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: Some(" ".to_string()),
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients.relay_url")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsEventPtr {
+            id: " ".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.id")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsEventPtr {
+            id: "reply".to_string(),
+            relays: Some(" ".to_string()),
+        }),
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.relays")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: Some(" ".to_string()),
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("subject")
+    ));
+}
+
+#[test]
+fn message_from_tags_rejects_invalid_optional_tags() {
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string(), " ".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["e".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["e".to_string(), " ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["e".to_string(), "reply".to_string(), "   ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["subject".to_string(), " ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("subject")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "".to_string()],
+            vec!["subject".to_string(), "topic".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["subject".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("subject")));
+}

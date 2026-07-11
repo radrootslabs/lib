@@ -2,11 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use radroots_event_store::{
-    RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, RadrootsEventStoreError,
-    RadrootsProjectionCursor, RadrootsStoredEvent,
-};
-use radroots_events::{
+use radroots_event::{
     RadrootsEventEnvelope,
     ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId},
     kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_listing_kind, is_order_event_kind},
@@ -14,8 +10,10 @@ use radroots_events::{
     order::RadrootsOrderEventType,
     tags::TAG_D,
 };
-use radroots_events_codec::order::{
-    RadrootsOrderEnvelopeParseError, order_event_context_from_tags,
+use radroots_event_codec::order::{RadrootsOrderEnvelopeParseError, order_event_context_from_tags};
+use radroots_event_store::{
+    RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, RadrootsEventStoreError,
+    RadrootsProjectionCursor, RadrootsStoredEvent,
 };
 use sqlx::Row;
 use thiserror::Error;
@@ -65,7 +63,7 @@ pub enum RadrootsTradeProjectionError {
     #[error("stored listing event {event_id} failed validation: {source}")]
     ListingValidation {
         event_id: String,
-        source: radroots_events::trade_validation::RadrootsTradeValidationListingError,
+        source: radroots_event::trade_validation::RadrootsTradeValidationListingError,
     },
     #[error("stored order event {event_id} could not decode as an order record: {source}")]
     OrderDecode {
@@ -908,10 +906,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_event_store::{
-        RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
-    };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventPtr,
         farm::RadrootsFarmRef,
         ids::RadrootsOrderQuoteId,
@@ -926,7 +921,10 @@ mod tests {
             RadrootsOrderPricingBasis, RadrootsOrderRequest,
         },
     };
-    use radroots_events_codec::order::{order_decision_event_build, order_request_event_build};
+    use radroots_event_codec::order::{order_decision_event_build, order_request_event_build};
+    use radroots_event_store::{
+        RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
+    };
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
         radroots_event_from_nostr, radroots_nostr_build_event,
@@ -1006,7 +1004,7 @@ mod tests {
     }
 
     fn signed_listing_event() -> RadrootsEventEnvelope {
-        let parts = radroots_events_codec::listing::encode::to_wire_parts(&listing())
+        let parts = radroots_event_codec::listing::encode::to_wire_parts(&listing())
             .expect("listing parts");
         sign_parts(
             parts.kind,

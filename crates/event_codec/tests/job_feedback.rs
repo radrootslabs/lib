@@ -1,0 +1,217 @@
+mod common;
+
+use radroots_event::job::{JobFeedbackStatus, JobPaymentRequest};
+use radroots_event::job_feedback::RadrootsJobFeedback;
+use radroots_event::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event_codec::job::encode::JobEncodeError;
+use radroots_event_codec::job::error::JobParseError;
+use radroots_event_codec::job::feedback::decode::{job_feedback_from_tags, parsed_from_event};
+use radroots_event_codec::job::feedback::encode::to_wire_parts;
+
+fn sample_feedback() -> RadrootsJobFeedback {
+    RadrootsJobFeedback {
+        kind: KIND_JOB_FEEDBACK as u16,
+        status: JobFeedbackStatus::Processing,
+        extra_info: Some("queued".to_string()),
+        request_event: common::event_ptr("req", Some("wss://relay")),
+        customer_pubkey: Some("customer".to_string()),
+        payment: Some(JobPaymentRequest {
+            amount_sat: 12,
+            bolt11: None,
+        }),
+        content: Some("payload".to_string()),
+        encrypted: false,
+    }
+}
+
+#[test]
+fn job_feedback_roundtrip_from_tags() {
+    let fb = sample_feedback();
+    let content = fb.content.clone().unwrap();
+    let parts = to_wire_parts(&fb, &content).unwrap();
+
+    let decoded = job_feedback_from_tags(parts.kind, &parts.tags, &content).unwrap();
+    assert_eq!(decoded, fb);
+}
+
+#[test]
+fn job_feedback_from_tags_accepts_e_ref_and_empty_content() {
+    let tags = vec![
+        vec![
+            "e_ref".to_string(),
+            "req".to_string(),
+            "wss://relay".to_string(),
+        ],
+        vec!["status".to_string(), "processing".to_string()],
+    ];
+    let decoded = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "").unwrap();
+    assert_eq!(decoded.request_event.id, "req");
+    assert_eq!(decoded.request_event.relays.as_deref(), Some("wss://relay"));
+    assert!(decoded.content.is_none());
+}
+
+#[test]
+fn job_feedback_requires_valid_kind() {
+    let mut fb = sample_feedback();
+    fb.kind = KIND_JOB_RESULT_MIN as u16;
+
+    let err = to_wire_parts(&fb, "payload").unwrap_err();
+    assert!(matches!(
+        err,
+        JobEncodeError::InvalidKind(KIND_JOB_RESULT_MIN)
+    ));
+}
+
+#[test]
+fn job_feedback_requires_status_tag() {
+    let tags = vec![vec!["e".to_string(), "req".to_string()]];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("status")));
+
+    let tags = vec![vec!["status".to_string(), "processing".to_string()]];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("e")));
+}
+
+#[test]
+fn job_feedback_rejects_unknown_status() {
+    let tags = vec![
+        vec!["status".to_string(), "unknown".to_string()],
+        vec!["e".to_string(), "req".to_string()],
+    ];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("status")));
+
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string()],
+    ];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string(), "req".to_string()],
+        vec!["amount".to_string(), "not-a-number".to_string()],
+    ];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("amount", _)));
+}
+
+#[test]
+fn job_feedback_data_from_event_success_path() {
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string(), "req".to_string()],
+        vec!["amount".to_string(), "12000".to_string()],
+    ];
+    let data = radroots_event_codec::job::feedback::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_FEEDBACK,
+        "payload".to_string(),
+        tags,
+    )
+    .expect("job feedback data");
+    assert_eq!(data.id, "id");
+    assert_eq!(data.author, "author");
+    assert_eq!(data.kind, KIND_JOB_FEEDBACK);
+    assert_eq!(data.data.request_event.id, "req");
+    assert_eq!(data.data.payment.as_ref().map(|p| p.amount_sat), Some(12));
+}
+
+#[test]
+fn job_feedback_data_from_event_propagates_decode_errors_with_valid_kind() {
+    let err = radroots_event_codec::job::feedback::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_FEEDBACK,
+        "payload".to_string(),
+        Vec::new(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("e")));
+}
+
+#[test]
+fn job_feedback_metadata_rejects_wrong_kind() {
+    let err = radroots_event_codec::job::feedback::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_REQUEST_MIN,
+        "payload".to_string(),
+        Vec::new(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        JobParseError::InvalidTag("kind (expected 7000)")
+    ));
+}
+
+#[test]
+fn job_feedback_index_from_event_propagates_parse_errors() {
+    let err = parsed_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_REQUEST_MIN,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        JobParseError::InvalidTag("kind (expected 7000)")
+    ));
+}
+
+#[test]
+fn job_feedback_build_tags_cover_optional_paths() {
+    let mut fb = sample_feedback();
+    fb.extra_info = None;
+    fb.payment = None;
+    fb.request_event.relays = None;
+    fb.customer_pubkey = None;
+    fb.encrypted = true;
+    let parts = to_wire_parts(&fb, "payload").unwrap();
+
+    let status = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("status"))
+        .expect("status tag");
+    assert_eq!(status.len(), 2);
+
+    let request = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("e"))
+        .expect("request tag");
+    assert_eq!(request.len(), 2);
+
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("amount"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"))
+    );
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("encrypted"))
+    );
+}

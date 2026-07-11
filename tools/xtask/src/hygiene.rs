@@ -42,8 +42,8 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
     reject_substrings(
         root,
         &[
-            PathBuf::from("crates/events/src"),
-            PathBuf::from("crates/events_codec/src"),
+            PathBuf::from("crates/event/src"),
+            PathBuf::from("crates/event_codec/src"),
             PathBuf::from("crates/trade/src"),
         ],
         &[
@@ -68,7 +68,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             "parse_envelope",
             "public_trade",
             "events::trade::",
-            "events_codec::trade::",
+            "event_codec::trade::",
             "trade_order_economics_digest",
             "trade_revision",
             "trade_lifecycle",
@@ -289,8 +289,8 @@ fn reject_substrings(
 
 fn reject_raw_protocol_strings(root: &Path, failures: &mut Vec<String>) {
     let rel_roots = [
-        PathBuf::from("crates/events/src"),
-        PathBuf::from("crates/events_codec/src"),
+        PathBuf::from("crates/event/src"),
+        PathBuf::from("crates/event_codec/src"),
         PathBuf::from("crates/trade/src"),
     ];
     for file in files_under(root, &rel_roots) {
@@ -446,7 +446,7 @@ mod tests {
         write_file(&root, "contracts/events/social-events.md", "tangle\n");
         write_file(
             &root,
-            "crates/events/src/kinds.rs",
+            "crates/event/src/kinds.rs",
             "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\n",
         );
         write_file(

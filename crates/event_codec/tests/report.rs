@@ -1,0 +1,453 @@
+#![cfg(feature = "serde_json")]
+
+use radroots_event::{
+    kinds::{KIND_ARTICLE, KIND_POST, KIND_REPORT},
+    report::RadrootsReport,
+    social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
+    tags::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
+};
+use radroots_event_codec::{
+    error::{EventEncodeError, EventParseError},
+    report::{
+        decode::{data_from_event, parsed_from_event, report_from_event},
+        encode::{report_build_tags, to_wire_parts, to_wire_parts_with_kind},
+    },
+};
+
+const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const REPORTED: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const FILE_HASH: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const ARTICLE_D_TAG: &str = "DDDDDDDDDDDDDDDDDDDDDA";
+
+fn profile_report() -> RadrootsReport {
+    RadrootsReport {
+        reported_pubkey: REPORTED.to_string(),
+        report_type: RadrootsReportType::Spam,
+        event: None,
+        file: None,
+        content: None,
+    }
+}
+
+fn event_report() -> RadrootsReport {
+    RadrootsReport {
+        reported_pubkey: REPORTED.to_string(),
+        report_type: RadrootsReportType::Illegal,
+        event: Some(RadrootsSocialTarget::Event {
+            id: EVENT_ID.to_string(),
+            author: Some(REPORTED.to_string()),
+            event_kind: Some(KIND_POST),
+            relays: Some(vec!["wss://relay.example.test".to_string()]),
+        }),
+        file: None,
+        content: Some("Contains prohibited listing text".to_string()),
+    }
+}
+
+fn file_report() -> RadrootsReport {
+    RadrootsReport {
+        reported_pubkey: REPORTED.to_string(),
+        report_type: RadrootsReportType::Malware,
+        event: None,
+        file: Some(RadrootsReportFileTarget {
+            sha256: Some(FILE_HASH.to_string()),
+            url: Some("https://media.example.test/blob".to_string()),
+            magnet: Some("magnet:?xt=urn:btih:example".to_string()),
+        }),
+        content: None,
+    }
+}
+
+fn address_report() -> RadrootsReport {
+    RadrootsReport {
+        reported_pubkey: REPORTED.to_string(),
+        report_type: RadrootsReportType::Nudity,
+        event: Some(RadrootsSocialTarget::Address {
+            address: format!("{KIND_ARTICLE}:{REPORTED}:{ARTICLE_D_TAG}"),
+            author: Some(REPORTED.to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        }),
+        file: None,
+        content: None,
+    }
+}
+
+fn has_tag(tags: &[Vec<String>], key: &str, value: &str) -> bool {
+    tags.iter().any(|tag| {
+        tag.first().map(|entry| entry.as_str()) == Some(key)
+            && tag.get(1).map(|entry| entry.as_str()) == Some(value)
+    })
+}
+
+fn replace_tag_value(tags: &mut [Vec<String>], key: &str, value: &str) {
+    let tag = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(key))
+        .expect("tag");
+    tag[1] = value.to_string();
+}
+
+#[test]
+fn report_to_wire_parts_roundtrips_pubkey_event_and_file_reports() {
+    let profile = to_wire_parts(&profile_report()).unwrap();
+    assert_eq!(profile.kind, KIND_REPORT);
+    assert!(profile.content.is_empty());
+    assert!(has_tag(&profile.tags, TAG_P, REPORTED));
+    assert_eq!(
+        profile.tags[0].get(2).map(|value| value.as_str()),
+        Some("spam")
+    );
+    let decoded = report_from_event(profile.kind, &profile.tags, &profile.content).unwrap();
+    assert_eq!(decoded.reported_pubkey, REPORTED);
+    assert_eq!(decoded.report_type, RadrootsReportType::Spam);
+
+    let event = to_wire_parts(&event_report()).unwrap();
+    assert_eq!(event.content, "Contains prohibited listing text");
+    assert!(has_tag(&event.tags, TAG_E, EVENT_ID));
+    let decoded = report_from_event(event.kind, &event.tags, &event.content).unwrap();
+    assert!(matches!(
+        decoded.event,
+        Some(RadrootsSocialTarget::Event { .. })
+    ));
+    assert_eq!(decoded.report_type, RadrootsReportType::Illegal);
+
+    let file = to_wire_parts(&file_report()).unwrap();
+    assert!(has_tag(&file.tags, TAG_SHA256, FILE_HASH));
+    assert!(has_tag(
+        &file.tags,
+        TAG_SERVER,
+        "https://media.example.test/blob"
+    ));
+    assert!(has_tag(
+        &file.tags,
+        TAG_MAGNET,
+        "magnet:?xt=urn:btih:example"
+    ));
+    let decoded = report_from_event(file.kind, &file.tags, &file.content).unwrap();
+    assert_eq!(
+        decoded.file.and_then(|target| target.sha256).as_deref(),
+        Some(FILE_HASH)
+    );
+
+    let address = to_wire_parts(&address_report()).unwrap();
+    assert!(has_tag(
+        &address.tags,
+        TAG_A,
+        format!("{KIND_ARTICLE}:{REPORTED}:{ARTICLE_D_TAG}").as_str()
+    ));
+    let decoded = report_from_event(address.kind, &address.tags, &address.content).unwrap();
+    assert_eq!(decoded.report_type, RadrootsReportType::Nudity);
+    assert!(matches!(
+        decoded.event,
+        Some(RadrootsSocialTarget::Address { relays: None, .. })
+    ));
+}
+
+#[test]
+fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
+    let mut report = profile_report();
+    report.reported_pubkey = " ".to_string();
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::EmptyRequiredField("reported_pubkey"))
+    ));
+
+    let mut report = profile_report();
+    report.reported_pubkey = "not-a-pubkey".to_string();
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("reported_pubkey"))
+    ));
+
+    assert!(matches!(
+        to_wire_parts_with_kind(&profile_report(), KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
+
+    let mut report = file_report();
+    report.file.as_mut().unwrap().sha256 = Some("bad".to_string());
+    assert!(matches!(
+        to_wire_parts(&report),
+        Err(EventEncodeError::InvalidField("file.sha256"))
+    ));
+
+    let mut report = file_report();
+    report.file = Some(RadrootsReportFileTarget {
+        sha256: None,
+        url: None,
+        magnet: None,
+    });
+    assert!(matches!(
+        to_wire_parts(&report),
+        Err(EventEncodeError::EmptyRequiredField("file"))
+    ));
+
+    let mut report = file_report();
+    report.file.as_mut().unwrap().url = Some("ftp://media.example.test/blob".to_string());
+    assert!(matches!(
+        to_wire_parts(&report),
+        Err(EventEncodeError::InvalidField("file.url"))
+    ));
+
+    let mut report = file_report();
+    report.file.as_mut().unwrap().magnet = Some(" ".to_string());
+    assert!(matches!(
+        to_wire_parts(&report),
+        Err(EventEncodeError::EmptyRequiredField("file.magnet"))
+    ));
+
+    let err = report_from_event(KIND_REPORT, &[], "").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag(TAG_P)));
+
+    let tags = vec![vec![
+        TAG_P.to_string(),
+        "not-a-pubkey".to_string(),
+        "spam".to_string(),
+    ]];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_P)));
+
+    let tags = vec![vec![
+        TAG_P.to_string(),
+        REPORTED.to_string(),
+        "unknown".to_string(),
+    ]];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_P)));
+
+    let tags = vec![
+        vec![
+            TAG_P.to_string(),
+            REPORTED.to_string(),
+            "malware".to_string(),
+        ],
+        vec![
+            TAG_SHA256.to_string(),
+            "bad".to_string(),
+            "malware".to_string(),
+        ],
+    ];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_SHA256)));
+
+    let err = report_from_event(KIND_POST, &tags, "").unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "1984",
+            got: KIND_POST
+        }
+    ));
+}
+
+#[test]
+fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
+    let mut report = event_report();
+    report.event = Some(RadrootsSocialTarget::External {
+        id: "https://example.test/report".to_string(),
+        external_kind: "web".to_string(),
+        hint: None,
+    });
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("event"))
+    ));
+
+    let mut report = event_report();
+    if let Some(RadrootsSocialTarget::Event { id, .. }) = &mut report.event {
+        *id = "not-a-lowercase-hex-id".to_string();
+    }
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("event.id"))
+    ));
+
+    let mut report = address_report();
+    if let Some(RadrootsSocialTarget::Address {
+        address, relays, ..
+    }) = &mut report.event
+    {
+        *address = "not-an-address".to_string();
+        *relays = Some(vec![
+            " ".to_string(),
+            "wss://relay.example.test".to_string(),
+        ]);
+    }
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("event.address"))
+    ));
+
+    let tags = vec![
+        vec![TAG_P.to_string(), REPORTED.to_string(), "spam".to_string()],
+        vec![
+            TAG_E.to_string(),
+            EVENT_ID.to_string(),
+            "illegal".to_string(),
+        ],
+    ];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_E)));
+
+    let tags = vec![
+        vec![TAG_P.to_string(), REPORTED.to_string(), "spam".to_string()],
+        vec![
+            TAG_A.to_string(),
+            "bad-address".to_string(),
+            "spam".to_string(),
+        ],
+    ];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber(TAG_A, _)));
+
+    let mut tags = report_build_tags(&address_report()).unwrap();
+    let address = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    address.truncate(1);
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_A)));
+
+    let mut tags = report_build_tags(&event_report()).unwrap();
+    let event = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_E))
+        .expect("event tag");
+    event.truncate(1);
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_E)));
+
+    let mut tags = report_build_tags(&address_report()).unwrap();
+    let address = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    address.truncate(2);
+    let decoded = report_from_event(KIND_REPORT, &tags, "").expect("address report");
+    assert!(matches!(
+        decoded.event,
+        Some(RadrootsSocialTarget::Address { .. })
+    ));
+}
+
+#[test]
+fn report_codec_covers_report_type_and_file_variants() {
+    for (report_type, expected) in [
+        (RadrootsReportType::Profanity, "profanity"),
+        (RadrootsReportType::Impersonation, "impersonation"),
+        (RadrootsReportType::Other, "other"),
+    ] {
+        let mut report = profile_report();
+        report.report_type = report_type;
+        let parts = to_wire_parts(&report).unwrap();
+        assert_eq!(parts.tags[0].get(2).map(String::as_str), Some(expected));
+        let decoded = report_from_event(parts.kind, &parts.tags, "").unwrap();
+        assert_eq!(decoded.report_type, report.report_type);
+    }
+
+    let mut report = file_report();
+    report.file = Some(RadrootsReportFileTarget {
+        sha256: None,
+        url: Some("https://media.example.test/blob".to_string()),
+        magnet: None,
+    });
+    let parts = to_wire_parts(&report).unwrap();
+    let decoded = report_from_event(parts.kind, &parts.tags, "").unwrap();
+    assert_eq!(
+        decoded.file.and_then(|file| file.url).as_deref(),
+        Some("https://media.example.test/blob")
+    );
+
+    let mut report = file_report();
+    report.file = Some(RadrootsReportFileTarget {
+        sha256: None,
+        url: None,
+        magnet: Some("magnet:?xt=urn:btih:example".to_string()),
+    });
+    let parts = to_wire_parts(&report).unwrap();
+    let decoded = report_from_event(parts.kind, &parts.tags, "").unwrap();
+    assert_eq!(
+        decoded.file.and_then(|file| file.magnet).as_deref(),
+        Some("magnet:?xt=urn:btih:example")
+    );
+
+    let mut report = event_report();
+    if let Some(RadrootsSocialTarget::Event { relays, .. }) = &mut report.event {
+        *relays = None;
+    }
+    let parts = to_wire_parts(&report).unwrap();
+    let event = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_E))
+        .expect("event tag");
+    assert_eq!(event.len(), 3);
+
+    let mut report = address_report();
+    if let Some(RadrootsSocialTarget::Address { relays, .. }) = &mut report.event {
+        *relays = Some(vec![
+            " ".to_string(),
+            "wss://relay.example.test".to_string(),
+        ]);
+    }
+    let parts = to_wire_parts(&report).unwrap();
+    let address = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    assert!(
+        address
+            .iter()
+            .any(|value| value == "wss://relay.example.test")
+    );
+    assert!(!address.iter().any(|value| value == " "));
+
+    let mut tags = report_build_tags(&file_report()).unwrap();
+    let sha = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_SHA256))
+        .expect("sha tag");
+    sha.truncate(2);
+    let decoded = report_from_event(KIND_REPORT, &tags, "").unwrap();
+    assert_eq!(
+        decoded.file.and_then(|file| file.sha256).as_deref(),
+        Some(FILE_HASH)
+    );
+
+    let mut tags = report_build_tags(&file_report()).unwrap();
+    replace_tag_value(&mut tags, TAG_SHA256, "bad");
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_SHA256)));
+}
+
+#[test]
+fn report_wrappers_preserve_event_metadata() {
+    let parts = to_wire_parts(&event_report()).unwrap();
+    let data = data_from_event(
+        "report_id".to_string(),
+        "author".to_string(),
+        12,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(data.kind, KIND_REPORT);
+    assert_eq!(data.data.report_type, RadrootsReportType::Illegal);
+
+    let parsed = parsed_from_event(
+        "report_id".to_string(),
+        "author".to_string(),
+        12,
+        parts.kind,
+        parts.content,
+        parts.tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.data.data.reported_pubkey, REPORTED);
+}

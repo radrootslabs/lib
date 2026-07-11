@@ -3,7 +3,7 @@ use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreQuantityPriceError,
     RadrootsCoreQuantityPriceOps,
 };
-use radroots_events::listing::RadrootsListingBin;
+use radroots_event::listing::RadrootsListingBin;
 
 pub trait BinPricingExt {
     fn subtotal_for_count(&self, bin_count: u32) -> RadrootsTradeListingSubtotal;
@@ -94,8 +94,8 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreUnit,
     };
-    use radroots_events::ids::RadrootsInventoryBinId;
-    use radroots_events::listing::RadrootsListingBin;
+    use radroots_event::ids::RadrootsInventoryBinId;
+    use radroots_event::listing::RadrootsListingBin;
 
     fn bin_id(raw: &str) -> RadrootsInventoryBinId {
         RadrootsInventoryBinId::parse(raw).expect("bin id")

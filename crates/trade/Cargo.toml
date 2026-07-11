@@ -20,13 +20,13 @@ dto-bindgen = [
   "dep:dto_bindgen",
   "dep:dto_bindgen_core",
   "radroots_core/dto-bindgen",
-  "radroots_events/dto-bindgen",
+  "radroots_event/dto-bindgen",
 ]
 std = [
   "radroots_authority/std",
   "radroots_core/std",
-  "radroots_events/std",
-  "radroots_events_codec/std",
+  "radroots_event/std",
+  "radroots_event_codec/std",
 ]
 event_store = [
   "std",
@@ -40,8 +40,8 @@ event_store = [
 serde = [
   "dep:serde",
   "radroots_core/serde",
-  "radroots_events/serde",
-  "radroots_events_codec/serde",
+  "radroots_event/serde",
+  "radroots_event_codec/serde",
 ]
 serde_json = [
   "serde",
@@ -49,14 +49,14 @@ serde_json = [
   "dep:hex",
   "dep:serde_json",
   "dep:sha2",
-  "radroots_events_codec/serde_json",
+  "radroots_event_codec/serde_json",
 ]
 
 [dependencies]
 radroots_authority = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
-radroots_events = { workspace = true, default-features = false }
-radroots_events_codec = { workspace = true, default-features = false }
+radroots_event = { workspace = true, default-features = false }
+radroots_event_codec = { workspace = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 base64 = { workspace = true, optional = true }
 dto_bindgen = { workspace = true, optional = true }

@@ -5,7 +5,7 @@ use crate::event_convert::radroots_event_from_nostr;
 use crate::events::radroots_nostr_build_event;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
-use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
@@ -43,8 +43,8 @@ mod tests {
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
     use nostr::JsonUtil;
-    use radroots_events::draft::RadrootsEventDraft;
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::draft::RadrootsEventDraft;
+    use radroots_event::kinds::KIND_POST;
 
     fn fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
         let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");

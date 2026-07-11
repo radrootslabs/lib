@@ -75,11 +75,11 @@ classes = [
 [implementation_provenance]
 model_crates = [
   "radroots_core",
-  "radroots_events",
+  "radroots_event",
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_events_codec"]
+algorithm_crates = ["radroots_event_codec"]
 
 [operations.profile_build_draft]
 domain = "profile"
@@ -93,8 +93,8 @@ signing = "native"
 transport = "native"
 
 [operations.profile_build_draft.implementation]
-rust_modules = ["crates/events_codec/src/profile/encode.rs"]
-rust_types = ["radroots_events::profile::RadrootsProfile"]
+rust_modules = ["crates/event_codec/src/profile/encode.rs"]
+rust_types = ["radroots_event::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
 vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
@@ -111,8 +111,8 @@ signing = "native"
 transport = "native"
 
 [operations.farm_build_draft.implementation]
-rust_modules = ["crates/events_codec/src/farm/encode.rs"]
-rust_types = ["radroots_events::farm::RadrootsFarm"]
+rust_modules = ["crates/event_codec/src/farm/encode.rs"]
+rust_types = ["radroots_event::farm::RadrootsFarm"]
 
 [operations.farm_build_draft.conformance]
 vector = "contracts/conformance/vectors/farm/build_draft.v1.json"
@@ -130,10 +130,10 @@ transport = "native"
 
 [operations.listing_build_tags.implementation]
 rust_modules = [
-  "crates/events_codec/src/listing/encode.rs",
-  "crates/events_codec/src/listing/tags.rs",
+  "crates/event_codec/src/listing/encode.rs",
+  "crates/event_codec/src/listing/tags.rs",
 ]
-rust_types = ["radroots_events::listing::RadrootsListing"]
+rust_types = ["radroots_event::listing::RadrootsListing"]
 
 [operations.listing_build_tags.conformance]
 vector = "contracts/conformance/vectors/listing/build_tags.v1.json"
@@ -151,10 +151,10 @@ transport = "native"
 
 [operations.listing_build_draft.implementation]
 rust_modules = [
-  "crates/events_codec/src/listing/encode.rs",
-  "crates/events_codec/src/wire.rs",
+  "crates/event_codec/src/listing/encode.rs",
+  "crates/event_codec/src/wire.rs",
 ]
-rust_types = ["radroots_events::listing::RadrootsListing"]
+rust_types = ["radroots_event::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
 vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
@@ -173,8 +173,8 @@ transport = "native"
 [operations.listing_parse_event.implementation]
 rust_modules = ["crates/trade/src/listing/codec.rs"]
 rust_types = [
-  "radroots_events::RadrootsNostrEvent",
-  "radroots_events::listing::RadrootsListing",
+  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::listing::RadrootsListing",
 ]
 
 [operations.listing_parse_event.conformance]
@@ -192,8 +192,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_post_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/post/encode.rs"]
-rust_types = ["radroots_events::post::RadrootsPost"]
+rust_modules = ["crates/event_codec/src/post/encode.rs"]
+rust_types = ["radroots_event::post::RadrootsPost"]
 
 [operations.social_post_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -210,8 +210,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_comment_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/comment/encode.rs"]
-rust_types = ["radroots_events::comment::RadrootsComment"]
+rust_modules = ["crates/event_codec/src/comment/encode.rs"]
+rust_types = ["radroots_event::comment::RadrootsComment"]
 
 [operations.social_comment_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -228,8 +228,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_reaction_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/reaction/encode.rs"]
-rust_types = ["radroots_events::reaction::RadrootsReaction"]
+rust_modules = ["crates/event_codec/src/reaction/encode.rs"]
+rust_types = ["radroots_event::reaction::RadrootsReaction"]
 
 [operations.social_reaction_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -246,8 +246,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_article_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/article/encode.rs"]
-rust_types = ["radroots_events::article::RadrootsArticle"]
+rust_modules = ["crates/event_codec/src/article/encode.rs"]
+rust_types = ["radroots_event::article::RadrootsArticle"]
 
 [operations.social_article_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -264,8 +264,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_file_metadata_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/file_metadata/encode.rs"]
-rust_types = ["radroots_events::file_metadata::RadrootsFileMetadata"]
+rust_modules = ["crates/event_codec/src/file_metadata/encode.rs"]
+rust_types = ["radroots_event::file_metadata::RadrootsFileMetadata"]
 
 [operations.social_file_metadata_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -282,8 +282,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_calendar_date_event_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
-rust_types = ["radroots_events::calendar::RadrootsCalendarDateEvent"]
+rust_modules = ["crates/event_codec/src/calendar/encode.rs"]
+rust_types = ["radroots_event::calendar::RadrootsCalendarDateEvent"]
 
 [operations.social_calendar_date_event_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -300,8 +300,8 @@ signing = "native"
 transport = "native"
 
 [operations.social_calendar_time_event_build_tags.implementation]
-rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
-rust_types = ["radroots_events::calendar::RadrootsCalendarTimeEvent"]
+rust_modules = ["crates/event_codec/src/calendar/encode.rs"]
+rust_types = ["radroots_event::calendar::RadrootsCalendarTimeEvent"]
 
 [operations.social_calendar_time_event_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -318,10 +318,10 @@ signing = "native"
 transport = "native"
 
 [operations.order_build_order_request_draft.implementation]
-rust_modules = ["crates/events_codec/src/order/encode.rs"]
+rust_modules = ["crates/event_codec/src/order/encode.rs"]
 rust_types = [
-  "radroots_events::RadrootsNostrEventPtr",
-  "radroots_events::order::RadrootsOrderRequest",
+  "radroots_event::RadrootsNostrEventPtr",
+  "radroots_event::order::RadrootsOrderRequest",
 ]
 
 [operations.order_build_order_request_draft.conformance]
@@ -339,8 +339,8 @@ signing = "native"
 transport = "native"
 
 [operations.order_build_order_decision_draft.implementation]
-rust_modules = ["crates/events_codec/src/order/encode.rs"]
-rust_types = ["radroots_events::order::RadrootsOrderDecision"]
+rust_modules = ["crates/event_codec/src/order/encode.rs"]
+rust_types = ["radroots_event::order::RadrootsOrderDecision"]
 
 [operations.order_build_order_decision_draft.conformance]
 vector = "contracts/conformance/vectors/order/build_order_decision_draft.v1.json"
@@ -357,11 +357,11 @@ signing = "native"
 transport = "native"
 
 [operations.order_parse_order_request.implementation]
-rust_modules = ["crates/events_codec/src/order/decode.rs"]
+rust_modules = ["crates/event_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_events::RadrootsNostrEvent",
-  "radroots_events::order::RadrootsOrderEnvelope",
-  "radroots_events::order::RadrootsOrderRequest",
+  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::order::RadrootsOrderEnvelope",
+  "radroots_event::order::RadrootsOrderRequest",
 ]
 
 [operations.order_parse_order_request.conformance]
@@ -379,11 +379,11 @@ signing = "native"
 transport = "native"
 
 [operations.order_parse_order_decision.implementation]
-rust_modules = ["crates/events_codec/src/order/decode.rs"]
+rust_modules = ["crates/event_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_events::RadrootsNostrEvent",
-  "radroots_events::order::RadrootsOrderEnvelope",
-  "radroots_events::order::RadrootsOrderDecision",
+  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::order::RadrootsOrderEnvelope",
+  "radroots_event::order::RadrootsOrderDecision",
 ]
 
 [operations.order_parse_order_decision.conformance]
@@ -401,8 +401,8 @@ signing = "native"
 transport = "native"
 
 [operations.order_parse_listing_address.implementation]
-rust_modules = ["crates/events/src/ids.rs"]
-rust_types = ["radroots_events::ids::RadrootsListingAddress"]
+rust_modules = ["crates/event/src/ids.rs"]
+rust_types = ["radroots_event::ids::RadrootsListingAddress"]
 
 [operations.order_parse_listing_address.conformance]
 vector = "contracts/conformance/vectors/order/parse_listing_address.v1.json"
@@ -421,7 +421,7 @@ transport = "native"
 [operations.trade_validation_validate_listing_event.implementation]
 rust_modules = ["crates/trade/src/listing/validation.rs"]
 rust_types = [
-  "radroots_events::RadrootsNostrEvent",
+  "radroots_event::RadrootsNostrEvent",
   "radroots_trade::listing::validation::RadrootsTradeListing",
 ]
 
@@ -440,9 +440,9 @@ signing = "native"
 transport = "native"
 
 [operations.knowledge_contract_manifest_json.implementation]
-rust_modules = ["crates/events_codec/src/manifest.rs"]
+rust_modules = ["crates/event_codec/src/manifest.rs"]
 rust_types = [
-  "radroots_events_codec::manifest::RadrootsKnowledgeContractManifest",
+  "radroots_event_codec::manifest::RadrootsKnowledgeContractManifest",
 ]
 
 [operations.knowledge_contract_manifest_json.conformance]
@@ -461,12 +461,12 @@ transport = "native"
 
 [operations.knowledge_verify_and_decode_event.implementation]
 rust_modules = [
-  "crates/events_codec/src/verification.rs",
-  "crates/events_codec/src/knowledge/decode.rs",
+  "crates/event_codec/src/verification.rs",
+  "crates/event_codec/src/knowledge/decode.rs",
 ]
 rust_types = [
-  "radroots_events::RadrootsNostrEvent",
-  "radroots_events_codec::verification::RadrootsDecodedEvent",
+  "radroots_event::RadrootsNostrEvent",
+  "radroots_event_codec::verification::RadrootsDecodedEvent",
 ]
 
 [operations.knowledge_verify_and_decode_event.conformance]

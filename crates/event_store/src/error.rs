@@ -1,6 +1,6 @@
-use radroots_events::contract::RadrootsContractMatchError;
-use radroots_events::event_head::RadrootsEventHeadMalformed;
-use radroots_events::ids::RadrootsIdParseError;
+use radroots_event::contract::RadrootsContractMatchError;
+use radroots_event::event_head::RadrootsEventHeadMalformed;
+use radroots_event::ids::RadrootsIdParseError;
 use radroots_transport::RadrootsTransportError;
 
 #[derive(Debug, thiserror::Error)]

@@ -36,7 +36,7 @@ thiserror = { workspace = true }
 sp1-build = { workspace = true, optional = true }
 
 [dev-dependencies]
-radroots_events = { workspace = true, features = ["serde"] }
+radroots_event = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [lints.rust]

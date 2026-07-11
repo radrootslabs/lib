@@ -19,7 +19,7 @@ std = [
   "dep:radroots_runtime_paths",
   "dep:radroots_secret_vault",
 ]
-profile = ["dep:radroots_events"]
+profile = ["dep:radroots_event"]
 json-file = ["std", "dep:radroots_runtime"]
 nip49 = ["std", "nostr/nip49"]
 secrecy = ["dep:secrecy"]
@@ -34,7 +34,7 @@ radroots_runtime_paths = { workspace = true, optional = true }
 radroots_secret_vault = { workspace = true, optional = true, features = [
   "std",
 ] }
-radroots_events = { workspace = true, optional = true, default-features = false, features = [
+radroots_event = { workspace = true, optional = true, default-features = false, features = [
   "serde",
 ] }
 nostr = { workspace = true }

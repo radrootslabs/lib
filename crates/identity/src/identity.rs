@@ -8,7 +8,7 @@ use nostr::{
     nips::nip49::{EncryptedSecretKey, KeySecurity},
 };
 #[cfg(feature = "profile")]
-use radroots_events::profile::RadrootsProfile;
+use radroots_event::profile::RadrootsProfile;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]

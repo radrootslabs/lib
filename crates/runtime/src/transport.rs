@@ -3,7 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use radroots_events::draft::RadrootsSignedEvent;
+use radroots_event::draft::RadrootsSignedEvent;
 #[cfg(feature = "transport-workers")]
 use radroots_transport::RadrootsTransportTargetReceipt;
 use radroots_transport::{
@@ -629,7 +629,7 @@ mod tests {
         RadrootsRuntimeLeaseRecord, record_verified_inbound_observation, recover_expired_leases,
     };
     #[cfg(feature = "transport-workers")]
-    use radroots_events::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
+    use radroots_event::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
     use radroots_transport::{
         RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
         RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchReceipt,

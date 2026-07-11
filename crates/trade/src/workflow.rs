@@ -4,8 +4,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::ids::{RadrootsEventId, RadrootsOrderId};
-use radroots_events::order::RadrootsOrderInventoryCommitment;
+use radroots_event::ids::{RadrootsEventId, RadrootsOrderId};
+use radroots_event::order::RadrootsOrderInventoryCommitment;
 
 use crate::{
     identity::RadrootsTradeLocator,
@@ -307,7 +307,7 @@ mod tests {
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
-    use radroots_events::{
+    use radroots_event::{
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
             RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,

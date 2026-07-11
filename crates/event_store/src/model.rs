@@ -1,9 +1,9 @@
 use crate::RadrootsEventStoreError;
-use radroots_events::RadrootsEventEnvelope;
-use radroots_events::contract::{
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsTagSemantic, RadrootsTagValueType,
 };
-use radroots_events::event_head::RadrootsEventHeadDecision;
+use radroots_event::event_head::RadrootsEventHeadDecision;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
@@ -397,10 +397,10 @@ pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::event_head::{
+    use radroots_event::event_head::{
         RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     };
-    use radroots_events::ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey};
+    use radroots_event::ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey};
 
     #[test]
     fn contract_status_event_class_and_observation_values_roundtrip() {

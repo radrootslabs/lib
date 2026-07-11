@@ -1,0 +1,171 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
+use radroots_event::job::JobInputType;
+use radroots_event::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_event::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event_codec::job::encode::JobEncodeError;
+use radroots_event_codec::job::error::JobParseError;
+use radroots_event_codec::job::request::decode::{job_request_from_tags, parsed_from_event};
+use radroots_event_codec::job::request::encode::to_wire_parts;
+use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
+
+fn sample_request() -> RadrootsJobRequest {
+    RadrootsJobRequest {
+        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        inputs: vec![RadrootsJobInput {
+            data: APP_PRIMARY_HTTPS.to_string(),
+            input_type: JobInputType::Url,
+            relay: Some(RELAY_PRIMARY_WSS.to_string()),
+            marker: Some("source".to_string()),
+        }],
+        output: Some("json".to_string()),
+        params: vec![RadrootsJobParam {
+            key: "foo".to_string(),
+            value: "bar".to_string(),
+        }],
+        bid_sat: Some(250),
+        relays: vec![RELAY_PRIMARY_WSS.to_string()],
+        providers: vec!["provider".to_string()],
+        topics: vec!["topic".to_string()],
+        encrypted: false,
+    }
+}
+
+#[test]
+fn job_request_roundtrip_from_tags() {
+    let req = sample_request();
+    let parts = to_wire_parts(&req, "payload").unwrap();
+
+    let decoded = job_request_from_tags(parts.kind, &parts.tags).unwrap();
+    assert_eq!(decoded, req);
+}
+
+#[test]
+fn job_request_requires_valid_kind() {
+    let mut req = sample_request();
+    req.kind = KIND_JOB_FEEDBACK as u16;
+
+    let err = to_wire_parts(&req, "payload").unwrap_err();
+    assert!(matches!(
+        err,
+        JobEncodeError::InvalidKind(KIND_JOB_FEEDBACK)
+    ));
+}
+
+#[test]
+fn job_request_requires_providers_when_encrypted() {
+    let mut req = sample_request();
+    req.encrypted = true;
+    req.providers.clear();
+
+    let err = to_wire_parts(&req, "payload").unwrap_err();
+    assert!(matches!(err, JobEncodeError::MissingProvidersForEncrypted));
+
+    let tags = vec![vec!["encrypted".to_string()]];
+    let err = job_request_from_tags(KIND_JOB_REQUEST_MIN + 1, &tags).unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("p")));
+}
+
+#[test]
+fn job_request_from_tags_accepts_encrypted_with_provider() {
+    let request = job_request_from_tags(
+        KIND_JOB_REQUEST_MIN + 1,
+        &[
+            vec!["encrypted".to_string()],
+            vec!["p".to_string(), "provider".to_string()],
+        ],
+    )
+    .unwrap();
+    assert!(request.encrypted);
+    assert_eq!(request.providers, vec!["provider".to_string()]);
+}
+
+#[test]
+fn job_request_to_wire_parts_allows_encrypted_when_provider_present() {
+    let mut req = sample_request();
+    req.encrypted = true;
+    let parts = to_wire_parts(&req, "payload").unwrap();
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("encrypted"))
+    );
+}
+
+#[test]
+fn job_request_from_tags_rejects_invalid_bid_tag() {
+    let err = job_request_from_tags(
+        KIND_JOB_REQUEST_MIN + 1,
+        &[vec!["bid".to_string(), "not-a-number".to_string()]],
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("bid", _)));
+}
+
+#[test]
+fn job_request_metadata_rejects_wrong_kind() {
+    let err = radroots_event_codec::job::request::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_RESULT_MIN,
+        Vec::new(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        JobParseError::InvalidTag("kind (expected 5000-5999)")
+    ));
+}
+
+#[test]
+fn job_request_data_from_event_success_path() {
+    let request = sample_request();
+    let parts = to_wire_parts(&request, "payload").expect("wire parts");
+    let data = radroots_event_codec::job::request::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        parts.kind,
+        parts.tags,
+    )
+    .expect("job request data");
+    assert_eq!(data.id, "id");
+    assert_eq!(data.author, "author");
+    assert_eq!(data.kind, KIND_JOB_REQUEST_MIN + 1);
+    assert_eq!(data.data.providers, vec!["provider".to_string()]);
+}
+
+#[test]
+fn job_request_data_from_event_propagates_decode_errors_with_valid_kind() {
+    let err = radroots_event_codec::job::request::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_REQUEST_MIN + 1,
+        vec![vec!["bid".to_string(), "not-a-number".to_string()]],
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("bid", _)));
+}
+
+#[test]
+fn job_request_index_from_event_propagates_parse_errors() {
+    let err = parsed_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_RESULT_MIN,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        JobParseError::InvalidTag("kind (expected 5000-5999)")
+    ));
+}

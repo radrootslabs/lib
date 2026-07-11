@@ -272,99 +272,99 @@ struct EventBoundaryExpectation {
 
 const PROFILE_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/profile.rs",
+        relative_path: "crates/event/src/profile.rs",
         required_fragments: &["pub struct RadrootsProfile"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_PROFILE: u32 = 0;"],
     },
 ];
 
 const FOLLOW_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/follow.rs",
+        relative_path: "crates/event/src/follow.rs",
         required_fragments: &["pub struct RadrootsFollow"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_FOLLOW: u32 = 3;"],
     },
 ];
 
 const POST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/post.rs",
+        relative_path: "crates/event/src/post.rs",
         required_fragments: &["pub struct RadrootsPost"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_POST: u32 = 1;"],
     },
 ];
 
 const COMMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/comment.rs",
+        relative_path: "crates/event/src/comment.rs",
         required_fragments: &["pub struct RadrootsComment"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_COMMENT: u32 = 1111;"],
     },
 ];
 
 const REACTION_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/reaction.rs",
+        relative_path: "crates/event/src/reaction.rs",
         required_fragments: &["pub struct RadrootsReaction"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_REACTION: u32 = 7;"],
     },
 ];
 
 const REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/repost.rs",
+        relative_path: "crates/event/src/repost.rs",
         required_fragments: &["pub struct RadrootsRepost"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_REPOST: u32 = 6;"],
     },
 ];
 
 const GENERIC_REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/repost.rs",
+        relative_path: "crates/event/src/repost.rs",
         required_fragments: &["pub struct RadrootsGenericRepost"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_GENERIC_REPOST: u32 = 16;"],
     },
 ];
 
 const SEAL_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/seal.rs",
+        relative_path: "crates/event/src/seal.rs",
         required_fragments: &["pub struct RadrootsSeal"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_SEAL: u32 = 13;"],
     },
 ];
 
 const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/message.rs",
+        relative_path: "crates/event/src/message.rs",
         required_fragments: &["pub struct RadrootsMessage"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_MESSAGE: u32 = 14;"],
     },
     EventBoundarySourceWitness {
@@ -382,11 +382,11 @@ const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
 
 const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/message_file.rs",
+        relative_path: "crates/event/src/message_file.rs",
         required_fragments: &["pub struct RadrootsMessageFile"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_MESSAGE_FILE: u32 = 15;"],
     },
     EventBoundarySourceWitness {
@@ -404,11 +404,11 @@ const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
 
 const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/gift_wrap.rs",
+        relative_path: "crates/event/src/gift_wrap.rs",
         required_fragments: &["pub struct RadrootsGiftWrap"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_GIFT_WRAP: u32 = 1059;"],
     },
     EventBoundarySourceWitness {
@@ -423,33 +423,33 @@ const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
 
 const PUBLIC_FILE_METADATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/file_metadata.rs",
+        relative_path: "crates/event/src/file_metadata.rs",
         required_fragments: &["pub struct RadrootsFileMetadata"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_PUBLIC_FILE_METADATA: u32 = KIND_FILE_METADATA;"],
     },
 ];
 
 const REPORT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/report.rs",
+        relative_path: "crates/event/src/report.rs",
         required_fragments: &["pub struct RadrootsReport"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_REPORT: u32 = 1984;"],
     },
 ];
 
 const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/list.rs",
+        relative_path: "crates/event/src/list.rs",
         required_fragments: &["pub struct RadrootsList"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &[
             "pub const KIND_LIST_MUTE: u32 = 10000;",
             "pub const KIND_LIST_GOOD_WIKI_RELAYS: u32 = 10102;",
@@ -459,22 +459,22 @@ const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 
 const RELAY_LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/list.rs",
+        relative_path: "crates/event/src/list.rs",
         required_fragments: &["pub struct RadrootsList"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_LIST_READ_WRITE_RELAYS: u32 = 10002;"],
     },
 ];
 
 const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/list_set.rs",
+        relative_path: "crates/event/src/list_set.rs",
         required_fragments: &["pub struct RadrootsListSet"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &[
             "pub const KIND_LIST_SET_FOLLOW: u32 = 30000;",
             "pub const KIND_LIST_SET_MEDIA_STARTER_PACK: u32 = 39092;",
@@ -484,18 +484,18 @@ const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
 
 const ARTICLE_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/article.rs",
+        relative_path: "crates/event/src/article.rs",
         required_fragments: &["pub struct RadrootsArticle"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ARTICLE: u32 = 30023;"],
     },
 ];
 
 const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/knowledge.rs",
+        relative_path: "crates/event/src/knowledge.rs",
         required_fragments: &[
             "pub struct RadrootsWikiArticle",
             "pub struct RadrootsKnowledgeClaim",
@@ -504,7 +504,7 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &[
             "pub const KIND_WIKI_MERGE_REQUEST: u32 = 818;",
             "pub const KIND_KNOWLEDGE_CLAIM: u32 = 3460;",
@@ -513,7 +513,7 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/contract.rs",
+        relative_path: "crates/event/src/contract.rs",
         required_fragments: &[
             "RadrootsReducer::KnowledgeProjection",
             "\"radroots.wiki.article.v1\"",
@@ -525,18 +525,18 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
 
 const APP_DATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/app_data.rs",
+        relative_path: "crates/event/src/app_data.rs",
         required_fragments: &["pub struct RadrootsAppData"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_APP_DATA: u32 = 30078;"],
     },
 ];
 
 const APP_HANDLER_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_APPLICATION_HANDLER: u32 = 31990;"],
     },
     EventBoundarySourceWitness {
@@ -547,143 +547,143 @@ const APP_HANDLER_WITNESSES: [EventBoundarySourceWitness; 2] = [
 
 const CALENDAR_DATE_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/calendar.rs",
+        relative_path: "crates/event/src/calendar.rs",
         required_fragments: &["pub struct RadrootsCalendarDateEvent"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_CALENDAR_DATE_EVENT: u32 = 31922;"],
     },
 ];
 
 const CALENDAR_TIME_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/calendar.rs",
+        relative_path: "crates/event/src/calendar.rs",
         required_fragments: &["pub struct RadrootsCalendarTimeEvent"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_CALENDAR_TIME_EVENT: u32 = 31923;"],
     },
 ];
 
 const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/calendar.rs",
+        relative_path: "crates/event/src/calendar.rs",
         required_fragments: &["pub struct RadrootsCalendar"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_CALENDAR: u32 = KIND_LIST_SET_CALENDAR;"],
     },
 ];
 
 const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/calendar.rs",
+        relative_path: "crates/event/src/calendar.rs",
         required_fragments: &["pub struct RadrootsCalendarEventRsvp"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_CALENDAR_EVENT_RSVP: u32 = 31925;"],
     },
 ];
 
 const FARM_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/farm.rs",
+        relative_path: "crates/event/src/farm.rs",
         required_fragments: &["pub struct RadrootsFarm"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_FARM: u32 = 30340;"],
     },
 ];
 
 const PLOT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/plot.rs",
+        relative_path: "crates/event/src/plot.rs",
         required_fragments: &["pub struct RadrootsPlot"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_PLOT: u32 = 30350;"],
     },
 ];
 
 const COOP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/coop.rs",
+        relative_path: "crates/event/src/coop.rs",
         required_fragments: &["pub struct RadrootsCoop"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_COOP: u32 = 30360;"],
     },
 ];
 
 const DOCUMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/document.rs",
+        relative_path: "crates/event/src/document.rs",
         required_fragments: &["pub struct RadrootsDocument"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_DOCUMENT: u32 = 30361;"],
     },
 ];
 
 const RESOURCE_AREA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/resource_area.rs",
+        relative_path: "crates/event/src/resource_area.rs",
         required_fragments: &["pub struct RadrootsResourceArea"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_RESOURCE_AREA: u32 = 30370;"],
     },
 ];
 
 const RESOURCE_CAP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/resource_cap.rs",
+        relative_path: "crates/event/src/resource_cap.rs",
         required_fragments: &["pub struct RadrootsResourceHarvestCap"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_RESOURCE_HARVEST_CAP: u32 = 30371;"],
     },
 ];
 
 const LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/listing.rs",
+        relative_path: "crates/event/src/listing.rs",
         required_fragments: &["pub struct RadrootsListing"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_LISTING: u32 = 30402;"],
     },
 ];
 
 const LISTING_DRAFT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/listing.rs",
+        relative_path: "crates/event/src/listing.rs",
         required_fragments: &["pub struct RadrootsListing"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_LISTING_DRAFT: u32 = 30403;"],
     },
 ];
 
 const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/job_request.rs",
+        relative_path: "crates/event/src/job_request.rs",
         required_fragments: &["pub struct RadrootsJobRequest"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &[
             "pub const KIND_JOB_REQUEST_MIN: u32 = 5000;",
             "pub const KIND_JOB_REQUEST_MAX: u32 = 5999;",
@@ -693,11 +693,11 @@ const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 
 const DVM_RESULT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/job_result.rs",
+        relative_path: "crates/event/src/job_result.rs",
         required_fragments: &["pub struct RadrootsJobResult"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &[
             "pub const KIND_JOB_RESULT_MIN: u32 = 6000;",
             "pub const KIND_JOB_RESULT_MAX: u32 = 6999;",
@@ -707,33 +707,33 @@ const DVM_RESULT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 
 const DVM_FEEDBACK_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/job_feedback.rs",
+        relative_path: "crates/event/src/job_feedback.rs",
         required_fragments: &["pub struct RadrootsJobFeedback"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_JOB_FEEDBACK: u32 = 7000;"],
     },
 ];
 
 const TRADE_ORDER_REQUESTED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ORDER_REQUEST: u32 = 3422;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
+        relative_path: "crates/event/src/order.rs",
         required_fragments: &[
             "pub struct RadrootsOrderRequest",
             "Self::OrderRequested => KIND_ORDER_REQUEST",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
+        relative_path: "crates/event_codec/src/order/encode.rs",
         required_fragments: &["pub fn order_request_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
+        relative_path: "crates/event_codec/src/order/decode.rs",
         required_fragments: &["pub fn order_request_from_event"],
     },
     EventBoundarySourceWitness {
@@ -747,11 +747,11 @@ const TRADE_ORDER_REQUESTED_WITNESSES: [EventBoundarySourceWitness; 5] = [
 
 const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ORDER_DECISION: u32 = 3423;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
+        relative_path: "crates/event/src/order.rs",
         required_fragments: &[
             "pub enum RadrootsOrderDecisionOutcome",
             "pub struct RadrootsOrderDecision",
@@ -759,11 +759,11 @@ const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
+        relative_path: "crates/event_codec/src/order/encode.rs",
         required_fragments: &["pub fn order_decision_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
+        relative_path: "crates/event_codec/src/order/decode.rs",
         required_fragments: &["pub fn order_decision_from_event"],
     },
     EventBoundarySourceWitness {
@@ -777,22 +777,22 @@ const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
 
 const TRADE_ORDER_REVISION_PROPOSED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
+        relative_path: "crates/event/src/order.rs",
         required_fragments: &[
             "pub struct RadrootsOrderRevisionProposal",
             "Self::OrderRevisionProposed => KIND_ORDER_REVISION_PROPOSAL",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
+        relative_path: "crates/event_codec/src/order/encode.rs",
         required_fragments: &["pub fn order_revision_proposal_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
+        relative_path: "crates/event_codec/src/order/decode.rs",
         required_fragments: &["pub fn order_revision_proposal_from_event"],
     },
     EventBoundarySourceWitness {
@@ -806,11 +806,11 @@ const TRADE_ORDER_REVISION_PROPOSED_WITNESSES: [EventBoundarySourceWitness; 5] =
 
 const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
+        relative_path: "crates/event/src/order.rs",
         required_fragments: &[
             "pub enum RadrootsOrderRevisionOutcome",
             "pub struct RadrootsOrderRevisionDecision",
@@ -818,11 +818,11 @@ const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] =
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
+        relative_path: "crates/event_codec/src/order/encode.rs",
         required_fragments: &["pub fn order_revision_decision_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
+        relative_path: "crates/event_codec/src/order/decode.rs",
         required_fragments: &["pub fn order_revision_decision_from_event"],
     },
     EventBoundarySourceWitness {
@@ -836,22 +836,22 @@ const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] =
 
 const TRADE_ORDER_CANCELLED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_ORDER_CANCELLATION: u32 = 3432;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
+        relative_path: "crates/event/src/order.rs",
         required_fragments: &[
             "pub struct RadrootsOrderCancellation",
             "Self::OrderCancelled => KIND_ORDER_CANCELLATION",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
+        relative_path: "crates/event_codec/src/order/encode.rs",
         required_fragments: &["pub fn order_cancellation_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
+        relative_path: "crates/event_codec/src/order/decode.rs",
         required_fragments: &["pub fn order_cancellation_from_event"],
     },
     EventBoundarySourceWitness {
@@ -869,14 +869,14 @@ const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 2] = [
         required_fragments: &["pub struct RadrootsTradeValidationReceipt"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
+        relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;"],
     },
 ];
 
 const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/relay_document.rs",
+        relative_path: "crates/event/src/relay_document.rs",
         required_fragments: &["pub struct RadrootsRelayDocument"],
     },
     EventBoundarySourceWitness {
@@ -2074,9 +2074,9 @@ fn validate_all_conformance_vectors(
 }
 
 pub fn write_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
-    let manifest_json = radroots_events_codec::contract_manifest_json()
+    let manifest_json = radroots_event_codec::contract_manifest_json()
         .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
-    let manifest_sha256 = radroots_events_codec::contract_manifest_sha256()
+    let manifest_sha256 = radroots_event_codec::contract_manifest_sha256()
         .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
     let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
     let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
@@ -2092,9 +2092,9 @@ pub fn write_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), St
 }
 
 pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(), String> {
-    let expected_json = radroots_events_codec::contract_manifest_json()
+    let expected_json = radroots_event_codec::contract_manifest_json()
         .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
-    let expected_sha256 = radroots_events_codec::contract_manifest_sha256()
+    let expected_sha256 = radroots_event_codec::contract_manifest_sha256()
         .map_err(|error| format!("hash knowledge contract manifest: {error}"))?;
     let manifest_path = workspace_root.join(KNOWLEDGE_MANIFEST_RELATIVE);
     let hash_path = workspace_root.join(KNOWLEDGE_MANIFEST_SHA256_RELATIVE);
@@ -2468,7 +2468,7 @@ fn should_synthesize_owner_contracts_for_tests(workspace_root: &Path) -> bool {
         .is_file()
         && workspace_root
             .join("crates")
-            .join("events_codec")
+            .join("event_codec")
             .join("Cargo.toml")
             .is_file()
         && workspace_root
@@ -4292,7 +4292,7 @@ transport = "native"
 
 [operations.profile_build_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_events::profile::RadrootsProfile"]
+rust_types = ["radroots_event::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
 vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
@@ -4310,7 +4310,7 @@ transport = "native"
 
 [operations.listing_build_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_events::listing::RadrootsListing"]
+rust_types = ["radroots_event::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
 vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
@@ -4723,7 +4723,7 @@ edition = "2024"
             &root,
             &[
                 TestCoverageRefreshRow {
-                    crate_name: "radroots_events_codec",
+                    crate_name: "radroots_event_codec",
                     status: "pass",
                     thresholds: CoverageThresholds {
                         fail_under_exec_lines: 100.0,
@@ -4754,11 +4754,11 @@ edition = "2024"
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
             policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_events_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_events_codec\", \"radroots_log\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_event_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_event_codec\", \"radroots_log\"]\n",
         )
         .expect("write coverage policy");
         let required = [
-            "radroots_events_codec".to_string(),
+            "radroots_event_codec".to_string(),
             "radroots_log".to_string(),
         ]
         .into_iter()

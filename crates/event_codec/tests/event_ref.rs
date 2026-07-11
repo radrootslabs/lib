@@ -1,0 +1,370 @@
+mod common;
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
+use radroots_event::kinds::KIND_POST;
+use radroots_event_codec::error::EventParseError;
+use radroots_event_codec::event_ref::{
+    build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags,
+    push_nip10_ref_tags,
+};
+use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS};
+
+fn hex_64(character: char) -> String {
+    core::iter::repeat_n(character, 64).collect()
+}
+
+#[test]
+fn build_and_parse_roundtrip_with_d_tag_and_relays() {
+    let event = common::event_ref_with_d(
+        &hex_64('1'),
+        &hex_64('2'),
+        42,
+        "d-tag",
+        Some(vec!["wss://relay".to_string()]),
+    );
+
+    let tag = build_event_ref_tag("e", &event);
+    let parsed = parse_event_ref_tag(&tag, "e").unwrap();
+
+    assert_eq!(parsed.id, event.id);
+    assert_eq!(parsed.author, event.author);
+    assert_eq!(parsed.kind, event.kind);
+    assert_eq!(parsed.d_tag, event.d_tag);
+    assert_eq!(parsed.relays, event.relays);
+}
+
+#[test]
+fn build_and_parse_roundtrip_without_d_tag_or_relays() {
+    let event = common::event_ref(&hex_64('3'), &hex_64('4'), KIND_POST);
+    let tag = build_event_ref_tag("e", &event);
+
+    assert_eq!(tag.len(), 5);
+    assert_eq!(tag[4], "");
+
+    let parsed = parse_event_ref_tag(&tag, "e").unwrap();
+    assert_eq!(parsed.id, event.id);
+    assert_eq!(parsed.author, event.author);
+    assert_eq!(parsed.kind, event.kind);
+    assert!(parsed.d_tag.is_none());
+    assert!(parsed.relays.is_none());
+}
+
+#[test]
+fn parse_event_ref_tag_rejects_noncanonical_event_pointer_shapes() {
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        "wss://relay".to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        "not-hex".to_string(),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        String::new(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        "not-hex".to_string(),
+        KIND_POST.to_string(),
+        String::new(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        "bad d-tag".to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('5'),
+        hex_64('6'),
+        KIND_POST.to_string(),
+        String::new(),
+        "https://relay".to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+}
+
+#[test]
+fn parse_event_ref_tag_rejects_invalid_kind() {
+    let tag = vec![
+        "e".to_string(),
+        hex_64('7'),
+        hex_64('8'),
+        "bad".to_string(),
+        String::new(),
+    ];
+
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber("e", _)));
+}
+
+#[test]
+fn parse_event_ref_tag_rejects_wrong_tag_name_and_missing_fields() {
+    let tag = vec!["p".to_string(), "id".to_string()];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        hex_64('9'),
+        hex_64('a'),
+        KIND_POST.to_string(),
+    ];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+}
+
+#[test]
+fn parse_event_ref_tag_rejects_missing_required_values() {
+    let err = parse_event_ref_tag(&["e".to_string()], "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = parse_event_ref_tag(&["e".to_string(), "id".to_string()], "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = parse_event_ref_tag(
+        &["e".to_string(), "id".to_string(), "author".to_string()],
+        "e",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+}
+
+#[test]
+fn find_event_ref_tag_locates_first_match() {
+    let id = hex_64('b');
+    let event = common::event_ref(&id, &hex_64('c'), KIND_POST);
+    let tags = vec![
+        vec!["p".to_string(), "pubkey".to_string()],
+        build_event_ref_tag("e", &event),
+    ];
+
+    let found = find_event_ref_tag(&tags, "e").unwrap();
+    assert_eq!(found[0], "e");
+    assert_eq!(found[1], id);
+}
+
+#[test]
+fn push_and_parse_nip10_ref_tags_roundtrip_with_and_without_a_tag() {
+    let event = common::event_ref_with_d(
+        "id",
+        "author",
+        KIND_POST,
+        "AAAAAAAAAAAAAAAAAAAAAA",
+        Some(vec![RELAY_PRIMARY_WSS.to_string()]),
+    );
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &event, "e", "p", "k", "a");
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.id, event.id);
+    assert_eq!(parsed.author, event.author);
+    assert_eq!(parsed.kind, event.kind);
+    assert_eq!(parsed.d_tag, event.d_tag);
+    assert_eq!(parsed.relays, event.relays);
+
+    let event = common::event_ref("id2", "author2", KIND_POST);
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &event, "e", "p", "k", "a");
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.id, event.id);
+    assert_eq!(parsed.author, event.author);
+    assert_eq!(parsed.kind, event.kind);
+    assert!(parsed.d_tag.is_none());
+
+    let event =
+        common::event_ref_with_d("id3", "author3", KIND_POST, "AAAAAAAAAAAAAAAAAAAAAA", None);
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &event, "e", "p", "k", "a");
+    let a_tag = tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
+        .expect("a tag");
+    assert_eq!(a_tag.len(), 2);
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.d_tag, event.d_tag);
+    assert!(parsed.relays.is_none());
+}
+
+#[test]
+fn parse_nip10_ref_tags_rejects_missing_or_invalid_required_tags() {
+    let err = parse_nip10_ref_tags(&[], "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string(), "".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), "bad-kind".to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber("k", _)));
+}
+
+#[test]
+fn parse_nip10_ref_tags_rejects_missing_required_values() {
+    let tags = vec![
+        vec!["e".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("k")));
+}
+
+#[test]
+fn parse_nip10_ref_tags_rejects_missing_p_and_k_tags() {
+    let missing_p = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&missing_p, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("p")));
+
+    let missing_k = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&missing_k, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("k")));
+}
+
+#[test]
+fn parse_nip10_ref_tags_prefers_e_relays_and_can_fall_back_to_a_relays() {
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:{}", KIND_POST, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            RELAY_SECONDARY_WSS.to_string(),
+        ],
+    ];
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.d_tag.as_deref(), Some("AAAAAAAAAAAAAAAAAAAAAA"));
+    assert_eq!(parsed.relays, Some(vec![RELAY_SECONDARY_WSS.to_string()]));
+
+    let tags = vec![
+        vec![
+            "e".to_string(),
+            "id".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
+        ],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:{}", KIND_POST, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            RELAY_SECONDARY_WSS.to_string(),
+        ],
+    ];
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.relays, Some(vec![RELAY_PRIMARY_WSS.to_string()]));
+}
+
+#[test]
+fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec!["a".to_string()],
+        vec![
+            "a".to_string(),
+            format!(
+                "{}:{}:{}",
+                KIND_POST + 1,
+                "author",
+                "AAAAAAAAAAAAAAAAAAAAAA"
+            ),
+            RELAY_PRIMARY_WSS.to_string(),
+        ],
+        vec![
+            "a".to_string(),
+            format!(
+                "{}:{}:{}",
+                KIND_POST, "other-author", "AAAAAAAAAAAAAAAAAAAAAA"
+            ),
+            RELAY_SECONDARY_WSS.to_string(),
+        ],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:", KIND_POST, "author"),
+            RELAY_TERTIARY_WSS.to_string(),
+        ],
+    ];
+
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert_eq!(parsed.relays, Some(vec![RELAY_TERTIARY_WSS.to_string()]));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec!["a".to_string(), format!("{}:{}", KIND_POST, "author")],
+    ];
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert!(parsed.relays.is_none());
+}

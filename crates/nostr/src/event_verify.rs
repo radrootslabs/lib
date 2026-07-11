@@ -8,7 +8,7 @@ use crate::types::{
     RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 use nostr::secp256k1::schnorr::Signature;
-use radroots_events::RadrootsEventEnvelope;
+use radroots_event::RadrootsEventEnvelope;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsNostrEventVerification {
@@ -74,7 +74,7 @@ mod tests {
     use crate::events::radroots_nostr_build_event;
     use crate::test_fixtures::FIXTURE_ALICE;
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_POST;
 
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =

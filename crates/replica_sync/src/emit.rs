@@ -9,20 +9,20 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_events::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
-use radroots_events::location::{has_textual_locality, is_public_geohash5};
-use radroots_events::plot::RadrootsPlot;
-use radroots_events::profile::{
+use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
+use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
+use radroots_event::location::{has_textual_locality, is_public_geohash5};
+use radroots_event::plot::RadrootsPlot;
+use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
     radroots_profile_type_from_tag_value, radroots_profile_type_tag_value,
 };
-use radroots_events_codec::farm::encode as farm_encode;
-use radroots_events_codec::farm::list_sets as farm_list_sets;
-use radroots_events_codec::list_set::encode as list_set_encode;
-use radroots_events_codec::plot::encode as plot_encode;
-use radroots_events_codec::wire::WireEventParts;
+use radroots_event_codec::farm::encode as farm_encode;
+use radroots_event_codec::farm::list_sets as farm_list_sets;
+use radroots_event_codec::list_set::encode as list_set_encode;
+use radroots_event_codec::plot::encode as plot_encode;
+use radroots_event_codec::wire::WireEventParts;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_profile,
     plot, plot_gcs_location, plot_tag,
@@ -528,10 +528,10 @@ fn load_farm_location(
 fn load_plot_location(
     exec: &dyn SqlExecutor,
     plot: &Plot,
-) -> Result<Option<radroots_events::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<radroots_event::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
     let location = load_gcs_location_for_plot(exec, &plot.id)?;
     Ok(
-        location.map(|gcs| radroots_events::plot::RadrootsPlotLocation {
+        location.map(|gcs| radroots_event::plot::RadrootsPlotLocation {
             primary: plot.location_primary.clone(),
             city: plot.location_city.clone(),
             region: plot.location_region.clone(),
@@ -658,7 +658,7 @@ fn compare_relation_rows(a: &RelationRow, b: &RelationRow) -> core::cmp::Orderin
 }
 
 fn list_set_to_wire_parts(
-    list_set: &radroots_events::list_set::RadrootsListSet,
+    list_set: &radroots_event::list_set::RadrootsListSet,
 ) -> Result<WireEventParts, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_list_set_to_wire_error() {
@@ -803,7 +803,7 @@ fn profile_event(
         tags.push(tag);
     }
     Ok(RadrootsReplicaEventDraft {
-        kind: radroots_events::kinds::KIND_PROFILE,
+        kind: radroots_event::kinds::KIND_PROFILE,
         author: pubkey.to_string(),
         content,
         tags,
@@ -2308,7 +2308,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&clean_exec, &clean_farm).is_err());
 
-        let invalid_list_set = radroots_events::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::list_set::RadrootsListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),
@@ -2350,7 +2350,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&exec, &farm_row).is_err());
 
-        let invalid_list_set = radroots_events::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::list_set::RadrootsListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),

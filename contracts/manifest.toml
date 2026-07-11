@@ -6,17 +6,17 @@ source = "rust"
 [surface]
 model_crates = [
   "radroots_core",
-  "radroots_events",
+  "radroots_event",
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_events_codec"]
+algorithm_crates = ["radroots_event_codec"]
 
 [surface.rust_crate_tiers]
 advanced_substrate = [
   "radroots_core",
-  "radroots_events",
-  "radroots_events_codec",
+  "radroots_event",
+  "radroots_event_codec",
   "radroots_trade",
   "radroots_identity",
   "radroots_nostr",
@@ -33,7 +33,7 @@ published_support = [
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_geocoder",
-  "radroots_events_indexed",
+  "radroots_event_index",
   "radroots_sql_core",
   "radroots_replica_db_schema",
   "radroots_replica_db",

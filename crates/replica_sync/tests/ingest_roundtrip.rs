@@ -1,21 +1,21 @@
-use radroots_events::RadrootsEventEnvelope;
-use radroots_events::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_events::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_events::kinds::{
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
+use radroots_event::kinds::{
     KIND_FARM, KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE,
 };
-use radroots_events::list::RadrootsListEntry;
-use radroots_events::list_set::RadrootsListSet;
-use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation};
-use radroots_events::profile::{
+use radroots_event::list::RadrootsListEntry;
+use radroots_event::list_set::RadrootsListSet;
+use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation};
+use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
     radroots_profile_type_tag_value,
 };
-use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::farm::encode as farm_encode;
-use radroots_events_codec::farm::list_sets as farm_list_sets;
-use radroots_events_codec::list_set::encode as list_set_encode;
-use radroots_events_codec::plot::encode as plot_encode;
+use radroots_event_codec::error::{EventEncodeError, EventParseError};
+use radroots_event_codec::farm::encode as farm_encode;
+use radroots_event_codec::farm::list_sets as farm_list_sets;
+use radroots_event_codec::list_set::encode as list_set_encode;
+use radroots_event_codec::plot::encode as plot_encode;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
     nostr_profile, plot, plot_gcs_location, plot_tag,
@@ -222,11 +222,11 @@ fn seed_source(
     };
     let farm_row = unwrap_sql(farm::create(exec, &farm_fields), "farm").result;
 
-    let point = radroots_events::gcs::RadrootsGeoJsonPoint {
+    let point = radroots_event::gcs::RadrootsGeoJsonPoint {
         r#type: "Point".to_string(),
         coordinates: [-122.4, 37.7],
     };
-    let polygon = radroots_events::gcs::RadrootsGeoJsonPolygon {
+    let polygon = radroots_event::gcs::RadrootsGeoJsonPolygon {
         r#type: "Polygon".to_string(),
         coordinates: vec![vec![
             [-122.4, 37.7],

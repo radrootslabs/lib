@@ -1,0 +1,202 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
+use radroots_event::job_feedback::RadrootsJobFeedback;
+use radroots_event::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_event::job_result::RadrootsJobResult;
+use radroots_event::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event_codec::job::feedback::encode::to_wire_parts as to_feedback_wire_parts;
+use radroots_event_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
+use radroots_event_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
+use radroots_event_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
+use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
+
+fn sample_request() -> RadrootsJobRequest {
+    RadrootsJobRequest {
+        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        inputs: vec![RadrootsJobInput {
+            data: "hello".to_string(),
+            input_type: JobInputType::Text,
+            relay: None,
+            marker: None,
+        }],
+        output: None,
+        params: vec![RadrootsJobParam {
+            key: "foo".to_string(),
+            value: "bar".to_string(),
+        }],
+        bid_sat: None,
+        relays: Vec::new(),
+        providers: vec!["provider".to_string()],
+        topics: Vec::new(),
+        encrypted: false,
+    }
+}
+
+#[test]
+fn borrowed_event_adapter_builds_request_metadata() {
+    let req = sample_request();
+    let parts = to_request_wire_parts(&req, "payload").unwrap();
+
+    let event = RadrootsEventEnvelope {
+        id: "id".to_string(),
+        author: "author".to_string(),
+        created_at: 42,
+        kind: parts.kind,
+        tags: parts.tags.clone(),
+        content: "payload".to_string(),
+        sig: "sig".to_string(),
+    };
+
+    let adapter = BorrowedEventAdapter::new(&event, event.created_at, &event.tags, &event.sig);
+    let metadata = adapter.to_job_request_metadata().unwrap();
+
+    assert_eq!(metadata.id, event.id);
+    assert_eq!(metadata.author, event.author);
+    assert_eq!(metadata.published_at, event.created_at);
+    assert_eq!(metadata.kind, event.kind);
+    assert_eq!(metadata.data, req);
+}
+
+fn sample_result() -> RadrootsJobResult {
+    RadrootsJobResult {
+        kind: (KIND_JOB_RESULT_MIN + 1) as u16,
+        request_event: radroots_event::RadrootsEventPtr {
+            id: "req".to_string(),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
+        },
+        request_json: Some("{\"foo\":\"bar\"}".to_string()),
+        inputs: vec![RadrootsJobInput {
+            data: "hello".to_string(),
+            input_type: JobInputType::Text,
+            relay: None,
+            marker: None,
+        }],
+        customer_pubkey: Some(FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string()),
+        payment: Some(JobPaymentRequest {
+            amount_sat: 1,
+            bolt11: None,
+        }),
+        content: Some("payload".to_string()),
+        encrypted: false,
+    }
+}
+
+fn sample_feedback() -> RadrootsJobFeedback {
+    RadrootsJobFeedback {
+        kind: KIND_JOB_FEEDBACK as u16,
+        status: JobFeedbackStatus::Processing,
+        extra_info: Some("processing".to_string()),
+        request_event: radroots_event::RadrootsEventPtr {
+            id: "req".to_string(),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
+        },
+        customer_pubkey: Some(FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string()),
+        payment: Some(JobPaymentRequest {
+            amount_sat: 2,
+            bolt11: None,
+        }),
+        content: Some("payload".to_string()),
+        encrypted: false,
+    }
+}
+
+#[test]
+fn borrowed_event_adapter_builds_request_metadata_and_index() {
+    let req = sample_request();
+    let parts = to_request_wire_parts(&req, "payload").unwrap();
+    let event = RadrootsEventEnvelope {
+        id: "id".to_string(),
+        author: "author".to_string(),
+        created_at: 42,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: "payload".to_string(),
+        sig: "sig".to_string(),
+    };
+
+    let adapter = BorrowedEventAdapter::new(&event, event.created_at, &event.tags, &event.sig);
+    assert_eq!(adapter.raw_id(), "id");
+    assert_eq!(adapter.raw_author(), "author");
+    assert_eq!(adapter.raw_published_at(), 42);
+    assert_eq!(adapter.raw_kind(), event.kind);
+    assert_eq!(adapter.raw_content(), "payload");
+    assert_eq!(adapter.raw_tags().len(), event.tags.len());
+    assert_eq!(adapter.raw_sig(), "sig");
+
+    let index = adapter.to_job_request_event_index().unwrap();
+    assert_eq!(index.event.id, event.id);
+    assert_eq!(index.event.author, event.author);
+    assert_eq!(index.event.created_at, event.created_at);
+    assert_eq!(index.event.kind, event.kind);
+    assert_eq!(index.event.content, event.content);
+    assert_eq!(index.event.sig, event.sig);
+}
+
+#[test]
+fn borrowed_event_adapter_builds_result_metadata_and_index() {
+    let result = sample_result();
+    let parts = to_result_wire_parts(&result, "payload").unwrap();
+    let event = RadrootsEventEnvelope {
+        id: "id".to_string(),
+        author: "author".to_string(),
+        created_at: 42,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: "payload".to_string(),
+        sig: "sig".to_string(),
+    };
+
+    let adapter = BorrowedEventAdapter::new(&event, event.created_at, &event.tags, &event.sig);
+    let metadata = adapter.to_job_result_metadata().unwrap();
+    assert_eq!(metadata.id, event.id);
+    assert_eq!(metadata.author, event.author);
+    assert_eq!(metadata.published_at, event.created_at);
+    assert_eq!(metadata.kind, event.kind);
+    assert_eq!(metadata.data.kind, result.kind);
+    assert_eq!(metadata.data.request_event.id, "req");
+    assert_eq!(metadata.data.content.as_deref(), Some("payload"));
+
+    let index = adapter.to_job_result_event_index().unwrap();
+    assert_eq!(index.event.id, event.id);
+    assert_eq!(index.event.author, event.author);
+    assert_eq!(index.event.created_at, event.created_at);
+    assert_eq!(index.event.kind, event.kind);
+    assert_eq!(index.event.content, event.content);
+    assert_eq!(index.event.sig, event.sig);
+}
+
+#[test]
+fn borrowed_event_adapter_builds_feedback_metadata_and_index() {
+    let feedback = sample_feedback();
+    let parts = to_feedback_wire_parts(&feedback, "payload").unwrap();
+    let event = RadrootsEventEnvelope {
+        id: "id".to_string(),
+        author: "author".to_string(),
+        created_at: 42,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: "payload".to_string(),
+        sig: "sig".to_string(),
+    };
+
+    let adapter = BorrowedEventAdapter::new(&event, event.created_at, &event.tags, &event.sig);
+    let metadata = adapter.to_job_feedback_metadata().unwrap();
+    assert_eq!(metadata.id, event.id);
+    assert_eq!(metadata.author, event.author);
+    assert_eq!(metadata.published_at, event.created_at);
+    assert_eq!(metadata.kind, event.kind);
+    assert_eq!(metadata.data.kind, feedback.kind);
+    assert_eq!(metadata.data.request_event.id, "req");
+    assert_eq!(metadata.data.content.as_deref(), Some("payload"));
+
+    let index = adapter.to_job_feedback_event_index().unwrap();
+    assert_eq!(index.event.id, event.id);
+    assert_eq!(index.event.author, event.author);
+    assert_eq!(index.event.created_at, event.created_at);
+    assert_eq!(index.event.kind, event.kind);
+    assert_eq!(index.event.content, event.content);
+    assert_eq!(index.event.sig, event.sig);
+}

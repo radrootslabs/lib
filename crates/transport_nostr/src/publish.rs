@@ -4,7 +4,7 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_events::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
+use radroots_event::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
@@ -669,8 +669,8 @@ fn ensure_raw_event_matches_signed_event(
 mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
-    use radroots_events::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-    use radroots_events::kinds::KIND_POST;
+    use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+    use radroots_event::kinds::KIND_POST;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };

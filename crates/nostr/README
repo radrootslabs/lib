@@ -8,7 +8,7 @@ primitives for the `radroots` core libraries.
  * typed filters, tags, events, relay metadata, parsers, and utility helpers;
  * feature-gated client operations and relay-management helpers for active
    network use;
- * adapters between `radroots_events`, `radroots_events_codec`, and Nostr wire
+ * adapters between `radroots_event`, `radroots_event_codec`, and Nostr wire
    representations;
  * optional NIP-11 and NIP-17 support alongside `std` and `no_std` builds.
 

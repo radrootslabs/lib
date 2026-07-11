@@ -6,30 +6,30 @@ use alloc::{
     vec::Vec,
 };
 
-#[cfg(feature = "event_store")]
-use radroots_event_store::{RadrootsEventStore, RadrootsEventStoreError, RadrootsStoredEvent};
 #[cfg(feature = "serde_json")]
-use radroots_events::RadrootsEventEnvelope;
-use radroots_events::ids::{
+use radroots_event::RadrootsEventEnvelope;
+use radroots_event::ids::{
     RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress,
     RadrootsOrderId, RadrootsPublicKey,
 };
 #[cfg(feature = "serde_json")]
-use radroots_events::order::RadrootsOrderEventType;
-use radroots_events::order::{
+use radroots_event::order::RadrootsOrderEventType;
+use radroots_event::order::{
     RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
     RadrootsOrderEconomics, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
     RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
     RadrootsOrderRevisionProposal,
 };
 #[cfg(feature = "event_store")]
-use radroots_events::tags::TAG_D;
+use radroots_event::tags::TAG_D;
 #[cfg(feature = "serde_json")]
-use radroots_events_codec::order::{
+use radroots_event_codec::order::{
     RadrootsOrderEnvelopeParseError, order_cancellation_from_event, order_decision_from_event,
     order_event_context_from_tags, order_request_from_event, order_revision_decision_from_event,
     order_revision_proposal_from_event,
 };
+#[cfg(feature = "event_store")]
+use radroots_event_store::{RadrootsEventStore, RadrootsEventStoreError, RadrootsStoredEvent};
 #[cfg(feature = "serde_json")]
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -377,7 +377,7 @@ fn stored_order_event_to_nostr_event(
 
 #[cfg(feature = "serde_json")]
 fn require_context_root_event_id(
-    context: &radroots_events_codec::order::RadrootsOrderEventContext,
+    context: &radroots_event_codec::order::RadrootsOrderEventContext,
 ) -> Result<RadrootsEventId, RadrootsOrderEventDecodeError> {
     context
         .root_event_id
@@ -387,7 +387,7 @@ fn require_context_root_event_id(
 
 #[cfg(feature = "serde_json")]
 fn require_context_prev_event_id(
-    context: &radroots_events_codec::order::RadrootsOrderEventContext,
+    context: &radroots_event_codec::order::RadrootsOrderEventContext,
 ) -> Result<RadrootsEventId, RadrootsOrderEventDecodeError> {
     context
         .prev_event_id
@@ -2665,7 +2665,7 @@ mod tests {
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
@@ -2681,7 +2681,7 @@ mod tests {
         },
     };
     #[cfg(feature = "serde_json")]
-    use radroots_events_codec::{
+    use radroots_event_codec::{
         order::{
             order_cancellation_event_build, order_decision_event_build, order_request_event_build,
             order_revision_decision_event_build, order_revision_proposal_event_build,
@@ -3392,7 +3392,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn order_event_context_requirements_report_missing_chain_ids() {
-        let context = radroots_events_codec::order::RadrootsOrderEventContext {
+        let context = radroots_event_codec::order::RadrootsOrderEventContext {
             counterparty_pubkey: public_key(BUYER),
             listing_event: None,
             root_event_id: None,

@@ -2,7 +2,7 @@
 
 use core::str::FromStr;
 
-use radroots_events::ids::{
+use radroots_event::ids::{
     RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId,
     RadrootsPublicKey,
 };
@@ -137,7 +137,7 @@ impl RadrootsTradeLocatorCandidate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::kinds::KIND_LISTING;
+    use radroots_event::kinds::KIND_LISTING;
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

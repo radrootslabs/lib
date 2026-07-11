@@ -14,14 +14,14 @@ use alloc::string::{String, ToString};
 #[cfg(all(feature = "serde_json", feature = "std"))]
 use std::string::{String, ToString};
 
-use radroots_events::ids::RadrootsListingAddress;
+use radroots_event::ids::RadrootsListingAddress;
 #[cfg(feature = "serde_json")]
-use radroots_events::{
+use radroots_event::{
     draft::{RadrootsDraftError, RadrootsEventDraft},
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
 };
 #[cfg(feature = "serde_json")]
-use radroots_events_codec::{listing::encode::to_json_wire_parts_with_kind, wire::to_frozen_draft};
+use radroots_event_codec::{listing::encode::to_json_wire_parts_with_kind, wire::to_frozen_draft};
 use thiserror::Error;
 
 use crate::listing::draft::RadrootsCanonicalListingDraft;
@@ -150,7 +150,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::{
+    use radroots_event::{
         RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},

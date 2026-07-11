@@ -12,7 +12,7 @@ homepage.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots_events/std"]
+std = ["radroots_event/std"]
 local_signer = [
   "std",
   "dep:radroots_nostr",
@@ -21,7 +21,7 @@ local_signer = [
 ]
 
 [dependencies]
-radroots_events = { workspace = true, default-features = false }
+radroots_event = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 
 [lints.rust]
