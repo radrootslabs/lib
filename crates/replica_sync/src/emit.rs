@@ -23,34 +23,34 @@ use radroots_event_codec::farm::list_sets as farm_list_sets;
 use radroots_event_codec::list_set::encode as list_set_encode;
 use radroots_event_codec::plot::encode as plot_encode;
 use radroots_event_codec::wire::WireEventParts;
-use radroots_replica_db::{
+use radroots_replica_schema::farm::{
+    Farm, IFarmFieldsFilter, IFarmFindMany, IFarmFindOne, IFarmFindOneArgs,
+};
+use radroots_replica_schema::farm_gcs_location::{
+    FarmGcsLocation, IFarmGcsLocationFieldsFilter, IFarmGcsLocationFindMany,
+};
+use radroots_replica_schema::farm_member::{
+    FarmMember, IFarmMemberFieldsFilter, IFarmMemberFindMany,
+};
+use radroots_replica_schema::farm_member_claim::{
+    FarmMemberClaim, IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany,
+};
+use radroots_replica_schema::farm_tag::{IFarmTagFieldsFilter, IFarmTagFindMany};
+use radroots_replica_schema::gcs_location::{
+    GcsLocation, GcsLocationQueryBindValues, IGcsLocationFindOne, IGcsLocationFindOneArgs,
+};
+use radroots_replica_schema::nostr_profile::{
+    INostrProfileFindOne, INostrProfileFindOneArgs, NostrProfileQueryBindValues,
+};
+use radroots_replica_schema::plot::{IPlotFieldsFilter, IPlotFindMany, Plot};
+use radroots_replica_schema::plot_gcs_location::{
+    IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany, PlotGcsLocation,
+};
+use radroots_replica_schema::plot_tag::{IPlotTagFieldsFilter, IPlotTagFindMany};
+use radroots_replica_store::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_profile,
     plot, plot_gcs_location, plot_tag,
 };
-use radroots_replica_db_schema::farm::{
-    Farm, IFarmFieldsFilter, IFarmFindMany, IFarmFindOne, IFarmFindOneArgs,
-};
-use radroots_replica_db_schema::farm_gcs_location::{
-    FarmGcsLocation, IFarmGcsLocationFieldsFilter, IFarmGcsLocationFindMany,
-};
-use radroots_replica_db_schema::farm_member::{
-    FarmMember, IFarmMemberFieldsFilter, IFarmMemberFindMany,
-};
-use radroots_replica_db_schema::farm_member_claim::{
-    FarmMemberClaim, IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany,
-};
-use radroots_replica_db_schema::farm_tag::{IFarmTagFieldsFilter, IFarmTagFindMany};
-use radroots_replica_db_schema::gcs_location::{
-    GcsLocation, GcsLocationQueryBindValues, IGcsLocationFindOne, IGcsLocationFindOneArgs,
-};
-use radroots_replica_db_schema::nostr_profile::{
-    INostrProfileFindOne, INostrProfileFindOneArgs, NostrProfileQueryBindValues,
-};
-use radroots_replica_db_schema::plot::{IPlotFieldsFilter, IPlotFindMany, Plot};
-use radroots_replica_db_schema::plot_gcs_location::{
-    IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany, PlotGcsLocation,
-};
-use radroots_replica_db_schema::plot_tag::{IPlotTagFieldsFilter, IPlotTagFindMany};
 use radroots_sql_core::SqlExecutor;
 use serde_json::Value;
 
@@ -289,7 +289,7 @@ fn resolve_farm(
         let result_query = farm::find_one(
             exec,
             &IFarmFindOne::On(IFarmFindOneArgs {
-                on: radroots_replica_db_schema::farm::FarmQueryBindValues::Id { id: id.clone() },
+                on: radroots_replica_schema::farm::FarmQueryBindValues::Id { id: id.clone() },
             }),
         );
         let result = result_query?;
@@ -754,10 +754,8 @@ fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
 fn load_profile(
     exec: &dyn SqlExecutor,
     pubkey: &str,
-) -> Result<
-    Option<radroots_replica_db_schema::nostr_profile::NostrProfile>,
-    RadrootsReplicaEventsError,
-> {
+) -> Result<Option<radroots_replica_schema::nostr_profile::NostrProfile>, RadrootsReplicaEventsError>
+{
     let result_query = nostr_profile::find_one(
         exec,
         &INostrProfileFindOne::On(INostrProfileFindOneArgs {
@@ -772,7 +770,7 @@ fn load_profile(
 
 fn profile_event(
     pubkey: &str,
-    profile: radroots_replica_db_schema::nostr_profile::NostrProfile,
+    profile: radroots_replica_schema::nostr_profile::NostrProfile,
 ) -> Result<RadrootsReplicaEventDraft, RadrootsReplicaEventsError> {
     let profile_type = match profile.profile_type.as_str() {
         "individual" | "farmer" => Some(RadrootsProfileType::Individual),
@@ -921,24 +919,24 @@ fn parts_to_draft(author: &str, parts: WireEventParts) -> RadrootsReplicaEventDr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_replica_db::{
+    use radroots_replica_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
+    use radroots_replica_schema::farm_gcs_location::{
+        IFarmGcsLocationFields, IFarmGcsLocationFindMany,
+    };
+    use radroots_replica_schema::farm_member::IFarmMemberFields;
+    use radroots_replica_schema::farm_member_claim::IFarmMemberClaimFields;
+    use radroots_replica_schema::farm_tag::IFarmTagFields;
+    use radroots_replica_schema::gcs_location::IGcsLocationFields;
+    use radroots_replica_schema::nostr_profile::INostrProfileFields;
+    use radroots_replica_schema::plot::{IPlotFields, IPlotFindMany};
+    use radroots_replica_schema::plot_gcs_location::{
+        IPlotGcsLocationFields, IPlotGcsLocationFindMany,
+    };
+    use radroots_replica_schema::plot_tag::IPlotTagFields;
+    use radroots_replica_store::{
         farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
         migrations, nostr_profile, plot, plot_gcs_location, plot_tag,
     };
-    use radroots_replica_db_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
-    use radroots_replica_db_schema::farm_gcs_location::{
-        IFarmGcsLocationFields, IFarmGcsLocationFindMany,
-    };
-    use radroots_replica_db_schema::farm_member::IFarmMemberFields;
-    use radroots_replica_db_schema::farm_member_claim::IFarmMemberClaimFields;
-    use radroots_replica_db_schema::farm_tag::IFarmTagFields;
-    use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-    use radroots_replica_db_schema::nostr_profile::INostrProfileFields;
-    use radroots_replica_db_schema::plot::{IPlotFields, IPlotFindMany};
-    use radroots_replica_db_schema::plot_gcs_location::{
-        IPlotGcsLocationFields, IPlotGcsLocationFindMany,
-    };
-    use radroots_replica_db_schema::plot_tag::IPlotTagFields;
     use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor, SqliteExecutor};
 
     struct ErrorExecutor;
@@ -1507,7 +1505,7 @@ mod tests {
 
         let profile_event_farm = profile_event(
             &farm_row.pubkey,
-            radroots_replica_db_schema::nostr_profile::NostrProfile {
+            radroots_replica_schema::nostr_profile::NostrProfile {
                 id: "00000000-0000-0000-0000-000000000001".to_string(),
                 created_at: "2024-01-01T00:00:00.000Z".to_string(),
                 updated_at: "2024-01-01T00:00:00.000Z".to_string(),
@@ -1528,7 +1526,7 @@ mod tests {
         assert!(!profile_event_farm.tags.is_empty());
         let profile_event_unknown = profile_event(
             &"6".repeat(64),
-            radroots_replica_db_schema::nostr_profile::NostrProfile {
+            radroots_replica_schema::nostr_profile::NostrProfile {
                 id: "00000000-0000-0000-0000-000000000002".to_string(),
                 created_at: "2024-01-01T00:00:00.000Z".to_string(),
                 updated_at: "2024-01-01T00:00:00.000Z".to_string(),
@@ -1754,7 +1752,7 @@ mod tests {
 
         let profile_coop = profile_event(
             &"c".repeat(64),
-            radroots_replica_db_schema::nostr_profile::NostrProfile {
+            radroots_replica_schema::nostr_profile::NostrProfile {
                 id: "00000000-0000-0000-0000-0000000000c0".to_string(),
                 created_at: "2024-01-01T00:00:00.000Z".to_string(),
                 updated_at: "2024-01-01T00:00:00.000Z".to_string(),
@@ -1776,7 +1774,7 @@ mod tests {
 
         let profile_any = profile_event(
             &"a".repeat(64),
-            radroots_replica_db_schema::nostr_profile::NostrProfile {
+            radroots_replica_schema::nostr_profile::NostrProfile {
                 id: "00000000-0000-0000-0000-0000000000a0".to_string(),
                 created_at: "2024-01-01T00:00:00.000Z".to_string(),
                 updated_at: "2024-01-01T00:00:00.000Z".to_string(),

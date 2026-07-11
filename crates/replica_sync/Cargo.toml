@@ -34,8 +34,8 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
   "serde_json",
 ] }
 radroots_sql_core = { workspace = true }
-radroots_replica_db_schema = { workspace = true }
-radroots_replica_db = { workspace = true }
+radroots_replica_schema = { workspace = true }
+radroots_replica_store = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
@@ -50,7 +50,7 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 radroots_sql_core = { workspace = true, features = ["native"] }
-radroots_replica_db = { workspace = true }
+radroots_replica_store = { workspace = true }
 serde_json = { workspace = true }
 
 [lints.rust]

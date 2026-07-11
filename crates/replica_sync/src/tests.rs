@@ -4,21 +4,21 @@ use crate::{
 };
 use radroots_event::gcs::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE};
-use radroots_replica_db::{
+use radroots_replica_schema::ReplicaSchemaError;
+use radroots_replica_schema::farm::IFarmFields;
+use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
+use radroots_replica_schema::farm_member::IFarmMemberFields;
+use radroots_replica_schema::farm_member_claim::IFarmMemberClaimFields;
+use radroots_replica_schema::farm_tag::IFarmTagFields;
+use radroots_replica_schema::gcs_location::IGcsLocationFields;
+use radroots_replica_schema::nostr_profile::INostrProfileFields;
+use radroots_replica_schema::plot::IPlotFields;
+use radroots_replica_schema::plot_gcs_location::IPlotGcsLocationFields;
+use radroots_replica_schema::plot_tag::IPlotTagFields;
+use radroots_replica_store::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
     nostr_profile, plot, plot_gcs_location, plot_tag,
 };
-use radroots_replica_db_schema::ReplicaSchemaError;
-use radroots_replica_db_schema::farm::IFarmFields;
-use radroots_replica_db_schema::farm_gcs_location::IFarmGcsLocationFields;
-use radroots_replica_db_schema::farm_member::IFarmMemberFields;
-use radroots_replica_db_schema::farm_member_claim::IFarmMemberClaimFields;
-use radroots_replica_db_schema::farm_tag::IFarmTagFields;
-use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-use radroots_replica_db_schema::nostr_profile::INostrProfileFields;
-use radroots_replica_db_schema::plot::IPlotFields;
-use radroots_replica_db_schema::plot_gcs_location::IPlotGcsLocationFields;
-use radroots_replica_db_schema::plot_tag::IPlotTagFields;
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use std::panic;

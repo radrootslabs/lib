@@ -1,0 +1,33 @@
+[package]
+name = "radroots_replica_store"
+publish = ["crates-io"]
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Replica database layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/radroots_replica_store"
+readme = "README"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["std"]
+std = ["radroots_sql_core/std"]
+web = ["std", "radroots_sql_core/web"]
+native = ["std", "radroots_sql_core/native"]
+
+[dependencies]
+radroots_sql_core = { workspace = true }
+radroots_replica_schema = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+radroots_sql_core = { workspace = true, features = ["native"] }

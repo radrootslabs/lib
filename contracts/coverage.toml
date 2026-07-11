@@ -19,7 +19,7 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
-[overrides.radroots_replica_db_schema]
+[overrides.radroots_replica_schema]
 require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
@@ -48,7 +48,7 @@ crates = [
   "radroots_nostr",
   "radroots_nostr_accounts",
   "radroots_nostr_connect",
-  "radroots_nostr_ndb",
+  "radroots_nostrdb",
   "radroots_nostr_runtime",
   "radroots_nostr_signer",
   "radroots_outbox",
@@ -56,16 +56,16 @@ crates = [
   "radroots_transport_publish_protocol",
   "radroots_transport_nostr",
   "radroots_transport_reticulum",
-  "radroots_replica_db",
-  "radroots_replica_db_schema",
+  "radroots_replica_store",
+  "radroots_replica_schema",
   "radroots_replica_sync",
   "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
   "radroots_secret_vault",
-  "radroots_sp1_guest_trade",
-  "radroots_sp1_host_trade",
+  "radroots_trade_sp1_guest",
+  "radroots_trade_sp1_host",
   "radroots_sql_core",
   "radroots_test_fixtures",
   "radroots_trade",

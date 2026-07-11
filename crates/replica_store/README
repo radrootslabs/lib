@@ -1,0 +1,22 @@
+# radroots_replica_store
+
+This is the README for `radroots_replica_store`, which provides replica SQL
+facades and shaped query helpers for the `radroots` core libraries.
+
+## Overview
+
+ * a generic `ReplicaSql<E>` facade over any `SqlExecutor` implementation;
+ * migration, backup, restore, and export helpers for replica database state;
+ * typed CRUD helpers over the shared replica schema models;
+ * shaped query helpers for common trade, farm, and event freshness lookups;
+ * feature-gated web and native backend support through `radroots_sql_core`.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_replica_store` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_store` distribution.

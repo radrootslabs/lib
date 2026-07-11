@@ -1,0 +1,23 @@
+# radroots_nostrdb
+
+This is the README for `radroots_nostrdb`, which provides nostrdb adapter
+primitives for the `radroots` core libraries.
+
+## Overview
+
+ * configuration, filter, ingest, query, and subscription types for
+   nostrdb-backed workflows;
+ * runtime-adapter hooks that let higher layers drive nostrdb as an event sink;
+ * feature-gated support for the `nostrdb` crate, runtime glue, and gift-wrap
+   handling;
+ * a `std`-based integration crate with optional async runtime support.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_nostrdb` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostrdb` distribution.

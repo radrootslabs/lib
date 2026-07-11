@@ -35,8 +35,8 @@ published_support = [
   "radroots_geocoder",
   "radroots_event_index",
   "radroots_sql_core",
-  "radroots_replica_db_schema",
-  "radroots_replica_db",
+  "radroots_replica_schema",
+  "radroots_replica_store",
   "radroots_replica_sync",
 ]
 deferred_publication = [
@@ -52,16 +52,16 @@ deferred_publication = [
   "radroots_mesh_agent_proto",
   "radroots_net",
   "radroots_nostr_runtime",
-  "radroots_nostr_ndb",
+  "radroots_nostrdb",
   "radroots_simplex_chat_proto",
   "radroots_simplex_smp_proto",
-  "radroots_sp1_guest_trade",
-  "radroots_sp1_host_trade",
+  "radroots_trade_sp1_guest",
+  "radroots_trade_sp1_host",
 ]
 
 [surface.internal_replica_crates]
-schema = "radroots_replica_db_schema"
-storage = "radroots_replica_db"
+schema = "radroots_replica_schema"
+storage = "radroots_replica_store"
 sync = "radroots_replica_sync"
 
 [policy]

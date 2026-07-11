@@ -16,7 +16,7 @@ default = ["std", "nostr-client", "rt"]
 std = []
 rt = ["std", "dep:futures", "dep:tokio"]
 nostr-client = ["std", "dep:radroots_nostr"]
-nostr-ndb = ["nostr-client"]
+nostrdb = ["nostr-client"]
 
 [dependencies]
 radroots_nostr = { workspace = true, optional = true, default-features = true, features = [

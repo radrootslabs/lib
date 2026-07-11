@@ -30,60 +30,60 @@ use radroots_event_codec::list_set::decode as list_set_decode;
 use radroots_event_codec::listing::decode as listing_decode;
 use radroots_event_codec::plot::decode as plot_decode;
 use radroots_event_codec::profile::decode as profile_decode;
-#[cfg(test)]
-use radroots_replica_db::farm_gcs_location;
-use radroots_replica_db::{
-    farm, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_event_head, nostr_profile,
-    plot, plot_gcs_location, plot_tag, trade_product,
-};
-use radroots_replica_db_schema::ReplicaSchemaError;
-use radroots_replica_db_schema::farm::{
+use radroots_replica_schema::ReplicaSchemaError;
+use radroots_replica_schema::farm::{
     FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
     IFarmUpdate,
 };
 #[cfg(test)]
-use radroots_replica_db_schema::farm_gcs_location::{
+use radroots_replica_schema::farm_gcs_location::{
     FarmGcsLocationQueryBindValues, IFarmGcsLocationDelete, IFarmGcsLocationFieldsFilter,
     IFarmGcsLocationFindMany, IFarmGcsLocationFindOneArgs,
 };
-use radroots_replica_db_schema::farm_member::{
+use radroots_replica_schema::farm_member::{
     FarmMemberQueryBindValues, IFarmMemberDelete, IFarmMemberFields, IFarmMemberFieldsFilter,
     IFarmMemberFindMany, IFarmMemberFindOneArgs,
 };
-use radroots_replica_db_schema::farm_member_claim::{
+use radroots_replica_schema::farm_member_claim::{
     FarmMemberClaimQueryBindValues, IFarmMemberClaimDelete, IFarmMemberClaimFields,
     IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany, IFarmMemberClaimFindOneArgs,
 };
-use radroots_replica_db_schema::farm_tag::{
+use radroots_replica_schema::farm_tag::{
     FarmTagQueryBindValues, IFarmTagDelete, IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany,
     IFarmTagFindOneArgs,
 };
-use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-use radroots_replica_db_schema::nostr_event_head::{
+use radroots_replica_schema::gcs_location::IGcsLocationFields;
+use radroots_replica_schema::nostr_event_head::{
     INostrEventHeadFields, INostrEventHeadFieldsPartial, INostrEventHeadFindOne,
     INostrEventHeadFindOneArgs, INostrEventHeadUpdate, NostrEventHead,
     NostrEventHeadQueryBindValues,
 };
-use radroots_replica_db_schema::nostr_profile::{
+use radroots_replica_schema::nostr_profile::{
     INostrProfileFields, INostrProfileFieldsPartial, INostrProfileFindOne,
     INostrProfileFindOneArgs, INostrProfileUpdate, NostrProfileQueryBindValues,
 };
-use radroots_replica_db_schema::plot::{
+use radroots_replica_schema::plot::{
     IPlotFields, IPlotFieldsFilter, IPlotFieldsPartial, IPlotFindMany, IPlotUpdate,
     PlotQueryBindValues,
 };
-use radroots_replica_db_schema::plot_gcs_location::{
+use radroots_replica_schema::plot_gcs_location::{
     IPlotGcsLocationDelete, IPlotGcsLocationFields, IPlotGcsLocationFieldsFilter,
     IPlotGcsLocationFindMany, IPlotGcsLocationFindOneArgs, PlotGcsLocationQueryBindValues,
 };
-use radroots_replica_db_schema::plot_tag::{
+use radroots_replica_schema::plot_tag::{
     IPlotTagDelete, IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany, IPlotTagFindOneArgs,
     PlotTagQueryBindValues,
 };
-use radroots_replica_db_schema::trade_product::{
+use radroots_replica_schema::trade_product::{
     ITradeProductFields, ITradeProductFieldsFilter, ITradeProductFieldsPartial,
     ITradeProductFindMany, ITradeProductFindOne, ITradeProductFindOneArgs, ITradeProductUpdate,
     TradeProductQueryBindValues,
+};
+#[cfg(test)]
+use radroots_replica_store::farm_gcs_location;
+use radroots_replica_store::{
+    farm, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_event_head, nostr_profile,
+    plot, plot_gcs_location, plot_tag, trade_product,
 };
 use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::error::SqlError;
@@ -1005,7 +1005,7 @@ fn find_farm_by_ref(
     exec: &dyn SqlExecutor,
     pubkey: &str,
     d_tag: &str,
-) -> Result<radroots_replica_db_schema::farm::Farm, RadrootsReplicaEventsError> {
+) -> Result<radroots_replica_schema::farm::Farm, RadrootsReplicaEventsError> {
     let filter = IFarmFieldsFilter {
         id: None,
         created_at: None,
@@ -1526,20 +1526,20 @@ mod tests {
     use radroots_event_codec::farm::list_sets as farm_list_sets;
     use radroots_event_codec::list_set::encode as list_set_encode;
     use radroots_event_codec::plot::encode as plot_encode;
-    use radroots_replica_db::{
+    use radroots_replica_schema::farm::IFarmFields;
+    use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
+    use radroots_replica_schema::farm_member::IFarmMemberFields;
+    use radroots_replica_schema::farm_member_claim::IFarmMemberClaimFields;
+    use radroots_replica_schema::farm_tag::IFarmTagFields;
+    use radroots_replica_schema::gcs_location::IGcsLocationFields;
+    use radroots_replica_schema::plot::IPlotFields;
+    use radroots_replica_schema::plot_gcs_location::IPlotGcsLocationFields;
+    use radroots_replica_schema::plot_tag::IPlotTagFields;
+    use radroots_replica_store::{
         ReplicaSql, farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag,
         gcs_location, migrations, nostr_event_head, plot, plot_gcs_location, plot_tag,
         trade_product,
     };
-    use radroots_replica_db_schema::farm::IFarmFields;
-    use radroots_replica_db_schema::farm_gcs_location::IFarmGcsLocationFields;
-    use radroots_replica_db_schema::farm_member::IFarmMemberFields;
-    use radroots_replica_db_schema::farm_member_claim::IFarmMemberClaimFields;
-    use radroots_replica_db_schema::farm_tag::IFarmTagFields;
-    use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-    use radroots_replica_db_schema::plot::IPlotFields;
-    use radroots_replica_db_schema::plot_gcs_location::IPlotGcsLocationFields;
-    use radroots_replica_db_schema::plot_tag::IPlotTagFields;
     use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
 
     struct FixedFactory;

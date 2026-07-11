@@ -4,8 +4,8 @@ version = "0.1.0"
 purpose = "offline-first local replica state and deterministic sync"
 
 [crate_family]
-schema = "radroots_replica_db_schema"
-storage = "radroots_replica_db"
+schema = "radroots_replica_schema"
+storage = "radroots_replica_store"
 sync = "radroots_replica_sync"
 
 [policy]

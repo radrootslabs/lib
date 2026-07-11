@@ -15,7 +15,7 @@ members = [
   "crates/nostr_accounts",
   "crates/nostr_connect",
   "crates/nostr_signer",
-  "crates/nostr_ndb",
+  "crates/nostrdb",
   "crates/nostr_runtime",
   "crates/outbox",
   "crates/transport_publish_protocol",
@@ -34,14 +34,14 @@ members = [
   "crates/simplex_smp_transport",
   "crates/sql_core",
   "crates/test_fixtures",
-  "crates/replica_db_schema",
+  "crates/replica_schema",
   "crates/replica_sync",
-  "crates/replica_db",
+  "crates/replica_store",
   "crates/runtime_paths",
   "crates/runtime_distribution",
   "crates/runtime_manager",
-  "crates/sp1_guest_trade",
-  "crates/sp1_host_trade",
+  "crates/trade_sp1_guest",
+  "crates/trade_sp1_host",
   "crates/trade",
   "crates/transport",
   "crates/mesh",
@@ -77,7 +77,7 @@ radroots_nostr = { path = "crates/nostr", version = "0.1.0-alpha.2", default-fea
 radroots_nostr_accounts = { path = "crates/nostr_accounts", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_connect = { path = "crates/nostr_connect", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_signer = { path = "crates/nostr_signer", version = "0.1.0-alpha.2", default-features = false }
-radroots_nostr_ndb = { path = "crates/nostr_ndb", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostrdb = { path = "crates/nostrdb", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime = { path = "crates/runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_paths = { path = "crates/runtime_paths", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "0.1.0-alpha.2", default-features = false }
@@ -99,9 +99,9 @@ radroots_simplex_smp_proto = { path = "crates/simplex_smp_proto", version = "0.1
 radroots_simplex_smp_transport = { path = "crates/simplex_smp_transport", version = "0.1.0-alpha.2", default-features = false }
 radroots_sql_core = { path = "crates/sql_core", version = "0.1.0-alpha.2", default-features = false }
 radroots_test_fixtures = { path = "crates/test_fixtures", version = "0.1.0-alpha.2" }
-radroots_replica_db_schema = { path = "crates/replica_db_schema", version = "0.1.0-alpha.2", default-features = false }
+radroots_replica_schema = { path = "crates/replica_schema", version = "0.1.0-alpha.2", default-features = false }
 radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.2", default-features = false }
-radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.2", default-features = false }
+radroots_replica_store = { path = "crates/replica_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-features = false }
 radroots_transport = { path = "crates/transport", version = "0.1.0-alpha.2", default-features = false }
 radroots_mesh = { path = "crates/mesh", version = "0.1.0-alpha.2", default-features = false }
@@ -110,8 +110,8 @@ radroots_mesh_agent_proto = { path = "crates/mesh_agent_proto", version = "0.1.0
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_app_store = { path = "crates/simplex_app_store", version = "0.1.0-alpha.2", default-features = false }
-radroots_sp1_guest_trade = { path = "crates/sp1_guest_trade", version = "0.1.0-alpha.2", default-features = false }
-radroots_sp1_host_trade = { path = "crates/sp1_host_trade", version = "0.1.0-alpha.2", default-features = false }
+radroots_trade_sp1_guest = { path = "crates/trade_sp1_guest", version = "0.1.0-alpha.2", default-features = false }
+radroots_trade_sp1_host = { path = "crates/trade_sp1_host", version = "0.1.0-alpha.2", default-features = false }
 
 anyhow = { version = "1" }
 aes-gcm = { version = "0.10.3", default-features = false, features = [

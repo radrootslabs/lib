@@ -3,8 +3,8 @@ use alloc::{collections::BTreeMap, string::String, string::ToString, vec::Vec};
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-use radroots_replica_db_schema::farm::IFarmFindMany;
-use radroots_replica_db_schema::nostr_event_head::INostrEventHeadFindMany;
+use radroots_replica_schema::farm::IFarmFindMany;
+use radroots_replica_schema::nostr_event_head::INostrEventHeadFindMany;
 use radroots_sql_core::SqlExecutor;
 
 use crate::error::RadrootsReplicaEventsError;
@@ -48,7 +48,7 @@ pub fn radroots_replica_pending_publish_batch<E: SqlExecutor>(
     exec: &E,
 ) -> Result<RadrootsReplicaPendingPublishBatch, RadrootsReplicaEventsError> {
     let farms =
-        radroots_replica_db::farm::find_many(exec, &IFarmFindMany { filter: None })?.results;
+        radroots_replica_store::farm::find_many(exec, &IFarmFindMany { filter: None })?.results;
     let mut expected: BTreeMap<String, RadrootsReplicaPendingPublishEvent> = BTreeMap::new();
 
     for farm in farms {
@@ -75,7 +75,7 @@ pub fn radroots_replica_pending_publish_batch<E: SqlExecutor>(
         }
     }
 
-    let states_query = radroots_replica_db::nostr_event_head::find_many(
+    let states_query = radroots_replica_store::nostr_event_head::find_many(
         exec,
         &INostrEventHeadFindMany { filter: None },
     );
@@ -123,9 +123,9 @@ mod tests {
         event_content_hash, event_content_hash_fail_next, event_head_key, tag_value,
     };
     use crate::types::RadrootsReplicaFarmSelector;
-    use radroots_replica_db::{farm, migrations, nostr_event_head};
-    use radroots_replica_db_schema::farm::IFarmFields;
-    use radroots_replica_db_schema::nostr_event_head::INostrEventHeadFields;
+    use radroots_replica_schema::farm::IFarmFields;
+    use radroots_replica_schema::nostr_event_head::INostrEventHeadFields;
+    use radroots_replica_store::{farm, migrations, nostr_event_head};
     use radroots_sql_core::{SqlExecutor, SqliteExecutor};
 
     #[test]

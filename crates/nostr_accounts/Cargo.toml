@@ -26,7 +26,7 @@ std = [
 file-store = ["std"]
 memory-vault = ["std", "radroots_secret_vault/memory-vault"]
 os-keyring = ["std", "radroots_secret_vault/os-keyring"]
-ndb-bridge = ["std", "dep:radroots_nostr_ndb"]
+nostrdb-bridge = ["std", "dep:radroots_nostrdb"]
 
 [dependencies]
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [
@@ -35,8 +35,8 @@ radroots_identity = { workspace = true, optional = true, default-features = fals
   "json-file",
 ] }
 radroots_nostr_signer = { workspace = true, optional = true }
-radroots_nostr_ndb = { workspace = true, optional = true, default-features = false, features = [
-  "ndb",
+radroots_nostrdb = { workspace = true, optional = true, default-features = false, features = [
+  "nostrdb",
   "giftwrap",
   "rt",
 ] }

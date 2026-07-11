@@ -16,28 +16,24 @@ use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
 use radroots_event_codec::list_set::encode as list_set_encode;
 use radroots_event_codec::plot::encode as plot_encode;
-use radroots_replica_db::{
-    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
-    nostr_profile, plot, plot_gcs_location, plot_tag,
-};
-use radroots_replica_db_schema::ReplicaSchemaError;
-use radroots_replica_db_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
-use radroots_replica_db_schema::farm_gcs_location::IFarmGcsLocationFields;
-use radroots_replica_db_schema::farm_member::{
+use radroots_replica_schema::ReplicaSchemaError;
+use radroots_replica_schema::farm::{IFarmFields, IFarmFieldsFilter, IFarmFindMany};
+use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
+use radroots_replica_schema::farm_member::{
     IFarmMemberFields, IFarmMemberFieldsFilter, IFarmMemberFindMany,
 };
-use radroots_replica_db_schema::farm_member_claim::{
+use radroots_replica_schema::farm_member_claim::{
     IFarmMemberClaimFields, IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany,
 };
-use radroots_replica_db_schema::farm_tag::{
-    IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany,
-};
-use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-use radroots_replica_db_schema::nostr_profile::INostrProfileFields;
-use radroots_replica_db_schema::plot::IPlotFields;
-use radroots_replica_db_schema::plot_gcs_location::IPlotGcsLocationFields;
-use radroots_replica_db_schema::plot_tag::{
-    IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany,
+use radroots_replica_schema::farm_tag::{IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany};
+use radroots_replica_schema::gcs_location::IGcsLocationFields;
+use radroots_replica_schema::nostr_profile::INostrProfileFields;
+use radroots_replica_schema::plot::IPlotFields;
+use radroots_replica_schema::plot_gcs_location::IPlotGcsLocationFields;
+use radroots_replica_schema::plot_tag::{IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany};
+use radroots_replica_store::{
+    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
+    nostr_profile, plot, plot_gcs_location, plot_tag,
 };
 use radroots_replica_sync::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaEventsError,
@@ -1396,7 +1392,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     let plot_rows = unwrap_sql(
         plot::find_many(
             &exec,
-            &radroots_replica_db_schema::plot::IPlotFindMany { filter: None },
+            &radroots_replica_schema::plot::IPlotFindMany { filter: None },
         ),
         "plot rows",
     )

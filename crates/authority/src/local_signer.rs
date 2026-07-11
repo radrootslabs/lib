@@ -41,7 +41,7 @@ mod tests {
     use radroots_event::RadrootsEventEnvelope;
     use radroots_event::kinds::KIND_POST;
     use radroots_nostr::prelude::{
-        RadrootsEventEnvelopeVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
+        RadrootsNostrEventVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
     };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -97,7 +97,7 @@ mod tests {
         assert_eq!(signed.pubkey, draft.expected_pubkey);
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),
-            RadrootsEventEnvelopeVerification::Verified
+            RadrootsNostrEventVerification::Verified
         );
     }
 }

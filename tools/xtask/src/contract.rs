@@ -5664,8 +5664,8 @@ edition = "2024"
             "surface.internal_replica_crates.storage must be a crate identifier",
             |bundle| {
                 bundle.manifest.surface.internal_replica_crates = Some(InternalReplicaCrates {
-                    schema: "radroots_replica_db_schema".to_string(),
-                    storage: "crates/replica_db".to_string(),
+                    schema: "radroots_replica_schema".to_string(),
+                    storage: "crates/replica_store".to_string(),
                     sync: "radroots_replica_sync".to_string(),
                 });
             },
