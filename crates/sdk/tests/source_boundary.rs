@@ -1938,6 +1938,50 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
 }
 
 #[test]
+fn sdk_transport_sources_reject_digest_only_and_top_level_relay_adapter_dispatch() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for relative_path in ["src", "tests", "examples"] {
+        let root = manifest_dir.join(relative_path);
+        if !root.exists() {
+            continue;
+        }
+        for path in rust_source_files(root.as_path()) {
+            if path.file_name().and_then(|file_name| file_name.to_str())
+                == Some("source_boundary.rs")
+            {
+                continue;
+            }
+            let source = read_source(path.as_path());
+            let relative_path = relative_manifest_path(manifest_dir, path.as_path());
+            for forbidden in ["payload_digest", "DigestOnly", "push_outbox_with_adapter"] {
+                assert!(
+                    !source.contains(forbidden),
+                    "{relative_path} must not retain digest-only or adapter-owned transport dispatch `{forbidden}`"
+                );
+            }
+        }
+    }
+
+    let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
+    for required in [
+        "RadrootsNostrTransport::new(adapter)",
+        "self.push_outbox_with_transport(&transport, request).await",
+        "pub async fn push_outbox_with_transport<T>",
+        "T: radroots_transport::RadrootsTransport + ?Sized",
+        "publish_claimed_outbox_event_with_transport(",
+    ] {
+        assert!(
+            sync_runtime.contains(required),
+            "src/sync_runtime.rs must retain generic transport dispatch witness `{required}`"
+        );
+    }
+    assert!(
+        !sync_runtime.contains("RadrootsRelayPublishAdapter"),
+        "src/sync_runtime.rs must not expose relay adapter dispatch as the top-level SDK push path"
+    );
+}
+
+#[test]
 fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
