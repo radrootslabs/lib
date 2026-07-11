@@ -39,7 +39,7 @@ crates = [
   "radroots_event_index",
   "radroots_geocoder",
   "radroots_identity",
-  "radroots_local_events",
+  "radroots_runtime_store",
   "radroots_log",
   "radroots_mesh",
   "radroots_mesh_agent_client",

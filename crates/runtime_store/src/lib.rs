@@ -6,11 +6,12 @@ mod models;
 mod order_work;
 mod store;
 
-pub use error::LocalEventsError;
+pub use error::RuntimeStoreError;
 pub use migrations::{MIGRATIONS, run_all_down, run_all_up};
 pub use models::{
-    LocalEventRecord, LocalEventRecordInput, LocalEventRecordUpdate, LocalEventsCursor,
-    LocalRecordFamily, LocalRecordStatus, PublishOutboxStatus, SourceRuntime,
+    PublishOutboxStatus, RelayDeliveryEvidence, RelayDeliveryFailure, RelayDeliveryState,
+    RuntimeStoreCursor, RuntimeStoreRecord, RuntimeStoreRecordFamily, RuntimeStoreRecordInput,
+    RuntimeStoreRecordStatus, RuntimeStoreRecordUpdate, SourceRuntime,
 };
 pub use order_work::{
     BUYER_ORDER_REQUEST_ACTOR_SOURCE_RESOLVED_ACCOUNT,
@@ -21,4 +22,4 @@ pub use order_work::{
     validate_supported_buyer_order_request_local_work_payload,
     validate_unsupported_buyer_order_request_local_work_payload,
 };
-pub use store::LocalEventsStore;
+pub use store::RuntimeStore;

@@ -1,27 +1,6 @@
-create table local_event_projection_cursor_previous (
-  consumer_id text primary key,
-  last_seq integer not null,
-  updated_at_ms integer not null,
-  check (trim(consumer_id) <> ''),
-  check (last_seq >= 0)
-);
-
-insert into local_event_projection_cursor_previous(
-  consumer_id,
-  last_seq,
-  updated_at_ms
-)
-select
-  consumer_id,
-  last_change_seq,
-  updated_at_ms
-from local_event_projection_cursor;
-
-drop table local_event_projection_cursor;
-alter table local_event_projection_cursor_previous rename to local_event_projection_cursor;
-
-create table local_event_record_previous (
+create table runtime_store_record_next (
   seq integer primary key autoincrement,
+  change_seq integer not null unique,
   record_id text not null unique,
   family text not null check (family in ('local_work', 'signed_event')),
   status text not null check (status in ('local_draft', 'local_saved', 'pending_publish', 'published', 'failed', 'conflict')),
@@ -43,14 +22,18 @@ create table local_event_record_previous (
   event_sig text,
   raw_event_json text,
   outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
+  relay_set_fingerprint text,
+  relay_delivery_json text,
+  check (change_seq >= 1),
   check (trim(record_id) <> ''),
   check (family <> 'local_work' or local_work_json is not null),
   check (family <> 'local_work' or outbox_status = 'none'),
   check (family <> 'signed_event' or (event_id is not null and event_kind is not null and event_pubkey is not null and event_sig is not null and raw_event_json is not null))
 );
 
-insert into local_event_record_previous(
+insert into runtime_store_record_next(
   seq,
+  change_seq,
   record_id,
   family,
   status,
@@ -71,10 +54,13 @@ insert into local_event_record_previous(
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status
+  outbox_status,
+  relay_set_fingerprint,
+  relay_delivery_json
 )
 select
   seq,
+  seq,
   record_id,
   family,
   status,
@@ -95,14 +81,39 @@ select
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status
-from local_event_record
+  outbox_status,
+  relay_set_fingerprint,
+  relay_delivery_json
+from runtime_store_record
 order by seq asc;
 
-drop table local_event_record;
-alter table local_event_record_previous rename to local_event_record;
+drop table runtime_store_record;
+alter table runtime_store_record_next rename to runtime_store_record;
 
-create index local_event_record_event_id_idx on local_event_record(event_id);
-create index local_event_record_listing_addr_idx on local_event_record(listing_addr);
-create index local_event_record_owner_pubkey_idx on local_event_record(owner_pubkey);
-create index local_event_record_status_idx on local_event_record(status);
+create index runtime_store_record_change_seq_idx on runtime_store_record(change_seq);
+create index runtime_store_record_event_id_idx on runtime_store_record(event_id);
+create index runtime_store_record_listing_addr_idx on runtime_store_record(listing_addr);
+create index runtime_store_record_owner_pubkey_idx on runtime_store_record(owner_pubkey);
+create index runtime_store_record_status_idx on runtime_store_record(status);
+
+create table runtime_store_projection_cursor_next (
+  consumer_id text primary key,
+  last_change_seq integer not null,
+  updated_at_ms integer not null,
+  check (trim(consumer_id) <> ''),
+  check (last_change_seq >= 0)
+);
+
+insert into runtime_store_projection_cursor_next(
+  consumer_id,
+  last_change_seq,
+  updated_at_ms
+)
+select
+  consumer_id,
+  last_seq,
+  updated_at_ms
+from runtime_store_projection_cursor;
+
+drop table runtime_store_projection_cursor;
+alter table runtime_store_projection_cursor_next rename to runtime_store_projection_cursor;

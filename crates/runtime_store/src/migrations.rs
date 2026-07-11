@@ -6,9 +6,9 @@ use radroots_sql_core::migrations::{Migration, migrations_run_all_down, migratio
 
 pub static MIGRATIONS: &[Migration] = &[
     Migration {
-        name: "0000_local_events",
-        up_sql: include_str!("../migrations/0000_local_events.up.sql"),
-        down_sql: include_str!("../migrations/0000_local_events.down.sql"),
+        name: "0000_runtime_store",
+        up_sql: include_str!("../migrations/0000_runtime_store.up.sql"),
+        down_sql: include_str!("../migrations/0000_runtime_store.down.sql"),
     },
     Migration {
         name: "0001_change_tracking",

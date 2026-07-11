@@ -1,4 +1,4 @@
-create table if not exists local_event_record (
+create table if not exists runtime_store_record (
   seq integer primary key autoincrement,
   record_id text not null unique,
   family text not null check (family in ('local_work', 'signed_event')),
@@ -21,18 +21,20 @@ create table if not exists local_event_record (
   event_sig text,
   raw_event_json text,
   outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
+  relay_set_fingerprint text,
+  relay_delivery_json text,
   check (trim(record_id) <> ''),
   check (family <> 'local_work' or local_work_json is not null),
   check (family <> 'local_work' or outbox_status = 'none'),
   check (family <> 'signed_event' or (event_id is not null and event_kind is not null and event_pubkey is not null and event_sig is not null and raw_event_json is not null))
 );
 
-create index if not exists local_event_record_event_id_idx on local_event_record(event_id);
-create index if not exists local_event_record_listing_addr_idx on local_event_record(listing_addr);
-create index if not exists local_event_record_owner_pubkey_idx on local_event_record(owner_pubkey);
-create index if not exists local_event_record_status_idx on local_event_record(status);
+create index if not exists runtime_store_record_event_id_idx on runtime_store_record(event_id);
+create index if not exists runtime_store_record_listing_addr_idx on runtime_store_record(listing_addr);
+create index if not exists runtime_store_record_owner_pubkey_idx on runtime_store_record(owner_pubkey);
+create index if not exists runtime_store_record_status_idx on runtime_store_record(status);
 
-create table if not exists local_event_projection_cursor (
+create table if not exists runtime_store_projection_cursor (
   consumer_id text primary key,
   last_seq integer not null,
   updated_at_ms integer not null,

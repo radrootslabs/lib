@@ -11,10 +11,10 @@ pub const DEFAULT_SHARED_IDENTITY_FILE_NAME: &str = "default.json";
 pub const DEFAULT_SHARED_GEONAMES_NAMESPACE_KIND: &str = "shared";
 pub const DEFAULT_SHARED_GEONAMES_NAMESPACE_VALUE: &str = "geonames";
 pub const DEFAULT_SHARED_GEONAMES_NAMESPACE: &str = "shared/geonames";
-pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND: &str = "shared";
-pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE: &str = "local_events";
-pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE: &str = "shared/local_events";
-pub const DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME: &str = "local_events.sqlite";
+pub const DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_KIND: &str = "shared";
+pub const DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE: &str = "runtime_store";
+pub const DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE: &str = "shared/runtime_store";
+pub const DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME: &str = "runtime_store.sqlite";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsBootstrapPaths {
@@ -59,19 +59,19 @@ pub fn default_shared_runtime_logs_dir(
 }
 
 #[must_use]
-pub fn default_shared_local_events_root_from_data_root(data_root: impl AsRef<Path>) -> PathBuf {
+pub fn default_shared_runtime_store_root_from_data_root(data_root: impl AsRef<Path>) -> PathBuf {
     data_root
         .as_ref()
-        .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND)
-        .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE)
+        .join(DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_KIND)
+        .join(DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE)
 }
 
 #[must_use]
-pub fn default_shared_local_events_database_path_from_data_root(
+pub fn default_shared_runtime_store_database_path_from_data_root(
     data_root: impl AsRef<Path>,
 ) -> PathBuf {
-    default_shared_local_events_root_from_data_root(data_root)
-        .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
+    default_shared_runtime_store_root_from_data_root(data_root)
+        .join(DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME)
 }
 
 #[must_use]
@@ -96,7 +96,7 @@ pub fn default_shared_geonames_database_path_from_cache_root(
         .join(default_shared_geonames_database_file_name(version))
 }
 
-pub fn default_shared_local_events_root_from_shared_accounts_data_root(
+pub fn default_shared_runtime_store_root_from_shared_accounts_data_root(
     shared_accounts_data_root: impl AsRef<Path>,
 ) -> Result<PathBuf, RadrootsRuntimePathsError> {
     let shared_accounts_data_root = shared_accounts_data_root.as_ref();
@@ -105,14 +105,14 @@ pub fn default_shared_local_events_root_from_shared_accounts_data_root(
             path: shared_accounts_data_root.to_path_buf(),
         }
     })?;
-    Ok(shared_data_root.join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE))
+    Ok(shared_data_root.join(DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE_VALUE))
 }
 
-pub fn default_shared_local_events_database_path_from_shared_accounts_data_root(
+pub fn default_shared_runtime_store_database_path_from_shared_accounts_data_root(
     shared_accounts_data_root: impl AsRef<Path>,
 ) -> Result<PathBuf, RadrootsRuntimePathsError> {
-    default_shared_local_events_root_from_shared_accounts_data_root(shared_accounts_data_root)
-        .map(|root| root.join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME))
+    default_shared_runtime_store_root_from_shared_accounts_data_root(shared_accounts_data_root)
+        .map(|root| root.join(DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME))
 }
 
 #[cfg(test)]
@@ -126,16 +126,15 @@ mod tests {
 
     use super::{
         DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_GEONAMES_NAMESPACE,
-        DEFAULT_SHARED_IDENTITY_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME,
-        DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE, default_namespaced_bootstrap_paths,
+        DEFAULT_SHARED_IDENTITY_FILE_NAME, DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME,
+        DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE, default_namespaced_bootstrap_paths,
         default_shared_geonames_database_file_name,
         default_shared_geonames_database_path_from_cache_root,
         default_shared_geonames_root_from_cache_root, default_shared_identity_path,
-        default_shared_local_events_database_path_from_data_root,
-        default_shared_local_events_database_path_from_shared_accounts_data_root,
-        default_shared_local_events_root_from_data_root,
-        default_shared_local_events_root_from_shared_accounts_data_root,
-        default_shared_runtime_logs_dir,
+        default_shared_runtime_logs_dir, default_shared_runtime_store_database_path_from_data_root,
+        default_shared_runtime_store_database_path_from_shared_accounts_data_root,
+        default_shared_runtime_store_root_from_data_root,
+        default_shared_runtime_store_root_from_shared_accounts_data_root,
     };
 
     #[test]
@@ -210,18 +209,18 @@ mod tests {
     }
 
     #[test]
-    fn shared_local_events_paths_use_canonical_shared_namespace() {
+    fn shared_runtime_store_paths_use_canonical_shared_namespace() {
         let data_root = PathBuf::from("/repo/infra/local/runtime/radroots/data");
 
         assert_eq!(
-            default_shared_local_events_root_from_data_root(&data_root),
-            data_root.join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE)
+            default_shared_runtime_store_root_from_data_root(&data_root),
+            data_root.join(DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE)
         );
         assert_eq!(
-            default_shared_local_events_database_path_from_data_root(&data_root),
+            default_shared_runtime_store_database_path_from_data_root(&data_root),
             data_root
-                .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE)
-                .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
+                .join(DEFAULT_SHARED_RUNTIME_STORE_NAMESPACE)
+                .join(DEFAULT_SHARED_RUNTIME_STORE_DB_FILE_NAME)
         );
     }
 
@@ -246,36 +245,36 @@ mod tests {
     }
 
     #[test]
-    fn shared_local_events_paths_derive_from_shared_accounts_data_root() {
+    fn shared_runtime_store_paths_derive_from_shared_accounts_data_root() {
         let shared_accounts_data_root =
             PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/accounts");
 
         assert_eq!(
-            default_shared_local_events_root_from_shared_accounts_data_root(
+            default_shared_runtime_store_root_from_shared_accounts_data_root(
                 &shared_accounts_data_root
             )
-            .expect("shared local-events root"),
-            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/local_events")
+            .expect("shared runtime-store root"),
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/runtime_store")
         );
         assert_eq!(
-            default_shared_local_events_root_from_shared_accounts_data_root(
+            default_shared_runtime_store_root_from_shared_accounts_data_root(
                 shared_accounts_data_root.clone()
             )
-            .expect("shared local-events root from owned path"),
-            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/local_events")
+            .expect("shared runtime-store root from owned path"),
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/runtime_store")
         );
         assert_eq!(
-            default_shared_local_events_database_path_from_shared_accounts_data_root(
+            default_shared_runtime_store_database_path_from_shared_accounts_data_root(
                 &shared_accounts_data_root
             )
-            .expect("shared local-events database path"),
+            .expect("shared runtime-store database path"),
             PathBuf::from(
-                "/repo/infra/local/runtime/radroots/data/shared/local_events/local_events.sqlite"
+                "/repo/infra/local/runtime/radroots/data/shared/runtime_store/runtime_store.sqlite"
             )
         );
 
         let err =
-            default_shared_local_events_root_from_shared_accounts_data_root(PathBuf::from("/"))
+            default_shared_runtime_store_root_from_shared_accounts_data_root(PathBuf::from("/"))
                 .expect_err("root path has no parent shared data root");
         assert_eq!(
             err,

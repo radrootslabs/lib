@@ -4367,7 +4367,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_local_events"
+name = "radroots_runtime_store"
 version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_sql_core",

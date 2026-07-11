@@ -4,8 +4,8 @@ use radroots_sql_core::error::SqlError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum LocalEventsError {
-    #[error("invalid local event record: {0}")]
+pub enum RuntimeStoreError {
+    #[error("invalid runtime store record: {0}")]
     InvalidRecord(String),
     #[error("sql error: {0}")]
     Sql(#[from] SqlError),

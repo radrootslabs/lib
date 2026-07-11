@@ -1,23 +1,23 @@
-use radroots_local_events::{
-    LocalEventRecordInput, LocalEventRecordUpdate, LocalEventsStore, LocalRecordFamily,
-    LocalRecordStatus, MIGRATIONS, PublishOutboxStatus, SourceRuntime,
+use radroots_runtime_store::{
+    MIGRATIONS, PublishOutboxStatus, RelayDeliveryEvidence, RuntimeStore, RuntimeStoreRecordFamily,
+    RuntimeStoreRecordInput, RuntimeStoreRecordStatus, RuntimeStoreRecordUpdate, SourceRuntime,
 };
 use radroots_sql_core::migrations::migrations_run_all_up;
 use radroots_sql_core::{SqlExecutor, SqliteExecutor};
 use serde_json::json;
 
-fn store() -> LocalEventsStore<SqliteExecutor> {
+fn store() -> RuntimeStore<SqliteExecutor> {
     let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
-    let store = LocalEventsStore::new(executor);
-    store.migrate_up().expect("migrate local events");
+    let store = RuntimeStore::new(executor);
+    store.migrate_up().expect("migrate runtime store");
     store
 }
 
-fn local_work(record_id: &str) -> LocalEventRecordInput {
-    LocalEventRecordInput {
+fn local_work(record_id: &str) -> RuntimeStoreRecordInput {
+    RuntimeStoreRecordInput {
         record_id: record_id.to_owned(),
-        family: LocalRecordFamily::LocalWork,
-        status: LocalRecordStatus::LocalSaved,
+        family: RuntimeStoreRecordFamily::LocalWork,
+        status: RuntimeStoreRecordStatus::LocalSaved,
         source_runtime: SourceRuntime::Cli,
         created_at_ms: 1000,
         inserted_at_ms: 1001,
@@ -35,14 +35,16 @@ fn local_work(record_id: &str) -> LocalEventRecordInput {
         event_sig: None,
         raw_event_json: None,
         outbox_status: PublishOutboxStatus::None,
+        relay_set_fingerprint: None,
+        relay_delivery_json: None,
     }
 }
 
-fn signed_event(record_id: &str) -> LocalEventRecordInput {
-    LocalEventRecordInput {
+fn signed_event(record_id: &str) -> RuntimeStoreRecordInput {
+    RuntimeStoreRecordInput {
         record_id: record_id.to_owned(),
-        family: LocalRecordFamily::SignedEvent,
-        status: LocalRecordStatus::PendingPublish,
+        family: RuntimeStoreRecordFamily::SignedEvent,
+        status: RuntimeStoreRecordStatus::PendingPublish,
         source_runtime: SourceRuntime::Cli,
         created_at_ms: 2000,
         inserted_at_ms: 2001,
@@ -60,6 +62,8 @@ fn signed_event(record_id: &str) -> LocalEventRecordInput {
         event_sig: Some("sig-a".to_owned()),
         raw_event_json: Some(json!({"id":"event-a","kind":3421})),
         outbox_status: PublishOutboxStatus::Pending,
+        relay_set_fingerprint: None,
+        relay_delivery_json: None,
     }
 }
 
@@ -136,16 +140,42 @@ fn outbox_status_updates_signed_event_records() {
     store.append_record(&input).expect("append signed event");
 
     let updated = store
-        .update_outbox(&LocalEventRecordUpdate {
+        .update_outbox(&RuntimeStoreRecordUpdate {
             record_id: "event-a".to_owned(),
-            status: LocalRecordStatus::Published,
+            status: RuntimeStoreRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
+            relay_set_fingerprint: None,
+            relay_delivery_json: None,
             updated_at_ms: 3000,
         })
         .expect("update outbox");
 
-    assert_eq!(updated.status, LocalRecordStatus::Published);
+    assert_eq!(updated.status, RuntimeStoreRecordStatus::Published);
     assert_eq!(updated.outbox_status, PublishOutboxStatus::Acknowledged);
+}
+
+#[test]
+fn relay_delivery_evidence_round_trips_on_signed_event_records() {
+    let store = store();
+    let mut input = signed_event("event-a");
+    let evidence = RelayDeliveryEvidence::acknowledged(
+        ["wss://relay.example"],
+        ["wss://relay.example"],
+        ["wss://relay.example"],
+        Vec::new(),
+    )
+    .expect("relay delivery evidence");
+    input.relay_set_fingerprint = evidence.relay_set_fingerprint();
+    input.relay_delivery_json = Some(evidence.to_json_value().expect("relay evidence json"));
+
+    let inserted = store.append_record(&input).expect("append signed event");
+    let loaded = store
+        .get_record("event-a")
+        .expect("load signed event")
+        .expect("signed event");
+
+    assert_eq!(inserted.relay_set_fingerprint, loaded.relay_set_fingerprint);
+    assert_eq!(inserted.relay_delivery_json, loaded.relay_delivery_json);
 }
 
 #[test]
@@ -163,10 +193,12 @@ fn changed_after_uses_change_seq_for_appends_and_outbox_updates() {
     assert_eq!(initial_rows[0].change_seq, appended.change_seq);
 
     let updated = store
-        .update_outbox(&LocalEventRecordUpdate {
+        .update_outbox(&RuntimeStoreRecordUpdate {
             record_id: "event-a".to_owned(),
-            status: LocalRecordStatus::Published,
+            status: RuntimeStoreRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
+            relay_set_fingerprint: None,
+            relay_delivery_json: None,
             updated_at_ms: 3000,
         })
         .expect("update outbox");
@@ -268,7 +300,7 @@ fn migration_assigns_existing_records_change_seq_from_insert_order() {
     migrations_run_all_up(&executor, &MIGRATIONS[..1]).expect("apply initial migration");
     let first = insert_pre_change_tracking_record(&executor, "local-a");
     let second = insert_pre_change_tracking_record(&executor, "local-b");
-    let store = LocalEventsStore::new(executor);
+    let store = RuntimeStore::new(executor);
 
     store.migrate_up().expect("apply change tracking migration");
     let rows = store
@@ -287,7 +319,7 @@ fn migration_repairs_pre_network_source_runtime_constraint() {
     let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
     create_pre_network_change_tracking_schema(&executor);
     let legacy_seq = insert_pre_network_change_tracking_record(&executor, "legacy-cli", 1);
-    let store = LocalEventsStore::new(executor);
+    let store = RuntimeStore::new(executor);
 
     store
         .migrate_up()
@@ -341,11 +373,15 @@ fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str)
             .raw_event_json
             .map(|value| serde_json::to_string(&value).expect("encode raw event")),
         input.outbox_status.as_str(),
+        input.relay_set_fingerprint,
+        input
+            .relay_delivery_json
+            .map(|value| serde_json::to_string(&value).expect("encode relay delivery")),
     ])
     .to_string();
     let outcome = executor
         .exec(
-            "insert into local_event_record(
+            "insert into runtime_store_record(
                 record_id,
                 family,
                 status,
@@ -366,18 +402,20 @@ fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str)
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                outbox_status,
+                relay_set_fingerprint,
+                relay_delivery_json
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             &params,
         )
-        .expect("insert old local event record");
+        .expect("insert pre-change-tracking runtime store record");
     outcome.last_insert_id
 }
 
 fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
     let schema = [
         "create table __migrations(id integer primary key, name text not null unique, applied_at text not null default (datetime('now')))",
-        "create table local_event_record (
+        "create table runtime_store_record (
             seq integer primary key autoincrement,
             change_seq integer not null unique,
             record_id text not null unique,
@@ -401,18 +439,20 @@ fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
             event_sig text,
             raw_event_json text,
             outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
+            relay_set_fingerprint text,
+            relay_delivery_json text,
             check (change_seq >= 1),
             check (trim(record_id) <> ''),
             check (family <> 'local_work' or local_work_json is not null),
             check (family <> 'local_work' or outbox_status = 'none'),
             check (family <> 'signed_event' or (event_id is not null and event_kind is not null and event_pubkey is not null and event_sig is not null and raw_event_json is not null))
         )",
-        "create index local_event_record_change_seq_idx on local_event_record(change_seq)",
-        "create index local_event_record_event_id_idx on local_event_record(event_id)",
-        "create index local_event_record_listing_addr_idx on local_event_record(listing_addr)",
-        "create index local_event_record_owner_pubkey_idx on local_event_record(owner_pubkey)",
-        "create index local_event_record_status_idx on local_event_record(status)",
-        "create table local_event_projection_cursor (
+        "create index runtime_store_record_change_seq_idx on runtime_store_record(change_seq)",
+        "create index runtime_store_record_event_id_idx on runtime_store_record(event_id)",
+        "create index runtime_store_record_listing_addr_idx on runtime_store_record(listing_addr)",
+        "create index runtime_store_record_owner_pubkey_idx on runtime_store_record(owner_pubkey)",
+        "create index runtime_store_record_status_idx on runtime_store_record(status)",
+        "create table runtime_store_projection_cursor (
             consumer_id text primary key,
             last_change_seq integer not null,
             updated_at_ms integer not null,
@@ -423,7 +463,7 @@ fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
     for sql in schema {
         executor.exec(sql, "[]").expect("schema statement");
     }
-    for name in ["0000_local_events", "0001_change_tracking"] {
+    for name in ["0000_runtime_store", "0001_change_tracking"] {
         let params = json!([name]).to_string();
         executor
             .exec("insert into __migrations(name) values(?)", &params)
@@ -464,11 +504,15 @@ fn insert_pre_network_change_tracking_record(
             .raw_event_json
             .map(|value| serde_json::to_string(&value).expect("encode raw event")),
         input.outbox_status.as_str(),
+        input.relay_set_fingerprint,
+        input
+            .relay_delivery_json
+            .map(|value| serde_json::to_string(&value).expect("encode relay delivery")),
     ])
     .to_string();
     let outcome = executor
         .exec(
-            "insert into local_event_record(
+            "insert into runtime_store_record(
                 change_seq,
                 record_id,
                 family,
@@ -490,10 +534,12 @@ fn insert_pre_network_change_tracking_record(
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                outbox_status,
+                relay_set_fingerprint,
+                relay_delivery_json
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             &params,
         )
-        .expect("insert pre-network local event record");
+        .expect("insert pre-network runtime store record");
     outcome.last_insert_id
 }

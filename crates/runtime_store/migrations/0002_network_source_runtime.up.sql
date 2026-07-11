@@ -1,4 +1,4 @@
-create table local_event_record_network_source_next (
+create table runtime_store_record_network_source_next (
   seq integer primary key autoincrement,
   change_seq integer not null unique,
   record_id text not null unique,
@@ -22,6 +22,8 @@ create table local_event_record_network_source_next (
   event_sig text,
   raw_event_json text,
   outbox_status text not null check (outbox_status in ('none', 'pending', 'acknowledged', 'failed')),
+  relay_set_fingerprint text,
+  relay_delivery_json text,
   check (change_seq >= 1),
   check (trim(record_id) <> ''),
   check (family <> 'local_work' or local_work_json is not null),
@@ -29,7 +31,7 @@ create table local_event_record_network_source_next (
   check (family <> 'signed_event' or (event_id is not null and event_kind is not null and event_pubkey is not null and event_sig is not null and raw_event_json is not null))
 );
 
-insert into local_event_record_network_source_next(
+insert into runtime_store_record_network_source_next(
   seq,
   change_seq,
   record_id,
@@ -52,7 +54,9 @@ insert into local_event_record_network_source_next(
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status
+  outbox_status,
+  relay_set_fingerprint,
+  relay_delivery_json
 )
 select
   seq,
@@ -77,15 +81,17 @@ select
   event_content,
   event_sig,
   raw_event_json,
-  outbox_status
-from local_event_record
+  outbox_status,
+  relay_set_fingerprint,
+  relay_delivery_json
+from runtime_store_record
 order by seq asc;
 
-drop table local_event_record;
-alter table local_event_record_network_source_next rename to local_event_record;
+drop table runtime_store_record;
+alter table runtime_store_record_network_source_next rename to runtime_store_record;
 
-create index local_event_record_change_seq_idx on local_event_record(change_seq);
-create index local_event_record_event_id_idx on local_event_record(event_id);
-create index local_event_record_listing_addr_idx on local_event_record(listing_addr);
-create index local_event_record_owner_pubkey_idx on local_event_record(owner_pubkey);
-create index local_event_record_status_idx on local_event_record(status);
+create index runtime_store_record_change_seq_idx on runtime_store_record(change_seq);
+create index runtime_store_record_event_id_idx on runtime_store_record(event_id);
+create index runtime_store_record_listing_addr_idx on runtime_store_record(listing_addr);
+create index runtime_store_record_owner_pubkey_idx on runtime_store_record(owner_pubkey);
+create index runtime_store_record_status_idx on runtime_store_record(status);

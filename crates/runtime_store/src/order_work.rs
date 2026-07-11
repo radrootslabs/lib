@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::LocalEventsError;
+use crate::RuntimeStoreError;
 use crate::models::validate_non_empty;
 
 pub const BUYER_ORDER_REQUEST_LOCAL_WORK_RECORD_KIND: &str = "buyer_order_request_v1";
@@ -32,7 +32,7 @@ pub struct BuyerOrderRequestLocalWorkValidation {
 
 pub fn buyer_order_request_local_work_record_id(
     order_id: &str,
-) -> Result<String, LocalEventsError> {
+) -> Result<String, RuntimeStoreError> {
     let order_id = order_id.trim();
     validate_non_empty("order_id", order_id)?;
     Ok(format!("app:local_work:order_request:{order_id}"))
@@ -40,7 +40,7 @@ pub fn buyer_order_request_local_work_record_id(
 
 pub fn validate_buyer_order_request_local_work_payload(
     payload: &Value,
-) -> Result<BuyerOrderRequestLocalWorkValidation, LocalEventsError> {
+) -> Result<BuyerOrderRequestLocalWorkValidation, RuntimeStoreError> {
     validate_string_field(
         payload,
         &["record_kind"],
@@ -82,7 +82,7 @@ pub fn validate_buyer_order_request_local_work_payload(
 
 pub fn validate_supported_buyer_order_request_local_work_payload(
     payload: &Value,
-) -> Result<BuyerOrderRequestLocalWorkValidation, LocalEventsError> {
+) -> Result<BuyerOrderRequestLocalWorkValidation, RuntimeStoreError> {
     let validation = validate_buyer_order_request_local_work_payload(payload)?;
     if validation.support_state != BuyerOrderRequestSupportState::Supported {
         return Err(invalid_field(
@@ -95,7 +95,7 @@ pub fn validate_supported_buyer_order_request_local_work_payload(
 
 pub fn validate_unsupported_buyer_order_request_local_work_payload(
     payload: &Value,
-) -> Result<BuyerOrderRequestLocalWorkValidation, LocalEventsError> {
+) -> Result<BuyerOrderRequestLocalWorkValidation, RuntimeStoreError> {
     let validation = validate_buyer_order_request_local_work_payload(payload)?;
     if validation.support_state != BuyerOrderRequestSupportState::Unsupported {
         return Err(invalid_field(
@@ -108,7 +108,7 @@ pub fn validate_unsupported_buyer_order_request_local_work_payload(
 
 fn validate_support_status(
     payload: &Value,
-) -> Result<(BuyerOrderRequestSupportState, Vec<String>), LocalEventsError> {
+) -> Result<(BuyerOrderRequestSupportState, Vec<String>), RuntimeStoreError> {
     let state = validate_required_string(payload, &["support_status", "state"])?;
     let issues = support_issues(payload)?;
     match state {
@@ -140,7 +140,7 @@ fn validate_support_status(
 fn validate_exportability(
     payload: &Value,
     support_state: BuyerOrderRequestSupportState,
-) -> Result<(), LocalEventsError> {
+) -> Result<(), RuntimeStoreError> {
     let state = validate_required_string(payload, &["exportability", "state"])?;
     match state {
         "exportable" => {
@@ -178,7 +178,7 @@ fn validate_exportability(
 fn validate_order_identity(
     payload: &Value,
     support_state: BuyerOrderRequestSupportState,
-) -> Result<(), LocalEventsError> {
+) -> Result<(), RuntimeStoreError> {
     validate_required_string(payload, &["document", "order", "listing_addr"])?;
     validate_required_string(payload, &["document", "order", "listing_event_id"])?;
     validate_required_string(payload, &["document", "order", "seller_pubkey"])?;
@@ -188,7 +188,7 @@ fn validate_order_identity(
     Ok(())
 }
 
-fn validate_buyer_pubkey(payload: &Value) -> Result<(), LocalEventsError> {
+fn validate_buyer_pubkey(payload: &Value) -> Result<(), RuntimeStoreError> {
     let order_buyer_pubkey =
         validate_required_string(payload, &["document", "order", "buyer_pubkey"])?;
     let actor_buyer_pubkey =
@@ -202,7 +202,7 @@ fn validate_buyer_pubkey(payload: &Value) -> Result<(), LocalEventsError> {
     Ok(())
 }
 
-fn validate_order_items(payload: &Value) -> Result<(), LocalEventsError> {
+fn validate_order_items(payload: &Value) -> Result<(), RuntimeStoreError> {
     let items = required_array(payload, &["document", "order", "items"])?;
     if items.is_empty() {
         return Err(invalid_field(
@@ -227,7 +227,7 @@ fn validate_order_items(payload: &Value) -> Result<(), LocalEventsError> {
     Ok(())
 }
 
-fn validate_order_economics(payload: &Value) -> Result<(), LocalEventsError> {
+fn validate_order_economics(payload: &Value) -> Result<(), RuntimeStoreError> {
     let economics = value_at(payload, &["document", "order", "economics"]).ok_or_else(|| {
         invalid_field("document.order.economics", "is required for app order work")
     })?;
@@ -316,7 +316,7 @@ fn validate_order_economics(payload: &Value) -> Result<(), LocalEventsError> {
     Ok(())
 }
 
-fn validate_money(payload: &Value, path: &[&str], currency: &str) -> Result<(), LocalEventsError> {
+fn validate_money(payload: &Value, path: &[&str], currency: &str) -> Result<(), RuntimeStoreError> {
     let Some(money) = value_at(payload, path) else {
         return Err(missing_field(path));
     };
@@ -335,7 +335,7 @@ fn validate_string_field(
     payload: &Value,
     path: &[&str],
     expected: &str,
-) -> Result<(), LocalEventsError> {
+) -> Result<(), RuntimeStoreError> {
     let Some(value) = value_at(payload, path).and_then(Value::as_str) else {
         return Err(missing_field(path));
     };
@@ -351,7 +351,7 @@ fn validate_string_field(
 fn validate_required_string<'a>(
     payload: &'a Value,
     path: &[&str],
-) -> Result<&'a str, LocalEventsError> {
+) -> Result<&'a str, RuntimeStoreError> {
     let Some(value) = value_at(payload, path).and_then(Value::as_str) else {
         return Err(missing_field(path));
     };
@@ -363,7 +363,7 @@ fn validate_bool_field(
     payload: &Value,
     path: &[&str],
     expected: bool,
-) -> Result<(), LocalEventsError> {
+) -> Result<(), RuntimeStoreError> {
     let Some(value) = value_at(payload, path).and_then(Value::as_bool) else {
         return Err(missing_field(path));
     };
@@ -376,21 +376,21 @@ fn validate_bool_field(
     Ok(())
 }
 
-fn validate_positive_i64(payload: &Value, path: &[&str]) -> Result<(), LocalEventsError> {
+fn validate_positive_i64(payload: &Value, path: &[&str]) -> Result<(), RuntimeStoreError> {
     match value_at(payload, path).and_then(Value::as_i64) {
         Some(value) if value > 0 => Ok(()),
         _ => Err(invalid_field(&path.join("."), "must be positive")),
     }
 }
 
-fn validate_positive_u64(payload: &Value, path: &[&str]) -> Result<u64, LocalEventsError> {
+fn validate_positive_u64(payload: &Value, path: &[&str]) -> Result<u64, RuntimeStoreError> {
     match value_at(payload, path).and_then(Value::as_u64) {
         Some(value) if value > 0 => Ok(value),
         _ => Err(invalid_field(&path.join("."), "must be positive")),
     }
 }
 
-fn validate_currency(field: &str, value: &str) -> Result<(), LocalEventsError> {
+fn validate_currency(field: &str, value: &str) -> Result<(), RuntimeStoreError> {
     if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_uppercase()) {
         return Err(invalid_field(
             field,
@@ -403,14 +403,14 @@ fn validate_currency(field: &str, value: &str) -> Result<(), LocalEventsError> {
 fn required_array<'a>(
     payload: &'a Value,
     path: &[&str],
-) -> Result<&'a Vec<Value>, LocalEventsError> {
+) -> Result<&'a Vec<Value>, RuntimeStoreError> {
     let Some(value) = value_at(payload, path).and_then(Value::as_array) else {
         return Err(missing_field(path));
     };
     Ok(value)
 }
 
-fn support_issues(payload: &Value) -> Result<Vec<String>, LocalEventsError> {
+fn support_issues(payload: &Value) -> Result<Vec<String>, RuntimeStoreError> {
     let issues = required_array(payload, &["support_status", "issues"])?;
     let mut parsed = Vec::with_capacity(issues.len());
     for (index, issue) in issues.iter().enumerate() {
@@ -434,16 +434,16 @@ fn value_at<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
     Some(current)
 }
 
-fn missing_field(path: &[&str]) -> LocalEventsError {
+fn missing_field(path: &[&str]) -> RuntimeStoreError {
     invalid_field(&path.join("."), "is required")
 }
 
-fn invalid_field(field: &str, requirement: &str) -> LocalEventsError {
-    LocalEventsError::InvalidRecord(format!("local order field `{field}` {requirement}"))
+fn invalid_field(field: &str, requirement: &str) -> RuntimeStoreError {
+    RuntimeStoreError::InvalidRecord(format!("local order field `{field}` {requirement}"))
 }
 
-fn invalid_field_at(field: String, requirement: &str) -> LocalEventsError {
-    LocalEventsError::InvalidRecord(format!("local order field `{field}` {requirement}"))
+fn invalid_field_at(field: String, requirement: &str) -> RuntimeStoreError {
+    RuntimeStoreError::InvalidRecord(format!("local order field `{field}` {requirement}"))
 }
 
 #[cfg(test)]
@@ -794,7 +794,7 @@ mod tests {
     }
 
     fn assert_error_contains<T: std::fmt::Debug>(
-        result: Result<T, LocalEventsError>,
+        result: Result<T, RuntimeStoreError>,
         expected: &str,
     ) {
         let error = result.expect_err("expected validation error");

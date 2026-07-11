@@ -8,15 +8,16 @@ use serde_json::{Value, json};
 use crate::migrations;
 use crate::models::validate_non_empty;
 use crate::{
-    LocalEventRecord, LocalEventRecordInput, LocalEventRecordUpdate, LocalEventsCursor,
-    LocalEventsError, LocalRecordFamily, LocalRecordStatus, PublishOutboxStatus, SourceRuntime,
+    PublishOutboxStatus, RuntimeStoreCursor, RuntimeStoreError, RuntimeStoreRecord,
+    RuntimeStoreRecordFamily, RuntimeStoreRecordInput, RuntimeStoreRecordStatus,
+    RuntimeStoreRecordUpdate, SourceRuntime,
 };
 
-pub struct LocalEventsStore<E: SqlExecutor> {
+pub struct RuntimeStore<E: SqlExecutor> {
     executor: E,
 }
 
-impl<E: SqlExecutor> LocalEventsStore<E> {
+impl<E: SqlExecutor> RuntimeStore<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
     }
@@ -35,11 +36,11 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
 
     pub fn append_record(
         &self,
-        input: &LocalEventRecordInput,
-    ) -> Result<LocalEventRecord, LocalEventsError> {
+        input: &RuntimeStoreRecordInput,
+    ) -> Result<RuntimeStoreRecord, RuntimeStoreError> {
         input.validate()?;
         self.executor.begin()?;
-        let result = (|| -> Result<(), LocalEventsError> {
+        let result = (|| -> Result<(), RuntimeStoreError> {
             let change_seq = self.next_change_seq()?;
             let params = json!([
                 change_seq,
@@ -63,10 +64,12 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                 input.event_content,
                 input.event_sig,
                 encode_json(input.raw_event_json.as_ref()),
-                input.outbox_status.as_str()
+                input.outbox_status.as_str(),
+                input.relay_set_fingerprint,
+                encode_json(input.relay_delivery_json.as_ref())
             ])
             .to_string();
-            let sql = "insert or ignore into local_event_record(
+            let sql = "insert or ignore into runtime_store_record(
                 change_seq,
                 record_id,
                 family,
@@ -88,8 +91,10 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
                 event_content,
                 event_sig,
                 raw_event_json,
-                outbox_status
-            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                outbox_status,
+                relay_set_fingerprint,
+                relay_delivery_json
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             let _ = self.executor.exec(sql, &params)?;
             Ok(())
         })();
@@ -101,17 +106,17 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
             }
         }
         self.get_record(&input.record_id)?
-            .ok_or_else(|| LocalEventsError::InvalidRecord("record append failed".to_owned()))
+            .ok_or_else(|| RuntimeStoreError::InvalidRecord("record append failed".to_owned()))
     }
 
     pub fn get_record(
         &self,
         record_id: &str,
-    ) -> Result<Option<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Option<RuntimeStoreRecord>, RuntimeStoreError> {
         validate_non_empty("record_id", record_id)?;
         let params = json!([record_id]).to_string();
         let rows = self.query_records(
-            "select * from local_event_record where record_id = ? limit 1",
+            "select * from runtime_store_record where record_id = ? limit 1",
             &params,
         )?;
         Ok(rows.into_iter().next())
@@ -121,10 +126,10 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         &self,
         after_seq: i64,
         limit: u32,
-    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Vec<RuntimeStoreRecord>, RuntimeStoreError> {
         let params = json!([after_seq, i64::from(limit)]).to_string();
         self.query_records(
-            "select * from local_event_record where seq > ? order by seq asc limit ?",
+            "select * from runtime_store_record where seq > ? order by seq asc limit ?",
             &params,
         )
     }
@@ -133,10 +138,10 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         &self,
         after_change_seq: i64,
         limit: u32,
-    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Vec<RuntimeStoreRecord>, RuntimeStoreError> {
         let params = json!([after_change_seq, i64::from(limit)]).to_string();
         self.query_records(
-            "select * from local_event_record where change_seq > ? order by change_seq asc, seq asc limit ?",
+            "select * from runtime_store_record where change_seq > ? order by change_seq asc, seq asc limit ?",
             &params,
         )
     }
@@ -144,10 +149,10 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
     pub fn list_records_changed_latest(
         &self,
         limit: u32,
-    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Vec<RuntimeStoreRecord>, RuntimeStoreError> {
         let params = json!([i64::from(limit)]).to_string();
         self.query_records(
-            "select * from local_event_record order by change_seq desc, seq desc, record_id asc limit ?",
+            "select * from runtime_store_record order by change_seq desc, seq desc, record_id asc limit ?",
             &params,
         )
     }
@@ -157,7 +162,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         before_change_seq: i64,
         before_seq: i64,
         limit: u32,
-    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Vec<RuntimeStoreRecord>, RuntimeStoreError> {
         let params = json!([
             before_change_seq,
             before_change_seq,
@@ -166,7 +171,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         ])
         .to_string();
         self.query_records(
-            "select * from local_event_record
+            "select * from runtime_store_record
              where change_seq < ? or (change_seq = ? and seq < ?)
              order by change_seq desc, seq desc, record_id asc
              limit ?",
@@ -176,25 +181,29 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
 
     pub fn update_outbox(
         &self,
-        update: &LocalEventRecordUpdate,
-    ) -> Result<LocalEventRecord, LocalEventsError> {
+        update: &RuntimeStoreRecordUpdate,
+    ) -> Result<RuntimeStoreRecord, RuntimeStoreError> {
         validate_non_empty("record_id", &update.record_id)?;
         self.executor.begin()?;
-        let result = (|| -> Result<i64, LocalEventsError> {
+        let result = (|| -> Result<i64, RuntimeStoreError> {
             let change_seq = self.next_change_seq()?;
             let params = json!([
                 change_seq,
                 update.status.as_str(),
                 update.outbox_status.as_str(),
+                update.relay_set_fingerprint,
+                encode_json(update.relay_delivery_json.as_ref()),
                 update.updated_at_ms,
                 update.record_id
             ])
             .to_string();
             let outcome = self.executor.exec(
-                "update local_event_record
+                "update runtime_store_record
                  set change_seq = ?,
                      status = ?,
                      outbox_status = ?,
+                     relay_set_fingerprint = ?,
+                     relay_delivery_json = ?,
                      updated_at_ms = ?
                  where record_id = ?",
                 &params,
@@ -212,22 +221,22 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
             }
         };
         if changes == 0 {
-            return Err(LocalEventsError::Sql(SqlError::NotFound(
+            return Err(RuntimeStoreError::Sql(SqlError::NotFound(
                 update.record_id.clone(),
             )));
         }
         self.get_record(&update.record_id)?
-            .ok_or_else(|| LocalEventsError::Sql(SqlError::NotFound(update.record_id.clone())))
+            .ok_or_else(|| RuntimeStoreError::Sql(SqlError::NotFound(update.record_id.clone())))
     }
 
     pub fn get_cursor(
         &self,
         consumer_id: &str,
-    ) -> Result<Option<LocalEventsCursor>, LocalEventsError> {
+    ) -> Result<Option<RuntimeStoreCursor>, RuntimeStoreError> {
         validate_non_empty("consumer_id", consumer_id)?;
         let params = json!([consumer_id]).to_string();
         let raw = self.executor.query_raw(
-            "select consumer_id, last_change_seq, updated_at_ms from local_event_projection_cursor where consumer_id = ? limit 1",
+            "select consumer_id, last_change_seq, updated_at_ms from runtime_store_projection_cursor where consumer_id = ? limit 1",
             &params,
         )?;
         let rows: Vec<CursorRow> = serde_json::from_str(&raw)?;
@@ -239,34 +248,34 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         consumer_id: &str,
         last_change_seq: i64,
         updated_at_ms: i64,
-    ) -> Result<LocalEventsCursor, LocalEventsError> {
+    ) -> Result<RuntimeStoreCursor, RuntimeStoreError> {
         validate_non_empty("consumer_id", consumer_id)?;
         let params = json!([consumer_id, last_change_seq, updated_at_ms]).to_string();
         self.executor.exec(
-            "insert into local_event_projection_cursor(consumer_id, last_change_seq, updated_at_ms)
+            "insert into runtime_store_projection_cursor(consumer_id, last_change_seq, updated_at_ms)
              values(?,?,?)
              on conflict(consumer_id) do update set
-                 last_change_seq = max(local_event_projection_cursor.last_change_seq, excluded.last_change_seq),
+                 last_change_seq = max(runtime_store_projection_cursor.last_change_seq, excluded.last_change_seq),
                  updated_at_ms = excluded.updated_at_ms",
             &params,
         )?;
         self.get_cursor(consumer_id)?
-            .ok_or_else(|| LocalEventsError::InvalidRecord("cursor advance failed".to_owned()))
+            .ok_or_else(|| RuntimeStoreError::InvalidRecord("cursor advance failed".to_owned()))
     }
 
     fn query_records(
         &self,
         sql: &str,
         params: &str,
-    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+    ) -> Result<Vec<RuntimeStoreRecord>, RuntimeStoreError> {
         let raw = self.executor.query_raw(sql, params)?;
         let rows: Vec<RecordRow> = serde_json::from_str(&raw)?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn next_change_seq(&self) -> Result<i64, LocalEventsError> {
+    fn next_change_seq(&self) -> Result<i64, RuntimeStoreError> {
         let raw = self.executor.query_raw(
-            "select coalesce(max(change_seq), 0) + 1 as change_seq from local_event_record",
+            "select coalesce(max(change_seq), 0) + 1 as change_seq from runtime_store_record",
             "[]",
         )?;
         let rows: Vec<ChangeSeqRow> = serde_json::from_str(&raw)?;
@@ -274,7 +283,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
             .next()
             .map(|row| row.change_seq)
             .ok_or_else(|| {
-                LocalEventsError::InvalidRecord("change sequence unavailable".to_owned())
+                RuntimeStoreError::InvalidRecord("change sequence unavailable".to_owned())
             })
     }
 }
@@ -304,18 +313,20 @@ struct RecordRow {
     event_sig: Option<String>,
     raw_event_json: Option<String>,
     outbox_status: String,
+    relay_set_fingerprint: Option<String>,
+    relay_delivery_json: Option<String>,
 }
 
-impl TryFrom<RecordRow> for LocalEventRecord {
-    type Error = LocalEventsError;
+impl TryFrom<RecordRow> for RuntimeStoreRecord {
+    type Error = RuntimeStoreError;
 
     fn try_from(row: RecordRow) -> Result<Self, Self::Error> {
         Ok(Self {
             seq: row.seq,
             change_seq: row.change_seq,
             record_id: row.record_id,
-            family: LocalRecordFamily::parse(&row.family)?,
-            status: LocalRecordStatus::parse(&row.status)?,
+            family: RuntimeStoreRecordFamily::parse(&row.family)?,
+            status: RuntimeStoreRecordStatus::parse(&row.status)?,
             source_runtime: SourceRuntime::parse(&row.source_runtime)?,
             created_at_ms: row.created_at_ms,
             inserted_at_ms: row.inserted_at_ms,
@@ -334,6 +345,8 @@ impl TryFrom<RecordRow> for LocalEventRecord {
             event_sig: row.event_sig,
             raw_event_json: decode_json(row.raw_event_json)?,
             outbox_status: PublishOutboxStatus::parse(&row.outbox_status)?,
+            relay_set_fingerprint: row.relay_set_fingerprint,
+            relay_delivery_json: decode_json(row.relay_delivery_json)?,
         })
     }
 }
@@ -345,7 +358,7 @@ struct CursorRow {
     updated_at_ms: i64,
 }
 
-impl From<CursorRow> for LocalEventsCursor {
+impl From<CursorRow> for RuntimeStoreCursor {
     fn from(row: CursorRow) -> Self {
         Self {
             consumer_id: row.consumer_id,
@@ -364,7 +377,7 @@ fn encode_json(value: Option<&Value>) -> Option<String> {
     value.map(Value::to_string)
 }
 
-fn decode_json(value: Option<String>) -> Result<Option<Value>, LocalEventsError> {
+fn decode_json(value: Option<String>) -> Result<Option<Value>, RuntimeStoreError> {
     value
         .map(|value| serde_json::from_str(&value))
         .transpose()
@@ -382,18 +395,18 @@ mod tests {
 
     use super::*;
 
-    fn store() -> LocalEventsStore<SqliteExecutor> {
+    fn store() -> RuntimeStore<SqliteExecutor> {
         let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
-        let store = LocalEventsStore::new(executor);
+        let store = RuntimeStore::new(executor);
         store.migrate_up().expect("migrate up");
         store
     }
 
-    fn local_work(record_id: &str) -> LocalEventRecordInput {
-        LocalEventRecordInput {
+    fn local_work(record_id: &str) -> RuntimeStoreRecordInput {
+        RuntimeStoreRecordInput {
             record_id: record_id.to_owned(),
-            family: LocalRecordFamily::LocalWork,
-            status: LocalRecordStatus::LocalSaved,
+            family: RuntimeStoreRecordFamily::LocalWork,
+            status: RuntimeStoreRecordStatus::LocalSaved,
             source_runtime: SourceRuntime::Cli,
             created_at_ms: 1000,
             inserted_at_ms: 1001,
@@ -411,14 +424,16 @@ mod tests {
             event_sig: None,
             raw_event_json: None,
             outbox_status: PublishOutboxStatus::None,
+            relay_set_fingerprint: None,
+            relay_delivery_json: None,
         }
     }
 
-    fn signed_event(record_id: &str) -> LocalEventRecordInput {
-        LocalEventRecordInput {
+    fn signed_event(record_id: &str) -> RuntimeStoreRecordInput {
+        RuntimeStoreRecordInput {
             record_id: record_id.to_owned(),
-            family: LocalRecordFamily::SignedEvent,
-            status: LocalRecordStatus::PendingPublish,
+            family: RuntimeStoreRecordFamily::SignedEvent,
+            status: RuntimeStoreRecordStatus::PendingPublish,
             source_runtime: SourceRuntime::Cli,
             created_at_ms: 2000,
             inserted_at_ms: 2001,
@@ -436,6 +451,8 @@ mod tests {
             event_sig: Some("sig-a".to_owned()),
             raw_event_json: Some(json!({"id":record_id,"kind":3421})),
             outbox_status: PublishOutboxStatus::Pending,
+            relay_set_fingerprint: None,
+            relay_delivery_json: None,
         }
     }
 
@@ -539,7 +556,9 @@ mod tests {
             "event_content": "{}",
             "event_sig": "sig-a",
             "raw_event_json": "{\"id\":\"event-a\",\"kind\":3421}",
-            "outbox_status": "pending"
+            "outbox_status": "pending",
+            "relay_set_fingerprint": null,
+            "relay_delivery_json": null
         });
         row[field] = value;
         json!([row]).to_string()
@@ -613,16 +632,24 @@ mod tests {
         );
 
         let updated = store
-            .update_outbox(&LocalEventRecordUpdate {
+            .update_outbox(&RuntimeStoreRecordUpdate {
                 record_id: "event-a".to_owned(),
-                status: LocalRecordStatus::Published,
+                status: RuntimeStoreRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
+                relay_set_fingerprint: Some("relay-a".to_owned()),
+                relay_delivery_json: Some(json!({
+                    "state": "acknowledged",
+                    "target_relays": ["wss://relay.example"],
+                    "connected_relays": ["wss://relay.example"],
+                    "acknowledged_relays": ["wss://relay.example"]
+                })),
                 updated_at_ms: 4000,
             })
             .expect("update outbox");
 
-        assert_eq!(updated.status, LocalRecordStatus::Published);
+        assert_eq!(updated.status, RuntimeStoreRecordStatus::Published);
         assert_eq!(updated.outbox_status, PublishOutboxStatus::Acknowledged);
+        assert_eq!(updated.relay_set_fingerprint.as_deref(), Some("relay-a"));
         store.migrate_down().expect("migrate down");
     }
 
@@ -652,10 +679,12 @@ mod tests {
         );
         assert!(
             store
-                .update_outbox(&LocalEventRecordUpdate {
+                .update_outbox(&RuntimeStoreRecordUpdate {
                     record_id: " ".to_owned(),
-                    status: LocalRecordStatus::Published,
+                    status: RuntimeStoreRecordStatus::Published,
                     outbox_status: PublishOutboxStatus::Acknowledged,
+                    relay_set_fingerprint: None,
+                    relay_delivery_json: None,
                     updated_at_ms: 4000,
                 })
                 .expect_err("empty update record id")
@@ -664,10 +693,12 @@ mod tests {
         );
 
         let missing_update = store
-            .update_outbox(&LocalEventRecordUpdate {
+            .update_outbox(&RuntimeStoreRecordUpdate {
                 record_id: "missing-event".to_owned(),
-                status: LocalRecordStatus::Published,
+                status: RuntimeStoreRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
+                relay_set_fingerprint: None,
+                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect_err("missing record update");
@@ -681,7 +712,7 @@ mod tests {
         store
             .executor()
             .exec(
-                "update local_event_record set local_work_json = ? where record_id = ?",
+                "update runtime_store_record set local_work_json = ? where record_id = ?",
                 &params,
             )
             .expect("corrupt local work json");
@@ -693,7 +724,7 @@ mod tests {
     #[test]
     fn store_rolls_back_when_change_sequence_is_unavailable() {
         let append_store =
-            LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("[]".to_owned())]));
+            RuntimeStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("[]".to_owned())]));
         let append_error = append_store
             .append_record(&local_work("local-a"))
             .expect_err("append error");
@@ -702,12 +733,14 @@ mod tests {
         assert_eq!(append_store.executor().rollbacks.load(Ordering::SeqCst), 1);
 
         let update_store =
-            LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("[]".to_owned())]));
+            RuntimeStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("[]".to_owned())]));
         let update_error = update_store
-            .update_outbox(&LocalEventRecordUpdate {
+            .update_outbox(&RuntimeStoreRecordUpdate {
                 record_id: "event-a".to_owned(),
-                status: LocalRecordStatus::Published,
+                status: RuntimeStoreRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
+                relay_set_fingerprint: None,
+                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect_err("update error");
@@ -718,7 +751,7 @@ mod tests {
 
     #[test]
     fn store_reports_cursor_advance_without_returned_cursor() {
-        let store = LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), Vec::new()));
+        let store = RuntimeStore::new(ScriptedExecutor::new(Vec::new(), Vec::new()));
 
         assert!(store.get_cursor("app").expect("missing cursor").is_none());
         let cursor_error = store
@@ -730,7 +763,7 @@ mod tests {
 
     #[test]
     fn store_reports_executor_and_decode_failures() {
-        let begin_store = LocalEventsStore::new(ScriptedExecutor::with_begin_error(
+        let begin_store = RuntimeStore::new(ScriptedExecutor::with_begin_error(
             SqlError::InvalidQuery("begin failed".to_owned()),
         ));
         assert!(
@@ -741,7 +774,7 @@ mod tests {
                 .contains("begin failed")
         );
 
-        let exec_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let exec_store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Err(SqlError::InvalidQuery("insert failed".to_owned()))],
             vec![Ok(r#"[{"change_seq":1}]"#.to_owned())],
         ));
@@ -754,7 +787,7 @@ mod tests {
         );
         assert_eq!(exec_store.executor().rollbacks.load(Ordering::SeqCst), 1);
 
-        let commit_store = LocalEventsStore::new(ScriptedExecutor::with_commit_error(
+        let commit_store = RuntimeStore::new(ScriptedExecutor::with_commit_error(
             SqlError::InvalidQuery("commit failed".to_owned()),
         ));
         assert!(
@@ -765,7 +798,7 @@ mod tests {
                 .contains("commit failed")
         );
 
-        let query_error_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let query_error_store = RuntimeStore::new(ScriptedExecutor::new(
             Vec::new(),
             vec![Err(SqlError::InvalidQuery("query failed".to_owned()))],
         ));
@@ -778,24 +811,24 @@ mod tests {
         );
 
         let invalid_rows_store =
-            LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
+            RuntimeStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
         let _ = invalid_rows_store
             .get_record("record-a")
             .expect_err("invalid rows");
 
         let cursor_rows_store =
-            LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
+            RuntimeStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
         let _ = cursor_rows_store
             .get_cursor("app")
             .expect_err("invalid cursor rows");
 
         let change_rows_store =
-            LocalEventsStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
+            RuntimeStore::new(ScriptedExecutor::new(Vec::new(), vec![Ok("{".to_owned())]));
         let _ = change_rows_store
             .append_record(&local_work("local-a"))
             .expect_err("invalid change rows");
 
-        let cursor_exec_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let cursor_exec_store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Err(SqlError::InvalidQuery("cursor failed".to_owned()))],
             Vec::new(),
         ));
@@ -807,7 +840,7 @@ mod tests {
                 .contains("cursor failed")
         );
 
-        let append_lookup_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let append_lookup_store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Ok(ExecOutcome {
                 changes: 1,
                 last_insert_id: 0,
@@ -822,7 +855,7 @@ mod tests {
                 .contains("record append failed")
         );
 
-        let update_lookup_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let update_lookup_store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Ok(ExecOutcome {
                 changes: 1,
                 last_insert_id: 0,
@@ -831,10 +864,12 @@ mod tests {
         ));
         assert!(
             update_lookup_store
-                .update_outbox(&LocalEventRecordUpdate {
+                .update_outbox(&RuntimeStoreRecordUpdate {
                     record_id: "event-a".to_owned(),
-                    status: LocalRecordStatus::Published,
+                    status: RuntimeStoreRecordStatus::Published,
                     outbox_status: PublishOutboxStatus::Acknowledged,
+                    relay_set_fingerprint: None,
+                    relay_delivery_json: None,
                     updated_at_ms: 4000,
                 })
                 .expect_err("update lookup failure")
@@ -842,7 +877,7 @@ mod tests {
                 .contains("event-a")
         );
 
-        let cursor_query_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let cursor_query_store = RuntimeStore::new(ScriptedExecutor::new(
             Vec::new(),
             vec![Err(SqlError::InvalidQuery(
                 "cursor query failed".to_owned(),
@@ -856,7 +891,7 @@ mod tests {
                 .contains("cursor query failed")
         );
 
-        let advance_cursor_query_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let advance_cursor_query_store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Ok(ExecOutcome {
                 changes: 1,
                 last_insert_id: 0,
@@ -873,7 +908,7 @@ mod tests {
                 .contains("advanced cursor query failed")
         );
 
-        let change_query_store = LocalEventsStore::new(ScriptedExecutor::new(
+        let change_query_store = RuntimeStore::new(ScriptedExecutor::new(
             Vec::new(),
             vec![Err(SqlError::InvalidQuery(
                 "change query failed".to_owned(),
@@ -898,7 +933,7 @@ mod tests {
             ("raw_event_json", json!("{"), "EOF"),
             ("outbox_status", json!("bad_outbox"), "outbox"),
         ] {
-            let store = LocalEventsStore::new(ScriptedExecutor::new(
+            let store = RuntimeStore::new(ScriptedExecutor::new(
                 Vec::new(),
                 vec![Ok(record_row_with(field, value))],
             ));
@@ -910,7 +945,7 @@ mod tests {
             );
         }
 
-        let store = LocalEventsStore::new(ScriptedExecutor::new(
+        let store = RuntimeStore::new(ScriptedExecutor::new(
             vec![Ok(ExecOutcome {
                 changes: 1,
                 last_insert_id: 0,
@@ -921,13 +956,15 @@ mod tests {
             ],
         ));
         let updated = store
-            .update_outbox(&LocalEventRecordUpdate {
+            .update_outbox(&RuntimeStoreRecordUpdate {
                 record_id: "record-a".to_owned(),
-                status: LocalRecordStatus::Published,
+                status: RuntimeStoreRecordStatus::Published,
                 outbox_status: PublishOutboxStatus::Acknowledged,
+                relay_set_fingerprint: None,
+                relay_delivery_json: None,
                 updated_at_ms: 4000,
             })
             .expect("scripted update");
-        assert_eq!(updated.status, LocalRecordStatus::Published);
+        assert_eq!(updated.status, RuntimeStoreRecordStatus::Published);
     }
 }
