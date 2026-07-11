@@ -4,6 +4,7 @@ use core::fmt;
 pub enum EventParseError {
     MissingTag(&'static str),
     InvalidTag(&'static str),
+    DuplicateTag(&'static str),
     InvalidKind { expected: &'static str, got: u32 },
     InvalidNumber(&'static str, core::num::ParseIntError),
     InvalidJson(&'static str),
@@ -14,6 +15,7 @@ impl EventParseError {
         match self {
             Self::MissingTag(_) => "missing_tag",
             Self::InvalidTag(_) => "invalid_tag",
+            Self::DuplicateTag(_) => "duplicate_tag",
             Self::InvalidKind { .. } => "invalid_kind",
             Self::InvalidNumber(_, _) => "invalid_number",
             Self::InvalidJson(_) => "invalid_json",
@@ -26,6 +28,7 @@ impl fmt::Display for EventParseError {
         match self {
             EventParseError::MissingTag(t) => write!(f, "missing tag: {}", t),
             EventParseError::InvalidTag(t) => write!(f, "invalid tag structure for '{}'", t),
+            EventParseError::DuplicateTag(t) => write!(f, "duplicate tag: {}", t),
             EventParseError::InvalidKind { expected, got } => {
                 write!(f, "invalid kind {} (expected {})", got, expected)
             }

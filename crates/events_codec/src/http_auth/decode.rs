@@ -9,7 +9,8 @@ use radroots_events::{
 
 use crate::error::EventParseError;
 use crate::field_helpers::{
-    optional_tag_value, require_empty_content, required_tag_value, validate_lowercase_hex_64_tag,
+    optional_unique_tag_value, require_empty_content, required_unique_tag_value,
+    validate_lowercase_hex_64_tag,
 };
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
@@ -27,13 +28,13 @@ pub fn http_auth_from_event(
         });
     }
     require_empty_content(content, "content")?;
-    let payload_sha256 = optional_tag_value(tags, TAG_PAYLOAD)?;
+    let payload_sha256 = optional_unique_tag_value(tags, TAG_PAYLOAD)?;
     if let Some(payload) = payload_sha256.as_deref() {
         validate_lowercase_hex_64_tag(payload, TAG_PAYLOAD)?;
     }
     Ok(RadrootsHttpAuth {
-        url: required_tag_value(tags, TAG_URL_AUTH)?,
-        method: required_tag_value(tags, TAG_METHOD)?,
+        url: required_unique_tag_value(tags, TAG_URL_AUTH)?,
+        method: required_unique_tag_value(tags, TAG_METHOD)?,
         payload_sha256,
     })
 }

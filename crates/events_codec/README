@@ -27,7 +27,9 @@ The Field codec surface validates the public Nostr event substrate exposed by
    address, a farm group id, an owner document tag, lowercase SHA-256 hashes,
    and optional caption text as content;
  * NIP-42 relay auth and NIP-98 HTTP auth events require empty content and the
-   auth tags required by their protocols;
+   auth tags required by their protocols; NIP-98 `u`, `method`, and `payload`
+   tags are parsed as singleton security tags and duplicate occurrences fail
+   closed;
  * NIP-29 group codecs preserve the protocol distinction between `h`-routed
    group operations and `d`-routed addressable group state for the supported
    `9000`, `9001`, `9002`, `9005`, `9007`, `9008`, `9009`, `9021`, `9022`,
