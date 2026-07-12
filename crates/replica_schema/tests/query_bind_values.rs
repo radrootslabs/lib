@@ -12,6 +12,9 @@ use radroots_replica_schema::nostr_relay::NostrRelayQueryBindValues;
 use radroots_replica_schema::plot::PlotQueryBindValues;
 use radroots_replica_schema::plot_gcs_location::PlotGcsLocationQueryBindValues;
 use radroots_replica_schema::plot_tag::PlotTagQueryBindValues;
+use radroots_replica_schema::result::{
+    ReplicaSchemaError, ReplicaSchemaResult, ReplicaSchemaResultList, ReplicaSchemaResultPass,
+};
 use radroots_replica_schema::trade_product::TradeProductQueryBindValues;
 use serde_json::Value;
 
@@ -352,3 +355,34 @@ assert_query_bind_values!(
     "trade-product-id",
     []
 );
+
+#[test]
+fn schema_result_wrappers_cover_constructors_and_status_labels() {
+    assert_eq!(
+        ReplicaSchemaError::from("err-a".to_string()),
+        ReplicaSchemaError {
+            err: "err-a".to_string()
+        }
+    );
+    assert_eq!(
+        ReplicaSchemaError::new("err-b".to_string()),
+        ReplicaSchemaError {
+            err: "err-b".to_string()
+        }
+    );
+    assert_eq!(
+        ReplicaSchemaResult::new("result-a".to_string()),
+        ReplicaSchemaResult {
+            result: "result-a".to_string()
+        }
+    );
+
+    let empty = ReplicaSchemaResultList::<String>::new(Vec::new());
+    assert!(empty.is_empty());
+    let filled = ReplicaSchemaResultList::new(vec!["row-a".to_string()]);
+    assert!(!filled.is_empty());
+    assert_eq!(filled.results, vec!["row-a".to_string()]);
+
+    assert_eq!(ReplicaSchemaResultPass::new(true).status_label(), "pass");
+    assert_eq!(ReplicaSchemaResultPass::new(false).status_label(), "fail");
+}

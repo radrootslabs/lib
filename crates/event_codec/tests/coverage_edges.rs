@@ -30,6 +30,14 @@ fn parsed_args() -> (String, String, u32, u32, String, Vec<Vec<String>>, String)
 }
 
 #[test]
+fn event_parse_error_duplicate_tag_code_and_display_are_stable() {
+    let error = EventParseError::DuplicateTag("d");
+
+    assert_eq!(error.code(), "duplicate_tag");
+    assert_eq!(error.to_string(), "duplicate tag: d");
+}
+
+#[test]
 fn parsed_wrappers_propagate_invalid_kind_errors() {
     let (id, author, created_at, kind, content, tags, sig) = parsed_args();
     assert_invalid_kind(

@@ -1459,6 +1459,12 @@ mod tests {
             RadrootsOrderEnvelopeParseError::InvalidTag("p")
         );
         assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::DuplicateTag(
+                "p",
+            )),
+            RadrootsOrderEnvelopeParseError::InvalidTag("p")
+        );
+        assert_eq!(
             map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidKind {
                 expected: "1",
                 got: 2,

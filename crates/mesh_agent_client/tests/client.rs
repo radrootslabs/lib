@@ -54,6 +54,14 @@ fn mock_client_status_reports_reticulum_preview_unavailable() {
 }
 
 #[test]
+fn default_mock_client_uses_preview_unavailable_policy() {
+    let client = RadrootsMockMeshAgentClient::default();
+
+    assert_eq!(client.scope().as_str(), RADROOTS_RETICULUM_PREVIEW_SCOPE_ID);
+    assert_eq!(client.policy().policy_id(), RADROOTS_MESH_PREVIEW_POLICY_ID);
+}
+
+#[test]
 fn mock_client_status_can_omit_transport_rows_without_enabling_delivery() {
     let client = RadrootsMockMeshAgentClient::preview_unavailable();
     let response = client.status(MeshAgentStatusRequest {
@@ -99,6 +107,8 @@ fn mock_client_publish_never_reports_success_outcomes() {
 #[test]
 fn dto_schema_names_match_capnp_surface() {
     assert_eq!(MeshAgentTransportKind::Reticulum.schema_name(), "reticulum");
+    assert_eq!(MeshAgentImplementation::Real.schema_name(), "real");
+    assert_eq!(MeshAgentImplementation::Mock.schema_name(), "mock");
     assert_eq!(
         MeshAgentImplementation::PreviewUnavailable.schema_name(),
         "previewUnavailable"
@@ -107,6 +117,18 @@ fn dto_schema_names_match_capnp_surface() {
     assert_eq!(MeshAgentResponseStatus::Deferred.schema_name(), "deferred");
     assert_eq!(MeshAgentResponseStatus::Rejected.schema_name(), "rejected");
     assert_eq!(
+        MeshAgentTransportOutcome::Accepted.schema_name(),
+        "accepted"
+    );
+    assert_eq!(
+        MeshAgentTransportOutcome::Delivered.schema_name(),
+        "delivered"
+    );
+    assert_eq!(
+        MeshAgentTransportOutcome::Forwarded.schema_name(),
+        "forwarded"
+    );
+    assert_eq!(
         MeshAgentTransportOutcome::TransportUnavailable.schema_name(),
         "transportUnavailable"
     );
@@ -114,6 +136,19 @@ fn dto_schema_names_match_capnp_surface() {
         MeshAgentTransportOutcome::StoredByGateway.schema_name(),
         "storedByGateway"
     );
+    assert_eq!(
+        MeshAgentTransportOutcome::DeferredUntilImplemented.schema_name(),
+        "deferredUntilImplemented"
+    );
+    assert_eq!(
+        MeshAgentTransportOutcome::Rejected.schema_name(),
+        "rejected"
+    );
+    assert_eq!(
+        MeshAgentTransportOutcome::RouteUnavailable.schema_name(),
+        "routeUnavailable"
+    );
+    assert_eq!(MeshAgentTransportOutcome::Timeout.schema_name(), "timeout");
 }
 
 #[test]
