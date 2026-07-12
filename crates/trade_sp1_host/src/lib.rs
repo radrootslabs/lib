@@ -430,6 +430,11 @@ pub struct RadrootsSp1TradeExecuteBundle {
     pub report: RadrootsSp1TradeExecuteReport,
 }
 
+/// Returns whether this build includes the order-acceptance SP1 guest ELF.
+pub fn order_acceptance_sp1_guest_elf_available() -> bool {
+    cfg!(radroots_sp1_guest_elf)
+}
+
 #[cfg(all(feature = "sp1_verify", radroots_sp1_guest_elf))]
 pub fn order_acceptance_guest_elf() -> sp1_sdk::Elf {
     sp1_sdk::include_elf!("radroots_sp1_trade_order_acceptance_guest")
@@ -1744,8 +1749,8 @@ struct ProofEnvelopeDigestMaterial<'a> {
 mod tests {
     use super::{
         RadrootsSp1TradeHostError, RadrootsSp1TradeProofMode, generate_order_acceptance_proof,
-        validation_receipt_for_order_acceptance_proof, validation_receipt_result_label,
-        verify_order_acceptance_proof_artifact_structure,
+        order_acceptance_sp1_guest_elf_available, validation_receipt_for_order_acceptance_proof,
+        validation_receipt_result_label, verify_order_acceptance_proof_artifact_structure,
     };
     use base64::Engine;
     use radroots_event::{RadrootsEventEnvelope, kinds::KIND_TRADE_VALIDATION_RECEIPT};
@@ -1773,6 +1778,14 @@ mod tests {
     type ProofEnvelopeMutation = (&'static str, fn(&mut super::RadrootsSp1TradeProofEnvelope));
     type PublicValuesExecutionMutation =
         (&'static str, fn(&mut RadrootsSp1TradePublicValuesExecution));
+
+    #[test]
+    fn order_acceptance_sp1_guest_elf_capability_matches_build_cfg() {
+        assert_eq!(
+            order_acceptance_sp1_guest_elf_available(),
+            cfg!(radroots_sp1_guest_elf)
+        );
+    }
 
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
         RadrootsSp1TradeOrderAcceptanceWitness {
