@@ -460,6 +460,7 @@ const REPLICA_STORE_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("replica_store_farm_delete", Some("opts_json"), Any, 2, 3),
     public_function!("replica_store_farm_find_many", Some("opts_json"), Any, 2, 3),
     public_function!("replica_store_farm_find_one", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_farm_update", Some("opts_json"), Any, 2, 3),
     public_function!(
         "replica_store_farm_gcs_location_create",
         Some("opts_json"),
@@ -829,6 +830,7 @@ const REPLICA_STORE_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("replica_store_plot_delete", Some("opts_json"), Any, 2, 3),
     public_function!("replica_store_plot_find_many", Some("opts_json"), Any, 2, 3),
     public_function!("replica_store_plot_find_one", Some("opts_json"), Any, 2, 3),
+    public_function!("replica_store_plot_update", Some("opts_json"), Any, 2, 3),
     public_function!(
         "replica_store_plot_gcs_location_create",
         Some("opts_json"),
@@ -1029,9 +1031,29 @@ mod tests {
                 .contains("export function replica_store_farm_create")
         );
         assert!(
+            replica_store[0]
+                .contents
+                .contains("export function replica_store_farm_update")
+        );
+        assert!(
+            replica_store[0]
+                .contents
+                .contains("export function replica_store_plot_update")
+        );
+        assert!(
             replica_store[1]
                 .contents
                 .contains("export declare const replica_store_farm_create")
+        );
+        assert!(
+            replica_store[1]
+                .contents
+                .contains("export declare const replica_store_farm_update")
+        );
+        assert!(
+            replica_store[1]
+                .contents
+                .contains("export declare const replica_store_plot_update")
         );
 
         let replica_sync = declaration_files(specs[2]).expect("replica sync declarations");
