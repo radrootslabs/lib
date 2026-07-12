@@ -6,7 +6,7 @@ facades and shaped query helpers for the `radroots` core libraries.
 ## Overview
 
  * a generic `ReplicaSql<E>` facade over any `SqlExecutor` implementation;
- * migration, backup, restore, and export helpers for replica database state;
+ * migration, backup, restore, and export helpers for replica store state;
  * typed CRUD helpers over the shared replica schema models;
  * shaped query helpers for common trade, farm, and event freshness lookups;
  * feature-gated web and native backend support through `radroots_sql_core`.
