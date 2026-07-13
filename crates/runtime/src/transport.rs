@@ -111,7 +111,8 @@ impl RadrootsRuntimeTransportDispatchRequest {
             self.payload.transport_payload()?,
             self.target_set.clone(),
             self.satisfaction_policy.clone(),
-        ))
+        )
+        .with_now_ms(self.now_ms))
     }
 }
 
@@ -639,10 +640,41 @@ mod tests {
         RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
         RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     };
+    #[cfg(feature = "transport-workers")]
+    use std::sync::{Arc, Mutex};
 
     struct StaticTransport {
         kind: RadrootsTransportKind,
         outcome_kind: RadrootsTransportOutcomeKind,
+        #[cfg(feature = "transport-workers")]
+        captured_now_ms: Option<Arc<Mutex<Vec<i64>>>>,
+    }
+
+    impl StaticTransport {
+        fn new(kind: RadrootsTransportKind, outcome_kind: RadrootsTransportOutcomeKind) -> Self {
+            Self {
+                kind,
+                outcome_kind,
+                #[cfg(feature = "transport-workers")]
+                captured_now_ms: None,
+            }
+        }
+
+        #[cfg(feature = "transport-workers")]
+        fn recording_now_ms(
+            kind: RadrootsTransportKind,
+            outcome_kind: RadrootsTransportOutcomeKind,
+        ) -> (Self, Arc<Mutex<Vec<i64>>>) {
+            let captured_now_ms = Arc::new(Mutex::new(Vec::new()));
+            (
+                Self {
+                    kind,
+                    outcome_kind,
+                    captured_now_ms: Some(captured_now_ms.clone()),
+                },
+                captured_now_ms,
+            )
+        }
     }
 
     impl RadrootsTransport for StaticTransport {
@@ -667,6 +699,13 @@ mod tests {
             request: RadrootsTransportDeliveryRequest,
         ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
             Box::pin(async move {
+                #[cfg(feature = "transport-workers")]
+                if let Some(captured_now_ms) = &self.captured_now_ms {
+                    captured_now_ms
+                        .lock()
+                        .expect("now_ms capture")
+                        .push(request.now_ms);
+                }
                 Ok(RadrootsTransportDeliveryReceipt {
                     request_id: request.request_id,
                     target_receipts: request
@@ -761,20 +800,20 @@ mod tests {
     async fn registry_dispatches_transport_by_transport_kind() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            })
+            .register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            ))
             .expect("register");
         assert_eq!(
             registry.registered_kinds(),
             vec![RadrootsTransportKind::Nostr]
         );
         assert!(matches!(
-            registry.register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            }),
+            registry.register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            )),
             Err(RadrootsRuntimeTransportError::TransportAlreadyRegistered(_))
         ));
 
@@ -820,6 +859,24 @@ mod tests {
             receipt.target_receipts[0].status,
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
+    }
+
+    #[test]
+    fn dispatch_request_preserves_transport_now_ms() {
+        let request = RadrootsRuntimeTransportDispatchRequest::new(
+            "nostr-delivery",
+            opaque_payload(),
+            vec![target(RadrootsTransportKind::Nostr, "wss://relay.example")],
+            RadrootsTransportSatisfactionPolicy::any_accepted(),
+            123_456,
+        )
+        .expect("request");
+
+        let delivery_request = request
+            .transport_delivery_request()
+            .expect("delivery request");
+
+        assert_eq!(delivery_request.now_ms, 123_456);
     }
 
     #[cfg(feature = "transport-reticulum")]
@@ -899,10 +956,10 @@ mod tests {
     async fn delivery_worker_dispatches_ready_targets_and_skips_deferred() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            })
+            .register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            ))
             .expect("register");
         let worker = RadrootsRuntimeDeliveryWorker::new(
             &registry,
@@ -957,6 +1014,45 @@ mod tests {
 
     #[cfg(feature = "transport-workers")]
     #[tokio::test]
+    async fn delivery_worker_passes_job_now_ms_to_registered_transport() {
+        let mut registry = RadrootsRuntimeTransportRegistry::new();
+        let (transport, captured_now_ms) = StaticTransport::recording_now_ms(
+            RadrootsTransportKind::Nostr,
+            RadrootsTransportOutcomeKind::Accepted,
+        );
+        registry.register(transport).expect("register");
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: opaque_payload(),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
+                    targets: vec![RadrootsRuntimeDeliveryTarget::ready(
+                        1,
+                        target(RadrootsTransportKind::Nostr, "wss://relay.example"),
+                    )],
+                }],
+                now_ms: 987_654,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 1);
+        assert_eq!(
+            captured_now_ms.lock().expect("now_ms capture").as_slice(),
+            &[987_654]
+        );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
     async fn delivery_worker_reports_no_wait_satisfied_without_dispatch() {
         let registry = RadrootsRuntimeTransportRegistry::new();
         let worker = RadrootsRuntimeDeliveryWorker::new(
@@ -996,10 +1092,10 @@ mod tests {
     async fn delivery_worker_required_targets_use_fingerprints() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            })
+            .register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            ))
             .expect("register");
         let worker = RadrootsRuntimeDeliveryWorker::new(
             &registry,
@@ -1056,10 +1152,10 @@ mod tests {
     async fn delivery_worker_keeps_accepted_and_delivered_satisfaction_distinct() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            })
+            .register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            ))
             .expect("register");
         let worker = RadrootsRuntimeDeliveryWorker::new(
             &registry,
@@ -1099,10 +1195,10 @@ mod tests {
     async fn delivery_worker_reports_quorum_satisfaction() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(StaticTransport {
-                kind: RadrootsTransportKind::Nostr,
-                outcome_kind: RadrootsTransportOutcomeKind::Accepted,
-            })
+            .register(StaticTransport::new(
+                RadrootsTransportKind::Nostr,
+                RadrootsTransportOutcomeKind::Accepted,
+            ))
             .expect("register");
         let worker = RadrootsRuntimeDeliveryWorker::new(
             &registry,
