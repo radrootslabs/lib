@@ -4,6 +4,7 @@ use crate::{
     RadrootsRelayOutcome, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy, publish_signed_event,
+    verified_signed_event_payload,
 };
 use radroots_event::RadrootsEventEnvelope;
 use radroots_event::draft::RadrootsSignedEvent;
@@ -18,9 +19,9 @@ use radroots_outbox::{
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -285,11 +286,8 @@ where
         signed_event.id.as_str(),
         publishable.active_delivery_plan_id,
     );
-    let payload = RadrootsTransportPayload::signed_event_json(
-        signed_event.id.clone(),
-        signed_event.raw_json.clone(),
-    )
-    .map_err(transport_error_to_relay_error)?;
+    let payload =
+        verified_signed_event_payload(&signed_event).map_err(transport_error_to_relay_error)?;
     let delivery = transport
         .deliver(
             RadrootsTransportDeliveryRequest::new(

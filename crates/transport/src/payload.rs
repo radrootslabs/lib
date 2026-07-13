@@ -24,7 +24,7 @@ pub enum RadrootsTransportPayload {
 }
 
 impl RadrootsTransportPayload {
-    pub fn signed_event_json(
+    pub fn unchecked_signed_event_json(
         event_id: impl AsRef<str>,
         raw_json: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
@@ -38,12 +38,12 @@ impl RadrootsTransportPayload {
         })
     }
 
-    pub fn signed_event_json_with_digest(
+    pub fn unchecked_signed_event_json_with_digest(
         event_id: impl AsRef<str>,
         raw_json: impl AsRef<str>,
         digest: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let payload = Self::signed_event_json(event_id, raw_json)?;
+        let payload = Self::unchecked_signed_event_json(event_id, raw_json)?;
         validate_supplied_digest(payload.digest(), digest.as_ref())?;
         Ok(payload)
     }

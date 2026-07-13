@@ -189,6 +189,14 @@ const FORBIDDEN_DELIVERY_PAYLOAD_CONCEPTS: &[ForbiddenConcept] = &[
         pattern: "DigestOnly",
         reason: "runtime dispatch must not retain a digest-only payload path",
     },
+    ForbiddenConcept {
+        pattern: "RadrootsTransportPayload::signed_event_json(",
+        reason: "signed-event payload construction must name unchecked validation explicitly",
+    },
+    ForbiddenConcept {
+        pattern: "RadrootsTransportPayload::signed_event_json_with_digest(",
+        reason: "signed-event digest validation must name unchecked validation explicitly",
+    },
 ];
 
 #[test]

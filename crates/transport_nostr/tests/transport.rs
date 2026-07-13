@@ -31,7 +31,7 @@ use radroots_transport_nostr::{
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
     RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
     fetch_and_ingest_relay_events, fetch_relay_events, fetch_relay_events_blocking,
-    publish_claimed_outbox_event, publish_signed_event,
+    publish_claimed_outbox_event, publish_signed_event, verified_signed_event_payload,
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -728,8 +728,11 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     let target = nostr_target(RELAY_PRIMARY_WSS);
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-1",
-        RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
-            .expect("payload"),
+        RadrootsTransportPayload::unchecked_signed_event_json(
+            signed.id.clone(),
+            signed.raw_json.clone(),
+        )
+        .expect("payload"),
         RadrootsTransportTargetSet::new(vec![target.clone()]).expect("targets"),
         RadrootsTransportSatisfactionPolicy::all_accepted(),
     );
@@ -751,6 +754,31 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
         receipt
             .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::all_accepted())
             .expect("satisfaction")
+    );
+}
+
+#[test]
+fn verified_signed_event_payload_preserves_transport_payload_identity() {
+    let signed = signed_post("verified payload");
+    let payload = verified_signed_event_payload(&signed).expect("verified payload");
+    let RadrootsTransportPayload::SignedEventJson {
+        event_id,
+        raw_json,
+        digest,
+    } = payload
+    else {
+        panic!("signed event payload expected");
+    };
+
+    assert_eq!(event_id, signed.id);
+    assert_eq!(raw_json, signed.raw_json);
+    assert_eq!(digest.len(), 64);
+
+    let mut mismatched = signed;
+    mismatched.raw_json = "{}".to_owned();
+    assert_eq!(
+        verified_signed_event_payload(&mismatched).expect_err("mismatched raw json"),
+        RadrootsTransportError::InvalidPayloadBytes
     );
 }
 
@@ -791,8 +819,11 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
     let target_error = transport
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-request-target",
-            RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
-                .expect("payload"),
+            RadrootsTransportPayload::unchecked_signed_event_json(
+                signed.id.clone(),
+                signed.raw_json.clone(),
+            )
+            .expect("payload"),
             RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
             RadrootsTransportSatisfactionPolicy::all_accepted(),
         ))
@@ -814,8 +845,11 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
     let receipt = transport
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-canonical-receipt",
-            RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
-                .expect("payload"),
+            RadrootsTransportPayload::unchecked_signed_event_json(
+                signed.id.clone(),
+                signed.raw_json.clone(),
+            )
+            .expect("payload"),
             RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
             policy.clone(),
         ))
@@ -859,8 +893,11 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
     .expect("required targets");
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-scoped",
-        RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
-            .expect("payload"),
+        RadrootsTransportPayload::unchecked_signed_event_json(
+            signed.id.clone(),
+            signed.raw_json.clone(),
+        )
+        .expect("payload"),
         RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("targets"),
         policy.clone(),
     );

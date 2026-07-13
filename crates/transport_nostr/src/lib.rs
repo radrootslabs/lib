@@ -33,6 +33,6 @@ pub use publish::RadrootsNostrClientPublishAdapter;
 pub use publish::{
     RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayPublishAdapter,
     RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
-    publish_signed_event,
+    publish_signed_event, verified_signed_event_payload,
 };
 pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrl, RadrootsRelayUrlPolicy};

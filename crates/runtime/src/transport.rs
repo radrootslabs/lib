@@ -60,17 +60,53 @@ pub enum RadrootsRuntimeTransportPayload {
     OpaqueBytes { label: String, bytes: Vec<u8> },
 }
 
+#[derive(serde::Deserialize)]
+struct RuntimeSignedEventJsonWire {
+    id: String,
+    pubkey: String,
+    created_at: u32,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
 impl RadrootsRuntimeTransportPayload {
+    pub fn verified_signed_event_json(
+        event: &RadrootsSignedEvent,
+    ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
+        verify_signed_event_raw_json_matches_event(event)?;
+        RadrootsTransportPayload::unchecked_signed_event_json(&event.id, &event.raw_json)
+    }
+
     pub fn transport_payload(&self) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
         match self {
-            Self::SignedEvent(event) => {
-                RadrootsTransportPayload::signed_event_json(&event.id, &event.raw_json)
-            }
+            Self::SignedEvent(event) => Self::verified_signed_event_json(event),
             Self::OpaqueBytes { label, bytes } => {
                 RadrootsTransportPayload::opaque_bytes(label, bytes)
             }
         }
     }
+}
+
+fn verify_signed_event_raw_json_matches_event(
+    event: &RadrootsSignedEvent,
+) -> Result<(), RadrootsTransportError> {
+    let wire: RuntimeSignedEventJsonWire = serde_json::from_str(event.raw_json.as_str())
+        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
+    if wire.id != event.id {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    if wire.pubkey != event.pubkey
+        || wire.created_at != event.created_at
+        || wire.kind != event.kind
+        || wire.tags != event.tags
+        || wire.content != event.content
+        || wire.sig != event.sig
+    {
+        return Err(RadrootsTransportError::InvalidPayloadBytes);
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -634,11 +670,12 @@ mod tests {
     use radroots_transport::{
         RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
         RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest, RadrootsTransportFuture,
-        RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportOutcome,
-        RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-        RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-        RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+        RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+        RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+        RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
+        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+        RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+        RadrootsTransportTargetSet,
     };
     #[cfg(feature = "transport-workers")]
     use std::sync::{Arc, Mutex};
@@ -763,17 +800,51 @@ mod tests {
 
     #[cfg(feature = "transport-workers")]
     fn signed_event() -> RadrootsSignedEvent {
+        let id = "d".repeat(64);
+        let pubkey = "e".repeat(64);
+        let sig = "f".repeat(128);
         RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: "d".repeat(64),
-            pubkey: "e".repeat(64),
+            id: id.clone(),
+            pubkey: pubkey.clone(),
             created_at: 10,
             kind: 1,
             tags: Vec::new(),
             content: "hello".to_owned(),
-            sig: "f".repeat(128),
-            raw_json: "{\"id\":\"fixture\"}".to_owned(),
+            sig: sig.clone(),
+            raw_json: format!(
+                "{{\"id\":\"{id}\",\"pubkey\":\"{pubkey}\",\"created_at\":10,\"kind\":1,\"tags\":[],\"content\":\"hello\",\"sig\":\"{sig}\"}}"
+            ),
         })
         .expect("signed event")
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[test]
+    fn runtime_verified_signed_event_payload_uses_structured_signed_event() {
+        let event = signed_event();
+        let payload = RadrootsRuntimeTransportPayload::verified_signed_event_json(&event)
+            .expect("verified payload");
+        let via_variant = RadrootsRuntimeTransportPayload::SignedEvent(event.clone())
+            .transport_payload()
+            .expect("transport payload");
+        let RadrootsTransportPayload::SignedEventJson {
+            event_id, raw_json, ..
+        } = payload.clone()
+        else {
+            panic!("signed event payload expected");
+        };
+
+        assert_eq!(payload, via_variant);
+        assert_eq!(event_id, event.id);
+        assert_eq!(raw_json, event.raw_json);
+
+        let mut mismatched = event;
+        mismatched.raw_json = "{}".to_owned();
+        assert_eq!(
+            RadrootsRuntimeTransportPayload::verified_signed_event_json(&mismatched)
+                .expect_err("mismatched raw json"),
+            RadrootsTransportError::InvalidPayloadBytes
+        );
     }
 
     #[cfg(feature = "transport-workers")]

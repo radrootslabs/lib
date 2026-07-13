@@ -380,13 +380,13 @@ fn request_models_round_trip_with_serde() {
 }
 
 #[test]
-fn payload_contract_derives_and_validates_digests() {
+fn payload_contract_derives_and_validates_unchecked_signed_event_digests() {
     let event_id = "a".repeat(64);
-    let signed = RadrootsTransportPayload::signed_event_json(
+    let signed = RadrootsTransportPayload::unchecked_signed_event_json(
         event_id.as_str(),
         "{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
     )
-    .expect("signed event payload");
+    .expect("unchecked signed event payload");
     assert_eq!(signed.payload_kind(), "signed_event_json");
     assert_eq!(signed.digest().len(), 64);
     assert!(
@@ -396,12 +396,12 @@ fn payload_contract_derives_and_validates_digests() {
             .all(|byte| { byte.is_ascii_digit() || matches!(byte, b'a'..=b'f') })
     );
     assert_eq!(
-        RadrootsTransportPayload::signed_event_json_with_digest(
+        RadrootsTransportPayload::unchecked_signed_event_json_with_digest(
             event_id.as_str(),
             "{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
             signed.digest(),
         )
-        .expect("signed payload with digest"),
+        .expect("unchecked signed payload with digest"),
         signed
     );
 
@@ -430,14 +430,14 @@ fn payload_contract_derives_and_validates_digests() {
 }
 
 #[test]
-fn payload_contract_rejects_invalid_ids_bytes_labels_and_digests() {
+fn payload_contract_rejects_invalid_unchecked_signed_event_ids_bytes_labels_and_digests() {
     assert_eq!(
-        RadrootsTransportPayload::signed_event_json("A".repeat(64), "{}")
+        RadrootsTransportPayload::unchecked_signed_event_json("A".repeat(64), "{}")
             .expect_err("uppercase event id"),
         RadrootsTransportError::InvalidPayloadId
     );
     assert_eq!(
-        RadrootsTransportPayload::signed_event_json("a".repeat(64), " [] ")
+        RadrootsTransportPayload::unchecked_signed_event_json("a".repeat(64), " [] ")
             .expect_err("non-object json"),
         RadrootsTransportError::InvalidPayloadBytes
     );

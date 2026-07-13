@@ -109,6 +109,36 @@ pub trait RadrootsRelayPublishAdapter: Send + Sync {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>;
 }
 
+pub fn verified_signed_event_payload(
+    signed_event: &RadrootsSignedEvent,
+) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
+    verify_signed_event_raw_json_matches_event(signed_event)?;
+    RadrootsTransportPayload::unchecked_signed_event_json(
+        signed_event.id.as_str(),
+        signed_event.raw_json.as_str(),
+    )
+}
+
+fn verify_signed_event_raw_json_matches_event(
+    signed_event: &RadrootsSignedEvent,
+) -> Result<(), RadrootsTransportError> {
+    let wire: SignedEventJsonWire = serde_json::from_str(signed_event.raw_json.as_str())
+        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
+    if wire.id != signed_event.id {
+        return Err(RadrootsTransportError::InvalidPayloadId);
+    }
+    if wire.pubkey != signed_event.pubkey
+        || wire.created_at != signed_event.created_at
+        || wire.kind != signed_event.kind
+        || wire.tags != signed_event.tags
+        || wire.content != signed_event.content
+        || wire.sig != signed_event.sig
+    {
+        return Err(RadrootsTransportError::InvalidPayloadBytes);
+    }
+    Ok(())
+}
+
 impl<A> RadrootsRelayPublishAdapter for &A
 where
     A: RadrootsRelayPublishAdapter + ?Sized,
