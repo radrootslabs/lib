@@ -361,13 +361,13 @@ fn schema_result_wrappers_cover_constructors_and_status_labels() {
     assert_eq!(
         ReplicaSchemaError::from("err-a".to_string()),
         ReplicaSchemaError {
-            err: "err-a".to_string()
+            error: "err-a".to_string()
         }
     );
     assert_eq!(
         ReplicaSchemaError::new("err-b".to_string()),
         ReplicaSchemaError {
-            err: "err-b".to_string()
+            error: "err-b".to_string()
         }
     );
     assert_eq!(

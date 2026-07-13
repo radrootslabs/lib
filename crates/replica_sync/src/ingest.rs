@@ -1397,7 +1397,7 @@ fn handle_delete_result<T>(
     match result {
         Ok(_) => Ok(()),
         Err(err) => {
-            if matches!(err.err, SqlError::NotFound(_)) {
+            if matches!(err.error, SqlError::NotFound(_)) {
                 return Ok(());
             }
             Err(err.into())

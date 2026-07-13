@@ -76,7 +76,7 @@ fn assert_invalid_argument<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
         Ok(_) => panic!("invalid argument expected"),
         Err(err) => err,
     };
-    assert!(matches!(err.err, SqlError::InvalidArgument(_)));
+    assert!(matches!(err.error, SqlError::InvalidArgument(_)));
 }
 
 fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
@@ -84,7 +84,7 @@ fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
         Ok(_) => panic!("not found expected"),
         Err(err) => err,
     };
-    assert!(matches!(err.err, SqlError::NotFound(_)));
+    assert!(matches!(err.error, SqlError::NotFound(_)));
 }
 
 fn open_db() -> ReplicaSql<SqliteExecutor> {

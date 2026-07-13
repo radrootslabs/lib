@@ -122,7 +122,7 @@ fn register_result_contracts(registry: &mut Registry) {
     for (name, field_name, field_ty) in [
         (
             "ReplicaSchemaError",
-            "err",
+            "error",
             TypeRef::GenericParam("T".to_owned()),
         ),
         (

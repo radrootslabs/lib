@@ -87,7 +87,7 @@ fn assert_invalid_query<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
         Ok(_) => panic!("invalid query expected"),
         Err(err) => err,
     };
-    assert!(matches!(err.err, SqlError::InvalidQuery(_)));
+    assert!(matches!(err.error, SqlError::InvalidQuery(_)));
 }
 
 fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
@@ -95,7 +95,7 @@ fn assert_not_found<T>(result: Result<T, ReplicaSchemaError<SqlError>>) {
         Ok(_) => panic!("not found expected"),
         Err(err) => err,
     };
-    assert!(matches!(err.err, SqlError::NotFound(_)));
+    assert!(matches!(err.error, SqlError::NotFound(_)));
 }
 
 #[test]

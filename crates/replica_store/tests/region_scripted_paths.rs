@@ -198,7 +198,7 @@ fn assert_replica_schema_error_code<T>(
         Ok(_) => panic!("expected ierror"),
         Err(err) => err,
     };
-    assert_eq!(err.err.code(), code);
+    assert_eq!(err.error.code(), code);
 }
 
 macro_rules! assert_secondary_model_paths {

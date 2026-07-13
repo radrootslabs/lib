@@ -49,7 +49,7 @@ use std::panic;
 fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -> T {
     match result {
         Ok(value) => value,
-        Err(err) => panic!("{label}: {}", err.err),
+        Err(err) => panic!("{label}: {}", err.error),
     }
 }
 

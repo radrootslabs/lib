@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ReplicaSchemaError<T> {
-    pub err: T,
+    pub error: T,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -21,14 +21,14 @@ pub struct ReplicaSchemaResultPass {
 }
 
 impl<T> From<T> for ReplicaSchemaError<T> {
-    fn from(err: T) -> Self {
-        Self { err }
+    fn from(error: T) -> Self {
+        Self { error }
     }
 }
 
 impl<T> ReplicaSchemaError<T> {
-    pub fn new(err: T) -> Self {
-        Self { err }
+    pub fn new(error: T) -> Self {
+        Self { error }
     }
 }
 

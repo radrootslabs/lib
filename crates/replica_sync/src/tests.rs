@@ -26,7 +26,7 @@ use std::panic;
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -> T {
     result
-        .map_err(|err| format!("{label}: {}", err.err))
+        .map_err(|err| format!("{label}: {}", err.error))
         .unwrap()
 }
 
