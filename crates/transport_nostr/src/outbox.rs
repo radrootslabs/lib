@@ -72,6 +72,7 @@ pub struct RadrootsOutboxPublishTargetReceipt {
     pub target_scope: Option<String>,
     pub target_label: Option<String>,
     pub attempted: bool,
+    pub transport_status: RadrootsTransportDeliveryTargetStatus,
     pub outcome: RadrootsRelayOutcome,
 }
 
@@ -116,8 +117,8 @@ where
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
             terminal_count: 0,
-            quorum: publishable.satisfaction_required_count,
-            quorum_met: publishable.accepted_count >= publishable.satisfaction_required_count,
+            quorum: publishable.remaining_satisfaction_count,
+            quorum_met: publishable.satisfied_count >= publishable.satisfaction_required_count,
             target_receipts: Vec::new(),
             relay_receipts: Vec::new(),
         });
@@ -130,10 +131,11 @@ where
         policy.relay_url_policy,
     )?;
     let target_strings = targets.relay_strings();
-    let satisfaction_policy = satisfaction_policy_for_required_accept_count(
-        publishable.required_accept_count,
+    let satisfaction_policy = satisfaction_policy_for_remaining_count(
+        publishable.satisfaction_class,
+        publishable.remaining_satisfaction_count,
         targets.len(),
-        publishable.required_targets.is_some(),
+        publishable.remaining_required_targets.as_deref(),
     )?;
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
@@ -149,7 +151,7 @@ where
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
             signed_event.id.clone(),
             target_strings,
-            publishable.required_accept_count,
+            publishable.remaining_satisfaction_count,
             message,
         ),
         Err(error) => return Err(error),
@@ -157,48 +159,15 @@ where
     let target_receipts = target_receipts_from_relay_receipts(&publishable, &publish.relays);
 
     for target_receipt in &target_receipts {
-        if target_receipt.outcome.counts_toward_quorum() {
-            outbox
-                .mark_delivery_target_accepted(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    now_ms,
-                )
-                .await?;
-        } else if target_receipt.outcome.is_retryable() {
-            outbox
-                .mark_delivery_target_failed_retryable(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    target_receipt
-                        .outcome
-                        .message
-                        .as_deref()
-                        .unwrap_or("relay publish retryable"),
-                    now_ms,
-                )
-                .await?;
-        } else {
-            outbox
-                .mark_delivery_target_failed_terminal(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    target_receipt
-                        .outcome
-                        .message
-                        .as_deref()
-                        .unwrap_or("relay publish terminal"),
-                    now_ms,
-                )
-                .await?;
-        }
+        complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
     }
 
     for relay in &publish.relays {
-        if relay.outcome.counts_toward_quorum()
+        if relay
+            .outcome
+            .to_transport_outcome()
+            .status
+            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
             && publishable
                 .targets_for_relay(relay.relay_url.as_str())
                 .next()
@@ -245,7 +214,7 @@ where
             .iter()
             .filter(|receipt| receipt.outcome.is_terminal_failure())
             .count(),
-        quorum: publishable.required_accept_count,
+        quorum: publishable.remaining_satisfaction_count,
         quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
             >= publishable.satisfaction_required_count,
         target_receipts,
@@ -294,8 +263,8 @@ where
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
             terminal_count: 0,
-            quorum: publishable.satisfaction_required_count,
-            quorum_met: publishable.accepted_count >= publishable.satisfaction_required_count,
+            quorum: publishable.remaining_satisfaction_count,
+            quorum_met: publishable.satisfied_count >= publishable.satisfaction_required_count,
             target_receipts: Vec::new(),
             relay_receipts: Vec::new(),
         });
@@ -336,48 +305,14 @@ where
     let target_receipts = target_receipts_from_transport_receipts(&publishable, &delivery);
 
     for target_receipt in &target_receipts {
-        if target_receipt.outcome.counts_toward_quorum() {
-            outbox
-                .mark_delivery_target_accepted(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    now_ms,
-                )
-                .await?;
-        } else if target_receipt.outcome.is_retryable() {
-            outbox
-                .mark_delivery_target_failed_retryable(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    target_receipt
-                        .outcome
-                        .message
-                        .as_deref()
-                        .unwrap_or("relay publish retryable"),
-                    now_ms,
-                )
-                .await?;
-        } else {
-            outbox
-                .mark_delivery_target_failed_terminal(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    target_receipt.delivery_target_id,
-                    target_receipt
-                        .outcome
-                        .message
-                        .as_deref()
-                        .unwrap_or("relay publish terminal"),
-                    now_ms,
-                )
-                .await?;
-        }
+        complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
     }
 
     for target_receipt in &target_receipts {
-        if target_receipt.outcome.counts_toward_quorum() {
+        if target_receipt
+            .transport_status
+            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
+        {
             ingest_publish_observation(
                 event_store,
                 &signed_event,
@@ -421,7 +356,7 @@ where
             .iter()
             .filter(|receipt| receipt.outcome.is_terminal_failure())
             .count(),
-        quorum: publishable.required_accept_count,
+        quorum: publishable.remaining_satisfaction_count,
         quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
             >= publishable.satisfaction_required_count,
         target_receipts,
@@ -460,9 +395,12 @@ struct PublishableRelays {
     active_delivery_plan_id: i64,
     relays: Vec<PublishableRelay>,
     accepted_count: usize,
+    satisfied_count: usize,
     satisfaction_required_count: usize,
-    required_accept_count: usize,
+    remaining_satisfaction_count: usize,
+    satisfaction_class: RadrootsTransportSatisfactionClass,
     required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
+    remaining_required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
 }
 
 impl PublishableRelays {
@@ -479,11 +417,13 @@ impl PublishableRelays {
         &self,
         target_receipts: &[RadrootsOutboxPublishTargetReceipt],
     ) -> usize {
-        self.accepted_count
+        self.satisfied_count
             + target_receipts
                 .iter()
                 .filter(|receipt| {
-                    receipt.outcome.counts_toward_quorum()
+                    receipt
+                        .transport_status
+                        .counts_as_satisfied(self.satisfaction_class)
                         && self.required_targets.as_ref().is_none_or(|required| {
                             required
                                 .iter()
@@ -516,6 +456,7 @@ fn target_receipts_from_relay_receipts(
                 target_scope: target.target_scope.clone(),
                 target_label: target.target_label.clone(),
                 attempted: relay_receipt.attempted,
+                transport_status: relay_receipt.outcome.to_transport_outcome().status,
                 outcome: relay_receipt.outcome.clone(),
             });
         }
@@ -543,10 +484,153 @@ fn target_receipts_from_transport_receipts(
                     target_label: target.target_label.clone(),
                     attempted: receipt.status
                         != RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+                    transport_status: receipt.status,
                     outcome: relay_outcome_from_transport_outcome(&receipt.outcome),
                 })
         })
         .collect()
+}
+
+async fn complete_outbox_delivery_target(
+    outbox: &RadrootsOutbox,
+    claimed: &RadrootsOutboxClaimedEvent,
+    receipt: &RadrootsOutboxPublishTargetReceipt,
+    now_ms: i64,
+) -> Result<(), RadrootsRelayTransportError> {
+    match receipt.transport_status {
+        RadrootsTransportDeliveryTargetStatus::Pending => {
+            return Err(RadrootsRelayTransportError::TransportContract(
+                "outbox publish receipt cannot complete a target with pending transport status"
+                    .to_owned(),
+            ));
+        }
+        RadrootsTransportDeliveryTargetStatus::Accepted => {
+            outbox
+                .mark_delivery_target_accepted(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::Delivered => {
+            outbox
+                .mark_delivery_target_delivered(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::Forwarded => {
+            outbox
+                .mark_delivery_target_forwarded(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::StoredByGateway => {
+            outbox
+                .mark_delivery_target_stored_by_gateway(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::Seen => {
+            outbox
+                .mark_delivery_target_seen(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented => {
+            outbox
+                .mark_delivery_target_deferred_until_implemented(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish deferred until implemented"),
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable => {
+            outbox
+                .mark_delivery_target_preview_unavailable(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish preview unavailable"),
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied => {
+            outbox
+                .mark_delivery_target_skipped_policy_denied(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish skipped by policy"),
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable => {
+            outbox
+                .mark_delivery_target_failed_retryable(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish retryable"),
+                    now_ms,
+                )
+                .await?;
+        }
+        RadrootsTransportDeliveryTargetStatus::FailedTerminal => {
+            outbox
+                .mark_delivery_target_failed_terminal(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    receipt.delivery_target_id,
+                    receipt
+                        .outcome
+                        .message
+                        .as_deref()
+                        .unwrap_or("relay publish terminal"),
+                    now_ms,
+                )
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 fn relay_receipts_from_transport_receipts(
@@ -663,22 +747,11 @@ fn publishable_transport_targets(
 fn transport_satisfaction_policy_for_publishable(
     publishable: &PublishableRelays,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
-    if publishable.required_targets.is_some() {
-        let required_targets = publishable
-            .relays
-            .iter()
-            .map(|relay| relay.endpoint_fingerprint.clone())
-            .collect::<Vec<_>>();
-        return RadrootsTransportSatisfactionPolicy::required_targets(
-            RadrootsTransportSatisfactionClass::Accepted,
-            required_targets,
-        )
-        .map_err(transport_error_to_relay_error);
-    }
-    satisfaction_policy_for_required_accept_count(
-        publishable.required_accept_count,
+    satisfaction_policy_for_remaining_count(
+        publishable.satisfaction_class,
+        publishable.remaining_satisfaction_count,
         publishable.relays.len(),
-        false,
+        publishable.remaining_required_targets.as_deref(),
     )
 }
 
@@ -763,26 +836,38 @@ async fn publishable_relays(
             active_delivery_plan_id
         )));
     }
-    let satisfied_count = plan
+    let satisfaction_class = plan
         .satisfaction_policy
         .target_satisfaction_class()
-        .map(|satisfaction_class| {
-            active_targets
-                .iter()
-                .filter(|target| {
-                    required_targets.as_ref().is_none_or(|required| {
-                        required
-                            .iter()
-                            .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
-                    }) && target
-                        .status
-                        .counts_as_transport_satisfaction(satisfaction_class)
-                })
-                .count()
+        .unwrap_or(RadrootsTransportSatisfactionClass::Accepted);
+    let satisfied_count = active_targets
+        .iter()
+        .filter(|target| {
+            required_targets.as_ref().is_none_or(|required| {
+                required
+                    .iter()
+                    .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
+            }) && target
+                .status
+                .counts_as_transport_satisfaction(satisfaction_class)
         })
-        .unwrap_or(0);
-    let required_accept_count =
+        .count();
+    let remaining_satisfaction_count =
         (plan.required_success_count as usize).saturating_sub(satisfied_count);
+    let remaining_required_targets = required_targets.as_ref().map(|required_targets| {
+        required_targets
+            .iter()
+            .filter(|required| {
+                !active_targets.iter().any(|target| {
+                    target.endpoint_fingerprint == **required
+                        && target
+                            .status
+                            .counts_as_transport_satisfaction(satisfaction_class)
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    });
     let mut relays = Vec::new();
     let mut accepted_count = 0usize;
     for target in &active_targets {
@@ -803,7 +888,7 @@ async fn publishable_relays(
         }
         let can_contribute_to_satisfaction =
             required_targets.is_none() || required_for_satisfaction;
-        if required_accept_count > 0
+        if remaining_satisfaction_count > 0
             && can_contribute_to_satisfaction
             && (target.status.is_ready_for_attempt()
                 || (republish_accepted_relays
@@ -862,9 +947,12 @@ async fn publishable_relays(
         active_delivery_plan_id,
         relays,
         accepted_count,
+        satisfied_count,
         satisfaction_required_count,
-        required_accept_count,
+        remaining_satisfaction_count,
+        satisfaction_class,
         required_targets,
+        remaining_required_targets,
     })
 }
 
@@ -883,32 +971,44 @@ fn is_nostr_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
     target.transport_kind == RadrootsTransportKind::Nostr
 }
 
-fn satisfaction_policy_for_required_accept_count(
-    required_accept_count: usize,
+fn satisfaction_policy_for_remaining_count(
+    satisfaction_class: RadrootsTransportSatisfactionClass,
+    remaining_satisfaction_count: usize,
     target_count: usize,
-    exact_required_targets: bool,
+    exact_required_targets: Option<&[RadrootsTransportTargetFingerprint]>,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
-    if exact_required_targets {
-        return Ok(RadrootsTransportSatisfactionPolicy::no_wait());
+    if let Some(targets) = exact_required_targets {
+        return RadrootsTransportSatisfactionPolicy::required_targets(
+            satisfaction_class,
+            targets.to_vec(),
+        )
+        .map_err(transport_error_to_relay_error);
     }
-    if required_accept_count >= target_count {
-        return Ok(RadrootsTransportSatisfactionPolicy::all_accepted());
+    if remaining_satisfaction_count >= target_count {
+        return Ok(RadrootsTransportSatisfactionPolicy::All {
+            class: satisfaction_class,
+        });
     }
-    if required_accept_count == 0 {
+    if remaining_satisfaction_count == 0 {
         return Err(RadrootsRelayTransportError::Transport(
-            "required Nostr relay acceptance count must be greater than zero".to_owned(),
+            "required Nostr relay satisfaction count must be greater than zero".to_owned(),
         ));
     }
-    if required_accept_count == 1 {
-        return Ok(RadrootsTransportSatisfactionPolicy::any_accepted());
+    if remaining_satisfaction_count == 1 {
+        return Ok(RadrootsTransportSatisfactionPolicy::Any {
+            class: satisfaction_class,
+        });
     }
-    let count = u16::try_from(required_accept_count).map_err(|_| {
+    let count = u16::try_from(remaining_satisfaction_count).map_err(|_| {
         RadrootsRelayTransportError::Transport(
-            "required Nostr relay acceptance count exceeds supported transport policy range"
+            "required Nostr relay satisfaction count exceeds supported transport policy range"
                 .to_owned(),
         )
     })?;
-    Ok(RadrootsTransportSatisfactionPolicy::quorum_accepted(count))
+    Ok(RadrootsTransportSatisfactionPolicy::Quorum {
+        class: satisfaction_class,
+        threshold: count,
+    })
 }
 
 async fn ingest_publish_observation(
@@ -949,31 +1049,135 @@ fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelop
 
 #[cfg(test)]
 mod tests {
-    use super::{adapter_transport_failure_receipt, satisfaction_policy_for_required_accept_count};
-    use radroots_transport::RadrootsTransportSatisfactionPolicy;
+    use super::{
+        PublishableRelay, PublishableRelays, adapter_transport_failure_receipt,
+        satisfaction_policy_for_remaining_count, target_receipts_from_relay_receipts,
+        target_receipts_from_transport_receipts,
+    };
+    use crate::{RadrootsRelayOutcome, RadrootsRelayPublishRelayReceipt};
+    use radroots_transport::{
+        RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
+        RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+    };
 
     #[test]
     fn internal_outbox_publish_helpers_cover_policy_edges() {
         assert_eq!(
-            satisfaction_policy_for_required_accept_count(2, 2, false).expect("all targets"),
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Accepted,
+                2,
+                2,
+                None
+            )
+            .expect("all targets"),
             RadrootsTransportSatisfactionPolicy::all_accepted()
         );
         assert_eq!(
-            satisfaction_policy_for_required_accept_count(1, 3, false).expect("at least one"),
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Accepted,
+                1,
+                3,
+                None
+            )
+            .expect("at least one"),
             RadrootsTransportSatisfactionPolicy::any_accepted()
         );
         assert_eq!(
-            satisfaction_policy_for_required_accept_count(1, 3, true)
-                .expect("exact required targets"),
-            RadrootsTransportSatisfactionPolicy::no_wait()
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Delivered,
+                2,
+                3,
+                None
+            )
+            .expect("delivered quorum"),
+            RadrootsTransportSatisfactionPolicy::quorum_delivered(2)
+        );
+        let required_target =
+            RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
+                .expect("required target");
+        assert_eq!(
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Delivered,
+                1,
+                3,
+                Some(core::slice::from_ref(&required_target.fingerprint))
+            )
+            .expect("exact required targets"),
+            RadrootsTransportSatisfactionPolicy::required_targets(
+                RadrootsTransportSatisfactionClass::Delivered,
+                vec![required_target.fingerprint]
+            )
+            .expect("required target policy")
         );
         assert!(
-            satisfaction_policy_for_required_accept_count(
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Accepted,
                 usize::from(u16::MAX) + 1,
                 usize::from(u16::MAX) + 2,
-                false,
+                None,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn outbox_publish_satisfaction_counts_use_active_transport_class() {
+        let target =
+            RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
+                .expect("target");
+        let publishable = PublishableRelays {
+            active_delivery_plan_id: 7,
+            relays: vec![PublishableRelay {
+                delivery_target_id: 11,
+                relay_url: target.uri.as_str().to_owned(),
+                endpoint_fingerprint: target.fingerprint.clone(),
+                target_scope: None,
+                target_label: None,
+            }],
+            accepted_count: 0,
+            satisfied_count: 0,
+            satisfaction_required_count: 1,
+            remaining_satisfaction_count: 1,
+            satisfaction_class: RadrootsTransportSatisfactionClass::Delivered,
+            required_targets: None,
+            remaining_required_targets: None,
+        };
+
+        let accepted_relay_receipts = target_receipts_from_relay_receipts(
+            &publishable,
+            &[RadrootsRelayPublishRelayReceipt::attempted(
+                target.uri.as_str(),
+                RadrootsRelayOutcome::accepted(),
+            )],
+        );
+        assert_eq!(
+            accepted_relay_receipts[0].transport_status,
+            RadrootsTransportDeliveryTargetStatus::Accepted
+        );
+        assert_eq!(
+            publishable.satisfied_count_after_receipts(&accepted_relay_receipts),
+            0
+        );
+
+        let delivered_transport_receipts = target_receipts_from_transport_receipts(
+            &publishable,
+            &RadrootsTransportDeliveryReceipt {
+                request_id: "request-1".to_owned(),
+                target_receipts: vec![RadrootsTransportTargetReceipt::new(
+                    target,
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
+                )],
+            },
+        );
+        assert_eq!(
+            delivered_transport_receipts[0].transport_status,
+            RadrootsTransportDeliveryTargetStatus::Delivered
+        );
+        assert_eq!(
+            publishable.satisfied_count_after_receipts(&delivered_transport_receipts),
+            1
         );
     }
 

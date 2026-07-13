@@ -774,6 +774,78 @@ impl RadrootsOutbox {
         .await
     }
 
+    pub async fn mark_delivery_target_delivered(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::Delivered,
+            None,
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_forwarded(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::Forwarded,
+            None,
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_stored_by_gateway(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::StoredByGateway,
+            None,
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_delivery_target_seen(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        delivery_target_id: i64,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_delivery_target_status(
+            outbox_event_id,
+            claim_token,
+            delivery_target_id,
+            RadrootsOutboxDeliveryTargetStatus::Seen,
+            None,
+            attempted_at_ms,
+        )
+        .await
+    }
+
     pub async fn mark_delivery_target_failed_retryable(
         &self,
         outbox_event_id: i64,
@@ -1130,11 +1202,13 @@ impl RadrootsOutbox {
                 tx.commit().await?;
                 return Ok(());
             }
-            return Err(RadrootsOutboxError::DeliveryTargetStatusConflict {
-                delivery_target_id,
-                current_status: current_status.as_str(),
-                requested_status: status.as_str(),
-            });
+            if !delivery_target_status_can_advance(current_status, status) {
+                return Err(RadrootsOutboxError::DeliveryTargetStatusConflict {
+                    delivery_target_id,
+                    current_status: current_status.as_str(),
+                    requested_status: status.as_str(),
+                });
+            }
         }
         let completed_at_ms = status.is_completed().then_some(attempted_at_ms);
         let outcome_kind = outcome_kind_for_status(status);
@@ -2304,6 +2378,27 @@ fn outcome_kind_for_status(
             RadrootsTransportOutcomeKind::Rejected
         }
     }
+}
+
+fn delivery_target_status_can_advance(
+    current: RadrootsOutboxDeliveryTargetStatus,
+    requested: RadrootsOutboxDeliveryTargetStatus,
+) -> bool {
+    matches!(
+        (current, requested),
+        (
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            RadrootsOutboxDeliveryTargetStatus::Forwarded
+                | RadrootsOutboxDeliveryTargetStatus::StoredByGateway
+                | RadrootsOutboxDeliveryTargetStatus::Seen
+                | RadrootsOutboxDeliveryTargetStatus::Delivered
+        ) | (
+            RadrootsOutboxDeliveryTargetStatus::Forwarded
+                | RadrootsOutboxDeliveryTargetStatus::StoredByGateway
+                | RadrootsOutboxDeliveryTargetStatus::Seen,
+            RadrootsOutboxDeliveryTargetStatus::Delivered
+        )
+    )
 }
 
 fn parse_transport_outcome_kind(
@@ -4811,6 +4906,233 @@ mod tests {
         assert_eq!(summary.pending_events, 1);
         assert_eq!(summary.preview_unavailable_events, 0);
         assert_eq!(summary.deferred_until_implemented_events, 0);
+    }
+
+    #[tokio::test]
+    async fn accepted_delivery_target_can_advance_to_strict_success_status() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "accepted then delivered");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_post",
+                draft,
+                signed_event,
+                RadrootsOutboxDeliveryPlanInput::new(
+                    "transport.nostr.local",
+                    1,
+                    RadrootsTransportSatisfactionPolicy::all_delivered(),
+                    vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                ),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let target_id = claimed.delivery_targets[0].delivery_target_id;
+
+        outbox
+            .mark_delivery_target_accepted(receipt.outbox_event_id, "claim-a", target_id, 1_100)
+            .await
+            .expect("accepted");
+        outbox
+            .mark_delivery_target_delivered(receipt.outbox_event_id, "claim-a", target_id, 1_110)
+            .await
+            .expect("delivered");
+
+        let state = outbox
+            .complete_publish_attempt(
+                receipt.outbox_event_id,
+                "claim-a",
+                "retryable",
+                "terminal",
+                2_500,
+                1_200,
+            )
+            .await
+            .expect("complete");
+        assert_eq!(state, RadrootsOutboxEventState::Published);
+        let targets = outbox
+            .delivery_targets(receipt.outbox_event_id)
+            .await
+            .expect("targets");
+        assert_eq!(
+            targets[0].status,
+            RadrootsOutboxDeliveryTargetStatus::Delivered
+        );
+        assert_eq!(targets[0].attempt_count, 2);
+        assert_eq!(targets[0].completed_at_ms, Some(1_110));
+        assert_eq!(
+            targets[0].last_outcome_kind,
+            Some(RadrootsTransportOutcomeKind::Delivered)
+        );
+        let attempts = outbox.delivery_attempts(target_id).await.expect("attempts");
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(
+            attempts[0].outcome_kind,
+            RadrootsTransportOutcomeKind::Accepted
+        );
+        assert_eq!(
+            attempts[1].outcome_kind,
+            RadrootsTransportOutcomeKind::Delivered
+        );
+        let plans = outbox
+            .delivery_plans(receipt.outbox_event_id)
+            .await
+            .expect("plans");
+        assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Complete);
+    }
+
+    #[tokio::test]
+    async fn claimed_delivery_targets_can_complete_as_strict_transport_successes() {
+        for (content, mark, expected_status, satisfaction_policy) in [
+            (
+                "transport delivered",
+                "delivered",
+                RadrootsOutboxDeliveryTargetStatus::Delivered,
+                RadrootsTransportSatisfactionPolicy::all_delivered(),
+            ),
+            (
+                "transport forwarded",
+                "forwarded",
+                RadrootsOutboxDeliveryTargetStatus::Forwarded,
+                RadrootsTransportSatisfactionPolicy::all_forwarded(),
+            ),
+            (
+                "transport stored",
+                "stored",
+                RadrootsOutboxDeliveryTargetStatus::StoredByGateway,
+                RadrootsTransportSatisfactionPolicy::all_stored(),
+            ),
+            (
+                "transport seen",
+                "seen",
+                RadrootsOutboxDeliveryTargetStatus::Seen,
+                RadrootsTransportSatisfactionPolicy::all_seen(),
+            ),
+        ] {
+            let outbox = RadrootsOutbox::open_memory().await.expect("open");
+            let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, content);
+            let signed_event =
+                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+            let receipt = outbox
+                .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event,
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.nostr.local",
+                        1,
+                        satisfaction_policy,
+                        vec![nostr_target(NOSTR_PRIMARY_WSS)],
+                    ),
+                    true,
+                    1_007,
+                    1_000,
+                ))
+                .await
+                .expect("enqueue");
+            let claimed = outbox
+                .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
+                .await
+                .expect("claim")
+                .expect("claimed");
+            let target_id = claimed.delivery_targets[0].delivery_target_id;
+
+            match mark {
+                "delivered" => {
+                    outbox
+                        .mark_delivery_target_delivered(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            1_100,
+                        )
+                        .await
+                        .expect("delivered");
+                }
+                "forwarded" => {
+                    outbox
+                        .mark_delivery_target_forwarded(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            1_100,
+                        )
+                        .await
+                        .expect("forwarded");
+                }
+                "stored" => {
+                    outbox
+                        .mark_delivery_target_stored_by_gateway(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            1_100,
+                        )
+                        .await
+                        .expect("stored");
+                }
+                "seen" => {
+                    outbox
+                        .mark_delivery_target_seen(
+                            receipt.outbox_event_id,
+                            "claim-a",
+                            target_id,
+                            1_100,
+                        )
+                        .await
+                        .expect("seen");
+                }
+                _ => unreachable!(),
+            }
+
+            let state = outbox
+                .complete_publish_attempt(
+                    receipt.outbox_event_id,
+                    "claim-a",
+                    "retryable",
+                    "terminal",
+                    2_500,
+                    1_200,
+                )
+                .await
+                .expect("complete");
+            assert_eq!(state, RadrootsOutboxEventState::Published);
+            let operation = outbox
+                .get_operation(receipt.operation_id)
+                .await
+                .expect("operation")
+                .expect("operation");
+            assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
+            let targets = outbox
+                .delivery_targets(receipt.outbox_event_id)
+                .await
+                .expect("targets");
+            assert_eq!(targets[0].status, expected_status);
+            assert_eq!(
+                targets[0].last_outcome_kind,
+                Some(outcome_kind_for_status(expected_status))
+            );
+            let attempts = outbox.delivery_attempts(target_id).await.expect("attempts");
+            assert_eq!(attempts.len(), 1);
+            assert_eq!(
+                attempts[0].outcome_kind,
+                outcome_kind_for_status(expected_status)
+            );
+            let plans = outbox
+                .delivery_plans(receipt.outbox_event_id)
+                .await
+                .expect("plans");
+            assert_eq!(plans[0].status, RadrootsOutboxDeliveryPlanStatus::Complete);
+        }
     }
 
     #[tokio::test]

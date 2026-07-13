@@ -730,7 +730,7 @@ pub enum TransportPublishOutcomeKind {
 }
 
 impl TransportPublishOutcomeKind {
-    pub fn counts_toward_satisfaction(self) -> bool {
+    pub fn counts_toward_accepted_delivery(self) -> bool {
         matches!(
             self,
             Self::Accepted | Self::DuplicateAccepted | Self::SkippedAlreadyAccepted
@@ -902,7 +902,7 @@ impl TransportPublishJobView {
         let acknowledged_count = self
             .targets
             .iter()
-            .filter(|target| target.outcome_kind.counts_toward_satisfaction())
+            .filter(|target| target.outcome_kind.counts_toward_accepted_delivery())
             .count();
         let retryable_count = self
             .targets
@@ -1302,7 +1302,7 @@ fn validate_job_status_state(
                     required_outcomes.iter().any(|outcome| {
                         target_outcome_fingerprint(outcome, 0).is_ok_and(|fingerprint| {
                             fingerprint == *required
-                                && outcome.outcome_kind.counts_toward_satisfaction()
+                                && outcome.outcome_kind.counts_toward_accepted_delivery()
                         })
                     })
                 });
@@ -1452,7 +1452,7 @@ mod tests {
             target_count: targets.len(),
             acknowledged_count: targets
                 .iter()
-                .filter(|target| target.outcome_kind.counts_toward_satisfaction())
+                .filter(|target| target.outcome_kind.counts_toward_accepted_delivery())
                 .count(),
             retryable_count: targets
                 .iter()
@@ -1774,8 +1774,10 @@ mod tests {
 
     #[test]
     fn outcome_kinds_classify_satisfaction_retry_and_terminal() {
-        assert!(TransportPublishOutcomeKind::Accepted.counts_toward_satisfaction());
-        assert!(TransportPublishOutcomeKind::SkippedAlreadyAccepted.counts_toward_satisfaction());
+        assert!(TransportPublishOutcomeKind::Accepted.counts_toward_accepted_delivery());
+        assert!(
+            TransportPublishOutcomeKind::SkippedAlreadyAccepted.counts_toward_accepted_delivery()
+        );
         assert!(TransportPublishOutcomeKind::Timeout.is_retryable());
         assert!(TransportPublishOutcomeKind::PreviewUnavailable.is_deferred_preview());
         assert!(TransportPublishOutcomeKind::DeferredUntilImplemented.is_deferred_preview());
@@ -2482,22 +2484,22 @@ mod tests {
         ];
 
         for kind in satisfied {
-            assert!(kind.counts_toward_satisfaction());
+            assert!(kind.counts_toward_accepted_delivery());
             assert!(!kind.is_retryable());
             assert!(!kind.is_terminal_failure());
         }
         for kind in retryable {
-            assert!(!kind.counts_toward_satisfaction());
+            assert!(!kind.counts_toward_accepted_delivery());
             assert!(kind.is_retryable());
             assert!(!kind.is_terminal_failure());
         }
         for kind in terminal {
-            assert!(!kind.counts_toward_satisfaction());
+            assert!(!kind.counts_toward_accepted_delivery());
             assert!(!kind.is_retryable());
             assert!(kind.is_terminal_failure());
         }
         for kind in deferred_preview {
-            assert!(!kind.counts_toward_satisfaction());
+            assert!(!kind.counts_toward_accepted_delivery());
             assert!(!kind.is_retryable());
             assert!(!kind.is_terminal_failure());
             assert!(kind.is_deferred_preview());

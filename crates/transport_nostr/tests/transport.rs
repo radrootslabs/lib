@@ -2237,7 +2237,7 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
     assert_eq!(published.event_id, signed.id);
     assert_eq!(published.attempted_count, 0);
     assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.quorum, 2);
+    assert_eq!(published.quorum, 0);
     assert!(published.quorum_met);
     assert!(published.target_receipts.is_empty());
     assert!(published.relay_receipts.is_empty());
