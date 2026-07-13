@@ -150,6 +150,10 @@ fn satisfaction_policy_counts_target_statuses() {
     let any = RadrootsTransportSatisfactionPolicy::any_accepted();
     let two = RadrootsTransportSatisfactionPolicy::quorum_accepted(2);
     let delivered = RadrootsTransportSatisfactionPolicy::quorum_delivered(2);
+    let forwarded = RadrootsTransportSatisfactionPolicy::any_forwarded();
+    let stored = RadrootsTransportSatisfactionPolicy::all_stored();
+    let seen = RadrootsTransportSatisfactionPolicy::quorum_seen(2);
+    let durable_or_observed = RadrootsTransportSatisfactionPolicy::any_durable_or_observed();
 
     assert_eq!(no_wait.required_target_count(0).expect("no wait"), 0);
     assert_eq!(no_wait.required_target_count(3).expect("no wait"), 0);
@@ -168,6 +172,58 @@ fn satisfaction_policy_counts_target_statuses() {
         delivered.target_satisfaction_class(),
         Some(RadrootsTransportSatisfactionClass::Delivered)
     );
+    assert_eq!(
+        forwarded.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Forwarded)
+    );
+    assert_eq!(
+        stored.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Stored)
+    );
+    assert_eq!(
+        seen.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::Seen)
+    );
+    assert_eq!(
+        durable_or_observed.target_satisfaction_class(),
+        Some(RadrootsTransportSatisfactionClass::DurableOrObserved)
+    );
+    for (policy, class) in [
+        (
+            RadrootsTransportSatisfactionPolicy::all_forwarded(),
+            RadrootsTransportSatisfactionClass::Forwarded,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::quorum_forwarded(2),
+            RadrootsTransportSatisfactionClass::Forwarded,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::any_stored(),
+            RadrootsTransportSatisfactionClass::Stored,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::quorum_stored(2),
+            RadrootsTransportSatisfactionClass::Stored,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::any_seen(),
+            RadrootsTransportSatisfactionClass::Seen,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::all_seen(),
+            RadrootsTransportSatisfactionClass::Seen,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::all_durable_or_observed(),
+            RadrootsTransportSatisfactionClass::DurableOrObserved,
+        ),
+        (
+            RadrootsTransportSatisfactionPolicy::quorum_durable_or_observed(2),
+            RadrootsTransportSatisfactionClass::DurableOrObserved,
+        ),
+    ] {
+        assert_eq!(policy.target_satisfaction_class(), Some(class));
+    }
     assert_eq!(
         any.is_satisfied_by(0, 0).expect_err("zero target set"),
         RadrootsTransportError::InvalidSatisfactionPolicy
@@ -636,51 +692,82 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
         RadrootsTransportError::InvalidSatisfactionPolicy
     );
 
-    let statuses = [
-        RadrootsTransportDeliveryTargetStatus::Pending,
-        RadrootsTransportDeliveryTargetStatus::Accepted,
-        RadrootsTransportDeliveryTargetStatus::Delivered,
-        RadrootsTransportDeliveryTargetStatus::Forwarded,
-        RadrootsTransportDeliveryTargetStatus::StoredByGateway,
-        RadrootsTransportDeliveryTargetStatus::Seen,
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
-        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
-        RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
-        RadrootsTransportDeliveryTargetStatus::FailedRetryable,
-        RadrootsTransportDeliveryTargetStatus::FailedTerminal,
+    let classes = [
+        RadrootsTransportSatisfactionClass::Accepted,
+        RadrootsTransportSatisfactionClass::Forwarded,
+        RadrootsTransportSatisfactionClass::Stored,
+        RadrootsTransportSatisfactionClass::Seen,
+        RadrootsTransportSatisfactionClass::Delivered,
+        RadrootsTransportSatisfactionClass::DurableOrObserved,
+    ];
+    let cases: &[(
+        RadrootsTransportDeliveryTargetStatus,
+        &[RadrootsTransportSatisfactionClass],
+    )] = &[
+        (RadrootsTransportDeliveryTargetStatus::Pending, &[]),
+        (
+            RadrootsTransportDeliveryTargetStatus::Accepted,
+            &[RadrootsTransportSatisfactionClass::Accepted],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::Delivered,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Forwarded,
+                RadrootsTransportSatisfactionClass::Seen,
+                RadrootsTransportSatisfactionClass::Delivered,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::Forwarded,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Forwarded,
+            ],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::StoredByGateway,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Stored,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::Seen,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Seen,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
+            &[],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
+            &[],
+        ),
+        (
+            RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+            &[],
+        ),
+        (RadrootsTransportDeliveryTargetStatus::FailedRetryable, &[]),
+        (RadrootsTransportDeliveryTargetStatus::FailedTerminal, &[]),
     ];
     assert!(RadrootsTransportDeliveryTargetStatus::Pending.is_ready_for_attempt());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_ready_for_attempt());
-    assert!(
-        RadrootsTransportDeliveryTargetStatus::Accepted
-            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
-    );
-    assert!(
-        !RadrootsTransportDeliveryTargetStatus::Accepted
-            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered)
-    );
-    for status in [
-        RadrootsTransportDeliveryTargetStatus::Delivered,
-        RadrootsTransportDeliveryTargetStatus::Forwarded,
-        RadrootsTransportDeliveryTargetStatus::StoredByGateway,
-        RadrootsTransportDeliveryTargetStatus::Seen,
-    ] {
-        assert!(status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted));
-        assert!(status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered));
+    for (status, satisfied_classes) in cases {
+        for class in classes {
+            assert_eq!(
+                status.counts_as_satisfied(class),
+                satisfied_classes.contains(&class),
+                "{status:?} / {class:?}"
+            );
+        }
     }
-    assert!(
-        statuses
-            .iter()
-            .filter(|status| !matches!(
-                status,
-                RadrootsTransportDeliveryTargetStatus::Accepted
-                    | RadrootsTransportDeliveryTargetStatus::Delivered
-                    | RadrootsTransportDeliveryTargetStatus::Forwarded
-                    | RadrootsTransportDeliveryTargetStatus::StoredByGateway
-                    | RadrootsTransportDeliveryTargetStatus::Seen
-            ))
-            .all(|status| !status.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted))
-    );
     assert!(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable.is_deferred_preview());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_retryable_failure());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedTerminal.is_terminal_failure());
@@ -688,120 +775,130 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
 
 #[test]
 fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
+    let classes = [
+        RadrootsTransportSatisfactionClass::Accepted,
+        RadrootsTransportSatisfactionClass::Forwarded,
+        RadrootsTransportSatisfactionClass::Stored,
+        RadrootsTransportSatisfactionClass::Seen,
+        RadrootsTransportSatisfactionClass::Delivered,
+        RadrootsTransportSatisfactionClass::DurableOrObserved,
+    ];
     let cases = [
         (
             RadrootsTransportOutcomeKind::Accepted,
             "accepted",
             RadrootsTransportDeliveryTargetStatus::Accepted,
-            true,
-            false,
+            &[RadrootsTransportSatisfactionClass::Accepted] as &[_],
         ),
         (
             RadrootsTransportOutcomeKind::DuplicateAccepted,
             "duplicate_accepted",
             RadrootsTransportDeliveryTargetStatus::Accepted,
-            true,
-            false,
+            &[RadrootsTransportSatisfactionClass::Accepted],
         ),
         (
             RadrootsTransportOutcomeKind::Delivered,
             "delivered",
             RadrootsTransportDeliveryTargetStatus::Delivered,
-            true,
-            true,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Forwarded,
+                RadrootsTransportSatisfactionClass::Seen,
+                RadrootsTransportSatisfactionClass::Delivered,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
         ),
         (
             RadrootsTransportOutcomeKind::Forwarded,
             "forwarded",
             RadrootsTransportDeliveryTargetStatus::Forwarded,
-            true,
-            true,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Forwarded,
+            ],
         ),
         (
             RadrootsTransportOutcomeKind::StoredByGateway,
             "stored_by_gateway",
             RadrootsTransportDeliveryTargetStatus::StoredByGateway,
-            true,
-            true,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Stored,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
         ),
         (
             RadrootsTransportOutcomeKind::Seen,
             "seen",
             RadrootsTransportDeliveryTargetStatus::Seen,
-            true,
-            true,
+            &[
+                RadrootsTransportSatisfactionClass::Accepted,
+                RadrootsTransportSatisfactionClass::Seen,
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            ],
         ),
         (
             RadrootsTransportOutcomeKind::DeferredUntilImplemented,
             "deferred_until_implemented",
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::Rejected,
             "rejected",
             RadrootsTransportDeliveryTargetStatus::FailedTerminal,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::RouteUnavailable,
             "route_unavailable",
             RadrootsTransportDeliveryTargetStatus::FailedTerminal,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::PayloadTooLarge,
             "payload_too_large",
             RadrootsTransportDeliveryTargetStatus::FailedTerminal,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::PolicyDenied,
             "policy_denied",
             RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::Timeout,
             "timeout",
             RadrootsTransportDeliveryTargetStatus::FailedRetryable,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::ConnectionFailed,
             "connection_failed",
             RadrootsTransportDeliveryTargetStatus::FailedRetryable,
-            false,
-            false,
+            &[],
         ),
         (
             RadrootsTransportOutcomeKind::TransportUnavailable,
             "transport_unavailable",
             RadrootsTransportDeliveryTargetStatus::FailedRetryable,
-            false,
-            false,
+            &[],
         ),
     ];
 
-    for (kind, label, status, accepted, delivered) in cases {
+    for (kind, label, status, satisfied_classes) in cases {
         let outcome = RadrootsTransportOutcome::new(kind).with_message("transport detail");
         assert_eq!(kind.as_str(), label);
         assert_eq!(outcome.kind, kind);
         assert_eq!(outcome.status, status);
-        assert_eq!(
-            kind.counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted),
-            accepted
-        );
-        assert_eq!(
-            kind.counts_as_satisfied(RadrootsTransportSatisfactionClass::Delivered),
-            delivered
-        );
+        for class in classes {
+            assert_eq!(
+                kind.counts_as_satisfied(class),
+                satisfied_classes.contains(&class),
+                "{kind:?} / {class:?}"
+            );
+        }
         assert_eq!(outcome.message.as_deref(), Some("transport detail"));
     }
 

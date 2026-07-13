@@ -33,10 +33,7 @@ impl RadrootsTransportDeliveryTargetStatus {
     }
 
     pub fn counts_as_delivered_satisfaction(self) -> bool {
-        matches!(
-            self,
-            Self::Delivered | Self::Forwarded | Self::StoredByGateway | Self::Seen
-        )
+        matches!(self, Self::Delivered)
     }
 
     pub fn counts_as_satisfied(
@@ -45,8 +42,18 @@ impl RadrootsTransportDeliveryTargetStatus {
     ) -> bool {
         match satisfaction_class {
             RadrootsTransportSatisfactionClass::Accepted => self.counts_as_accepted_satisfaction(),
+            RadrootsTransportSatisfactionClass::Forwarded => {
+                matches!(self, Self::Forwarded | Self::Delivered)
+            }
+            RadrootsTransportSatisfactionClass::Stored => matches!(self, Self::StoredByGateway),
+            RadrootsTransportSatisfactionClass::Seen => {
+                matches!(self, Self::Seen | Self::Delivered)
+            }
             RadrootsTransportSatisfactionClass::Delivered => {
                 self.counts_as_delivered_satisfaction()
+            }
+            RadrootsTransportSatisfactionClass::DurableOrObserved => {
+                matches!(self, Self::StoredByGateway | Self::Seen | Self::Delivered)
             }
         }
     }

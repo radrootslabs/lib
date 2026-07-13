@@ -2464,7 +2464,25 @@ fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolic
 fn satisfaction_class_storage_value(class: RadrootsTransportSatisfactionClass) -> &'static str {
     match class {
         RadrootsTransportSatisfactionClass::Accepted => "accepted",
+        RadrootsTransportSatisfactionClass::Forwarded => "forwarded",
+        RadrootsTransportSatisfactionClass::Stored => "stored",
+        RadrootsTransportSatisfactionClass::Seen => "seen",
         RadrootsTransportSatisfactionClass::Delivered => "delivered",
+        RadrootsTransportSatisfactionClass::DurableOrObserved => "durable_or_observed",
+    }
+}
+
+fn parse_satisfaction_class_storage_value(
+    value: &str,
+) -> Option<RadrootsTransportSatisfactionClass> {
+    match value {
+        "accepted" => Some(RadrootsTransportSatisfactionClass::Accepted),
+        "forwarded" => Some(RadrootsTransportSatisfactionClass::Forwarded),
+        "stored" => Some(RadrootsTransportSatisfactionClass::Stored),
+        "seen" => Some(RadrootsTransportSatisfactionClass::Seen),
+        "delivered" => Some(RadrootsTransportSatisfactionClass::Delivered),
+        "durable_or_observed" => Some(RadrootsTransportSatisfactionClass::DurableOrObserved),
+        _ => None,
     }
 }
 
@@ -2472,52 +2490,54 @@ fn parse_satisfaction_policy(
     value: &str,
     required_success_count: i64,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
-    match value {
-        "no_wait" if required_success_count == 0 => {
-            Ok(RadrootsTransportSatisfactionPolicy::no_wait())
-        }
-        "all_accepted" => Ok(RadrootsTransportSatisfactionPolicy::all_accepted()),
-        "any_accepted" => Ok(RadrootsTransportSatisfactionPolicy::any_accepted()),
-        "all_delivered" => Ok(RadrootsTransportSatisfactionPolicy::all_delivered()),
-        "any_delivered" => Ok(RadrootsTransportSatisfactionPolicy::any_delivered()),
-        stored if stored == format!("quorum_accepted:{required_success_count}") => {
-            Ok(RadrootsTransportSatisfactionPolicy::quorum_accepted(
-                required_count_u16(required_success_count)?,
-            ))
-        }
-        stored if stored == format!("quorum_delivered:{required_success_count}") => {
-            Ok(RadrootsTransportSatisfactionPolicy::quorum_delivered(
-                required_count_u16(required_success_count)?,
-            ))
-        }
-        stored if stored.starts_with("required_accepted:") => parse_required_target_policy(
-            stored,
-            "required_accepted:",
-            RadrootsTransportSatisfactionClass::Accepted,
-            required_success_count,
-        ),
-        stored if stored.starts_with("required_delivered:") => parse_required_target_policy(
-            stored,
-            "required_delivered:",
-            RadrootsTransportSatisfactionClass::Delivered,
-            required_success_count,
-        ),
-        _ => Err(RadrootsOutboxError::InvalidStoredEnum {
-            field: "outbox_delivery_plan.satisfaction_policy",
-            value: value.to_owned(),
-        }),
+    if value == "no_wait" && required_success_count == 0 {
+        return Ok(RadrootsTransportSatisfactionPolicy::no_wait());
     }
+    if let Some(class) = value
+        .strip_prefix("all_")
+        .and_then(parse_satisfaction_class_storage_value)
+    {
+        return Ok(RadrootsTransportSatisfactionPolicy::All { class });
+    }
+    if let Some(class) = value
+        .strip_prefix("any_")
+        .and_then(parse_satisfaction_class_storage_value)
+    {
+        return Ok(RadrootsTransportSatisfactionPolicy::Any { class });
+    }
+    if let Some((class_label, threshold)) = value
+        .strip_prefix("quorum_")
+        .and_then(|stored| stored.split_once(':'))
+    {
+        if threshold == required_success_count.to_string()
+            && let Some(class) = parse_satisfaction_class_storage_value(class_label)
+        {
+            return Ok(RadrootsTransportSatisfactionPolicy::Quorum {
+                class,
+                threshold: required_count_u16(required_success_count)?,
+            });
+        }
+    }
+    if let Some((class_label, fingerprints)) = value
+        .strip_prefix("required_")
+        .and_then(|stored| stored.split_once(':'))
+        && let Some(class) = parse_satisfaction_class_storage_value(class_label)
+    {
+        return parse_required_target_policy(value, fingerprints, class, required_success_count);
+    }
+    Err(RadrootsOutboxError::InvalidStoredEnum {
+        field: "outbox_delivery_plan.satisfaction_policy",
+        value: value.to_owned(),
+    })
 }
 
 fn parse_required_target_policy(
     stored: &str,
-    prefix: &str,
+    fingerprints: &str,
     class: RadrootsTransportSatisfactionClass,
     required_success_count: i64,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
-    let targets = stored
-        .strip_prefix(prefix)
-        .expect("stored required target policy prefix")
+    let targets = fingerprints
         .split(',')
         .map(RadrootsTransportTargetFingerprint::parse)
         .collect::<Result<Vec<_>, _>>()?;
@@ -2641,6 +2661,43 @@ mod tests {
             parse_satisfaction_policy(stored.as_str(), 1),
             Err(RadrootsOutboxError::InvalidStoredEnum { .. })
         ));
+    }
+
+    #[test]
+    fn satisfaction_policy_storage_round_trips_all_transport_classes() {
+        for (policy, stored, required_count) in [
+            (
+                RadrootsTransportSatisfactionPolicy::any_forwarded(),
+                "any_forwarded",
+                1,
+            ),
+            (
+                RadrootsTransportSatisfactionPolicy::all_stored(),
+                "all_stored",
+                2,
+            ),
+            (
+                RadrootsTransportSatisfactionPolicy::quorum_seen(2),
+                "quorum_seen:2",
+                2,
+            ),
+            (
+                RadrootsTransportSatisfactionPolicy::any_durable_or_observed(),
+                "any_durable_or_observed",
+                1,
+            ),
+            (
+                RadrootsTransportSatisfactionPolicy::quorum_delivered(2),
+                "quorum_delivered:2",
+                2,
+            ),
+        ] {
+            assert_eq!(satisfaction_policy_storage_value(&policy), stored);
+            assert_eq!(
+                parse_satisfaction_policy(stored, required_count).expect("parse policy"),
+                policy
+            );
+        }
     }
 
     #[test]

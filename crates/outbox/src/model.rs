@@ -214,10 +214,17 @@ impl RadrootsOutboxDeliveryTargetStatus {
                     | Self::StoredByGateway
                     | Self::Seen
             ),
-            RadrootsTransportSatisfactionClass::Delivered => matches!(
-                self,
-                Self::Delivered | Self::Forwarded | Self::StoredByGateway | Self::Seen
-            ),
+            RadrootsTransportSatisfactionClass::Forwarded => {
+                matches!(self, Self::Forwarded | Self::Delivered)
+            }
+            RadrootsTransportSatisfactionClass::Stored => matches!(self, Self::StoredByGateway),
+            RadrootsTransportSatisfactionClass::Seen => {
+                matches!(self, Self::Seen | Self::Delivered)
+            }
+            RadrootsTransportSatisfactionClass::Delivered => matches!(self, Self::Delivered),
+            RadrootsTransportSatisfactionClass::DurableOrObserved => {
+                matches!(self, Self::StoredByGateway | Self::Seen | Self::Delivered)
+            }
         }
     }
 
@@ -648,7 +655,7 @@ mod tests {
                 "forwarded",
                 false,
                 true,
-                true,
+                false,
                 false,
                 false,
             ),
@@ -657,7 +664,7 @@ mod tests {
                 "stored_by_gateway",
                 false,
                 true,
-                true,
+                false,
                 false,
                 false,
             ),
@@ -666,7 +673,7 @@ mod tests {
                 "seen",
                 false,
                 true,
-                true,
+                false,
                 false,
                 false,
             ),

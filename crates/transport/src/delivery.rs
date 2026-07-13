@@ -11,7 +11,11 @@ use alloc::vec::Vec;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsTransportSatisfactionClass {
     Accepted,
+    Forwarded,
+    Stored,
+    Seen,
     Delivered,
+    DurableOrObserved,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -58,6 +62,63 @@ impl RadrootsTransportSatisfactionPolicy {
         }
     }
 
+    pub fn any_forwarded() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::Forwarded,
+        }
+    }
+
+    pub fn all_forwarded() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::Forwarded,
+        }
+    }
+
+    pub fn quorum_forwarded(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::Forwarded,
+            threshold,
+        }
+    }
+
+    pub fn any_stored() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::Stored,
+        }
+    }
+
+    pub fn all_stored() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::Stored,
+        }
+    }
+
+    pub fn quorum_stored(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::Stored,
+            threshold,
+        }
+    }
+
+    pub fn any_seen() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::Seen,
+        }
+    }
+
+    pub fn all_seen() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::Seen,
+        }
+    }
+
+    pub fn quorum_seen(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::Seen,
+            threshold,
+        }
+    }
+
     pub fn any_delivered() -> Self {
         Self::Any {
             class: RadrootsTransportSatisfactionClass::Delivered,
@@ -73,6 +134,25 @@ impl RadrootsTransportSatisfactionPolicy {
     pub fn quorum_delivered(threshold: u16) -> Self {
         Self::Quorum {
             class: RadrootsTransportSatisfactionClass::Delivered,
+            threshold,
+        }
+    }
+
+    pub fn any_durable_or_observed() -> Self {
+        Self::Any {
+            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
+        }
+    }
+
+    pub fn all_durable_or_observed() -> Self {
+        Self::All {
+            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
+        }
+    }
+
+    pub fn quorum_durable_or_observed(threshold: u16) -> Self {
+        Self::Quorum {
+            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
             threshold,
         }
     }
