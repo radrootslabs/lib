@@ -9,7 +9,7 @@ pub mod manifest;
 pub mod serde_ext;
 pub mod types;
 
-pub use checkpoint::{RadrootsEventIndexIndexCheckpoint, RadrootsEventIndexShardCheckpoint};
+pub use checkpoint::{RadrootsEventIndexCheckpoint, RadrootsEventIndexShardCheckpoint};
 pub use manifest::{
     RadrootsEventIndexManifest, RadrootsEventIndexManifestError, RadrootsEventIndexShardMetadata,
     validate_manifest,

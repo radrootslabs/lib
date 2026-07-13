@@ -4,7 +4,7 @@ use dto_bindgen_core::{
 };
 
 use crate::{
-    checkpoint::{RadrootsEventIndexIndexCheckpoint, RadrootsEventIndexShardCheckpoint},
+    checkpoint::{RadrootsEventIndexCheckpoint, RadrootsEventIndexShardCheckpoint},
     manifest::{RadrootsEventIndexManifest, RadrootsEventIndexShardMetadata},
     types::RadrootsEventIndexIdRange,
 };
@@ -15,7 +15,7 @@ pub fn dto_roots() -> [RootDescriptor; 5] {
         RootDescriptor::new::<RadrootsEventIndexShardMetadata>(),
         RootDescriptor::new::<RadrootsEventIndexManifest>(),
         RootDescriptor::new::<RadrootsEventIndexShardCheckpoint>(),
-        RootDescriptor::new::<RadrootsEventIndexIndexCheckpoint>(),
+        RootDescriptor::new::<RadrootsEventIndexCheckpoint>(),
     ]
 }
 
@@ -62,11 +62,11 @@ impl Dto for RadrootsEventIndexShardCheckpoint {
     }
 }
 
-impl Dto for RadrootsEventIndexIndexCheckpoint {
+impl Dto for RadrootsEventIndexCheckpoint {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsEventIndexIndexCheckpoint",
-            "RadrootsEventIndexIndexCheckpoint",
+            "RadrootsEventIndexCheckpoint",
+            "RadrootsEventIndexCheckpoint",
             span("crates/event_index/src/checkpoint.rs", 24),
         )
         .with_field(field(
@@ -83,11 +83,7 @@ impl Dto for RadrootsEventIndexIndexCheckpoint {
             "crates/event_index/src/checkpoint.rs",
             31,
         ));
-        register(
-            ctx,
-            "RadrootsEventIndexIndexCheckpoint",
-            TypeDef::Struct(def),
-        )
+        register(ctx, "RadrootsEventIndexCheckpoint", TypeDef::Struct(def))
     }
 }
 
@@ -150,7 +146,7 @@ mod tests {
     fn custom_epoch_second_fields_render_as_numbers() {
         let registry = build_registry(dto_roots());
         let shard_checkpoint = find_struct(&registry, "RadrootsEventIndexShardCheckpoint");
-        let index_checkpoint = find_struct(&registry, "RadrootsEventIndexIndexCheckpoint");
+        let index_checkpoint = find_struct(&registry, "RadrootsEventIndexCheckpoint");
 
         assert_eq!(
             find_field(shard_checkpoint, "last_created_at").ty,

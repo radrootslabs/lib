@@ -19,7 +19,7 @@ pub struct RadrootsEventIndexShardCheckpoint {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventIndexIndexCheckpoint {
+pub struct RadrootsEventIndexCheckpoint {
     #[cfg_attr(
         feature = "serde",
         serde(deserialize_with = "crate::serde_ext::epoch_seconds::de")
@@ -28,7 +28,7 @@ pub struct RadrootsEventIndexIndexCheckpoint {
     pub shards: Vec<RadrootsEventIndexShardCheckpoint>,
 }
 
-impl RadrootsEventIndexIndexCheckpoint {
+impl RadrootsEventIndexCheckpoint {
     pub fn get(
         &self,
         id: &RadrootsEventIndexShardId,
@@ -46,7 +46,7 @@ impl RadrootsEventIndexIndexCheckpoint {
 
 #[cfg(test)]
 mod tests {
-    use super::{RadrootsEventIndexIndexCheckpoint, RadrootsEventIndexShardCheckpoint};
+    use super::{RadrootsEventIndexCheckpoint, RadrootsEventIndexShardCheckpoint};
     use crate::types::RadrootsEventIndexShardId;
     #[cfg(not(feature = "std"))]
     use alloc::{string::String, vec, vec::Vec};
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn get_returns_none_for_unknown_shard() {
-        let cp = RadrootsEventIndexIndexCheckpoint {
+        let cp = RadrootsEventIndexCheckpoint {
             generated_at: 1,
             shards: vec![checkpoint("us-1", 10, Some("a"))],
         };
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn upsert_inserts_and_updates_shards() {
-        let mut cp = RadrootsEventIndexIndexCheckpoint {
+        let mut cp = RadrootsEventIndexCheckpoint {
             generated_at: 2,
             shards: Vec::new(),
         };
