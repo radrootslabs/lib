@@ -776,6 +776,10 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
                     "configured": true,
                     "implementation": "real",
                     "usable_for_delivery": true,
+                    "capabilities": {
+                        "deliver": true,
+                        "fetch": false
+                    },
                     "message": "ready"
                 }]
             }
@@ -834,12 +838,21 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
                     status.implementation.as_str(),
                     status.configured,
                     status.usable_for_delivery,
+                    status.capabilities.deliver,
+                    status.capabilities.fetch,
                 )
             })
             .collect::<Vec<_>>(),
         vec![
-            ("nostr", "real", true, true),
-            ("reticulum", "preview_unavailable", true, false)
+            ("nostr", "real", true, true, true, false),
+            (
+                "reticulum",
+                "preview_unavailable",
+                true,
+                false,
+                false,
+                false
+            )
         ]
     );
 }

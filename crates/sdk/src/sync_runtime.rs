@@ -233,7 +233,15 @@ pub struct SyncTransportStatusSummary {
     pub configured: bool,
     pub implementation: String,
     pub usable_for_delivery: bool,
+    pub capabilities: SyncTransportOperationCapabilitiesSummary,
     pub message: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncTransportOperationCapabilitiesSummary {
+    pub deliver: bool,
+    pub fetch: bool,
 }
 
 #[cfg(feature = "runtime")]
@@ -246,6 +254,10 @@ impl SyncTransportStatusSummary {
             configured: status.configured,
             implementation: transport_implementation_label(status.implementation).to_owned(),
             usable_for_delivery: status.usable_for_delivery,
+            capabilities: SyncTransportOperationCapabilitiesSummary {
+                deliver: status.capabilities.deliver,
+                fetch: status.capabilities.fetch,
+            },
             message: status.message,
         }
     }

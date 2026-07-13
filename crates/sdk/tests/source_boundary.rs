@@ -2005,6 +2005,12 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         "pub configured: bool,",
         "pub implementation: String,",
         "pub usable_for_delivery: bool,",
+        "pub capabilities: SyncTransportOperationCapabilitiesSummary,",
+        "pub struct SyncTransportOperationCapabilitiesSummary",
+        "pub deliver: bool,",
+        "pub fetch: bool,",
+        "status.capabilities.deliver",
+        "status.capabilities.fetch",
         "pub message: String,",
     ] {
         assert!(
@@ -2018,11 +2024,24 @@ fn sdk_sync_status_sources_reject_retired_relay_shaped_generic_fields() {
         "pub configured: bool,",
         "pub implementation: String,",
         "pub usable_for_delivery: bool,",
+        "pub capabilities: SyncTransportOperationCapabilitiesSummary,",
         "pub message: String,",
     ] {
         assert!(
             status_summary.contains(required),
             "SDK sync status summary must retain canonical status field witness `{required}`"
+        );
+    }
+
+    let operation_capabilities_summary = source_between(
+        sync_runtime.as_str(),
+        "pub struct SyncTransportOperationCapabilitiesSummary",
+        "\n}\n\n#[cfg(feature = \"runtime\")]\nimpl SyncTransportStatusSummary",
+    );
+    for required in ["pub deliver: bool,", "pub fetch: bool,"] {
+        assert!(
+            operation_capabilities_summary.contains(required),
+            "SDK sync transport capabilities must retain operation field witness `{required}`"
         );
     }
 

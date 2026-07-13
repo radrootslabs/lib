@@ -221,7 +221,8 @@ pub use crate::sync_runtime::{
     SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT, SYNC_PROJECTION_REFRESH_MAX_LIMIT, SdkRelayAuthPolicy,
     SyncEventStoreStatus, SyncOutboxStatus, SyncProjectionRefreshReceipt,
     SyncProjectionRefreshRequest, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
-    SyncTransportProfileSummary, SyncTransportStatusSummary, SyncTransportTargetSummary,
+    SyncTransportOperationCapabilitiesSummary, SyncTransportProfileSummary,
+    SyncTransportStatusSummary, SyncTransportTargetSummary,
 };
 #[cfg(feature = "runtime")]
 pub use crate::trade_storage::{
