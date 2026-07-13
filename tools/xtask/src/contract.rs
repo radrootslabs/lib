@@ -4262,7 +4262,7 @@ domains = ["profile", "farm", "listing", "trade"]
 public = [
   "WireEventParts",
   "RadrootsFrozenEventDraft",
-  "RadrootsSignedNostrEvent",
+  "RadrootsSignedEvent",
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
