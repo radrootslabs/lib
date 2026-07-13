@@ -3,9 +3,8 @@ use core::time::Duration;
 
 use radroots_event::draft::RadrootsSignedEvent;
 use radroots_transport_publish_protocol::{
-    METHOD_EVENT, SignedNostrEventWire, TransportPublishDeliveryPolicy,
-    TransportPublishEventRequest, TransportPublishEventResponse, TransportPublishProtocolError,
-    TransportPublishTargetPolicy,
+    METHOD_EVENT, SignedEventWire, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
+    TransportPublishEventResponse, TransportPublishProtocolError, TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -299,8 +298,8 @@ where
     decode_jsonrpc_response(method, request_id, body.as_str())
 }
 
-fn signed_event_wire(event: &RadrootsSignedEvent) -> SignedNostrEventWire {
-    SignedNostrEventWire {
+fn signed_event_wire(event: &RadrootsSignedEvent) -> SignedEventWire {
+    SignedEventWire {
         id: event.id.clone(),
         pubkey: event.pubkey.clone(),
         created_at: event.created_at as u64,

@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use crate::adapters::signing::SignedNostrEvent;
+use crate::adapters::signing::SignedEvent;
 use crate::identity::RadrootsIdentity;
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError, RadrootsNostrEventId,
@@ -58,7 +58,7 @@ pub async fn connected_relay_urls(client: &RadrootsNostrClient) -> Vec<String> {
 
 pub async fn publish_signed_event(
     client: &RadrootsNostrClient,
-    event: &SignedNostrEvent,
+    event: &SignedEvent,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_event(event).await
 }
