@@ -56,14 +56,14 @@ impl From<RadrootsTransportError> for RadrootsRuntimeTransportError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsRuntimeTransportPayload {
-    SignedNostrEvent(RadrootsSignedEvent),
+    SignedEvent(RadrootsSignedEvent),
     OpaqueBytes { label: String, bytes: Vec<u8> },
 }
 
 impl RadrootsRuntimeTransportPayload {
     pub fn transport_payload(&self) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
         match self {
-            Self::SignedNostrEvent(event) => {
+            Self::SignedEvent(event) => {
                 RadrootsTransportPayload::signed_event_json(&event.id, &event.raw_json)
             }
             Self::OpaqueBytes { label, bytes } => {

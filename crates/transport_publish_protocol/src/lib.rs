@@ -257,7 +257,7 @@ impl std::error::Error for TransportPublishProtocolError {}
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignedNostrEventWire {
+pub struct SignedEventWire {
     pub id: String,
     pub pubkey: String,
     pub created_at: u64,
@@ -267,7 +267,7 @@ pub struct SignedNostrEventWire {
     pub sig: String,
 }
 
-impl SignedNostrEventWire {
+impl SignedEventWire {
     pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
         validate_lower_hex("id", self.id.as_str(), 64)?;
         validate_lower_hex("pubkey", self.pubkey.as_str(), 64)?;
@@ -647,7 +647,7 @@ fn validate_required_target_fingerprints(
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportPublishEventRequest {
-    pub event: SignedNostrEventWire,
+    pub event: SignedEventWire,
     pub target_policy: TransportPublishTargetPolicy,
     pub delivery_policy: TransportPublishDeliveryPolicy,
     #[cfg_attr(
@@ -1358,8 +1358,8 @@ fn validate_job_status_state(
 mod tests {
     use super::*;
 
-    fn event() -> SignedNostrEventWire {
-        SignedNostrEventWire {
+    fn event() -> SignedEventWire {
+        SignedEventWire {
             id: "0".repeat(64),
             pubkey: "1".repeat(64),
             created_at: 1_700_000_000,
