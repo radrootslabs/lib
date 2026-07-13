@@ -46,11 +46,11 @@ source_files = [
 root_module_file = "crates/core/src/generated/dto_roots.rs"
 
 [[package]]
-key = "events"
+key = "event"
 rust_package = "radroots_event"
 rust_crate = "radroots_event"
-npm = "@radroots/events-bindings"
-out_dir = "target/dto-bindgen/events-bindings"
+npm = "@radroots/event-bindings"
+out_dir = "target/dto-bindgen/event-bindings"
 
 [package.root_discovery]
 mode = "source_manifest"
