@@ -474,7 +474,7 @@ fn with_event_index_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
         "RadrootsEventIndexShardMetadata",
         "RadrootsEventIndexManifest",
         "RadrootsEventIndexShardCheckpoint",
-        "RadrootsEventIndexIndexCheckpoint",
+        "RadrootsEventIndexCheckpoint",
     ];
     declarations.sort_by_key(|declaration| {
         order
@@ -679,7 +679,7 @@ mod tests {
         "RadrootsEventIndexShardMetadata",
         "RadrootsEventIndexManifest",
         "RadrootsEventIndexShardCheckpoint",
-        "RadrootsEventIndexIndexCheckpoint",
+        "RadrootsEventIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
         "RadrootsOrderIssue",
