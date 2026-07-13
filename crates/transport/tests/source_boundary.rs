@@ -32,6 +32,8 @@ const CORE_TRANSPORT_CONTRACT_SOURCE_ROOTS: &[&str] = &["transport/src"];
 const DELIVERY_PAYLOAD_CONTRACT_SOURCE_ROOTS: &[&str] =
     &["transport/src", "runtime/src", "transport_reticulum/src"];
 
+const FOUNDATION_HARDENING_DOC_ROOTS: &[&str] = &["contracts", "docs"];
+
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
         pattern: "\"radrootsd_proxy\"",
@@ -199,6 +201,92 @@ const FORBIDDEN_DELIVERY_PAYLOAD_CONCEPTS: &[ForbiddenConcept] = &[
     },
 ];
 
+const FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: "SignedNostrEvent",
+        reason: "generic signed-event surfaces must use product-neutral signed-event names",
+    },
+    ForbiddenConcept {
+        pattern: "RadrootsEventIndexIndexCheckpoint",
+        reason: "event-index checkpoint names must not duplicate the index noun",
+    },
+    ForbiddenConcept {
+        pattern: "RadrootsEventsIndexed",
+        reason: "event-indexed APIs must use the singular event-index crate family",
+    },
+    ForbiddenConcept {
+        pattern: "RADROOTS_EVENTS_VERSION",
+        reason: "event contract version constants must use the current singular event namespace",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_events",
+        reason: "crate and manifest surfaces must use the current singular event crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_events_codec",
+        reason: "event codec crate surfaces must use the current singular event-codec name",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_events_indexed",
+        reason: "event index crate surfaces must use the current singular event-index name",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_local_events",
+        reason: "local event storage must not reintroduce retired local-events crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_local_store",
+        reason: "runtime storage must not reintroduce retired local-store crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_types",
+        reason: "shared type surfaces must use current crate ownership instead of retired types crates",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_types_bindings",
+        reason: "generated bindings must not reintroduce retired types-binding crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_nostr_ndb",
+        reason: "Nostr database ownership must not reintroduce retired ndb crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_replica_db",
+        reason: "replica database surfaces must use current replica-store ownership",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_replica_db_schema",
+        reason: "replica schema surfaces must use current replica-schema ownership",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_sp1_guest_trade",
+        reason: "trade SP1 crate surfaces must use the current trade_sp1 crate names",
+    },
+    ForbiddenConcept {
+        pattern: "radroots_sp1_host_trade",
+        reason: "trade SP1 crate surfaces must use the current trade_sp1 crate names",
+    },
+];
+
+const FORBIDDEN_FOUNDATION_HARDENING_DOC_CONCEPTS: &[ForbiddenConcept] = &[
+    ForbiddenConcept {
+        pattern: "Nostr event timestamp",
+        reason: "generic docs must describe event-envelope timestamps without protocol leakage",
+    },
+    ForbiddenConcept {
+        pattern: "Forwarded satisfies Delivered",
+        reason: "forwarded evidence must not be documented as strict delivery",
+    },
+    ForbiddenConcept {
+        pattern: "StoredByGateway satisfies Delivered",
+        reason: "gateway storage evidence must not be documented as strict delivery",
+    },
+    ForbiddenConcept {
+        pattern: "Seen satisfies Delivered",
+        reason: "seen evidence must not be documented as strict delivery",
+    },
+];
+
 #[test]
 fn transport_hardening_sources_reject_removed_protocol_identifiers() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -356,6 +444,46 @@ fn delivery_request_sources_require_payload_objects() {
     assert!(
         findings.is_empty(),
         "delivery payload source-boundary violations:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn foundation_hardening_repo_sources_reject_retired_names_and_ambiguous_docs() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let repo_root = crates_root.parent().expect("repo root");
+    let mut findings = Vec::new();
+
+    for path in foundation_hardening_guard_files(repo_root) {
+        let source = read_source(path.as_path());
+        let relative_path = relative_path(repo_root, path.as_path());
+
+        for concept in FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS {
+            if contains_forbidden_concept(source.as_str(), concept.pattern) {
+                findings.push(format!(
+                    "{} contains retired Foundation Hardening concept `{}`: {}",
+                    relative_path, concept.pattern, concept.reason
+                ));
+            }
+        }
+
+        if is_doc_surface(path.as_path()) {
+            for concept in FORBIDDEN_FOUNDATION_HARDENING_DOC_CONCEPTS {
+                if source.contains(concept.pattern) {
+                    findings.push(format!(
+                        "{} contains ambiguous Foundation Hardening wording `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "Foundation Hardening V1 source-boundary violations:\n{}",
         findings.join("\n")
     );
 }
@@ -659,6 +787,68 @@ fn rust_source_files(root: &Path) -> Vec<PathBuf> {
     paths
 }
 
+fn foundation_hardening_guard_files(repo_root: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    for path in [
+        repo_root.join("Cargo.toml"),
+        repo_root.join("README"),
+        repo_root.join("README.md"),
+    ] {
+        if path.exists() {
+            paths.push(path);
+        }
+    }
+
+    let crates_root = repo_root.join("crates");
+    for entry in fs::read_dir(crates_root.as_path())
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", crates_root.display()))
+    {
+        let path = entry.expect("crate entry").path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let src = path.join("src");
+        if src.exists() {
+            paths.extend(rust_source_files(src.as_path()));
+        }
+
+        for file_name in ["Cargo.toml", "README", "README.md"] {
+            let candidate = path.join(file_name);
+            if candidate.exists() {
+                paths.push(candidate);
+            }
+        }
+    }
+
+    for relative_root in FOUNDATION_HARDENING_DOC_ROOTS {
+        let root = repo_root.join(relative_root);
+        if root.exists() {
+            collect_doc_surface_files(root.as_path(), &mut paths);
+        }
+    }
+
+    paths.sort();
+    paths
+}
+
+fn collect_doc_surface_files(root: &Path, paths: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(root)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display()))
+    {
+        let path = entry.expect("doc surface entry").path();
+        if path.is_dir() {
+            collect_doc_surface_files(path.as_path(), paths);
+            continue;
+        }
+
+        if is_doc_surface(path.as_path()) {
+            paths.push(path);
+        }
+    }
+}
+
 fn collect_rust_source_files(root: &Path, paths: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(root)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display()))
@@ -684,6 +874,16 @@ fn production_source(source: &str) -> &str {
         .map_or(source, |index| &source[..index])
 }
 
+fn is_doc_surface(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|file_name| file_name.to_str()),
+        Some("README") | Some("README.md")
+    ) || matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("md")
+    )
+}
+
 fn relative_path(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .expect("source path is under crate root")
@@ -707,6 +907,10 @@ fn source_between<'source>(
 }
 
 fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
+    if !pattern.chars().all(is_rust_identifier_character) {
+        return source.contains(pattern);
+    }
+
     source.match_indices(pattern).any(|(index, _)| {
         let before = source[..index].chars().next_back();
         let after = source[index + pattern.len()..].chars().next();
