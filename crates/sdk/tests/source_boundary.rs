@@ -96,6 +96,96 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
         pattern: "preserve serde",
         reason: "SDK docs must describe serialized-field stability without serde-compat wording",
     },
+    ForbiddenSdkConcept {
+        pattern: "Nostr event timestamp",
+        reason: "SDK docs must describe event-envelope timestamps without generic Nostr wording",
+    },
+];
+
+const FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS: &[ForbiddenSdkConcept] = &[
+    ForbiddenSdkConcept {
+        pattern: "SignedNostrEvent",
+        reason: "generic signed-event surfaces must use product-neutral signed-event names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RadrootsEventIndexIndexCheckpoint",
+        reason: "event-index checkpoint names must not duplicate the index noun",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RadrootsEventsIndexed",
+        reason: "event-indexed APIs must use the singular event-index crate family",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RADROOTS_EVENTS_VERSION",
+        reason: "event contract version constants must use the current singular event namespace",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_events",
+        reason: "SDK crate and package surfaces must use the current singular event crate names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_events_codec",
+        reason: "SDK event codec surfaces must use the current singular event-codec name",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_events_indexed",
+        reason: "SDK event index surfaces must use the current singular event-index name",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_local_events",
+        reason: "SDK local event storage must not reintroduce retired local-events names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_local_store",
+        reason: "SDK runtime storage must not reintroduce retired local-store names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_types",
+        reason: "SDK shared type surfaces must use current crate ownership instead of retired types crates",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_types_bindings",
+        reason: "SDK generated bindings must not reintroduce retired types-binding names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_nostr_ndb",
+        reason: "SDK Nostr database surfaces must not reintroduce retired ndb names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_replica_db",
+        reason: "SDK replica surfaces must use current replica-store ownership",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_replica_db_schema",
+        reason: "SDK replica schema surfaces must use current replica-schema ownership",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_sp1_guest_trade",
+        reason: "SDK trade SP1 surfaces must use the current trade_sp1 crate names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "radroots_sp1_host_trade",
+        reason: "SDK trade SP1 surfaces must use the current trade_sp1 crate names",
+    },
+];
+
+const FORBIDDEN_FOUNDATION_HARDENING_DOC_CONCEPTS: &[ForbiddenSdkConcept] = &[
+    ForbiddenSdkConcept {
+        pattern: "Nostr event timestamp",
+        reason: "SDK docs must describe event-envelope timestamps without generic Nostr wording",
+    },
+    ForbiddenSdkConcept {
+        pattern: "Forwarded satisfies Delivered",
+        reason: "SDK docs must not imply forwarded evidence is strict delivery",
+    },
+    ForbiddenSdkConcept {
+        pattern: "StoredByGateway satisfies Delivered",
+        reason: "SDK docs must not imply gateway storage evidence is strict delivery",
+    },
+    ForbiddenSdkConcept {
+        pattern: "Seen satisfies Delivered",
+        reason: "SDK docs must not imply seen evidence is strict delivery",
+    },
 ];
 
 const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[
@@ -132,6 +222,7 @@ const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "sdk.trades().resync()",
     "sdk.trades().validation_receipts()",
     "sdk.dvm()",
+    "event-envelope timestamp",
 ];
 
 const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
@@ -744,6 +835,47 @@ fn sdk_readme_documents_current_public_product_surface() {
             "README must document current SDK public API concept `{concept}`"
         );
     }
+}
+
+#[test]
+fn sdk_foundation_hardening_surfaces_reject_retired_names_and_ambiguous_docs() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .expect("SDK repo root");
+    let mut findings = Vec::new();
+
+    for path in sdk_foundation_hardening_guard_files(repo_root) {
+        let source = read_source(path.as_path());
+        let relative_path = relative_manifest_path(repo_root, path.as_path());
+
+        for concept in FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS {
+            if contains_forbidden_concept(source.as_str(), concept.pattern) {
+                findings.push(format!(
+                    "{} contains retired Foundation Hardening concept `{}`: {}",
+                    relative_path, concept.pattern, concept.reason
+                ));
+            }
+        }
+
+        if is_doc_surface(path.as_path()) {
+            for concept in FORBIDDEN_FOUNDATION_HARDENING_DOC_CONCEPTS {
+                if source.contains(concept.pattern) {
+                    findings.push(format!(
+                        "{} contains ambiguous Foundation Hardening wording `{}`: {}",
+                        relative_path, concept.pattern, concept.reason
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "SDK Foundation Hardening V1 source-boundary violations:\n{}",
+        findings.join("\n")
+    );
 }
 
 #[test]
@@ -2338,18 +2470,92 @@ fn sdk_root_alias_guard_files(manifest_dir: &Path) -> Vec<PathBuf> {
     paths
 }
 
+fn sdk_foundation_hardening_guard_files(repo_root: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    for path in [
+        repo_root.join("Cargo.toml"),
+        repo_root.join("package.json"),
+        repo_root.join("README"),
+        repo_root.join("README.md"),
+    ] {
+        if path.exists() {
+            paths.push(path);
+        }
+    }
+
+    for relative_root in ["crates", "packages"] {
+        let root = repo_root.join(relative_root);
+        if root.exists() {
+            collect_sdk_foundation_hardening_guard_files(root.as_path(), &mut paths);
+        }
+    }
+
+    paths.sort();
+    paths
+}
+
+fn collect_sdk_foundation_hardening_guard_files(root: &Path, paths: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(root)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display()))
+    {
+        let path = entry.expect("SDK guard entry").path();
+        if path.file_name().and_then(|file_name| file_name.to_str()) == Some("source_boundary.rs") {
+            continue;
+        }
+
+        if path.is_dir() {
+            if matches!(
+                path.file_name().and_then(|file_name| file_name.to_str()),
+                Some("target") | Some("node_modules") | Some("dist")
+            ) {
+                continue;
+            }
+            collect_sdk_foundation_hardening_guard_files(path.as_path(), paths);
+            continue;
+        }
+
+        let is_guarded_extension = matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("rs") | Some("ts") | Some("json") | Some("toml") | Some("md")
+        );
+        if is_guarded_extension
+            || matches!(
+                path.file_name().and_then(|file_name| file_name.to_str()),
+                Some("README") | Some("README.md")
+            )
+        {
+            paths.push(path);
+        }
+    }
+}
+
 fn read_source(path: &Path) -> String {
     fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("failed to read source {}: {error}", path.display()))
 }
 
 fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
+    if !pattern.chars().all(is_rust_identifier_character) {
+        return source.contains(pattern);
+    }
+
     source.match_indices(pattern).any(|(index, _)| {
         let before = source[..index].chars().next_back();
         let after = source[index + pattern.len()..].chars().next();
         before.is_none_or(|character| !is_rust_identifier_character(character))
             && after.is_none_or(|character| !is_rust_identifier_character(character))
     })
+}
+
+fn is_doc_surface(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|file_name| file_name.to_str()),
+        Some("README") | Some("README.md")
+    ) || matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("md")
+    )
 }
 
 fn removed_reticulum_preview_endpoint_lines(source: &str) -> Vec<usize> {

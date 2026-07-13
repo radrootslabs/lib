@@ -32,7 +32,7 @@ controlled adapter-level tests and advanced integration checks. Those methods ar
 product API.
 
 Event `created_at` and local observation time are separate contracts. The event timestamp remains
-the authored Nostr event timestamp, while event-store and outbox mutation timestamps use the SDK
+the authored event-envelope timestamp, while event-store and outbox mutation timestamps use the SDK
 clock at enqueue time. Listing enqueue receipts report mutation state with the product names
 `StoredAndQueued` and `AlreadyQueued`.
 
