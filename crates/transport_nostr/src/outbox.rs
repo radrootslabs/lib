@@ -408,9 +408,14 @@ impl PublishableRelays {
         &'a self,
         relay_url: &'a str,
     ) -> impl Iterator<Item = &'a PublishableRelay> + 'a {
-        self.relays
-            .iter()
-            .filter(move |target| target.relay_url == relay_url)
+        let canonical_relay_url = RadrootsTransportTarget::nostr_relay(relay_url)
+            .ok()
+            .map(|target| target.uri.as_str().to_owned());
+        self.relays.iter().filter(move |target| {
+            canonical_relay_url
+                .as_deref()
+                .is_some_and(|relay_url| target.relay_url == relay_url)
+        })
     }
 
     fn satisfied_count_after_receipts(
@@ -723,8 +728,7 @@ fn publishable_transport_targets(
         .relays
         .iter()
         .map(|relay| {
-            RadrootsTransportTarget::new_with_metadata(
-                RadrootsTransportKind::Nostr,
+            RadrootsTransportTarget::nostr_relay_with_metadata(
                 relay.relay_url.as_str(),
                 relay
                     .target_scope
@@ -1057,9 +1061,9 @@ mod tests {
     use crate::{RadrootsRelayOutcome, RadrootsRelayPublishRelayReceipt};
     use radroots_transport::{
         RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+        RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+        RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+        RadrootsTransportTargetReceipt,
     };
 
     #[test]
@@ -1095,8 +1099,7 @@ mod tests {
             RadrootsTransportSatisfactionPolicy::quorum_delivered(2)
         );
         let required_target =
-            RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
-                .expect("required target");
+            RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("required target");
         assert_eq!(
             satisfaction_policy_for_remaining_count(
                 RadrootsTransportSatisfactionClass::Delivered,
@@ -1124,9 +1127,7 @@ mod tests {
 
     #[test]
     fn outbox_publish_satisfaction_counts_use_active_transport_class() {
-        let target =
-            RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
-                .expect("target");
+        let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
         let publishable = PublishableRelays {
             active_delivery_plan_id: 7,
             relays: vec![PublishableRelay {

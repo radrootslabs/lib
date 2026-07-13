@@ -19,16 +19,10 @@ fn opaque_payload() -> RadrootsTransportPayload {
 #[test]
 fn target_fingerprints_are_stable_and_transport_scoped() {
     let nostr_upper =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, " WSS://Relay.Example/Events ")
-            .expect("nostr target");
+        RadrootsTransportTarget::nostr_relay(" WSS://Relay.Example/Events ").expect("nostr target");
     let nostr_lower =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example/Events")
-            .expect("nostr target");
-    let reticulum = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-    )
-    .expect("reticulum target");
+        RadrootsTransportTarget::nostr_relay("wss://relay.example/Events").expect("nostr target");
+    let reticulum = RadrootsTransportTarget::reticulum_preview().expect("reticulum target");
 
     assert_eq!(nostr_upper.uri.as_str(), "wss://relay.example/Events");
     assert_eq!(nostr_upper.scope, None);
@@ -132,15 +126,65 @@ fn removed_proxy_kind() -> String {
 
 #[test]
 fn target_set_rejects_duplicate_fingerprints() {
-    let first = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example/a")
-        .expect("first target");
+    let first =
+        RadrootsTransportTarget::nostr_relay("wss://relay.example/a").expect("first target");
     let duplicate =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "WSS://RELAY.EXAMPLE/a")
-            .expect("duplicate target");
+        RadrootsTransportTarget::nostr_relay("WSS://RELAY.EXAMPLE/a").expect("duplicate target");
     let err = RadrootsTransportTargetSet::new(vec![first, duplicate])
         .expect_err("duplicate fingerprints must fail");
 
     assert_eq!(err, RadrootsTransportError::DuplicateTargetFingerprint);
+}
+
+#[test]
+fn nostr_relay_targets_use_canonical_endpoint_identity() {
+    let root = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("root target");
+    let root_slash =
+        RadrootsTransportTarget::nostr_relay("WSS://RELAY.EXAMPLE/").expect("root slash target");
+    let path =
+        RadrootsTransportTarget::nostr_relay("wss://relay.example/path").expect("path target");
+    let generic =
+        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example/")
+            .expect("generic nostr target");
+
+    assert_eq!(root.uri.as_str(), "wss://relay.example");
+    assert_eq!(root_slash.uri.as_str(), "wss://relay.example");
+    assert_eq!(root.fingerprint, root_slash.fingerprint);
+    assert_eq!(root.fingerprint, generic.fingerprint);
+    assert_ne!(root.fingerprint, path.fingerprint);
+    assert_eq!(path.uri.as_str(), "wss://relay.example/path");
+    assert_eq!(
+        RadrootsTransportTargetSet::new(vec![root, root_slash])
+            .expect_err("canonical-equivalent roots collide"),
+        RadrootsTransportError::DuplicateTargetFingerprint
+    );
+}
+
+#[test]
+fn nostr_relay_targets_reject_noncanonical_or_unsupported_endpoint_forms() {
+    for invalid in [
+        "https://relay.example",
+        "wss://user@relay.example",
+        "wss://user:password@relay.example",
+        "wss://relay.example?subscription=1",
+        "wss://relay.example#fragment",
+        "wss://",
+        "wss://relay.example:bad",
+        "wss://relay.example:65536",
+        "ws://relay.example",
+    ] {
+        assert_eq!(
+            RadrootsTransportTarget::nostr_relay(invalid).expect_err("invalid Nostr relay target"),
+            RadrootsTransportError::InvalidTargetUri
+        );
+    }
+
+    let local_ws =
+        RadrootsTransportTarget::nostr_relay("ws://LOCALHOST:7777/").expect("local ws relay");
+    assert_eq!(local_ws.uri.as_str(), "ws://localhost:7777");
+    let local_ipv6 =
+        RadrootsTransportTarget::nostr_relay("ws://[::1]:7777").expect("local ipv6 relay");
+    assert_eq!(local_ipv6.uri.as_str(), "ws://[::1]:7777");
 }
 
 #[test]
@@ -292,11 +336,7 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
 
 #[test]
 fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
-    let target = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-    )
-    .expect("target");
+    let target = RadrootsTransportTarget::reticulum_preview().expect("target");
     let receipt = RadrootsTransportDeliveryReceipt {
         request_id: "reticulum-preview".to_owned(),
         target_receipts: vec![RadrootsTransportTargetReceipt::new(
@@ -323,8 +363,7 @@ fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
 #[test]
 #[cfg(feature = "serde")]
 fn request_models_round_trip_with_serde() {
-    let target = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
-        .expect("target");
+    let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
     let target_set = RadrootsTransportTargetSet::new(vec![target]).expect("target set");
     let request = RadrootsTransportDeliveryRequest::new(
         "req-1",
@@ -558,11 +597,8 @@ fn transport_kind_and_target_parsers_cover_negative_edges() {
 
 #[test]
 fn reticulum_transport_targets_require_exact_preview_endpoint() {
-    let target = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-    )
-    .expect("exact Reticulum preview endpoint");
+    let target =
+        RadrootsTransportTarget::reticulum_preview().expect("exact Reticulum preview endpoint");
     assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
     assert_eq!(
         target.scope.as_ref().map(|scope| scope.as_str()),
@@ -913,10 +949,10 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
 
 #[test]
 fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
-    let required = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://one.example")
-        .expect("required target");
-    let optional = RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://two.example")
-        .expect("optional target");
+    let required =
+        RadrootsTransportTarget::nostr_relay("wss://one.example").expect("required target");
+    let optional =
+        RadrootsTransportTarget::nostr_relay("wss://two.example").expect("optional target");
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
         vec![required.fingerprint.clone()],
@@ -1065,8 +1101,7 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
         }
     }
 
-    let target = RadrootsTransportTarget::new(RadrootsTransportKind::Local, "local:memory")
-        .expect("local target");
+    let target = RadrootsTransportTarget::local("local:memory").expect("local target");
     let target_set = RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set");
     let transport = MemoryTransport { target };
     assert_eq!(transport.transport_kind(), RadrootsTransportKind::Local);

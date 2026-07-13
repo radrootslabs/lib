@@ -2699,12 +2699,11 @@ mod tests {
     }
 
     fn nostr_target(uri: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, uri).expect("nostr target")
+        RadrootsTransportTarget::nostr_relay(uri).expect("nostr target")
     }
 
     fn scoped_nostr_target(uri: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::new_with_metadata(
-            RadrootsTransportKind::Nostr,
+        RadrootsTransportTarget::nostr_relay_with_metadata(
             uri,
             Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
             Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
@@ -2713,9 +2712,7 @@ mod tests {
     }
 
     fn scoped_reticulum_target(scope: &str, label: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::new_with_metadata(
-            RadrootsTransportKind::Reticulum,
-            RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+        RadrootsTransportTarget::reticulum_preview_with_metadata(
             Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
             Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
         )
@@ -2723,12 +2720,12 @@ mod tests {
     }
 
     fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, uri)
-            .expect("reticulum target")
+        assert_eq!(uri, RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+        RadrootsTransportTarget::reticulum_preview().expect("reticulum target")
     }
 
     fn proxy_target(uri: &str) -> RadrootsTransportTarget {
-        RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, uri).expect("proxy target")
+        RadrootsTransportTarget::proxy(uri).expect("proxy target")
     }
 
     #[test]

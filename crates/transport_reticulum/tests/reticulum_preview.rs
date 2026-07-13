@@ -14,13 +14,12 @@ use radroots_transport_reticulum::{
 };
 
 fn reticulum_target(uri: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, uri).expect("reticulum target")
+    assert_eq!(uri, RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+    RadrootsTransportTarget::reticulum_preview().expect("reticulum target")
 }
 
 fn scoped_reticulum_target(scope: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::new_with_metadata(
-        RadrootsTransportKind::Reticulum,
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+    RadrootsTransportTarget::reticulum_preview_with_metadata(
         Some(RadrootsTransportMeshScopeId::parse(scope).expect("scope")),
         None,
     )
@@ -28,8 +27,7 @@ fn scoped_reticulum_target(scope: &str) -> RadrootsTransportTarget {
 }
 
 fn nostr_target() -> RadrootsTransportTarget {
-    RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example")
-        .expect("nostr target")
+    RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("nostr target")
 }
 
 fn delivery_request(targets: Vec<RadrootsTransportTarget>) -> RadrootsTransportDeliveryRequest {

@@ -398,20 +398,24 @@ impl TransportPublishTarget {
             .map(RadrootsTransportTargetLabel::parse)
             .transpose()
             .map_err(|error| target_metadata_error(error, index))?;
-        let target = RadrootsTransportTarget::new_with_metadata(
-            transport_kind,
-            self.endpoint_uri.as_str(),
-            scope,
-            label,
-        )
-        .map_err(|error| target_fingerprint_error(error, index))?;
+        let target =
+            transport_target_from_parts(transport_kind, self.endpoint_uri.as_str(), scope, label)
+                .map_err(|error| target_fingerprint_error(error, index))?;
         Ok(target.fingerprint)
     }
 
-    fn identity_eq(&self, outcome: &TransportPublishTargetOutcome) -> bool {
-        self.transport_kind == outcome.transport_kind
-            && self.endpoint_uri == outcome.endpoint_uri
-            && self.target_scope == outcome.target_scope
+    fn identity_eq(
+        &self,
+        target_index: usize,
+        outcome: &TransportPublishTargetOutcome,
+        outcome_index: usize,
+    ) -> Result<bool, TransportPublishProtocolError> {
+        if self.transport_kind != outcome.transport_kind
+            || self.target_scope != outcome.target_scope
+        {
+            return Ok(false);
+        }
+        Ok(self.fingerprint(target_index)? == target_outcome_fingerprint(outcome, outcome_index)?)
     }
 }
 
@@ -1199,14 +1203,38 @@ fn target_outcome_fingerprint(
         .map(RadrootsTransportTargetLabel::parse)
         .transpose()
         .map_err(|error| target_metadata_error(error, index))?;
-    let target = RadrootsTransportTarget::new_with_metadata(
-        transport_kind,
-        target.endpoint_uri.as_str(),
-        scope,
-        label,
-    )
-    .map_err(|error| target_fingerprint_error(error, index))?;
+    let target =
+        transport_target_from_parts(transport_kind, target.endpoint_uri.as_str(), scope, label)
+            .map_err(|error| target_fingerprint_error(error, index))?;
     Ok(target.fingerprint)
+}
+
+fn transport_target_from_parts(
+    transport_kind: RadrootsTransportKind,
+    endpoint_uri: &str,
+    scope: Option<RadrootsTransportMeshScopeId>,
+    label: Option<RadrootsTransportTargetLabel>,
+) -> Result<RadrootsTransportTarget, RadrootsTransportError> {
+    match transport_kind {
+        RadrootsTransportKind::Nostr => {
+            RadrootsTransportTarget::nostr_relay_with_metadata(endpoint_uri, scope, label)
+        }
+        RadrootsTransportKind::Reticulum => {
+            if endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
+                return Err(RadrootsTransportError::InvalidTargetUri);
+            }
+            RadrootsTransportTarget::reticulum_preview_with_metadata(scope, label)
+        }
+        RadrootsTransportKind::Local => {
+            RadrootsTransportTarget::local_with_metadata(endpoint_uri, scope, label)
+        }
+        RadrootsTransportKind::Proxy => {
+            RadrootsTransportTarget::proxy_with_metadata(endpoint_uri, scope, label)
+        }
+        RadrootsTransportKind::Mesh | RadrootsTransportKind::Custom(_) => {
+            RadrootsTransportTarget::new_with_metadata(transport_kind, endpoint_uri, scope, label)
+        }
+    }
 }
 
 fn required_policy_outcomes<'a>(
@@ -1253,9 +1281,16 @@ fn validate_job_target_policy_outcomes(
     let mut matched_targets = Vec::new();
     matched_targets.resize(targets.len(), false);
     for (outcome_index, outcome) in outcomes.iter().enumerate() {
-        let Some((target_index, _)) = targets.iter().enumerate().find(|(target_index, target)| {
-            !matched_targets[*target_index] && target.identity_eq(outcome)
-        }) else {
+        let mut matched_target_index = None;
+        for (target_index, target) in targets.iter().enumerate() {
+            if !matched_targets[target_index]
+                && target.identity_eq(target_index, outcome, outcome_index)?
+            {
+                matched_target_index = Some(target_index);
+                break;
+            }
+        }
+        let Some(target_index) = matched_target_index else {
             return Err(
                 TransportPublishProtocolError::InvalidExplicitTargetOutcome {
                     index: outcome_index,
@@ -1925,6 +1960,19 @@ mod tests {
         )
         .validate()
         .expect("explicit target outcomes match regardless of order");
+
+        job_from_targets(
+            TransportPublishJobStatus::DeliverySatisfied,
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "wss://relay-a.example.com",
+            )]),
+            vec![nostr_outcome_for(
+                "wss://relay-a.example.com/",
+                TransportPublishOutcomeKind::Accepted,
+            )],
+        )
+        .validate()
+        .expect("explicit target outcome matches canonical-equivalent endpoint");
 
         let mismatched_endpoint = job_from_targets(
             TransportPublishJobStatus::DeliverySatisfied,

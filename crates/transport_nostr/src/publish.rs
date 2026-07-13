@@ -309,10 +309,9 @@ fn target_receipts_from_relay_receipts(
         .iter()
         .cloned()
         .map(|target| {
-            let relay_url = target.uri.as_str().trim_end_matches('/');
             let outcome = relay_receipts
                 .iter()
-                .find(|receipt| receipt.relay_url.trim_end_matches('/') == relay_url)
+                .find(|receipt| relay_receipt_matches_target(receipt, &target))
                 .map(|receipt| receipt.outcome.to_transport_outcome())
                 .unwrap_or_else(|| {
                     RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::RouteUnavailable)
@@ -404,8 +403,7 @@ fn relay_publish_satisfies_policy(
             policy.required_target_count(target_count)?;
             let mut satisfied_required_targets = BTreeSet::new();
             for receipt in relays {
-                let target =
-                    RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, &receipt.relay_url)?;
+                let target = RadrootsTransportTarget::nostr_relay(&receipt.relay_url)?;
                 if targets.contains(&target.fingerprint)
                     && receipt
                         .outcome
@@ -421,6 +419,14 @@ fn relay_publish_satisfies_policy(
                 .all(|target| satisfied_required_targets.contains(target)))
         }
     }
+}
+
+fn relay_receipt_matches_target(
+    receipt: &RadrootsRelayPublishRelayReceipt,
+    target: &RadrootsTransportTarget,
+) -> bool {
+    RadrootsTransportTarget::nostr_relay(receipt.relay_url.as_str())
+        .is_ok_and(|receipt_target| receipt_target.uri == target.uri)
 }
 
 #[derive(Clone, Default)]

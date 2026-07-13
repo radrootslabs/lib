@@ -18,6 +18,11 @@ impl RadrootsTransportTargetUri {
         Ok(Self(canonical))
     }
 
+    fn parse_nostr_relay(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        let canonical = canonicalize_nostr_relay_uri(raw.as_ref())?;
+        Ok(Self(canonical))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -161,6 +166,58 @@ impl RadrootsTransportTarget {
         Self::new_with_metadata(kind, uri, None, None)
     }
 
+    pub fn nostr_relay(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        Self::nostr_relay_with_metadata(uri, None, None)
+    }
+
+    pub fn nostr_relay_with_metadata(
+        uri: impl AsRef<str>,
+        scope: Option<RadrootsTransportMeshScopeId>,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
+        Self::new_with_metadata(RadrootsTransportKind::Nostr, uri, scope, label)
+    }
+
+    pub fn reticulum_preview() -> Result<Self, RadrootsTransportError> {
+        Self::reticulum_preview_with_metadata(None, None)
+    }
+
+    pub fn reticulum_preview_with_metadata(
+        scope: Option<RadrootsTransportMeshScopeId>,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
+        Self::new_with_metadata(
+            RadrootsTransportKind::Reticulum,
+            RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+            scope,
+            label,
+        )
+    }
+
+    pub fn local(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        Self::local_with_metadata(uri, None, None)
+    }
+
+    pub fn local_with_metadata(
+        uri: impl AsRef<str>,
+        scope: Option<RadrootsTransportMeshScopeId>,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
+        Self::new_with_metadata(RadrootsTransportKind::Local, uri, scope, label)
+    }
+
+    pub fn proxy(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        Self::proxy_with_metadata(uri, None, None)
+    }
+
+    pub fn proxy_with_metadata(
+        uri: impl AsRef<str>,
+        scope: Option<RadrootsTransportMeshScopeId>,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
+        Self::new_with_metadata(RadrootsTransportKind::Proxy, uri, scope, label)
+    }
+
     pub fn new_with_metadata(
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
@@ -173,7 +230,10 @@ impl RadrootsTransportTarget {
         {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
-        let uri = RadrootsTransportTargetUri::parse(raw_uri)?;
+        let uri = match kind {
+            RadrootsTransportKind::Nostr => RadrootsTransportTargetUri::parse_nostr_relay(raw_uri)?,
+            _ => RadrootsTransportTargetUri::parse(raw_uri)?,
+        };
         let scope = scope.or_else(|| default_scope_for_kind(&kind));
         let fingerprint =
             RadrootsTransportTargetFingerprint::from_target(&kind, &uri, scope.as_ref());
@@ -263,4 +323,119 @@ fn is_valid_scheme(value: &str) -> bool {
     let mut chars = value.chars();
     matches!(chars.next(), Some(first) if first.is_ascii_alphabetic())
         && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
+}
+
+fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(RadrootsTransportError::EmptyTargetUri);
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
+    {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    if trimmed.contains('?') || trimmed.contains('#') {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    let Some(scheme_end) = trimmed.find("://") else {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    };
+    let scheme = trimmed[..scheme_end].to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "wss" | "ws") {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    let endpoint = &trimmed[scheme_end + 3..];
+    let authority_end = endpoint.find('/').unwrap_or(endpoint.len());
+    let authority = &endpoint[..authority_end];
+    let path = &endpoint[authority_end..];
+    let authority = canonicalize_nostr_relay_authority(authority, scheme.as_str())?;
+    if path == "/" {
+        return Ok(format!("{scheme}://{authority}"));
+    }
+    Ok(format!("{scheme}://{authority}{path}"))
+}
+
+fn canonicalize_nostr_relay_authority(
+    authority: &str,
+    scheme: &str,
+) -> Result<String, RadrootsTransportError> {
+    if authority.is_empty() || authority.contains('@') {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    let (host, port) = if let Some(rest) = authority.strip_prefix('[') {
+        let Some(host_end) = rest.find(']') else {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        };
+        let host = &rest[..host_end];
+        let suffix = &rest[host_end + 1..];
+        if host.is_empty()
+            || host
+                .chars()
+                .any(|ch| matches!(ch, '[' | ']' | '/' | '?' | '#' | '@'))
+        {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        (
+            format!("[{}]", host.to_ascii_lowercase()),
+            parse_nostr_relay_port(suffix)?,
+        )
+    } else {
+        if authority.contains(['[', ']']) {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        let mut parts = authority.splitn(2, ':');
+        let host = parts.next().unwrap_or_default();
+        let port = parts
+            .next()
+            .map(|port| parse_nostr_relay_port_with_prefix(port))
+            .transpose()?;
+        if host.is_empty() || !is_valid_nostr_relay_host(host) {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        (host.to_ascii_lowercase(), port)
+    };
+    if scheme == "ws" && !is_local_ws_relay_host(host.as_str()) {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    Ok(match port {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    })
+}
+
+fn parse_nostr_relay_port(suffix: &str) -> Result<Option<String>, RadrootsTransportError> {
+    if suffix.is_empty() {
+        return Ok(None);
+    }
+    let Some(port) = suffix.strip_prefix(':') else {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    };
+    parse_nostr_relay_port_with_prefix(port).map(Some)
+}
+
+fn parse_nostr_relay_port_with_prefix(port: &str) -> Result<String, RadrootsTransportError> {
+    if port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    let value = port
+        .parse::<u32>()
+        .map_err(|_| RadrootsTransportError::InvalidTargetUri)?;
+    if value > u16::MAX as u32 {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    Ok(port.to_string())
+}
+
+fn is_valid_nostr_relay_host(host: &str) -> bool {
+    if host.contains("..") || host.starts_with('.') || host.ends_with('.') {
+        return false;
+    }
+    host.bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.'))
+}
+
+fn is_local_ws_relay_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }

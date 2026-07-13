@@ -76,6 +76,23 @@ impl RadrootsRelayPublishAdapter for PartialPublishAdapter {
     }
 }
 
+struct SlashSpelledRelayReceiptPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for SlashSpelledRelayReceiptPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
+                format!("{RELAY_PRIMARY_WSS}/"),
+                RadrootsRelayOutcome::accepted(),
+            )])
+        })
+    }
+}
+
 struct NostrJsonFailurePublishAdapter;
 
 impl RadrootsRelayPublishAdapter for NostrJsonFailurePublishAdapter {
@@ -207,12 +224,11 @@ async fn complete_claimed_signing(
 }
 
 fn nostr_target(relay_url: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, relay_url).expect("nostr target")
+    RadrootsTransportTarget::nostr_relay(relay_url).expect("nostr target")
 }
 
 fn scoped_nostr_target(relay_url: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::new_with_metadata(
-        RadrootsTransportKind::Nostr,
+    RadrootsTransportTarget::nostr_relay_with_metadata(
         relay_url,
         Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
         Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
@@ -771,11 +787,7 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
         .expect_err("payload rejected");
     assert_eq!(payload_error, RadrootsTransportError::InvalidPayloadBytes);
 
-    let non_nostr_target = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Reticulum,
-        radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-    )
-    .expect("reticulum target");
+    let non_nostr_target = RadrootsTransportTarget::reticulum_preview().expect("reticulum target");
     let target_error = transport
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-request-target",
@@ -787,6 +799,50 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
         .await
         .expect_err("target rejected");
     assert_eq!(target_error, RadrootsTransportError::InvalidTargetUri);
+}
+
+#[tokio::test]
+async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
+    let signed = signed_post("facade canonical receipt");
+    let target = nostr_target(RELAY_PRIMARY_WSS);
+    let policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![target.fingerprint.clone()],
+    )
+    .expect("required target policy");
+    let transport = RadrootsNostrTransport::new(SlashSpelledRelayReceiptPublishAdapter);
+    let receipt = transport
+        .deliver(RadrootsTransportDeliveryRequest::new(
+            "facade-canonical-receipt",
+            RadrootsTransportPayload::signed_event_json(signed.id.clone(), signed.raw_json.clone())
+                .expect("payload"),
+            RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+            policy.clone(),
+        ))
+        .await
+        .expect("delivery");
+
+    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(receipt.target_receipts[0].target, target);
+    assert_eq!(
+        receipt.target_receipts[0].status,
+        radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
+    );
+    assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
+
+    let relay_receipt = publish_signed_event(
+        &SlashSpelledRelayReceiptPublishAdapter,
+        RadrootsRelayPublishRequest::new(
+            signed,
+            RadrootsRelayTargetSet::new(vec![RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
+                .expect("targets"),
+            1_070,
+        )
+        .with_satisfaction_policy(policy),
+    )
+    .await
+    .expect("relay publish");
+    assert!(relay_receipt.quorum_met);
 }
 
 #[tokio::test]
@@ -873,8 +929,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
 async fn publish_required_target_policy_uses_relay_fingerprints() {
     let signed = signed_post("required relay");
     let required_target =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, RELAY_PRIMARY_WSS)
-            .expect("required target");
+        RadrootsTransportTarget::nostr_relay(RELAY_PRIMARY_WSS).expect("required target");
     let targets = RadrootsRelayTargetSet::new(
         vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
         RadrootsRelayUrlPolicy::Public,
@@ -2348,11 +2403,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
                 RadrootsTransportSatisfactionPolicy::all_accepted(),
                 vec![
                     nostr_target(RELAY_PRIMARY_WSS),
-                    RadrootsTransportTarget::new(
-                        RadrootsTransportKind::Reticulum,
-                        "reticulum:preview-unavailable",
-                    )
-                    .expect("reticulum target"),
+                    RadrootsTransportTarget::reticulum_preview().expect("reticulum target"),
                 ],
             ),
             1_000,
