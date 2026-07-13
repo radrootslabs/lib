@@ -1,10 +1,11 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
@@ -204,6 +205,10 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
         RadrootsTransportImplementationState::Real
     );
     assert!(status.usable_for_delivery);
+    assert_eq!(
+        status.capabilities,
+        RadrootsTransportCapabilities::deliver_only()
+    );
     assert_eq!(status.message, "ready");
 
     let json = serde_json::to_value(&status).expect("status json");
@@ -211,6 +216,8 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
     assert_eq!(json["implementation"], "real");
     assert_eq!(json["configured"], true);
     assert_eq!(json["usable_for_delivery"], true);
+    assert_eq!(json["capabilities"]["deliver"], true);
+    assert_eq!(json["capabilities"]["fetch"], false);
     assert_eq!(json["message"], "ready");
     for retired in [
         "kind",
@@ -381,6 +388,10 @@ fn fingerprint_parser_rejects_non_sha256_hex() {
 #[test]
 fn transport_errors_have_stable_display_strings() {
     let cases = [
+        (
+            RadrootsTransportError::UnsupportedOperation,
+            "transport operation is unsupported",
+        ),
         (
             RadrootsTransportError::EmptyTransportKind,
             "transport kind is empty",
@@ -920,7 +931,8 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
                     RadrootsTransportImplementationState::Real,
                     true,
                     "ready",
-                ))
+                )
+                .with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch()))
             })
         }
 
@@ -963,6 +975,10 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     assert_eq!(transport.transport_kind(), RadrootsTransportKind::Local);
     let status = futures::executor::block_on(transport.status()).expect("status");
     assert_eq!(status.kind, RadrootsTransportKind::Local);
+    assert_eq!(
+        status.capabilities,
+        RadrootsTransportCapabilities::deliver_and_fetch()
+    );
     let delivery =
         futures::executor::block_on(transport.deliver(RadrootsTransportDeliveryRequest::new(
             "deliver-1",

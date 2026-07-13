@@ -173,6 +173,43 @@ impl RadrootsTransportOutcome {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTransportCapabilities {
+    pub deliver: bool,
+    pub fetch: bool,
+}
+
+impl RadrootsTransportCapabilities {
+    pub const fn none() -> Self {
+        Self {
+            deliver: false,
+            fetch: false,
+        }
+    }
+
+    pub const fn deliver_only() -> Self {
+        Self {
+            deliver: true,
+            fetch: false,
+        }
+    }
+
+    pub const fn fetch_only() -> Self {
+        Self {
+            deliver: false,
+            fetch: true,
+        }
+    }
+
+    pub const fn deliver_and_fetch() -> Self {
+        Self {
+            deliver: true,
+            fetch: true,
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportStatus {
     #[cfg_attr(feature = "serde", serde(rename = "transport"))]
     pub kind: RadrootsTransportKind,
@@ -181,6 +218,7 @@ pub struct RadrootsTransportStatus {
     pub configured: bool,
     pub implementation: RadrootsTransportImplementationState,
     pub usable_for_delivery: bool,
+    pub capabilities: RadrootsTransportCapabilities,
     pub message: String,
 }
 
@@ -199,8 +237,18 @@ impl RadrootsTransportStatus {
             configured,
             implementation,
             usable_for_delivery,
+            capabilities: if usable_for_delivery {
+                RadrootsTransportCapabilities::deliver_only()
+            } else {
+                RadrootsTransportCapabilities::none()
+            },
             message: message.into(),
         }
+    }
+
+    pub fn with_capabilities(mut self, capabilities: RadrootsTransportCapabilities) -> Self {
+        self.capabilities = capabilities;
+        self
     }
 
     pub fn with_profile_id(mut self, profile_id: impl Into<String>) -> Self {

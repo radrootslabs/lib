@@ -684,6 +684,18 @@ fn transport_satisfaction_policy_for_publishable(
 
 fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRelayTransportError {
     match error {
+        RadrootsTransportError::UnsupportedOperation
+        | RadrootsTransportError::EmptyTransportKind
+        | RadrootsTransportError::InvalidTransportKind
+        | RadrootsTransportError::EmptyTargetScope
+        | RadrootsTransportError::InvalidTargetScope
+        | RadrootsTransportError::EmptyTargetLabel
+        | RadrootsTransportError::InvalidTargetLabel
+        | RadrootsTransportError::InvalidSatisfactionPolicy
+        | RadrootsTransportError::EmptyRequiredTargetSet
+        | RadrootsTransportError::DuplicateRequiredTargetFingerprint => {
+            RadrootsRelayTransportError::Transport(error.to_string())
+        }
         RadrootsTransportError::EmptyTargetUri
         | RadrootsTransportError::InvalidTargetUri
         | RadrootsTransportError::EmptyTargetSet
@@ -700,17 +712,6 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::InvalidPayloadDigest
         | RadrootsTransportError::PayloadDigestMismatch => {
             RadrootsRelayTransportError::NostrEventJson(error.to_string())
-        }
-        RadrootsTransportError::EmptyTransportKind
-        | RadrootsTransportError::InvalidTransportKind
-        | RadrootsTransportError::EmptyTargetScope
-        | RadrootsTransportError::InvalidTargetScope
-        | RadrootsTransportError::EmptyTargetLabel
-        | RadrootsTransportError::InvalidTargetLabel
-        | RadrootsTransportError::InvalidSatisfactionPolicy
-        | RadrootsTransportError::EmptyRequiredTargetSet
-        | RadrootsTransportError::DuplicateRequiredTargetFingerprint => {
-            RadrootsRelayTransportError::Transport(error.to_string())
         }
     }
 }

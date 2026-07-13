@@ -6,12 +6,12 @@ use core::time::Duration;
 use futures::future::BoxFuture;
 use radroots_event::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
 use radroots_transport::{
-    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt,
+    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus,
+    RadrootsTransportTarget, RadrootsTransportTargetReceipt,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -138,7 +138,8 @@ impl<A> RadrootsNostrTransport<A> {
                 RadrootsTransportImplementationState::Real,
                 true,
                 "ready",
-            ),
+            )
+            .with_capabilities(RadrootsTransportCapabilities::deliver_only()),
         }
     }
 
@@ -206,9 +207,7 @@ where
         &'a self,
         _request: RadrootsTransportFetchRequest,
     ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
-        Box::pin(
-            async move { Err(radroots_transport::RadrootsTransportError::InvalidTransportKind) },
-        )
+        Box::pin(async move { Err(RadrootsTransportError::UnsupportedOperation) })
     }
 }
 

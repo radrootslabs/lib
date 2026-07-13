@@ -25,8 +25,8 @@ pub use message::{
 };
 pub use payload::RadrootsTransportPayload;
 pub use status::{
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportStatus,
+    RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportStatus,
 };
 pub use target::{
     RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,

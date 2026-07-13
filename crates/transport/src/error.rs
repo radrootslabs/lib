@@ -2,6 +2,7 @@ use core::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTransportError {
+    UnsupportedOperation,
     EmptyTransportKind,
     InvalidTransportKind,
     EmptyTargetUri,
@@ -29,6 +30,7 @@ pub enum RadrootsTransportError {
 impl fmt::Display for RadrootsTransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnsupportedOperation => f.write_str("transport operation is unsupported"),
             Self::EmptyTransportKind => f.write_str("transport kind is empty"),
             Self::InvalidTransportKind => f.write_str("transport kind is invalid"),
             Self::EmptyTargetUri => f.write_str("transport target URI is empty"),

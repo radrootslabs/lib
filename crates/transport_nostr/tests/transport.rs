@@ -18,9 +18,10 @@ use radroots_outbox::{
 };
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryRequest, RadrootsTransportError,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-    RadrootsTransportTarget, RadrootsTransportTargetLabel, RadrootsTransportTargetSet,
+    RadrootsTransportFetchRequest, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsNostrTransport,
@@ -718,8 +719,11 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     );
 
     let receipt = transport.deliver(request).await.expect("delivery");
+    let status = transport.status().await.expect("status");
 
     assert_eq!(adapter.captured_raw_events(), vec![signed.raw_json]);
+    assert!(status.capabilities.deliver);
+    assert!(!status.capabilities.fetch);
     assert_eq!(receipt.request_id, "facade-request-1");
     assert_eq!(receipt.target_receipts.len(), 1);
     assert_eq!(receipt.target_receipts[0].target, target);
@@ -732,6 +736,22 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
             .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::all_accepted())
             .expect("satisfaction")
     );
+}
+
+#[tokio::test]
+async fn nostr_transport_facade_reports_fetch_as_unsupported_operation() {
+    let transport = RadrootsNostrTransport::new(RadrootsMockRelayPublishAdapter::new());
+    let target_set =
+        RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)]).expect("targets");
+    let error = transport
+        .fetch(RadrootsTransportFetchRequest::new(
+            "facade-fetch-unsupported",
+            target_set,
+        ))
+        .await
+        .expect_err("fetch unsupported");
+
+    assert_eq!(error, RadrootsTransportError::UnsupportedOperation);
 }
 
 #[tokio::test]

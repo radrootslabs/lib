@@ -407,11 +407,18 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
         "pub configured: bool,",
         "pub implementation: TransportPublishImplementation,",
         "pub usable_for_delivery: bool,",
+        "pub capabilities: TransportPublishOperationCapabilities,",
+        "pub struct TransportPublishOperationCapabilities",
+        "pub deliver: bool,",
+        "pub fetch: bool,",
         "TransportPublishImplementation::Real",
         "TransportPublishImplementation::PreviewUnavailable",
         "configured: true",
         "usable_for_delivery: true",
         "usable_for_delivery: false",
+        "capabilities: TransportPublishOperationCapabilities",
+        "deliver: true",
+        "fetch: false",
     ] {
         assert!(
             source.contains(required),

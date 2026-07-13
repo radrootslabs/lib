@@ -632,9 +632,9 @@ mod tests {
     #[cfg(feature = "transport-workers")]
     use radroots_event::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
     use radroots_transport::{
-        RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-        RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchReceipt,
-        RadrootsTransportFetchRequest, RadrootsTransportFuture,
+        RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+        RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+        RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest, RadrootsTransportFuture,
         RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportOutcome,
         RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
         RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
@@ -690,7 +690,8 @@ mod tests {
                     RadrootsTransportImplementationState::Real,
                     true,
                     "ready",
-                ))
+                )
+                .with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch()))
             })
         }
 
@@ -838,6 +839,10 @@ mod tests {
             .expect("receipt");
         let status = transport.status().await.expect("status");
         assert_eq!(status.kind, RadrootsTransportKind::Nostr);
+        assert_eq!(
+            status.capabilities,
+            RadrootsTransportCapabilities::deliver_and_fetch()
+        );
         let fetch = transport
             .fetch(RadrootsTransportFetchRequest::new(
                 "nostr-fetch",
@@ -913,6 +918,8 @@ mod tests {
             status.implementation,
             RadrootsTransportImplementationState::PreviewUnavailable
         );
+        assert!(!status.capabilities.deliver);
+        assert!(!status.capabilities.fetch);
         let fetch = transport
             .fetch(RadrootsTransportFetchRequest::new(
                 "reticulum-fetch",

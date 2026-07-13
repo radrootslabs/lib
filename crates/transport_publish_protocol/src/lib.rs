@@ -992,6 +992,10 @@ impl TransportPublishCapabilities {
                         configured: true,
                         implementation: TransportPublishImplementation::Real,
                         usable_for_delivery: true,
+                        capabilities: TransportPublishOperationCapabilities {
+                            deliver: true,
+                            fetch: false,
+                        },
                         preview_behavior: None,
                         message: "Nostr relay publish is available".to_owned(),
                     },
@@ -1000,6 +1004,10 @@ impl TransportPublishCapabilities {
                         configured: true,
                         implementation: TransportPublishImplementation::PreviewUnavailable,
                         usable_for_delivery: false,
+                        capabilities: TransportPublishOperationCapabilities {
+                            deliver: false,
+                            fetch: false,
+                        },
                         preview_behavior: Some(
                             TransportPublishPreviewBehavior::RejectDeliveryAttempts,
                         ),
@@ -1048,12 +1056,21 @@ pub struct TransportPublishTransportCapability {
     pub configured: bool,
     pub implementation: TransportPublishImplementation,
     pub usable_for_delivery: bool,
+    pub capabilities: TransportPublishOperationCapabilities,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub preview_behavior: Option<TransportPublishPreviewBehavior>,
     pub message: String,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportPublishOperationCapabilities {
+    pub deliver: bool,
+    pub fetch: bool,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1519,6 +1536,8 @@ mod tests {
         assert!(nostr.configured);
         assert_eq!(nostr.implementation, TransportPublishImplementation::Real);
         assert!(nostr.usable_for_delivery);
+        assert!(nostr.capabilities.deliver);
+        assert!(!nostr.capabilities.fetch);
         let reticulum = capabilities
             .publish
             .transports
@@ -1531,6 +1550,8 @@ mod tests {
             TransportPublishImplementation::PreviewUnavailable
         );
         assert!(!reticulum.usable_for_delivery);
+        assert!(!reticulum.capabilities.deliver);
+        assert!(!reticulum.capabilities.fetch);
         assert_eq!(
             reticulum.preview_behavior,
             Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts)

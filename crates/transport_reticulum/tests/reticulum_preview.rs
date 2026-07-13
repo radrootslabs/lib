@@ -292,6 +292,8 @@ fn core_transport_trait_reports_preview_status_delivery_and_fetch() {
         RadrootsTransportImplementationState::PreviewUnavailable
     );
     assert!(!status.usable_for_delivery);
+    assert!(!status.capabilities.deliver);
+    assert!(!status.capabilities.fetch);
 
     let delivery = futures::executor::block_on(RadrootsTransport::deliver(
         &transport,
@@ -503,6 +505,8 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
         RadrootsTransportImplementationState::PreviewUnavailable
     );
     assert!(!status.transport_status.usable_for_delivery);
+    assert!(!status.transport_status.capabilities.deliver);
+    assert!(!status.transport_status.capabilities.fetch);
 
     let receipt = transport
         .deliver(delivery_request(vec![reticulum_target(
