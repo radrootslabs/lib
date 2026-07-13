@@ -275,10 +275,7 @@ impl TargetSet {
         let mut targets = Vec::new();
         for relay in relays {
             let normalized = normalized_nostr_relay_url(relay.as_ref(), policy)?;
-            targets.push(RadrootsTransportTarget::new(
-                RadrootsTransportKind::Nostr,
-                normalized,
-            )?);
+            targets.push(RadrootsTransportTarget::nostr_relay(normalized)?);
         }
         Self::from_transport_targets(targets)
     }
@@ -457,12 +454,16 @@ impl ReticulumPreviewProfile {
     }
 
     pub fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
-        TargetSet::transport_targets(vec![RadrootsTransportTarget::new_with_metadata(
-            RadrootsTransportKind::Reticulum,
-            self.endpoint_uri.as_str(),
-            Some(self.scope.transport_scope()),
-            None,
-        )?])
+        if self.endpoint_uri.as_str() != radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+        {
+            return Err(radroots_transport::RadrootsTransportError::InvalidTargetUri.into());
+        }
+        TargetSet::transport_targets(vec![
+            RadrootsTransportTarget::reticulum_preview_with_metadata(
+                Some(self.scope.transport_scope()),
+                None,
+            )?,
+        ])
     }
 }
 
@@ -606,8 +607,7 @@ impl ProxyProfile {
     }
 
     pub(crate) fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
-        TargetSet::transport_targets(vec![RadrootsTransportTarget::new(
-            RadrootsTransportKind::Proxy,
+        TargetSet::transport_targets(vec![RadrootsTransportTarget::proxy(
             self.endpoint_url.as_str(),
         )?])
     }

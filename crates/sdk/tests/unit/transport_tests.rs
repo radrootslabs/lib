@@ -211,16 +211,10 @@ fn target_sets_reject_duplicate_transport_fingerprints() {
             if message == "transport target set contains duplicate fingerprints"
     ));
 
-    let first = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Nostr,
-        "wss://relay-a.example.com/path",
-    )
-    .expect("first target");
-    let second = RadrootsTransportTarget::new(
-        RadrootsTransportKind::Nostr,
-        "WSS://RELAY-A.EXAMPLE.COM/path",
-    )
-    .expect("second target");
+    let first = RadrootsTransportTarget::nostr_relay("wss://relay-a.example.com/path")
+        .expect("first target");
+    let second = RadrootsTransportTarget::nostr_relay("WSS://RELAY-A.EXAMPLE.COM/path")
+        .expect("second target");
     let duplicate_targets =
         TargetSet::transport_targets(vec![first, second]).expect_err("duplicate targets");
 
@@ -345,12 +339,9 @@ fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
 
 #[test]
 fn explicit_target_sets_reject_mixed_proxy_delegate_targets() {
-    let proxy =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Proxy, "http://127.0.0.1:8080/rpc")
-            .expect("proxy target");
+    let proxy = RadrootsTransportTarget::proxy("http://127.0.0.1:8080/rpc").expect("proxy target");
     let nostr =
-        RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example.com")
-            .expect("Nostr target");
+        RadrootsTransportTarget::nostr_relay("wss://relay.example.com").expect("Nostr target");
 
     let error = TargetSet::transport_targets(vec![proxy.clone(), nostr])
         .expect_err("mixed proxy target set");

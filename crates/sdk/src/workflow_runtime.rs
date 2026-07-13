@@ -17,9 +17,7 @@ use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
-use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
-};
+use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
 
 const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
 
@@ -212,13 +210,12 @@ fn resolved_delivery_plan(
             )
         }
         TargetPolicy::MeshScope(scope) => {
-            let target_set =
-                TargetSet::transport_targets(vec![RadrootsTransportTarget::new_with_metadata(
-                    RadrootsTransportKind::Reticulum,
-                    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
+            let target_set = TargetSet::transport_targets(vec![
+                RadrootsTransportTarget::reticulum_preview_with_metadata(
                     Some(scope.transport_scope()),
                     None,
-                )?])?;
+                )?,
+            ])?;
             delivery_plan_from_targets(
                 "mesh_scope",
                 target_set.into_targets(),
