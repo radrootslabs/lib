@@ -121,7 +121,7 @@ fn publish_request() -> TransportPublishEventRequest {
 }
 
 fn job_status_for_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobStatus {
-    if outcome_kind.counts_toward_satisfaction() {
+    if outcome_kind.counts_toward_accepted_delivery() {
         TransportPublishJobStatus::DeliverySatisfied
     } else if outcome_kind.is_retryable() {
         TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
@@ -159,7 +159,7 @@ fn job(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
         ),
         delivery_policy: TransportPublishDeliveryPolicy::Any,
         target_count: 1,
-        acknowledged_count: usize::from(outcome_kind.counts_toward_satisfaction()),
+        acknowledged_count: usize::from(outcome_kind.counts_toward_accepted_delivery()),
         retryable_count: usize::from(outcome_kind.is_retryable()),
         terminal_count: usize::from(outcome_kind.is_terminal_failure()),
         requested_at_ms: 1_700_000_000_000,

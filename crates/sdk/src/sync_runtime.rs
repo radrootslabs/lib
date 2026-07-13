@@ -1208,7 +1208,7 @@ async fn proxy_delivery_policy(
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
         .collect::<Vec<_>>();
-    reject_delivered_proxy_satisfaction(&plan.satisfaction_policy)?;
+    reject_non_accepted_proxy_satisfaction(&plan.satisfaction_policy)?;
     let ready_target_count = active_targets
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
@@ -1249,7 +1249,7 @@ fn proxy_delivery_policy_from_remaining(
     required_remaining_targets: Option<&[RadrootsTransportTargetFingerprint]>,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
-    reject_delivered_proxy_satisfaction(satisfaction_policy)?;
+    reject_non_accepted_proxy_satisfaction(satisfaction_policy)?;
     if required_remaining == 0 {
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
@@ -1333,11 +1333,12 @@ fn proxy_required_remaining_targets(
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn reject_delivered_proxy_satisfaction(
+fn reject_non_accepted_proxy_satisfaction(
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
-    if satisfaction_policy.target_satisfaction_class()
-        == Some(RadrootsTransportSatisfactionClass::Delivered)
+    if satisfaction_policy
+        .target_satisfaction_class()
+        .is_some_and(|class| class != RadrootsTransportSatisfactionClass::Accepted)
     {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "radrootsd proxy publish only supports accepted-class satisfaction policies"
@@ -1528,7 +1529,7 @@ async fn complete_proxy_delivery_target(
     outcome: &TransportPublishTargetOutcome,
     now_ms: i64,
 ) -> Result<(), RadrootsSdkError> {
-    if outcome.outcome_kind.counts_toward_satisfaction() {
+    if outcome.outcome_kind.counts_toward_accepted_delivery() {
         sync.sdk
             ._outbox
             .mark_delivery_target_accepted(

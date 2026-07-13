@@ -51,8 +51,8 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy,
 };
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
-    RadrootsTransportTargetLabel,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportTarget, RadrootsTransportTargetLabel,
 };
 use radroots_transport_nostr::{
     RadrootsNostrTransport, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
@@ -322,7 +322,7 @@ fn delivery_target_record(
 
 #[cfg(feature = "radrootsd-proxy")]
 fn proxy_job(event_id: &str, outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
-    let delivery_satisfied = outcome_kind.counts_toward_satisfaction();
+    let delivery_satisfied = outcome_kind.counts_toward_accepted_delivery();
     let retryable = outcome_kind.is_retryable();
     let terminal_failure = outcome_kind.is_terminal_failure();
     let status = if delivery_satisfied {
@@ -929,49 +929,61 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
 
 #[cfg(feature = "radrootsd-proxy")]
 #[tokio::test]
-async fn proxy_delivery_policy_rejects_delivered_satisfaction_before_daemon_publish() {
+async fn proxy_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_publish() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
-    let (sdk, claimed) = claimed_uningested_proxy_event_with_satisfaction(
-        "proxy-delivered-rejected",
-        endpoint.as_str(),
+    for (index, satisfaction_policy) in [
+        RadrootsTransportSatisfactionPolicy::all_forwarded(),
+        RadrootsTransportSatisfactionPolicy::all_stored(),
+        RadrootsTransportSatisfactionPolicy::all_seen(),
         RadrootsTransportSatisfactionPolicy::all_delivered(),
-    )
-    .await;
-    let sync = sdk.sync();
-    let adapter = RadrootsdProxyPublishAdapter::new(
-        RadrootsdProxyConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
-    );
+        RadrootsTransportSatisfactionPolicy::all_durable_or_observed(),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let d_tag = format!("proxy-non-accepted-rejected-{index}");
+        let (sdk, claimed) = claimed_uningested_proxy_event_with_satisfaction(
+            d_tag.as_str(),
+            endpoint.as_str(),
+            satisfaction_policy,
+        )
+        .await;
+        let sync = sdk.sync();
+        let adapter = RadrootsdProxyPublishAdapter::new(
+            RadrootsdProxyConfig::new(endpoint.clone()).with_timeout(Duration::from_millis(50)),
+        );
 
-    let error =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        let error =
+            push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+                .await
+                .expect_err("non-accepted-class proxy satisfaction rejected");
+        assert_no_transport_publish_request(&listener);
+
+        assert!(matches!(
+            error,
+            RadrootsSdkError::InvalidRequest { message }
+                if message.contains("radrootsd proxy publish")
+                    && message.contains("accepted-class satisfaction")
+        ));
+        let stored = sdk
+            ._outbox
+            .get_event(claimed.outbox_event_id)
             .await
-            .expect_err("delivered-class proxy satisfaction rejected");
-    assert_no_transport_publish_request(&listener);
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::InvalidRequest { message }
-            if message.contains("radrootsd proxy publish")
-                && message.contains("accepted-class satisfaction")
-    ));
-    let stored = sdk
-        ._outbox
-        .get_event(claimed.outbox_event_id)
-        .await
-        .expect("stored")
-        .expect("stored");
-    assert_eq!(stored.state, RadrootsOutboxEventState::FailedTerminal);
-    assert!(stored.claim_token.is_none());
-    assert!(!stored.event_store_ingested);
-    assert_eq!(stored.event_store_ingested_at_ms, None);
-    assert!(
-        stored
-            .last_error
-            .as_deref()
-            .expect("last error")
-            .contains("accepted-class satisfaction")
-    );
+            .expect("stored")
+            .expect("stored");
+        assert_eq!(stored.state, RadrootsOutboxEventState::FailedTerminal);
+        assert!(stored.claim_token.is_none());
+        assert!(!stored.event_store_ingested);
+        assert_eq!(stored.event_store_ingested_at_ms, None);
+        assert!(
+            stored
+                .last_error
+                .as_deref()
+                .expect("last error")
+                .contains("accepted-class satisfaction")
+        );
+    }
 }
 
 #[cfg(feature = "radrootsd-proxy")]
@@ -1762,6 +1774,7 @@ impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
                 target_scope: Some("farm.local".to_owned()),
                 target_label: Some("Farm relay".to_owned()),
                 attempted: true,
+                transport_status: RadrootsTransportDeliveryTargetStatus::Accepted,
                 outcome: radroots_transport_nostr::RadrootsRelayOutcome::accepted(),
             });
         self
