@@ -40,6 +40,12 @@ const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
 const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "100/100/100/100";
 const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
+const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
+    "dto_bindgen",
+    "dto_bindgen_backend_ts",
+    "dto_bindgen_core",
+    "dto_bindgen_macros",
+];
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
 ];
@@ -2557,6 +2563,94 @@ fn read_workspace_package_dependencies(
     Ok(deps)
 }
 
+fn validate_publishable_dto_tooling_sources(
+    workspace_root: &Path,
+    public_crates: &BTreeSet<String>,
+) -> Result<(), String> {
+    let workspace_manifest_value = parse_toml::<toml::Value>(&workspace_root.join("Cargo.toml"))?;
+    let package_records = workspace_package_records(workspace_root)?;
+
+    for record in package_records {
+        if !public_crates.contains(&record.name) {
+            continue;
+        }
+        for section in ["dependencies", "build-dependencies"] {
+            let Some(dependencies) = record
+                .manifest_value
+                .get(section)
+                .and_then(toml::Value::as_table)
+            else {
+                continue;
+            };
+            for dependency_name in DTO_TOOLING_DEPENDENCIES {
+                let Some(dependency_value) = dependencies.get(dependency_name) else {
+                    continue;
+                };
+                validate_publishable_dto_dependency_source(
+                    workspace_manifest_value.as_table(),
+                    record.name.as_str(),
+                    section,
+                    dependency_name,
+                    dependency_value,
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_publishable_dto_dependency_source(
+    workspace_manifest: Option<&toml::value::Table>,
+    crate_name: &str,
+    section: &str,
+    dependency_name: &str,
+    dependency_value: &toml::Value,
+) -> Result<(), String> {
+    let resolved =
+        resolve_workspace_dependency_source(workspace_manifest, dependency_name, dependency_value)
+            .unwrap_or(dependency_value);
+    if dependency_has_source_key(resolved, "git") {
+        return Err(format!(
+            "public crate {crate_name} {section}.{dependency_name} must use a crates.io DTO tooling dependency, not a git source"
+        ));
+    }
+    if dependency_has_source_key(resolved, "path") {
+        return Err(format!(
+            "public crate {crate_name} {section}.{dependency_name} must use a crates.io DTO tooling dependency, not a path source"
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_workspace_dependency_source<'a>(
+    workspace_manifest: Option<&'a toml::value::Table>,
+    dependency_name: &str,
+    dependency_value: &toml::Value,
+) -> Option<&'a toml::Value> {
+    if !dependency_has_workspace_true(dependency_value) {
+        return None;
+    }
+    workspace_manifest?
+        .get("workspace")?
+        .as_table()?
+        .get("dependencies")?
+        .as_table()?
+        .get(dependency_name)
+}
+
+fn dependency_has_workspace_true(value: &toml::Value) -> bool {
+    value
+        .as_table()
+        .and_then(|table| table.get("workspace"))
+        .and_then(toml::Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn dependency_has_source_key(value: &toml::Value, key: &str) -> bool {
+    value.as_table().and_then(|table| table.get(key)).is_some()
+}
+
 fn join_set(items: &BTreeSet<String>) -> String {
     items.iter().cloned().collect::<Vec<_>>().join(", ")
 }
@@ -3529,7 +3623,6 @@ fn validate_release_publish_policy(
             ));
         }
     }
-
     Ok(())
 }
 
@@ -3564,6 +3657,7 @@ pub fn validate_release_preflight_with_override(
         .expect("validated contract includes required crates");
     let required_crates = collect_unique_set(&required_crate_list, "required.crates")
         .expect("validated contract enforces unique required.crates");
+    validate_publishable_dto_tooling_sources(workspace_root, &publish_crates)?;
     validate_publish_package_metadata(workspace_root, &publish_crates)?;
     validate_required_coverage_summary_with_policy(workspace_root, &required_crates, &policy)?;
     Ok(())
@@ -5627,6 +5721,95 @@ edition = "2024"
         let internal_flag = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("internal crate must be non-publishable");
         assert!(internal_flag.contains("non-public crate"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn release_preflight_rejects_public_dto_tooling_git_or_path_sources() {
+        let root = create_synthetic_workspace("release_policy_dto_tooling_sources");
+
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+publish = ["crates-io"]
+version = "0.1.0"
+edition = "2024"
+description = "crate a"
+repository = "https://example.com/a"
+homepage = "https://example.com/a"
+documentation = "https://docs.example.com/a"
+readme = "README"
+
+[dependencies]
+dto_bindgen_core = { path = "../../dto_bindgen_core", version = "0.1.0", optional = true }
+"#,
+        );
+        let path_err = validate_release_preflight(&root).expect_err("public path DTO dependency");
+        assert!(path_err.contains("radroots_a dependencies.dto_bindgen_core"));
+        assert!(path_err.contains("not a path source"));
+
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a", "crates/b"]
+resolver = "2"
+
+[workspace.dependencies]
+dto_bindgen = { version = "0.1.0", git = "https://example.com/dto_bindgen", rev = "abc123" }
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+publish = ["crates-io"]
+version = "0.1.0"
+edition = "2024"
+description = "crate a"
+repository = "https://example.com/a"
+homepage = "https://example.com/a"
+documentation = "https://docs.example.com/a"
+readme = "README"
+
+[dependencies]
+dto_bindgen = { workspace = true, optional = true }
+"#,
+        );
+        let git_err =
+            validate_release_preflight(&root).expect_err("public workspace git DTO dependency");
+        assert!(git_err.contains("radroots_a dependencies.dto_bindgen"));
+        assert!(git_err.contains("not a git source"));
+
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+publish = ["crates-io"]
+version = "0.1.0"
+edition = "2024"
+description = "crate a"
+repository = "https://example.com/a"
+homepage = "https://example.com/a"
+documentation = "https://docs.example.com/a"
+readme = "README"
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+dto_bindgen = { workspace = true, optional = true }
+"#,
+        );
+        validate_release_preflight(&root)
+            .expect("internal DTO tooling source does not block public publish policy");
 
         let _ = fs::remove_dir_all(root);
     }
