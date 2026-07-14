@@ -112,6 +112,18 @@ const FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS: &[ForbiddenSdkConcept] = 
         reason: "event draft surfaces must use the current RadrootsEventDraft name",
     },
     ForbiddenSdkConcept {
+        pattern: "RadrootsNostrEvent",
+        reason: "product-level event surfaces must use protocol-neutral event names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RadrootsNostrEventRef",
+        reason: "product-level event references must use RadrootsEventRef",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RadrootsNostrEventPtr",
+        reason: "product-level event pointers must use RadrootsEventPtr",
+    },
+    ForbiddenSdkConcept {
         pattern: "pub type SignedEvent",
         reason: "SDK signing adapters must not expose compatibility aliases for signed events",
     },
@@ -867,6 +879,10 @@ fn sdk_foundation_hardening_surfaces_reject_retired_names_and_ambiguous_docs() {
         let relative_path = relative_manifest_path(repo_root, path.as_path());
 
         for concept in FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS {
+            if foundation_hardening_retired_concept_allowed(relative_path.as_str(), concept.pattern)
+            {
+                continue;
+            }
             if contains_forbidden_concept(source.as_str(), concept.pattern) {
                 findings.push(format!(
                     "{} contains retired Foundation Hardening concept `{}`: {}",
@@ -2544,6 +2560,21 @@ fn collect_sdk_foundation_hardening_guard_files(root: &Path, paths: &mut Vec<Pat
             paths.push(path);
         }
     }
+}
+
+fn foundation_hardening_retired_concept_allowed(relative_path: &str, pattern: &str) -> bool {
+    pattern == "RadrootsNostrEvent" && sdk_nostr_protocol_context(relative_path)
+}
+
+fn sdk_nostr_protocol_context(relative_path: &str) -> bool {
+    matches!(
+        relative_path,
+        "crates/sdk/src/adapters/nostr.rs"
+            | "crates/sdk/src/adapters/signing.rs"
+            | "crates/sdk/src/signer_provider.rs"
+            | "crates/sdk/examples/sdk_v1_myc_nip46_signer_setup.rs"
+            | "crates/sdk/tests/unit/signer_provider_tests.rs"
+    )
 }
 
 fn read_source(path: &Path) -> String {
