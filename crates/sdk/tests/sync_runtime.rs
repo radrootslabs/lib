@@ -182,7 +182,10 @@ fn write_transport_publish_response(
     job_number: usize,
 ) {
     let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
-    let event = &body_json["params"]["event"];
+    let raw_event_json = body_json["params"]["raw_event_json"]
+        .as_str()
+        .expect("raw event json");
+    let event: serde_json::Value = serde_json::from_str(raw_event_json).expect("event json");
     let (
         status,
         terminal,
@@ -1746,6 +1749,35 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         )
         .await
         .expect("enqueue");
+    let pre_push_outbox =
+        RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+            .await
+            .expect("pre-push outbox");
+    let pre_push_stored = pre_push_outbox
+        .get_event(enqueue.outbox_event_id)
+        .await
+        .expect("pre-push stored")
+        .expect("pre-push stored");
+    assert_eq!(pre_push_stored.state, RadrootsOutboxEventState::Signed);
+    let pre_push_targets = pre_push_outbox
+        .delivery_targets(enqueue.outbox_event_id)
+        .await
+        .expect("pre-push targets");
+    assert_eq!(pre_push_targets.len(), 1);
+    assert_eq!(
+        pre_push_targets[0].transport_kind,
+        radroots_sdk::RadrootsTransportKind::Proxy
+    );
+    assert_eq!(
+        pre_push_targets[0].status,
+        RadrootsOutboxDeliveryTargetStatus::Pending
+    );
+    let pre_push_status = sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("pre-push status");
+    assert_eq!(pre_push_status.outbox.ready_signed_events, 1);
 
     let receipt = sdk
         .sync()
@@ -1754,12 +1786,12 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         .expect("transport publish push");
 
     assert_eq!(receipt.attempted_events, 1);
-    assert_eq!(receipt.published_events, 1);
     assert_eq!(receipt.events[0].outbox_event_id, enqueue.outbox_event_id);
     assert_eq!(
         receipt.events[0].final_state,
         PushOutboxEventState::Published
     );
+    assert_eq!(receipt.published_events, 1);
     assert_eq!(receipt.events[0].targets.len(), 1);
     assert_eq!(
         receipt.events[0].targets[0].endpoint_uri,
@@ -1783,7 +1815,11 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         "request_then_author_write_then_daemon_default"
     );
     assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
-    assert!(body["params"]["event"]["sig"].as_str().is_some());
+    let raw_event_json = body["params"]["raw_event_json"]
+        .as_str()
+        .expect("raw event json");
+    let event: serde_json::Value = serde_json::from_str(raw_event_json).expect("event json");
+    assert!(event["sig"].as_str().is_some());
     assert!(!recorded.body.contains("bridge."));
     assert!(!recorded.body.contains("signer_session_id"));
 

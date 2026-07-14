@@ -96,7 +96,10 @@ fn read_transport_publish_request_body(stream: &mut TcpStream) -> String {
 
 fn write_transport_publish_accept_response(stream: &mut TcpStream, body: &str) {
     let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
-    let event = &body_json["params"]["event"];
+    let raw_event_json = body_json["params"]["raw_event_json"]
+        .as_str()
+        .expect("raw event json");
+    let event: serde_json::Value = serde_json::from_str(raw_event_json).expect("event json");
     let response_body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": body_json["id"],

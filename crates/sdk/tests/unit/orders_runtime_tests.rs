@@ -2039,12 +2039,21 @@ fn evidence_reference_helpers_reject_invalid_ids_and_payload_mismatches() {
 }
 
 #[test]
-fn parse_order_evidence_reports_invalid_ids_unsupported_kinds_and_decode_errors() {
+fn parse_order_evidence_reports_constructor_id_unsupported_kind_and_decode_errors() {
+    let invalid_id = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: "not-hex".to_owned(),
+        author: hex_64('c'),
+        created_at: 1_700_000_000,
+        kind: KIND_ORDER_REQUEST,
+        tags: Vec::new(),
+        content: "{}".to_owned(),
+        sig: hex_128('f'),
+    })
+    .expect_err("invalid id");
     assert!(
-        invalid_request_message(parsed_order_evidence_error(parse_order_evidence(
-            &nostr_event("not-hex".to_owned(), KIND_ORDER_REQUEST,)
-        )))
-        .contains("order evidence event id is invalid")
+        invalid_id
+            .to_string()
+            .contains("event envelope id is invalid")
     );
     assert!(
         invalid_request_message(parsed_order_evidence_error(parse_order_evidence(
