@@ -20,6 +20,7 @@ use radroots_event::{
         RadrootsOrderEconomicLine, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
         RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
     },
+    wire::RadrootsNip01EventWireParts,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_nostr::prelude::{
@@ -89,6 +90,12 @@ impl RadrootsEventSigner for FixtureSigner {
             }
         })
     }
+}
+
+fn signed_event_from_envelope(event: RadrootsEventEnvelope) -> RadrootsSignedEvent {
+    let wire = event.to_nip01_wire();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
 #[tokio::test]
@@ -260,16 +267,18 @@ async fn dvm_configured_enqueue_reports_prepare_and_target_errors_without_mutati
 async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-dvm-ingest", 10);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event = signed_order_decision_event("order-dvm-ingest", &request_event_id, 11);
-    let decision_event_id =
-        RadrootsEventId::parse(decision_event.id.as_str()).expect("decision id");
+    let decision_event_id = RadrootsEventId::parse(decision_event.id_str()).expect("decision id");
     for (event, observed_at_ms) in [
         (request_event.clone(), 1_000),
         (decision_event.clone(), 1_100),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest order event");
     }
@@ -289,11 +298,11 @@ async fn dvm_validation_receipt_ingest_commits_pending_trade_status() {
         &decision_event_id,
         12,
     );
-    let receipt_event_id = RadrootsEventId::parse(receipt_event.id.as_str()).expect("receipt id");
+    let receipt_event_id = RadrootsEventId::parse(receipt_event.id_str()).expect("receipt id");
     let ingest = sdk
         .dvm()
         .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(receipt_event)
+            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(receipt_event))
                 .with_expected_order_id(order_id("order-dvm-ingest"))
                 .with_expected_listing_event_id(listing_event_id.clone())
                 .with_expected_root_event_id(request_event_id.clone())
@@ -367,7 +376,7 @@ async fn dvm_validation_receipt_ingest_rejects_binding_mismatch_without_mutation
     let error = sdk
         .dvm()
         .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(receipt_event)
+            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(receipt_event))
                 .with_expected_order_id(order_id("other-order")),
         )
         .await
@@ -448,7 +457,7 @@ async fn dvm_validation_receipt_ingest_reports_timestamp_and_refresh_errors() {
     let error = sdk
         .dvm()
         .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(overflow_observed)
+            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(overflow_observed))
                 .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
         )
         .await
@@ -477,7 +486,9 @@ async fn dvm_validation_receipt_ingest_reports_timestamp_and_refresh_errors() {
     );
     let error = sdk
         .dvm()
-        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(default_observed))
+        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(
+            signed_event_from_envelope(default_observed),
+        ))
         .await
         .expect_err("default observed overflow");
     assert!(matches!(
@@ -505,7 +516,7 @@ async fn dvm_validation_receipt_ingest_reports_timestamp_and_refresh_errors() {
     let error = sdk
         .dvm()
         .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(refresh_overflow)
+            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(refresh_overflow))
                 .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000)),
         )
         .await
@@ -554,7 +565,9 @@ async fn dvm_prepare_and_ingest_use_sdk_clock_defaults() {
     );
     let ingest = sdk
         .dvm()
-        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(receipt_event))
+        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(
+            signed_event_from_envelope(receipt_event),
+        ))
         .await
         .expect("default observed timestamp ingest");
 
@@ -574,7 +587,9 @@ async fn dvm_validation_receipt_ingest_rejects_invalid_verified_order_id() {
 
     let error = sdk
         .dvm()
-        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(receipt_event))
+        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(
+            signed_event_from_envelope(receipt_event),
+        ))
         .await
         .expect_err("invalid order id");
 
@@ -591,23 +606,21 @@ async fn dvm_validation_receipt_ingest_rejects_invalid_verified_order_id() {
 
 #[tokio::test]
 async fn dvm_validation_receipt_ingest_rejects_invalid_receipt_event_id() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let mut receipt_event = signed_validation_receipt_event(
+    let (_tempdir, _sdk, store) = directory_sdk_and_store().await;
+    let receipt_event = signed_validation_receipt_event(
         "order-dvm-bad-receipt-id",
         &deterministic_event_id("listing-event"),
         &deterministic_event_id("request-event"),
         &deterministic_event_id("decision-event"),
         12,
     );
-    receipt_event.id = "bad id".to_owned();
-
-    let error = sdk
-        .dvm()
-        .ingest_validation_receipt(DvmValidationReceiptIngestRequest::new(receipt_event))
-        .await
+    let mut wire = receipt_event.to_nip01_wire();
+    wire.id = "bad id".to_owned();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    let error = RadrootsSignedEvent::from_wire_unchecked(wire, raw_json)
         .expect_err("invalid receipt event id");
 
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(error.to_string().contains("event envelope id is invalid"));
     assert_eq!(
         store
             .status_summary()
@@ -845,7 +858,7 @@ fn signed_validation_receipt_event(
 fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
-    parts: radroots_event_codec::wire::WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 ) -> RadrootsEventEnvelope {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);

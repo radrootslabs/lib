@@ -25,10 +25,12 @@ use crate::{
 use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 #[cfg(feature = "runtime")]
 use radroots_event::{
-    RadrootsEventEnvelope,
+    RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
     contract::RadrootsActorRole,
+    draft::RadrootsSignedEvent,
     ids::RadrootsEventId,
     kinds::{
         KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
@@ -63,8 +65,6 @@ use radroots_event_codec::order::{
     order_cancellation_from_event, order_decision_from_event, order_request_from_event,
     order_revision_decision_from_event, order_revision_proposal_from_event,
 };
-#[cfg(any(feature = "signer-adapters", test))]
-use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_event_store::RadrootsStoredEventTag;
 #[cfg(feature = "runtime")]
@@ -379,13 +379,13 @@ pub struct TradeSubmitReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeRequestEvidenceIngestRequest {
-    pub event: RadrootsEventEnvelope,
+    pub event: RadrootsSignedEvent,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl TradeRequestEvidenceIngestRequest {
-    pub fn new(event: RadrootsEventEnvelope) -> Self {
+    pub fn new(event: RadrootsSignedEvent) -> Self {
         Self {
             event,
             observed_at: None,
@@ -414,13 +414,13 @@ pub struct TradeRequestEvidenceIngestReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct TradeEvidenceIngestRequest {
-    pub event: RadrootsEventEnvelope,
+    pub event: RadrootsSignedEvent,
     pub observed_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl TradeEvidenceIngestRequest {
-    pub fn new(event: RadrootsEventEnvelope) -> Self {
+    pub fn new(event: RadrootsSignedEvent) -> Self {
         Self {
             event,
             observed_at: None,
@@ -2573,7 +2573,7 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         request: TradeEvidenceIngestRequest,
     ) -> Result<TradeEvidenceIngestReceipt, RadrootsSdkError> {
-        let evidence = parse_order_evidence(&request.event)?;
+        let evidence = parse_order_evidence(request.event.envelope())?;
         let observed_at = self.resolved_created_at(request.observed_at)?;
         let observed_at_ms = sdk_timestamp_ms(observed_at)?;
         let receipt = self
@@ -2598,7 +2598,7 @@ impl<'sdk> TradesClient<'sdk> {
         &self,
         request: TradeRequestEvidenceIngestRequest,
     ) -> Result<TradeRequestEvidenceIngestReceipt, RadrootsSdkError> {
-        let evidence = parse_order_request_evidence(&request.event)?;
+        let evidence = parse_order_request_evidence(request.event.envelope())?;
         let observed_at = self.resolved_created_at(request.observed_at)?;
         let observed_at_ms = sdk_timestamp_ms(observed_at)?;
         let receipt = self
@@ -4348,8 +4348,8 @@ where
     )
     .await?;
     let (mut receipts, mut invalid_receipts) = classify_validation_receipts(events, None)?;
-    receipts.retain(|receipt| receipt.event.id == receipt_event_id.as_str());
-    invalid_receipts.retain(|receipt| receipt.event.id == receipt_event_id.as_str());
+    receipts.retain(|receipt| receipt.event.id_str() == receipt_event_id.as_str());
+    invalid_receipts.retain(|receipt| receipt.event.id_str() == receipt_event_id.as_str());
     attach_worker_evidence(
         sdk,
         adapter,
@@ -4560,7 +4560,7 @@ where
     let mut selections = worker_evidence_for_receipts(trusted_worker_pubkeys, receipts, events)?;
     for receipt in receipts {
         receipt.worker_evidence = selections
-            .remove(receipt.event.id.as_str())
+            .remove(receipt.event.id_str())
             .unwrap_or_default();
     }
     Ok(())
@@ -4578,14 +4578,14 @@ fn worker_evidence_for_receipts(
         .collect::<BTreeSet<_>>();
     let binding_by_receipt_id = receipts
         .iter()
-        .map(|receipt| (receipt.event.id.as_str(), receipt))
+        .map(|receipt| (receipt.event.id_str(), receipt))
         .collect::<BTreeMap<_, _>>();
     let mut by_receipt =
-        BTreeMap::<String, Vec<(u32, String, bool, TradeValidationReceiptWorkerEvidence)>>::new();
+        BTreeMap::<String, Vec<(u64, String, bool, TradeValidationReceiptWorkerEvidence)>>::new();
 
     for event in events {
         let payload =
-            match serde_json::from_str::<RawTradeValidationReceiptWorkerResult>(&event.content) {
+            match serde_json::from_str::<RawTradeValidationReceiptWorkerResult>(event.content()) {
                 Ok(payload) => payload,
                 Err(_) => continue,
             };
@@ -4595,12 +4595,12 @@ fn worker_evidence_for_receipts(
         if !worker_payload_binds_receipt(&payload, binding) {
             continue;
         }
-        let author = RadrootsPublicKey::parse(event.author.as_str()).map_err(|error| {
+        let author = RadrootsPublicKey::parse(event.author_str()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("validation receipt worker evidence author is invalid: {error}"),
             }
         })?;
-        let result_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+        let result_event_id = RadrootsEventId::parse(event.id_str()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("validation receipt worker evidence event id is invalid: {error}"),
             }
@@ -4629,8 +4629,8 @@ fn worker_evidence_for_receipts(
                 .and_then(RadrootsTradeCommitmentConfidence::from_label),
         };
         by_receipt.entry(receipt_event_id).or_default().push((
-            event.created_at,
-            event.id,
+            event.created_at_u64(),
+            event.id_str().to_owned(),
             trusted,
             view,
         ));
@@ -4669,7 +4669,7 @@ fn worker_payload_binds_receipt(
     payload.status == "succeeded"
         && payload.worker_role.as_deref() == Some("non_authoritative_prover")
         && payload.receipt_kind == Some(KIND_TRADE_VALIDATION_RECEIPT)
-        && payload.receipt_event_id == receipt.event.id
+        && payload.receipt_event_id == receipt.event.id_str()
         && payload.order_id.as_deref() == Some(receipt.tags.order_id.as_str())
         && payload.listing_event_id.as_deref() == Some(receipt.tags.listing_event_id.as_str())
         && payload.event_set_root.as_deref() == Some(receipt.tags.event_set_root.as_str())
@@ -4776,7 +4776,7 @@ async fn trade_status_validation_trust_decision(
         ));
     }
     let event = stored_event_to_nostr_event(&stored_event)?;
-    let receipt_author = match RadrootsPublicKey::parse(event.author.as_str()) {
+    let receipt_author = match RadrootsPublicKey::parse(event.author_str()) {
         Ok(author) => author,
         Err(_) => {
             return Ok(trade_validation_trust_decision(
@@ -5270,7 +5270,7 @@ fn stored_event_to_nostr_event(
             ),
         }
     })?;
-    Ok(RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -5278,6 +5278,12 @@ fn stored_event_to_nostr_event(
         tags,
         content: stored_event.content.clone(),
         sig: stored_event.sig.clone(),
+    })
+    .map_err(|error| RadrootsSdkError::EventStore {
+        message: format!(
+            "stored event {} contains invalid envelope: {error}",
+            stored_event.event_id
+        ),
     })
 }
 
@@ -5287,9 +5293,9 @@ fn validation_receipt_event_order(
     right: &TradeValidationReceiptEvent,
 ) -> core::cmp::Ordering {
     left.event
-        .created_at
-        .cmp(&right.event.created_at)
-        .then_with(|| left.event.id.cmp(&right.event.id))
+        .created_at()
+        .cmp(&right.event.created_at())
+        .then_with(|| left.event.id().cmp(right.event.id()))
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
@@ -5298,9 +5304,9 @@ fn validation_receipt_invalid_order(
     right: &TradeValidationReceiptInvalidCandidate,
 ) -> core::cmp::Ordering {
     left.event
-        .created_at
-        .cmp(&right.event.created_at)
-        .then_with(|| left.event.id.cmp(&right.event.id))
+        .created_at()
+        .cmp(&right.event.created_at())
+        .then_with(|| left.event.id().cmp(right.event.id()))
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
@@ -5625,7 +5631,7 @@ impl<'sdk> TradeSellerClient<'sdk> {
                     ),
                 }
             })?;
-            let nostr_event = RadrootsEventEnvelope {
+            let nostr_event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
                 id: event.event_id,
                 author: event.pubkey,
                 created_at: event.created_at,
@@ -5633,7 +5639,10 @@ impl<'sdk> TradeSellerClient<'sdk> {
                 tags,
                 content: event.content,
                 sig: event.sig,
-            };
+            })
+            .map_err(|error| RadrootsSdkError::Projection {
+                message: format!("stored trade inbox event envelope is invalid: {error}"),
+            })?;
             if let Ok(RadrootsOrderEventRecord::Request(record)) =
                 order_event_record_from_event(&nostr_event)
             {
@@ -6387,12 +6396,12 @@ struct ParsedOrderEvidence {
 fn parse_order_evidence(
     event: &RadrootsEventEnvelope,
 ) -> Result<ParsedOrderEvidence, RadrootsSdkError> {
-    let event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+    let event_id = RadrootsEventId::parse(event.id_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("order evidence event id is invalid: {error}"),
         }
     })?;
-    let (order_id, listing_addr) = match event.kind {
+    let (order_id, listing_addr) = match event.kind_u32() {
         KIND_ORDER_REQUEST => {
             let payload = order_request_from_event(event)
                 .map_err(order_evidence_parse_error)?
@@ -6434,7 +6443,7 @@ fn parse_order_evidence(
         order_id,
         listing_addr,
         event_id,
-        event_kind: event.kind,
+        event_kind: event.kind_u32(),
     })
 }
 
@@ -6680,15 +6689,13 @@ fn order_submit_plan(
                 message: format!("order submit draft encode failed: {error}"),
             }
         })?;
-    let frozen_draft = to_frozen_draft(
+    let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
         draft.into_wire_parts(),
         TRADE_SUBMIT_CONTRACT_ID,
         order_request.buyer_pubkey.as_str(),
         created_at_nostr,
-    )
-    .expect("validated order submit draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
-        .expect("frozen order submit draft produces a valid event id");
+        "trade.prepare_submit",
+    );
     Ok(TradeSubmitPlan {
         workflow: order_workflow_plan(
             TradeWorkflowKind::Submit,
@@ -6732,15 +6739,13 @@ fn order_decision_plan(
         .expect("canonical order decision payload validates");
     let draft = order::build_order_decision_draft(&request_event_id, &request_event_id, &decision)
         .expect("validated order decision draft encodes");
-    let frozen_draft = to_frozen_draft(
+    let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
         draft.into_wire_parts(),
         TRADE_DECISION_CONTRACT_ID,
         decision.seller_pubkey.as_str(),
         created_at_nostr,
-    )
-    .expect("validated order decision draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
-        .expect("frozen order decision draft produces a valid event id");
+        "trade.prepare_decision",
+    );
     Ok(TradeDecisionPlan {
         workflow: order_workflow_plan(
             TradeWorkflowKind::Decision,
@@ -7138,15 +7143,22 @@ fn order_workflow_enqueue_receipt(
 
 #[cfg(any(feature = "signer-adapters", test))]
 fn freeze_order_workflow_draft(
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
     contract_id: &str,
     expected_pubkey: &str,
     created_at: u32,
     _operation: &'static str,
 ) -> (RadrootsEventDraft, RadrootsEventId) {
-    let frozen_draft = to_frozen_draft(parts, contract_id, expected_pubkey, created_at)
-        .expect("validated order workflow draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
+    let frozen_draft = RadrootsEventDraft::new(
+        contract_id,
+        parts.kind,
+        u64::from(created_at),
+        parts.tags,
+        parts.content,
+        expected_pubkey,
+    )
+    .expect("validated order workflow draft freezes");
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
         .expect("frozen order workflow draft produces a valid event id");
     (frozen_draft, expected_event_id)
 }
@@ -7219,7 +7231,7 @@ struct TradeRequestEvidence {
 fn parse_order_request_evidence(
     event: &RadrootsEventEnvelope,
 ) -> Result<TradeRequestEvidence, RadrootsSdkError> {
-    let request_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+    let request_event_id = RadrootsEventId::parse(event.id_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("order request evidence event id is invalid: {error}"),
         }
@@ -7982,6 +7994,9 @@ fn projection_error(error: RadrootsOrderStoreQueryError) -> RadrootsSdkError {
         }
         RadrootsOrderStoreQueryError::Decode { .. } => {
             "stored order event could not decode as order record"
+        }
+        RadrootsOrderStoreQueryError::InvalidStoredEnvelope { .. } => {
+            "stored order event envelope is invalid"
         }
         RadrootsOrderStoreQueryError::Projection(error) => return error.into(),
     };

@@ -607,6 +607,7 @@ mod tests {
         RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
         RadrootsSocialMediaMetadata, RadrootsSocialTarget,
     };
+    use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 
     fn sample_listing() -> RadrootsListing {
         let quantity =
@@ -888,10 +889,10 @@ mod tests {
                 .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
                 .sign_with_keys(&keys)
                 .expect("signed event");
-        serde_json::to_string(&radroots_event::RadrootsEventEnvelope {
+        let envelope = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event.id.to_hex(),
             author: event.pubkey.to_hex(),
-            created_at: event.created_at.as_secs() as u32,
+            created_at: event.created_at.as_secs(),
             kind: u32::from(event.kind.as_u16()),
             tags: event
                 .tags
@@ -902,7 +903,8 @@ mod tests {
             content: event.content,
             sig: event.sig.to_string(),
         })
-        .expect("event json")
+        .expect("event envelope");
+        serde_json::to_string(&envelope).expect("event json")
     }
 
     fn social_location() -> RadrootsSocialLocation {

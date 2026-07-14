@@ -68,29 +68,29 @@ impl RadrootsEventSigner for FixtureSigner {
         &self,
         draft: &RadrootsEventDraft,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey.as_str() {
+        if self.pubkey().as_str() != draft.expected_pubkey_str() {
             return Err(RadrootsSignerError::SigningFailed {
                 message: "wrong fixture signer".to_owned(),
             });
         }
         let sig = "f".repeat(128);
         let raw_json = serde_json::json!({
-            "id": draft.expected_event_id,
+            "id": draft.expected_event_id_str(),
             "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at,
-            "kind": draft.kind,
-            "tags": draft.tags,
-            "content": draft.content,
+            "created_at": draft.created_at_u64(),
+            "kind": draft.kind_u32(),
+            "tags": draft.tags_as_vec(),
+            "content": draft.content(),
             "sig": sig,
         })
         .to_string();
         RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id.clone(),
+            id: draft.expected_event_id_str().to_owned(),
             pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
+            created_at: draft.created_at_u64(),
+            kind: draft.kind_u32(),
+            tags: draft.tags_as_vec(),
+            content: draft.content().to_owned(),
             sig,
             raw_json,
         })
@@ -252,11 +252,11 @@ async fn farm_prepare_publish_is_side_effect_free() {
     let request = FarmPreparePublishRequest::new(farmer_actor(), farm(FARM_A_D_TAG, "North Farm"));
     let prepared = sdk.farms().prepare_publish(request).expect("prepared");
 
-    assert_eq!(prepared.frozen_draft.kind, KIND_FARM);
+    assert_eq!(prepared.frozen_draft.kind_u32(), KIND_FARM);
     assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
     assert_eq!(
         prepared.expected_event_id,
-        prepared.frozen_draft.expected_event_id
+        prepared.frozen_draft.expected_event_id_str()
     );
     assert_eq!(
         prepared.farm_addr.as_str(),
@@ -684,7 +684,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         .expect("outbox event")
         .expect("outbox event");
     assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
-    assert_eq!(outbox_event.draft.kind, KIND_FARM);
+    assert_eq!(outbox_event.draft.kind_u32(), KIND_FARM);
     assert!(outbox_event.signed_event.is_some());
 }
 

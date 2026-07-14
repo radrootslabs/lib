@@ -9,10 +9,11 @@ use crate::{
 };
 use radroots_authority::RadrootsActorContext;
 use radroots_event::{
-    RadrootsEventEnvelope,
     contract::RadrootsActorRole,
+    draft::RadrootsSignedEvent,
     ids::{RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
+    wire::RadrootsNip01EventWire,
 };
 use radroots_trade::validation_receipt::RadrootsValidationReceiptProofSystem;
 
@@ -33,14 +34,17 @@ fn trade_transition_proof_plan_builds_microstandard_wire_payload() {
     )
     .expect("plan");
     let payload: serde_json::Value =
-        serde_json::from_str(&plan.frozen_draft.content).expect("payload json");
+        serde_json::from_str(plan.frozen_draft.content()).expect("payload json");
 
     assert_eq!(
-        plan.frozen_draft.contract_id,
+        plan.frozen_draft.contract_id(),
         super::DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID
     );
-    assert_eq!(plan.frozen_draft.kind, KIND_TRADE_TRANSITION_PROOF_REQUEST);
-    assert_eq!(plan.frozen_draft.expected_pubkey, SERVICE);
+    assert_eq!(
+        plan.frozen_draft.kind_u32(),
+        KIND_TRADE_TRANSITION_PROOF_REQUEST
+    );
+    assert_eq!(plan.frozen_draft.expected_pubkey_str(), SERVICE);
     assert_eq!(plan.worker_pubkey.as_str(), WORKER);
     assert_eq!(plan.proof_mode, DvmProofMode::None);
     assert_eq!(
@@ -54,12 +58,10 @@ fn trade_transition_proof_plan_builds_microstandard_wire_payload() {
     assert_eq!(payload["inventory_sequence"], 7);
     assert_eq!(payload["previous_state_root"], hash32('3'));
     assert_eq!(payload["listing_event_id"], event_id('1').as_str());
+    let tags = plan.frozen_draft.tags_as_vec();
+    assert_eq!(tags[0], vec!["a", listing_addr().as_str()]);
     assert_eq!(
-        plan.frozen_draft.tags[0],
-        vec!["a", listing_addr().as_str()]
-    );
-    assert_eq!(
-        plan.frozen_draft.tags[1],
+        tags[1],
         vec![
             "i",
             event_id('3').as_str(),
@@ -67,7 +69,7 @@ fn trade_transition_proof_plan_builds_microstandard_wire_payload() {
             "radroots:order_decision_event"
         ]
     );
-    assert_eq!(plan.frozen_draft.tags[2], vec!["p", WORKER]);
+    assert_eq!(tags[2], vec!["p", WORKER]);
 }
 
 #[test]
@@ -371,14 +373,26 @@ fn hash32(ch: char) -> String {
     format!("0x{}", ch.to_string().repeat(64))
 }
 
-fn dummy_event() -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
+fn dummy_event() -> RadrootsSignedEvent {
+    let wire = RadrootsNip01EventWire {
         id: event_id('9').into_string(),
-        author: event_id('a').into_string(),
+        pubkey: event_id('a').into_string(),
         created_at: 1,
         kind: 3440,
         tags: Vec::new(),
         content: "{}".to_owned(),
-        sig: event_id('b').into_string(),
-    }
+        sig: "b".repeat(128),
+        extra: Default::default(),
+    };
+    let raw_json = serde_json::json!({
+        "id": wire.id.clone(),
+        "pubkey": wire.pubkey.clone(),
+        "created_at": wire.created_at,
+        "kind": wire.kind,
+        "tags": wire.tags.clone(),
+        "content": wire.content.clone(),
+        "sig": wire.sig.clone()
+    })
+    .to_string();
+    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
 }

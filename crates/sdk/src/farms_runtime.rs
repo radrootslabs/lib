@@ -23,7 +23,6 @@ use radroots_event::{
     listing::RadrootsListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
-use radroots_event_codec::wire::to_frozen_draft;
 #[cfg(feature = "runtime")]
 pub const FARM_PUBLISH_OPERATION_KIND: &str = "farm.publish.v1";
 
@@ -740,14 +739,16 @@ fn farm_publish_plan(
         })?;
     let farm_addr = farm_addr(actor, farm_value.d_tag.as_str())
         .expect("validated farm d tag forms a farm address");
-    let frozen_draft = to_frozen_draft(
-        parts,
+    let frozen_draft = RadrootsEventDraft::new(
         FARM_PROFILE_CONTRACT_ID,
+        parts.kind,
+        created_at_nostr.into(),
+        parts.tags,
+        parts.content,
         actor.pubkey().as_str(),
-        created_at_nostr,
     )
     .expect("validated farm publish draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
         .expect("frozen farm draft produces a valid event id");
     Ok(FarmPublishPlan {
         farm_addr,

@@ -23,29 +23,29 @@ impl RadrootsEventSigner for FixtureSigner {
         &self,
         draft: &RadrootsEventDraft,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey.as_str() {
+        if self.pubkey().as_str() != draft.expected_pubkey_str() {
             return Err(RadrootsSignerError::SigningFailed {
                 message: "wrong fixture signer".to_owned(),
             });
         }
         let sig = "f".repeat(128);
         let raw_json = serde_json::json!({
-            "id": draft.expected_event_id,
+            "id": draft.expected_event_id_str(),
             "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at,
-            "kind": draft.kind,
-            "tags": draft.tags,
-            "content": draft.content,
+            "created_at": draft.created_at_u64(),
+            "kind": draft.kind_u32(),
+            "tags": draft.tags_as_vec(),
+            "content": draft.content(),
             "sig": sig,
         })
         .to_string();
         RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id.clone(),
+            id: draft.expected_event_id_str().to_owned(),
             pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
+            created_at: draft.created_at_u64(),
+            kind: draft.kind_u32(),
+            tags: draft.tags_as_vec(),
+            content: draft.content().to_owned(),
             sig,
             raw_json,
         })

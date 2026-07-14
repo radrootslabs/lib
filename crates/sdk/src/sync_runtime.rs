@@ -1128,7 +1128,7 @@ async fn push_proxy_claimed_outbox_event(
         idempotency_key: Some(proxy_outbox_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
-            signed_event.id.as_str(),
+            signed_event.id_str(),
             active_delivery_plan_id(claimed, "radrootsd proxy publish")?,
         )),
         timeout_ms: adapter.config().request_timeout_ms,
@@ -1686,7 +1686,7 @@ fn proxy_transport_error_receipt(
         .filter(|target| target.status.is_ready_for_attempt())
         .collect::<Vec<_>>();
     let target_count = ready_targets.len();
-    let event_id = push_receipt_event_id(event.id.as_str(), "proxy transport failure event id")?;
+    let event_id = push_receipt_event_id(event.id_str(), "proxy transport failure event id")?;
     Ok(PushOutboxEventReceipt {
         event_id,
         outbox_event_id: claimed.outbox_event_id,

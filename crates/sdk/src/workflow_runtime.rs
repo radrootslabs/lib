@@ -6,7 +6,6 @@ use crate::{
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
-    RadrootsEventEnvelope,
     draft::{RadrootsEventDraft, RadrootsSignedEvent},
     ids::RadrootsEventId,
 };
@@ -78,12 +77,12 @@ async fn enqueue_signed_workflow_event(
         Some(idempotency_key) => idempotency_key,
         None => SdkIdempotencyKey::derive(
             request.operation_kind,
-            request.frozen_draft.expected_event_id.as_str(),
-            request.frozen_draft.expected_pubkey.as_str(),
+            request.frozen_draft.expected_event_id_str(),
+            request.frozen_draft.expected_pubkey_str(),
         ),
     };
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id.as_str())
+    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_str())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let idempotency_key_for_enqueue = idempotency_key.clone();
@@ -102,15 +101,13 @@ async fn enqueue_signed_workflow_event(
         .await?;
     let partial_failure_digest_prefix =
         digest_prefix(preflight.operation_idempotency_digest.as_str());
-    let event = event_from_signed(&signed_event);
     let local_import_observation = RadrootsTransportObservation::new(
         RadrootsTransportKind::Local,
         SDK_LOCAL_EVENT_ENDPOINT_URI,
         RadrootsTransportObservationType::LocalImport,
         observed_at_ms,
     )?;
-    let ingest = RadrootsEventIngest::new(event, observed_at_ms)
-        .with_raw_json(signed_event.raw_json.clone())
+    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
         .with_observation(local_import_observation);
     let ingest_receipt = sdk._event_store.ingest_event(ingest).await?;
     let outbox_input = signed_outbox_input(
@@ -317,18 +314,6 @@ fn signed_outbox_input(
         observed_at_ms,
     )
     .with_idempotency_key(idempotency_key.into_string())
-}
-
-fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
-        id: signed_event.id.clone(),
-        author: signed_event.pubkey.clone(),
-        created_at: signed_event.created_at,
-        kind: signed_event.kind,
-        tags: signed_event.tags.clone(),
-        content: signed_event.content.clone(),
-        sig: signed_event.sig.clone(),
-    }
 }
 
 #[cfg(test)]

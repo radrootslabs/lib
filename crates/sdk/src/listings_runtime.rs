@@ -331,8 +331,8 @@ fn listing_publish_plan(
     let public_listing_addr = canonical.public_listing_addr().clone();
     let draft_listing_addr = canonical.draft_listing_addr().clone();
     let mutation = RadrootsListingMutation::publish(canonical);
-    let frozen_draft = build_listing_mutation_draft(&mutation, created_at_nostr)?;
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
+    let frozen_draft = build_listing_mutation_draft(&mutation, u64::from(created_at_nostr))?;
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
         .expect("frozen listing draft produces a valid event id");
     Ok(ListingPublishPlan {
         public_listing_addr,

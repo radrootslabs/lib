@@ -1,10 +1,10 @@
 use super::{event_builder_from_parts, sign_parts_with_identity};
 use crate::identity::RadrootsIdentity;
-use radroots_event_codec::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[test]
 fn event_builder_from_parts_preserves_kind_and_content() {
-    let builder = event_builder_from_parts(WireEventParts {
+    let builder = event_builder_from_parts(RadrootsNip01EventWireParts {
         kind: 30402,
         content: "hello".into(),
         tags: vec![vec!["x".into(), "y".into()]],
@@ -22,7 +22,7 @@ fn sign_parts_with_identity_signs_event() {
     let identity = RadrootsIdentity::generate();
     let event = sign_parts_with_identity(
         &identity,
-        WireEventParts {
+        RadrootsNip01EventWireParts {
             kind: 30402,
             content: "hello".into(),
             tags: vec![],

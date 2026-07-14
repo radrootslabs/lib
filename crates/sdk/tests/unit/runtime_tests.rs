@@ -1604,19 +1604,38 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .build()
         .await
         .expect("populated sdk");
+    let populated_event_pubkey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let populated_event_tags = Vec::<Vec<String>>::new();
+    let populated_event_content = "{}".to_owned();
+    let populated_event_id = radroots_event::wire::compute_canonical_nip01_event_id(
+        populated_event_pubkey,
+        1_700_000_002,
+        1,
+        &populated_event_tags,
+        &populated_event_content,
+    )
+    .expect("canonical event id");
+    let populated_event_wire = radroots_event::wire::RadrootsNip01EventWire {
+        id: populated_event_id.into_string(),
+        pubkey: populated_event_pubkey.to_owned(),
+        created_at: 1_700_000_002,
+        kind: 1,
+        tags: populated_event_tags,
+        content: populated_event_content,
+        sig: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_owned(),
+        extra: Default::default(),
+    };
+    let populated_event_raw_json =
+        serde_json::to_string(&populated_event_wire).expect("raw event json");
+    let populated_event = radroots_event::draft::RadrootsSignedEvent::from_wire_verified_id(
+        populated_event_wire,
+        populated_event_raw_json,
+    )
+    .expect("signed event");
     populated_sdk
         ._event_store
         .ingest_event(radroots_event_store::RadrootsEventIngest::new(
-            radroots_event::RadrootsEventEnvelope {
-                id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
-                author: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                    .to_owned(),
-                created_at: 1_700_000_002,
-                kind: 1,
-                tags: Vec::new(),
-                content: "{}".to_owned(),
-                sig: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_owned(),
-            },
+            populated_event,
             1_700_000_002_000,
         ))
         .await

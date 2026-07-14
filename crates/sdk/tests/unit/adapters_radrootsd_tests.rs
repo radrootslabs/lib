@@ -1,4 +1,5 @@
 use super::*;
+use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI;
 use radroots_transport_publish_protocol::{
     NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
@@ -86,7 +87,7 @@ fn spawn_http_server(
 }
 
 fn signed_event() -> RadrootsSignedEvent {
-    RadrootsSignedEvent {
+    let wire = RadrootsNip01EventWire {
         id: "a".repeat(64),
         pubkey: "b".repeat(64),
         created_at: 1_700_000_000,
@@ -94,22 +95,24 @@ fn signed_event() -> RadrootsSignedEvent {
         tags: vec![vec!["d".to_owned(), "listing-1".to_owned()]],
         content: "{\"name\":\"carrots\"}".to_owned(),
         sig: "c".repeat(128),
-        raw_json: serde_json::json!({
-            "id": "a".repeat(64),
-            "pubkey": "b".repeat(64),
-            "created_at": 1_700_000_000u32,
-            "kind": 30402u32,
-            "tags": [["d", "listing-1"]],
-            "content": "{\"name\":\"carrots\"}",
-            "sig": "c".repeat(128)
-        })
-        .to_string(),
-    }
+        extra: Default::default(),
+    };
+    let raw_json = serde_json::json!({
+        "id": "a".repeat(64),
+        "pubkey": "b".repeat(64),
+        "created_at": 1_700_000_000u32,
+        "kind": 30402u32,
+        "tags": [["d", "listing-1"]],
+        "content": "{\"name\":\"carrots\"}",
+        "sig": "c".repeat(128)
+    })
+    .to_string();
+    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
 }
 
 fn publish_request() -> TransportPublishEventRequest {
     TransportPublishEventRequest {
-        event: signed_event_wire(&signed_event()),
+        raw_event_json: signed_event().raw_json().to_owned(),
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
             vec!["wss://relay.example.com".to_owned()],
@@ -358,9 +361,11 @@ fn proxy_config_builders_preserve_typed_runtime_options() {
 fn publish_event_request_json_uses_signed_event_contract() {
     let value = publish_event_request_json(&publish_request()).expect("request json");
 
-    assert_eq!(value["event"]["id"], "a".repeat(64));
-    assert_eq!(value["event"]["pubkey"], "b".repeat(64));
-    assert_eq!(value["event"]["kind"], 30_402);
+    let raw_event_json = value["raw_event_json"].as_str().expect("raw event json");
+    let raw_event: serde_json::Value = serde_json::from_str(raw_event_json).expect("raw event");
+    assert_eq!(raw_event["id"], "a".repeat(64));
+    assert_eq!(raw_event["pubkey"], "b".repeat(64));
+    assert_eq!(raw_event["kind"], 30_402);
     assert_eq!(value["target_policy"]["kind"], "nostr");
     assert_eq!(
         value["target_policy"]["source_policy"],
@@ -462,7 +467,11 @@ async fn publish_event_posts_transport_publish_jsonrpc() {
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
     assert_eq!(body["method"], METHOD_EVENT);
     assert_eq!(body["id"], SDK_RADROOTSD_PROXY_REQUEST_ID);
-    assert_eq!(body["params"]["event"]["content"], "{\"name\":\"carrots\"}");
+    let raw_event_json = body["params"]["raw_event_json"]
+        .as_str()
+        .expect("raw event json");
+    let raw_event: serde_json::Value = serde_json::from_str(raw_event_json).expect("raw event");
+    assert_eq!(raw_event["content"], "{\"name\":\"carrots\"}");
     assert_eq!(body["params"]["target_policy"]["kind"], "nostr");
     assert_eq!(
         body["params"]["target_policy"]["relay_urls"][0],
@@ -833,7 +842,7 @@ async fn publish_event_empty_http_error_reports_empty_body() {
 }
 
 #[tokio::test]
-async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
+async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
     let adapter =
         RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
     let base = RadrootsdProxyPublishRequest {
@@ -847,10 +856,6 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
         timeout_ms: Some(1_000),
     };
 
-    let mut invalid_event_kind = base.clone();
-    invalid_event_kind.signed_event.kind = 70_000;
-    let mut empty_event_tag = base.clone();
-    empty_event_tag.signed_event.tags = vec![Vec::new()];
     let mut invalid_quorum = base.clone();
     invalid_quorum.delivery_policy = TransportPublishDeliveryPolicy::Quorum { quorum: 0 };
     let mut too_many_targets = base.clone();
@@ -896,8 +901,6 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
     empty_idempotency.idempotency_key = Some(" ".to_owned());
 
     for request in [
-        invalid_event_kind,
-        empty_event_tag,
         invalid_quorum,
         too_many_targets,
         empty_endpoint_uri,
@@ -915,7 +918,7 @@ async fn publish_signed_event_rejects_invalid_protocol_requests_before_http() {
 async fn adapter_rejects_invalid_request_before_transport() {
     let adapter =
         RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
-    let mut request = RadrootsdProxyPublishRequest {
+    let request = RadrootsdProxyPublishRequest {
         signed_event: signed_event(),
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -925,7 +928,6 @@ async fn adapter_rejects_invalid_request_before_transport() {
         idempotency_key: None,
         timeout_ms: None,
     };
-    request.signed_event.id = "A".repeat(64);
 
     let error = adapter
         .publish_signed_event(request)

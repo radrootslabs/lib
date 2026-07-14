@@ -120,6 +120,7 @@ fn is_exact_crates_version(version: &str) -> bool {
 }
 
 const CONSUMER_MAIN: &str = r#"use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
+use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_sdk::knowledge::prelude::*;
 
 const SECRET_KEY_HEX: &str = "0101010101010101010101010101010101010101010101010101010101010101";
@@ -141,7 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sign_parts(parts: WireEventParts) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
+fn sign_parts(parts: RadrootsNip01EventWireParts) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
     let tags = parts
         .tags
         .into_iter()
@@ -152,10 +153,10 @@ fn sign_parts(parts: WireEventParts) -> Result<RadrootsEventEnvelope, Box<dyn st
         .tags(tags)
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(&keys)?;
-    Ok(RadrootsEventEnvelope {
+    Ok(RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
-        created_at: event.created_at.as_secs() as u32,
+        created_at: event.created_at.as_secs(),
         kind: u32::from(event.kind.as_u16()),
         tags: event
             .tags
@@ -165,7 +166,7 @@ fn sign_parts(parts: WireEventParts) -> Result<RadrootsEventEnvelope, Box<dyn st
             .collect(),
         content: event.content,
         sig: event.sig.to_string(),
-    })
+    })?)
 }
 
 fn public_key_hex() -> String {

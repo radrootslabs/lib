@@ -5,80 +5,80 @@ pub use radroots_event_codec::order::RadrootsOrderEnvelopeParseError;
 
 use radroots_event::RadrootsEventEnvelope;
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_event::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
+use radroots_event::wire::RadrootsNip01EventWireParts;
 #[cfg(any(feature = "signer-adapters", test))]
-use radroots_event_codec::wire::WireEventParts;
+use radroots_event::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRequestDraft {
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderDecisionDraft {
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRevisionProposalDraft {
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRevisionDecisionDraft {
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderCancellationDraft {
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRequestDraft {
-    pub fn into_wire_parts(self) -> WireEventParts {
+    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderDecisionDraft {
-    pub fn into_wire_parts(self) -> WireEventParts {
+    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRevisionProposalDraft {
-    pub fn into_wire_parts(self) -> WireEventParts {
+    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderRevisionDecisionDraft {
-    pub fn into_wire_parts(self) -> WireEventParts {
+    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 impl RadrootsOrderCancellationDraft {
-    pub fn into_wire_parts(self) -> WireEventParts {
+    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
 #[cfg(any(feature = "signer-adapters", test))]
 fn with_contract_root_event_tag(
-    mut parts: WireEventParts,
+    mut parts: RadrootsNip01EventWireParts,
     root_event_id: &RadrootsEventId,
-) -> WireEventParts {
+) -> RadrootsNip01EventWireParts {
     parts
         .tags
         .push(vec![TAG_E.to_owned(), root_event_id.as_str().to_owned()]);

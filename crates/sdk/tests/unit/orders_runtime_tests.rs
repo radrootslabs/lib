@@ -6,6 +6,7 @@ use radroots_core::{
 };
 use radroots_event::{
     draft::RadrootsSignedEvent,
+    envelope::RadrootsEventEnvelopeParts,
     kinds::KIND_LISTING,
     order::{
         RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem, RadrootsOrderEconomicLine,
@@ -120,7 +121,7 @@ fn ptr(id: String) -> RadrootsEventPtr {
 }
 
 fn nostr_event(id: String, kind: u32) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id,
         author: hex_64('c'),
         created_at: 1_700_000_000,
@@ -128,7 +129,8 @@ fn nostr_event(id: String, kind: u32) -> RadrootsEventEnvelope {
         tags: Vec::new(),
         content: "{}".to_owned(),
         sig: hex_128('f'),
-    }
+    })
+    .expect("event envelope")
 }
 
 fn actor(pubkey: &RadrootsPublicKey, role: RadrootsActorRole) -> RadrootsActorContext {
@@ -594,21 +596,29 @@ async fn enqueue_fixture_submit(sdk: &RadrootsClient, raw_order_id: &str) -> Tra
 }
 
 fn event_from_parts(
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
     contract_id: &str,
     expected_pubkey: &RadrootsPublicKey,
 ) -> RadrootsEventEnvelope {
-    let frozen = to_frozen_draft(parts, contract_id, expected_pubkey.as_str(), 1_700_000_000)
-        .expect("frozen draft");
-    RadrootsEventEnvelope {
-        id: frozen.expected_event_id,
+    let frozen = RadrootsEventDraft::new(
+        contract_id,
+        parts.kind,
+        1_700_000_000,
+        parts.tags,
+        parts.content,
+        expected_pubkey.as_str(),
+    )
+    .expect("frozen draft");
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: frozen.expected_event_id_str().to_owned(),
         author: expected_pubkey.as_str().to_owned(),
-        created_at: frozen.created_at,
-        kind: frozen.kind,
-        tags: frozen.tags,
-        content: frozen.content,
+        created_at: frozen.created_at_u64(),
+        kind: frozen.kind_u32(),
+        tags: frozen.tags_as_vec(),
+        content: frozen.content().to_owned(),
         sig: hex_128('f'),
-    }
+    })
+    .expect("event envelope")
 }
 
 fn request_event() -> RadrootsEventEnvelope {
@@ -621,6 +631,36 @@ fn request_event() -> RadrootsEventEnvelope {
         TRADE_SUBMIT_CONTRACT_ID,
         &request.buyer_pubkey,
     )
+}
+
+fn event_parts_from(event: &RadrootsEventEnvelope) -> RadrootsEventEnvelopeParts {
+    RadrootsEventEnvelopeParts {
+        id: event.id_str().to_owned(),
+        author: event.author_str().to_owned(),
+        created_at: event.created_at_u64(),
+        kind: event.kind_u32(),
+        tags: event.tags_as_vec(),
+        content: event.content().to_owned(),
+        sig: event.sig_str().to_owned(),
+    }
+}
+
+fn event_with_content(event: &RadrootsEventEnvelope, content: String) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        content,
+        ..event_parts_from(event)
+    })
+    .expect("event envelope")
+}
+
+fn signed_event_from(event: RadrootsEventEnvelope) -> RadrootsSignedEvent {
+    let wire = event.to_nip01_wire();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
+}
+
+fn request_signed_event() -> RadrootsSignedEvent {
+    signed_event_from(request_event())
 }
 
 fn order_request_evidence_error(
@@ -1008,7 +1048,7 @@ fn workflow_plan_builders_cover_success_and_actor_mismatch_paths() {
         1_700_000_000,
         "order test",
     );
-    assert_eq!(expected_event_id, frozen_draft.expected_event_id);
+    assert_eq!(expected_event_id, frozen_draft.expected_event_id_str());
 }
 
 #[test]
@@ -1161,7 +1201,7 @@ fn order_evidence_parses_all_lifecycle_event_kinds() {
     );
 
     let decision_event_id =
-        RadrootsEventId::parse(decision_event.id.as_str()).expect("decision event id");
+        RadrootsEventId::parse(decision_event.id_str()).expect("decision event id");
     let proposal = revision_proposal_payload(&root_event_id, &decision_event_id);
     let proposal_event = event_from_parts(
         order::build_order_revision_proposal_draft(&root_event_id, &decision_event_id, &proposal)
@@ -1178,7 +1218,7 @@ fn order_evidence_parses_all_lifecycle_event_kinds() {
     );
 
     let proposal_event_id =
-        RadrootsEventId::parse(proposal_event.id.as_str()).expect("proposal event id");
+        RadrootsEventId::parse(proposal_event.id_str()).expect("proposal event id");
     let revision_decision = revision_decision_payload(
         &proposal,
         &proposal_event_id,
@@ -1226,22 +1266,26 @@ fn order_request_evidence_parses_and_rejects_malformed_envelopes() {
     assert_eq!(evidence.buyer_pubkey, pubkey('c'));
     assert_eq!(evidence.seller_pubkey, pubkey('d'));
 
-    let mut invalid_id = event.clone();
-    invalid_id.id = "not-hex".to_owned();
+    let invalid_id = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: "not-hex".to_owned(),
+        ..event_parts_from(&event)
+    })
+    .expect_err("invalid id");
     assert!(
-        invalid_request_message(order_request_evidence_error(parse_order_request_evidence(
-            &invalid_id,
-        )))
-        .contains("event id is invalid")
+        invalid_id
+            .to_string()
+            .contains("event envelope id is invalid")
     );
 
-    let mut invalid_author = event.clone();
-    invalid_author.author = "not-hex".to_owned();
+    let invalid_author = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        author: "not-hex".to_owned(),
+        ..event_parts_from(&event)
+    })
+    .expect_err("invalid author");
     assert!(
-        invalid_request_message(order_request_evidence_error(parse_order_request_evidence(
-            &invalid_author,
-        )))
-        .contains("decode failed")
+        invalid_author
+            .to_string()
+            .contains("event envelope author is invalid")
     );
 
     let request = order_request_payload();
@@ -1259,8 +1303,7 @@ fn order_request_evidence_parses_and_rejects_malformed_envelopes() {
         .contains("decode failed")
     );
 
-    let mut decode_failure = event.clone();
-    decode_failure.content = "{}".to_owned();
+    let decode_failure = event_with_content(&event, "{}".to_owned());
     assert!(
         invalid_request_message(order_request_evidence_error(parse_order_request_evidence(
             &decode_failure,
@@ -1268,11 +1311,13 @@ fn order_request_evidence_parses_and_rejects_malformed_envelopes() {
         .contains("decode failed")
     );
 
-    let mut envelope = serde_json::from_str::<serde_json::Value>(event.content.as_str())
-        .expect("request envelope");
+    let mut envelope =
+        serde_json::from_str::<serde_json::Value>(event.content()).expect("request envelope");
     envelope["order_id"] = serde_json::Value::String("other-order".to_owned());
-    let mut order_mismatch = event.clone();
-    order_mismatch.content = serde_json::to_string(&envelope).expect("mismatched envelope");
+    let order_mismatch = event_with_content(
+        &event,
+        serde_json::to_string(&envelope).expect("mismatched envelope"),
+    );
     assert!(
         invalid_request_message(order_request_evidence_error(parse_order_request_evidence(
             &order_mismatch,
@@ -1280,11 +1325,13 @@ fn order_request_evidence_parses_and_rejects_malformed_envelopes() {
         .contains("decode failed")
     );
 
-    let mut envelope = serde_json::from_str::<serde_json::Value>(event.content.as_str())
-        .expect("request envelope");
+    let mut envelope =
+        serde_json::from_str::<serde_json::Value>(event.content()).expect("request envelope");
     envelope["listing_addr"] = serde_json::Value::String(format!("30402:{}:other", hex_64('d')));
-    let mut listing_mismatch = event;
-    listing_mismatch.content = serde_json::to_string(&envelope).expect("mismatched envelope");
+    let listing_mismatch = event_with_content(
+        &event,
+        serde_json::to_string(&envelope).expect("mismatched envelope"),
+    );
     assert!(
         invalid_request_message(order_request_evidence_error(parse_order_request_evidence(
             &listing_mismatch,
@@ -3817,7 +3864,8 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     assert!(matches!(
         sdk.trades()
             .ingest_evidence(
-                TradeEvidenceIngestRequest::new(request_event()).with_observed_at(out_of_range,)
+                TradeEvidenceIngestRequest::new(request_signed_event())
+                    .with_observed_at(out_of_range,)
             )
             .await,
         Err(RadrootsSdkError::TimestampOutOfRange { .. })
@@ -3825,7 +3873,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     assert!(matches!(
         sdk.trades()
             .ingest_request_evidence(
-                TradeRequestEvidenceIngestRequest::new(request_event())
+                TradeRequestEvidenceIngestRequest::new(request_signed_event())
                     .with_observed_at(out_of_range,),
             )
             .await,
@@ -3945,14 +3993,16 @@ async fn order_default_timestamp_paths_report_clock_errors() {
     assert!(matches!(
         clock_error_sdk
             .trades()
-            .ingest_evidence(TradeEvidenceIngestRequest::new(request_event()))
+            .ingest_evidence(TradeEvidenceIngestRequest::new(request_signed_event()))
             .await,
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
     ));
     assert!(matches!(
         clock_error_sdk
             .trades()
-            .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(request_event()))
+            .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(
+                request_signed_event()
+            ))
             .await,
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
     ));
@@ -4056,10 +4106,10 @@ fn order_runtime_request_builders_and_serializers_cover_source_attached_paths() 
     assert_struct_serialize_error_paths(&submit_enqueue, 6);
 
     let request_ingest =
-        TradeRequestEvidenceIngestRequest::new(request_event()).with_observed_at(created_at);
+        TradeRequestEvidenceIngestRequest::new(request_signed_event()).with_observed_at(created_at);
     assert_struct_serialize_error_paths(&request_ingest, 2);
     let evidence_ingest =
-        TradeEvidenceIngestRequest::new(request_event()).with_observed_at(created_at);
+        TradeEvidenceIngestRequest::new(request_signed_event()).with_observed_at(created_at);
     assert_struct_serialize_error_paths(&evidence_ingest, 2);
 
     let decision_prepare = TradeDecisionPrepareRequest::new(
@@ -4342,7 +4392,7 @@ async fn closed_event_store_errors_are_mapped_for_ingest_and_prepared_lookup() {
     sdk._event_store.pool().close().await;
     let ingest_error = sdk
         .trades()
-        .ingest_evidence(TradeEvidenceIngestRequest::new(request_event()))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(request_signed_event()))
         .await
         .expect_err("closed ingest evidence");
     assert!(matches!(ingest_error, RadrootsSdkError::EventStore { .. }));
@@ -4351,7 +4401,9 @@ async fn closed_event_store_errors_are_mapped_for_ingest_and_prepared_lookup() {
     sdk._event_store.pool().close().await;
     let request_ingest_error = sdk
         .trades()
-        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(request_event()))
+        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(
+            request_signed_event(),
+        ))
         .await
         .expect_err("closed request evidence ingest");
     assert!(matches!(
@@ -4372,7 +4424,7 @@ async fn closed_event_store_errors_are_mapped_for_ingest_and_prepared_lookup() {
 #[tokio::test]
 async fn order_status_and_evidence_ingest_cover_source_attached_success_paths() {
     let sdk = prepared_order_sdk().await;
-    let request_event = request_event();
+    let request_event = request_signed_event();
     let request_receipt = sdk
         .trades()
         .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(

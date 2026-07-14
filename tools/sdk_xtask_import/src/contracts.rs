@@ -684,7 +684,12 @@ order = 1
 "profile.build_draft" = "profile.buildDraft"
 
 [shared_types]
-"WireEventParts" = "WireEventParts"
+"RadrootsNip01EventWireParts" = "RadrootsNip01EventWireParts"
+"RadrootsNip01EventWireDto" = "RadrootsNip01EventWireDto"
+"RadrootsEventDraft" = "RadrootsEventDraft"
+"RadrootsSignedEventDto" = "RadrootsSignedEventDto"
+"RadrootsVerifiedSignedEventDto" = "RadrootsVerifiedSignedEventDto"
+"RadrootsEventEnvelopeDto" = "RadrootsEventEnvelopeDto"
 
 [artifacts]
 models_dir = "src/generated"

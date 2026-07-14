@@ -11,15 +11,14 @@ use crate::{
 };
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, authorize_actor_for_draft};
+use radroots_event::wire::RadrootsNip01EventWireParts;
 #[cfg(feature = "runtime")]
 use radroots_event::{
-    RadrootsEventEnvelope,
-    draft::RadrootsEventDraft,
+    draft::{RadrootsEventDraft, RadrootsSignedEvent},
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::KIND_TRADE_TRANSITION_PROOF_REQUEST,
 };
-#[cfg(feature = "runtime")]
-use radroots_event_codec::wire::{WireEventParts, canonicalize_tags, to_frozen_draft};
+use radroots_event_codec::wire::canonicalize_tags;
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
@@ -329,7 +328,7 @@ pub struct DvmTradeTransitionProofReceipt {
 #[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct DvmValidationReceiptIngestRequest {
-    pub event: RadrootsEventEnvelope,
+    pub event: RadrootsSignedEvent,
     pub observed_at: Option<RadrootsSdkTimestamp>,
     pub expected_order_id: Option<RadrootsOrderId>,
     pub expected_listing_event_id: Option<RadrootsEventId>,
@@ -340,7 +339,7 @@ pub struct DvmValidationReceiptIngestRequest {
 
 #[cfg(feature = "runtime")]
 impl DvmValidationReceiptIngestRequest {
-    pub fn new(event: RadrootsEventEnvelope) -> Self {
+    pub fn new(event: RadrootsSignedEvent) -> Self {
         Self {
             event,
             observed_at: None,
@@ -468,7 +467,7 @@ impl<'sdk> DvmClient<'sdk> {
         request: DvmValidationReceiptIngestRequest,
     ) -> Result<DvmValidationReceiptIngestReceipt, RadrootsSdkError> {
         let verified = verify_validation_receipt_event(
-            &request.event,
+            request.event.envelope(),
             RadrootsValidationReceiptExpectedBinding {
                 order_id: request
                     .expected_order_id
@@ -490,7 +489,7 @@ impl<'sdk> DvmClient<'sdk> {
             },
         )
         .map_err(validation_receipt_sdk_error)?;
-        let receipt_event_id = parse_event_id(request.event.id.as_str(), "receipt event id")?;
+        let receipt_event_id = parse_event_id(request.event.id_str(), "receipt event id")?;
         let order_id =
             RadrootsOrderId::parse(verified.tags.order_id.as_str()).map_err(|error| {
                 RadrootsSdkError::InvalidRequest {
@@ -576,19 +575,22 @@ fn dvm_trade_transition_proof_plan(
         ],
     ];
     canonicalize_tags(&mut tags);
-    let frozen_draft = to_frozen_draft(
-        WireEventParts {
-            kind: KIND_TRADE_TRANSITION_PROOF_REQUEST,
-            content,
-            tags,
-        },
+    let parts = RadrootsNip01EventWireParts {
+        kind: KIND_TRADE_TRANSITION_PROOF_REQUEST,
+        content,
+        tags,
+    };
+    let frozen_draft = RadrootsEventDraft::new(
         DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID,
+        parts.kind,
+        u64::from(created_at.try_into_nostr_created_at()?),
+        parts.tags,
+        parts.content,
         request.actor.pubkey().as_str(),
-        created_at.try_into_nostr_created_at()?,
     )
     .expect("DVM proof request draft is valid");
     authorize_actor_for_draft(&request.actor, &frozen_draft)?;
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
         .expect("frozen DVM proof request draft produces a valid event id");
     Ok(DvmTradeTransitionProofPlan {
         worker_pubkey: request.worker_pubkey,

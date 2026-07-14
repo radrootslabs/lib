@@ -5,7 +5,7 @@ use super::{
 use crate::adapters::signing::sign_parts_with_identity;
 use crate::identity::RadrootsIdentity;
 use core::time::Duration;
-use radroots_event_codec::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_nostr::prelude::RadrootsNostrClientOptions;
 use tokio::runtime::Runtime;
 
@@ -74,7 +74,7 @@ fn relay_helpers_accept_empty_relay_sets_without_network_endpoints() {
 
         let signed = sign_parts_with_identity(
             &identity,
-            WireEventParts {
+            RadrootsNip01EventWireParts {
                 kind: 1,
                 content: "hello".to_owned(),
                 tags: Vec::new(),

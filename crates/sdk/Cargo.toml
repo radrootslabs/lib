@@ -59,6 +59,7 @@ signer-adapters = [
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
   "dep:tokio",
+  "radroots_event/signature",
   "radroots_nostr/events",
 ]
 runtime = [

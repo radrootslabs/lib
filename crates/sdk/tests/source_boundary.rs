@@ -104,6 +104,22 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
 
 const FORBIDDEN_FOUNDATION_HARDENING_RETIRED_CONCEPTS: &[ForbiddenSdkConcept] = &[
     ForbiddenSdkConcept {
+        pattern: "WireEventParts",
+        reason: "event construction must use current Radroots NIP-01 wire part names",
+    },
+    ForbiddenSdkConcept {
+        pattern: "RadrootsFrozenEventDraft",
+        reason: "event draft surfaces must use the current RadrootsEventDraft name",
+    },
+    ForbiddenSdkConcept {
+        pattern: "pub type SignedEvent",
+        reason: "SDK signing adapters must not expose compatibility aliases for signed events",
+    },
+    ForbiddenSdkConcept {
+        pattern: "pub type NostrEventBuilder",
+        reason: "SDK signing adapters must not expose compatibility aliases for event builders",
+    },
+    ForbiddenSdkConcept {
         pattern: "SignedNostrEvent",
         reason: "generic signed-event surfaces must use product-neutral signed-event names",
     },

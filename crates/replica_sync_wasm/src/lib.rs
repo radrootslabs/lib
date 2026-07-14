@@ -4,7 +4,7 @@
 use base64::Engine;
 #[cfg(target_arch = "wasm32")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use radroots_event::RadrootsEventEnvelope;
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_replica_sync::RadrootsReplicaSyncRequest;
 #[cfg(target_arch = "wasm32")]
 use radroots_replica_sync::{
@@ -36,13 +36,11 @@ impl RadrootsReplicaIdFactory for WasmIdFactory {
 }
 
 #[derive(Deserialize)]
-struct NostrEventEnvelope {
+#[serde(deny_unknown_fields)]
+struct EventEnvelopeInput {
     id: String,
-    #[serde(default)]
-    author: Option<String>,
-    #[serde(default)]
-    pubkey: Option<String>,
-    created_at: u32,
+    author: String,
+    created_at: u64,
     kind: u32,
     tags: Vec<Vec<String>>,
     content: String,
@@ -54,25 +52,18 @@ pub fn parse_request_model(request_json: &str) -> Result<RadrootsReplicaSyncRequ
 }
 
 pub fn parse_event_model(event_json: &str) -> Result<RadrootsEventEnvelope, String> {
-    let envelope: NostrEventEnvelope =
+    let envelope: EventEnvelopeInput =
         serde_json::from_str(event_json).map_err(|error| error.to_string())?;
-    let author = match (envelope.author, envelope.pubkey) {
-        (Some(author), Some(pubkey)) if author != pubkey => {
-            return Err("author/pubkey mismatch".to_owned());
-        }
-        (Some(author), _) => author,
-        (None, Some(pubkey)) => pubkey,
-        (None, None) => return Err("missing author/pubkey".to_owned()),
-    };
-    Ok(RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: envelope.id,
-        author,
+        author: envelope.author,
         created_at: envelope.created_at,
         kind: envelope.kind,
         tags: envelope.tags,
         content: envelope.content,
         sig: envelope.sig,
     })
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -105,12 +96,12 @@ mod tests {
 
     fn event_json(author: Option<&str>, pubkey: Option<&str>) -> String {
         let mut fields = vec![
-            r#""id":"event-id""#.to_owned(),
+            format!(r#""id":"{}""#, "0".repeat(64)),
             r#""created_at":123"#.to_owned(),
             r#""kind":30023"#.to_owned(),
             r#""tags":[["d","one"]]"#.to_owned(),
             r#""content":"content""#.to_owned(),
-            r#""sig":"sig""#.to_owned(),
+            format!(r#""sig":"{}""#, "f".repeat(128)),
         ];
         if let Some(author) = author {
             fields.push(format!(r#""author":"{author}""#));
@@ -122,35 +113,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_event_accepts_matching_author_and_pubkey() {
-        let event = parse_event_model(&event_json(Some("author"), Some("author"))).expect("event");
-        assert_eq!(event.author, "author");
-        assert_eq!(event.tags, vec![vec!["d".to_owned(), "one".to_owned()]]);
+    fn parse_event_accepts_author_domain_envelope() {
+        let author = "a".repeat(64);
+        let event = parse_event_model(&event_json(Some(author.as_str()), None)).expect("event");
+        assert_eq!(event.author_str(), author);
+        assert_eq!(
+            event.tags_as_vec(),
+            vec![vec!["d".to_owned(), "one".to_owned()]]
+        );
     }
 
     #[test]
-    fn parse_event_accepts_author_without_pubkey() {
-        let event = parse_event_model(&event_json(Some("author"), None)).expect("event");
-        assert_eq!(event.author, "author");
+    fn parse_event_rejects_pubkey_wire_alias() {
+        let author = "a".repeat(64);
+        let error = parse_event_model(&event_json(Some(author.as_str()), Some(author.as_str())))
+            .expect_err("error");
+        assert!(error.contains("unknown field `pubkey`"));
     }
 
     #[test]
-    fn parse_event_accepts_pubkey_without_author() {
-        let event = parse_event_model(&event_json(None, Some("pubkey"))).expect("event");
-        assert_eq!(event.author, "pubkey");
-    }
-
-    #[test]
-    fn parse_event_rejects_author_pubkey_mismatch() {
-        let error =
-            parse_event_model(&event_json(Some("author"), Some("pubkey"))).expect_err("error");
-        assert_eq!(error, "author/pubkey mismatch");
-    }
-
-    #[test]
-    fn parse_event_rejects_missing_author_and_pubkey() {
+    fn parse_event_rejects_missing_author() {
         let error = parse_event_model(&event_json(None, None)).expect_err("error");
-        assert_eq!(error, "missing author/pubkey");
+        assert!(error.contains("missing field `author`"));
     }
 
     #[test]

@@ -29,8 +29,6 @@ use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_event::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_event::kinds::KIND_FARM;
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-proxy")]
 use radroots_nostr::prelude::{
@@ -134,15 +132,13 @@ fn proxy_actor() -> RadrootsActorContext {
 
 #[cfg(feature = "radrootsd-proxy")]
 fn proxy_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
-    to_frozen_draft(
-        WireEventParts {
-            kind: KIND_FARM,
-            content: "{}".to_owned(),
-            tags: vec![vec!["d".to_owned(), d_tag.to_owned()]],
-        },
+    RadrootsEventDraft::new(
         "radroots.farm.profile.v1",
-        PROXY_SIGNER_PUBLIC_KEY_HEX,
+        KIND_FARM,
         1_700_000_000,
+        vec![vec!["d".to_owned(), d_tag.to_owned()]],
+        "{}",
+        PROXY_SIGNER_PUBLIC_KEY_HEX,
     )
     .expect("frozen draft")
 }
@@ -903,7 +899,7 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
         message.clone(),
     )
     .expect("proxy transport error receipt");
-    assert_eq!(receipt.event_id, signed_event.id);
+    assert_eq!(receipt.event_id, signed_event.id_str());
     assert_eq!(receipt.final_state, PushOutboxEventState::PublishRetryable);
     assert_eq!(receipt.retryable_count, 1);
     assert!(!receipt.quorum_met);
@@ -1115,16 +1111,15 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
         state: RadrootsOutboxEventState::Signed,
         claim_token: "claim-token".to_owned(),
         active_delivery_plan_id: Some(1),
-        draft: RadrootsEventDraft {
-            contract_id: "radroots.test".to_owned(),
-            contract_registry_version: 1,
-            kind: 1,
-            created_at: 1_700_000_000,
-            tags: Vec::new(),
-            content: "{}".to_owned(),
-            expected_pubkey: "a".repeat(64),
-            expected_event_id: "b".repeat(64),
-        },
+        draft: RadrootsEventDraft::new(
+            "radroots.farm.profile.v1",
+            KIND_FARM,
+            1_700_000_000,
+            vec![vec!["d".to_owned(), "missing-signed-event".to_owned()]],
+            "{}",
+            PROXY_SIGNER_PUBLIC_KEY_HEX,
+        )
+        .expect("draft"),
         signed_event: None,
         delivery_targets: Vec::new(),
     };
@@ -1457,8 +1452,7 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
                 .signed_event
                 .as_ref()
                 .expect("signed event")
-                .id
-                .as_str(),
+                .id_str(),
             outcome_kind,
         );
         assert_eq!(
@@ -1467,16 +1461,19 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
                 .signed_event
                 .as_ref()
                 .expect("signed event")
-                .id
-                .clone()
+                .id_str()
         );
         assert_eq!(
             publish.pubkey,
-            claimed.signed_event.as_ref().expect("signed event").pubkey
+            claimed
+                .signed_event
+                .as_ref()
+                .expect("signed event")
+                .pubkey_str()
         );
         assert_eq!(
             publish.event_kind,
-            claimed.signed_event.as_ref().expect("signed event").kind
+            claimed.signed_event.as_ref().expect("signed event").kind()
         );
         let proxy_receipt =
             push_proxy_event_receipt(claimed.outbox_event_id, publish.clone()).expect("receipt");
@@ -1564,10 +1561,7 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
         .expect("claim")
         .expect("claim");
     assert_eq!(claimed.outbox_event_id, enqueue.outbox_event_id);
-    let mut publish = proxy_job(
-        signed_event.id.as_str(),
-        TransportPublishOutcomeKind::Accepted,
-    );
+    let mut publish = proxy_job(signed_event.id_str(), TransportPublishOutcomeKind::Accepted);
     publish.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
         TransportPublishTarget::nostr("wss://relay.example.com")
             .with_scope("farm.a")
@@ -1631,8 +1625,7 @@ async fn proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation
             .signed_event
             .as_ref()
             .expect("signed event")
-            .id
-            .as_str(),
+            .id_str(),
         TransportPublishOutcomeKind::Accepted,
     );
     publish.targets.push(publish.targets[0].clone());

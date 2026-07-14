@@ -572,7 +572,7 @@ mod tests {
         "RadrootsCoopRef",
         "RadrootsDocument",
         "RadrootsDocumentSubject",
-        "RadrootsEventEnvelope",
+        "RadrootsEventEnvelopeDto",
         "RadrootsEventPtr",
         "RadrootsEventRef",
         "RadrootsEvidenceBounty",
@@ -626,6 +626,7 @@ mod tests {
         "RadrootsMessageFile",
         "RadrootsMessageFileDimensions",
         "RadrootsMessageRecipient",
+        "RadrootsNip01EventWireDto",
         "RadrootsOrderCancellation",
         "RadrootsOrderDecision",
         "RadrootsOrderDecisionOutcome",
@@ -659,6 +660,8 @@ mod tests {
         "RadrootsResourceHarvestProduct",
         "RadrootsRightsAssertion",
         "RadrootsSeal",
+        "RadrootsSignedEventDto",
+        "RadrootsSignedEventVerificationStateDto",
         "RadrootsSocialFarmAnchor",
         "RadrootsSocialLocation",
         "RadrootsSocialMediaDimensions",
@@ -668,6 +671,8 @@ mod tests {
         "RadrootsTradeListingValidateRequest",
         "RadrootsTradeListingValidateResult",
         "RadrootsTradeValidationListingError",
+        "RadrootsVerifiedSignedEventDto",
+        "RadrootsVerifiedSignedEventVerificationStateDto",
         "RadrootsWikiArticle",
         "RadrootsWikiArticleVersionRef",
         "RadrootsWikiMergeRequest",
@@ -893,6 +898,30 @@ mod tests {
         let actual = type_inventory(EVENT_BINDINGS_TYPES_TS);
 
         assert_eq!(actual, EVENT_TYPE_INVENTORY);
+    }
+
+    #[test]
+    fn event_generated_types_expose_current_signed_event_dto_shapes() {
+        let wire = type_declaration(EVENT_BINDINGS_TYPES_TS, "RadrootsNip01EventWireDto");
+        let envelope = type_declaration(EVENT_BINDINGS_TYPES_TS, "RadrootsEventEnvelopeDto");
+        let signed = type_declaration(EVENT_BINDINGS_TYPES_TS, "RadrootsSignedEventDto");
+        let verified = type_declaration(EVENT_BINDINGS_TYPES_TS, "RadrootsVerifiedSignedEventDto");
+
+        assert!(wire.contains("pubkey: string"));
+        assert!(wire.contains("extra: { [key: string]: unknown }"));
+        assert!(envelope.contains("author: string"));
+        assert!(!envelope.contains("pubkey"));
+        assert!(!envelope.contains("extra"));
+        assert!(signed.contains("state: RadrootsSignedEventVerificationStateDto"));
+        assert!(signed.contains("envelope: RadrootsEventEnvelopeDto"));
+        assert!(signed.contains("wire: RadrootsNip01EventWireDto"));
+        assert!(signed.contains("raw_json: string"));
+        assert!(verified.contains("state: RadrootsVerifiedSignedEventVerificationStateDto"));
+        assert!(verified.contains("signed_event: RadrootsSignedEventDto"));
+        assert!(
+            !EVENT_BINDINGS_TYPES_TS.contains("export type RadrootsEventEnvelope ="),
+            "event package must not export the retired raw envelope type name"
+        );
     }
 
     #[test]

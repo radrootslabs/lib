@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use radroots_event::draft::RadrootsSignedEvent;
 use radroots_transport_publish_protocol::{
-    METHOD_EVENT, SignedEventWire, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
+    METHOD_EVENT, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
     TransportPublishEventResponse, TransportPublishProtocolError, TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
@@ -81,6 +81,8 @@ impl RadrootsdProxyPublishAdapter {
         &self,
         request: RadrootsdProxyPublishRequest,
     ) -> Result<TransportPublishEventResponse, RadrootsdError> {
+        let event_identity =
+            RadrootsdProxyPublishEventIdentity::from_signed_event(&request.signed_event);
         let request = request.into_protocol_request();
         request
             .validate(SDK_RADROOTSD_PROXY_MAX_TARGETS)
@@ -92,7 +94,7 @@ impl RadrootsdProxyPublishAdapter {
             self.config.timeout,
         )
         .await?;
-        validate_transport_publish_response_for_request(&request, &response)?;
+        validate_transport_publish_response_for_request(&request, &event_identity, &response)?;
         Ok(response)
     }
 }
@@ -109,11 +111,28 @@ pub struct RadrootsdProxyPublishRequest {
 impl RadrootsdProxyPublishRequest {
     fn into_protocol_request(self) -> TransportPublishEventRequest {
         TransportPublishEventRequest {
-            event: signed_event_wire(&self.signed_event),
+            raw_event_json: self.signed_event.raw_json().to_owned(),
             target_policy: self.target_policy,
             delivery_policy: self.delivery_policy,
             idempotency_key: self.idempotency_key,
             timeout_ms: self.timeout_ms,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RadrootsdProxyPublishEventIdentity {
+    event_id: String,
+    pubkey: String,
+    kind: u32,
+}
+
+impl RadrootsdProxyPublishEventIdentity {
+    fn from_signed_event(event: &RadrootsSignedEvent) -> Self {
+        Self {
+            event_id: event.id_str().to_owned(),
+            pubkey: event.pubkey_str().to_owned(),
+            kind: event.kind(),
         }
     }
 }
@@ -298,20 +317,9 @@ where
     decode_jsonrpc_response(method, request_id, body.as_str())
 }
 
-fn signed_event_wire(event: &RadrootsSignedEvent) -> SignedEventWire {
-    SignedEventWire {
-        id: event.id.clone(),
-        pubkey: event.pubkey.clone(),
-        created_at: event.created_at as u64,
-        kind: event.kind,
-        tags: event.tags.clone(),
-        content: event.content.clone(),
-        sig: event.sig.clone(),
-    }
-}
-
 fn validate_transport_publish_response_for_request(
     request: &TransportPublishEventRequest,
+    event_identity: &RadrootsdProxyPublishEventIdentity,
     response: &TransportPublishEventResponse,
 ) -> Result<(), RadrootsdError> {
     response.job.validate().map_err(|error| {
@@ -319,13 +327,13 @@ fn validate_transport_publish_response_for_request(
             "radrootsd transport publish response invalid: {error}"
         ))
     })?;
-    if response.job.event_id != request.event.id {
+    if response.job.event_id != event_identity.event_id {
         return Err(response_mismatch("event_id"));
     }
-    if response.job.pubkey != request.event.pubkey {
+    if response.job.pubkey != event_identity.pubkey {
         return Err(response_mismatch("pubkey"));
     }
-    if response.job.event_kind != request.event.kind {
+    if response.job.event_kind != event_identity.kind {
         return Err(response_mismatch("event_kind"));
     }
     if response.job.delivery_policy != request.delivery_policy {

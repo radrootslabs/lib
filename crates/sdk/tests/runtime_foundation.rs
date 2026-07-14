@@ -1045,7 +1045,11 @@ fn sdk_examples_stay_on_product_api_boundary() {
     ];
 
     for (name, example) in examples {
-        assert!(!example.contains("WireEventParts"), "{name}");
+        assert!(!example.contains(concat!("Wire", "EventParts")), "{name}");
+        assert!(
+            !example.contains(concat!("Radroots", "Frozen", "EventDraft")),
+            "{name}"
+        );
         assert!(!example.contains("protocol::wire"), "{name}");
         assert!(!example.contains("event_codec::wire"), "{name}");
         assert!(!example.contains(".as_wire_parts("), "{name}");

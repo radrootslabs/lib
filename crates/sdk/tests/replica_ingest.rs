@@ -1,4 +1,4 @@
-use radroots_event::{RadrootsEventEnvelope, farm::RadrootsFarm};
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts, farm::RadrootsFarm};
 use radroots_replica_schema::farm::IFarmFindMany;
 use radroots_replica_store::ReplicaSql;
 use radroots_replica_sync::{RadrootsReplicaIngestOutcome, radroots_replica_ingest_event};
@@ -17,15 +17,16 @@ fn sdk_event(
     content: String,
     tags: Vec<Vec<String>>,
 ) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: format!("{id:064x}"),
         author: author.to_owned(),
-        created_at,
+        created_at: u64::from(created_at),
         kind,
         tags,
         content,
         sig: "f".repeat(128),
-    }
+    })
+    .expect("sdk event envelope")
 }
 
 fn sample_farm() -> RadrootsFarm {
@@ -81,5 +82,5 @@ fn sdk_farm_draft_ingests_into_replica_projection() {
     assert_eq!(farms.len(), 1);
     assert_eq!(farms[0].d_tag, sample_farm().d_tag);
     assert_eq!(farms[0].name, sample_farm().name);
-    assert_eq!(farms[0].pubkey, event.author);
+    assert_eq!(farms[0].pubkey, event.author_str());
 }

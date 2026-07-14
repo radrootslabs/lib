@@ -3,9 +3,8 @@ use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::contract::RadrootsActorRole;
-use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
 use radroots_event::kinds::KIND_FARM;
-use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
@@ -54,15 +53,13 @@ fn frozen_draft_for(pubkey: &str) -> RadrootsEventDraft {
 }
 
 fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsEventDraft {
-    to_frozen_draft(
-        WireEventParts {
-            kind: KIND_FARM,
-            content: "{}".to_owned(),
-            tags: vec![vec!["d".to_owned(), d_tag.to_owned()]],
-        },
+    RadrootsEventDraft::new(
         "radroots.farm.profile.v1",
-        pubkey,
+        KIND_FARM,
         1_700_000_000,
+        vec![vec!["d".to_owned(), d_tag.to_owned()]],
+        "{}",
+        pubkey,
     )
     .expect("frozen draft")
 }
@@ -72,16 +69,29 @@ fn frozen_draft() -> RadrootsEventDraft {
 }
 
 fn signed_event() -> RadrootsSignedEvent {
-    RadrootsSignedEvent {
-        id: "b".repeat(64),
-        pubkey: "a".repeat(64),
-        created_at: 1_700_000_000,
-        kind: 1,
-        tags: vec![vec!["d".to_owned(), "test".to_owned()]],
-        content: "{}".to_owned(),
-        sig: "c".repeat(128),
-        raw_json: "{}".to_owned(),
-    }
+    let draft = frozen_draft();
+    let sig = "c".repeat(128);
+    let raw_json = serde_json::json!({
+        "id": draft.expected_event_id_str(),
+        "pubkey": draft.expected_pubkey_str(),
+        "created_at": draft.created_at_u64(),
+        "kind": draft.kind_u32(),
+        "tags": draft.tags_as_vec(),
+        "content": draft.content(),
+        "sig": sig,
+    })
+    .to_string();
+    RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        id: draft.expected_event_id_str().to_owned(),
+        pubkey: draft.expected_pubkey_str().to_owned(),
+        created_at: draft.created_at_u64(),
+        kind: draft.kind_u32(),
+        tags: draft.tags_as_vec(),
+        content: draft.content().to_owned(),
+        sig,
+        raw_json,
+    })
+    .expect("signed event")
 }
 
 fn nostr_profile(relay: &'static str) -> crate::TransportProfile {
@@ -121,9 +131,9 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     let draft = frozen_draft();
 
     let signed = signed_event();
-    let event = event_from_signed(&signed);
-    assert_eq!(event.id, signed.id);
-    assert_eq!(event.author, signed.pubkey);
+    let event = signed.envelope();
+    assert_eq!(event.id(), signed.id());
+    assert_eq!(event.author(), signed.pubkey());
 
     let idempotency_key = SdkIdempotencyKey::new("workflow-idempotency").expect("idempotency");
     let input = signed_outbox_input(
@@ -344,7 +354,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
 
     assert_eq!(
         receipt.signed_event_id.as_str(),
-        first_draft.expected_event_id
+        first_draft.expected_event_id_str()
     );
     assert!(receipt.local_event_seq > 0);
     assert!(receipt.outbox_operation_id > 0);
@@ -445,7 +455,10 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
     .await
     .expect("configured enqueue");
 
-    assert_eq!(receipt.signed_event_id.as_str(), draft.expected_event_id);
+    assert_eq!(
+        receipt.signed_event_id.as_str(),
+        draft.expected_event_id_str()
+    );
     assert_eq!(receipt.idempotency_digest_prefix.len(), 12);
 }
 

@@ -1,6 +1,7 @@
 #![cfg(feature = "knowledge")]
 
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
+use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_sdk::knowledge::prelude::*;
 
 const SECRET_KEY_HEX: &str = "0101010101010101010101010101010101010101010101010101010101010101";
@@ -60,8 +61,8 @@ fn fluent_builders_auto_fill_schema_and_prepare_drafts() {
     let claim_draft = claim_builder()
         .build_draft(public_key_hex(), CREATED_AT)
         .expect("claim draft");
-    assert_eq!(article_draft.contract_id, WIKI_ARTICLE_CONTRACT_ID);
-    assert_eq!(claim_draft.contract_id, KNOWLEDGE_CLAIM_CONTRACT_ID);
+    assert_eq!(article_draft.contract_id(), WIKI_ARTICLE_CONTRACT_ID);
+    assert_eq!(claim_draft.contract_id(), KNOWLEDGE_CLAIM_CONTRACT_ID);
 }
 
 #[test]
@@ -329,17 +330,20 @@ fn knowledge_draft_builder_freezes_mvp_drafts_without_runtime() {
         .knowledge_field_report(&knowledge_field_report())
         .expect("field report draft");
 
-    assert_eq!(article.contract_id, WIKI_ARTICLE_CONTRACT_ID);
-    assert_eq!(redirect.contract_id, WIKI_REDIRECT_CONTRACT_ID);
-    assert_eq!(merge_request.contract_id, WIKI_MERGE_REQUEST_CONTRACT_ID);
-    assert_eq!(source.contract_id, KNOWLEDGE_SOURCE_CONTRACT_ID);
-    assert_eq!(claim.contract_id, KNOWLEDGE_CLAIM_CONTRACT_ID);
-    assert_eq!(relation.contract_id, KNOWLEDGE_RELATION_CONTRACT_ID);
-    assert_eq!(review.contract_id, KNOWLEDGE_REVIEW_CONTRACT_ID);
-    assert_eq!(field_report.contract_id, KNOWLEDGE_FIELD_REPORT_CONTRACT_ID);
-    assert_eq!(claim.expected_pubkey, public_key_hex());
-    assert_eq!(claim.created_at, CREATED_AT);
-    assert_eq!(claim.kind, KIND_KNOWLEDGE_CLAIM);
+    assert_eq!(article.contract_id(), WIKI_ARTICLE_CONTRACT_ID);
+    assert_eq!(redirect.contract_id(), WIKI_REDIRECT_CONTRACT_ID);
+    assert_eq!(merge_request.contract_id(), WIKI_MERGE_REQUEST_CONTRACT_ID);
+    assert_eq!(source.contract_id(), KNOWLEDGE_SOURCE_CONTRACT_ID);
+    assert_eq!(claim.contract_id(), KNOWLEDGE_CLAIM_CONTRACT_ID);
+    assert_eq!(relation.contract_id(), KNOWLEDGE_RELATION_CONTRACT_ID);
+    assert_eq!(review.contract_id(), KNOWLEDGE_REVIEW_CONTRACT_ID);
+    assert_eq!(
+        field_report.contract_id(),
+        KNOWLEDGE_FIELD_REPORT_CONTRACT_ID
+    );
+    assert_eq!(claim.expected_pubkey_str(), public_key_hex());
+    assert_eq!(claim.created_at_u64(), u64::from(CREATED_AT));
+    assert_eq!(claim.kind_u32(), KIND_KNOWLEDGE_CLAIM);
 }
 
 #[test]
@@ -397,7 +401,7 @@ fn knowledge_errors_expose_stable_codes() {
     let draft_error: RadrootsSdkKnowledgeError = RadrootsEventDraft::new(
         KNOWLEDGE_CLAIM_CONTRACT_ID,
         KIND_KNOWLEDGE_CLAIM,
-        CREATED_AT,
+        u64::from(CREATED_AT),
         Vec::new(),
         r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#,
         public_key_hex(),
@@ -408,7 +412,7 @@ fn knowledge_errors_expose_stable_codes() {
     assert_eq!(draft_error.inner_code(), "missing_tag");
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -421,10 +425,10 @@ fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
-        created_at: event.created_at.as_secs() as u32,
+        created_at: event.created_at.as_secs(),
         kind: u32::from(event.kind.as_u16()),
         tags: event
             .tags
@@ -434,7 +438,8 @@ fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
             .collect(),
         content: event.content,
         sig: event.sig.to_string(),
-    }
+    })
+    .expect("event envelope")
 }
 
 fn public_key_hex() -> String {

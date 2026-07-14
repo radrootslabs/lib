@@ -16,9 +16,11 @@ use radroots_core::{
 };
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_event::ids::RadrootsPublicKey;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
     contract::RadrootsActorRole,
+    draft::RadrootsSignedEvent,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId},
     kinds::{
         KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST,
@@ -31,7 +33,6 @@ use radroots_event::{
         RadrootsOrderRevisionOutcome,
     },
 };
-use radroots_event_codec::wire::WireEventParts;
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
@@ -88,6 +89,12 @@ const SELLER_PUBLIC_KEY_HEX: &str =
 const SERVICE_SECRET_KEY_HEX: &str =
     "48314941f2c9c01ef99f531df7b1d59a8de23dbeb45a498e5aa5f671e921931f";
 const RELAY: &str = "wss://relay.radroots.test";
+
+fn signed_event_from_envelope(event: RadrootsEventEnvelope) -> RadrootsSignedEvent {
+    let wire = event.to_nip01_wire();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+}
 #[cfg(any())]
 const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
@@ -689,11 +696,11 @@ async fn order_submit_prepare_is_side_effect_free() {
         prepared.listing_event_id.as_str(),
         listing_event.id.as_str()
     );
-    assert_eq!(prepared.frozen_draft.kind, KIND_ORDER_REQUEST);
+    assert_eq!(prepared.frozen_draft.kind_u32(), KIND_ORDER_REQUEST);
     assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
     assert_eq!(
         prepared.expected_event_id,
-        prepared.frozen_draft.expected_event_id
+        prepared.frozen_draft.expected_event_id_str()
     );
     assert_eq!(
         store
@@ -939,7 +946,7 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         .expect("outbox event")
         .expect("outbox event");
     assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
-    assert_eq!(outbox_event.draft.kind, KIND_ORDER_REQUEST);
+    assert_eq!(outbox_event.draft.kind_u32(), KIND_ORDER_REQUEST);
     assert!(outbox_event.signed_event.is_some());
 
     let status = sdk
@@ -1221,7 +1228,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     let ingest = seller_sdk
         .dvm()
         .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(receipt_event)
+            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(receipt_event))
                 .with_expected_order_id(propose_receipt.order_id.clone())
                 .with_expected_listing_event_id(propose_receipt.listing_event_id.clone())
                 .with_expected_root_event_id(propose_receipt.signed_event_id.clone())
@@ -1233,7 +1240,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     assert_eq!(ingest.receipt_event_id, receipt_event_id);
     seller_store
         .ingest_event(RadrootsEventIngest::new(
-            radroots_event_from_nostr(&worker_raw_event),
+            signed_event_from_envelope(radroots_event_from_nostr(&worker_raw_event)),
             4_050,
         ))
         .await
@@ -1331,10 +1338,9 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let order_id = "trade-status-trusted-crypto";
     let request_event = signed_order_request_event(order_id, 70);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event = signed_order_decision_event(order_id, &request_event_id, 71);
-    let decision_event_id =
-        RadrootsEventId::parse(decision_event.id.as_str()).expect("decision id");
+    let decision_event_id = RadrootsEventId::parse(decision_event.id_str()).expect("decision id");
     let listing_event_id = deterministic_event_id("listing-event");
     let receipt_raw_event = signed_raw_sp1_validation_receipt_event(
         order_id,
@@ -1361,7 +1367,10 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
         (radroots_event_from_nostr(&worker_raw_event), 7_300),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest trade status trust event");
     }
@@ -1792,7 +1801,7 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::require_explicit_evidence([
-                        TradeEvidenceIngestRequest::new(request_event),
+                        TradeEvidenceIngestRequest::new(signed_event_from_envelope(request_event)),
                     ]),
                 )
                 .try_with_idempotency_key("trade-product-explicit-accept")
@@ -1943,10 +1952,7 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
     assert_eq!(list.receipts.len(), 1);
     assert!(list.invalid_receipts.is_empty());
     assert_eq!(list.nostr_evidence.out_of_filter_count, 2);
-    assert_eq!(
-        list.receipts[0].event.id.as_str(),
-        receipt_event_id.as_str()
-    );
+    assert_eq!(list.receipts[0].event.id_str(), receipt_event_id.as_str());
     let trusted = list.receipts[0]
         .worker_evidence
         .trusted
@@ -3300,7 +3306,7 @@ async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects()
     };
 
     assert_eq!(plan.order_id.as_str(), "trade-product-dry-run");
-    assert_eq!(plan.frozen_draft.kind, KIND_ORDER_REQUEST);
+    assert_eq!(plan.frozen_draft.kind_u32(), KIND_ORDER_REQUEST);
     assert_eq!(plan.expected_event_id, plan.workflow.expected_event_id);
     assert_eq!(
         store
@@ -3904,7 +3910,7 @@ fn validation_receipt_wire_parts(
     listing_event_id: &RadrootsEventId,
     root_event_id: &RadrootsEventId,
     target_event_id: &RadrootsEventId,
-) -> WireEventParts {
+) -> RadrootsNip01EventWireParts {
     validation_receipt_wire_parts_with_proof(
         raw_order_id,
         listing_event_id,
@@ -3920,7 +3926,7 @@ fn validation_receipt_wire_parts_with_proof(
     root_event_id: &RadrootsEventId,
     target_event_id: &RadrootsEventId,
     proof_system: RadrootsValidationReceiptProofSystem,
-) -> WireEventParts {
+) -> RadrootsNip01EventWireParts {
     let proof = match proof_system {
         RadrootsValidationReceiptProofSystem::None => RadrootsValidationReceiptProof {
             inline_proof_base64: None,
@@ -4022,7 +4028,7 @@ fn signed_raw_sp1_worker_result_event(
     signed_raw_event(
         SERVICE_SECRET_KEY_HEX,
         created_at,
-        WireEventParts {
+        RadrootsNip01EventWireParts {
             kind: KIND_TRADE_TRANSITION_PROOF_RESULT,
             content,
             tags: vec![
@@ -4074,7 +4080,7 @@ fn signed_raw_worker_result_event(
     signed_raw_event(
         SERVICE_SECRET_KEY_HEX,
         created_at,
-        WireEventParts {
+        RadrootsNip01EventWireParts {
             kind: KIND_TRADE_TRANSITION_PROOF_RESULT,
             content,
             tags: vec![
@@ -4155,7 +4161,10 @@ async fn ingest_status_noise_events(
     for index in 0..non_trade_count {
         store
             .ingest_event(RadrootsEventIngest::new(
-                signed_status_noise_post_event(index, 32_000 + index as u32),
+                signed_event_from_envelope(signed_status_noise_post_event(
+                    index,
+                    32_000 + index as u32,
+                )),
                 1_700_200_000_000 + index,
             ))
             .await
@@ -4166,7 +4175,10 @@ async fn ingest_status_noise_events(
         let order_id = format!("status-noise-background-{index:03}");
         store
             .ingest_event(RadrootsEventIngest::new(
-                signed_order_request_event(&order_id, 33_000 + index as u32),
+                signed_event_from_envelope(signed_order_request_event(
+                    &order_id,
+                    33_000 + index as u32,
+                )),
                 1_700_200_100_000 + index,
             ))
             .await
@@ -4185,13 +4197,17 @@ fn hash32(ch: char) -> String {
 fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
 ) -> RadrootsEventEnvelope {
     let event = signed_raw_event(secret_key_hex, created_at, parts);
     radroots_event_from_nostr(&event)
 }
 
-fn signed_raw_event(secret_key_hex: &str, created_at: u32, parts: WireEventParts) -> nostr::Event {
+fn signed_raw_event(
+    secret_key_hex: &str,
+    created_at: u32,
+    parts: RadrootsNip01EventWireParts,
+) -> nostr::Event {
     let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
     let keys = RadrootsNostrKeys::new(secret_key);
     radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
@@ -4223,7 +4239,7 @@ fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr:
 #[cfg(any())]
 fn request_event_ptr(event: &RadrootsEventEnvelope) -> RadrootsEventPtr {
     RadrootsEventPtr {
-        id: event.id.clone(),
+        id: event.id_str().to_owned(),
         relays: Some(RELAY.to_owned()),
     }
 }
@@ -4268,7 +4284,7 @@ fn signed_status_noise_post_event(index: i64, created_at: u32) -> RadrootsEventE
     signed_event(
         SELLER_SECRET_KEY_HEX,
         created_at,
-        WireEventParts {
+        RadrootsNip01EventWireParts {
             kind: KIND_POST,
             content: format!("local status noise {index}"),
             tags: Vec::new(),
@@ -4280,7 +4296,7 @@ fn signed_non_order_event(created_at: u32) -> RadrootsEventEnvelope {
     signed_event(
         SELLER_SECRET_KEY_HEX,
         created_at,
-        WireEventParts {
+        RadrootsNip01EventWireParts {
             kind: KIND_LISTING,
             content: "{}".to_owned(),
             tags: vec![vec!["d".to_owned(), "not-an-order".to_owned()]],
@@ -4293,9 +4309,10 @@ fn signed_non_order_event(created_at: u32) -> RadrootsEventEnvelope {
 async fn order_request_evidence_ingest_stores_request_and_enables_decision_enqueue() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-ingested", 39);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
-    let ingest_request = TradeRequestEvidenceIngestRequest::new(request_event.clone())
-        .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
+    let ingest_request =
+        TradeRequestEvidenceIngestRequest::new(signed_event_from_envelope(request_event.clone()))
+            .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
 
     let ingest_receipt = sdk
         .trades()
@@ -4359,13 +4376,15 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
 async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-evidence-ingest", 39);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event =
         signed_order_decision_event("order-evidence-ingest", &request_event_id, 40);
 
     let request_receipt = sdk
         .trades()
-        .ingest_evidence(TradeEvidenceIngestRequest::new(request_event.clone()))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_event_from_envelope(
+            request_event.clone(),
+        )))
         .await
         .expect("request evidence");
     assert_eq!(request_receipt.order_id.as_str(), "order-evidence-ingest");
@@ -4375,7 +4394,9 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 
     let decision_receipt = sdk
         .trades()
-        .ingest_evidence(TradeEvidenceIngestRequest::new(decision_event.clone()))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_event_from_envelope(
+            decision_event.clone(),
+        )))
         .await
         .expect("decision evidence");
     assert_eq!(decision_receipt.order_id.as_str(), "order-evidence-ingest");
@@ -4385,7 +4406,9 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
 
     let duplicate_receipt = sdk
         .trades()
-        .ingest_evidence(TradeEvidenceIngestRequest::new(decision_event))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_event_from_envelope(
+            decision_event,
+        )))
         .await
         .expect("duplicate decision evidence");
     assert_eq!(duplicate_receipt.local_event_seq, 2);
@@ -4420,7 +4443,9 @@ async fn order_evidence_ingest_rejects_non_order_events() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let error = sdk
         .trades()
-        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_non_order_event(41)))
+        .ingest_evidence(TradeEvidenceIngestRequest::new(signed_event_from_envelope(
+            signed_non_order_event(41),
+        )))
         .await
         .expect_err("non order event");
 
@@ -4443,7 +4468,9 @@ async fn order_request_evidence_ingest_rejects_non_request_events() {
 
     let error = sdk
         .trades()
-        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(decision_event))
+        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(
+            signed_event_from_envelope(decision_event),
+        ))
         .await
         .expect_err("non request event");
 
@@ -4483,11 +4510,11 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
     assert_eq!(accepted.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
     assert_eq!(accepted.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
     assert_eq!(accepted.request_event_id, request_event_id);
-    assert_eq!(accepted.frozen_draft.kind, KIND_ORDER_DECISION);
+    assert_eq!(accepted.frozen_draft.kind_u32(), KIND_ORDER_DECISION);
     assert_eq!(accepted.created_at.unix_seconds(), 1_700_000_000);
     assert_eq!(
         accepted.expected_event_id,
-        accepted.frozen_draft.expected_event_id
+        accepted.frozen_draft.expected_event_id_str()
     );
 
     let mut declined_payload = order_decision("order-decision-prepare-decline");
@@ -4504,7 +4531,7 @@ async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
         .expect("declined plan");
 
     assert_eq!(declined.order_id.as_str(), "order-decision-prepare-decline");
-    assert_eq!(declined.frozen_draft.kind, KIND_ORDER_DECISION);
+    assert_eq!(declined.frozen_draft.kind_u32(), KIND_ORDER_DECISION);
     assert_eq!(
         store
             .status_summary()
@@ -4661,7 +4688,10 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
 
     let request_event = signed_order_request_event("order-decision-serialized-enqueue", 45);
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_500))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            4_500,
+        ))
         .await
         .expect("ingest request");
     let enqueue_request = TradeDecisionEnqueueRequest::new(
@@ -4799,7 +4829,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
             "order_id": receipt.order_id.as_str(),
             "locator": {
                 "trade_id": receipt.order_id.as_str(),
-                "root_event_id": request_event.id.as_str(),
+                "root_event_id": request_event.id_str(),
                 "listing_addr": receipt.listing_addr.as_str(),
                 "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
                 "seller_pubkey": SELLER_PUBLIC_KEY_HEX
@@ -4807,7 +4837,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
             "listing_addr": receipt.listing_addr.as_str(),
             "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
             "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
-            "request_event_id": request_event.id.as_str(),
+            "request_event_id": request_event.id_str(),
             "expected_event_id": receipt.expected_event_id.as_str(),
             "signed_event_id": receipt.signed_event_id.as_str(),
             "local_event_seq": 2,
@@ -5069,18 +5099,19 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
 
     let event = signed_order_request_event("order-evidence-dto", 77);
     let request_evidence =
-        TradeRequestEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+        TradeRequestEvidenceIngestRequest::new(signed_event_from_envelope(event.clone()))
+            .with_observed_at(created_at);
     let request_evidence_json =
         serde_json::to_value(&request_evidence).expect("request evidence json");
     assert_struct_serialize_error_paths(&request_evidence, 2);
-    assert_eq!(request_evidence_json["event"]["id"], event.id.as_str());
+    assert_eq!(request_evidence_json["event"]["id"], event.id_str());
     assert_eq!(request_evidence_json["observed_at"], 1_700_000_654);
 
-    let order_evidence =
-        TradeEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+    let order_evidence = TradeEvidenceIngestRequest::new(signed_event_from_envelope(event.clone()))
+        .with_observed_at(created_at);
     let order_evidence_json = serde_json::to_value(&order_evidence).expect("order evidence json");
     assert_struct_serialize_error_paths(&order_evidence, 2);
-    assert_eq!(order_evidence_json["event"]["id"], event.id.as_str());
+    assert_eq!(order_evidence_json["event"]["id"], event.id_str());
     assert_eq!(order_evidence_json["observed_at"], 1_700_000_654);
 }
 
@@ -5089,9 +5120,12 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
 async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_status() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-accept", 40);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            4_000,
+        ))
         .await
         .expect("ingest request");
     let request = TradeDecisionEnqueueRequest::new(
@@ -5152,7 +5186,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
         .expect("outbox event")
         .expect("outbox event");
     assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
-    assert_eq!(outbox_event.draft.kind, KIND_ORDER_DECISION);
+    assert_eq!(outbox_event.draft.kind_u32(), KIND_ORDER_DECISION);
     assert!(outbox_event.signed_event.is_some());
 
     let status = sdk
@@ -5168,7 +5202,7 @@ async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_st
             .request_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(request_event.id.as_str())
+        Some(request_event.id_str())
     );
     assert_eq!(
         status
@@ -5194,7 +5228,10 @@ async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() 
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-decline", 41);
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_100))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            4_100,
+        ))
         .await
         .expect("ingest request");
     let mut decision = order_decision("order-decision-decline");
@@ -5290,7 +5327,10 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-wrong-signer", 42);
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_200))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            4_200,
+        ))
         .await
         .expect("ingest request");
     let request = TradeDecisionEnqueueRequest::new(
@@ -5332,7 +5372,7 @@ async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_
 async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-conflict", 43);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event =
         signed_order_decision_event("order-decision-conflict", &request_event_id, 44);
     for (event, observed_at_ms) in [
@@ -5340,7 +5380,10 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
         (decision_event.clone(), 4_400),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest");
     }
@@ -5385,7 +5428,7 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
             .decision_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(decision_event.id.as_str())
+        Some(decision_event.id_str())
     );
 }
 
@@ -5394,9 +5437,12 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
 async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-agreement", 50);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 5_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            5_000,
+        ))
         .await
         .expect("ingest request");
 
@@ -5544,9 +5590,12 @@ async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
 async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lifecycle() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-pending-revision", 55);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 5_500))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            5_500,
+        ))
         .await
         .expect("ingest request");
     let proposal = order_revision_proposal(
@@ -5662,9 +5711,12 @@ async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lif
 async fn order_declined_revision_finalizes_declined_negotiation() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-declined-revision", 56);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 5_600))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            5_600,
+        ))
         .await
         .expect("ingest request");
     let proposal = order_revision_proposal(
@@ -5784,9 +5836,12 @@ async fn order_declined_revision_finalizes_declined_negotiation() {
 async fn order_cancel_lifecycle_enqueue_updates_status() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-cancel", 60);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 6_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            6_000,
+        ))
         .await
         .expect("ingest request");
     let cancellation_actor = buyer_actor();
@@ -5882,7 +5937,7 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
 async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-lifecycle-invalid", 70);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let missing = sdk
         .trades()
         .enqueue_revision_proposal_with_explicit_signer(
@@ -5916,7 +5971,10 @@ async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
     );
 
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 7_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            7_000,
+        ))
         .await
         .expect("ingest request");
     let decision_receipt = sdk
@@ -6043,9 +6101,12 @@ async fn order_status_query_uses_indexed_order_id_under_background_event_noise()
     .await;
 
     let request_event = signed_order_request_event("order-status-noise-active", 31_000);
-    let request_event_id = request_event.id.clone();
+    let request_event_id = request_event.id().clone();
     store
-        .ingest_event(RadrootsEventIngest::new(request_event, 1_700_200_000_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event),
+            1_700_200_000_000,
+        ))
         .await
         .expect("active order ingest");
 
@@ -6588,7 +6649,7 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
 async fn order_status_projects_local_request_and_decision_events() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-1", 20);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event = signed_order_decision_event("order-1", &request_event_id, 21);
 
     for (event, observed_at_ms) in [
@@ -6596,7 +6657,10 @@ async fn order_status_projects_local_request_and_decision_events() {
         (decision_event.clone(), 2_100),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest");
     }
@@ -6618,7 +6682,7 @@ async fn order_status_projects_local_request_and_decision_events() {
             .iter()
             .map(RadrootsEventId::as_str)
             .collect::<Vec<_>>(),
-        vec![request_event.id.as_str(), decision_event.id.as_str()]
+        vec![request_event.id_str(), decision_event.id_str()]
     );
     assert_eq!(receipt.status, TradeStatusKind::AgreedPendingRhi);
     assert_eq!(
@@ -6626,18 +6690,18 @@ async fn order_status_projects_local_request_and_decision_events() {
             .request_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(request_event.id.as_str())
+        Some(request_event.id_str())
     );
     assert_eq!(
         receipt
             .decision_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(decision_event.id.as_str())
+        Some(decision_event.id_str())
     );
     assert_eq!(
         receipt.last_event_id.as_ref().map(RadrootsEventId::as_str),
-        Some(decision_event.id.as_str())
+        Some(decision_event.id_str())
     );
     assert_eq!(receipt.listing_addr, Some(listing_address()));
     assert_eq!(
@@ -6671,12 +6735,15 @@ async fn order_status_projects_local_request_and_decision_events() {
 async fn order_status_reports_limited_local_results() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-1", 25);
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
     let decision_event = signed_order_decision_event("order-1", &request_event_id, 26);
 
     for (event, observed_at_ms) in [(request_event.clone(), 2_500), (decision_event, 2_600)] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest");
     }
@@ -6697,19 +6764,19 @@ async fn order_status_reports_limited_local_results() {
             .iter()
             .map(RadrootsEventId::as_str)
             .collect::<Vec<_>>(),
-        vec![request_event.id.as_str()]
+        vec![request_event.id_str()]
     );
     assert_eq!(
         receipt
             .request_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(request_event.id.as_str())
+        Some(request_event.id_str())
     );
     assert!(receipt.decision_event_id.is_none());
     assert_eq!(
         receipt.last_event_id.as_ref().map(RadrootsEventId::as_str),
-        Some(request_event.id.as_str())
+        Some(request_event.id_str())
     );
     assert!(receipt.issues.is_empty());
 }
@@ -6725,7 +6792,10 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
         (second_request_event.clone(), 2_800),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest");
     }
@@ -6745,10 +6815,7 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
             .iter()
             .map(RadrootsEventId::as_str)
             .collect::<Vec<_>>(),
-        vec![
-            first_request_event.id.as_str(),
-            second_request_event.id.as_str()
-        ]
+        vec![first_request_event.id_str(), second_request_event.id_str()]
     );
     assert!(receipt.issues.is_empty());
     let candidate_roots = receipt
@@ -6765,10 +6832,7 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
         .collect::<Vec<_>>();
     assert_eq!(
         candidate_roots,
-        vec![
-            first_request_event.id.as_str(),
-            second_request_event.id.as_str()
-        ]
+        vec![first_request_event.id_str(), second_request_event.id_str()]
     );
     assert_eq!(
         receipt
@@ -6777,15 +6841,15 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
             .map(|candidate| TradeStatusRequest::locator_selector(&candidate.locator))
             .collect::<Vec<_>>(),
         vec![
-            format!("order-1@{}", first_request_event.id.as_str()),
-            format!("order-1@{}", second_request_event.id.as_str())
+            format!("order-1@{}", first_request_event.id_str()),
+            format!("order-1@{}", second_request_event.id_str())
         ]
     );
 
     let root_specific = sdk
         .trades()
         .status(
-            TradeStatusRequest::parse(&format!("order-1@{}", second_request_event.id.as_str()))
+            TradeStatusRequest::parse(&format!("order-1@{}", second_request_event.id_str()))
                 .expect("root status request"),
         )
         .await
@@ -6798,7 +6862,7 @@ async fn order_status_reports_root_ambiguity_for_reused_trade_ids() {
             .request_event_id
             .as_ref()
             .map(RadrootsEventId::as_str),
-        Some(second_request_event.id.as_str())
+        Some(second_request_event.id_str())
     );
     assert!(root_specific.ambiguity_candidates.is_empty());
 }
@@ -6815,7 +6879,10 @@ async fn trade_product_mutation_returns_structured_ambiguity() {
         (second_request_event.clone(), 2_800),
     ] {
         store
-            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event_from_envelope(event),
+                observed_at_ms,
+            ))
             .await
             .expect("ingest");
     }
@@ -6860,10 +6927,7 @@ async fn trade_product_mutation_returns_structured_ambiguity() {
                     .expect("root event id")
             })
             .collect::<Vec<_>>(),
-        vec![
-            first_request_event.id.as_str(),
-            second_request_event.id.as_str()
-        ]
+        vec![first_request_event.id_str(), second_request_event.id_str()]
     );
     assert_eq!(
         error.recovery_actions(),
@@ -6887,11 +6951,14 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     let request_event = signed_order_request_event("order-1", 30);
     let raw_event_json = serde_json::to_string(&request_event).expect("raw event json");
     store
-        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 3_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event.clone()),
+            3_000,
+        ))
         .await
         .expect("ingest");
     sqlx::query("UPDATE event_envelopes SET tags_json = '[' WHERE event_id = ?")
-        .bind(request_event.id.as_str())
+        .bind(request_event.id_str())
         .execute(store.pool())
         .await
         .expect("corrupt tags");
@@ -6906,7 +6973,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
     assert!(matches!(error, RadrootsSdkError::Projection { .. }));
     assert!(message.contains("contains invalid tags_json"));
     assert!(!message.contains(raw_event_json.as_str()));
-    assert!(!message.contains(request_event.sig.as_str()));
+    assert!(!message.contains(request_event.sig_str()));
     assert!(!message.contains("\"tags\""));
     assert!(!message.contains("\"content\""));
 }
@@ -6917,7 +6984,10 @@ async fn trade_status_watch_emits_finite_refresh_window() {
     let order_id = "watch-finite-refresh-window";
     let request_event = signed_order_request_event(order_id, 820);
     store
-        .ingest_event(RadrootsEventIngest::new(request_event, 1_700_400_000_000))
+        .ingest_event(RadrootsEventIngest::new(
+            signed_event_from_envelope(request_event),
+            1_700_400_000_000,
+        ))
         .await
         .expect("request ingest");
 
@@ -7056,7 +7126,7 @@ async fn manual_local_status_perf_gate_measures_100k_events() {
         let event = signed_order_request_event(&order_id, 20_000 + index as u32);
         store
             .ingest_event(RadrootsEventIngest::new(
-                event,
+                signed_event_from_envelope(event),
                 1_700_100_000_000 + index as i64,
             ))
             .await

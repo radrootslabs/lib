@@ -2,8 +2,8 @@ use super::*;
 use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
 use radroots_event::contract::RadrootsActorRole;
+use radroots_event::draft::RadrootsEventDraft;
 use radroots_event::kinds::{KIND_COOP, KIND_FARM};
-use radroots_event_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
@@ -64,15 +64,13 @@ fn frozen_draft_with(
     tags: Vec<Vec<String>>,
     content: &str,
 ) -> RadrootsEventDraft {
-    to_frozen_draft(
-        WireEventParts {
-            kind,
-            content: content.to_owned(),
-            tags,
-        },
+    RadrootsEventDraft::new(
         contract_id,
+        kind,
+        u64::from(created_at),
+        tags,
+        content,
         pubkey,
-        created_at,
     )
     .expect("frozen draft")
 }
@@ -80,7 +78,7 @@ fn frozen_draft_with(
 fn sign_event(keys: &RadrootsNostrKeys, draft: &RadrootsEventDraft) -> RadrootsNostrEvent {
     let signed =
         radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(keys, draft).expect("signed");
-    RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event")
+    RadrootsNostrEvent::from_json(signed.raw_json()).expect("event")
 }
 
 fn response_event(
@@ -255,7 +253,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
     assert!(provider.capability().nip46_permissions.is_empty());
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::LocalKey);
     assert_eq!(receipt.signer_pubkey, USER_PUBLIC_KEY_HEX);
-    assert_eq!(receipt.signed_event_id, draft.expected_event_id);
+    assert_eq!(receipt.signed_event_id, draft.expected_event_id_str());
     assert_eq!(
         progress,
         vec![
@@ -530,7 +528,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let draft = frozen_draft();
     let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
         .expect("signed");
-    let signed_event = RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event");
+    let signed_event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("event");
     let transport = Arc::new(MockNip46Transport::new(
         remote_keys.clone(),
         vec![MockNip46Response::Respond(
@@ -584,14 +582,17 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         .into_iter()
         .map(Tag::to_vec)
         .collect::<Vec<_>>();
-    assert_eq!(sign_event_request.pubkey.to_hex(), draft.expected_pubkey);
+    assert_eq!(
+        sign_event_request.pubkey.to_hex(),
+        draft.expected_pubkey_str()
+    );
     assert_eq!(
         sign_event_request.created_at.as_secs(),
-        u64::from(draft.created_at)
+        draft.created_at_u64()
     );
-    assert_eq!(sign_event_request.kind.as_u16(), draft.kind as u16);
-    assert_eq!(request_tags, draft.tags);
-    assert_eq!(sign_event_request.content, draft.content);
+    assert_eq!(sign_event_request.kind.as_u16(), draft.kind_u32() as u16);
+    assert_eq!(request_tags, draft.tags_as_vec());
+    assert_eq!(sign_event_request.content, draft.content());
     let request_id = request_messages[0]
         .id
         .strip_prefix("radroots-sdk-myc-nip46-sign-")
@@ -608,48 +609,6 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
             }
         ]
     );
-}
-
-#[test]
-fn myc_nip46_sign_event_request_reports_invalid_frozen_drafts() {
-    let mut invalid_pubkey = frozen_draft();
-    invalid_pubkey.expected_pubkey = "not-a-public-key".to_owned();
-    let error = sign_event_request_from_frozen_draft(&invalid_pubkey)
-        .expect_err("invalid NIP-46 pubkey error");
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerProtocol {
-            mode,
-            ref reason
-        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
-            && reason.contains("failed to parse frozen draft pubkey")
-    ));
-
-    let mut oversized_kind = frozen_draft();
-    oversized_kind.kind = u32::from(u16::MAX) + 1;
-    let error = sign_event_request_from_frozen_draft(&oversized_kind)
-        .expect_err("oversized NIP-46 event kind error");
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerProtocol {
-            mode,
-            ref reason
-        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
-            && reason.contains("failed to convert frozen draft kind")
-    ));
-
-    let mut empty_tag = frozen_draft();
-    empty_tag.tags = vec![Vec::new()];
-    let error =
-        sign_event_request_from_frozen_draft(&empty_tag).expect_err("invalid NIP-46 tag error");
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerProtocol {
-            mode,
-            ref reason
-        } if mode == RadrootsSdkSignerMode::MycNip46.as_str()
-            && reason.contains("failed to convert frozen draft tags")
-    ));
 }
 
 #[tokio::test]
@@ -727,7 +686,7 @@ async fn myc_nip46_provider_returns_completion_progress_errors_after_remote_sign
     let draft = frozen_draft();
     let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
         .expect("signed");
-    let signed_event = RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event");
+    let signed_event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("event");
     let (signer, transport) = myc_signer_with_responses(vec![MockNip46Response::Respond(
         RadrootsNostrConnectResponse::SignedEvent(signed_event),
     )]);
@@ -1086,5 +1045,5 @@ async fn sdk_builder_installs_configured_signer_provider() {
         ))
         .await
         .expect("receipt");
-    assert_eq!(receipt.signed_event_id, draft.expected_event_id);
+    assert_eq!(receipt.signed_event_id, draft.expected_event_id_str());
 }
