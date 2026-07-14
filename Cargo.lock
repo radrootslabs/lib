@@ -1502,7 +1502,8 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "dto_bindgen"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=d323df81bba8aa2335c70c1fb039e5af5e40a98e#d323df81bba8aa2335c70c1fb039e5af5e40a98e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "344721c4ea7c610331888cf2deb8c6f9e4946e9826556f174d6d83e1138760e9"
 dependencies = [
  "dto_bindgen_backend_python",
  "dto_bindgen_backend_ts",
@@ -1514,7 +1515,8 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_backend_python"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=d323df81bba8aa2335c70c1fb039e5af5e40a98e#d323df81bba8aa2335c70c1fb039e5af5e40a98e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "038d5b4aa350d45dd0ea198f685413012232db10dd09238f1b5cd1934301235a"
 dependencies = [
  "dto_bindgen_core",
 ]
@@ -1522,7 +1524,8 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_backend_ts"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=d323df81bba8aa2335c70c1fb039e5af5e40a98e#d323df81bba8aa2335c70c1fb039e5af5e40a98e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc2b545740c6aa6e5f675f88e27ed19b6c06b808a99cda3249bf5c9b9b309479"
 dependencies = [
  "dto_bindgen_core",
 ]
@@ -1530,7 +1533,8 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_core"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=d323df81bba8aa2335c70c1fb039e5af5e40a98e#d323df81bba8aa2335c70c1fb039e5af5e40a98e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "748aa1b194fc9e4d5c3fd44541c991dd5572cb12c8156fed35a0c7d13f937e12"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1544,7 +1548,8 @@ dependencies = [
 [[package]]
 name = "dto_bindgen_macros"
 version = "0.1.0"
-source = "git+https://github.com/triesap/dto_bindgen?rev=d323df81bba8aa2335c70c1fb039e5af5e40a98e#d323df81bba8aa2335c70c1fb039e5af5e40a98e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3cb9aafc704e13c470498fb9c351353af71c759ba810239bfb82f2d69658934"
 dependencies = [
  "proc-macro2",
  "quote",
