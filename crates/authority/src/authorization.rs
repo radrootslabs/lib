@@ -259,7 +259,17 @@ mod tests {
                 sig: hex_128('f'),
                 extra: Default::default(),
             };
-            RadrootsSignedEvent::from_wire_unchecked(wire, "{}").map_err(|error| {
+            let mut wire = wire;
+            if self.overrides.event_id.is_none() {
+                wire.id = wire
+                    .computed_event_id()
+                    .map_err(|error| RadrootsSignerError::SigningFailed {
+                        message: error.to_string(),
+                    })?
+                    .into_string();
+            }
+            let raw_json = raw_json_for_wire(&wire);
+            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
                 RadrootsSignerError::SigningFailed {
                     message: error.to_string(),
                 }
@@ -269,7 +279,6 @@ mod tests {
 
     fn signed_event_from_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
         signed_event_from_parts(
-            draft.expected_event_id_str().to_owned(),
             draft.expected_pubkey_str().to_owned(),
             draft.created_at_u64(),
             draft.kind_u32(),
@@ -279,27 +288,38 @@ mod tests {
     }
 
     fn signed_event_from_parts(
-        id: String,
         pubkey: String,
         created_at: u64,
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
     ) -> RadrootsSignedEvent {
-        RadrootsSignedEvent::from_wire_unchecked(
-            RadrootsNip01EventWire {
-                id,
-                pubkey,
-                created_at,
-                kind,
-                tags,
-                content,
-                sig: hex_128('f'),
-                extra: Default::default(),
-            },
-            "{}",
-        )
-        .expect("signed event")
+        let mut wire = RadrootsNip01EventWire {
+            id: String::new(),
+            pubkey,
+            created_at,
+            kind,
+            tags,
+            content,
+            sig: hex_128('f'),
+            extra: Default::default(),
+        };
+        wire.id = wire.computed_event_id().expect("event id").into_string();
+        let raw_json = raw_json_for_wire(&wire);
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    }
+
+    fn raw_json_for_wire(wire: &RadrootsNip01EventWire) -> String {
+        serde_json::json!({
+            "id": wire.id,
+            "pubkey": wire.pubkey,
+            "created_at": wire.created_at,
+            "kind": wire.kind,
+            "tags": wire.tags,
+            "content": wire.content,
+            "sig": wire.sig,
+        })
+        .to_string()
     }
 
     #[test]
@@ -367,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn signed_event_id_mismatch_fails() {
+    fn signer_explicit_id_mismatch_fails_before_authorized_signing() {
         let pubkey = hex_64('a');
         let draft = listing_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
@@ -375,7 +395,9 @@ mod tests {
 
         assert!(matches!(
             sign_authorized_draft(&actor, &signer, &draft),
-            Err(RadrootsAuthorityError::SignedEventIdMismatch { .. })
+            Err(RadrootsAuthorityError::Signer(
+                RadrootsSignerError::SigningFailed { .. }
+            ))
         ));
     }
 
@@ -486,7 +508,6 @@ mod tests {
         let pubkey = hex_64('a');
         let draft = listing_draft(pubkey.as_str());
         let signed = signed_event_from_parts(
-            draft.expected_event_id_str().to_owned(),
             hex_64('b'),
             draft.created_at_u64(),
             draft.kind_u32(),

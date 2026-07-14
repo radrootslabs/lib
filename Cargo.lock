@@ -4268,6 +4268,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_event",
  "radroots_nostr",
+ "serde_json",
 ]
 
 [[package]]

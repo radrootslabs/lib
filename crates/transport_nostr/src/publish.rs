@@ -716,16 +716,13 @@ mod tests {
         (raw_event, signed_event)
     }
 
-    fn assert_mismatch(raw_event: &RadrootsNostrEvent, signed_event: RadrootsSignedEvent) {
-        assert!(ensure_raw_event_matches_signed_event(raw_event, &signed_event).is_err());
+    fn assert_mismatch(raw_event: RadrootsNostrEvent, signed_event: &RadrootsSignedEvent) {
+        assert!(ensure_raw_event_matches_signed_event(&raw_event, signed_event).is_err());
     }
 
-    fn signed_event_with_wire(
-        original: &RadrootsSignedEvent,
-        wire: RadrootsNip01EventWire,
-    ) -> RadrootsSignedEvent {
-        RadrootsSignedEvent::from_wire_unchecked(wire, original.raw_json().to_owned())
-            .expect("signed event")
+    fn raw_event_from_wire(wire: RadrootsNip01EventWire) -> RadrootsNostrEvent {
+        RadrootsNostrEvent::from_json(serde_json::to_string(&wire).expect("raw event json"))
+            .expect("raw event")
     }
 
     #[test]
@@ -735,30 +732,30 @@ mod tests {
 
         let mut wire = signed_event.wire().clone();
         wire.id = "00".repeat(32);
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.pubkey = "11".repeat(32);
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.created_at += 1;
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.kind += 1;
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.content.push_str(" changed");
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.sig = "22".repeat(64);
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
 
         let mut wire = signed_event.wire().clone();
         wire.tags.push(vec!["t".to_owned(), "compost".to_owned()]);
-        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
+        assert_mismatch(raw_event_from_wire(wire), &signed_event);
     }
 }

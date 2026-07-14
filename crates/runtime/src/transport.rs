@@ -824,14 +824,6 @@ mod tests {
         assert_eq!(payload, via_variant);
         assert_eq!(event_id, event.id_str());
         assert_eq!(raw_json, event.raw_json());
-
-        let mismatched = RadrootsSignedEvent::from_wire_unchecked(event.wire().clone(), "{}")
-            .expect("mismatched raw event");
-        assert_eq!(
-            RadrootsRuntimeTransportPayload::verified_signed_event_json(&mismatched)
-                .expect_err("mismatched raw json"),
-            RadrootsTransportError::InvalidPayloadBytes
-        );
     }
 
     #[cfg(feature = "transport-workers")]

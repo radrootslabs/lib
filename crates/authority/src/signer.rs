@@ -114,23 +114,36 @@ mod tests {
                 .as_deref()
                 .unwrap_or(draft.expected_event_id_str())
                 .to_owned();
-            RadrootsSignedEvent::from_wire_unchecked(
-                RadrootsNip01EventWire {
-                    id,
-                    pubkey: self.pubkey.to_string(),
-                    created_at: draft.created_at_u64(),
-                    kind: draft.kind_u32(),
-                    tags: draft.tags_as_vec(),
-                    content: draft.content().to_owned(),
-                    sig: hex_128('f'),
-                    extra: Default::default(),
-                },
-                "{}",
-            )
-            .map_err(|error| RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
+            let wire = RadrootsNip01EventWire {
+                id,
+                pubkey: self.pubkey.to_string(),
+                created_at: draft.created_at_u64(),
+                kind: draft.kind_u32(),
+                tags: draft.tags_as_vec(),
+                content: draft.content().to_owned(),
+                sig: hex_128('f'),
+                extra: Default::default(),
+            };
+            let raw_json = raw_json_for_wire(&wire);
+            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
+                RadrootsSignerError::SigningFailed {
+                    message: error.to_string(),
+                }
             })
         }
+    }
+
+    fn raw_json_for_wire(wire: &RadrootsNip01EventWire) -> String {
+        serde_json::json!({
+            "id": wire.id,
+            "pubkey": wire.pubkey,
+            "created_at": wire.created_at,
+            "kind": wire.kind,
+            "tags": wire.tags,
+            "content": wire.content,
+            "sig": wire.sig,
+        })
+        .to_string()
     }
 
     #[test]

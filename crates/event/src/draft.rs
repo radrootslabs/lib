@@ -489,7 +489,8 @@ impl RadrootsSignedEvent {
         })
     }
 
-    pub fn from_wire_unchecked(
+    #[cfg(test)]
+    fn from_wire_unchecked(
         wire: RadrootsNip01EventWire,
         raw_json: impl Into<String>,
     ) -> Result<Self, RadrootsSignedEventError> {
@@ -600,12 +601,6 @@ pub fn validate_signed_nostr_event_matches_draft(
             actual_pubkey: signed_event.pubkey_str().to_owned(),
         });
     }
-    if signed_event.id_str() != draft.expected_event_id_str() {
-        return Err(RadrootsDraftError::SignedEventIdMismatch {
-            expected_event_id: draft.expected_event_id_str().to_owned(),
-            actual_event_id: signed_event.id_str().to_owned(),
-        });
-    }
     if signed_event.created_at() != draft.created_at_u64() {
         return Err(RadrootsDraftError::SignedEventCreatedAtMismatch {
             expected_created_at: draft.created_at_u64(),
@@ -630,6 +625,12 @@ pub fn validate_signed_nostr_event_matches_draft(
         return Err(RadrootsDraftError::SignedEventContentMismatch {
             expected_len: draft.content().len(),
             actual_len: signed_event.content().len(),
+        });
+    }
+    if signed_event.id_str() != draft.expected_event_id_str() {
+        return Err(RadrootsDraftError::SignedEventIdMismatch {
+            expected_event_id: draft.expected_event_id_str().to_owned(),
+            actual_event_id: signed_event.id_str().to_owned(),
         });
     }
     let computed_event_id = compute_nip01_event_id(

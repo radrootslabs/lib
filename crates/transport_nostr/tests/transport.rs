@@ -778,13 +778,6 @@ fn verified_signed_event_payload_preserves_transport_payload_identity() {
     assert_eq!(event_id, signed.id_str());
     assert_eq!(raw_json, signed.raw_json().to_owned());
     assert_eq!(digest.len(), 64);
-
-    let mismatched =
-        RadrootsSignedEvent::from_wire_unchecked(signed.wire().clone(), "{}").expect("mismatch");
-    assert_eq!(
-        verified_signed_event_payload(&mismatched).expect_err("mismatched raw json"),
-        RadrootsTransportError::InvalidPayloadBytes
-    );
 }
 
 #[tokio::test]
