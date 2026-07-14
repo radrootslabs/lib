@@ -20,6 +20,7 @@ pub struct RadrootsFollow {
 )]
 #[derive(Clone, Debug)]
 pub struct RadrootsFollowProfile {
+    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_number"))]
     pub published_at: u64,
     pub public_key: String,
     pub relay_url: Option<String>,

@@ -3,7 +3,6 @@
 
 pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescriptor> {
     ::std::vec![
-        ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventEnvelope>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventPtr>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventRef>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::account::RadrootsAccountClaim>(),
@@ -14,6 +13,16 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::coop::RadrootsCoopRef>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::document::RadrootsDocument>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::document::RadrootsDocumentSubject>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsNip01EventWireDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsSignedEventDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::dto::RadrootsSignedEventVerificationStateDto,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsVerifiedSignedEventDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::dto::RadrootsVerifiedSignedEventVerificationStateDto,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::envelope::RadrootsEventEnvelope>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarm>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarmPublicLocation>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarmRef>(),

@@ -60,6 +60,8 @@ source_files = [
   "crates/event/src/comment.rs",
   "crates/event/src/coop.rs",
   "crates/event/src/document.rs",
+  "crates/event/src/dto.rs",
+  "crates/event/src/envelope.rs",
   "crates/event/src/farm.rs",
   "crates/event/src/follow.rs",
   "crates/event/src/gcs.rs",

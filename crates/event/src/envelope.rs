@@ -296,10 +296,12 @@ pub struct RadrootsEventEnvelopeParts {
 )]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsEventEnvelopeDto")))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventEnvelope {
     id: RadrootsEventId,
     author: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_number"))]
     created_at: RadrootsEventTimestamp,
     kind: RadrootsEventKind,
     tags: RadrootsEventTags,

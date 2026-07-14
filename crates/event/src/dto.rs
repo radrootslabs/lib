@@ -1,3 +1,62 @@
+use crate::RadrootsEventEnvelope;
+
+#[derive(dto_bindgen::Dto)]
+#[dto(export)]
+pub struct RadrootsNip01EventWireDto {
+    pub id: String,
+    pub pubkey: String,
+    #[dto(int = "json_number")]
+    pub created_at: u64,
+    pub kind: u32,
+    pub tags: Vec<Vec<String>>,
+    pub content: String,
+    pub sig: String,
+    pub extra: RadrootsNip01EventExtraDto,
+}
+
+#[derive(dto_bindgen::Dto)]
+#[dto(export)]
+#[dto(as = "string_enum")]
+pub enum RadrootsSignedEventVerificationStateDto {
+    #[dto(rename = "id_verified")]
+    IdVerified,
+}
+
+#[derive(dto_bindgen::Dto)]
+#[dto(export)]
+#[dto(as = "string_enum")]
+pub enum RadrootsVerifiedSignedEventVerificationStateDto {
+    #[dto(rename = "signature_verified")]
+    SignatureVerified,
+}
+
+#[derive(dto_bindgen::Dto)]
+#[dto(export)]
+pub struct RadrootsSignedEventDto {
+    pub state: RadrootsSignedEventVerificationStateDto,
+    pub envelope: RadrootsEventEnvelope,
+    pub wire: RadrootsNip01EventWireDto,
+    pub raw_json: String,
+}
+
+#[derive(dto_bindgen::Dto)]
+#[dto(export)]
+pub struct RadrootsVerifiedSignedEventDto {
+    pub state: RadrootsVerifiedSignedEventVerificationStateDto,
+    pub signed_event: RadrootsSignedEventDto,
+}
+
+pub struct RadrootsNip01EventExtraDto;
+
+impl dto_bindgen::Dto for RadrootsNip01EventExtraDto {
+    fn describe(_ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
+        dto_bindgen::__private::TypeRef::Override(dto_bindgen::__private::TargetOverride::new(
+            dto_bindgen::__private::BackendId::TypeScript,
+            "{ [key: string]: unknown }",
+        ))
+    }
+}
+
 #[path = "generated/dto_roots.rs"]
 mod generated_roots;
 
@@ -20,6 +79,9 @@ mod tests {
         let export_names = registry_export_names(&registry);
 
         assert!(export_names.contains("RadrootsEventEnvelope"));
+        assert!(export_names.contains("RadrootsNip01EventWireDto"));
+        assert!(export_names.contains("RadrootsSignedEventDto"));
+        assert!(export_names.contains("RadrootsVerifiedSignedEventDto"));
         assert!(export_names.contains("RadrootsListingImageSize"));
     }
 
