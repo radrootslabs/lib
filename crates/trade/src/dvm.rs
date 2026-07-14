@@ -401,15 +401,16 @@ pub fn build_transition_proof_request_tags(
 pub fn parse_transition_proof_request_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsTradeTransitionProofRequestEnvelope, RadrootsTradeDvmError> {
-    if event.kind != KIND_TRADE_TRANSITION_PROOF_REQUEST {
+    if event.kind_u32() != KIND_TRADE_TRANSITION_PROOF_REQUEST {
         return Err(RadrootsTradeDvmError::UnsupportedKind {
             expected: KIND_TRADE_TRANSITION_PROOF_REQUEST,
-            actual: event.kind,
+            actual: event.kind_u32(),
         });
     }
-    let tags = parse_transition_proof_request_tags(&event.tags)?;
+    let event_tags = event.tags_as_vec();
+    let tags = parse_transition_proof_request_tags(&event_tags)?;
     let content: RadrootsTradeTransitionProofRequestV1 =
-        serde_json::from_str(&event.content).map_err(RadrootsTradeDvmError::InvalidContent)?;
+        serde_json::from_str(event.content()).map_err(RadrootsTradeDvmError::InvalidContent)?;
     validate_transition_proof_request_binding(&tags, &content)?;
     validate_transition_proof_request_content(&content)?;
     Ok(RadrootsTradeTransitionProofRequestEnvelope { tags, content })
@@ -437,13 +438,7 @@ pub fn build_transition_proof_result_tags(
     inputs: &[RadrootsTradeDvmInputTag],
     binding: &RadrootsTradeTransitionProofResultBinding,
 ) -> Result<Vec<Vec<String>>, RadrootsTradeDvmError> {
-    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).map_err(|source| {
-        RadrootsTradeDvmError::InvalidTag {
-            tag: TAG_E,
-            value: request_event.id.clone(),
-            source,
-        }
-    })?;
+    let request_event_id = request_event.id().clone();
     let request_json = serialize_request_event(request_event)?;
     let mut tags = vec![
         vec![RADROOTS_DVM_TAG_REQUEST.to_string(), request_json],
@@ -514,13 +509,13 @@ pub fn parse_transition_proof_result_tags(
     let request_event_json = required_tag_value(tags, RADROOTS_DVM_TAG_REQUEST)?;
     let request_event: RadrootsEventEnvelope = serde_json::from_str(request_event_json)
         .map_err(RadrootsTradeDvmError::InvalidRequestEvent)?;
-    if request_event.kind != KIND_TRADE_TRANSITION_PROOF_REQUEST {
+    if request_event.kind_u32() != KIND_TRADE_TRANSITION_PROOF_REQUEST {
         return Err(RadrootsTradeDvmError::RequestEventKind {
-            kind: request_event.kind,
+            kind: request_event.kind_u32(),
         });
     }
     let request_event_id = parse_event_id_tag(TAG_E, required_tag_value(tags, TAG_E)?)?;
-    if request_event.id != request_event_id.as_str() {
+    if request_event.id() != &request_event_id {
         return Err(RadrootsTradeDvmError::RequestEventIdMismatch);
     }
     let customer_pubkey = parse_pubkey_tag(TAG_P, required_tag_value(tags, TAG_P)?)?;
@@ -860,15 +855,66 @@ mod tests {
     }
 
     fn request_event(content: &RadrootsTradeTransitionProofRequestV1) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
-            id: event_id(10).into_string(),
+        request_event_with_parts(
+            event_id(10),
+            KIND_TRADE_TRANSITION_PROOF_REQUEST,
+            build_transition_proof_request_tags(&public_key(WORKER), content),
+            serde_json::to_string(content).expect("content"),
+        )
+    }
+
+    fn request_event_with_parts(
+        id: RadrootsEventId,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(radroots_event::RadrootsEventEnvelopeParts {
+            id: id.into_string(),
             author: BUYER.to_string(),
             created_at: 1,
-            kind: KIND_TRADE_TRANSITION_PROOF_REQUEST,
-            tags: build_transition_proof_request_tags(&public_key(WORKER), content),
-            content: serde_json::to_string(content).expect("content"),
-            sig: "sig".to_string(),
-        }
+            kind,
+            tags,
+            content,
+            sig: "f".repeat(128),
+        })
+        .expect("request event")
+    }
+
+    fn request_event_with_tags(
+        content: &RadrootsTradeTransitionProofRequestV1,
+        tags: Vec<Vec<String>>,
+    ) -> RadrootsEventEnvelope {
+        request_event_with_parts(
+            event_id(10),
+            KIND_TRADE_TRANSITION_PROOF_REQUEST,
+            tags,
+            serde_json::to_string(content).expect("content"),
+        )
+    }
+
+    fn request_event_with_kind(
+        content: &RadrootsTradeTransitionProofRequestV1,
+        kind: u32,
+    ) -> RadrootsEventEnvelope {
+        request_event_with_parts(
+            event_id(10),
+            kind,
+            build_transition_proof_request_tags(&public_key(WORKER), content),
+            serde_json::to_string(content).expect("content"),
+        )
+    }
+
+    fn request_event_with_content(
+        content: &RadrootsTradeTransitionProofRequestV1,
+        event_content: String,
+    ) -> RadrootsEventEnvelope {
+        request_event_with_parts(
+            event_id(10),
+            KIND_TRADE_TRANSITION_PROOF_REQUEST,
+            build_transition_proof_request_tags(&public_key(WORKER), content),
+            event_content,
+        )
     }
 
     #[test]
@@ -887,8 +933,8 @@ mod tests {
     fn transition_proof_result_tags_bind_stringified_request() {
         let content = request_content();
         let request_event = request_event(&content);
-        let request_tags =
-            parse_transition_proof_request_tags(&request_event.tags).expect("request tags");
+        let request_tags = parse_transition_proof_request_tags(&request_event.tags_as_vec())
+            .expect("request tags");
         let binding = RadrootsTradeTransitionProofResultBinding {
             listing_event_id: content.listing_event_id.clone(),
             root_event_id: content.request_event_id.clone(),
@@ -937,10 +983,9 @@ mod tests {
     #[test]
     fn transition_proof_request_rejects_missing_input_tags() {
         let content = request_content();
-        let mut event = request_event(&content);
-        event
-            .tags
-            .retain(|tag| tag.first().map(String::as_str) != Some(TAG_I));
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.retain(|tag| tag.first().map(String::as_str) != Some(TAG_I));
+        let event = request_event_with_tags(&content, tags);
 
         assert!(matches!(
             parse_transition_proof_request_event(&event),
@@ -1013,8 +1058,7 @@ mod tests {
     #[test]
     fn transition_proof_request_parser_rejects_kind_tag_content_and_hash_edges() {
         let content = request_content();
-        let mut event = request_event(&content);
-        event.kind = KIND_PROFILE;
+        let event = request_event_with_kind(&content, KIND_PROFILE);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::UnsupportedKind {
@@ -1023,41 +1067,43 @@ mod tests {
             })
         ));
 
-        let mut event = request_event(&content);
-        event.content = "{".to_string();
+        let event = request_event_with_content(&content, "{".to_string());
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidContent(_))
         ));
 
-        let mut event = request_event(&content);
-        event.tags.iter_mut().for_each(|tag| {
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.iter_mut().for_each(|tag| {
             if tag.first().map(String::as_str) == Some(TAG_P) {
                 tag[1] = "bad".to_string();
             }
         });
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_P, .. })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.iter_mut().for_each(|tag| {
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.iter_mut().for_each(|tag| {
             if tag.first().map(String::as_str) == Some(TAG_A) {
                 tag[1] = "bad".to_string();
             }
         });
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_A, .. })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.iter_mut().for_each(|tag| {
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.iter_mut().for_each(|tag| {
             if tag.first().map(String::as_str) == Some(TAG_A) {
                 tag[1] = format!("{KIND_LISTING}:{SELLER}:BBBBBBBBBBBBBBBBBBBBBg");
             }
         });
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::ContentMismatch {
@@ -1065,8 +1111,8 @@ mod tests {
             })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.iter_mut().for_each(|tag| {
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.iter_mut().for_each(|tag| {
             if tag.first().map(String::as_str) == Some(TAG_I)
                 && tag.get(3).map(String::as_str)
                     == Some(RadrootsTradeDvmInputRole::Listing.as_str())
@@ -1074,6 +1120,7 @@ mod tests {
                 tag[1] = event_id(99).into_string();
             }
         });
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::ContentMismatch {
@@ -1142,43 +1189,47 @@ mod tests {
             ));
         }
 
-        let mut event = request_event(&content);
-        event.tags.push(vec![TAG_I.to_string()]);
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.push(vec![TAG_I.to_string()]);
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::MissingTag { tag: TAG_I })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.push(vec![
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.push(vec![
             TAG_I.to_string(),
             event_id(44).into_string(),
             "url".to_string(),
             RadrootsTradeDvmInputRole::Listing.as_str().to_string(),
         ]);
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_I, .. })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.push(vec![
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.push(vec![
             TAG_I.to_string(),
             event_id(44).into_string(),
             RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
         ]);
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::MissingTag { tag: TAG_I })
         ));
 
-        let mut event = request_event(&content);
-        event.tags.push(vec![
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.push(vec![
             TAG_I.to_string(),
             event_id(44).into_string(),
             RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
             "radroots:legacy_event".to_string(),
         ]);
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidInputRole { .. })
@@ -1214,27 +1265,29 @@ mod tests {
                 event_id(97),
             ),
         ] {
-            let mut event = request_event(&content);
-            event.tags.iter_mut().for_each(|tag| {
+            let mut tags = request_event(&content).tags_as_vec();
+            tags.iter_mut().for_each(|tag| {
                 if tag.first().map(String::as_str) == Some(TAG_I)
                     && tag.get(3).map(String::as_str) == Some(role.as_str())
                 {
                     tag[1] = event_id.clone().into_string();
                 }
             });
+            let event = request_event_with_tags(&content, tags);
             assert!(matches!(
                 parse_transition_proof_request_event(&event),
                 Err(RadrootsTradeDvmError::ContentMismatch { field: got }) if got == field
             ));
         }
 
-        let mut event = request_event(&content);
-        event.tags.push(vec![
+        let mut tags = request_event(&content).tags_as_vec();
+        tags.push(vec![
             TAG_I.to_string(),
             "bad".to_string(),
             RADROOTS_DVM_INPUT_TYPE_EVENT.to_string(),
             RadrootsTradeDvmInputRole::Listing.as_str().to_string(),
         ]);
+        let event = request_event_with_tags(&content, tags);
         assert!(matches!(
             parse_transition_proof_request_event(&event),
             Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_I, .. })
@@ -1254,8 +1307,8 @@ mod tests {
     fn transition_proof_result_and_feedback_parsers_cover_error_edges() {
         let content = request_content();
         let request_event = request_event(&content);
-        let request_tags =
-            parse_transition_proof_request_tags(&request_event.tags).expect("request tags");
+        let request_tags = parse_transition_proof_request_tags(&request_event.tags_as_vec())
+            .expect("request tags");
         let binding = RadrootsTradeTransitionProofResultBinding {
             listing_event_id: content.listing_event_id.clone(),
             root_event_id: content.request_event_id.clone(),
@@ -1300,18 +1353,6 @@ mod tests {
             })
         ));
 
-        let mut bad_request_event = request_event.clone();
-        bad_request_event.id = "bad".to_string();
-        assert!(matches!(
-            build_transition_proof_result_tags(
-                &bad_request_event,
-                &public_key(BUYER),
-                &request_tags.inputs,
-                &binding,
-            ),
-            Err(RadrootsTradeDvmError::InvalidTag { tag: TAG_E, .. })
-        ));
-
         let mut invalid_json = tags.clone();
         invalid_json[0][1] = "{".to_string();
         assert!(matches!(
@@ -1319,8 +1360,7 @@ mod tests {
             Err(RadrootsTradeDvmError::InvalidRequestEvent(_))
         ));
 
-        let mut wrong_kind_request = request_event.clone();
-        wrong_kind_request.kind = KIND_PROFILE;
+        let wrong_kind_request = request_event_with_kind(&content, KIND_PROFILE);
         let mut wrong_kind = tags.clone();
         wrong_kind[0][1] = serde_json::to_string(&wrong_kind_request).unwrap();
         assert!(matches!(

@@ -4,7 +4,7 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_event::draft::{RadrootsSignedEvent, RadrootsSignedEventParts};
+use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
@@ -114,26 +114,20 @@ pub fn verified_signed_event_payload(
 ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
     verify_signed_event_raw_json_matches_event(signed_event)?;
     RadrootsTransportPayload::unchecked_signed_event_json(
-        signed_event.id.as_str(),
-        signed_event.raw_json.as_str(),
+        signed_event.id_str(),
+        signed_event.raw_json(),
     )
 }
 
 fn verify_signed_event_raw_json_matches_event(
     signed_event: &RadrootsSignedEvent,
 ) -> Result<(), RadrootsTransportError> {
-    let wire: SignedEventJsonWire = serde_json::from_str(signed_event.raw_json.as_str())
+    let wire = RadrootsNip01EventWire::parse_json(signed_event.raw_json())
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
-    if wire.id != signed_event.id {
+    if wire.id != signed_event.id_str() {
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
-    if wire.pubkey != signed_event.pubkey
-        || wire.created_at != signed_event.created_at
-        || wire.kind != signed_event.kind
-        || wire.tags != signed_event.tags
-        || wire.content != signed_event.content
-        || wire.sig != signed_event.sig
-    {
+    if &wire != signed_event.wire() {
         return Err(RadrootsTransportError::InvalidPayloadBytes);
     }
     Ok(())
@@ -272,17 +266,6 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
     }
 }
 
-#[derive(Deserialize)]
-struct SignedEventJsonWire {
-    id: String,
-    pubkey: String,
-    created_at: u32,
-    kind: u32,
-    tags: Vec<Vec<String>>,
-    content: String,
-    sig: String,
-}
-
 fn signed_event_from_transport_payload(
     payload: &RadrootsTransportPayload,
 ) -> Result<RadrootsSignedEvent, RadrootsTransportError> {
@@ -292,22 +275,13 @@ fn signed_event_from_transport_payload(
     else {
         return Err(RadrootsTransportError::InvalidPayloadBytes);
     };
-    let wire: SignedEventJsonWire =
-        serde_json::from_str(raw_json).map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
+    let wire = RadrootsNip01EventWire::parse_json(raw_json)
+        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
     if wire.id != *event_id {
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
-    RadrootsSignedEvent::new(RadrootsSignedEventParts {
-        id: wire.id,
-        pubkey: wire.pubkey,
-        created_at: wire.created_at,
-        kind: wire.kind,
-        tags: wire.tags,
-        content: wire.content,
-        sig: wire.sig,
-        raw_json: raw_json.clone(),
-    })
-    .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json.clone())
+        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)
 }
 
 fn relay_targets_from_transport_targets(
@@ -376,7 +350,7 @@ pub async fn publish_signed_event<A>(
 where
     A: RadrootsRelayPublishAdapter,
 {
-    let event_id = request.signed_event.id.clone();
+    let event_id = request.signed_event.id_str().to_owned();
     let satisfaction_policy = request.satisfaction_policy.clone();
     let target_count = request.targets.len();
     let quorum = satisfaction_policy.required_target_count(target_count)?;
@@ -497,7 +471,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
             self.captured_raw_events
                 .lock()
                 .map_err(captured_raw_event_lock_error)?
-                .push(request.signed_event.raw_json.clone());
+                .push(request.signed_event.raw_json().to_owned());
             Ok(request
                 .targets
                 .relays()
@@ -543,7 +517,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async move {
-            let event = RadrootsNostrEvent::from_json(request.signed_event.raw_json.as_str())
+            let event = RadrootsNostrEvent::from_json(request.signed_event.raw_json())
                 .map_err(|error| RadrootsRelayTransportError::NostrEventJson(error.to_string()))?;
             ensure_raw_event_matches_signed_event(&event, &request.signed_event)?;
             let target_strings = request.targets.relay_strings();
@@ -661,24 +635,32 @@ fn ensure_raw_event_matches_signed_event(
     signed_event: &RadrootsSignedEvent,
 ) -> Result<(), RadrootsRelayTransportError> {
     let mismatches = [
-        ("id", event.id.to_hex(), signed_event.id.clone()),
-        ("pubkey", event.pubkey.to_hex(), signed_event.pubkey.clone()),
+        ("id", event.id.to_hex(), signed_event.id_str().to_owned()),
+        (
+            "pubkey",
+            event.pubkey.to_hex(),
+            signed_event.pubkey_str().to_owned(),
+        ),
         (
             "created_at",
             event.created_at.as_secs().to_string(),
-            signed_event.created_at.to_string(),
+            signed_event.created_at().to_string(),
         ),
         (
             "kind",
             (event.kind.as_u16() as u32).to_string(),
-            signed_event.kind.to_string(),
+            signed_event.kind().to_string(),
         ),
         (
             "content",
             event.content.clone(),
-            signed_event.content.clone(),
+            signed_event.content().to_owned(),
         ),
-        ("sig", event.sig.to_string(), signed_event.sig.clone()),
+        (
+            "sig",
+            event.sig.to_string(),
+            signed_event.sig_str().to_owned(),
+        ),
     ];
     for (field, raw, wrapped) in mismatches {
         if raw != wrapped {
@@ -692,7 +674,7 @@ fn ensure_raw_event_matches_signed_event(
         .iter()
         .map(|tag| tag.as_slice().to_vec())
         .collect::<Vec<_>>();
-    if raw_tags != signed_event.tags {
+    if raw_tags != signed_event.tags_as_vec() {
         return Err(RadrootsRelayTransportError::NostrEventJson(
             "raw event JSON tags do not match signed event tags".to_owned(),
         ));
@@ -706,6 +688,7 @@ mod tests {
     use nostr::JsonUtil;
     use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
     use radroots_event::kinds::KIND_POST;
+    use radroots_event::wire::RadrootsNip01EventWire;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -729,8 +712,7 @@ mod tests {
         )
         .expect("draft");
         let signed_event = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
-        let raw_event =
-            RadrootsNostrEvent::from_json(signed_event.raw_json.as_str()).expect("raw event");
+        let raw_event = RadrootsNostrEvent::from_json(signed_event.raw_json()).expect("raw event");
         (raw_event, signed_event)
     }
 
@@ -738,39 +720,45 @@ mod tests {
         assert!(ensure_raw_event_matches_signed_event(raw_event, &signed_event).is_err());
     }
 
+    fn signed_event_with_wire(
+        original: &RadrootsSignedEvent,
+        wire: RadrootsNip01EventWire,
+    ) -> RadrootsSignedEvent {
+        RadrootsSignedEvent::from_wire_unchecked(wire, original.raw_json().to_owned())
+            .expect("signed event")
+    }
+
     #[test]
     fn raw_event_match_guard_accepts_exact_event_and_rejects_field_mismatches() {
         let (raw_event, signed_event) = signed_post("matched");
         ensure_raw_event_matches_signed_event(&raw_event, &signed_event).expect("matching event");
 
-        let mut mismatched = signed_event.clone();
-        mismatched.id = "00".repeat(32);
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.id = "00".repeat(32);
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event.clone();
-        mismatched.pubkey = "11".repeat(32);
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.pubkey = "11".repeat(32);
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event.clone();
-        mismatched.created_at += 1;
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.created_at += 1;
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event.clone();
-        mismatched.kind += 1;
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.kind += 1;
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event.clone();
-        mismatched.content.push_str(" changed");
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.content.push_str(" changed");
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event.clone();
-        mismatched.sig = "22".repeat(64);
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.sig = "22".repeat(64);
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
 
-        let mut mismatched = signed_event;
-        mismatched
-            .tags
-            .push(vec!["t".to_owned(), "compost".to_owned()]);
-        assert_mismatch(&raw_event, mismatched);
+        let mut wire = signed_event.wire().clone();
+        wire.tags.push(vec!["t".to_owned(), "compost".to_owned()]);
+        assert_mismatch(&raw_event, signed_event_with_wire(&signed_event, wire));
     }
 }

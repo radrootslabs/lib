@@ -48,21 +48,21 @@ pub fn radroots_nostr_verify_event_id(
 }
 
 fn raw_event_from_radroots(event: &RadrootsEventEnvelope) -> Option<RadrootsNostrRawEvent> {
-    let id = RadrootsNostrEventId::from_hex(event.id.as_str()).ok()?;
-    let public_key = RadrootsNostrPublicKey::from_hex(event.author.as_str()).ok()?;
-    let kind_u16 = u16::try_from(event.kind).ok()?;
-    let mut tags = Vec::with_capacity(event.tags.len());
-    for tag in event.tags.iter().cloned() {
-        tags.push(RadrootsNostrTag::parse(tag).ok()?);
+    let id = RadrootsNostrEventId::from_hex(event.id_str()).ok()?;
+    let public_key = RadrootsNostrPublicKey::from_hex(event.author_str()).ok()?;
+    let kind_u16 = u16::try_from(event.kind_u32()).ok()?;
+    let mut tags = Vec::with_capacity(event.tag_slices().len());
+    for tag in event.tag_slices() {
+        tags.push(RadrootsNostrTag::parse(tag.as_slice().to_vec()).ok()?);
     }
-    let sig = Signature::from_str(event.sig.as_str()).ok()?;
+    let sig = Signature::from_str(event.sig_str()).ok()?;
     Some(RadrootsNostrRawEvent::new(
         id,
         public_key,
-        RadrootsNostrTimestamp::from_secs(u64::from(event.created_at)),
+        RadrootsNostrTimestamp::from_secs(event.created_at_u64()),
         RadrootsNostrKind::Custom(kind_u16),
         tags,
-        event.content.clone(),
+        event.content().to_owned(),
         sig,
     ))
 }
@@ -74,7 +74,7 @@ mod tests {
     use crate::events::radroots_nostr_build_event;
     use crate::test_fixtures::FIXTURE_ALICE;
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
-    use radroots_event::kinds::KIND_POST;
+    use radroots_event::{RadrootsEventEnvelopeParts, kinds::KIND_POST};
 
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =
@@ -95,6 +95,24 @@ mod tests {
         radroots_event_from_nostr(&raw_event)
     }
 
+    fn envelope_with(
+        event: &RadrootsEventEnvelope,
+        content: String,
+        kind: u32,
+        sig: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: event.id_str().to_owned(),
+            author: event.author_str().to_owned(),
+            created_at: event.created_at_u64(),
+            kind,
+            tags: event.tags_as_vec(),
+            content,
+            sig,
+        })
+        .expect("envelope")
+    }
+
     #[test]
     fn verifies_signed_event_id_and_signature() {
         let event = signed_event();
@@ -111,8 +129,13 @@ mod tests {
 
     #[test]
     fn reports_id_mismatch_before_signature_checks() {
-        let mut event = signed_event();
-        event.content = "tampered".to_owned();
+        let original = signed_event();
+        let event = envelope_with(
+            &original,
+            "tampered".to_owned(),
+            original.kind_u32(),
+            original.sig_str().to_owned(),
+        );
 
         assert_eq!(
             radroots_nostr_verify_event(&event),
@@ -122,9 +145,16 @@ mod tests {
 
     #[test]
     fn reports_signature_invalid_for_valid_id_with_wrong_signature() {
-        let mut event = signed_event();
-        let replacement = if event.sig.starts_with('0') { "1" } else { "0" };
-        event.sig.replace_range(0..1, replacement);
+        let original = signed_event();
+        let mut sig = original.sig_str().to_owned();
+        let replacement = if sig.starts_with('0') { "1" } else { "0" };
+        sig.replace_range(0..1, replacement);
+        let event = envelope_with(
+            &original,
+            original.content().to_owned(),
+            original.kind_u32(),
+            sig,
+        );
 
         assert_eq!(
             radroots_nostr_verify_event(&event),
@@ -134,8 +164,13 @@ mod tests {
 
     #[test]
     fn reports_malformed_envelope_for_unparseable_wire_fields() {
-        let mut event = signed_event();
-        event.kind = u32::from(u16::MAX) + 1;
+        let original = signed_event();
+        let event = envelope_with(
+            &original,
+            original.content().to_owned(),
+            u32::from(u16::MAX) + 1,
+            original.sig_str().to_owned(),
+        );
 
         assert_eq!(
             radroots_nostr_verify_event(&event),

@@ -10,9 +10,8 @@ use alloc::{
 use base64::Engine as _;
 use radroots_event::{
     RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
-    tags::TAG_D,
+    tags::TAG_D, wire::RadrootsNip01EventWireParts,
 };
-use radroots_event_codec::wire::WireEventParts;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -566,8 +565,8 @@ pub fn validation_receipt_tags_from_tags(
 pub fn validation_receipt_event_build(
     order_id: &str,
     receipt: &RadrootsTradeValidationReceipt,
-) -> Result<WireEventParts, RadrootsValidationReceiptError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, RadrootsValidationReceiptError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_TRADE_VALIDATION_RECEIPT,
         content: validation_receipt_canonical_content(receipt)?,
         tags: validation_receipt_tags(order_id, receipt)?,
@@ -584,15 +583,16 @@ pub fn verify_validation_receipt_event(
     event: &RadrootsEventEnvelope,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
-    if event.kind != KIND_TRADE_VALIDATION_RECEIPT {
+    if event.kind_u32() != KIND_TRADE_VALIDATION_RECEIPT {
         return Err(RadrootsValidationReceiptError::InvalidKind {
             expected: KIND_TRADE_VALIDATION_RECEIPT,
-            got: event.kind,
+            got: event.kind_u32(),
         });
     }
 
-    let receipt = validation_receipt_content_from_str(&event.content)?;
-    let tags = validation_receipt_tags_from_tags(&event.tags)?;
+    let receipt = validation_receipt_content_from_str(event.content())?;
+    let event_tags = event.tags_as_vec();
+    let tags = validation_receipt_tags_from_tags(&event_tags)?;
 
     if tags.listing_event_id != receipt.statement.listing_event_id {
         return Err(RadrootsValidationReceiptError::TagMismatch(
@@ -864,8 +864,8 @@ mod tests {
         verify_validation_receipt_event,
     };
     use radroots_event::{
-        RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
-        tags::TAG_D,
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, ids::RadrootsPublicKey,
+        kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D,
     };
 
     fn hash32(c: char) -> String {
@@ -923,15 +923,30 @@ mod tests {
     fn sample_validation_receipt_event() -> RadrootsEventEnvelope {
         let receipt = sample_validation_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
-        RadrootsEventEnvelope {
+        validation_receipt_event_with_parts(parts.kind, parts.tags, parts.content)
+    }
+
+    fn validation_receipt_event_with_parts(
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event_id('9'),
             author: event_id('a'),
             created_at: 1,
-            kind: parts.kind,
-            tags: parts.tags,
-            content: parts.content,
-            sig: "signature".to_string(),
-        }
+            kind,
+            tags,
+            content,
+            sig: "f".repeat(128),
+        })
+        .expect("receipt event")
+    }
+
+    fn validation_receipt_event_with_tags(tags: Vec<Vec<String>>) -> RadrootsEventEnvelope {
+        let receipt = sample_validation_receipt();
+        let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
+        validation_receipt_event_with_parts(parts.kind, tags, parts.content)
     }
 
     #[test]
@@ -1449,8 +1464,9 @@ mod tests {
 
     #[test]
     fn validation_receipt_verifier_rejects_each_tag_mismatch() {
-        let mut event = sample_validation_receipt_event();
-        event.tags[1][1] = event_id('3');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[1][1] = event_id('3');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1458,15 +1474,17 @@ mod tests {
             ))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[2][1] = event_id('3');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[2][1] = event_id('3');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch("root_event_id"))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[3][1] = event_id('3');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[3][1] = event_id('3');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1474,8 +1492,9 @@ mod tests {
             ))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[4][1] = hash32('d');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[4][1] = hash32('d');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1483,8 +1502,9 @@ mod tests {
             ))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[5][1] = hash32('d');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[5][1] = hash32('d');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1492,8 +1512,9 @@ mod tests {
             ))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[6][1] = hash32('d');
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[6][1] = hash32('d');
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1501,15 +1522,17 @@ mod tests {
             ))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[7][1] = "sp1_core".to_string();
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[7][1] = "sp1_core".to_string();
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch("proof_system"))
         );
 
-        let mut event = sample_validation_receipt_event();
-        event.tags[8][1] = "listing_validation".to_string();
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[8][1] = "listing_validation".to_string();
+        let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch("receipt_type"))
@@ -1659,7 +1682,7 @@ mod tests {
         );
 
         let event = sample_validation_receipt_event();
-        assert_eq!(event.kind, KIND_TRADE_VALIDATION_RECEIPT);
+        assert_eq!(event.kind_u32(), KIND_TRADE_VALIDATION_RECEIPT);
         let verified = validation_receipt_from_event(&event).expect("verified receipt");
         assert_eq!(verified.tags.order_id, "order-1");
         assert_eq!(verified.tags.listing_event_id, event_id('0'));
@@ -1813,8 +1836,12 @@ mod tests {
 
     #[test]
     fn validation_receipt_verifier_rejects_non_validation_receipt_kind() {
-        let mut event = sample_validation_receipt_event();
-        event.kind = 3434;
+        let sample = sample_validation_receipt_event();
+        let event = validation_receipt_event_with_parts(
+            3434,
+            sample.tags_as_vec(),
+            sample.content().to_owned(),
+        );
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::InvalidKind {
@@ -1840,22 +1867,23 @@ mod tests {
             ))
         );
 
-        let mut missing_event_set = event.clone();
-        missing_event_set
-            .tags
-            .retain(|tag| tag.first().map(|value| value.as_str()) != Some("event_set_root"));
+        let mut tags = event.tags_as_vec();
+        tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("event_set_root"));
+        let missing_event_set =
+            validation_receipt_event_with_parts(event.kind_u32(), tags, event.content().to_owned());
         assert_eq!(
             validation_receipt_from_event(&missing_event_set),
             Err(RadrootsValidationReceiptError::MissingTag("event_set_root"))
         );
 
-        let mut wrong_reducer_output = event.clone();
-        let reducer_tag = wrong_reducer_output
-            .tags
+        let mut tags = event.tags_as_vec();
+        let reducer_tag = tags
             .iter_mut()
             .find(|tag| tag.first().map(|value| value.as_str()) == Some("reducer_output_root"))
             .expect("reducer output tag");
         reducer_tag[1] = hash32('8');
+        let wrong_reducer_output =
+            validation_receipt_event_with_parts(event.kind_u32(), tags, event.content().to_owned());
         assert_eq!(
             validation_receipt_from_event(&wrong_reducer_output),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1863,13 +1891,14 @@ mod tests {
             ))
         );
 
-        let mut wrong_public_values = event.clone();
-        let public_values_tag = wrong_public_values
-            .tags
+        let mut tags = event.tags_as_vec();
+        let public_values_tag = tags
             .iter_mut()
             .find(|tag| tag.first().map(|value| value.as_str()) == Some("public_values_hash"))
             .expect("public values tag");
         public_values_tag[1] = hash32('b');
+        let wrong_public_values =
+            validation_receipt_event_with_parts(event.kind_u32(), tags, event.content().to_owned());
         assert_eq!(
             validation_receipt_from_event(&wrong_public_values),
             Err(RadrootsValidationReceiptError::TagMismatch(
@@ -1898,9 +1927,7 @@ mod tests {
 
         receipt.proof.proof_reference = Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
         let parts = validation_receipt_event_build("order-1", &receipt).expect("sp1 event parts");
-        let mut event = sample_validation_receipt_event();
-        event.content = parts.content;
-        event.tags = parts.tags;
+        let event = validation_receipt_event_with_parts(parts.kind, parts.tags, parts.content);
         let verified = verify_validation_receipt_event(
             &event,
             RadrootsValidationReceiptExpectedBinding {
@@ -2036,9 +2063,7 @@ mod tests {
     fn validation_receipt_expected_binding_enforces_sp1_identity() {
         let receipt = sample_sp1_reference_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("sp1 event parts");
-        let mut event = sample_validation_receipt_event();
-        event.content = parts.content;
-        event.tags = parts.tags;
+        let event = validation_receipt_event_with_parts(parts.kind, parts.tags, parts.content);
 
         verify_validation_receipt_event(
             &event,

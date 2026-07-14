@@ -8,6 +8,8 @@ use alloc::{
 
 #[cfg(feature = "serde_json")]
 use radroots_event::RadrootsEventEnvelope;
+#[cfg(feature = "event_store")]
+use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_event::ids::{
     RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress,
     RadrootsOrderId, RadrootsPublicKey,
@@ -169,13 +171,15 @@ pub enum RadrootsOrderEventDecodeError {
 pub fn order_event_record_from_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEventRecord, RadrootsOrderEventDecodeError> {
-    let message_type = RadrootsOrderEventType::from_kind(event.kind)
-        .ok_or(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind })?;
-    let context = order_event_context_from_tags(message_type, &event.tags)?;
-    let event_id =
-        RadrootsEventId::parse(&event.id).map_err(RadrootsOrderEventDecodeError::InvalidEventId)?;
-    let author_pubkey = RadrootsPublicKey::parse(&event.author)
-        .map_err(RadrootsOrderEventDecodeError::InvalidAuthor)?;
+    let message_type = RadrootsOrderEventType::from_kind(event.kind_u32()).ok_or(
+        RadrootsOrderEventDecodeError::UnsupportedKind {
+            kind: event.kind_u32(),
+        },
+    )?;
+    let tags = event.tags_as_vec();
+    let context = order_event_context_from_tags(message_type, &tags)?;
+    let event_id = event.id().clone();
+    let author_pubkey = event.author().clone();
 
     match message_type {
         RadrootsOrderEventType::OrderRequested => {
@@ -254,6 +258,11 @@ pub enum RadrootsOrderStoreQueryError {
     InvalidStoredTagsJson {
         event_id: String,
         source: serde_json::Error,
+    },
+    #[error("stored order event {event_id} contains invalid envelope fields: {source}")]
+    InvalidStoredEnvelope {
+        event_id: String,
+        source: radroots_event::RadrootsEventEnvelopeError,
     },
     #[error("stored order event {event_id} could not decode as an order record: {source}")]
     Decode {
@@ -364,7 +373,7 @@ fn stored_order_event_to_nostr_event(
             source,
         }
     })?;
-    Ok(RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -373,6 +382,12 @@ fn stored_order_event_to_nostr_event(
         content: stored_event.content.clone(),
         sig: stored_event.sig.clone(),
     })
+    .map_err(
+        |source| RadrootsOrderStoreQueryError::InvalidStoredEnvelope {
+            event_id: stored_event.event_id.clone(),
+            source,
+        },
+    )
 }
 
 #[cfg(feature = "serde_json")]
@@ -2666,7 +2681,7 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventPtr,
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
             RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
@@ -2679,14 +2694,12 @@ mod tests {
             RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
             RadrootsOrderRevisionProposal,
         },
+        wire::RadrootsNip01EventWireParts,
     };
     #[cfg(feature = "serde_json")]
-    use radroots_event_codec::{
-        order::{
-            order_cancellation_event_build, order_decision_event_build, order_request_event_build,
-            order_revision_decision_event_build, order_revision_proposal_event_build,
-        },
-        wire::WireEventParts,
+    use radroots_event_codec::order::{
+        order_cancellation_event_build, order_decision_event_build, order_request_event_build,
+        order_revision_decision_event_build, order_revision_proposal_event_build,
     };
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -2743,16 +2756,21 @@ mod tests {
     }
 
     #[cfg(feature = "serde_json")]
-    fn event_from_parts(raw_id: u8, author: &str, parts: WireEventParts) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
+    fn event_from_parts(
+        raw_id: u8,
+        author: &str,
+        parts: RadrootsNip01EventWireParts,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event_id(raw_id).into_string(),
-            author: author.into(),
+            author: author.to_string(),
             created_at: 1,
             kind: parts.kind,
             tags: parts.tags,
             content: parts.content,
-            sig: "sig".into(),
-        }
+            sig: "f".repeat(128),
+        })
+        .expect("event")
     }
 
     fn economics(bin_count: u32) -> RadrootsOrderEconomics {
@@ -3356,36 +3374,19 @@ mod tests {
                     && record.payload.reason == "changed plans"
         ));
 
-        let unsupported = RadrootsEventEnvelope {
+        let unsupported = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event_id(16).into_string(),
-            author: BUYER.into(),
+            author: BUYER.to_string(),
             created_at: 1,
             kind: 1,
             tags: Vec::new(),
             content: "{}".into(),
-            sig: "sig".into(),
-        };
+            sig: "f".repeat(128),
+        })
+        .expect("unsupported event");
         assert!(matches!(
             super::order_event_record_from_event(&unsupported),
             Err(super::RadrootsOrderEventDecodeError::UnsupportedKind { kind: 1 })
-        ));
-
-        let request_parts =
-            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
-        let mut invalid_id_event = event_from_parts(17, BUYER, request_parts);
-        invalid_id_event.id = "not-an-event-id".into();
-        assert!(matches!(
-            super::order_event_record_from_event(&invalid_id_event),
-            Err(super::RadrootsOrderEventDecodeError::InvalidEventId(_))
-        ));
-
-        let request_parts =
-            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
-        let mut invalid_author_event = event_from_parts(18, BUYER, request_parts);
-        invalid_author_event.author = "not-a-pubkey".into();
-        assert!(matches!(
-            super::order_event_record_from_event(&invalid_author_event),
-            Err(super::RadrootsOrderEventDecodeError::InvalidAuthor(_))
         ));
     }
 

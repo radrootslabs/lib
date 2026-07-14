@@ -129,10 +129,11 @@ fn ensure_public_listing_kind(kind: u32) -> Result<(), RadrootsPublicListingAddr
 pub fn parse_listing_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsListing, ListingParseError> {
-    if !is_listing_kind(event.kind) {
-        return Err(ListingParseError::InvalidKind(event.kind));
+    if !is_listing_kind(event.kind_u32()) {
+        return Err(ListingParseError::InvalidKind(event.kind_u32()));
     }
-    self::codec::listing_from_event_parts(&event.tags, &event.content)
+    let tags = event.tags_as_vec();
+    self::codec::listing_from_event_parts(&tags, event.content())
 }
 
 #[cfg(test)]
@@ -143,7 +144,7 @@ mod tests {
         parse_public_listing_address,
     };
     use radroots_event::{
-        RadrootsEventEnvelope,
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         ids::RadrootsListingAddress,
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE},
         order::RadrootsListingParseError,
@@ -152,9 +153,9 @@ mod tests {
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     fn listing_event() -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
-            id: "event-1".into(),
-            author: SELLER.into(),
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: "9".repeat(64),
+            author: SELLER.to_string(),
             created_at: 1,
             kind: KIND_LISTING,
             tags: vec![
@@ -182,21 +183,23 @@ mod tests {
                 ],
             ],
             content: String::new(),
-            sig: String::new(),
-        }
+            sig: "f".repeat(128),
+        })
+        .expect("listing event")
     }
 
     #[test]
     fn parse_listing_event_rejects_non_listing_kind() {
-        let event = RadrootsEventEnvelope {
-            id: "event-1".into(),
-            author: "seller".into(),
+        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: "8".repeat(64),
+            author: SELLER.to_string(),
             created_at: 1,
             kind: KIND_PROFILE,
             tags: vec![],
             content: String::new(),
-            sig: String::new(),
-        };
+            sig: "f".repeat(128),
+        })
+        .expect("profile event");
 
         assert!(matches!(
             parse_listing_event(&event),

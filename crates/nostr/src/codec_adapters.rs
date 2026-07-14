@@ -3,7 +3,6 @@ use alloc::{string::String, vec::Vec};
 
 use crate::types::RadrootsNostrEvent;
 
-use crate::util::created_at_u32_saturating;
 use radroots_event::{
     job_feedback::RadrootsJobFeedback, job_request::RadrootsJobRequest,
     job_result::RadrootsJobResult,
@@ -22,8 +21,8 @@ fn author(e: &RadrootsNostrEvent) -> String {
     e.pubkey.to_hex()
 }
 
-fn published_at(e: &RadrootsNostrEvent) -> u32 {
-    created_at_u32_saturating(e.created_at)
+fn published_at(e: &RadrootsNostrEvent) -> u64 {
+    e.created_at.as_secs()
 }
 
 fn kind_u32(e: &RadrootsNostrEvent) -> u32 {

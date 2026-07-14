@@ -17,6 +17,12 @@ pub enum RadrootsOutboxError {
     #[error("Signed event does not match frozen draft: {0}")]
     SignedEventDraftMismatch(#[from] radroots_event::draft::RadrootsDraftError),
 
+    #[error("Event wire error: {0}")]
+    EventWire(#[from] radroots_event::wire::RadrootsEventWireError),
+
+    #[error("Signed event error: {0}")]
+    SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
+
     #[error("delivery targets cannot be empty")]
     EmptyDeliveryTargets,
 
@@ -64,6 +70,12 @@ pub enum RadrootsOutboxError {
 
     #[error("Signed event missing for outbox event {0}")]
     MissingSignedEvent(i64),
+
+    #[error("Stored signed event JSON missing raw event JSON for outbox event {0}")]
+    StoredSignedEventMissingRawJson(i64),
+
+    #[error("Stored raw event JSON missing signed event JSON for outbox event {0}")]
+    StoredRawEventMissingSignedEvent(i64),
 
     #[error("Signed event ID mismatch: expected {expected_event_id}, got {actual_event_id}")]
     SignedEventIdMismatch {

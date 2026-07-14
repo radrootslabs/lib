@@ -13,15 +13,13 @@ use thiserror::Error;
 use radroots_event::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_event::message::RadrootsMessage;
 use radroots_event::message_file::RadrootsMessageFile;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message::decode as message_decode;
 use radroots_event_codec::message::encode as message_encode;
 use radroots_event_codec::message_file::decode as message_file_decode;
 use radroots_event_codec::message_file::encode as message_file_encode;
 use radroots_event_codec::parsed::RadrootsParsedData;
-use radroots_event_codec::wire::WireEventParts;
-
-use crate::util::created_at_u32_saturating;
 
 #[derive(Debug, Error)]
 pub enum RadrootsNip17Error {
@@ -50,7 +48,7 @@ pub enum RadrootsNip17Rumor {
 #[derive(Clone, Debug)]
 pub struct RadrootsNip17WrapOptions {
     pub include_sender: bool,
-    pub rumor_created_at: Option<u32>,
+    pub rumor_created_at: Option<u64>,
     pub gift_wrap_tags: Vec<Vec<String>>,
 }
 
@@ -78,13 +76,13 @@ fn tags_from_slices(tag_slices: &[Vec<String>]) -> Vec<Tag> {
 }
 
 fn rumor_from_parts(
-    parts: WireEventParts,
+    parts: RadrootsNip01EventWireParts,
     author: PublicKey,
-    created_at: Option<u32>,
+    created_at: Option<u64>,
 ) -> UnsignedEvent {
     let tags = tags_from_slices(&parts.tags);
     let timestamp = match created_at {
-        Some(ts) => Timestamp::from_secs(ts as u64),
+        Some(ts) => Timestamp::from_secs(ts),
         None => Timestamp::now(),
     };
     let mut rumor = UnsignedEvent::new(
@@ -180,7 +178,7 @@ where
     let mut rumor = unwrapped.rumor;
     let id = rumor.id().to_string();
     let author = rumor.pubkey.to_string();
-    let published_at = created_at_u32_saturating(rumor.created_at);
+    let published_at = rumor.created_at.as_secs();
     let kind = rumor.kind.as_u16() as u32;
     let tags: Vec<Vec<String>> = rumor
         .tags

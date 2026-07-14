@@ -1,6 +1,8 @@
 use radroots_event::contract::RadrootsContractMatchError;
+use radroots_event::draft::RadrootsSignedEventError;
 use radroots_event::event_head::RadrootsEventHeadMalformed;
 use radroots_event::ids::RadrootsIdParseError;
+use radroots_event::wire::RadrootsEventWireError;
 use radroots_transport::RadrootsTransportError;
 
 #[derive(Debug, thiserror::Error)]
@@ -15,6 +17,10 @@ pub enum RadrootsEventStoreError {
     EventHeadMalformed(RadrootsEventHeadMalformed),
     #[error("identifier parse error: {0}")]
     IdParse(#[from] RadrootsIdParseError),
+    #[error("event wire error: {0}")]
+    EventWire(#[from] RadrootsEventWireError),
+    #[error("signed event error: {0}")]
+    SignedEvent(#[from] RadrootsSignedEventError),
     #[error("transport contract error: {0}")]
     Transport(RadrootsTransportError),
     #[error("stored event `{0}` was not found")]
@@ -40,6 +46,8 @@ pub enum RadrootsEventStoreError {
     },
     #[error("integer value `{value}` is outside {field} range")]
     IntegerRange { field: &'static str, value: i64 },
+    #[error("unsigned integer value `{value}` is outside {field} range")]
+    UnsignedIntegerRange { field: &'static str, value: u64 },
 }
 
 impl From<RadrootsTransportError> for RadrootsEventStoreError {

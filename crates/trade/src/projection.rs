@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use radroots_event::{
-    RadrootsEventEnvelope,
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
     ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId},
     kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_listing_kind, is_order_event_kind},
     listing::{RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingStatus},
@@ -60,6 +60,13 @@ pub enum RadrootsTradeProjectionError {
         event_id: String,
         source: serde_json::Error,
     },
+    #[error("stored event {event_id} contains invalid envelope data: {source}")]
+    InvalidStoredEnvelope {
+        event_id: String,
+        source: RadrootsEventEnvelopeError,
+    },
+    #[error("stored event {event_id} created_at {created_at} exceeds sqlite integer range")]
+    StoredCreatedAtRange { event_id: String, created_at: u64 },
     #[error("stored listing event {event_id} failed validation: {source}")]
     ListingValidation {
         event_id: String,
@@ -379,7 +386,12 @@ async fn upsert_listing_projection(
     .bind(location.geohash.as_str())
     .bind(listing_json)
     .bind(stored_event.seq)
-    .bind(i64::from(stored_event.created_at))
+    .bind(i64::try_from(stored_event.created_at).map_err(|_| {
+        RadrootsTradeProjectionError::StoredCreatedAtRange {
+            event_id: stored_event.event_id.clone(),
+            created_at: stored_event.created_at,
+        }
+    })?)
     .bind(updated_at_ms)
     .execute(store.pool())
     .await?;
@@ -709,18 +721,18 @@ fn push_order_record(
 fn request_listing_event_id(
     event: &RadrootsEventEnvelope,
 ) -> Result<Option<RadrootsEventId>, RadrootsTradeProjectionError> {
-    let context =
-        order_event_context_from_tags(RadrootsOrderEventType::OrderRequested, &event.tags)
-            .map_err(|source| RadrootsTradeProjectionError::OrderContext {
-                event_id: event.id.clone(),
-                source,
-            })?;
+    let tags = event.tags_as_vec();
+    let context = order_event_context_from_tags(RadrootsOrderEventType::OrderRequested, &tags)
+        .map_err(|source| RadrootsTradeProjectionError::OrderContext {
+            event_id: event.id_str().to_owned(),
+            source,
+        })?;
     context
         .listing_event
         .map(|listing_event| {
             RadrootsEventId::parse(listing_event.id.as_str()).map_err(|source| {
                 RadrootsTradeProjectionError::ValidationReceiptEventId {
-                    event_id: event.id.clone(),
+                    event_id: event.id_str().to_owned(),
                     source,
                 }
             })
@@ -757,7 +769,7 @@ fn stored_event_to_nostr_event(
             source,
         }
     })?;
-    Ok(RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: stored_event.event_id.clone(),
         author: stored_event.pubkey.clone(),
         created_at: stored_event.created_at,
@@ -766,6 +778,12 @@ fn stored_event_to_nostr_event(
         content: stored_event.content.clone(),
         sig: stored_event.sig.clone(),
     })
+    .map_err(
+        |source| RadrootsTradeProjectionError::InvalidStoredEnvelope {
+            event_id: stored_event.event_id.clone(),
+            source,
+        },
+    )
 }
 
 async fn transport_observation_count_for_events(
@@ -908,6 +926,7 @@ mod tests {
     };
     use radroots_event::{
         RadrootsEventPtr,
+        draft::RadrootsSignedEvent,
         farm::RadrootsFarmRef,
         ids::RadrootsOrderQuoteId,
         kinds::KIND_LISTING,
@@ -920,6 +939,7 @@ mod tests {
             RadrootsOrderEconomics, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
             RadrootsOrderPricingBasis, RadrootsOrderRequest,
         },
+        wire::RadrootsNip01EventWire,
     };
     use radroots_event_codec::order::{order_decision_event_build, order_request_event_build};
     use radroots_event_store::{
@@ -927,7 +947,7 @@ mod tests {
     };
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
-        radroots_event_from_nostr, radroots_nostr_build_event,
+        radroots_nostr_build_event,
     };
     use radroots_transport::RadrootsTransportKind;
 
@@ -1003,7 +1023,7 @@ mod tests {
         }
     }
 
-    fn signed_listing_event() -> RadrootsEventEnvelope {
+    fn signed_listing_event() -> RadrootsSignedEvent {
         let parts = radroots_event_codec::listing::encode::to_wire_parts(&listing())
             .expect("listing parts");
         sign_parts(
@@ -1015,11 +1035,11 @@ mod tests {
         )
     }
 
-    fn listing_addr(event: &RadrootsEventEnvelope) -> RadrootsListingAddress {
+    fn listing_addr(event: &RadrootsSignedEvent) -> RadrootsListingAddress {
         RadrootsListingAddress::parse(format!(
             "{}:{}:{}",
             KIND_LISTING,
-            event.author,
+            event.pubkey_str(),
             listing().d_tag
         ))
         .expect("listing address")
@@ -1054,7 +1074,7 @@ mod tests {
         }
     }
 
-    fn order_request(listing_event: &RadrootsEventEnvelope) -> RadrootsOrderRequest {
+    fn order_request(listing_event: &RadrootsSignedEvent) -> RadrootsOrderRequest {
         RadrootsOrderRequest {
             order_id: order_id(),
             listing_addr: listing_addr(listing_event),
@@ -1068,17 +1088,17 @@ mod tests {
         }
     }
 
-    fn signed_order_request_event(listing_event: &RadrootsEventEnvelope) -> RadrootsEventEnvelope {
+    fn signed_order_request_event(listing_event: &RadrootsSignedEvent) -> RadrootsSignedEvent {
         signed_order_request_event_at(listing_event, 1_700_000_010)
     }
 
     fn signed_order_request_event_at(
-        listing_event: &RadrootsEventEnvelope,
+        listing_event: &RadrootsSignedEvent,
         created_at: u32,
-    ) -> RadrootsEventEnvelope {
+    ) -> RadrootsSignedEvent {
         let parts = order_request_event_build(
             &RadrootsEventPtr {
-                id: listing_event.id.clone(),
+                id: listing_event.id_str().to_owned(),
                 relays: Some("wss://relay.example.test".to_owned()),
             },
             &order_request(listing_event),
@@ -1094,9 +1114,9 @@ mod tests {
     }
 
     fn signed_order_decision_event(
-        request: &RadrootsEventEnvelope,
-        listing_event: &RadrootsEventEnvelope,
-    ) -> RadrootsEventEnvelope {
+        request: &RadrootsSignedEvent,
+        listing_event: &RadrootsSignedEvent,
+    ) -> RadrootsSignedEvent {
         let decision = RadrootsOrderDecision {
             order_id: order_id(),
             listing_addr: listing_addr(listing_event),
@@ -1109,7 +1129,7 @@ mod tests {
                 }],
             },
         };
-        let root = RadrootsEventId::parse(request.id.as_str()).expect("root");
+        let root = request.id().clone();
         let parts = order_decision_event_build(&root, &root, &decision).expect("decision parts");
         sign_parts(
             parts.kind,
@@ -1121,14 +1141,14 @@ mod tests {
     }
 
     fn signed_receipt_event(
-        listing_event: &RadrootsEventEnvelope,
-        request: &RadrootsEventEnvelope,
-        decision: &RadrootsEventEnvelope,
+        listing_event: &RadrootsSignedEvent,
+        request: &RadrootsSignedEvent,
+        decision: &RadrootsSignedEvent,
         result: RadrootsValidationReceiptResult,
-    ) -> RadrootsEventEnvelope {
-        let request_id = RadrootsEventId::parse(request.id.as_str()).expect("request");
-        let listing_event_id = RadrootsEventId::parse(listing_event.id.as_str()).expect("listing");
-        let decision_id = RadrootsEventId::parse(decision.id.as_str()).expect("decision");
+    ) -> RadrootsSignedEvent {
+        let request_id = request.id().clone();
+        let listing_event_id = listing_event.id().clone();
+        let decision_id = decision.id().clone();
         let receipt = RadrootsTradeValidationReceipt {
             changed_records_root: hash32('a'),
             domain: "radroots.receipt".to_owned(),
@@ -1180,13 +1200,15 @@ mod tests {
         tags: Vec<Vec<String>>,
         created_at: u32,
         keys: &RadrootsNostrKeys,
-    ) -> RadrootsEventEnvelope {
+    ) -> RadrootsSignedEvent {
         let raw_event = radroots_nostr_build_event(kind, content, tags)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
             .sign_with_keys(keys)
             .expect("signed");
-        radroots_event_from_nostr(&raw_event)
+        let raw_json = serde_json::to_string(&raw_event).expect("raw event json");
+        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str()).expect("wire");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
     fn hash32(character: char) -> String {
@@ -1265,10 +1287,10 @@ mod tests {
         );
         assert_eq!(
             status.projection.validation_receipt_event_id,
-            Some(RadrootsEventId::parse(receipt_event.id).expect("receipt"))
+            Some(receipt_event.id().clone())
         );
 
-        let root_event_id = RadrootsEventId::parse(request_event.id).expect("request");
+        let root_event_id = request_event.id().clone();
         let trade_row = sqlx::query(
             "SELECT root_event_id, projection_version, status, rhi_state, transport_observation_count, source_event_count, evidence_hash FROM trade_projection WHERE order_id = ? AND root_event_id = ? AND projection_version = ?",
         )
@@ -1319,8 +1341,8 @@ mod tests {
         let listing_event = signed_listing_event();
         let first_request_event = signed_order_request_event_at(&listing_event, 1_700_000_010);
         let second_request_event = signed_order_request_event_at(&listing_event, 1_700_000_011);
-        let first_root = RadrootsEventId::parse(first_request_event.id.clone()).expect("first");
-        let second_root = RadrootsEventId::parse(second_request_event.id.clone()).expect("second");
+        let first_root = first_request_event.id().clone();
+        let second_root = second_request_event.id().clone();
 
         store
             .ingest_event(RadrootsEventIngest::new(listing_event.clone(), 10))

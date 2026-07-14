@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
-#[cfg(test)]
-use radroots_event::draft::RadrootsSignedEventParts;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_event::ids::RadrootsPublicKey;
+#[cfg(test)]
+use radroots_event::wire::RadrootsNip01EventWire;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignerIdentity {
@@ -60,6 +60,7 @@ mod tests {
     struct MockSigner {
         pubkey: RadrootsPublicKey,
         failure: Option<RadrootsSignerError>,
+        event_id: Option<String>,
     }
 
     impl MockSigner {
@@ -67,6 +68,7 @@ mod tests {
             Self {
                 pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
                 failure: None,
+                event_id: None,
             }
         }
 
@@ -74,6 +76,15 @@ mod tests {
             Self {
                 pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
                 failure: Some(failure),
+                event_id: None,
+            }
+        }
+
+        fn with_event_id(pubkey: &str, event_id: String) -> Self {
+            Self {
+                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                failure: None,
+                event_id: Some(event_id),
             }
         }
     }
@@ -98,16 +109,24 @@ mod tests {
                     }
                 });
             }
-            RadrootsSignedEvent::new(RadrootsSignedEventParts {
-                id: draft.expected_event_id.to_string(),
-                pubkey: self.pubkey.to_string(),
-                created_at: draft.created_at,
-                kind: draft.kind,
-                tags: draft.tags.clone(),
-                content: draft.content.clone(),
-                sig: hex_128('f'),
-                raw_json: "{}".to_owned(),
-            })
+            let id = self
+                .event_id
+                .as_deref()
+                .unwrap_or(draft.expected_event_id_str())
+                .to_owned();
+            RadrootsSignedEvent::from_wire_unchecked(
+                RadrootsNip01EventWire {
+                    id,
+                    pubkey: self.pubkey.to_string(),
+                    created_at: draft.created_at_u64(),
+                    kind: draft.kind_u32(),
+                    tags: draft.tags_as_vec(),
+                    content: draft.content().to_owned(),
+                    sig: hex_128('f'),
+                    extra: Default::default(),
+                },
+                "{}",
+            )
             .map_err(|error| RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
             })
@@ -142,9 +161,9 @@ mod tests {
 
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
-        assert_eq!(signed.id, draft.expected_event_id);
-        assert_eq!(signed.pubkey, pubkey);
-        assert_eq!(signed.kind, KIND_POST);
+        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.pubkey_str(), pubkey);
+        assert_eq!(signed.kind(), KIND_POST);
     }
 
     #[test]
@@ -175,9 +194,8 @@ mod tests {
     #[test]
     fn mock_signer_maps_invalid_signed_event_parts() {
         let pubkey = hex_64('a');
-        let signer = MockSigner::new(pubkey.as_str());
-        let mut draft = draft_for(pubkey.as_str());
-        draft.expected_event_id = "bad-id".to_string();
+        let signer = MockSigner::with_event_id(pubkey.as_str(), "bad-id".to_string());
+        let draft = draft_for(pubkey.as_str());
 
         let err = signer.sign_frozen_draft(&draft).expect_err("failure");
 

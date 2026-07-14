@@ -6,7 +6,6 @@ use crate::{
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy, publish_signed_event,
     verified_signed_event_payload,
 };
-use radroots_event::RadrootsEventEnvelope;
 use radroots_event::draft::RadrootsSignedEvent;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
@@ -113,7 +112,7 @@ where
             .await?;
         return Ok(RadrootsOutboxPublishReceipt {
             local_ingest,
-            event_id: signed_event.id,
+            event_id: signed_event.id_str().to_owned(),
             attempted_count: 0,
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
@@ -144,13 +143,13 @@ where
         .with_idempotency_key(outbox_publish_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
-            signed_event.id.as_str(),
+            signed_event.id_str(),
             active_delivery_plan_id,
         ));
     let publish = match publish_signed_event(adapter, request).await {
         Ok(receipt) => receipt,
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
-            signed_event.id.clone(),
+            signed_event.id_str().to_owned(),
             target_strings,
             publishable.remaining_satisfaction_count,
             message,
@@ -259,7 +258,7 @@ where
             .await?;
         return Ok(RadrootsOutboxPublishReceipt {
             local_ingest,
-            event_id: signed_event.id,
+            event_id: signed_event.id_str().to_owned(),
             attempted_count: 0,
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
@@ -283,7 +282,7 @@ where
     let request_id = outbox_publish_idempotency_key(
         claimed.outbox_event_id,
         claimed.attempt_count,
-        signed_event.id.as_str(),
+        signed_event.id_str(),
         publishable.active_delivery_plan_id,
     );
     let payload =
@@ -337,7 +336,7 @@ where
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
-        event_id: signed_event.id,
+        event_id: signed_event.id_str().to_owned(),
         attempted_count: target_receipts
             .iter()
             .filter(|receipt| receipt.attempted)
@@ -1030,23 +1029,10 @@ async fn ingest_publish_observation(
     if let Some(message) = message {
         observation = observation.with_redacted_message(message);
     }
-    let ingest = RadrootsEventIngest::new(event_from_signed(signed_event), observed_at_ms)
-        .with_raw_json(signed_event.raw_json.clone())
+    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
         .with_observation(observation);
     event_store.ingest_event(ingest).await?;
     Ok(())
-}
-
-fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
-        id: signed_event.id.clone(),
-        author: signed_event.pubkey.clone(),
-        created_at: signed_event.created_at,
-        kind: signed_event.kind,
-        tags: signed_event.tags.clone(),
-        content: signed_event.content.clone(),
-        sig: signed_event.sig.clone(),
-    }
 }
 
 #[cfg(test)]

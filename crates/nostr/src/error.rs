@@ -28,6 +28,14 @@ pub enum RadrootsNostrError {
     DraftError(#[from] radroots_event::draft::RadrootsDraftError),
 
     #[cfg(feature = "events")]
+    #[error("Event wire error: {0}")]
+    EventWire(#[from] radroots_event::wire::RadrootsEventWireError),
+
+    #[cfg(feature = "events")]
+    #[error("Signed event error: {0}")]
+    SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
+
+    #[cfg(feature = "events")]
     #[error(
         "Frozen draft signer public key mismatch: expected {expected_pubkey}, got {actual_pubkey}"
     )]

@@ -13,14 +13,11 @@ use radroots_event_codec::profile::RadrootsProfileData;
 use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
 
 #[cfg(feature = "events")]
-use crate::util::created_at_u32_saturating;
-
-#[cfg(feature = "events")]
 pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<RadrootsPost> {
     RadrootsParsedData::new(
         e.id.to_string(),
         e.pubkey.to_string(),
-        created_at_u32_saturating(e.created_at),
+        e.created_at.as_secs(),
         e.kind.as_u16() as u32,
         RadrootsPost {
             content: e.content.clone(),
@@ -56,7 +53,7 @@ pub fn to_profile_event_metadata(
         return Some(RadrootsParsedData::new(
             e.id.to_string(),
             e.pubkey.to_string(),
-            created_at_u32_saturating(e.created_at),
+            e.created_at.as_secs(),
             e.kind.as_u16() as u32,
             RadrootsProfileData {
                 profile_type,
@@ -81,7 +78,7 @@ pub fn to_profile_event_metadata(
         return Some(RadrootsParsedData::new(
             e.id.to_string(),
             e.pubkey.to_string(),
-            created_at_u32_saturating(e.created_at),
+            e.created_at.as_secs(),
             e.kind.as_u16() as u32,
             RadrootsProfileData {
                 profile_type,

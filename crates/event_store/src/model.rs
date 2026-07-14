@@ -3,7 +3,9 @@ use radroots_event::RadrootsEventEnvelope;
 use radroots_event::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsTagSemantic, RadrootsTagValueType,
 };
+use radroots_event::draft::RadrootsSignedEvent;
 use radroots_event::event_head::RadrootsEventHeadDecision;
+use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
@@ -215,30 +217,41 @@ impl RadrootsTransportObservation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventIngest {
-    pub event: RadrootsEventEnvelope,
-    pub raw_json: Option<String>,
+    pub signed_event: RadrootsSignedEvent,
     pub observed_at_ms: i64,
     pub transport_observation: Option<RadrootsTransportObservation>,
 }
 
 impl RadrootsEventIngest {
-    pub fn new(event: RadrootsEventEnvelope, observed_at_ms: i64) -> Self {
+    pub fn new(signed_event: RadrootsSignedEvent, observed_at_ms: i64) -> Self {
         Self {
-            event,
-            raw_json: None,
+            signed_event,
             observed_at_ms,
             transport_observation: None,
         }
     }
 
-    pub fn with_raw_json(mut self, raw_json: impl Into<String>) -> Self {
-        self.raw_json = Some(raw_json.into());
-        self
+    pub fn from_raw_json(
+        raw_json: impl Into<String>,
+        observed_at_ms: i64,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        let raw_json = raw_json.into();
+        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
+        let signed_event = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)?;
+        Ok(Self::new(signed_event, observed_at_ms))
     }
 
     pub fn with_observation(mut self, observation: RadrootsTransportObservation) -> Self {
         self.transport_observation = Some(observation);
         self
+    }
+
+    pub fn event(&self) -> &RadrootsEventEnvelope {
+        self.signed_event.envelope()
+    }
+
+    pub fn raw_json(&self) -> &str {
+        self.signed_event.raw_json()
     }
 }
 
@@ -295,7 +308,7 @@ pub struct RadrootsStoredEvent {
     pub seq: i64,
     pub event_id: String,
     pub pubkey: String,
-    pub created_at: u32,
+    pub created_at: u64,
     pub kind: u32,
     pub tags_json: String,
     pub content: String,
@@ -329,7 +342,7 @@ pub struct RadrootsStoredEventHead {
     pub pubkey: String,
     pub d_tag: Option<String>,
     pub event_id: String,
-    pub created_at: u32,
+    pub created_at: u64,
     pub updated_at_ms: i64,
 }
 

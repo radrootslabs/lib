@@ -329,8 +329,7 @@ fn post_relay_fetch_request(observed_at_ms: i64, max_events: usize) -> RadrootsR
 
 fn tampered_raw_event() -> String {
     let signed = signed_post("trusted");
-    let mut value =
-        serde_json::from_str::<serde_json::Value>(signed.raw_json.as_str()).expect("raw json");
+    let mut value = serde_json::from_str::<serde_json::Value>(signed.raw_json()).expect("raw json");
     value["content"] = serde_json::Value::String("tampered".to_owned());
     serde_json::to_string(&value).expect("tampered json")
 }
@@ -712,7 +711,10 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     .await
     .expect("publish");
 
-    assert_eq!(adapter.captured_raw_events(), vec![signed.raw_json]);
+    assert_eq!(
+        adapter.captured_raw_events(),
+        vec![signed.raw_json().to_owned()]
+    );
     assert_eq!(receipt.attempted_count, 3);
     assert_eq!(receipt.accepted_count, 2);
     assert_eq!(receipt.retryable_count, 1);
@@ -729,8 +731,8 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-1",
         RadrootsTransportPayload::unchecked_signed_event_json(
-            signed.id.clone(),
-            signed.raw_json.clone(),
+            signed.id_str().to_owned(),
+            signed.raw_json().to_owned(),
         )
         .expect("payload"),
         RadrootsTransportTargetSet::new(vec![target.clone()]).expect("targets"),
@@ -740,7 +742,10 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     let receipt = transport.deliver(request).await.expect("delivery");
     let status = transport.status().await.expect("status");
 
-    assert_eq!(adapter.captured_raw_events(), vec![signed.raw_json]);
+    assert_eq!(
+        adapter.captured_raw_events(),
+        vec![signed.raw_json().to_owned()]
+    );
     assert!(status.capabilities.deliver);
     assert!(!status.capabilities.fetch);
     assert_eq!(receipt.request_id, "facade-request-1");
@@ -770,12 +775,12 @@ fn verified_signed_event_payload_preserves_transport_payload_identity() {
         panic!("signed event payload expected");
     };
 
-    assert_eq!(event_id, signed.id);
-    assert_eq!(raw_json, signed.raw_json);
+    assert_eq!(event_id, signed.id_str());
+    assert_eq!(raw_json, signed.raw_json().to_owned());
     assert_eq!(digest.len(), 64);
 
-    let mut mismatched = signed;
-    mismatched.raw_json = "{}".to_owned();
+    let mismatched =
+        RadrootsSignedEvent::from_wire_unchecked(signed.wire().clone(), "{}").expect("mismatch");
     assert_eq!(
         verified_signed_event_payload(&mismatched).expect_err("mismatched raw json"),
         RadrootsTransportError::InvalidPayloadBytes
@@ -820,8 +825,8 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-request-target",
             RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id.clone(),
-                signed.raw_json.clone(),
+                signed.id_str().to_owned(),
+                signed.raw_json().to_owned(),
             )
             .expect("payload"),
             RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
@@ -846,8 +851,8 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-canonical-receipt",
             RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id.clone(),
-                signed.raw_json.clone(),
+                signed.id_str().to_owned(),
+                signed.raw_json().to_owned(),
             )
             .expect("payload"),
             RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
@@ -894,8 +899,8 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-scoped",
         RadrootsTransportPayload::unchecked_signed_event_json(
-            signed.id.clone(),
-            signed.raw_json.clone(),
+            signed.id_str().to_owned(),
+            signed.raw_json().to_owned(),
         )
         .expect("payload"),
         RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("targets"),
@@ -932,7 +937,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     .await
     .expect("publish");
 
-    assert_eq!(receipt.event_id, signed.id);
+    assert_eq!(receipt.event_id, signed.id_str());
     assert_eq!(receipt.attempted_count, 2);
     assert_eq!(receipt.accepted_count, 1);
     assert_eq!(receipt.retryable_count, 0);
@@ -1089,11 +1094,11 @@ fn fetch_requests_reject_zero_limits_and_timeouts() {
 #[test]
 fn fetch_blocking_facade_runs_mock_adapter() {
     let signed = signed_post("blocking fetch");
-    let accepted_id = signed.id.clone();
+    let accepted_id = signed.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json,
+            raw_json: signed.raw_json().to_owned(),
             observed_at_ms: 1_090,
         },
         RadrootsRelayFetchItem::Eose {
@@ -1116,12 +1121,12 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json.clone(),
+            raw_json: signed.raw_json().to_owned(),
             observed_at_ms: 1_000,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json.clone(),
+            raw_json: signed.raw_json().to_owned(),
             observed_at_ms: 1_001,
         },
         RadrootsRelayFetchItem::Event {
@@ -1222,7 +1227,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     assert!(!receipt.events[4].projection_eligible);
 
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_eq!(observations.len(), 1);
@@ -1245,12 +1250,12 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json.clone(),
+            raw_json: wrong_tag.raw_json().to_owned(),
             observed_at_ms: 1_005,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json.clone(),
+            raw_json: accepted.raw_json().to_owned(),
             observed_at_ms: 1_006,
         },
         RadrootsRelayFetchItem::Event {
@@ -1289,14 +1294,14 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     assert!(receipt.events[2].out_of_filter);
     assert!(
         store
-            .get_event(accepted.id.as_str())
+            .get_event(accepted.id_str())
             .await
             .expect("accepted lookup")
             .is_some()
     );
     assert!(
         store
-            .get_event(wrong_tag.id.as_str())
+            .get_event(wrong_tag.id_str())
             .await
             .expect("wrong tag lookup")
             .is_none()
@@ -1315,9 +1320,9 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
     let accepted = signed_post("accepted capped event");
     let skipped = signed_post("skipped capped event");
     let wrong_tag = signed_event_with_kind_and_hashtag("wrong capped tag", KIND_POST, "compost");
-    let accepted_id = accepted.id.clone();
-    let skipped_id = skipped.id.clone();
-    let wrong_tag_id = wrong_tag.id.clone();
+    let accepted_id = accepted.id_str().to_owned();
+    let skipped_id = skipped.id_str().to_owned();
+    let wrong_tag_id = wrong_tag.id_str().to_owned();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
@@ -1327,17 +1332,17 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json,
+            raw_json: wrong_tag.raw_json().to_owned(),
             observed_at_ms: 1_100,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json.clone(),
+            raw_json: accepted.raw_json().to_owned(),
             observed_at_ms: 1_101,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: skipped.raw_json,
+            raw_json: skipped.raw_json().to_owned(),
             observed_at_ms: 1_102,
         },
         RadrootsRelayFetchItem::Eose {
@@ -1426,7 +1431,7 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
         vec!["soil".to_owned()],
     )
     .expect("filter");
-    let accepted_id = accepted.id.clone();
+    let accepted_id = accepted.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1435,17 +1440,17 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json,
+            raw_json: wrong_tag.raw_json().to_owned(),
             observed_at_ms: 2_101,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json.clone(),
+            raw_json: accepted.raw_json().to_owned(),
             observed_at_ms: 2_102,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: skipped.raw_json,
+            raw_json: skipped.raw_json().to_owned(),
             observed_at_ms: 2_103,
         },
         RadrootsRelayFetchItem::Eose {
@@ -1496,7 +1501,7 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
 async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
     let accepted = signed_post("raw scan accepted event");
     let wrong_tag = signed_event_with_kind_and_hashtag("raw scan wrong tag", KIND_POST, "compost");
-    let accepted_id = accepted.id.clone();
+    let accepted_id = accepted.id_str().to_owned();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         RadrootsRelayFetchItem::Event {
@@ -1506,12 +1511,12 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json,
+            raw_json: wrong_tag.raw_json().to_owned(),
             observed_at_ms: 1_131,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json,
+            raw_json: accepted.raw_json().to_owned(),
             observed_at_ms: 1_132,
         },
         RadrootsRelayFetchItem::Eose {
@@ -1550,7 +1555,7 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        raw_json: signed.raw_json.clone(),
+        raw_json: signed.raw_json().to_owned(),
         observed_at_ms: 1_200,
     }]);
 
@@ -1565,7 +1570,7 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
 
     assert_eq!(receipt.inserted_count, 1);
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_eq!(observations.len(), 1);
@@ -1578,7 +1583,7 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
     closed_store.pool().close().await;
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        raw_json: signed.raw_json,
+        raw_json: signed.raw_json().to_owned(),
         observed_at_ms: 1_210,
     }]);
     let receipt =
@@ -1598,7 +1603,7 @@ async fn fetch_ingest_rejects_invalid_observation_endpoint() {
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: " ".to_owned(),
-        raw_json: signed.raw_json,
+        raw_json: signed.raw_json().to_owned(),
         observed_at_ms: 1_300,
     }]);
 
@@ -1625,10 +1630,10 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -1733,7 +1738,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     .await
     .expect("retry publish");
 
-    assert_eq!(second.local_ingest.event_id, signed.id);
+    assert_eq!(second.local_ingest.event_id, signed.id_str());
     assert_eq!(second.attempted_count, 1);
     assert_eq!(retry_adapter.captured_raw_events().len(), 1);
 
@@ -1751,7 +1756,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
 
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 3);
@@ -1765,10 +1770,10 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -1813,8 +1818,8 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id);
-    assert_eq!(published.event_id, signed.id);
+    assert_eq!(published.local_ingest.event_id, signed.id_str());
+    assert_eq!(published.event_id, signed.id_str());
     assert_eq!(published.attempted_count, 2);
     assert_eq!(published.accepted_count, 2);
     assert_eq!(published.retryable_count, 0);
@@ -1865,7 +1870,7 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
             && target.target_label.as_ref().map(|label| label.as_str()) == Some("East foodshed")
     }));
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 1);
@@ -1879,10 +1884,10 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let optional = nostr_target(RELAY_PRIMARY_WSS);
@@ -1982,10 +1987,10 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let optional = nostr_target(RELAY_PRIMARY_WSS);
@@ -2049,7 +2054,7 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id);
+    assert_eq!(published.local_ingest.event_id, signed.id_str());
     assert_eq!(published.attempted_count, 1);
     assert_eq!(published.accepted_count, 1);
     assert_eq!(published.retryable_count, 0);
@@ -2074,7 +2079,7 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
             && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
     }));
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 1);
@@ -2088,10 +2093,10 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let required = scoped_nostr_target(RELAY_PRIMARY_WSS, "foodshed.west", "West foodshed");
@@ -2178,10 +2183,10 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2269,10 +2274,10 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2325,8 +2330,8 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id);
-    assert_eq!(published.event_id, signed.id);
+    assert_eq!(published.local_ingest.event_id, signed.id_str());
+    assert_eq!(published.event_id, signed.id_str());
     assert_eq!(published.attempted_count, 0);
     assert_eq!(published.accepted_count, 2);
     assert_eq!(published.quorum, 0);
@@ -2358,10 +2363,10 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2406,7 +2411,7 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
         .expect("event");
     assert_eq!(event.state, RadrootsOutboxEventState::Published);
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 1);
@@ -2424,10 +2429,10 @@ async fn outbox_publish_skips_non_nostr_targets() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2498,10 +2503,10 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2589,7 +2594,7 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
     );
 
     let observations = store
-        .observations_for_event(signed.id.as_str())
+        .observations_for_event(signed.id_str())
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 2);
@@ -2603,10 +2608,10 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2654,7 +2659,7 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id);
+    assert_eq!(published.local_ingest.event_id, signed.id_str());
     assert_eq!(published.attempted_count, 2);
     assert_eq!(published.accepted_count, 2);
     assert_eq!(published.quorum, 1);
@@ -2686,10 +2691,10 @@ async fn outbox_publish_republish_policy_keeps_terminal_targets_excluded() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags.clone(),
-        signed.content.clone(),
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2766,10 +2771,10 @@ async fn outbox_publish_requires_claimed_signed_event() {
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags,
-        signed.content,
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2813,10 +2818,10 @@ async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_fil
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags,
-        signed.content,
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2870,10 +2875,10 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
     let draft = RadrootsEventDraft::new(
         "radroots.social.post.v1",
         KIND_POST,
-        signed.created_at,
-        signed.tags,
-        signed.content,
-        signed.pubkey.as_str(),
+        signed.created_at(),
+        signed.tags_as_vec(),
+        signed.content().to_owned(),
+        signed.pubkey_str(),
     )
     .expect("draft");
     let receipt = outbox
@@ -2933,7 +2938,7 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
         };
         items.push(RadrootsRelayFetchItem::Event {
             relay_url: relay_url.to_owned(),
-            raw_json: signed.raw_json,
+            raw_json: signed.raw_json().to_owned(),
             observed_at_ms: 10_000 + index,
         });
     }

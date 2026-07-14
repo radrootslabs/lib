@@ -68,15 +68,7 @@ mod tests {
     }
 
     fn verification_event(signed: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
-            id: signed.id.clone(),
-            author: signed.pubkey.clone(),
-            created_at: signed.created_at,
-            kind: signed.kind,
-            tags: signed.tags.clone(),
-            content: signed.content.clone(),
-            sig: signed.sig.clone(),
-        }
+        signed.envelope().clone()
     }
 
     #[test]
@@ -93,8 +85,8 @@ mod tests {
 
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
-        assert_eq!(signed.id, draft.expected_event_id);
-        assert_eq!(signed.pubkey, draft.expected_pubkey);
+        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),
             RadrootsNostrEventVerification::Verified

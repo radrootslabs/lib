@@ -8,9 +8,7 @@ use radroots_event_store::{
     RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore,
     RadrootsTransportObservation, RadrootsTransportObservationType,
 };
-use radroots_nostr::prelude::{
-    RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter, radroots_event_from_nostr,
-};
+use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
 use radroots_transport::RadrootsTransportKind;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -360,7 +358,6 @@ where
                 raw_json,
                 observed_at_ms,
             }) => {
-                let event = radroots_event_from_nostr(&raw_event);
                 let observation_type = match mode {
                     RadrootsRelayFetchMode::Fetch => RadrootsTransportObservationType::Fetch,
                     RadrootsRelayFetchMode::Subscription => {
@@ -373,9 +370,26 @@ where
                     observation_type,
                     observed_at_ms,
                 )?;
-                let ingest = RadrootsEventIngest::new(event, observed_at_ms)
-                    .with_raw_json(raw_json)
-                    .with_observation(observation);
+                let ingest = match RadrootsEventIngest::from_raw_json(raw_json, observed_at_ms) {
+                    Ok(ingest) => ingest.with_observation(observation),
+                    Err(error) => {
+                        receipt.malformed_count += 1;
+                        receipt.events.push(RadrootsRelayFetchEventReceipt {
+                            relay_url,
+                            event_id: Some(raw_event.id.to_hex()),
+                            inserted: false,
+                            duplicate: false,
+                            unsupported: false,
+                            malformed: true,
+                            out_of_filter: false,
+                            skipped_over_limit: false,
+                            projection_eligible: false,
+                            verification_status: None,
+                            message: Some(error.to_string()),
+                        });
+                        continue;
+                    }
+                };
                 match event_store.ingest_event(ingest).await {
                     Ok(store_receipt) => {
                         let unsupported =

@@ -2,12 +2,12 @@
 
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
 use radroots_event::contract::{RadrootsEventContract, event_contract};
-#[cfg(test)]
-use radroots_event::draft::RadrootsSignedEventParts;
 use radroots_event::draft::{
     RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent,
     validate_signed_nostr_event_matches_draft,
 };
+#[cfg(test)]
+use radroots_event::wire::RadrootsNip01EventWire;
 
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::ToString};
@@ -32,22 +32,22 @@ pub fn authorize_actor_for_draft(
     actor: &RadrootsActorContext,
     draft: &RadrootsEventDraft,
 ) -> Result<&'static RadrootsEventContract, RadrootsAuthorityError> {
-    let contract = event_contract(draft.contract_id.as_str()).ok_or_else(|| {
+    let contract = event_contract(draft.contract_id()).ok_or_else(|| {
         RadrootsAuthorityError::UnknownContract {
-            contract_id: draft.contract_id.clone(),
+            contract_id: draft.contract_id().to_owned(),
         }
     })?;
-    if contract.kind != draft.kind {
+    if contract.kind != draft.kind_u32() {
         return Err(RadrootsAuthorityError::DraftKindMismatch {
-            contract_id: draft.contract_id.clone(),
+            contract_id: draft.contract_id().to_owned(),
             expected_kind: contract.kind,
-            actual_kind: draft.kind,
+            actual_kind: draft.kind_u32(),
         });
     }
     authorize_actor_for_contract(actor, contract)?;
-    if actor.pubkey().as_str() != draft.expected_pubkey.as_str() {
+    if actor.pubkey().as_str() != draft.expected_pubkey_str() {
         return Err(RadrootsAuthorityError::ActorPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey.clone(),
+            expected_pubkey: draft.expected_pubkey_str().to_owned(),
             actor_pubkey: actor.pubkey().as_str().to_owned(),
         });
     }
@@ -61,11 +61,11 @@ pub fn authorize_signer_for_draft<S>(
 where
     S: RadrootsEventSigner + ?Sized,
 {
-    if signer.pubkey().as_str() == draft.expected_pubkey.as_str() {
+    if signer.pubkey().as_str() == draft.expected_pubkey_str() {
         Ok(())
     } else {
         Err(RadrootsAuthorityError::SignerPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey.clone(),
+            expected_pubkey: draft.expected_pubkey_str().to_owned(),
             signer_pubkey: signer.pubkey().as_str().to_owned(),
         })
     }
@@ -190,7 +190,7 @@ mod tests {
     #[derive(Default)]
     struct SignedEventOverrides {
         event_id: Option<String>,
-        created_at: Option<u32>,
+        created_at: Option<u64>,
         kind: Option<u32>,
         tags: Option<Vec<Vec<String>>>,
         content: Option<String>,
@@ -236,46 +236,69 @@ mod tests {
             &self,
             draft: &RadrootsEventDraft,
         ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-            RadrootsSignedEvent::new(RadrootsSignedEventParts {
+            let wire = RadrootsNip01EventWire {
                 id: self
                     .overrides
                     .event_id
                     .as_deref()
-                    .unwrap_or(draft.expected_event_id.as_str())
+                    .unwrap_or(draft.expected_event_id_str())
                     .to_owned(),
                 pubkey: self.pubkey.to_string(),
-                created_at: self.overrides.created_at.unwrap_or(draft.created_at),
-                kind: self.overrides.kind.unwrap_or(draft.kind),
+                created_at: self.overrides.created_at.unwrap_or(draft.created_at_u64()),
+                kind: self.overrides.kind.unwrap_or(draft.kind_u32()),
                 tags: self
                     .overrides
                     .tags
                     .clone()
-                    .unwrap_or_else(|| draft.tags.clone()),
+                    .unwrap_or_else(|| draft.tags_as_vec()),
                 content: self
                     .overrides
                     .content
                     .clone()
-                    .unwrap_or_else(|| draft.content.clone()),
+                    .unwrap_or_else(|| draft.content().to_owned()),
                 sig: hex_128('f'),
-                raw_json: "{}".to_owned(),
-            })
-            .map_err(|error| RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
+                extra: Default::default(),
+            };
+            RadrootsSignedEvent::from_wire_unchecked(wire, "{}").map_err(|error| {
+                RadrootsSignerError::SigningFailed {
+                    message: error.to_string(),
+                }
             })
         }
     }
 
     fn signed_event_from_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
-        RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id.clone(),
-            pubkey: draft.expected_pubkey.clone(),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
-            sig: hex_128('f'),
-            raw_json: "{}".to_owned(),
-        })
+        signed_event_from_parts(
+            draft.expected_event_id_str().to_owned(),
+            draft.expected_pubkey_str().to_owned(),
+            draft.created_at_u64(),
+            draft.kind_u32(),
+            draft.tags_as_vec(),
+            draft.content().to_owned(),
+        )
+    }
+
+    fn signed_event_from_parts(
+        id: String,
+        pubkey: String,
+        created_at: u64,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsSignedEvent {
+        RadrootsSignedEvent::from_wire_unchecked(
+            RadrootsNip01EventWire {
+                id,
+                pubkey,
+                created_at,
+                kind,
+                tags,
+                content,
+                sig: hex_128('f'),
+                extra: Default::default(),
+            },
+            "{}",
+        )
         .expect("signed event")
     }
 
@@ -344,44 +367,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_contract_and_kind_mismatch_fail() {
-        let actor = seller_actor(hex_64('a').as_str());
-        let unknown = RadrootsEventDraft {
-            contract_id: "radroots.unknown.v1".to_owned(),
-            contract_registry_version: 1,
-            kind: KIND_LISTING,
-            created_at: 1_700_000_000,
-            tags: Vec::new(),
-            content: "{}".to_owned(),
-            expected_pubkey: hex_64('a'),
-            expected_event_id: hex_64('e'),
-        };
-        assert!(matches!(
-            authorize_actor_for_draft(&actor, &unknown),
-            Err(RadrootsAuthorityError::UnknownContract { .. })
-        ));
-
-        let wrong_kind = RadrootsEventDraft {
-            contract_id: "radroots.listing.published.v1".to_owned(),
-            contract_registry_version: 1,
-            kind: KIND_POST,
-            created_at: 1_700_000_000,
-            tags: Vec::new(),
-            content: "{}".to_owned(),
-            expected_pubkey: hex_64('a'),
-            expected_event_id: hex_64('e'),
-        };
-        assert!(matches!(
-            authorize_actor_for_draft(&actor, &wrong_kind),
-            Err(RadrootsAuthorityError::DraftKindMismatch {
-                expected_kind: KIND_LISTING,
-                actual_kind: KIND_POST,
-                ..
-            })
-        ));
-    }
-
-    #[test]
     fn signed_event_id_mismatch_fails() {
         let pubkey = hex_64('a');
         let draft = listing_draft(pubkey.as_str());
@@ -402,7 +387,7 @@ mod tests {
         let signer = StaticSigner::with_overrides(
             pubkey.as_str(),
             SignedEventOverrides {
-                created_at: Some(draft.created_at + 1),
+                created_at: Some(draft.created_at_u64() + 1),
                 ..SignedEventOverrides::default()
             },
         );
@@ -500,17 +485,14 @@ mod tests {
     fn signed_event_pubkey_mismatch_fails() {
         let pubkey = hex_64('a');
         let draft = listing_draft(pubkey.as_str());
-        let signed = RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id.clone(),
-            pubkey: hex_64('b'),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
-            sig: hex_128('f'),
-            raw_json: "{}".to_owned(),
-        })
-        .expect("signed event");
+        let signed = signed_event_from_parts(
+            draft.expected_event_id_str().to_owned(),
+            hex_64('b'),
+            draft.created_at_u64(),
+            draft.kind_u32(),
+            draft.tags_as_vec(),
+            draft.content().to_owned(),
+        );
 
         assert!(matches!(
             validate_signed_event_matches_draft(&signed, &draft),
@@ -531,54 +513,10 @@ mod tests {
     }
 
     #[test]
-    fn signed_event_computed_id_mismatch_fails() {
-        let pubkey = hex_64('a');
-        let inconsistent_draft = RadrootsEventDraft {
-            contract_id: "radroots.listing.published.v1".to_owned(),
-            contract_registry_version: 1,
-            kind: KIND_LISTING,
-            created_at: 1_700_000_000,
-            tags: vec![vec!["d".to_owned(), "listing-a".to_owned()]],
-            content: "{}".to_owned(),
-            expected_pubkey: pubkey,
-            expected_event_id: hex_64('e'),
-        };
-        let signed = signed_event_from_draft(&inconsistent_draft);
-
-        assert!(matches!(
-            validate_signed_event_matches_draft(&signed, &inconsistent_draft),
-            Err(RadrootsAuthorityError::SignedEventComputedIdMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn sign_authorized_draft_calls_full_integrity_check() {
-        let pubkey = hex_64('a');
-        let inconsistent_draft = RadrootsEventDraft {
-            contract_id: "radroots.listing.published.v1".to_owned(),
-            contract_registry_version: 1,
-            kind: KIND_LISTING,
-            created_at: 1_700_000_000,
-            tags: vec![vec!["d".to_owned(), "listing-a".to_owned()]],
-            content: "{}".to_owned(),
-            expected_pubkey: pubkey.clone(),
-            expected_event_id: hex_64('e'),
-        };
-        let actor = seller_actor(pubkey.as_str());
-        let signer = StaticSigner::new(pubkey.as_str());
-
-        assert!(matches!(
-            sign_authorized_draft(&actor, &signer, &inconsistent_draft),
-            Err(RadrootsAuthorityError::SignedEventComputedIdMismatch { .. })
-        ));
-    }
-
-    #[test]
     fn static_signer_maps_invalid_signed_event_parts() {
         let pubkey = hex_64('a');
-        let mut draft = listing_draft(pubkey.as_str());
-        draft.expected_event_id = "bad-id".to_owned();
-        let signer = StaticSigner::new(pubkey.as_str());
+        let draft = listing_draft(pubkey.as_str());
+        let signer = StaticSigner::with_event_id(pubkey.as_str(), "bad-id".to_owned());
 
         assert!(matches!(
             signer.sign_frozen_draft(&draft),
@@ -595,9 +533,9 @@ mod tests {
 
         let signed = sign_authorized_draft(&actor, &signer, &draft).expect("signed");
 
-        assert_eq!(signed.id, draft.expected_event_id);
-        assert_eq!(signed.pubkey, draft.expected_pubkey);
-        assert_eq!(signed.kind, KIND_LISTING);
+        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.kind(), KIND_LISTING);
     }
 
     #[test]

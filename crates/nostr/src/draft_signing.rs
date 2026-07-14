@@ -1,39 +1,42 @@
 #![forbid(unsafe_code)]
 
 use crate::error::RadrootsNostrError;
-use crate::event_convert::radroots_event_from_nostr;
 use crate::events::radroots_nostr_build_event;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::wire::RadrootsNip01EventWire;
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
     draft: &RadrootsEventDraft,
 ) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
     let actual_pubkey = keys.public_key().to_hex();
-    if actual_pubkey != draft.expected_pubkey {
+    if actual_pubkey != draft.expected_pubkey_str() {
         return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey.clone(),
+            expected_pubkey: draft.expected_pubkey_str().to_owned(),
             actual_pubkey,
         });
     }
 
-    let event = radroots_nostr_build_event(draft.kind, draft.content.clone(), draft.tags.clone())?
-        .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(
-            draft.created_at,
-        )))
-        .sign_with_keys(keys)?;
+    let event = radroots_nostr_build_event(
+        draft.kind_u32(),
+        draft.content().to_owned(),
+        draft.tags_as_vec(),
+    )?
+    .custom_created_at(RadrootsNostrTimestamp::from_secs(draft.created_at_u64()))
+    .sign_with_keys(keys)?;
     let actual_event_id = event.id.to_hex();
-    if actual_event_id != draft.expected_event_id {
+    if actual_event_id != draft.expected_event_id_str() {
         return Err(RadrootsNostrError::FrozenDraftEventIdMismatch {
-            expected_event_id: draft.expected_event_id.clone(),
+            expected_event_id: draft.expected_event_id_str().to_owned(),
             actual_event_id,
         });
     }
 
     let raw_json = event.as_json();
-    RadrootsSignedEvent::from_event(radroots_event_from_nostr(&event), raw_json).map_err(Into::into)
+    let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -69,17 +72,17 @@ mod tests {
         let draft = post_draft(FIXTURE_ALICE.public_key_hex);
         let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
 
-        assert_eq!(signed.id, draft.expected_event_id);
-        assert_eq!(signed.pubkey, draft.expected_pubkey);
-        assert_eq!(signed.created_at, draft.created_at);
-        assert_eq!(signed.kind, draft.kind);
-        assert_eq!(signed.tags, draft.tags);
-        assert_eq!(signed.content, draft.content);
+        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.created_at(), draft.created_at_u64());
+        assert_eq!(signed.kind(), draft.kind_u32());
+        assert_eq!(signed.tags_as_vec(), draft.tags_as_vec());
+        assert_eq!(signed.content(), draft.content());
 
-        let raw_event = crate::types::RadrootsNostrEvent::from_json(signed.raw_json.as_str())
-            .expect("raw json");
-        assert_eq!(raw_event.id.to_hex(), signed.id);
-        assert_eq!(raw_event.created_at.as_secs(), u64::from(draft.created_at));
+        let raw_event =
+            crate::types::RadrootsNostrEvent::from_json(signed.raw_json()).expect("raw json");
+        assert_eq!(raw_event.id.to_hex(), signed.id_str());
+        assert_eq!(raw_event.created_at.as_secs(), draft.created_at_u64());
     }
 
     #[test]
@@ -97,8 +100,10 @@ mod tests {
     #[test]
     fn sign_frozen_draft_rejects_event_id_mismatch() {
         let keys = fixture_keys(FIXTURE_ALICE.secret_key_hex);
-        let mut draft = post_draft(FIXTURE_ALICE.public_key_hex);
-        draft.expected_event_id = "f".repeat(64);
+        let draft = post_draft(FIXTURE_ALICE.public_key_hex);
+        let mut raw = serde_json::to_value(&draft).expect("draft json");
+        raw["expected_event_id"] = serde_json::Value::String("f".repeat(64));
+        let draft: RadrootsEventDraft = serde_json::from_value(raw).expect("draft");
         let error = radroots_nostr_sign_frozen_draft(&keys, &draft).expect_err("id mismatch");
 
         assert!(matches!(

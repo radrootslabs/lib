@@ -13,10 +13,10 @@ use crate::model::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxReticulumPreviewEventRecord,
     RadrootsOutboxSignedOperationInput, RadrootsOutboxStatusSummary,
 };
-use radroots_event::RadrootsEventEnvelope;
 use radroots_event::draft::{
     RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
+use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
@@ -134,10 +134,11 @@ impl RadrootsOutbox {
         input: &RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
-        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey.as_str(),
+            input.draft.expected_pubkey_str(),
             &input.draft,
         );
 
@@ -145,7 +146,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation_for_pool(
                 &self.pool,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey.as_str(),
+                input.draft.expected_pubkey_str(),
                 idempotency_key,
             )
             .await?
@@ -153,7 +154,7 @@ impl RadrootsOutbox {
         {
             return Err(RadrootsOutboxError::IdempotencyConflict {
                 operation_kind: input.operation_kind.clone(),
-                expected_pubkey: input.draft.expected_pubkey.clone(),
+                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
                 idempotency_key: idempotency_key.to_owned(),
                 existing_digest: existing.operation_idempotency_digest,
                 new_digest: operation_digest,
@@ -170,10 +171,11 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey.as_str(),
+            input.draft.expected_pubkey_str(),
             &input.draft,
         );
         let mut tx = self.pool.begin().await?;
@@ -182,7 +184,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey.as_str(),
+                input.draft.expected_pubkey_str(),
                 idempotency_key,
             )
             .await?
@@ -190,7 +192,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -223,7 +225,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey.as_str())
+        .bind(input.draft.expected_pubkey_str())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -237,8 +239,8 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id.as_str())
-        .bind(input.draft.expected_pubkey.as_str())
+        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_pubkey_str())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
         .bind(input.created_at_ms)
@@ -256,7 +258,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id,
+            expected_event_id: input.draft.expected_event_id_str().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -267,10 +269,11 @@ impl RadrootsOutbox {
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
-        let prepared = prepare_delivery_plan(&input.draft.expected_event_id, &input.delivery_plan)?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey.as_str(),
+            input.draft.expected_pubkey_str(),
             &input.draft,
         );
         let mut tx = self.pool.begin().await?;
@@ -279,7 +282,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey.as_str(),
+                input.draft.expected_pubkey_str(),
                 idempotency_key,
             )
             .await?
@@ -287,7 +290,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -326,7 +329,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey.as_str())
+        .bind(input.draft.expected_pubkey_str())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -336,16 +339,16 @@ impl RadrootsOutbox {
         .await?;
         let operation_id = operation.last_insert_rowid();
         let draft_json = serde_json::to_string(&input.draft)?;
-        let signed_event_json = serde_json::to_string(&input.signed_event)?;
+        let signed_event_json = signed_event_wire_json(&input.signed_event)?;
         let event = sqlx::query(
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id.as_str())
-        .bind(input.draft.expected_pubkey.as_str())
+        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_pubkey_str())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
-        .bind(input.signed_event.raw_json.as_str())
+        .bind(input.signed_event.raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(input.created_at_ms)
         .bind(bool_i64(input.event_store_inserted))
@@ -365,7 +368,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id,
+            expected_event_id: input.draft.expected_event_id_str().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -622,18 +625,18 @@ impl RadrootsOutbox {
         if stored != Some(claim_token) {
             return Err(RadrootsOutboxError::ClaimTokenMismatch { outbox_event_id });
         }
-        if signed_event.id != record.event_id {
+        if signed_event.id_str() != record.event_id {
             return Err(RadrootsOutboxError::SignedEventIdMismatch {
                 expected_event_id: record.event_id,
-                actual_event_id: signed_event.id,
+                actual_event_id: signed_event.id_str().to_owned(),
             });
         }
-        let signed_event_json = serde_json::to_string(&signed_event)?;
+        let signed_event_json = signed_event_wire_json(&signed_event)?;
         let changed = sqlx::query(
             "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, last_error = NULL, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
         .bind(signed_event_json.as_str())
-        .bind(signed_event.raw_json.as_str())
+        .bind(signed_event.raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(now_ms)
         .bind(outbox_event_id)
@@ -724,15 +727,13 @@ impl RadrootsOutbox {
         let signed_event = record
             .signed_event
             .ok_or(RadrootsOutboxError::MissingSignedEvent(outbox_event_id))?;
-        let event = event_from_signed(&signed_event);
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Local,
             "local:outbox",
             RadrootsTransportObservationType::LocalImport,
             observed_at_ms,
         )?;
-        let ingest = RadrootsEventIngest::new(event, observed_at_ms)
-            .with_raw_json(signed_event.raw_json.clone())
+        let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
             .with_observation(observation);
         let receipt = event_store.ingest_event(ingest).await?;
         let changed = sqlx::query(
@@ -1794,12 +1795,12 @@ async fn ensure_event_signed(
     event_store_inserted: bool,
     event_store_ingested_at_ms: i64,
 ) -> Result<(), RadrootsOutboxError> {
-    let signed_event_json = serde_json::to_string(signed_event)?;
+    let signed_event_json = signed_event_wire_json(signed_event)?;
     sqlx::query(
         "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = CASE WHEN state IN ('draft_queued', 'sign_retryable', 'signing') THEN ? ELSE state END, event_store_ingested = 1, event_store_inserted = ?, event_store_ingested_at_ms = ? WHERE outbox_event_id = ? AND signed_event_json IS NULL",
     )
     .bind(signed_event_json.as_str())
-    .bind(signed_event.raw_json.as_str())
+    .bind(signed_event.raw_json())
     .bind(RadrootsOutboxEventState::Signed.as_str())
     .bind(bool_i64(event_store_inserted))
     .bind(event_store_ingested_at_ms)
@@ -2226,17 +2227,28 @@ fn operation_from_row(
 fn event_from_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
+    let outbox_event_id = row.try_get("outbox_event_id")?;
+    let event_id = row.try_get::<String, _>("event_id")?;
     let draft: RadrootsEventDraft =
         serde_json::from_str(row.try_get::<String, _>("draft_json")?.as_str())?;
-    let signed_event = row
-        .try_get::<Option<String>, _>("signed_event_json")?
-        .map(|json| serde_json::from_str(json.as_str()))
-        .transpose()?;
+    let signed_event = signed_event_from_storage(
+        outbox_event_id,
+        row.try_get("signed_event_json")?,
+        row.try_get("raw_event_json")?,
+    )?;
+    if let Some(signed_event) = signed_event.as_ref()
+        && signed_event.id_str() != event_id
+    {
+        return Err(RadrootsOutboxError::SignedEventIdMismatch {
+            expected_event_id: event_id,
+            actual_event_id: signed_event.id_str().to_owned(),
+        });
+    }
     let state = RadrootsOutboxEventState::parse(row.try_get::<String, _>("state")?.as_str())?;
     Ok(RadrootsOutboxEventRecord {
-        outbox_event_id: row.try_get("outbox_event_id")?,
+        outbox_event_id,
         operation_id: row.try_get("operation_id")?,
-        event_id: row.try_get("event_id")?,
+        event_id,
         expected_pubkey: row.try_get("expected_pubkey")?,
         draft,
         signed_event,
@@ -2255,6 +2267,34 @@ fn event_from_row(
         created_at_ms: row.try_get("created_at_ms")?,
         updated_at_ms: row.try_get("updated_at_ms")?,
     })
+}
+
+fn signed_event_from_storage(
+    outbox_event_id: i64,
+    signed_event_json: Option<String>,
+    raw_event_json: Option<String>,
+) -> Result<Option<RadrootsSignedEvent>, RadrootsOutboxError> {
+    match (signed_event_json, raw_event_json) {
+        (None, None) => Ok(None),
+        (Some(_), None) => Err(RadrootsOutboxError::StoredSignedEventMissingRawJson(
+            outbox_event_id,
+        )),
+        (None, Some(_)) => Err(RadrootsOutboxError::StoredRawEventMissingSignedEvent(
+            outbox_event_id,
+        )),
+        (Some(signed_json), Some(raw_json)) => {
+            let wire = RadrootsNip01EventWire::parse_json(signed_json.as_str())?;
+            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+                .map(Some)
+                .map_err(Into::into)
+        }
+    }
+}
+
+fn signed_event_wire_json(
+    signed_event: &RadrootsSignedEvent,
+) -> Result<String, RadrootsOutboxError> {
+    serde_json::to_string(signed_event.wire()).map_err(Into::into)
 }
 
 fn delivery_plan_from_row(
@@ -2424,18 +2464,6 @@ fn parse_transport_outcome_kind(
             field,
             value: value.to_owned(),
         }),
-    }
-}
-
-fn event_from_signed(signed_event: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
-        id: signed_event.id.clone(),
-        author: signed_event.pubkey.clone(),
-        created_at: signed_event.created_at,
-        kind: signed_event.kind,
-        tags: signed_event.tags.clone(),
-        content: signed_event.content.clone(),
-        sig: signed_event.sig.clone(),
     }
 }
 
@@ -3253,7 +3281,7 @@ mod tests {
         assert_ne!(scoped.fingerprint, rescaled.fingerprint);
 
         let first_prepared = prepare_delivery_plan(
-            draft.expected_event_id.as_str(),
+            draft.expected_event_id_str(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,
@@ -3263,7 +3291,7 @@ mod tests {
         )
         .expect("first plan");
         let relabeled_prepared = prepare_delivery_plan(
-            draft.expected_event_id.as_str(),
+            draft.expected_event_id_str(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,
@@ -3273,7 +3301,7 @@ mod tests {
         )
         .expect("relabeled plan");
         let rescaled_prepared = prepare_delivery_plan(
-            draft.expected_event_id.as_str(),
+            draft.expected_event_id_str(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,
@@ -5323,7 +5351,7 @@ mod tests {
             .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_200)
             .await
             .expect("first ingest");
-        assert_eq!(first.event_id, signed.id);
+        assert_eq!(first.event_id, signed.id_str());
         assert!(!first.already_ingested);
 
         let second = outbox
@@ -5332,7 +5360,7 @@ mod tests {
             .expect("second ingest");
         assert!(second.already_ingested);
         let observations = event_store
-            .observations_for_event(signed.id.as_str())
+            .observations_for_event(signed.id_str())
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);

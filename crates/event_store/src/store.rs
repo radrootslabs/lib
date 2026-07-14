@@ -16,7 +16,7 @@ use radroots_event::event_head::{
     RadrootsEventHeadCoordinate, RadrootsEventHeadDecision, event_head_candidate_for_contract,
     select_event_head,
 };
-use radroots_event::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsPublicKey};
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 use radroots_nostr::prelude::{RadrootsNostrEventVerification, radroots_nostr_verify_event};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
@@ -105,22 +105,20 @@ impl RadrootsEventStore {
         &self,
         ingest: RadrootsEventIngest,
     ) -> Result<RadrootsEventIngestReceipt, RadrootsEventStoreError> {
-        validate_event_identity(&ingest.event)?;
-        let verification_status = verify_event(&ingest.event);
-        let classification = classify_event(&ingest.event);
-        let raw_json = ingest
-            .raw_json
-            .clone()
-            .map(Ok)
-            .unwrap_or_else(|| serde_json::to_string(&ingest.event))?;
-        let tags_json = serde_json::to_string(&ingest.event.tags)?;
+        let event = ingest.event();
+        validate_event_identity(event)?;
+        let verification_status = verify_event(event);
+        let classification = classify_event(event);
+        let tags = event.tags_as_vec();
+        let tags_json = serde_json::to_string(&tags)?;
+        let event_id = event.id_str().to_owned();
         let mut tx = self.pool.begin().await?;
         let insert = insert_raw_event(
             &mut tx,
             &ingest,
             &classification,
             verification_status,
-            raw_json.as_str(),
+            ingest.raw_json(),
             tags_json.as_str(),
         )
         .await?;
@@ -129,12 +127,11 @@ impl RadrootsEventStore {
         let mut projection_eligible = classification.base_projection_eligible(verification_status);
 
         if inserted {
-            insert_tags(&mut tx, &ingest.event, classification.contract).await?;
+            insert_tags(&mut tx, event, classification.contract).await?;
             if let Some(contract) = classification.contract {
                 if projection_eligible {
                     let head =
-                        apply_event_head(&mut tx, &ingest.event, contract, ingest.observed_at_ms)
-                            .await?;
+                        apply_event_head(&mut tx, event, contract, ingest.observed_at_ms).await?;
                     projection_eligible = head.projection_eligible;
                     head_decision = head.decision;
                     sqlx::query(
@@ -142,7 +139,7 @@ impl RadrootsEventStore {
                     )
                     .bind(bool_i64(projection_eligible))
                     .bind(ingest.observed_at_ms)
-                    .bind(ingest.event.id.as_str())
+                    .bind(event_id.as_str())
                     .execute(&mut *tx)
                     .await?;
                 } else {
@@ -155,14 +152,14 @@ impl RadrootsEventStore {
         }
 
         if let Some(observation) = ingest.transport_observation.as_ref() {
-            upsert_observation(&mut tx, ingest.event.id.as_str(), observation).await?;
+            upsert_observation(&mut tx, event_id.as_str(), observation).await?;
         }
 
         tx.commit().await?;
 
         Ok(RadrootsEventIngestReceipt {
             seq: insert.seq,
-            event_id: ingest.event.id,
+            event_id,
             inserted,
             verification_status,
             contract_status: classification.contract_status,
@@ -450,14 +447,14 @@ async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsEv
 }
 
 fn validate_event_identity(event: &RadrootsEventEnvelope) -> Result<(), RadrootsEventStoreError> {
-    RadrootsEventId::parse(event.id.as_str())?;
-    RadrootsPublicKey::parse(event.author.as_str())?;
-    RadrootsEventSignature::parse(event.sig.as_str())?;
+    RadrootsEventId::parse(event.id_str())?;
+    RadrootsPublicKey::parse(event.author_str())?;
     Ok(())
 }
 
 fn classify_event(event: &RadrootsEventEnvelope) -> EventClassification {
-    match identify_event_contract(event.kind, &event.tags, &event.content) {
+    let tags = event.tags_as_vec();
+    match identify_event_contract(event.kind_u32(), &tags, event.content()) {
         Ok(contract) => EventClassification {
             contract_status: RadrootsEventContractStatus::Supported,
             contract: Some(contract),
@@ -497,7 +494,7 @@ async fn insert_raw_event(
     raw_json: &str,
     tags_json: &str,
 ) -> Result<InsertRawEventResult, RadrootsEventStoreError> {
-    let event = &ingest.event;
+    let event = ingest.event();
     let contract_id = classification.contract.map(|contract| contract.id);
     let event_class = classification
         .contract
@@ -506,13 +503,13 @@ async fn insert_raw_event(
     let result = sqlx::query(
         "INSERT OR IGNORE INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(event.id.as_str())
-    .bind(event.author.as_str())
-    .bind(i64::from(event.created_at))
-    .bind(i64::from(event.kind))
+    .bind(event.id_str())
+    .bind(event.author_str())
+    .bind(i64_from_u64("created_at", event.created_at_u64())?)
+    .bind(i64::from(event.kind_u32()))
     .bind(tags_json)
-    .bind(event.content.as_str())
-    .bind(event.sig.as_str())
+    .bind(event.content())
+    .bind(event.sig_str())
     .bind(raw_json)
     .bind(verification_status.as_str())
     .bind(classification.contract_status.as_str())
@@ -524,7 +521,7 @@ async fn insert_raw_event(
     .execute(&mut **tx)
     .await?;
     let inserted = result.rows_affected() > 0;
-    let seq = event_seq(tx, event.id.as_str()).await?;
+    let seq = event_seq(tx, event.id_str()).await?;
     Ok(InsertRawEventResult { inserted, seq })
 }
 
@@ -546,10 +543,11 @@ async fn insert_tags(
     event: &RadrootsEventEnvelope,
     contract: Option<&'static RadrootsEventContract>,
 ) -> Result<(), RadrootsEventStoreError> {
-    for (index, tag) in event.tags.iter().enumerate() {
-        let tag_name = tag.first().map(String::as_str).unwrap_or("");
-        let tag_value = tag.get(1).map(String::as_str);
-        let tag_json = serde_json::to_string(tag)?;
+    for (index, tag) in event.tag_slices().iter().enumerate() {
+        let tag_values = tag.as_slice();
+        let tag_name = tag_values.first().map(String::as_str).unwrap_or("");
+        let tag_value = tag_values.get(1).map(String::as_str);
+        let tag_json = serde_json::to_string(tag_values)?;
         let tag_contract = contract.and_then(|contract| {
             contract
                 .tags
@@ -562,7 +560,7 @@ async fn insert_tags(
         sqlx::query(
             "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(event.id.as_str())
+        .bind(event.id_str())
         .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
             field: "tag_index",
             value: i64::MAX,
@@ -675,7 +673,7 @@ async fn current_event_head(
         Ok(RadrootsCurrentEventHead {
             coordinate: coordinate.clone(),
             event_id: RadrootsEventId::parse(event_id)?,
-            created_at: u32_from_i64("created_at", created_at)?,
+            created_at: u64_from_i64("created_at", created_at)?,
         })
     })
     .transpose()
@@ -703,7 +701,7 @@ async fn upsert_head(
             .bind(i64::from(*kind))
             .bind(pubkey.as_str())
             .bind(candidate.event_id.as_str())
-            .bind(i64::from(candidate.created_at))
+            .bind(i64_from_u64("created_at", candidate.created_at)?)
             .bind(updated_at_ms)
             .execute(&mut **tx)
             .await?;
@@ -728,7 +726,7 @@ async fn upsert_head(
             .bind(pubkey.as_str())
             .bind(d_tag.as_str())
             .bind(candidate.event_id.as_str())
-            .bind(i64::from(candidate.created_at))
+            .bind(i64_from_u64("created_at", candidate.created_at)?)
             .bind(updated_at_ms)
             .execute(&mut **tx)
             .await?;
@@ -742,7 +740,7 @@ fn stored_event_from_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<RadrootsStoredEvent, RadrootsEventStoreError> {
     let kind = u32_from_i64("kind", row.try_get("kind")?)?;
-    let created_at = u32_from_i64("created_at", row.try_get("created_at")?)?;
+    let created_at = u64_from_i64("created_at", row.try_get("created_at")?)?;
     let verification_status =
         RadrootsEventVerificationStatus::parse(row.try_get("verification_status")?)?;
     let contract_status =
@@ -798,7 +796,7 @@ fn stored_head_from_row(
         pubkey: row.try_get("pubkey")?,
         d_tag: row.try_get("d_tag")?,
         event_id: row.try_get("event_id")?,
-        created_at: u32_from_i64("created_at", row.try_get("created_at")?)?,
+        created_at: u64_from_i64("created_at", row.try_get("created_at")?)?,
         updated_at_ms: row.try_get("updated_at_ms")?,
     })
 }
@@ -859,6 +857,16 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsEventSto
     u32::try_from(value).map_err(|_| RadrootsEventStoreError::IntegerRange { field, value })
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn u64_from_i64(field: &'static str, value: i64) -> Result<u64, RadrootsEventStoreError> {
+    u64::try_from(value).map_err(|_| RadrootsEventStoreError::IntegerRange { field, value })
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventStoreError> {
+    i64::try_from(value).map_err(|_| RadrootsEventStoreError::UnsignedIntegerRange { field, value })
+}
+
 fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
@@ -900,13 +908,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_event::draft::RadrootsSignedEvent;
     use radroots_event::event_head::event_head_candidate_for_event;
     use radroots_event::kinds::{
         KIND_GEOCHAT, KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE,
     };
+    use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
-        radroots_event_from_nostr, radroots_nostr_build_event,
+        radroots_nostr_build_event,
     };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -929,27 +939,72 @@ mod tests {
         created_at: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsEventEnvelope {
+    ) -> RadrootsSignedEvent {
         let raw_event = radroots_nostr_build_event(kind, content, tags)
             .expect("builder")
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
             .sign_with_keys(&fixture_keys())
             .expect("signed event");
-        radroots_event_from_nostr(&raw_event)
+        signed_event_from_raw_json(serde_json::to_string(&raw_event).expect("raw json"))
     }
 
-    fn tamper_signature(event: &mut RadrootsEventEnvelope) {
-        let replacement = if event.sig.starts_with('0') { "1" } else { "0" };
-        event.sig.replace_range(0..1, replacement);
+    fn signed_event_from_raw_json(raw_json: String) -> RadrootsSignedEvent {
+        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str()).expect("wire");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    }
+
+    fn synthetic_signed_event(
+        kind: u32,
+        created_at: u64,
+        tags: Vec<Vec<String>>,
+        content: &str,
+    ) -> RadrootsSignedEvent {
+        let pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned();
+        let content = content.to_owned();
+        let id = compute_canonical_nip01_event_id(
+            pubkey.as_str(),
+            created_at,
+            kind,
+            &tags,
+            content.as_str(),
+        )
+        .expect("event id")
+        .into_string();
+        let wire = RadrootsNip01EventWire {
+            id,
+            pubkey,
+            created_at,
+            kind,
+            tags,
+            content,
+            sig: event_id('f').repeat(2),
+            extra: Default::default(),
+        };
+        let raw_json = serde_json::to_string(&wire).expect("raw json");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    }
+
+    fn tamper_signature(event: &RadrootsSignedEvent) -> RadrootsSignedEvent {
+        let mut wire = event.wire().clone();
+        let replacement = if wire.sig.starts_with('0') { "1" } else { "0" };
+        wire.sig.replace_range(0..1, replacement);
+        let raw_json = serde_json::to_string(&wire).expect("raw json");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    }
+
+    fn tampered_content_raw_json(event: &RadrootsSignedEvent, content: &str) -> String {
+        let mut wire = event.wire().clone();
+        wire.content = content.to_owned();
+        serde_json::to_string(&wire).expect("raw json")
     }
 
     fn listing_tags(d_tag: &str) -> Vec<Vec<String>> {
         vec![vec!["d".to_owned(), d_tag.to_owned()]]
     }
 
-    fn head_coordinate_for_event(event: &RadrootsEventEnvelope) -> RadrootsEventHeadCoordinate {
+    fn head_coordinate_for_event(event: &RadrootsSignedEvent) -> RadrootsEventHeadCoordinate {
         let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_event(event).expect("head candidate")
+            event_head_candidate_for_event(event.envelope()).expect("head candidate")
         else {
             panic!("event should select a head");
         };
@@ -1153,8 +1208,7 @@ mod tests {
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             "hello",
         );
-        let ingest =
-            RadrootsEventIngest::new(event.clone(), 1_000).with_raw_json("{\"fixture\":true}");
+        let ingest = RadrootsEventIngest::new(event.clone(), 1_000);
 
         let first = store
             .ingest_event(ingest.clone())
@@ -1162,7 +1216,7 @@ mod tests {
             .expect("first ingest");
         let second = store.ingest_event(ingest).await.expect("second ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1179,7 +1233,7 @@ mod tests {
             RadrootsEventVerificationStatus::Verified
         );
         assert_eq!(stored.seq, first.seq);
-        assert_eq!(stored.raw_json, "{\"fixture\":true}");
+        assert_eq!(stored.raw_json, event.raw_json());
         assert_eq!(stored.content, "hello");
         assert_eq!(stored.tags_json, "[[\"t\",\"soil\"]]");
         assert_eq!(
@@ -1189,12 +1243,23 @@ mod tests {
         assert!(stored.projection_eligible);
         assert_eq!(
             store
-                .tags_for_event(event.id.as_str())
+                .tags_for_event(event.id_str())
                 .await
                 .expect("tags")
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn wrapper_json_is_rejected_as_event_authority() {
+        let event = signed_event(KIND_POST, 10, Vec::new(), "hello");
+        let wrapper_json = serde_json::to_string(&event).expect("wrapper json");
+
+        let error = RadrootsEventIngest::from_raw_json(wrapper_json, 1_000)
+            .expect_err("wrapper json should not parse as event wire");
+
+        assert!(matches!(error, RadrootsEventStoreError::EventWire(_)));
     }
 
     #[tokio::test]
@@ -1206,7 +1271,7 @@ mod tests {
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1234,15 +1299,15 @@ mod tests {
 
     #[test]
     fn test_helpers_cover_signature_and_non_head_branches() {
-        let mut zero_sig = signed_event(KIND_POST, 12, Vec::new(), "zero");
-        zero_sig.sig.replace_range(0..1, "0");
-        tamper_signature(&mut zero_sig);
-        assert!(zero_sig.sig.starts_with('1'));
+        let zero_sig = synthetic_signed_event(KIND_POST, 12, Vec::new(), "zero");
+        let zero_sig = tamper_signature(&zero_sig);
+        assert!(zero_sig.sig_str().starts_with('0'));
 
-        let mut nonzero_sig = signed_event(KIND_POST, 12, Vec::new(), "nonzero");
-        nonzero_sig.sig.replace_range(0..1, "1");
-        tamper_signature(&mut nonzero_sig);
-        assert!(nonzero_sig.sig.starts_with('0'));
+        let nonzero_sig = tamper_signature(&signed_event(KIND_POST, 12, Vec::new(), "nonzero"));
+        assert_ne!(
+            nonzero_sig.sig_str(),
+            signed_event(KIND_POST, 12, Vec::new(), "nonzero").sig_str()
+        );
     }
 
     #[test]
@@ -1253,33 +1318,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn id_mismatch_events_are_stored_but_not_projected() {
+    async fn id_mismatch_raw_json_is_rejected_before_storage() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let mut event = signed_event(KIND_POST, 12, Vec::new(), "hello");
-        event.content = "tampered".to_owned();
-        let receipt = store
-            .ingest_event(RadrootsEventIngest::new(event.clone(), 2_100))
-            .await
-            .expect("ingest");
-        let stored = store
-            .get_event(event.id.as_str())
-            .await
-            .expect("get")
-            .expect("stored");
+        let event = signed_event(KIND_POST, 12, Vec::new(), "hello");
+        let raw_json = tampered_content_raw_json(&event, "tampered");
 
-        assert_eq!(
-            receipt.contract_status,
-            RadrootsEventContractStatus::Supported
-        );
-        assert_eq!(
-            receipt.verification_status,
-            RadrootsEventVerificationStatus::IdMismatch
-        );
-        assert_eq!(
-            stored.verification_status,
-            RadrootsEventVerificationStatus::IdMismatch
-        );
-        assert!(!stored.projection_eligible);
+        let error = RadrootsEventIngest::from_raw_json(raw_json, 2_100).expect_err("id mismatch");
+
+        assert!(matches!(error, RadrootsEventStoreError::EventWire(_)));
         assert!(
             store
                 .events_since_cursor("social", 10)
@@ -1292,14 +1338,13 @@ mod tests {
     #[tokio::test]
     async fn signature_invalid_events_are_stored_but_not_projected() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let mut event = signed_event(KIND_POST, 13, Vec::new(), "hello");
-        tamper_signature(&mut event);
+        let event = tamper_signature(&signed_event(KIND_POST, 13, Vec::new(), "hello"));
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(event.clone(), 2_200))
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1325,15 +1370,14 @@ mod tests {
     #[tokio::test]
     async fn malformed_envelope_events_are_stored_but_not_projected() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let mut event = signed_event(KIND_POST, 13, Vec::new(), "hello");
-        event.kind = u32::from(u16::MAX) + 1;
+        let event = synthetic_signed_event(u32::from(u16::MAX) + 1, 13, Vec::new(), "hello");
 
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(event.clone(), 2_250))
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1359,7 +1403,7 @@ mod tests {
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1380,11 +1424,11 @@ mod tests {
     async fn event_head_helper_maps_not_persisted_candidates() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_GEOCHAT, 17, Vec::new(), "hello");
-        let classification = classify_event(&event);
+        let classification = classify_event(event.envelope());
         let contract = classification.contract.expect("contract");
         let mut tx = store.pool.begin().await.expect("tx");
 
-        let head = apply_event_head(&mut tx, &event, contract, 2_280)
+        let head = apply_event_head(&mut tx, event.envelope(), contract, 2_280)
             .await
             .expect("head");
 
@@ -1402,7 +1446,7 @@ mod tests {
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1420,7 +1464,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn id_mismatch_addressable_events_do_not_update_heads() {
+    async fn id_mismatch_addressable_raw_json_does_not_update_heads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let original = signed_event(KIND_LISTING, 17, listing_tags("listing-1"), "{}");
         let first = store
@@ -1428,18 +1472,9 @@ mod tests {
             .await
             .expect("first");
         let coordinate = head_coordinate_for_event(&original);
-        let mut invalid = signed_event(KIND_LISTING, 18, listing_tags("listing-1"), "{}");
-        invalid.content = "{\"tampered\":true}".to_owned();
-
-        let receipt = store
-            .ingest_event(RadrootsEventIngest::new(invalid.clone(), 2_400))
-            .await
-            .expect("invalid");
-        let stored = store
-            .get_event(invalid.id.as_str())
-            .await
-            .expect("get")
-            .expect("stored");
+        let invalid = signed_event(KIND_LISTING, 18, listing_tags("listing-1"), "{}");
+        let raw_json = tampered_content_raw_json(&invalid, "{\"tampered\":true}");
+        let error = RadrootsEventIngest::from_raw_json(raw_json, 2_400).expect_err("id mismatch");
         let head = store
             .event_head(&coordinate)
             .await
@@ -1447,17 +1482,8 @@ mod tests {
             .expect("stored head");
 
         assert_eq!(first.head_decision, RadrootsEventHeadStoreDecision::Applied);
-        assert_eq!(
-            receipt.verification_status,
-            RadrootsEventVerificationStatus::IdMismatch
-        );
-        assert_eq!(
-            receipt.head_decision,
-            RadrootsEventHeadStoreDecision::NotProjectionEligible
-        );
-        assert!(!receipt.projection_eligible);
-        assert!(!stored.projection_eligible);
-        assert_eq!(head.event_id, original.id);
+        assert!(matches!(error, RadrootsEventStoreError::EventWire(_)));
+        assert_eq!(head.event_id, original.id_str());
     }
 
     #[tokio::test]
@@ -1469,8 +1495,12 @@ mod tests {
             .await
             .expect("first");
         let coordinate = head_coordinate_for_event(&original);
-        let mut invalid = signed_event(KIND_LISTING, 20, listing_tags("listing-2"), "{}");
-        tamper_signature(&mut invalid);
+        let invalid = tamper_signature(&signed_event(
+            KIND_LISTING,
+            20,
+            listing_tags("listing-2"),
+            "{}",
+        ));
 
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(invalid.clone(), 2_600))
@@ -1491,7 +1521,7 @@ mod tests {
             RadrootsEventHeadStoreDecision::NotProjectionEligible
         );
         assert!(!receipt.projection_eligible);
-        assert_eq!(head.event_id, original.id);
+        assert_eq!(head.event_id, original.id_str());
     }
 
     #[tokio::test]
@@ -1503,8 +1533,12 @@ mod tests {
             .await
             .expect("original");
         let coordinate = head_coordinate_for_event(&original);
-        let mut invalid = signed_event(KIND_LISTING, 22, listing_tags("listing-3"), "{}");
-        invalid.content = "{\"tampered\":true}".to_owned();
+        let invalid = tamper_signature(&signed_event(
+            KIND_LISTING,
+            22,
+            listing_tags("listing-3"),
+            "{}",
+        ));
 
         let first_invalid = store
             .ingest_event(RadrootsEventIngest::new(invalid.clone(), 2_800))
@@ -1531,7 +1565,7 @@ mod tests {
             second_invalid.head_decision,
             RadrootsEventHeadStoreDecision::SkippedDuplicate
         );
-        assert_eq!(head.event_id, original.id);
+        assert_eq!(head.event_id, original.id_str());
     }
 
     #[tokio::test]
@@ -1562,7 +1596,7 @@ mod tests {
             second.head_decision,
             RadrootsEventHeadStoreDecision::SkippedDuplicate
         );
-        assert_eq!(head.event_id, event.id);
+        assert_eq!(head.event_id, event.id_str());
     }
 
     #[tokio::test]
@@ -1575,7 +1609,7 @@ mod tests {
             .await
             .expect("ingest");
         let stored = store
-            .get_event(event.id.as_str())
+            .get_event(event.id_str())
             .await
             .expect("get")
             .expect("stored");
@@ -1651,8 +1685,8 @@ mod tests {
             .await
             .expect("tag query");
         assert_eq!(events.len(), 2);
-        assert_eq!(events[0].event_id, high_created_at.id);
-        assert_eq!(events[1].event_id, low_created_at.id);
+        assert_eq!(events[0].event_id, high_created_at.id_str());
+        assert_eq!(events[1].event_id, low_created_at.id_str());
         assert!(events.iter().all(|event| event.projection_eligible));
 
         let limited = store
@@ -1660,7 +1694,7 @@ mod tests {
             .await
             .expect("limited tag query");
         assert_eq!(limited.len(), 1);
-        assert_eq!(limited[0].event_id, high_created_at.id);
+        assert_eq!(limited[0].event_id, high_created_at.id_str());
     }
 
     #[tokio::test]
@@ -1746,7 +1780,7 @@ mod tests {
             .await
             .expect("contract tag query");
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_id, matching_order.id);
+        assert_eq!(events[0].event_id, matching_order.id_str());
         assert_eq!(
             events[0].contract_id.as_deref(),
             Some("radroots.order.request.v1")
@@ -1771,7 +1805,7 @@ mod tests {
             .ingest_event(RadrootsEventIngest::new(event.clone(), 3_000))
             .await
             .expect("ingest");
-        let tags = store.tags_for_event(event.id.as_str()).await.expect("tags");
+        let tags = store.tags_for_event(event.id_str()).await.expect("tags");
 
         assert_eq!(tags[0].tag_index, 0);
         assert_eq!(tags[0].tag_name, "p");
@@ -1811,7 +1845,7 @@ mod tests {
             .ingest_event(RadrootsEventIngest::new(event.clone(), 3_100))
             .await
             .expect("ingest");
-        let tags = store.tags_for_event(event.id.as_str()).await.expect("tags");
+        let tags = store.tags_for_event(event.id_str()).await.expect("tags");
         let listing_tag = tags
             .iter()
             .find(|tag| tag.tag_name == "listing_event")
@@ -1864,7 +1898,7 @@ mod tests {
         store.ingest_event(ingest).await.expect("older duplicate");
 
         let observations = store
-            .observations_for_event(event.id.as_str())
+            .observations_for_event(event.id_str())
             .await
             .expect("stale duplicate observations");
         assert_eq!(observations.len(), 1);
@@ -1912,7 +1946,7 @@ mod tests {
             .expect("newer duplicate without message");
 
         let observations = store
-            .observations_for_event(event.id.as_str())
+            .observations_for_event(event.id_str())
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);
@@ -1943,7 +1977,7 @@ mod tests {
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"a\"}"),
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"b\"}"),
         ];
-        events.sort_by(|left, right| left.id.cmp(&right.id));
+        events.sort_by(|left, right| left.id_str().cmp(right.id_str()));
         let lower = events[0].clone();
         let higher = events[1].clone();
 
@@ -1967,7 +2001,7 @@ mod tests {
             second.head_decision,
             RadrootsEventHeadStoreDecision::Applied
         );
-        assert_eq!(head.event_id, lower.id);
+        assert_eq!(head.event_id, lower.id_str());
 
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store
@@ -1988,7 +2022,7 @@ mod tests {
             second.head_decision,
             RadrootsEventHeadStoreDecision::SkippedSameTimestampHigherEventId
         );
-        assert_eq!(head.event_id, lower.id);
+        assert_eq!(head.event_id, lower.id_str());
     }
 
     #[tokio::test]
@@ -2011,8 +2045,8 @@ mod tests {
             .await
             .expect("initial replay");
         assert_eq!(replay.len(), 2);
-        assert_eq!(replay[0].event_id, first.id);
-        assert_eq!(replay[1].event_id, second.id);
+        assert_eq!(replay[0].event_id, first.id_str());
+        assert_eq!(replay[1].event_id, second.id_str());
         store
             .update_projection_cursor(&RadrootsProjectionCursor {
                 projection_id: "social".to_owned(),
@@ -2027,7 +2061,7 @@ mod tests {
             .await
             .expect("next replay");
         assert_eq!(replay.len(), 1);
-        assert_eq!(replay[0].event_id, second.id);
+        assert_eq!(replay[0].event_id, second.id_str());
     }
 
     #[tokio::test]

@@ -44,19 +44,22 @@ pub struct RadrootsTradeListing {
 pub fn validate_listing_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsTradeListing, TradeListingValidationError> {
-    if !is_listing_kind(event.kind) {
-        return Err(TradeListingValidationError::InvalidKind { kind: event.kind });
+    if !is_listing_kind(event.kind_u32()) {
+        return Err(TradeListingValidationError::InvalidKind {
+            kind: event.kind_u32(),
+        });
     }
 
-    let listing = listing_from_event_parts(&event.tags, &event.content)
+    let tags = event.tags_as_vec();
+    let listing = listing_from_event_parts(&tags, event.content())
         .map_err(|error| TradeListingValidationError::ParseError { error })?;
     let listing_id = listing.d_tag.trim().to_string();
 
-    let seller_pubkey = event.author.clone();
+    let seller_pubkey = event.author_str().to_owned();
     if listing.farm.pubkey != seller_pubkey {
         return Err(TradeListingValidationError::InvalidSeller);
     }
-    let listing_addr_raw = format!("{}:{}:{}", event.kind, seller_pubkey, listing_id);
+    let listing_addr_raw = format!("{}:{}:{}", event.kind_u32(), seller_pubkey, listing_id);
     let listing_addr = RadrootsListingAddress::parse(&listing_addr_raw)
         .map_err(|_| TradeListingValidationError::ParseError {
             error: RadrootsListingParseError::InvalidTag("listing_addr".to_string()),
@@ -271,12 +274,10 @@ mod tests {
     }
 
     fn base_event(listing: &RadrootsListing) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
-            id: "evt".into(),
-            author: SELLER.into(),
-            created_at: 0,
-            kind: KIND_LISTING,
-            tags: vec![
+        event_with_parts(
+            SELLER,
+            KIND_LISTING,
+            vec![
                 vec!["d".into(), listing.d_tag.to_string()],
                 vec!["p".into(), listing.farm.pubkey.clone()],
                 vec![
@@ -284,9 +285,26 @@ mod tests {
                     format!("30340:{}:{}", listing.farm.pubkey, listing.farm.d_tag),
                 ],
             ],
-            content: serde_json::to_string(listing).unwrap(),
-            sig: "sig".into(),
-        }
+            serde_json::to_string(listing).unwrap(),
+        )
+    }
+
+    fn event_with_parts(
+        author: &str,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(radroots_event::RadrootsEventEnvelopeParts {
+            id: "9".repeat(64),
+            author: author.to_string(),
+            created_at: 0,
+            kind,
+            tags,
+            content,
+            sig: "f".repeat(128),
+        })
+        .expect("event")
     }
 
     fn assert_validation_err(listing: RadrootsListing, expected: TradeListingValidationError) {
@@ -305,8 +323,12 @@ mod tests {
     #[test]
     fn validate_draft_listing_ok() {
         let listing = base_listing();
-        let mut event = base_event(&listing);
-        event.kind = KIND_LISTING_DRAFT;
+        let event = event_with_parts(
+            SELLER,
+            KIND_LISTING_DRAFT,
+            base_event(&listing).tags_as_vec(),
+            serde_json::to_string(&listing).unwrap(),
+        );
         let validated = validate_listing_event(&event).expect("draft listing");
         assert_eq!(
             validated.listing_addr,
@@ -317,8 +339,12 @@ mod tests {
     #[test]
     fn validate_listing_rejects_missing_d_tag() {
         let listing = base_listing();
-        let mut event = base_event(&listing);
-        event.tags.clear();
+        let event = event_with_parts(
+            SELLER,
+            KIND_LISTING,
+            Vec::new(),
+            serde_json::to_string(&listing).unwrap(),
+        );
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(
             err,
@@ -330,39 +356,42 @@ mod tests {
 
     #[test]
     fn validate_listing_rejects_invalid_currency() {
-        let mut event = base_event(&base_listing());
-        event.content = String::new();
-        event.tags = vec![
-            vec!["d".into(), "AAAAAAAAAAAAAAAAAAAAAg".into()],
-            vec!["p".into(), SELLER.into()],
-            vec!["a".into(), format!("30340:{SELLER}:AAAAAAAAAAAAAAAAAAAAAA")],
-            vec!["key".into(), "coffee".into()],
-            vec!["title".into(), "Coffee".into()],
-            vec!["category".into(), "coffee".into()],
-            vec!["summary".into(), "Single origin".into()],
+        let event = event_with_parts(
+            SELLER,
+            KIND_LISTING,
             vec![
-                "quantity".into(),
-                "1".into(),
-                "lb".into(),
-                "bag".into(),
-                "5".into(),
+                vec!["d".into(), "AAAAAAAAAAAAAAAAAAAAAg".into()],
+                vec!["p".into(), SELLER.into()],
+                vec!["a".into(), format!("30340:{SELLER}:AAAAAAAAAAAAAAAAAAAAAA")],
+                vec!["key".into(), "coffee".into()],
+                vec!["title".into(), "Coffee".into()],
+                vec!["category".into(), "coffee".into()],
+                vec!["summary".into(), "Single origin".into()],
+                vec![
+                    "quantity".into(),
+                    "1".into(),
+                    "lb".into(),
+                    "bag".into(),
+                    "5".into(),
+                ],
+                vec![
+                    "price".into(),
+                    "20".into(),
+                    "US".into(),
+                    "1".into(),
+                    "lb".into(),
+                ],
+                vec![
+                    "location".into(),
+                    "Farm".into(),
+                    "Town".into(),
+                    "Region".into(),
+                ],
+                vec!["status".into(), "active".into()],
+                vec!["delivery".into(), "pickup".into()],
             ],
-            vec![
-                "price".into(),
-                "20".into(),
-                "US".into(),
-                "1".into(),
-                "lb".into(),
-            ],
-            vec![
-                "location".into(),
-                "Farm".into(),
-                "Town".into(),
-                "Region".into(),
-            ],
-            vec!["status".into(), "active".into()],
-            vec!["delivery".into(), "pickup".into()],
-        ];
+            String::new(),
+        );
         let err = validate_listing_event(&event).unwrap_err();
         assert!(format!("{err:?}").starts_with("ParseError"));
     }
@@ -370,28 +399,14 @@ mod tests {
     #[test]
     fn validate_listing_rejects_mismatched_seller() {
         let listing = base_listing();
-        let mut event = base_event(&listing);
-        event.author = OTHER_SELLER.into();
+        let event = event_with_parts(
+            OTHER_SELLER,
+            KIND_LISTING,
+            base_event(&listing).tags_as_vec(),
+            serde_json::to_string(&listing).unwrap(),
+        );
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(err, TradeListingValidationError::InvalidSeller);
-    }
-
-    #[test]
-    fn validate_listing_rejects_invalid_listing_address_parts() {
-        let mut listing = base_listing();
-        listing.farm.pubkey = "not-a-pubkey".into();
-        let mut event = base_event(&listing);
-        event.author = "not-a-pubkey".into();
-        let err = validate_listing_event(&event).unwrap_err();
-
-        assert_eq!(
-            err,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::codec::ListingParseError::InvalidTag(
-                    "listing_addr".to_string()
-                )
-            }
-        );
     }
 
     #[test]
@@ -406,8 +421,12 @@ mod tests {
     #[test]
     fn validate_listing_rejects_invalid_kind() {
         let listing = base_listing();
-        let mut event = base_event(&listing);
-        event.kind = 0;
+        let event = event_with_parts(
+            SELLER,
+            0,
+            base_event(&listing).tags_as_vec(),
+            serde_json::to_string(&listing).unwrap(),
+        );
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(err, TradeListingValidationError::InvalidKind { kind: 0 });
     }

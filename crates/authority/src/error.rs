@@ -59,8 +59,8 @@ pub enum RadrootsAuthorityError {
     },
 
     SignedEventCreatedAtMismatch {
-        expected_created_at: u32,
-        actual_created_at: u32,
+        expected_created_at: u64,
+        actual_created_at: u64,
     },
 
     SignedEventKindMismatch {
