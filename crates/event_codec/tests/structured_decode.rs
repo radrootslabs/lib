@@ -280,7 +280,7 @@ fn farm_metadata_and_index_decode_roundtrip() {
         "sig1".to_string(),
     )
     .expect("farm index");
-    assert_eq!(index.event.id, "id1");
+    assert_eq!(index.event.id_str(), "id1");
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -342,7 +342,7 @@ fn coop_metadata_and_index_decode_roundtrip() {
         "sig2".to_string(),
     )
     .expect("coop index");
-    assert_eq!(index.event.kind, KIND_COOP);
+    assert_eq!(index.event.kind_u32(), KIND_COOP);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -574,7 +574,7 @@ fn plot_metadata_and_index_decode_roundtrip() {
         "sig3".to_string(),
     )
     .expect("plot index");
-    assert_eq!(index.event.author, TEST_PUBKEY_HEX);
+    assert_eq!(index.event.author_str(), TEST_PUBKEY_HEX);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -754,7 +754,7 @@ fn document_metadata_and_index_decode_roundtrip() {
         "sig4".to_string(),
     )
     .expect("document index");
-    assert_eq!(index.event.kind, KIND_DOCUMENT);
+    assert_eq!(index.event.kind_u32(), KIND_DOCUMENT);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -833,7 +833,7 @@ fn resource_area_metadata_and_index_decode_roundtrip() {
         "sig5".to_string(),
     )
     .expect("area index");
-    assert_eq!(index.event.id, "id5");
+    assert_eq!(index.event.id_str(), "id5");
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -916,6 +916,6 @@ fn resource_cap_metadata_and_index_decode_roundtrip() {
         "sig6".to_string(),
     )
     .expect("cap index");
-    assert_eq!(index.event.sig, "sig6");
+    assert_eq!(index.event.sig_str(), "sig6");
     assert_eq!(index.data.data.d_tag, d_tag);
 }

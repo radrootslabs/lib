@@ -380,7 +380,7 @@ fn file_metadata_wrappers_preserve_event_metadata() {
     )
     .unwrap();
 
-    assert_eq!(parsed.event.created_at, 90);
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.created_at_u64(), 90);
+    assert_eq!(parsed.event.sig_str(), "sig");
     assert_eq!(parsed.data.data.sha256, VALID_HASH);
 }

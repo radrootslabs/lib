@@ -272,17 +272,27 @@ fn message_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.subject.as_deref(), Some("topic"));
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
         77,
         KIND_MESSAGE,
         "hello".to_string(),
         tags,
-        "sig".to_string(),
+        concat!(
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        )
+        .to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.kind, KIND_MESSAGE);
-    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.event.kind_u32(), KIND_MESSAGE);
+    assert_eq!(
+        index.event.sig_str(),
+        concat!(
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        )
+    );
     assert_eq!(index.data.data.recipients.len(), 2);
 }
 

@@ -27,7 +27,7 @@ use crate::job::{
 pub trait JobEventLike {
     fn raw_id(&self) -> String;
     fn raw_author(&self) -> String;
-    fn raw_published_at(&self) -> u32;
+    fn raw_published_at(&self) -> u64;
     fn raw_kind(&self) -> u32;
     fn raw_content(&self) -> String;
     fn raw_tags(&self) -> Vec<Vec<String>>;
@@ -124,13 +124,13 @@ pub trait JobEventBorrow<'a> {
 #[derive(Clone, Copy)]
 pub struct BorrowedEventAdapter<'a, E: JobEventBorrow<'a>> {
     inner: &'a E,
-    published_at: u32,
+    published_at: u64,
     tags: &'a [Vec<String>],
     sig: &'a str,
 }
 
 impl<'a, E: JobEventBorrow<'a>> BorrowedEventAdapter<'a, E> {
-    pub fn new(inner: &'a E, published_at: u32, tags: &'a [Vec<String>], sig: &'a str) -> Self {
+    pub fn new(inner: &'a E, published_at: u64, tags: &'a [Vec<String>], sig: &'a str) -> Self {
         Self {
             inner,
             published_at,
@@ -150,7 +150,7 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
         self.inner.raw_author().to_owned()
     }
     #[inline]
-    fn raw_published_at(&self) -> u32 {
+    fn raw_published_at(&self) -> u64 {
         self.published_at
     }
     #[inline]
@@ -174,18 +174,18 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
 impl<'a> JobEventBorrow<'a> for radroots_event::RadrootsEventEnvelope {
     #[inline]
     fn raw_id(&'a self) -> &'a str {
-        &self.id
+        self.id_str()
     }
     #[inline]
     fn raw_author(&'a self) -> &'a str {
-        &self.author
+        self.author_str()
     }
     #[inline]
     fn raw_content(&'a self) -> &'a str {
-        &self.content
+        self.content()
     }
     #[inline]
     fn raw_kind(&'a self) -> u32 {
-        self.kind
+        self.kind_u32()
     }
 }

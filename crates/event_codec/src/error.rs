@@ -5,6 +5,7 @@ pub enum EventParseError {
     MissingTag(&'static str),
     InvalidTag(&'static str),
     DuplicateTag(&'static str),
+    InvalidEnvelope,
     InvalidKind { expected: &'static str, got: u32 },
     InvalidNumber(&'static str, core::num::ParseIntError),
     InvalidJson(&'static str),
@@ -16,6 +17,7 @@ impl EventParseError {
             Self::MissingTag(_) => "missing_tag",
             Self::InvalidTag(_) => "invalid_tag",
             Self::DuplicateTag(_) => "duplicate_tag",
+            Self::InvalidEnvelope => "invalid_envelope",
             Self::InvalidKind { .. } => "invalid_kind",
             Self::InvalidNumber(_, _) => "invalid_number",
             Self::InvalidJson(_) => "invalid_json",
@@ -29,6 +31,7 @@ impl fmt::Display for EventParseError {
             EventParseError::MissingTag(t) => write!(f, "missing tag: {}", t),
             EventParseError::InvalidTag(t) => write!(f, "invalid tag structure for '{}'", t),
             EventParseError::DuplicateTag(t) => write!(f, "duplicate tag: {}", t),
+            EventParseError::InvalidEnvelope => write!(f, "invalid event envelope"),
             EventParseError::InvalidKind { expected, got } => {
                 write!(f, "invalid kind {} (expected {})", got, expected)
             }
@@ -45,6 +48,12 @@ impl std::error::Error for EventParseError {
             EventParseError::InvalidNumber(_, e) => Some(e),
             _ => None,
         }
+    }
+}
+
+impl From<radroots_event::RadrootsEventEnvelopeError> for EventParseError {
+    fn from(_: radroots_event::RadrootsEventEnvelopeError) -> Self {
+        Self::InvalidEnvelope
     }
 }
 

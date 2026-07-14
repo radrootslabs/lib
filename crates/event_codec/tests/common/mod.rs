@@ -1,6 +1,15 @@
 #![allow(dead_code)]
 
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventPtr, RadrootsEventRef};
+use radroots_event::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr, RadrootsEventRef,
+};
+
+pub const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+pub const EVENT_SIG: &str = concat!(
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+);
 
 pub fn event_ref(id: &str, author: &str, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
@@ -36,13 +45,14 @@ pub fn event_ptr(id: &str, relays: Option<&str>) -> RadrootsEventPtr {
 }
 
 pub fn nostr_event(kind: u32, content: &str, tags: Vec<Vec<String>>) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
-        id: "id".to_string(),
-        author: "author".to_string(),
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: EVENT_ID.to_string(),
+        author: AUTHOR.to_string(),
         created_at: 123,
         kind,
         tags,
         content: content.to_string(),
-        sig: "sig".to_string(),
-    }
+        sig: EVENT_SIG.to_string(),
+    })
+    .unwrap()
 }

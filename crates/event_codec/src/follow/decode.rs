@@ -2,7 +2,6 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     follow::{RadrootsFollow, RadrootsFollowProfile},
     kinds::KIND_FOLLOW,
 };
@@ -18,7 +17,7 @@ fn looks_like_ws_relay(s: &str) -> bool {
 
 fn parse_follow_tag(
     tag: &[String],
-    published_at: u32,
+    published_at: u64,
 ) -> Result<RadrootsFollowProfile, EventParseError> {
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     let (relay_url, contact_name) = match tag.get(2).filter(|s| !s.is_empty()) {
@@ -48,7 +47,7 @@ fn parse_follow_tag(
 pub fn follow_from_tags(
     kind: u32,
     tags: &[Vec<String>],
-    published_at: u32,
+    published_at: u64,
 ) -> Result<RadrootsFollow, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
@@ -69,7 +68,7 @@ pub fn follow_from_tags(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     _content: String,
     tags: Vec<Vec<String>>,
@@ -87,7 +86,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -101,16 +100,5 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }

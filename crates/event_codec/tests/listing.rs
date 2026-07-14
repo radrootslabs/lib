@@ -6,7 +6,7 @@ use radroots_core::{
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_event::{
-    RadrootsEventEnvelope,
+    RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{
@@ -34,6 +34,13 @@ use radroots_event_codec::listing::tags::{
 };
 use std::str::FromStr;
 
+const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const EVENT_SIG: &str = concat!(
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+);
+
 fn listing_d_tag(raw: &str) -> RadrootsDTag {
     raw.parse().unwrap()
 }
@@ -56,6 +63,19 @@ fn replace_first_tag(tags: &mut [Vec<String>], name: &str, replacement: Vec<&str
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(name))
         .expect("tag");
     *tag = replacement.into_iter().map(str::to_string).collect();
+}
+
+fn event_envelope(kind: u32, tags: Vec<Vec<String>>, content: String) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: EVENT_ID.to_string(),
+        author: AUTHOR.to_string(),
+        created_at: 7,
+        kind,
+        tags,
+        content,
+        sig: EVENT_SIG.to_string(),
+    })
+    .unwrap()
 }
 
 fn assert_missing_tag(tags: Vec<Vec<String>>, expected: &'static str) {
@@ -898,59 +918,51 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
     let parts = to_wire_parts(&listing).unwrap();
     let data = data_from_event(
-        "event-id".to_string(),
-        "author-pubkey".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         7,
         parts.kind,
         parts.content.clone(),
         parts.tags.clone(),
     )
     .unwrap();
-    assert_eq!(data.id, "event-id");
-    assert_eq!(data.author, "author-pubkey");
+    assert_eq!(data.id, EVENT_ID);
+    assert_eq!(data.author, AUTHOR);
     assert_eq!(data.published_at, 7);
     assert_eq!(data.kind, KIND_LISTING);
     assert_eq!(data.data.d_tag, listing.d_tag);
 
     let parsed = parsed_from_event(
-        "event-id".to_string(),
-        "author-pubkey".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         7,
         parts.kind,
         parts.content.clone(),
         parts.tags.clone(),
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.id, "event-id");
-    assert_eq!(parsed.event.author, "author-pubkey");
-    assert_eq!(parsed.event.created_at, 7);
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.id_str(), EVENT_ID);
+    assert_eq!(parsed.event.author_str(), AUTHOR);
+    assert_eq!(parsed.event.created_at_u64(), 7);
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 
-    let event = RadrootsEventEnvelope {
-        id: "event-id".to_string(),
-        author: "author-pubkey".to_string(),
-        created_at: 7,
-        kind: parts.kind,
-        tags: parts.tags,
-        content: parts.content,
-        sig: "sig".to_string(),
-    };
+    let event = event_envelope(parts.kind, parts.tags, parts.content);
     let data = data_from_nostr_event(&event).unwrap();
     assert_eq!(data.data.d_tag, listing.d_tag);
     let parsed = parsed_from_nostr_event(&event).unwrap();
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 
     let err = parsed_from_event(
-        "event-id".to_string(),
-        "author-pubkey".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         7,
         KIND_POST,
-        event.content,
-        event.tags,
-        "sig".to_string(),
+        event.content().to_string(),
+        event.tags_as_vec(),
+        EVENT_SIG.to_string(),
     )
     .unwrap_err();
     assert!(matches!(

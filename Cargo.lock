@@ -4288,6 +4288,7 @@ dependencies = [
  "dto_bindgen",
  "hex",
  "radroots_core",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2",

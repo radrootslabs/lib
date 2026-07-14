@@ -2,7 +2,6 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     farm_crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
     farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
@@ -40,7 +39,7 @@ pub fn farm_crdt_change_from_event_with_author(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -58,7 +57,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -72,18 +71,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 fn farm_crdt_change_from_event_inner(

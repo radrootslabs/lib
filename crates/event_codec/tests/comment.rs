@@ -542,7 +542,7 @@ fn comment_metadata_and_index_from_event_roundtrip() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.created_at, 77);
-    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.event.created_at_u64(), 77);
+    assert_eq!(index.event.sig_str(), "sig");
     assert_address_target(&index.data.data.parent, PARENT_AUTHOR, KIND_ARTICLE, D_TAG);
 }

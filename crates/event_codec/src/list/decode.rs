@@ -2,7 +2,6 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_list_set_kind, is_nip51_standard_list_kind},
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
@@ -93,7 +92,7 @@ fn is_ws_relay_url(value: &str) -> bool {
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -111,7 +110,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -125,18 +124,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 #[cfg(feature = "serde_json")]

@@ -5,7 +5,6 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     calendar::{
         RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
         RadrootsCalendarTimeEvent,
@@ -195,7 +194,7 @@ pub fn rsvp_from_event(
 pub fn date_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -213,7 +212,7 @@ pub fn date_data_from_event(
 pub fn time_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -231,7 +230,7 @@ pub fn time_data_from_event(
 pub fn calendar_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -249,7 +248,7 @@ pub fn calendar_data_from_event(
 pub fn rsvp_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -267,7 +266,7 @@ pub fn rsvp_data_from_event(
 pub fn date_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -281,24 +280,13 @@ pub fn date_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 pub fn time_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -312,24 +300,13 @@ pub fn time_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 pub fn calendar_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -343,24 +320,13 @@ pub fn calendar_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 pub fn rsvp_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -374,18 +340,7 @@ pub fn rsvp_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 fn parse_required_u64(tags: &[Vec<String>], key: &'static str) -> Result<u64, EventParseError> {

@@ -1,6 +1,5 @@
 #![cfg(all(feature = "knowledge", feature = "nostr"))]
 
-use radroots_event::RadrootsEventEnvelope;
 use radroots_event::contract::validate_event_contract_shape;
 use radroots_event::kinds::{
     KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
@@ -19,6 +18,7 @@ use radroots_event::knowledge::{
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
     contribution_attestation_from_event, contribution_attestation_to_wire_parts,
@@ -74,7 +74,7 @@ fn article_version_ref_for(event_id_character: char, d_tag: &str) -> RadrootsWik
 }
 
 fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: hex_64('0'),
         author: hex_64('a'),
         created_at: 1_800_000_000,
@@ -82,17 +82,46 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
         tags: parts.tags,
         content: parts.content,
         sig: "1".repeat(128),
-    }
+    })
+    .unwrap()
+}
+
+fn event_with_parts(
+    event: &RadrootsEventEnvelope,
+    tags: Vec<Vec<String>>,
+    content: String,
+) -> RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: event.id_str().to_string(),
+        author: event.author_str().to_string(),
+        created_at: event.created_at_u64(),
+        kind: event.kind_u32(),
+        tags,
+        content,
+        sig: event.sig_str().to_string(),
+    })
+    .unwrap()
+}
+
+fn mutate_tags(event: &mut RadrootsEventEnvelope, update: impl FnOnce(&mut Vec<Vec<String>>)) {
+    let mut tags = event.tags_as_vec();
+    update(&mut tags);
+    *event = event_with_parts(event, tags, event.content().to_string());
+}
+
+fn replace_content(event: &mut RadrootsEventEnvelope, content: String) {
+    *event = event_with_parts(event, event.tags_as_vec(), content);
 }
 
 fn replace_first_tag_value(event: &mut RadrootsEventEnvelope, name: &str, value: String) {
-    let tag = event
-        .tags
-        .iter_mut()
-        .find(|tag| tag.first().map(String::as_str) == Some(name))
-        .expect("tag");
-    let tag_value = tag.get_mut(1).expect("tag value");
-    *tag_value = value;
+    mutate_tags(event, |tags| {
+        let tag = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(name))
+            .expect("tag");
+        let tag_value = tag.get_mut(1).expect("tag value");
+        *tag_value = value;
+    });
 }
 
 fn marked_tag(tag: &[String], name: &str, marker: &str) -> bool {
@@ -101,7 +130,7 @@ fn marked_tag(tag: &[String], name: &str, marker: &str) -> bool {
 
 fn marked_tag_index(event: &RadrootsEventEnvelope, name: &str, marker: &str) -> usize {
     event
-        .tags
+        .tags_as_vec()
         .iter()
         .position(|tag| marked_tag(tag, name, marker))
         .expect("marked tag")
@@ -160,10 +189,10 @@ fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
         .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
-        created_at: event.created_at.as_secs() as u32,
+        created_at: event.created_at.as_secs(),
         kind: u32::from(event.kind.as_u16()),
         tags: event
             .tags
@@ -173,7 +202,8 @@ fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
             .collect(),
         content: event.content,
         sig: event.sig.to_string(),
-    }
+    })
+    .unwrap()
 }
 
 fn wiki_article() -> RadrootsWikiArticle {
@@ -355,28 +385,28 @@ fn attestation() -> RadrootsContributionAttestation {
 fn knowledge_codecs_roundtrip_all_contracts() {
     let article_event = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     validate_event_contract_shape(&article_event, "radroots.wiki.article.v1").unwrap();
-    assert!(article_event.tags.iter().any(|tag| tag
+    assert!(article_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "a".to_string(),
             format!("30818:{}:soil-health", hex_64('a')),
             "wss://relay.radroots.example".to_string(),
             "fork".to_string()
         ]));
-    assert!(article_event.tags.iter().any(|tag| tag
+    assert!(article_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "e".to_string(),
             hex_64('b'),
             "wss://relay.radroots.example".to_string(),
             "fork".to_string()
         ]));
-    assert!(article_event.tags.iter().any(|tag| tag
+    assert!(article_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "a".to_string(),
             format!("30818:{}:soil-health", hex_64('a')),
             "wss://relay.radroots.example".to_string(),
             "defer".to_string()
         ]));
-    assert!(article_event.tags.iter().any(|tag| tag
+    assert!(article_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "e".to_string(),
             hex_64('b'),
@@ -398,7 +428,7 @@ fn knowledge_codecs_roundtrip_all_contracts() {
     };
     let redirect_event = event_from_parts(wiki_redirect_to_wire_parts(&redirect).unwrap());
     validate_event_contract_shape(&redirect_event, "radroots.wiki.redirect.v1").unwrap();
-    assert!(redirect_event.tags.iter().any(|tag| tag
+    assert!(redirect_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "a".to_string(),
             format!("30818:{}:soil-health", hex_64('a')),
@@ -423,14 +453,14 @@ fn knowledge_codecs_roundtrip_all_contracts() {
     };
     let merge_event = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
     validate_event_contract_shape(&merge_event, "radroots.wiki.merge_request.v1").unwrap();
-    assert_eq!(merge_event.content, "Merge synthetic source");
+    assert_eq!(merge_event.content(), "Merge synthetic source");
     assert!(
         merge_event
-            .tags
+            .tags_as_vec()
             .iter()
             .any(|tag| tag == &vec!["e".to_string(), hex_64('e'), String::new()])
     );
-    assert!(merge_event.tags.iter().any(|tag| tag
+    assert!(merge_event.tags_as_vec().iter().any(|tag| tag
         == &vec![
             "e".to_string(),
             hex_64('f'),
@@ -665,7 +695,8 @@ fn verified_decode_accepts_signed_claim_and_rejects_mutation() {
     assert!(matches!(decoded, RadrootsDecodedEvent::KnowledgeClaim(_)));
 
     let mut mutated = signed;
-    mutated.content = mutated.content.replace("Cover crops", "Compost");
+    let mutated_content = mutated.content().replace("Cover crops", "Compost");
+    replace_content(&mut mutated, mutated_content);
     let err = verify_and_decode_radroots_event(mutated).unwrap_err();
     assert_eq!(err.code(), "nip01_verification");
     assert!(matches!(
@@ -677,22 +708,22 @@ fn verified_decode_accepts_signed_claim_and_rejects_mutation() {
 #[test]
 fn malformed_knowledge_events_return_stable_decode_codes() {
     let mut missing_contract = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
-    missing_contract
-        .tags
-        .retain(|tag| tag.first().map(|value| value.as_str()) != Some("contract"));
+    mutate_tags(&mut missing_contract, |tags| {
+        tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("contract"));
+    });
     let signed = sign_parts(WireEventParts {
-        kind: missing_contract.kind,
-        content: missing_contract.content,
-        tags: missing_contract.tags,
+        kind: missing_contract.kind_u32(),
+        content: missing_contract.content().to_string(),
+        tags: missing_contract.tags_as_vec(),
     });
     let error = verify_and_decode_radroots_event(signed).unwrap_err();
     assert_eq!(error.code(), "contract_validation");
 
     let mut report =
         event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&report.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(report.content()).unwrap();
     value["context"]["latitude"] = serde_json::Value::from("45.0000");
-    report.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut report, serde_json::to_string(&value).unwrap());
     let parsed_error = knowledge_field_report_from_event(report).unwrap_err();
     assert_eq!(parsed_error.code(), "invalid_json");
 }
@@ -706,11 +737,13 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
         })
         .unwrap(),
     );
-    for tag in &mut redirect.tags {
-        if tag.first().map(|value| value.as_str()) == Some("a") {
-            tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+    mutate_tags(&mut redirect, |tags| {
+        for tag in tags {
+            if tag.first().map(|value| value.as_str()) == Some("a") {
+                tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+            }
         }
-    }
+    });
     assert_parse_error(
         wiki_redirect_from_event(redirect).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -724,9 +757,9 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
         explanation: Some("Merge synthetic source".to_string()),
     };
     let mut missing_target = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
-    missing_target
-        .tags
-        .retain(|tag| tag.first().map(|value| value.as_str()) != Some("a"));
+    mutate_tags(&mut missing_target, |tags| {
+        tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("a"));
+    });
     assert_parse_error(
         wiki_merge_request_from_event(missing_target).unwrap_err(),
         EventParseError::MissingTag("a"),
@@ -734,18 +767,20 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
 
     let mut missing_destination =
         event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
-    missing_destination
-        .tags
-        .retain(|tag| tag.first().map(|value| value.as_str()) != Some("p"));
+    mutate_tags(&mut missing_destination, |tags| {
+        tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("p"));
+    });
     assert_parse_error(
         wiki_merge_request_from_event(missing_destination).unwrap_err(),
         EventParseError::MissingTag("p"),
     );
 
     let mut missing_source = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
-    missing_source.tags.retain(|tag| {
-        !(tag.first().map(|value| value.as_str()) == Some("e")
-            && tag.last().map(|value| value.as_str()) == Some("source"))
+    mutate_tags(&mut missing_source, |tags| {
+        tags.retain(|tag| {
+            !(tag.first().map(|value| value.as_str()) == Some("e")
+                && tag.last().map(|value| value.as_str()) == Some("source"))
+        });
     });
     assert_parse_error(
         wiki_merge_request_from_event(missing_source).unwrap_err(),
@@ -753,12 +788,14 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
     );
 
     let mut duplicate_source = event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
-    duplicate_source.tags.push(vec![
-        "e".to_string(),
-        hex_64('a'),
-        String::new(),
-        "source".to_string(),
-    ]);
+    mutate_tags(&mut duplicate_source, |tags| {
+        tags.push(vec![
+            "e".to_string(),
+            hex_64('a'),
+            String::new(),
+            "source".to_string(),
+        ]);
+    });
     assert_parse_error(
         wiki_merge_request_from_event(duplicate_source).unwrap_err(),
         EventParseError::InvalidTag("e"),
@@ -766,11 +803,13 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
 
     let mut wrong_merge_target =
         event_from_parts(wiki_merge_request_to_wire_parts(&merge).unwrap());
-    for tag in &mut wrong_merge_target.tags {
-        if tag.first().map(|value| value.as_str()) == Some("a") {
-            tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+    mutate_tags(&mut wrong_merge_target, |tags| {
+        for tag in tags {
+            if tag.first().map(|value| value.as_str()) == Some("a") {
+                tag[1] = format!("30023:{}:soil-health", hex_64('a'));
+            }
         }
-    }
+    });
     assert_parse_error(
         wiki_merge_request_from_event(wrong_merge_target).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -778,16 +817,18 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
 
     let mut orphan_fork = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let mut removed_fork_event = false;
-    orphan_fork.tags.retain(|tag| {
-        if !removed_fork_event
-            && tag.first().map(|value| value.as_str()) == Some("e")
-            && tag.last().map(|value| value.as_str()) == Some("fork")
-        {
-            removed_fork_event = true;
-            false
-        } else {
-            true
-        }
+    mutate_tags(&mut orphan_fork, |tags| {
+        tags.retain(|tag| {
+            if !removed_fork_event
+                && tag.first().map(|value| value.as_str()) == Some("e")
+                && tag.last().map(|value| value.as_str()) == Some("fork")
+            {
+                removed_fork_event = true;
+                false
+            } else {
+                true
+            }
+        });
     });
     assert_parse_error(
         wiki_article_from_event(orphan_fork).unwrap_err(),
@@ -796,20 +837,22 @@ fn malformed_nip54_wiki_shapes_are_rejected() {
 
     let mut duplicate_defer =
         event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
-    duplicate_defer.tags.extend([
-        vec![
-            "a".to_string(),
-            format!("30818:{}:compost", hex_64('a')),
-            String::new(),
-            "defer".to_string(),
-        ],
-        vec![
-            "e".to_string(),
-            hex_64('c'),
-            String::new(),
-            "defer".to_string(),
-        ],
-    ]);
+    mutate_tags(&mut duplicate_defer, |tags| {
+        tags.extend([
+            vec![
+                "a".to_string(),
+                format!("30818:{}:compost", hex_64('a')),
+                String::new(),
+                "defer".to_string(),
+            ],
+            vec![
+                "e".to_string(),
+                hex_64('c'),
+                String::new(),
+                "defer".to_string(),
+            ],
+        ]);
+    });
     assert_parse_error(
         wiki_article_from_event(duplicate_defer).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -841,22 +884,22 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
 
     let mut grouped = two_forks_event;
     let fork_addresses = grouped
-        .tags
+        .tags_as_vec()
         .iter()
         .filter(|tag| marked_tag(tag, "a", "fork"))
         .cloned()
         .collect::<Vec<_>>();
     let fork_events = grouped
-        .tags
+        .tags_as_vec()
         .iter()
         .filter(|tag| marked_tag(tag, "e", "fork"))
         .cloned()
         .collect::<Vec<_>>();
-    grouped
-        .tags
-        .retain(|tag| !marked_tag(tag, "a", "fork") && !marked_tag(tag, "e", "fork"));
-    grouped.tags.extend(fork_addresses);
-    grouped.tags.extend(fork_events);
+    mutate_tags(&mut grouped, |tags| {
+        tags.retain(|tag| !marked_tag(tag, "a", "fork") && !marked_tag(tag, "e", "fork"));
+        tags.extend(fork_addresses);
+        tags.extend(fork_events);
+    });
     assert_parse_error(
         wiki_article_from_event(grouped).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -865,7 +908,9 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
     let mut reversed = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let fork_address_index = marked_tag_index(&reversed, "a", "fork");
     let fork_event_index = marked_tag_index(&reversed, "e", "fork");
-    reversed.tags.swap(fork_address_index, fork_event_index);
+    mutate_tags(&mut reversed, |tags| {
+        tags.swap(fork_address_index, fork_event_index);
+    });
     assert_parse_error(
         wiki_article_from_event(reversed).unwrap_err(),
         EventParseError::InvalidTag("e"),
@@ -873,7 +918,9 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
 
     let mut relay_mismatch = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let fork_event_index = marked_tag_index(&relay_mismatch, "e", "fork");
-    relay_mismatch.tags[fork_event_index][2] = "wss://other.radroots.example".to_string();
+    mutate_tags(&mut relay_mismatch, |tags| {
+        tags[fork_event_index][2] = "wss://other.radroots.example".to_string();
+    });
     assert_parse_error(
         wiki_article_from_event(relay_mismatch).unwrap_err(),
         EventParseError::InvalidTag("e"),
@@ -882,7 +929,9 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
     let mut missing_partner =
         event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let fork_event_index = marked_tag_index(&missing_partner, "e", "fork");
-    missing_partner.tags.remove(fork_event_index);
+    mutate_tags(&mut missing_partner, |tags| {
+        tags.remove(fork_event_index);
+    });
     assert_parse_error(
         wiki_article_from_event(missing_partner).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -891,7 +940,9 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
     let mut misplaced_marker =
         event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let fork_address_index = marked_tag_index(&misplaced_marker, "a", "fork");
-    misplaced_marker.tags[fork_address_index].insert(2, "fork".to_string());
+    mutate_tags(&mut misplaced_marker, |tags| {
+        tags[fork_address_index].insert(2, "fork".to_string());
+    });
     assert_parse_error(
         wiki_article_from_event(misplaced_marker).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -899,7 +950,9 @@ fn wiki_article_version_refs_require_adjacent_marked_pairs() {
 
     let mut wrong_kind = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
     let fork_address_index = marked_tag_index(&wrong_kind, "a", "fork");
-    wrong_kind.tags[fork_address_index][1] = format!("30023:{}:soil-health", hex_64('a'));
+    mutate_tags(&mut wrong_kind, |tags| {
+        tags[fork_address_index][1] = format!("30023:{}:soil-health", hex_64('a'));
+    });
     assert_parse_error(
         wiki_article_from_event(wrong_kind).unwrap_err(),
         EventParseError::InvalidTag("a"),
@@ -913,7 +966,7 @@ fn wiki_article_codec_accepts_missing_title_tag() {
     let article_event = event_from_parts(wiki_article_to_wire_parts(&article).unwrap());
     assert!(
         !article_event
-            .tags
+            .tags_as_vec()
             .iter()
             .any(|tag| tag.first().map(String::as_str) == Some("title"))
     );
@@ -1106,25 +1159,25 @@ fn knowledge_claim_encode_enforces_citation_rules() {
 #[test]
 fn semantic_validation_rejects_invalid_decoded_content() {
     let mut article = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
-    article.content = String::new();
+    replace_content(&mut article, String::new());
     assert_parse_error(
         wiki_article_from_event(article).unwrap_err(),
         EventParseError::InvalidJson("content_djot"),
     );
 
     let mut source_event = event_from_parts(knowledge_source_to_wire_parts(&source()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&source_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(source_event.content()).unwrap();
     value["title"] = serde_json::Value::String(String::new());
-    source_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut source_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_source_from_event(source_event).unwrap_err(),
         EventParseError::InvalidJson("title"),
     );
 
     let mut claim_event = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&claim_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(claim_event.content()).unwrap();
     value["citation_spans"][0]["quote_hash"] = serde_json::Value::String("bad".to_string());
-    claim_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut claim_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_claim_from_event(claim_event).unwrap_err(),
         EventParseError::InvalidJson("citation_spans"),
@@ -1132,18 +1185,18 @@ fn semantic_validation_rejects_invalid_decoded_content() {
 
     let mut relation_event =
         event_from_parts(knowledge_relation_to_wire_parts(&relation()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&relation_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(relation_event.content()).unwrap();
     value["subject"]["external_id"] = serde_json::Value::String("cover-crops".to_string());
-    relation_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut relation_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_relation_from_event(relation_event).unwrap_err(),
         EventParseError::InvalidJson("subject"),
     );
 
     let mut review_event = event_from_parts(knowledge_review_to_wire_parts(&review()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&review_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(review_event.content()).unwrap();
     value["target"]["kind"] = serde_json::Value::from(0);
-    review_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut review_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_review_from_event(review_event).unwrap_err(),
         EventParseError::InvalidJson("review_target"),
@@ -1151,9 +1204,9 @@ fn semantic_validation_rejects_invalid_decoded_content() {
 
     let mut report_event =
         event_from_parts(knowledge_field_report_to_wire_parts(&field_report()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&report_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(report_event.content()).unwrap();
     value["observations"] = serde_json::Value::Array(Vec::new());
-    report_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut report_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_field_report_from_event(report_event).unwrap_err(),
         EventParseError::InvalidJson("observations"),
@@ -1171,9 +1224,9 @@ fn semantic_validation_rejects_invalid_decoded_content() {
         closes_at: None,
     };
     let mut bounty_event = event_from_parts(evidence_bounty_to_wire_parts(&bounty).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&bounty_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(bounty_event.content()).unwrap();
     value["target_refs"] = serde_json::Value::Array(Vec::new());
-    bounty_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut bounty_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         evidence_bounty_from_event(bounty_event).unwrap_err(),
         EventParseError::InvalidJson("target_refs"),
@@ -1191,9 +1244,9 @@ fn semantic_validation_rejects_invalid_decoded_content() {
     };
     let mut proposal_event =
         event_from_parts(knowledge_change_proposal_to_wire_parts(&proposal).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&proposal_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(proposal_event.content()).unwrap();
     value["summary"] = serde_json::Value::String(String::new());
-    proposal_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut proposal_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_change_proposal_from_event(proposal_event).unwrap_err(),
         EventParseError::InvalidJson("summary"),
@@ -1210,9 +1263,12 @@ fn semantic_validation_rejects_invalid_decoded_content() {
     };
     let mut attestation_event =
         event_from_parts(contribution_attestation_to_wire_parts(&attestation).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&attestation_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(attestation_event.content()).unwrap();
     value["subject_refs"] = serde_json::Value::Array(Vec::new());
-    attestation_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(
+        &mut attestation_event,
+        serde_json::to_string(&value).unwrap(),
+    );
     assert_parse_error(
         contribution_attestation_from_event(attestation_event).unwrap_err(),
         EventParseError::InvalidJson("subject_refs"),
@@ -1222,12 +1278,13 @@ fn semantic_validation_rejects_invalid_decoded_content() {
 #[test]
 fn knowledge_decode_rejects_invalid_relay_values() {
     let mut article_event = event_from_parts(wiki_article_to_wire_parts(&wiki_article()).unwrap());
-    let source_tag = article_event
-        .tags
-        .iter_mut()
-        .find(|tag| tag.first().map(String::as_str) == Some("source"))
-        .expect("source tag");
-    source_tag[5] = invalid_relay();
+    mutate_tags(&mut article_event, |tags| {
+        let source_tag = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some("source"))
+            .expect("source tag");
+        source_tag[5] = invalid_relay();
+    });
     assert_parse_error(
         wiki_article_from_event(article_event).unwrap_err(),
         EventParseError::InvalidTag("source"),
@@ -1240,32 +1297,33 @@ fn knowledge_decode_rejects_invalid_relay_values() {
         })
         .unwrap(),
     );
-    let target_tag = redirect_event
-        .tags
-        .iter_mut()
-        .find(|tag| tag.first().map(String::as_str) == Some("a"))
-        .expect("target tag");
-    target_tag[2] = invalid_relay();
+    mutate_tags(&mut redirect_event, |tags| {
+        let target_tag = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some("a"))
+            .expect("target tag");
+        target_tag[2] = invalid_relay();
+    });
     assert_parse_error(
         wiki_redirect_from_event(redirect_event).unwrap_err(),
         EventParseError::InvalidTag("a"),
     );
 
     let mut source_event = event_from_parts(knowledge_source_to_wire_parts(&source()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&source_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(source_event.content()).unwrap();
     value["artifact_refs"][0]["relays"] =
         serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
-    source_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut source_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_source_from_event(source_event).unwrap_err(),
         EventParseError::InvalidJson("artifact_refs"),
     );
 
     let mut review_event = event_from_parts(knowledge_review_to_wire_parts(&review()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&review_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(review_event.content()).unwrap();
     value["target"]["relays"] =
         serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
-    review_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut review_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_review_from_event(review_event).unwrap_err(),
         EventParseError::InvalidJson("review_target"),
@@ -1275,10 +1333,10 @@ fn knowledge_decode_rejects_invalid_relay_values() {
     report.context.location_precision = RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
     report.context.private_location_ref = Some(event_ref('f', KIND_KNOWLEDGE_SOURCE));
     let mut report_event = event_from_parts(knowledge_field_report_to_wire_parts(&report).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&report_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(report_event.content()).unwrap();
     value["context"]["private_location_ref"]["relays"] =
         serde_json::Value::Array(vec![serde_json::Value::String(invalid_relay())]);
-    report_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut report_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_field_report_from_event(report_event).unwrap_err(),
         EventParseError::InvalidJson("private_location_ref"),
@@ -1288,9 +1346,9 @@ fn knowledge_decode_rejects_invalid_relay_values() {
 #[test]
 fn knowledge_claim_decode_enforces_citation_rules() {
     let mut claim_event = event_from_parts(knowledge_claim_to_wire_parts(&claim()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_str(&claim_event.content).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(claim_event.content()).unwrap();
     value["citation_spans"] = serde_json::Value::Array(Vec::new());
-    claim_event.content = serde_json::to_string(&value).unwrap();
+    replace_content(&mut claim_event, serde_json::to_string(&value).unwrap());
     assert_parse_error(
         knowledge_claim_from_event(claim_event).unwrap_err(),
         EventParseError::InvalidJson("citation_spans"),

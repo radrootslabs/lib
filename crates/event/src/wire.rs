@@ -13,6 +13,7 @@ use std::{collections::BTreeMap, string::String, vec::Vec};
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
+use crate::{RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts};
 use core::fmt;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -197,7 +198,10 @@ impl From<RadrootsCanonicalEventIdError> for RadrootsEventWireError {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip01EventWire {
     pub id: String,
@@ -207,7 +211,7 @@ pub struct RadrootsNip01EventWire {
     pub tags: Vec<Vec<String>>,
     pub content: String,
     pub sig: String,
-    #[cfg_attr(feature = "serde", serde(flatten))]
+    #[cfg_attr(any(feature = "serde", test), serde(flatten))]
     pub extra: BTreeMap<String, Value>,
 }
 
@@ -261,6 +265,18 @@ impl RadrootsNip01EventWire {
             });
         }
         Ok(())
+    }
+
+    pub fn into_envelope(self) -> Result<RadrootsEventEnvelope, RadrootsEventEnvelopeError> {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: self.id,
+            author: self.pubkey,
+            created_at: self.created_at,
+            kind: self.kind,
+            tags: self.tags,
+            content: self.content,
+            sig: self.sig,
+        })
     }
 
     fn from_json_value(

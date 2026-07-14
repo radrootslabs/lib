@@ -744,7 +744,7 @@ fn calendar_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(date_parsed.event.sig, "sig");
+    assert_eq!(date_parsed.event.sig_str(), "sig");
 
     let time = sample_time_event();
     let time_parts = time_to_wire_parts(&time).unwrap();
@@ -788,7 +788,7 @@ fn calendar_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(time_parsed.event.created_at, 8);
+    assert_eq!(time_parsed.event.created_at_u64(), 8);
 
     let calendar = sample_calendar_collection();
     let calendar_parts = calendar_to_wire_parts(&calendar).unwrap();
@@ -832,7 +832,7 @@ fn calendar_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(calendar_parsed.event.sig, "sig");
+    assert_eq!(calendar_parsed.event.sig_str(), "sig");
 
     let rsvp = sample_rsvp();
     let rsvp_parts = rsvp_to_wire_parts(&rsvp).unwrap();
@@ -876,5 +876,5 @@ fn calendar_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(rsvp_parsed.event.created_at, 10);
+    assert_eq!(rsvp_parsed.event.created_at_u64(), 10);
 }

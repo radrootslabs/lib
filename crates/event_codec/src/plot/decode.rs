@@ -7,7 +7,6 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     farm::RadrootsFarmRef,
     kinds::{KIND_FARM, KIND_PLOT},
     plot::RadrootsPlot,
@@ -126,7 +125,7 @@ pub fn plot_from_event(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -144,7 +143,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -158,16 +157,5 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }

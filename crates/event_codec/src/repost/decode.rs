@@ -5,7 +5,6 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     kinds::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
     repost::{RadrootsGenericRepost, RadrootsRepost},
     social::RadrootsSocialTarget,
@@ -102,7 +101,7 @@ pub fn generic_repost_from_event(
 pub fn repost_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -120,7 +119,7 @@ pub fn repost_data_from_event(
 pub fn generic_repost_data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -138,7 +137,7 @@ pub fn generic_repost_data_from_event(
 pub fn repost_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -152,24 +151,13 @@ pub fn repost_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 pub fn generic_repost_parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -183,18 +171,7 @@ pub fn generic_repost_parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 fn find_tag<'a>(tags: &'a [Vec<String>], key: &'static str) -> Option<&'a Vec<String>> {

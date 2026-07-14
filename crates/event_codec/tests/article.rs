@@ -214,6 +214,6 @@ fn article_wrappers_preserve_event_metadata() {
     )
     .unwrap();
 
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.sig_str(), "sig");
     assert_eq!(parsed.data.data.d_tag, VALID_D_TAG);
 }

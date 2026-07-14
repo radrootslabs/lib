@@ -5,7 +5,6 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     file_metadata::RadrootsFileMetadata,
     kinds::KIND_PUBLIC_FILE_METADATA,
     social::RadrootsSocialMediaThumbnail,
@@ -90,7 +89,7 @@ fn reject_private_farm_file_tags(tags: &[Vec<String>]) -> Result<(), EventParseE
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -108,7 +107,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -122,18 +121,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 fn optional_hash_tag(

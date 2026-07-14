@@ -3171,7 +3171,8 @@ pub fn identify_event_contract(
 pub fn validate_event_contract(
     event: &RadrootsEventEnvelope,
 ) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
-    let contract = match identify_event_contract(event.kind, &event.tags, &event.content) {
+    let tags = event.tags_as_vec();
+    let contract = match identify_event_contract(event.kind_u32(), &tags, event.content()) {
         Ok(contract) => contract,
         Err(error) => return Err(RadrootsContractValidationError::ContractMatch { error }),
     };
@@ -3183,7 +3184,8 @@ pub fn validate_event_contract_shape(
     event: &RadrootsEventEnvelope,
     contract_id: &str,
 ) -> Result<(), RadrootsContractValidationError> {
-    validate_event_contract_parts(event.kind, &event.tags, event.content.as_str(), contract_id)
+    let tags = event.tags_as_vec();
+    validate_event_contract_parts(event.kind_u32(), &tags, event.content(), contract_id)
 }
 
 pub fn validate_event_contract_parts(
@@ -3615,6 +3617,7 @@ fn content_json_string_field_equals(content: &str, field: &str, value: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RadrootsEventEnvelopeParts;
     use std::collections::BTreeSet;
 
     static AMBIGUOUS_TEST_CONTRACTS: &[RadrootsEventContract] = &[
@@ -3728,7 +3731,7 @@ mod tests {
     }
 
     fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: "0".repeat(64),
             author: "1".repeat(64),
             created_at: 1_700_000_000,
@@ -3739,7 +3742,8 @@ mod tests {
                 .collect(),
             content: content.to_owned(),
             sig: "2".repeat(128),
-        }
+        })
+        .expect("event envelope")
     }
 
     fn unsigned_event_owned(
@@ -3747,7 +3751,7 @@ mod tests {
         tags: Vec<Vec<String>>,
         content: &str,
     ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: "0".repeat(64),
             author: "1".repeat(64),
             created_at: 1_700_000_000,
@@ -3755,7 +3759,8 @@ mod tests {
             tags,
             content: content.to_owned(),
             sig: "2".repeat(128),
-        }
+        })
+        .expect("event envelope")
     }
 
     fn hex_64(character: char) -> String {

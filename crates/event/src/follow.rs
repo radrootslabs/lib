@@ -20,7 +20,7 @@ pub struct RadrootsFollow {
 )]
 #[derive(Clone, Debug)]
 pub struct RadrootsFollowProfile {
-    pub published_at: u32,
+    pub published_at: u64,
     pub public_key: String,
     pub relay_url: Option<String>,
     pub contact_name: Option<String>,

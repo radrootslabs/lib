@@ -128,12 +128,12 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.id, "id");
-    assert_eq!(index.event.author, "author");
-    assert_eq!(index.event.created_at, 42);
-    assert_eq!(index.event.kind, KIND_APP_DATA);
-    assert_eq!(index.event.content, "payload");
-    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.event.id_str(), "id");
+    assert_eq!(index.event.author_str(), "author");
+    assert_eq!(index.event.created_at_u64(), 42);
+    assert_eq!(index.event.kind_u32(), KIND_APP_DATA);
+    assert_eq!(index.event.content(), "payload");
+    assert_eq!(index.event.sig_str(), "sig");
     assert_eq!(index.data.data.d_tag, "radroots.app");
 }
 

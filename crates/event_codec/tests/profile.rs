@@ -183,8 +183,8 @@ fn profile_metadata_ignores_short_unknown_and_unrelated_profile_type_tags() {
 #[test]
 fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
     let parsed = parsed_from_event(
-        "event-id".to_string(),
-        "author-pubkey".to_string(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
         42,
         KIND_PROFILE,
         "{\"name\":\"alice\"}".to_string(),
@@ -192,16 +192,32 @@ fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
             RADROOTS_PROFILE_TYPE_TAG_KEY.to_string(),
             RADROOTS_PROFILE_TYPE_TAG_FARM.to_string(),
         ]],
-        "event-sig".to_string(),
+        concat!(
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        )
+        .to_string(),
     )
     .expect("parsed profile");
 
-    assert_eq!(parsed.event.id, "event-id");
-    assert_eq!(parsed.event.author, "author-pubkey");
-    assert_eq!(parsed.event.created_at, 42);
-    assert_eq!(parsed.event.kind, KIND_PROFILE);
-    assert_eq!(parsed.event.content, "{\"name\":\"alice\"}");
-    assert_eq!(parsed.event.sig, "event-sig");
+    assert_eq!(
+        parsed.event.id_str(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    assert_eq!(
+        parsed.event.author_str(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+    assert_eq!(parsed.event.created_at_u64(), 42);
+    assert_eq!(parsed.event.kind_u32(), KIND_PROFILE);
+    assert_eq!(parsed.event.content(), "{\"name\":\"alice\"}");
+    assert_eq!(
+        parsed.event.sig_str(),
+        concat!(
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        )
+    );
     assert_eq!(parsed.data.data.profile.name, "alice");
     assert_eq!(
         parsed.data.data.profile_type,

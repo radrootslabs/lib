@@ -1,5 +1,4 @@
 use radroots_event::{
-    RadrootsEventEnvelope,
     job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
     kinds::is_request_kind,
 };
@@ -68,7 +67,7 @@ pub fn job_request_from_tags(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsJobRequest>, JobParseError> {
@@ -88,23 +87,13 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
 ) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
     let data = data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
+        .map_err(|_| JobParseError::InvalidTag("event_envelope"))
 }

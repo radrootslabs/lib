@@ -428,7 +428,7 @@ fn repost_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.sig_str(), "sig");
 
     let generic_parts = generic_repost_to_wire_parts(&generic_article_repost()).unwrap();
     let generic_data = generic_repost_data_from_event(
@@ -452,5 +452,5 @@ fn repost_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(generic_parsed.event.created_at, 11);
+    assert_eq!(generic_parsed.event.created_at_u64(), 11);
 }

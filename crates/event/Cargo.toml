@@ -23,6 +23,7 @@ dto-bindgen = [
 ]
 knowledge = []
 knowledge-nip54 = ["knowledge"]
+signature = ["dep:secp256k1"]
 std = ["radroots_core/std"]
 serde = ["dep:serde", "radroots_core/serde"]
 
@@ -37,6 +38,7 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
+secp256k1 = { workspace = true, optional = true }
 sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]

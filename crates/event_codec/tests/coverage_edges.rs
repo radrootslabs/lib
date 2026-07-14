@@ -17,15 +17,19 @@ fn assert_invalid_kind<T>(result: Result<T, EventParseError>, expected: &'static
     }
 }
 
-fn parsed_args() -> (String, String, u32, u32, String, Vec<Vec<String>>, String) {
+fn parsed_args() -> (String, String, u64, u32, String, Vec<Vec<String>>, String) {
     (
-        "event-id".to_string(),
-        "author".to_string(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
         1,
         KIND_POST,
         String::new(),
         Vec::new(),
-        "sig".to_string(),
+        concat!(
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        )
+        .to_string(),
     )
 }
 

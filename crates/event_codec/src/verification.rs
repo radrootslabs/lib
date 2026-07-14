@@ -10,7 +10,6 @@ use radroots_event::contract::{
     RadrootsContractValidationError, RadrootsEventContract,
     validate_event_contract as validate_radroots_event_contract,
 };
-use radroots_event::draft::compute_nip01_event_id;
 use radroots_event::ids::RadrootsEventId;
 use radroots_event::knowledge::{
     RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
@@ -18,6 +17,7 @@ use radroots_event::knowledge::{
     RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_event::wire::compute_canonical_nip01_event_id;
 
 use crate::error::EventParseError;
 use crate::knowledge::decode::{
@@ -225,21 +225,21 @@ impl RadrootsDecodedEvent {
 pub fn verify_event_id(
     event: RadrootsEventEnvelope,
 ) -> Result<RadrootsIdVerifiedEvent, RadrootsNip01VerificationError> {
-    RadrootsEventId::parse(event.id.as_str())
+    RadrootsEventId::parse(event.id_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let expected = compute_nip01_event_id(
-        event.author.as_str(),
-        event.created_at,
-        event.kind,
-        &event.tags,
-        event.content.as_str(),
+    let expected = compute_canonical_nip01_event_id(
+        event.author_str(),
+        event.created_at_u64(),
+        event.kind_u32(),
+        &event.tags_as_vec(),
+        event.content(),
     )
     .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?
     .into_string();
-    if event.id != expected {
+    if event.id_str() != expected {
         return Err(RadrootsNip01VerificationError::IdMismatch {
             expected,
-            actual: event.id,
+            actual: event.id_str().to_string(),
         });
     }
     Ok(RadrootsIdVerifiedEvent { event })
@@ -354,28 +354,29 @@ pub fn verify_and_decode_radroots_event(
 fn raw_event_from_radroots(
     event: &RadrootsEventEnvelope,
 ) -> Result<nostr::Event, RadrootsNip01VerificationError> {
-    let id = nostr::EventId::from_hex(event.id.as_str())
+    let id = nostr::EventId::from_hex(event.id_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let public_key = nostr::PublicKey::from_hex(event.author.as_str())
+    let public_key = nostr::PublicKey::from_hex(event.author_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let kind_u16 =
-        u16::try_from(event.kind).map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let mut tags = Vec::with_capacity(event.tags.len());
-    for tag in event.tags.iter().cloned() {
+    let kind_u16 = u16::try_from(event.kind_u32())
+        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
+    let tags_vec = event.tags_as_vec();
+    let mut tags = Vec::with_capacity(tags_vec.len());
+    for tag in tags_vec {
         tags.push(
             nostr::Tag::parse(tag)
                 .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?,
         );
     }
-    let sig = nostr::secp256k1::schnorr::Signature::from_str(event.sig.as_str())
+    let sig = nostr::secp256k1::schnorr::Signature::from_str(event.sig_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     Ok(nostr::Event::new(
         id,
         public_key,
-        nostr::Timestamp::from_secs(u64::from(event.created_at)),
+        nostr::Timestamp::from_secs(event.created_at_u64()),
         nostr::Kind::Custom(kind_u16),
         tags,
-        event.content.clone(),
+        event.content().to_string(),
         sig,
     ))
 }

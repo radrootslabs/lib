@@ -5,8 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope, kinds::KIND_REACTION, reaction::RadrootsReaction,
-    social::RadrootsSocialTarget, tags::TAG_E_ROOT,
+    kinds::KIND_REACTION, reaction::RadrootsReaction, social::RadrootsSocialTarget,
+    tags::TAG_E_ROOT,
 };
 
 use crate::error::EventParseError;
@@ -42,7 +42,7 @@ pub fn reaction_from_tags(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -60,7 +60,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -74,18 +74,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
 fn parse_reaction_target(tags: &[Vec<String>]) -> Result<RadrootsSocialTarget, EventParseError> {

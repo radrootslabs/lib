@@ -135,7 +135,7 @@ mod tests {
             "sig".to_string(),
         )
         .expect("parsed event");
-        assert_eq!(parsed.event.sig, "sig");
+        assert_eq!(parsed.event.sig_str(), "sig");
         assert_eq!(parsed.data.data, auth);
     }
 

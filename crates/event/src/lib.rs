@@ -19,6 +19,7 @@ pub mod document;
 pub mod draft;
 #[cfg(feature = "dto-bindgen")]
 pub mod dto;
+pub mod envelope;
 pub mod event_head;
 pub mod farm;
 pub mod farm_crdt;
@@ -63,27 +64,15 @@ pub mod tags;
 pub mod trade_validation;
 pub mod wire;
 
+pub use envelope::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
+    RadrootsEventKind, RadrootsEventKindClass, RadrootsEventTag, RadrootsEventTags,
+    RadrootsEventTimestamp,
+};
 pub use wire::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsEventWireLimits,
     RadrootsNip01EventWire, canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
 };
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventEnvelope {
-    pub id: String,
-    pub author: String,
-    pub created_at: u32,
-    pub kind: u32,
-    pub tags: Vec<Vec<String>>,
-    pub content: String,
-    pub sig: String,
-}
 
 #[cfg_attr(
     any(feature = "serde", test),

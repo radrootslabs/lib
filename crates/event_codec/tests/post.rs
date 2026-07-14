@@ -711,12 +711,12 @@ fn post_metadata_and_index_from_event_roundtrip() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.id, "id");
-    assert_eq!(index.event.author, "author");
-    assert_eq!(index.event.created_at, 77);
-    assert_eq!(index.event.kind, KIND_POST);
-    assert_eq!(index.event.content, "hello");
-    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.event.id_str(), "id");
+    assert_eq!(index.event.author_str(), "author");
+    assert_eq!(index.event.created_at_u64(), 77);
+    assert_eq!(index.event.kind_u32(), KIND_POST);
+    assert_eq!(index.event.content(), "hello");
+    assert_eq!(index.event.sig_str(), "sig");
     assert_eq!(index.data.data.content, "hello");
 }
 

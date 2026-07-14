@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 
-use crate::RadrootsEventEnvelope;
 use crate::contract::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
 use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey};
 use crate::tags::TAG_D;
+use crate::{RadrootsEventEnvelope, RadrootsEventTag};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsEventHeadCoordinate {
@@ -27,14 +27,14 @@ pub enum RadrootsEventHeadCoordinate {
 pub struct RadrootsEventHeadCandidate {
     pub coordinate: RadrootsEventHeadCoordinate,
     pub event_id: RadrootsEventId,
-    pub created_at: u32,
+    pub created_at: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCurrentEventHead {
     pub coordinate: RadrootsEventHeadCoordinate,
     pub event_id: RadrootsEventId,
-    pub created_at: u32,
+    pub created_at: u64,
 }
 
 impl From<RadrootsEventHeadCandidate> for RadrootsCurrentEventHead {
@@ -80,29 +80,15 @@ pub fn event_head_candidate_for_class(
         RadrootsEventClass::Regular => RadrootsEventHeadCandidateResult::NotHeadSelected,
         RadrootsEventClass::Ephemeral => RadrootsEventHeadCandidateResult::NotPersisted,
         RadrootsEventClass::Replaceable | RadrootsEventClass::Addressable => {
-            let event_id = match RadrootsEventId::parse(&event.id) {
-                Ok(event_id) => event_id,
-                Err(error) => {
-                    return RadrootsEventHeadCandidateResult::Malformed(
-                        RadrootsEventHeadMalformed::InvalidEventId(error),
-                    );
-                }
-            };
-            let pubkey = match RadrootsPublicKey::parse(&event.author) {
-                Ok(pubkey) => pubkey,
-                Err(error) => {
-                    return RadrootsEventHeadCandidateResult::Malformed(
-                        RadrootsEventHeadMalformed::InvalidPubkey(error),
-                    );
-                }
-            };
+            let event_id = event.id().clone();
+            let pubkey = event.author().clone();
             let coordinate = if class == RadrootsEventClass::Replaceable {
                 RadrootsEventHeadCoordinate::Replaceable {
-                    kind: event.kind,
+                    kind: event.kind_u32(),
                     pubkey,
                 }
             } else {
-                let Some(d_tag) = first_tag_value(&event.tags, TAG_D) else {
+                let Some(d_tag) = first_tag_value(event.tag_slices(), TAG_D) else {
                     return RadrootsEventHeadCandidateResult::Malformed(
                         RadrootsEventHeadMalformed::MissingDTag,
                     );
@@ -116,7 +102,7 @@ pub fn event_head_candidate_for_class(
                     }
                 };
                 RadrootsEventHeadCoordinate::Addressable {
-                    kind: event.kind,
+                    kind: event.kind_u32(),
                     pubkey,
                     d_tag,
                 }
@@ -124,7 +110,7 @@ pub fn event_head_candidate_for_class(
             RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
                 coordinate,
                 event_id,
-                created_at: event.created_at,
+                created_at: event.created_at_u64(),
             })
         }
     }
@@ -140,7 +126,8 @@ pub fn event_head_candidate_for_contract(
 pub fn event_head_candidate_for_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsEventHeadCandidateResult, RadrootsContractMatchError> {
-    let contract = identify_event_contract(event.kind, &event.tags, &event.content)?;
+    let tags = event.tags_as_vec();
+    let contract = identify_event_contract(event.kind_u32(), &tags, event.content())?;
     Ok(event_head_candidate_for_contract(event, contract))
 }
 
@@ -170,16 +157,17 @@ pub fn select_event_head(
     }
 }
 
-fn first_tag_value<'a>(tags: &'a [Vec<String>], name: &str) -> Option<&'a str> {
+fn first_tag_value<'a>(tags: &'a [RadrootsEventTag], name: &str) -> Option<&'a str> {
     tags.iter()
-        .find(|tag| tag.first().map(String::as_str) == Some(name))
-        .and_then(|tag| tag.get(1))
+        .find(|tag| tag.as_slice().first().map(String::as_str) == Some(name))
+        .and_then(|tag| tag.as_slice().get(1))
         .map(String::as_str)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RadrootsEventEnvelopeParts;
     use crate::contract::RadrootsContractMatchError;
     use crate::kinds::{
         KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE,
@@ -189,38 +177,50 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
+    fn hex_128(character: char) -> String {
+        core::iter::repeat_n(character, 128).collect()
+    }
+
     fn event(
         kind: u32,
         id: &str,
         author: &str,
-        created_at: u32,
+        created_at: u64,
         tags: Vec<Vec<String>>,
     ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: id.to_string(),
             author: author.to_string(),
             created_at,
             kind,
             tags,
             content: String::new(),
-            sig: String::new(),
-        }
+            sig: hex_128('f'),
+        })
+        .expect("event envelope")
     }
 
     fn event_with_content(
         kind: u32,
         id: &str,
         author: &str,
-        created_at: u32,
+        created_at: u64,
         tags: Vec<Vec<String>>,
         content: &str,
     ) -> RadrootsEventEnvelope {
-        let mut event = event(kind, id, author, created_at, tags);
-        event.content = content.to_string();
-        event
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: id.to_string(),
+            author: author.to_string(),
+            created_at,
+            kind,
+            tags,
+            content: content.to_string(),
+            sig: hex_128('f'),
+        })
+        .expect("event envelope")
     }
 
-    fn candidate(id: char, created_at: u32) -> RadrootsEventHeadCandidate {
+    fn candidate(id: char, created_at: u64) -> RadrootsEventHeadCandidate {
         expect_candidate(event_head_candidate_for_class(
             &event(10002, &hex_64(id), &hex_64('a'), created_at, Vec::new()),
             RadrootsEventClass::Replaceable,
@@ -305,25 +305,6 @@ mod tests {
         assert!(matches!(
             event_head_candidate_for_class(&invalid, RadrootsEventClass::Addressable),
             RadrootsEventHeadCandidateResult::Malformed(RadrootsEventHeadMalformed::InvalidDTag(_))
-        ));
-    }
-
-    #[test]
-    fn malformed_candidates_report_invalid_event_ids_and_pubkeys() {
-        let bad_event_id = event(10002, "not-hex", &hex_64('a'), 1, Vec::new());
-        assert!(matches!(
-            event_head_candidate_for_class(&bad_event_id, RadrootsEventClass::Replaceable),
-            RadrootsEventHeadCandidateResult::Malformed(
-                RadrootsEventHeadMalformed::InvalidEventId(_)
-            )
-        ));
-
-        let bad_pubkey = event(10002, &hex_64('1'), "not-hex", 1, Vec::new());
-        assert!(matches!(
-            event_head_candidate_for_class(&bad_pubkey, RadrootsEventClass::Replaceable),
-            RadrootsEventHeadCandidateResult::Malformed(RadrootsEventHeadMalformed::InvalidPubkey(
-                _
-            ))
         ));
     }
 

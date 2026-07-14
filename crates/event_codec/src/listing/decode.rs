@@ -528,7 +528,7 @@ pub fn listing_from_event_parts(
     let location = location
         .map(|location| {
             let geohash = geohash.ok_or(EventParseError::InvalidTag(TAG_GEOHASH))?;
-            Ok(RadrootsListingPublicLocation {
+            Ok::<RadrootsListingPublicLocation, EventParseError>(RadrootsListingPublicLocation {
                 primary: location.primary,
                 city: location.city,
                 region: location.region,
@@ -582,7 +582,7 @@ pub fn listing_from_event_parts(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -600,7 +600,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -614,7 +614,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent::from_parts(
+    RadrootsParsedEvent::from_parts(
         id,
         author,
         published_at,
@@ -623,19 +623,19 @@ pub fn parsed_from_event(
         tags,
         sig,
         data.data,
-    ))
+    )
 }
 
 pub fn data_from_nostr_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedData<RadrootsListing>, EventParseError> {
     data_from_event(
-        event.id.clone(),
-        event.author.clone(),
-        event.created_at,
-        event.kind,
-        event.content.clone(),
-        event.tags.clone(),
+        event.id_str().to_string(),
+        event.author_str().to_string(),
+        event.created_at_u64(),
+        event.kind_u32(),
+        event.content().to_string(),
+        event.tags_as_vec(),
     )
 }
 
@@ -643,13 +643,13 @@ pub fn parsed_from_nostr_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsListing>, EventParseError> {
     parsed_from_event(
-        event.id.clone(),
-        event.author.clone(),
-        event.created_at,
-        event.kind,
-        event.content.clone(),
-        event.tags.clone(),
-        event.sig.clone(),
+        event.id_str().to_string(),
+        event.author_str().to_string(),
+        event.created_at_u64(),
+        event.kind_u32(),
+        event.content().to_string(),
+        event.tags_as_vec(),
+        event.sig_str().to_string(),
     )
 }
 

@@ -2,7 +2,6 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     relay_auth::{KIND_RELAY_AUTH, RadrootsRelayAuth},
     tags::{TAG_CHALLENGE, TAG_RELAY},
 };
@@ -34,7 +33,7 @@ pub fn relay_auth_from_event(
 pub fn data_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -52,7 +51,7 @@ pub fn data_from_event(
 pub fn parsed_from_event(
     id: String,
     author: String,
-    published_at: u32,
+    published_at: u64,
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
@@ -66,16 +65,5 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsParsedEvent {
-        event: RadrootsEventEnvelope {
-            id,
-            author,
-            created_at: published_at,
-            kind,
-            content,
-            tags,
-            sig,
-        },
-        data,
-    })
+    RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }

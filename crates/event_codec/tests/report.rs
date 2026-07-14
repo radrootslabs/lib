@@ -448,6 +448,6 @@ fn report_wrappers_preserve_event_metadata() {
         "sig".to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.event.sig_str(), "sig");
     assert_eq!(parsed.data.data.reported_pubkey, REPORTED);
 }
