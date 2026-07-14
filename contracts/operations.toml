@@ -16,12 +16,12 @@ domains = [
 
 [shared_types]
 public = [
-  "WireEventParts",
-  "RadrootsFrozenEventDraft",
+  "RadrootsNip01EventWireParts",
+  "RadrootsEventDraft",
   "RadrootsSignedEvent",
-  "RadrootsNostrEvent",
-  "RadrootsNostrEventRef",
-  "RadrootsNostrEventPtr",
+  "RadrootsEventEnvelope",
+  "RadrootsEventRef",
+  "RadrootsEventPtr",
   "RadrootsListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
@@ -86,7 +86,7 @@ domain = "profile"
 id = "profile.build_draft"
 stability = "beta"
 inputs = ["RadrootsProfile", "RadrootsProfileType?"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -104,7 +104,7 @@ domain = "farm"
 id = "farm.build_draft"
 stability = "beta"
 inputs = ["RadrootsFarm"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -143,7 +143,7 @@ domain = "listing"
 id = "listing.build_draft"
 stability = "beta"
 inputs = ["RadrootsListing"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -163,7 +163,7 @@ vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
 domain = "listing"
 id = "listing.parse_event"
 stability = "beta"
-inputs = ["RadrootsNostrEvent"]
+inputs = ["RadrootsEventEnvelope"]
 outputs = ["RadrootsListing"]
 error_class = "parse_error"
 deterministic = true
@@ -173,7 +173,7 @@ transport = "native"
 [operations.listing_parse_event.implementation]
 rust_modules = ["crates/trade/src/listing/codec.rs"]
 rust_types = [
-  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::RadrootsEventEnvelope",
   "radroots_event::listing::RadrootsListing",
 ]
 
@@ -310,8 +310,8 @@ vector = "contracts/conformance/vectors/social/mvp.v1.json"
 domain = "order"
 id = "order.build_order_request_draft"
 stability = "beta"
-inputs = ["RadrootsOrderRequest", "RadrootsNostrEventPtr"]
-outputs = ["WireEventParts"]
+inputs = ["RadrootsOrderRequest", "RadrootsEventPtr"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -320,7 +320,7 @@ transport = "native"
 [operations.order_build_order_request_draft.implementation]
 rust_modules = ["crates/event_codec/src/order/encode.rs"]
 rust_types = [
-  "radroots_event::RadrootsNostrEventPtr",
+  "radroots_event::RadrootsEventPtr",
   "radroots_event::order::RadrootsOrderRequest",
 ]
 
@@ -332,7 +332,7 @@ domain = "order"
 id = "order.build_order_decision_draft"
 stability = "beta"
 inputs = ["root_event_id", "prev_event_id", "RadrootsOrderDecision"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -349,7 +349,7 @@ vector = "contracts/conformance/vectors/order/build_order_decision_draft.v1.json
 domain = "order"
 id = "order.parse_order_request"
 stability = "beta"
-inputs = ["RadrootsNostrEvent"]
+inputs = ["RadrootsEventEnvelope"]
 outputs = ["RadrootsOrderEnvelope", "RadrootsOrderRequest"]
 error_class = "parse_error"
 deterministic = true
@@ -359,7 +359,7 @@ transport = "native"
 [operations.order_parse_order_request.implementation]
 rust_modules = ["crates/event_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::RadrootsEventEnvelope",
   "radroots_event::order::RadrootsOrderEnvelope",
   "radroots_event::order::RadrootsOrderRequest",
 ]
@@ -371,7 +371,7 @@ vector = "contracts/conformance/vectors/order/parse_order_request.v1.json"
 domain = "order"
 id = "order.parse_order_decision"
 stability = "beta"
-inputs = ["RadrootsNostrEvent"]
+inputs = ["RadrootsEventEnvelope"]
 outputs = ["RadrootsOrderEnvelope", "RadrootsOrderDecision"]
 error_class = "parse_error"
 deterministic = true
@@ -381,7 +381,7 @@ transport = "native"
 [operations.order_parse_order_decision.implementation]
 rust_modules = ["crates/event_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::RadrootsEventEnvelope",
   "radroots_event::order::RadrootsOrderEnvelope",
   "radroots_event::order::RadrootsOrderDecision",
 ]
@@ -411,7 +411,7 @@ vector = "contracts/conformance/vectors/order/parse_listing_address.v1.json"
 domain = "trade_validation"
 id = "trade_validation.validate_listing_event"
 stability = "beta"
-inputs = ["RadrootsNostrEvent"]
+inputs = ["RadrootsEventEnvelope"]
 outputs = ["TradeListingValidateResult"]
 error_class = "validation_error"
 deterministic = true
@@ -421,7 +421,7 @@ transport = "native"
 [operations.trade_validation_validate_listing_event.implementation]
 rust_modules = ["crates/trade/src/listing/validation.rs"]
 rust_types = [
-  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::RadrootsEventEnvelope",
   "radroots_trade::listing::validation::RadrootsTradeListing",
 ]
 
@@ -452,7 +452,7 @@ vector = "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json"
 domain = "knowledge"
 id = "knowledge.verify_and_decode_event"
 stability = "beta"
-inputs = ["RadrootsNostrEvent"]
+inputs = ["RadrootsEventEnvelope"]
 outputs = ["RadrootsDecodedEvent"]
 error_class = "decode_error"
 deterministic = true
@@ -465,7 +465,7 @@ rust_modules = [
   "crates/event_codec/src/knowledge/decode.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsNostrEvent",
+  "radroots_event::RadrootsEventEnvelope",
   "radroots_event_codec::verification::RadrootsDecodedEvent",
 ]
 

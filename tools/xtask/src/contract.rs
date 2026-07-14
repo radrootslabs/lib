@@ -46,6 +46,13 @@ const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
     "dto_bindgen_core",
     "dto_bindgen_macros",
 ];
+const RETIRED_OPERATION_EVENT_NAMES: [&str; 5] = [
+    "WireEventParts",
+    "RadrootsFrozenEventDraft",
+    "RadrootsNostrEvent",
+    "RadrootsNostrEventRef",
+    "RadrootsNostrEventPtr",
+];
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
 ];
@@ -2791,6 +2798,10 @@ fn validate_operations_contract(
     if shared_types.is_empty() {
         return Err("shared_types.public must not be empty".to_string());
     }
+    validate_no_retired_operation_event_names(
+        &operations_manifest.shared_types.public,
+        "shared_types.public",
+    )?;
     let error_classes =
         collect_non_empty_set(&operations_manifest.errors.classes, "errors.classes")?;
     if error_classes.is_empty() {
@@ -2864,6 +2875,10 @@ fn validate_operations_contract(
             &operation.inputs,
             &format!("operation {} inputs", operation.id),
         )?;
+        validate_no_retired_operation_event_names(
+            &operation.inputs,
+            &format!("operation {} inputs", operation.id),
+        )?;
         if operation.outputs.is_empty() {
             return Err(format!(
                 "operation {} outputs must not be empty",
@@ -2871,6 +2886,10 @@ fn validate_operations_contract(
             ));
         }
         let _ = collect_non_empty_set(
+            &operation.outputs,
+            &format!("operation {} outputs", operation.id),
+        )?;
+        validate_no_retired_operation_event_names(
             &operation.outputs,
             &format!("operation {} outputs", operation.id),
         )?;
@@ -2893,6 +2912,10 @@ fn validate_operations_contract(
             ));
         }
         let _ = collect_non_empty_set(
+            &operation.implementation.rust_types,
+            &format!("operation {} implementation.rust_types", operation.id),
+        )?;
+        validate_no_retired_operation_event_names(
             &operation.implementation.rust_types,
             &format!("operation {} implementation.rust_types", operation.id),
         )?;
@@ -2938,6 +2961,22 @@ fn validate_operations_contract(
         validate_conformance_vector_file(&vector_path, &operations_manifest.contract.version)?;
     }
 
+    Ok(())
+}
+
+fn validate_no_retired_operation_event_names(
+    values: &[String],
+    context: &str,
+) -> Result<(), String> {
+    for value in values {
+        for retired in RETIRED_OPERATION_EVENT_NAMES {
+            if value == retired || value.ends_with(&format!("::{retired}")) {
+                return Err(format!(
+                    "{context} uses retired event type {retired}; use target-state event and wire names"
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -4354,12 +4393,12 @@ domains = ["profile", "farm", "listing", "trade"]
 
 [shared_types]
 public = [
-  "WireEventParts",
-  "RadrootsFrozenEventDraft",
+  "RadrootsNip01EventWireParts",
+  "RadrootsEventDraft",
   "RadrootsSignedEvent",
-  "RadrootsNostrEvent",
-  "RadrootsNostrEventRef",
-  "RadrootsNostrEventPtr",
+  "RadrootsEventEnvelope",
+  "RadrootsEventRef",
+  "RadrootsEventPtr",
   "RadrootsListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
@@ -4378,7 +4417,7 @@ domain = "profile"
 id = "profile.build_draft"
 stability = "beta"
 inputs = ["RadrootsProfile", "RadrootsProfileType?"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -4396,7 +4435,7 @@ domain = "listing"
 id = "listing.build_draft"
 stability = "beta"
 inputs = ["RadrootsListing"]
-outputs = ["WireEventParts"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -5985,6 +6024,61 @@ rust_package = "radroots_sdk"
                 .domains
                 .clear();
         });
+        assert_bundle_error(
+            "shared_types.public uses retired event type RadrootsNostrEvent",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .shared_types
+                    .public
+                    .push("RadrootsNostrEvent".to_string());
+            },
+        );
+        assert_bundle_error(
+            "operation profile.build_draft inputs uses retired event type RadrootsNostrEvent",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .operations
+                    .get_mut("profile_build_draft")
+                    .expect("profile operation")
+                    .inputs
+                    .push("RadrootsNostrEvent".to_string());
+            },
+        );
+        assert_bundle_error(
+            "operation profile.build_draft outputs uses retired event type WireEventParts",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .operations
+                    .get_mut("profile_build_draft")
+                    .expect("profile operation")
+                    .outputs
+                    .push("WireEventParts".to_string());
+            },
+        );
+        assert_bundle_error(
+            "operation profile.build_draft implementation.rust_types uses retired event type RadrootsNostrEventPtr",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .operations
+                    .get_mut("profile_build_draft")
+                    .expect("profile operation")
+                    .implementation
+                    .rust_types
+                    .push("radroots_event::RadrootsNostrEventPtr".to_string());
+            },
+        );
         let _ = fs::remove_dir_all(root);
     }
 
