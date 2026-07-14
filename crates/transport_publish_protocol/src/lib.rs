@@ -16,7 +16,7 @@ use radroots_transport::{
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };
 
-pub const API_VERSION: &str = "radrootsd.transport_publish.v4";
+pub const API_VERSION: &str = "radrootsd.transport_publish.v5";
 pub const DAEMON_NAME: &str = "radrootsd";
 pub const METHOD_CAPABILITIES: &str = "transport.publish.capabilities";
 pub const METHOD_EVENT: &str = "transport.publish.event";
@@ -29,7 +29,7 @@ pub enum TransportPublishProtocolError {
         field: &'static str,
         expected_len: usize,
     },
-    InvalidKind(u32),
+    EmptyRawEventJson,
     EmptyTag {
         index: usize,
     },
@@ -130,9 +130,7 @@ impl fmt::Display for TransportPublishProtocolError {
                 field,
                 expected_len,
             } => write!(f, "{field} must be {expected_len} lowercase hex characters"),
-            Self::InvalidKind(kind) => {
-                write!(f, "event kind {kind} exceeds transport publish range")
-            }
+            Self::EmptyRawEventJson => f.write_str("raw_event_json must not be empty"),
             Self::EmptyTag { index } => write!(f, "tag {index} must not be empty"),
             Self::EmptyIdempotencyKey => f.write_str("idempotency key must not be empty"),
             Self::EmptyTransportKind { index } => {
@@ -253,36 +251,6 @@ impl fmt::Display for TransportPublishProtocolError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for TransportPublishProtocolError {}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignedEventWire {
-    pub id: String,
-    pub pubkey: String,
-    pub created_at: u64,
-    pub kind: u32,
-    pub tags: Vec<Vec<String>>,
-    pub content: String,
-    pub sig: String,
-}
-
-impl SignedEventWire {
-    pub fn validate(&self) -> Result<(), TransportPublishProtocolError> {
-        validate_lower_hex("id", self.id.as_str(), 64)?;
-        validate_lower_hex("pubkey", self.pubkey.as_str(), 64)?;
-        validate_lower_hex("sig", self.sig.as_str(), 128)?;
-        if self.kind > u16::MAX as u32 {
-            return Err(TransportPublishProtocolError::InvalidKind(self.kind));
-        }
-        for (index, tag) in self.tags.iter().enumerate() {
-            if tag.is_empty() {
-                return Err(TransportPublishProtocolError::EmptyTag { index });
-            }
-        }
-        Ok(())
-    }
-}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
@@ -651,7 +619,7 @@ fn validate_required_target_fingerprints(
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportPublishEventRequest {
-    pub event: SignedEventWire,
+    pub raw_event_json: String,
     pub target_policy: TransportPublishTargetPolicy,
     pub delivery_policy: TransportPublishDeliveryPolicy,
     #[cfg_attr(
@@ -668,7 +636,9 @@ pub struct TransportPublishEventRequest {
 
 impl TransportPublishEventRequest {
     pub fn validate(&self, max_targets: usize) -> Result<(), TransportPublishProtocolError> {
-        self.event.validate()?;
+        if self.raw_event_json.is_empty() {
+            return Err(TransportPublishProtocolError::EmptyRawEventJson);
+        }
         self.target_policy.validate(max_targets)?;
         self.delivery_policy.validate()?;
         if let TransportPublishTargetPolicy::ExplicitTargets { targets } = &self.target_policy {
@@ -855,9 +825,6 @@ impl TransportPublishJobView {
         }
         validate_lower_hex("event_id", self.event_id.as_str(), 64)?;
         validate_lower_hex("pubkey", self.pubkey.as_str(), 64)?;
-        if self.event_kind > u16::MAX as u32 {
-            return Err(TransportPublishProtocolError::InvalidKind(self.event_kind));
-        }
         self.target_policy.validate(usize::MAX)?;
         self.delivery_policy.validate()?;
         if self.terminal != job_status_is_terminal(self.status) {
@@ -961,7 +928,7 @@ pub struct TransportPublishCapabilities {
 }
 
 impl TransportPublishCapabilities {
-    pub fn v4(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
+    pub fn v5(max_event_bytes: usize, max_targets_per_request: usize) -> Self {
         Self {
             daemon: DAEMON_NAME.to_owned(),
             api_version: API_VERSION.to_owned(),
@@ -976,7 +943,7 @@ impl TransportPublishCapabilities {
                 mode: "scoped_bearer_token".to_owned(),
             },
             publish: TransportPublishSurfaceCapabilities {
-                signed_event_ingress: true,
+                raw_event_json_ingress: true,
                 server_side_user_signing: false,
                 max_event_bytes,
                 max_targets_per_request,
@@ -1034,7 +1001,7 @@ pub struct TransportPublishAuthCapabilities {
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportPublishSurfaceCapabilities {
-    pub signed_event_ingress: bool,
+    pub raw_event_json_ingress: bool,
     pub server_side_user_signing: bool,
     pub max_event_bytes: usize,
     pub max_targets_per_request: usize,
@@ -1410,16 +1377,13 @@ fn validate_job_status_state(
 mod tests {
     use super::*;
 
-    fn event() -> SignedEventWire {
-        SignedEventWire {
-            id: "0".repeat(64),
-            pubkey: "1".repeat(64),
-            created_at: 1_700_000_000,
-            kind: 30_402,
-            tags: vec![vec!["d".to_owned(), "listing-1".to_owned()]],
-            content: "{}".to_owned(),
-            sig: "2".repeat(128),
-        }
+    fn raw_event_json() -> String {
+        format!(
+            r#"{{"id":"{}","pubkey":"{}","created_at":1700000000,"kind":30402,"tags":[["d","listing-1"]],"content":"{{}}","sig":"{}"}}"#,
+            "0".repeat(64),
+            "1".repeat(64),
+            "2".repeat(128)
+        )
     }
 
     fn nostr_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishTargetOutcome {
@@ -1540,10 +1504,10 @@ mod tests {
     }
 
     #[test]
-    fn transport_publish_capabilities_match_v4_surface() {
-        let capabilities = TransportPublishCapabilities::v4(1024, 10);
+    fn transport_publish_capabilities_match_v5_surface() {
+        let capabilities = TransportPublishCapabilities::v5(1024, 10);
 
-        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v4");
+        assert_eq!(capabilities.api_version, "radrootsd.transport_publish.v5");
         assert_eq!(
             capabilities.methods,
             vec![
@@ -1596,7 +1560,7 @@ mod tests {
     #[test]
     fn request_validation_covers_targets_and_policy() {
         let request = TransportPublishEventRequest {
-            event: event(),
+            raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay.example.com"),
             ]),
@@ -2179,7 +2143,7 @@ mod tests {
     #[test]
     fn serde_round_trip_preserves_preview_target() {
         let request = TransportPublishEventRequest {
-            event: event(),
+            raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::reticulum_preview(
                     TransportPublishPreviewBehavior::DeferDeliveryPlans,
@@ -2200,7 +2164,7 @@ mod tests {
     #[test]
     fn serde_round_trip_preserves_target_metadata() {
         let request = TransportPublishEventRequest {
-            event: event(),
+            raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay.example.com")
                     .with_scope("farm.local")
@@ -2229,8 +2193,8 @@ mod tests {
                 "id must be 64 lowercase hex characters",
             ),
             (
-                TransportPublishProtocolError::InvalidKind(70_000),
-                "event kind 70000 exceeds transport publish range",
+                TransportPublishProtocolError::EmptyRawEventJson,
+                "raw_event_json must not be empty",
             ),
             (
                 TransportPublishProtocolError::EmptyTag { index: 2 },
@@ -2320,45 +2284,20 @@ mod tests {
     }
 
     #[test]
-    fn signed_event_validation_rejects_each_invalid_event_shape() {
-        let mut invalid_id = event();
-        invalid_id.id = "A".repeat(64);
-        assert!(matches!(
-            invalid_id.validate(),
-            Err(TransportPublishProtocolError::InvalidHexField { field: "id", .. })
-        ));
-
-        let mut invalid_pubkey = event();
-        invalid_pubkey.pubkey = "g".repeat(64);
-        assert!(matches!(
-            invalid_pubkey.validate(),
-            Err(TransportPublishProtocolError::InvalidHexField {
-                field: "pubkey",
-                ..
-            })
-        ));
-
-        let mut invalid_sig = event();
-        invalid_sig.sig = "2".repeat(127);
-        assert!(matches!(
-            invalid_sig.validate(),
-            Err(TransportPublishProtocolError::InvalidHexField { field: "sig", .. })
-        ));
-
-        let mut invalid_kind = event();
-        invalid_kind.kind = u16::MAX as u32 + 1;
+    fn publish_request_validation_rejects_empty_raw_event_json() {
+        let empty_raw_event = TransportPublishEventRequest {
+            raw_event_json: String::new(),
+            target_policy: TransportPublishTargetPolicy::nostr(
+                NostrPublishTargetSourcePolicy::DaemonDefaultOnly,
+                Vec::new(),
+            ),
+            delivery_policy: TransportPublishDeliveryPolicy::Any,
+            idempotency_key: None,
+            timeout_ms: None,
+        };
         assert_eq!(
-            invalid_kind.validate(),
-            Err(TransportPublishProtocolError::InvalidKind(
-                u16::MAX as u32 + 1
-            ))
-        );
-
-        let mut empty_tag = event();
-        empty_tag.tags.push(Vec::new());
-        assert_eq!(
-            empty_tag.validate(),
-            Err(TransportPublishProtocolError::EmptyTag { index: 1 })
+            empty_raw_event.validate(10),
+            Err(TransportPublishProtocolError::EmptyRawEventJson)
         );
     }
 
@@ -2382,7 +2321,7 @@ mod tests {
         assert_eq!(nostr.request_target_count(), 1);
 
         let mut empty_targets = TransportPublishEventRequest {
-            event: event(),
+            raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(Vec::new()),
             delivery_policy: TransportPublishDeliveryPolicy::Any,
             idempotency_key: None,
@@ -2462,7 +2401,7 @@ mod tests {
                 .expect("required policy");
         assert_eq!(required_policy.required_target_count(3), 1);
         let required_request = TransportPublishEventRequest {
-            event: event(),
+            raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 required_target.clone(),
                 TransportPublishTarget::nostr("wss://relay.example").with_scope("farm.remote"),
@@ -2584,15 +2523,6 @@ mod tests {
         assert_eq!(
             empty_job.validate(),
             Err(TransportPublishProtocolError::EmptyJobId)
-        );
-
-        let mut invalid_kind = base.clone();
-        invalid_kind.event_kind = u16::MAX as u32 + 1;
-        assert_eq!(
-            invalid_kind.validate(),
-            Err(TransportPublishProtocolError::InvalidKind(
-                u16::MAX as u32 + 1
-            ))
         );
 
         let mut invalid_pubkey = base.clone();

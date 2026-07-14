@@ -12,7 +12,7 @@ pub struct NostrEventHead {
     pub pubkey: String,
     pub d_tag: String,
     pub last_event_id: String,
-    pub last_created_at: u32,
+    pub last_created_at: u64,
     pub content_hash: String,
 }
 
@@ -23,7 +23,7 @@ pub struct INostrEventHeadFields {
     pub pubkey: String,
     pub d_tag: String,
     pub last_event_id: String,
-    pub last_created_at: u32,
+    pub last_created_at: u64,
     pub content_hash: String,
 }
 
@@ -48,7 +48,7 @@ pub struct INostrEventHeadFieldsFilter {
     pub pubkey: Option<String>,
     pub d_tag: Option<String>,
     pub last_event_id: Option<String>,
-    pub last_created_at: Option<u32>,
+    pub last_created_at: Option<u64>,
     pub content_hash: Option<String>,
 }
 

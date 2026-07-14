@@ -13,6 +13,8 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::RadrootsCoreDecimal;
 use radroots_event::RadrootsEventEnvelope;
+#[cfg(test)]
+use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_event::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
     RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_event,
@@ -192,7 +194,7 @@ fn ingest_event_inner(
     event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    match event.kind {
+    match event.kind_u32() {
         KIND_PROFILE => ingest_profile_event(exec, event),
         KIND_FARM => ingest_farm_event(exec, event, factory),
         KIND_PLOT => ingest_plot_event(exec, event, factory),
@@ -200,7 +202,7 @@ fn ingest_event_inner(
         kind if is_nip51_list_set_kind(kind) => ingest_list_set_event(exec, event),
         _ => Err(RadrootsReplicaEventsError::InvalidData(format!(
             "unsupported kind {}",
-            event.kind
+            event.kind_u32()
         ))),
     }
 }
@@ -210,12 +212,12 @@ fn ingest_profile_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
-        event.id.clone(),
-        event.author.clone(),
-        event.created_at,
-        event.kind,
-        event.content.clone(),
-        event.tags.clone(),
+        event.id_str().to_owned(),
+        event.author_str().to_owned(),
+        event.created_at_u64(),
+        event.kind_u32(),
+        event.content().to_owned(),
+        event.tags_as_vec(),
     );
     let data = data_result?;
     let profile_type = match data.data.profile_type {
@@ -301,7 +303,8 @@ fn ingest_farm_event(
     event: &RadrootsEventEnvelope,
     _factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let farm = farm_decode::farm_from_event(event.kind, &event.tags, &event.content)?;
+    let farm =
+        farm_decode::farm_from_event(event.kind_u32(), &event.tags_as_vec(), event.content())?;
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -312,7 +315,7 @@ fn ingest_farm_event(
         created_at: None,
         updated_at: None,
         d_tag: Some(farm.d_tag.clone()),
-        pubkey: Some(event.author.clone()),
+        pubkey: Some(event.author_str().to_owned()),
         name: None,
         about: None,
         website: None,
@@ -336,7 +339,7 @@ fn ingest_farm_event(
     let farm_id = if let Some(row) = existing.results.first() {
         let fields = IFarmFieldsPartial {
             d_tag: Some(Value::from(farm.d_tag.clone())),
-            pubkey: Some(Value::from(event.author.clone())),
+            pubkey: Some(Value::from(event.author_str().to_owned())),
             name: Some(Value::from(farm.name.clone())),
             about: to_value_opt(farm.about.clone()),
             website: to_value_opt(farm.website.clone()),
@@ -359,7 +362,7 @@ fn ingest_farm_event(
     } else {
         let fields = IFarmFields {
             d_tag: farm.d_tag.clone(),
-            pubkey: event.author.clone(),
+            pubkey: event.author_str().to_owned(),
             name: farm.name.clone(),
             about: farm.about.clone(),
             website: farm.website.clone(),
@@ -384,7 +387,8 @@ fn ingest_plot_event(
     event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let plot = plot_decode::plot_from_event(event.kind, &event.tags, &event.content)?;
+    let plot =
+        plot_decode::plot_from_event(event.kind_u32(), &event.tags_as_vec(), event.content())?;
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -459,7 +463,11 @@ fn ingest_listing_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let listing = listing_decode::listing_from_event(event.kind, &event.tags, &event.content)?;
+    let listing = listing_decode::listing_from_event(
+        event.kind_u32(),
+        &event.tags_as_vec(),
+        event.content(),
+    )?;
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -481,11 +489,14 @@ fn ingest_list_set_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    if event.kind != radroots_event::kinds::KIND_LIST_SET_GENERIC {
+    if event.kind_u32() != radroots_event::kinds::KIND_LIST_SET_GENERIC {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
-    let list_set =
-        list_set_decode::list_set_from_tags(event.kind, event.content.clone(), &event.tags)?;
+    let list_set = list_set_decode::list_set_from_tags(
+        event.kind_u32(),
+        event.content().to_owned(),
+        &event.tags_as_vec(),
+    )?;
 
     let metadata_count = usize::from(list_set.title.is_some())
         + usize::from(list_set.description.is_some())
@@ -509,7 +520,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        upsert_member_claims(exec, &event.author, &list_set)?;
+        upsert_member_claims(exec, event.author_str(), &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
     }
@@ -529,7 +540,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        let farm = find_farm_by_ref(exec, &event.author, &farm_d_tag)?;
+        let farm = find_farm_by_ref(exec, event.author_str(), &farm_d_tag)?;
         upsert_farm_members(exec, &farm.id, role, &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
@@ -541,7 +552,12 @@ fn ingest_list_set_event(
 }
 
 fn listing_event_addr(event: &RadrootsEventEnvelope, listing: &RadrootsListing) -> String {
-    format!("{}:{}:{}", event.kind, event.author, listing.d_tag)
+    format!(
+        "{}:{}:{}",
+        event.kind_u32(),
+        event.author_str(),
+        listing.d_tag
+    )
 }
 
 fn listing_is_orderable(listing: &RadrootsListing) -> bool {
@@ -904,11 +920,11 @@ fn event_head_decision(
             return Ok(EventHeadDecision {
                 apply: false,
                 key: String::new(),
-                kind: event.kind,
-                pubkey: event.author.clone(),
+                kind: event.kind_u32(),
+                pubkey: event.author_str().to_owned(),
                 d_tag: String::new(),
-                last_event_id: event.id.clone(),
-                last_created_at: event.created_at,
+                last_event_id: event.id_str().to_owned(),
+                last_created_at: event.created_at_u64(),
                 content_hash: String::new(),
             });
         }
@@ -920,9 +936,9 @@ fn event_head_decision(
     };
     let (key, kind, pubkey, d_tag) = event_head_coordinate_fields(&candidate.coordinate);
     #[cfg(test)]
-    let content_hash = event_content_hash(&event.content, &event.tags)?;
+    let content_hash = event_content_hash(event.content(), &event.tags_as_vec())?;
     #[cfg(not(test))]
-    let content_hash = event_content_hash(&event.content, &event.tags);
+    let content_hash = event_content_hash(event.content(), &event.tags_as_vec());
     let existing_result = nostr_event_head::find_one(
         exec,
         &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
@@ -954,8 +970,8 @@ fn event_head_decision(
         kind,
         pubkey,
         d_tag,
-        last_event_id: event.id.clone(),
-        last_created_at: event.created_at,
+        last_event_id: event.id_str().to_owned(),
+        last_created_at: event.created_at_u64(),
         content_hash,
     })
 }
@@ -1497,7 +1513,7 @@ struct EventHeadDecision {
     pubkey: String,
     d_tag: String,
     last_event_id: String,
-    last_created_at: u32,
+    last_created_at: u64,
     content_hash: String,
 }
 
@@ -1541,6 +1557,51 @@ mod tests {
         trade_product,
     };
     use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
+
+    fn test_event_envelope(
+        id: u64,
+        author: &str,
+        created_at: u64,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: format!("{id:064x}"),
+            author: author.to_string(),
+            created_at,
+            kind,
+            tags,
+            content,
+            sig: "f".repeat(128),
+        })
+        .expect("test event envelope")
+    }
+
+    fn test_event_with_parts(
+        event: &RadrootsEventEnvelope,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: event.id_str().to_owned(),
+            author: event.author_str().to_owned(),
+            created_at: event.created_at_u64(),
+            kind,
+            tags,
+            content,
+            sig: event.sig_str().to_owned(),
+        })
+        .expect("test event envelope parts")
+    }
+
+    fn test_event_with_content(
+        event: &RadrootsEventEnvelope,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        test_event_with_parts(event, event.kind_u32(), event.tags_as_vec(), content)
+    }
 
     struct FixedFactory;
 
@@ -1747,15 +1808,14 @@ mod tests {
                 radroots_profile_type_tag_value(profile_type).to_string(),
             ]);
         }
-        RadrootsEventEnvelope {
-            id: format!("{id:064x}"),
-            author: author.to_string(),
-            created_at,
-            kind: KIND_PROFILE,
+        test_event_envelope(
+            id,
+            author,
+            u64::from(created_at),
+            KIND_PROFILE,
             tags,
-            content: serde_json::to_string(&profile).expect("profile json"),
-            sig: "f".repeat(128),
-        }
+            serde_json::to_string(&profile).expect("profile json"),
+        )
     }
 
     fn farm_event(
@@ -1778,15 +1838,14 @@ mod tests {
             tags,
         };
         let tags = farm_encode::farm_build_tags(&farm).expect("farm tags");
-        RadrootsEventEnvelope {
-            id: format!("{id:064x}"),
-            author: author.to_string(),
-            created_at,
-            kind: KIND_FARM,
+        test_event_envelope(
+            id,
+            author,
+            u64::from(created_at),
+            KIND_FARM,
             tags,
-            content: serde_json::to_string(&farm).expect("farm json"),
-            sig: "f".repeat(128),
-        }
+            serde_json::to_string(&farm).expect("farm json"),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1809,15 +1868,14 @@ mod tests {
             tags,
         };
         let tags = plot_encode::plot_build_tags(&plot).expect("plot tags");
-        RadrootsEventEnvelope {
-            id: format!("{id:064x}"),
-            author: author.to_string(),
-            created_at,
-            kind: KIND_PLOT,
+        test_event_envelope(
+            id,
+            author,
+            u64::from(created_at),
+            KIND_PLOT,
             tags,
-            content: serde_json::to_string(&plot).expect("plot json"),
-            sig: "f".repeat(128),
-        }
+            serde_json::to_string(&plot).expect("plot json"),
+        )
     }
 
     fn list_set_event(
@@ -1828,15 +1886,14 @@ mod tests {
         list_set: &RadrootsListSet,
     ) -> RadrootsEventEnvelope {
         let parts = list_set_encode::to_wire_parts_with_kind(list_set, kind).expect("list set");
-        RadrootsEventEnvelope {
-            id: format!("{id:064x}"),
-            author: author.to_string(),
-            created_at,
+        test_event_envelope(
+            id,
+            author,
+            u64::from(created_at),
             kind,
-            tags: parts.tags,
-            content: parts.content,
-            sig: "f".repeat(128),
-        }
+            parts.tags,
+            parts.content,
+        )
     }
 
     fn listing_event(
@@ -1848,12 +1905,12 @@ mod tests {
         title: &str,
     ) -> RadrootsEventEnvelope {
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
-        RadrootsEventEnvelope {
-            id: format!("{id:064x}"),
-            author: author.to_string(),
-            created_at,
-            kind: KIND_LISTING,
-            tags: vec![
+        test_event_envelope(
+            id,
+            author,
+            u64::from(created_at),
+            KIND_LISTING,
+            vec![
                 vec!["d".to_string(), d_tag.to_string()],
                 vec![
                     "a".to_string(),
@@ -1891,9 +1948,8 @@ mod tests {
                 vec!["inventory".to_string(), "5".to_string()],
                 vec!["status".to_string(), status.to_string()],
             ],
-            content: format!("# {title}"),
-            sig: "f".repeat(128),
-        }
+            format!("# {title}"),
+        )
     }
 
     fn listing_decimal(raw: &str) -> RadrootsCoreDecimal {
@@ -2133,15 +2189,14 @@ mod tests {
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
-        let event = RadrootsEventEnvelope {
-            id: format!("{:064x}", 1u64),
-            author: "a".repeat(64),
-            created_at: 1,
-            kind: KIND_LIST_SET_FOLLOW,
-            tags: Vec::new(),
-            content: String::new(),
-            sig: "f".repeat(128),
-        };
+        let event = test_event_envelope(
+            1,
+            &"a".repeat(64),
+            1,
+            KIND_LIST_SET_FOLLOW,
+            Vec::new(),
+            String::new(),
+        );
         let begin_err =
             radroots_replica_ingest_event_with_factory(&begin_executor, &event, &FixedFactory)
                 .expect_err("begin");
@@ -2181,15 +2236,7 @@ mod tests {
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
-        let unsupported = RadrootsEventEnvelope {
-            id: format!("{:064x}", 2u64),
-            author: "a".repeat(64),
-            created_at: 2,
-            kind: 42,
-            tags: Vec::new(),
-            content: String::new(),
-            sig: "f".repeat(128),
-        };
+        let unsupported = test_event_envelope(2, &"a".repeat(64), 2, 42, Vec::new(), String::new());
         let err = radroots_replica_ingest_event_with_factory(
             &rollback_executor,
             &unsupported,
@@ -2550,7 +2597,8 @@ mod tests {
             "active",
             "Pasture Eggs",
         );
-        active.tags.push(vec![
+        let mut active_tags = active.tags_as_vec();
+        active_tags.push(vec![
             "radroots:discount".to_string(),
             serde_json::json!({
                 "scope": "bin",
@@ -2565,6 +2613,12 @@ mod tests {
             })
             .to_string(),
         ]);
+        active = test_event_with_parts(
+            &active,
+            active.kind_u32(),
+            active_tags,
+            active.content().to_owned(),
+        );
         assert_eq!(
             radroots_replica_ingest_event(&exec, &active).expect("active ingest"),
             RadrootsReplicaIngestOutcome::Applied
@@ -2666,7 +2720,7 @@ mod tests {
         .expect("event state")
         .result
         .expect("state row");
-        assert_eq!(state.last_event_id, archived.id);
+        assert_eq!(state.last_event_id, archived.id_str());
 
         let stale_active = listing_event(
             499,
@@ -2708,7 +2762,8 @@ mod tests {
             "active",
             "Half Gram Greens",
         );
-        for tag in &mut active.tags {
+        let mut active_tags = active.tags_as_vec();
+        for tag in &mut active_tags {
             if tag.first().is_some_and(|name| name == "radroots:bin") {
                 tag[2] = "0.5".to_string();
                 tag[3] = "g".to_string();
@@ -2725,6 +2780,12 @@ mod tests {
                 tag[7] = "g".to_string();
             }
         }
+        active = test_event_with_parts(
+            &active,
+            active.kind_u32(),
+            active_tags,
+            active.content().to_owned(),
+        );
 
         assert_eq!(
             radroots_replica_ingest_event(&exec, &active).expect("fractional active ingest"),
@@ -3426,8 +3487,7 @@ mod tests {
             Some(RadrootsProfileType::Individual),
             "profile-base",
         );
-        let mut profile_bad_content = profile.clone();
-        profile_bad_content.content = "{".to_string();
+        let profile_bad_content = test_event_with_content(&profile, "{".to_string());
         assert!(ingest_profile_event(&exec, &profile_bad_content).is_err());
 
         let profile_query_fail = QueryFailExecutor {
@@ -3503,8 +3563,7 @@ mod tests {
             RadrootsReplicaIngestOutcome::Applied
         );
 
-        let mut farm_bad_content = farm_seed.clone();
-        farm_bad_content.content = "{".to_string();
+        let farm_bad_content = test_event_with_content(&farm_seed, "{".to_string());
         assert!(ingest_farm_event(&exec, &farm_bad_content, &FixedFactory).is_err());
 
         let farm_query_fail = QueryFailExecutor {
@@ -3703,8 +3762,7 @@ mod tests {
             RadrootsReplicaIngestOutcome::Applied
         );
 
-        let mut plot_bad_content = plot_seed.clone();
-        plot_bad_content.content = "{".to_string();
+        let plot_bad_content = test_event_with_content(&plot_seed, "{".to_string());
         assert!(ingest_plot_event(&exec, &plot_bad_content, &FixedFactory).is_err());
 
         let plot_query_fail = QueryFailExecutor {
@@ -3859,16 +3917,19 @@ mod tests {
         );
         assert!(ingest_plot_event(&plot_state_fail, &plot_state_event, &FixedFactory).is_err());
 
-        let mut list_decode_fail = profile_event(
+        let list_decode_fail = profile_event(
             830,
             &farm_pubkey,
             108,
             Some(RadrootsProfileType::Farm),
             "unused",
         );
-        list_decode_fail.kind = KIND_LIST_SET_GENERIC;
-        list_decode_fail.content = "{".to_string();
-        list_decode_fail.tags = Vec::new();
+        let list_decode_fail = test_event_with_parts(
+            &list_decode_fail,
+            KIND_LIST_SET_GENERIC,
+            Vec::new(),
+            "{".to_string(),
+        );
         assert!(ingest_list_set_event(&exec, &list_decode_fail).is_err());
 
         let members_list = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)])

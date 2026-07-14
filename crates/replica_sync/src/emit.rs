@@ -18,11 +18,11 @@ use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
     radroots_profile_type_from_tag_value, radroots_profile_type_tag_value,
 };
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
 use radroots_event_codec::list_set::encode as list_set_encode;
 use radroots_event_codec::plot::encode as plot_encode;
-use radroots_event_codec::wire::WireEventParts;
 use radroots_replica_schema::farm::{
     Farm, IFarmFieldsFilter, IFarmFindMany, IFarmFindOne, IFarmFindOneArgs,
 };
@@ -185,7 +185,7 @@ pub fn radroots_replica_farm_event(
     };
     let tags = farm_encode::farm_build_tags(&farm_event)?;
     let content = canonical_json_string(&farm_event)?;
-    let parts = WireEventParts {
+    let parts = RadrootsNip01EventWireParts {
         kind: KIND_FARM,
         content,
         tags,
@@ -215,7 +215,7 @@ pub fn radroots_replica_plot_events(
         };
         let tags = plot_encode::plot_build_tags(&plot_event)?;
         let content = canonical_json_string(&plot_event)?;
-        let parts = WireEventParts {
+        let parts = RadrootsNip01EventWireParts {
             kind: KIND_PLOT,
             content,
             tags,
@@ -659,7 +659,7 @@ fn compare_relation_rows(a: &RelationRow, b: &RelationRow) -> core::cmp::Orderin
 
 fn list_set_to_wire_parts(
     list_set: &radroots_event::list_set::RadrootsListSet,
-) -> Result<WireEventParts, RadrootsReplicaEventsError> {
+) -> Result<RadrootsNip01EventWireParts, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_list_set_to_wire_error() {
         return Err(RadrootsReplicaEventsError::InvalidData(
@@ -907,7 +907,7 @@ fn load_member_claims_for_member(
     Ok(result.results)
 }
 
-fn parts_to_draft(author: &str, parts: WireEventParts) -> RadrootsReplicaEventDraft {
+fn parts_to_draft(author: &str, parts: RadrootsNip01EventWireParts) -> RadrootsReplicaEventDraft {
     RadrootsReplicaEventDraft {
         kind: parts.kind,
         author: author.to_string(),

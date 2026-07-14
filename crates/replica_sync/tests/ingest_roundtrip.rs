@@ -1,4 +1,3 @@
-use radroots_event::RadrootsEventEnvelope;
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
 use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_event::kinds::{
@@ -11,6 +10,7 @@ use radroots_event::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
     radroots_profile_type_tag_value,
 };
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
@@ -180,15 +180,14 @@ fn unwrap_sql_panics_on_error() {
 }
 
 fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
-        id: format!("{:064x}", index as u64 + 1),
-        author: draft.author.clone(),
-        created_at: 1_720_000_000 + index,
-        kind: draft.kind,
-        tags: draft.tags.clone(),
-        content: draft.content.clone(),
-        sig: "f".repeat(128),
-    }
+    event_with_parts(
+        u64::from(index) + 1,
+        draft.author.as_str(),
+        1_720_000_000 + index,
+        draft.kind,
+        draft.content.clone(),
+        draft.tags.clone(),
+    )
 }
 
 fn seed_source(
@@ -547,15 +546,14 @@ fn sync_all_selector_and_options_paths_are_supported() {
 fn ingest_rejects_unsupported_kind() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
-    let event = RadrootsEventEnvelope {
-        id: format!("{:064x}", 1u64),
-        author: "a".repeat(64),
-        created_at: 1_720_000_001,
-        kind: 42,
-        tags: Vec::new(),
-        content: String::new(),
-        sig: "f".repeat(128),
-    };
+    let event = event_with_parts(
+        1,
+        &"a".repeat(64),
+        1_720_000_001,
+        42,
+        String::new(),
+        Vec::new(),
+    );
     let err = radroots_replica_ingest_event(&exec, &event).expect_err("unsupported kind");
     assert!(err.to_string().contains("unsupported kind"));
 }
@@ -637,7 +635,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         11,
         KIND_PROFILE,
         "{".to_string(),
-        profile_ok.tags.clone(),
+        profile_ok.tags_as_vec(),
     );
     assert!(radroots_replica_ingest_event(&exec, &profile_parse_error).is_err());
 
@@ -663,7 +661,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         13,
         KIND_FARM,
         "{".to_string(),
-        farm_seed.tags.clone(),
+        farm_seed.tags_as_vec(),
     );
     assert!(radroots_replica_ingest_event(&exec, &farm_parse_error).is_err());
 
@@ -686,7 +684,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         15,
         KIND_PLOT,
         "{".to_string(),
-        plot_ok.tags.clone(),
+        plot_ok.tags_as_vec(),
     );
     assert!(radroots_replica_ingest_event(&exec, &plot_parse_error).is_err());
 
@@ -919,15 +917,16 @@ fn event_with_parts(
     content: String,
     tags: Vec<Vec<String>>,
 ) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope {
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: format!("{id:064x}"),
         author: author.to_string(),
-        created_at,
+        created_at: u64::from(created_at),
         kind,
         tags,
         content,
         sig: "f".repeat(128),
-    }
+    })
+    .expect("test event envelope")
 }
 
 fn sample_point(lat: f64, lng: f64) -> RadrootsGeoJsonPoint {

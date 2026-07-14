@@ -1166,10 +1166,10 @@ async fn fetch_ingests_events_and_records_transport_observations() {
             .await
             .expect("fetch ingest");
 
-    assert_eq!(receipt.inserted_count, 3);
+    assert_eq!(receipt.inserted_count, 2);
     assert_eq!(receipt.duplicate_count, 1);
     assert_eq!(receipt.unsupported_count, 1);
-    assert_eq!(receipt.malformed_count, 1);
+    assert_eq!(receipt.malformed_count, 2);
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 2);
     assert_eq!(receipt.notice_count, 1);
@@ -1218,10 +1218,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         Some(RadrootsEventVerificationStatus::Verified.as_str())
     );
     assert!(!receipt.events[2].projection_eligible);
-    assert_eq!(
-        receipt.events[3].verification_status.as_deref(),
-        Some(RadrootsEventVerificationStatus::IdMismatch.as_str())
-    );
+    assert_eq!(receipt.events[3].verification_status, None);
     assert!(!receipt.events[3].projection_eligible);
     assert_eq!(receipt.events[4].verification_status, None);
     assert!(!receipt.events[4].projection_eligible);
