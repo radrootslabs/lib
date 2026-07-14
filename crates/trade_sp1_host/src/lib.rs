@@ -1753,7 +1753,9 @@ mod tests {
         validation_receipt_result_label, verify_order_acceptance_proof_artifact_structure,
     };
     use base64::Engine;
-    use radroots_event::{RadrootsEventEnvelope, kinds::KIND_TRADE_VALIDATION_RECEIPT};
+    use radroots_event::{
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, kinds::KIND_TRADE_VALIDATION_RECEIPT,
+    };
     use radroots_trade::validation_receipt::{
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
@@ -2501,7 +2503,7 @@ mod tests {
         );
 
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
-        let event = RadrootsEventEnvelope {
+        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
             author: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                 .to_string(),
@@ -2510,7 +2512,8 @@ mod tests {
             tags: parts.tags,
             content: parts.content,
             sig: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
-        };
+        })
+        .expect("validation receipt event");
         verify_validation_receipt_event(
             &event,
             RadrootsValidationReceiptExpectedBinding {
