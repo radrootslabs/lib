@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     kinds::{KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST},
     list::{RadrootsList, RadrootsListEntry},
@@ -150,17 +153,17 @@ fn list_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.entries[0].values, list.entries[0].values);
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         44,
         KIND_LIST_MUTE,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_LIST_MUTE);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.entries.len(), 2);
 }
 

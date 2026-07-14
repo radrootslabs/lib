@@ -3,8 +3,7 @@ use core::fmt;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec, vec::Vec};
 
-pub use crate::wire::{WireEventParts, canonicalize_tags, empty_content, to_frozen_draft};
-pub use radroots_event::draft::RadrootsEventDraft;
+pub use crate::wire::{canonicalize_tags, empty_content};
 
 #[derive(Debug)]
 pub enum JobEncodeError {

@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     geochat::RadrootsGeoChat,
     kinds::{KIND_GEOCHAT, KIND_POST},
@@ -234,17 +237,17 @@ fn geochat_metadata_and_index_from_event_roundtrip() {
     assert!(metadata.data.teleported);
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         77,
         KIND_GEOCHAT,
         "hello".to_string(),
         tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_GEOCHAT);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.geohash, "dr5rsj7");
 }
 

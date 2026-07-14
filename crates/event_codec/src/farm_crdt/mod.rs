@@ -28,7 +28,12 @@ mod tests {
     const WORKSPACE_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
     const DOCUMENT_ID: &str = "AAAAAAAAAAAAAAAAAAAAAg";
     const GROUP_ID: &str = "field-group";
-    const AUTHOR: &str = "author_pubkey";
+    const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const EVENT_SIG: &str = concat!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
 
     #[test]
     fn farm_crdt_change_encodes_and_decodes_task_change() {
@@ -257,7 +262,7 @@ mod tests {
         let parts = to_wire_parts_with_author(&change, AUTHOR).expect("crdt wire parts");
 
         let data = data_from_event(
-            "event-id".to_string(),
+            EVENT_ID.to_string(),
             AUTHOR.to_string(),
             99,
             parts.kind,
@@ -265,23 +270,23 @@ mod tests {
             parts.tags.clone(),
         )
         .expect("parsed data");
-        assert_eq!(data.id, "event-id");
+        assert_eq!(data.id, EVENT_ID);
         assert_eq!(data.author, AUTHOR);
         assert_eq!(data.published_at, 99);
         assert_eq!(data.kind, KIND_FARM_CRDT_CHANGE);
         assert_eq!(data.data, change);
 
         let parsed = parsed_from_event(
-            "event-id".to_string(),
+            EVENT_ID.to_string(),
             AUTHOR.to_string(),
             99,
             parts.kind,
             parts.content,
             parts.tags,
-            "sig".to_string(),
+            EVENT_SIG.to_string(),
         )
         .expect("parsed event");
-        assert_eq!(parsed.event.sig_str(), "sig");
+        assert_eq!(parsed.event.sig_str(), EVENT_SIG);
         assert_eq!(parsed.data.data, change);
 
         let no_author_parts = to_wire_parts(&change).expect("crdt wire parts");

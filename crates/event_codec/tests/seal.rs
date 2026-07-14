@@ -1,6 +1,9 @@
 use radroots_event::kinds::{KIND_MESSAGE, KIND_SEAL};
 use radroots_event::seal::RadrootsSeal;
 
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::seal::decode::{data_from_event, parsed_from_event, seal_from_parts};
 use radroots_event_codec::seal::encode::{seal_build_tags, to_wire_parts, to_wire_parts_with_kind};
@@ -62,32 +65,32 @@ fn seal_from_parts_requires_content() {
 #[test]
 fn seal_metadata_and_index_from_event_roundtrip() {
     let metadata = data_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         14,
         KIND_SEAL,
         "payload".to_string(),
         Vec::new(),
     )
     .unwrap();
-    assert_eq!(metadata.id, "id");
-    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.id, EVENT_ID);
+    assert_eq!(metadata.author, AUTHOR);
     assert_eq!(metadata.published_at, 14);
     assert_eq!(metadata.kind, KIND_SEAL);
     assert_eq!(metadata.data.content, "payload");
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         14,
         KIND_SEAL,
         "payload".to_string(),
         Vec::new(),
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_SEAL);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.content, "payload");
 }
 

@@ -17,7 +17,10 @@ use crate::wire::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsNip01EventWire,
     canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
 };
-use crate::{RadrootsEventEnvelope, RadrootsEventEnvelopeError};
+use crate::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventKind, RadrootsEventTags,
+    RadrootsEventTimestamp,
+};
 use core::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,7 +44,7 @@ pub enum RadrootsDraftError {
         actual_event_id: String,
     },
     SignedEventCreatedAtMismatch {
-        expected_created_at: u32,
+        expected_created_at: u64,
         actual_created_at: u64,
     },
     SignedEventKindMismatch {
@@ -62,6 +65,7 @@ pub enum RadrootsDraftError {
     },
     IdParse(RadrootsIdParseError),
     CanonicalEventId(RadrootsCanonicalEventIdError),
+    Envelope(RadrootsEventEnvelopeError),
     SignedEvent(RadrootsSignedEventError),
 }
 
@@ -135,6 +139,7 @@ impl fmt::Display for RadrootsDraftError {
             ),
             Self::IdParse(error) => write!(f, "{error}"),
             Self::CanonicalEventId(error) => write!(f, "{error}"),
+            Self::Envelope(error) => write!(f, "{error}"),
             Self::SignedEvent(error) => write!(f, "{error}"),
         }
     }
@@ -158,6 +163,12 @@ impl From<RadrootsCanonicalEventIdError> for RadrootsDraftError {
     }
 }
 
+impl From<RadrootsEventEnvelopeError> for RadrootsDraftError {
+    fn from(value: RadrootsEventEnvelopeError) -> Self {
+        Self::Envelope(value)
+    }
+}
+
 impl From<RadrootsSignedEventError> for RadrootsDraftError {
     fn from(value: RadrootsSignedEventError) -> Self {
         Self::SignedEvent(value)
@@ -170,21 +181,21 @@ impl From<RadrootsSignedEventError> for RadrootsDraftError {
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventDraft {
-    pub contract_id: String,
-    pub contract_registry_version: u32,
-    pub kind: u32,
-    pub created_at: u32,
-    pub tags: Vec<Vec<String>>,
-    pub content: String,
-    pub expected_pubkey: String,
-    pub expected_event_id: String,
+    contract_id: String,
+    contract_registry_version: u32,
+    kind: RadrootsEventKind,
+    created_at: RadrootsEventTimestamp,
+    tags: RadrootsEventTags,
+    content: String,
+    expected_pubkey: RadrootsPublicKey,
+    expected_event_id: RadrootsEventId,
 }
 
 impl RadrootsEventDraft {
     pub fn new(
         contract_id: impl Into<String>,
         kind: u32,
-        created_at: u32,
+        created_at: u64,
         tags: Vec<Vec<String>>,
         content: impl Into<String>,
         expected_pubkey: impl AsRef<str>,
@@ -201,7 +212,7 @@ impl RadrootsEventDraft {
                 actual_kind: kind,
             });
         }
-        let expected_pubkey = RadrootsPublicKey::parse(expected_pubkey.as_ref())?.into_string();
+        let expected_pubkey = RadrootsPublicKey::parse(expected_pubkey.as_ref())?;
         let content = content.into();
         validate_event_contract_parts(kind, &tags, content.as_str(), contract.id).map_err(
             |error| RadrootsDraftError::ContractShape {
@@ -209,15 +220,20 @@ impl RadrootsEventDraft {
                 error,
             },
         )?;
-        let expected_event_id =
-            compute_nip01_event_id(expected_pubkey.as_str(), created_at, kind, &tags, &content)?
-                .into_string();
+        let typed_tags = RadrootsEventTags::new(tags)?;
+        let expected_event_id = compute_nip01_event_id(
+            expected_pubkey.as_str(),
+            created_at,
+            kind,
+            &typed_tags.to_vec(),
+            &content,
+        )?;
         Ok(Self {
             contract_id: contract.id.to_owned(),
             contract_registry_version: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
-            kind,
-            created_at,
-            tags,
+            kind: RadrootsEventKind::new(kind),
+            created_at: RadrootsEventTimestamp::new(created_at),
+            tags: typed_tags,
             content,
             expected_pubkey,
             expected_event_id,
@@ -227,11 +243,75 @@ impl RadrootsEventDraft {
     pub fn nip01_preimage(&self) -> Result<String, RadrootsDraftError> {
         nip01_event_id_preimage(
             self.expected_pubkey.as_str(),
-            self.created_at,
-            self.kind,
-            &self.tags,
+            self.created_at.as_u64(),
+            self.kind.as_u32(),
+            &self.tags.to_vec(),
             self.content.as_str(),
         )
+    }
+
+    #[inline]
+    pub fn contract_id(&self) -> &str {
+        self.contract_id.as_str()
+    }
+
+    #[inline]
+    pub fn contract_registry_version(&self) -> u32 {
+        self.contract_registry_version
+    }
+
+    #[inline]
+    pub fn kind(&self) -> RadrootsEventKind {
+        self.kind
+    }
+
+    #[inline]
+    pub fn kind_u32(&self) -> u32 {
+        self.kind.as_u32()
+    }
+
+    #[inline]
+    pub fn created_at(&self) -> RadrootsEventTimestamp {
+        self.created_at
+    }
+
+    #[inline]
+    pub fn created_at_u64(&self) -> u64 {
+        self.created_at.as_u64()
+    }
+
+    #[inline]
+    pub fn tags(&self) -> &RadrootsEventTags {
+        &self.tags
+    }
+
+    pub fn tags_as_vec(&self) -> Vec<Vec<String>> {
+        self.tags.to_vec()
+    }
+
+    #[inline]
+    pub fn content(&self) -> &str {
+        self.content.as_str()
+    }
+
+    #[inline]
+    pub fn expected_pubkey(&self) -> &RadrootsPublicKey {
+        &self.expected_pubkey
+    }
+
+    #[inline]
+    pub fn expected_pubkey_str(&self) -> &str {
+        self.expected_pubkey.as_str()
+    }
+
+    #[inline]
+    pub fn expected_event_id(&self) -> &RadrootsEventId {
+        &self.expected_event_id
+    }
+
+    #[inline]
+    pub fn expected_event_id_str(&self) -> &str {
+        self.expected_event_id.as_str()
     }
 }
 
@@ -514,46 +594,47 @@ pub fn validate_signed_nostr_event_matches_draft(
     signed_event: &RadrootsSignedEvent,
     draft: &RadrootsEventDraft,
 ) -> Result<(), RadrootsDraftError> {
-    if signed_event.pubkey_str() != draft.expected_pubkey.as_str() {
+    if signed_event.pubkey_str() != draft.expected_pubkey_str() {
         return Err(RadrootsDraftError::SignedEventPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey.clone(),
+            expected_pubkey: draft.expected_pubkey_str().to_owned(),
             actual_pubkey: signed_event.pubkey_str().to_owned(),
         });
     }
-    if signed_event.id_str() != draft.expected_event_id.as_str() {
+    if signed_event.id_str() != draft.expected_event_id_str() {
         return Err(RadrootsDraftError::SignedEventIdMismatch {
-            expected_event_id: draft.expected_event_id.clone(),
+            expected_event_id: draft.expected_event_id_str().to_owned(),
             actual_event_id: signed_event.id_str().to_owned(),
         });
     }
-    if signed_event.created_at() != u64::from(draft.created_at) {
+    if signed_event.created_at() != draft.created_at_u64() {
         return Err(RadrootsDraftError::SignedEventCreatedAtMismatch {
-            expected_created_at: draft.created_at,
+            expected_created_at: draft.created_at_u64(),
             actual_created_at: signed_event.created_at(),
         });
     }
-    if signed_event.kind() != draft.kind {
+    if signed_event.kind() != draft.kind_u32() {
         return Err(RadrootsDraftError::SignedEventKindMismatch {
-            expected_kind: draft.kind,
+            expected_kind: draft.kind_u32(),
             actual_kind: signed_event.kind(),
         });
     }
     let signed_tags = signed_event.tags_as_vec();
-    if signed_tags != draft.tags {
+    let draft_tags = draft.tags_as_vec();
+    if signed_tags != draft_tags {
         return Err(RadrootsDraftError::SignedEventTagsMismatch {
-            expected_len: draft.tags.len(),
+            expected_len: draft_tags.len(),
             actual_len: signed_tags.len(),
         });
     }
-    if signed_event.content() != draft.content {
+    if signed_event.content() != draft.content() {
         return Err(RadrootsDraftError::SignedEventContentMismatch {
-            expected_len: draft.content.len(),
+            expected_len: draft.content().len(),
             actual_len: signed_event.content().len(),
         });
     }
     let computed_event_id = compute_nip01_event_id(
         signed_event.pubkey_str(),
-        draft.created_at,
+        draft.created_at_u64(),
         signed_event.kind(),
         &signed_tags,
         signed_event.content(),
@@ -595,34 +676,26 @@ fn verify_bip340_signature(
 
 pub fn compute_nip01_event_id(
     pubkey: &str,
-    created_at: u32,
+    created_at: u64,
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<RadrootsEventId, RadrootsDraftError> {
     RadrootsPublicKey::parse(pubkey)?;
     Ok(compute_canonical_nip01_event_id(
-        pubkey,
-        u64::from(created_at),
-        kind,
-        tags,
-        content,
+        pubkey, created_at, kind, tags, content,
     )?)
 }
 
 pub fn nip01_event_id_preimage(
     pubkey: &str,
-    created_at: u32,
+    created_at: u64,
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String, RadrootsDraftError> {
     Ok(canonical_nip01_event_id_preimage(
-        pubkey,
-        u64::from(created_at),
-        kind,
-        tags,
-        content,
+        pubkey, created_at, kind, tags, content,
     )?)
 }
 
@@ -704,11 +777,11 @@ mod tests {
 
     fn signed_event_for_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
         let wire = verified_wire(
-            draft.expected_pubkey.clone(),
-            u64::from(draft.created_at),
-            draft.kind,
-            draft.tags.clone(),
-            draft.content.clone(),
+            draft.expected_pubkey_str().to_string(),
+            draft.created_at_u64(),
+            draft.kind_u32(),
+            draft.tags_as_vec(),
+            draft.content().to_string(),
             hex_128('b'),
         );
         let raw_json = raw_json_for_wire(&wire);
@@ -732,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    fn frozen_draft_computes_expected_event_id() {
+    fn draft_computes_expected_event_id() {
         let draft = RadrootsEventDraft::new(
             "radroots.social.post.v1",
             KIND_POST,
@@ -751,7 +824,7 @@ mod tests {
             "[0,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",1700000000,1,[[\"t\",\"soil\"],[\"p\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]],\"hello\"]"
         );
         assert_eq!(
-            draft.expected_event_id,
+            draft.expected_event_id_str(),
             "59d2486ef5557e0e317127de55005f2863361ad4041277ae523a869f2294cf9c"
         );
     }
@@ -1056,12 +1129,12 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
+                draft.expected_event_id_str().to_string(),
                 hex_64('c'),
-                u64::from(draft.created_at),
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.clone(),
+                draft.created_at_u64(),
+                draft.kind_u32(),
+                draft.tags_as_vec(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",
@@ -1077,11 +1150,11 @@ mod tests {
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
                 hex_64('d'),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at),
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.clone(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64(),
+                draft.kind_u32(),
+                draft.tags_as_vec(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",
@@ -1096,12 +1169,12 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at) + 1,
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.clone(),
+                draft.expected_event_id_str().to_string(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64() + 1,
+                draft.kind_u32(),
+                draft.tags_as_vec(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",
@@ -1116,12 +1189,12 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at),
+                draft.expected_event_id_str().to_string(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64(),
                 KIND_PROFILE,
-                draft.tags.clone(),
-                draft.content.clone(),
+                draft.tags_as_vec(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",
@@ -1134,16 +1207,16 @@ mod tests {
             RadrootsDraftError::SignedEventKindMismatch { .. }
         ));
 
-        let mut tags = draft.tags.clone();
+        let mut tags = draft.tags_as_vec();
         tags.push(vec!["p".to_owned(), hex_64('e')]);
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at),
-                draft.kind,
+                draft.expected_event_id_str().to_string(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64(),
+                draft.kind_u32(),
                 tags,
-                draft.content.clone(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",
@@ -1158,11 +1231,11 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at),
-                draft.kind,
-                draft.tags.clone(),
+                draft.expected_event_id_str().to_string(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64(),
+                draft.kind_u32(),
+                draft.tags_as_vec(),
                 "changed".to_owned(),
                 hex_128('b'),
             ),
@@ -1176,16 +1249,18 @@ mod tests {
             RadrootsDraftError::SignedEventContentMismatch { .. }
         ));
 
-        let mut draft = post_draft();
-        draft.expected_event_id = hex_64('f');
+        let mut draft_value = serde_json::to_value(post_draft()).expect("draft json");
+        draft_value["expected_event_id"] = serde_json::Value::String(hex_64('f'));
+        let draft: RadrootsEventDraft =
+            serde_json::from_value(draft_value).expect("tampered draft");
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id.clone(),
-                draft.expected_pubkey.clone(),
-                u64::from(draft.created_at),
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.clone(),
+                draft.expected_event_id_str().to_string(),
+                draft.expected_pubkey_str().to_string(),
+                draft.created_at_u64(),
+                draft.kind_u32(),
+                draft.tags_as_vec(),
+                draft.content().to_string(),
                 hex_128('b'),
             ),
             "{}",

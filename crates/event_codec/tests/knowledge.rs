@@ -18,6 +18,7 @@ use radroots_event::knowledge::{
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
@@ -35,7 +36,6 @@ use radroots_event_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
-use radroots_event_codec::wire::WireEventParts;
 
 fn hex_64(character: char) -> String {
     core::iter::repeat_n(character, 64).collect()
@@ -73,7 +73,7 @@ fn article_version_ref_for(event_id_character: char, d_tag: &str) -> RadrootsWik
     }
 }
 
-fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+fn event_from_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: hex_64('0'),
         author: hex_64('a'),
@@ -174,7 +174,7 @@ fn invalid_relay() -> String {
     "http://relay.radroots.example".to_string()
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -711,7 +711,7 @@ fn malformed_knowledge_events_return_stable_decode_codes() {
     mutate_tags(&mut missing_contract, |tags| {
         tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("contract"));
     });
-    let signed = sign_parts(WireEventParts {
+    let signed = sign_parts(RadrootsNip01EventWireParts {
         kind: missing_contract.kind_u32(),
         content: missing_contract.content().to_string(),
         tags: missing_contract.tags_as_vec(),

@@ -1,5 +1,8 @@
 #![cfg(feature = "serde_json")]
 
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     article::RadrootsArticle,
     farm::RadrootsFarmRef,
@@ -204,16 +207,18 @@ fn article_wrappers_preserve_event_metadata() {
     assert_eq!(data.data.title, "Spring soil notes");
 
     let parsed = parsed_from_event(
-        "event_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         42,
         parts.kind,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
 
-    assert_eq!(parsed.event.sig_str(), "sig");
+    assert_eq!(parsed.event.id_str(), EVENT_ID);
+    assert_eq!(parsed.event.author_str(), AUTHOR);
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, VALID_D_TAG);
 }

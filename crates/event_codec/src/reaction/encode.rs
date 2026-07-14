@@ -14,7 +14,7 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     parse_address_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_REACTION;
 
@@ -26,19 +26,21 @@ pub fn reaction_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(reaction: &RadrootsReaction) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    reaction: &RadrootsReaction,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(reaction, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     reaction: &RadrootsReaction,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = reaction_build_tags(reaction)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: reaction.content.clone(),
         tags,

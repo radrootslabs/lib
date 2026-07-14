@@ -10,7 +10,7 @@ use radroots_event::geochat::RadrootsGeoChat;
 use radroots_event::kinds::KIND_GEOCHAT;
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_GEOCHAT;
 const TAG_G: &str = "g";
@@ -48,12 +48,14 @@ pub fn geochat_build_tags(geochat: &RadrootsGeoChat) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(geochat: &RadrootsGeoChat) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    geochat: &RadrootsGeoChat,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if geochat.content.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = geochat_build_tags(geochat)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: DEFAULT_KIND,
         content: geochat.content.clone(),
         tags,

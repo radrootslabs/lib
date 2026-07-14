@@ -28,6 +28,12 @@ mod tests {
     const D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
     const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
     const GROUP_ID: &str = "field-group";
+    const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const EVENT_SIG: &str = concat!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
 
     #[test]
     fn farm_workspace_manifest_encodes_canonical_tags_and_decodes() {
@@ -174,31 +180,31 @@ mod tests {
         );
 
         let data = data_from_event(
-            "event-id".to_string(),
-            "author-pubkey".to_string(),
+            EVENT_ID.to_string(),
+            AUTHOR.to_string(),
             99,
             parts.kind,
             parts.content.clone(),
             parts.tags.clone(),
         )
         .expect("parsed data");
-        assert_eq!(data.id, "event-id");
-        assert_eq!(data.author, "author-pubkey");
+        assert_eq!(data.id, EVENT_ID);
+        assert_eq!(data.author, AUTHOR);
         assert_eq!(data.published_at, 99);
         assert_eq!(data.kind, KIND_FARM_WORKSPACE_MANIFEST);
         assert_same_manifest(&data.data, &manifest);
 
         let parsed = parsed_from_event(
-            "event-id".to_string(),
-            "author-pubkey".to_string(),
+            EVENT_ID.to_string(),
+            AUTHOR.to_string(),
             99,
             parts.kind,
             parts.content,
             parts.tags,
-            "sig".to_string(),
+            EVENT_SIG.to_string(),
         )
         .expect("parsed event");
-        assert_eq!(parsed.event.sig_str(), "sig");
+        assert_eq!(parsed.event.sig_str(), EVENT_SIG);
         assert_same_manifest(&parsed.data.data, &manifest);
     }
 

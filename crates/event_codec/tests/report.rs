@@ -1,5 +1,8 @@
 #![cfg(feature = "serde_json")]
 
+mod common;
+
+use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
     kinds::{KIND_ARTICLE, KIND_POST, KIND_REPORT},
     report::RadrootsReport,
@@ -439,15 +442,15 @@ fn report_wrappers_preserve_event_metadata() {
     assert_eq!(data.data.report_type, RadrootsReportType::Illegal);
 
     let parsed = parsed_from_event(
-        "report_id".to_string(),
-        "author".to_string(),
+        ENVELOPE_ID.to_string(),
+        ENVELOPE_AUTHOR.to_string(),
         12,
         parts.kind,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), "sig");
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.reported_pubkey, REPORTED);
 }

@@ -7,8 +7,8 @@ use alloc::{
 use radroots_event::follow::{RadrootsFollow, RadrootsFollowProfile};
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
 use radroots_event::kinds::KIND_FOLLOW;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_FOLLOW;
 
@@ -58,16 +58,18 @@ pub enum FollowMutation {
     },
 }
 
-pub fn to_wire_parts(follow: &RadrootsFollow) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    follow: &RadrootsFollow,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(follow, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     follow: &RadrootsFollow,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     let tags = follow_build_tags(follow)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: String::new(),
         tags,
@@ -122,7 +124,7 @@ pub fn follow_apply(
 pub fn follow_to_wire_parts_after(
     follow: &RadrootsFollow,
     mutation: FollowMutation,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     let updated = follow_apply(follow, mutation)?;
     to_wire_parts(&updated)
 }

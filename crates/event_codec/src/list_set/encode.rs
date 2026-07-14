@@ -10,7 +10,7 @@ use radroots_event::{kinds::is_nip51_list_set_kind, list_set::RadrootsListSet};
 use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 use crate::list::encode::list_entries_to_tags;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_D: &str = "d";
 const TAG_TITLE: &str = "title";
@@ -61,12 +61,12 @@ pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, E
 pub fn to_wire_parts_with_kind(
     list: &RadrootsListSet,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if !is_nip51_list_set_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = list_set_build_tags(list)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: list.content.clone(),
         tags,

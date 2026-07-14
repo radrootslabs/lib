@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     app_data::{KIND_APP_DATA, RadrootsAppData},
     kinds::KIND_POST,
@@ -119,21 +122,21 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.content, "payload");
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         42,
         KIND_APP_DATA,
         "payload".to_string(),
         tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.id_str(), "id");
-    assert_eq!(index.event.author_str(), "author");
+    assert_eq!(index.event.id_str(), EVENT_ID);
+    assert_eq!(index.event.author_str(), AUTHOR);
     assert_eq!(index.event.created_at_u64(), 42);
     assert_eq!(index.event.kind_u32(), KIND_APP_DATA);
     assert_eq!(index.event.content(), "payload");
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.d_tag, "radroots.app");
 }
 

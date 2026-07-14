@@ -18,7 +18,7 @@ use crate::field_helpers::{
     push_optional_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
 use crate::social_helpers::{dimensions_tag, push_thumbnail, validate_http_url};
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_PUBLIC_FILE_METADATA;
 
@@ -64,18 +64,20 @@ pub fn file_metadata_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(metadata: &RadrootsFileMetadata) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    metadata: &RadrootsFileMetadata,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(metadata, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     metadata: &RadrootsFileMetadata,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: metadata.content.clone().unwrap_or_default(),
         tags: file_metadata_build_tags(metadata)?,

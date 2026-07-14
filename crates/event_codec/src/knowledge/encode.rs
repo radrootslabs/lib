@@ -33,7 +33,8 @@ use serde::Serialize;
 
 use crate::error::EventEncodeError;
 use crate::event_ref::build_event_ref_tag;
-use crate::wire::{WireEventParts, empty_content};
+use crate::wire::empty_content;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_TITLE: &str = "title";
 const TAG_SOURCE: &str = "source";
@@ -175,8 +176,8 @@ pub fn wiki_article_build_tags(
 
 pub fn wiki_article_to_wire_parts(
     article: &RadrootsWikiArticle,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_WIKI_ARTICLE,
         content: article.content_djot.clone(),
         tags: wiki_article_build_tags(article)?,
@@ -196,8 +197,8 @@ pub fn wiki_redirect_build_tags(
 
 pub fn wiki_redirect_to_wire_parts(
     redirect: &RadrootsWikiRedirect,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_WIKI_REDIRECT,
         content: empty_content(),
         tags: wiki_redirect_build_tags(redirect)?,
@@ -229,8 +230,8 @@ pub fn wiki_merge_request_build_tags(
 
 pub fn wiki_merge_request_to_wire_parts(
     request: &RadrootsWikiMergeRequest,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_WIKI_MERGE_REQUEST,
         content: request.explanation.clone().unwrap_or_default(),
         tags: wiki_merge_request_build_tags(request)?,
@@ -250,8 +251,8 @@ pub fn knowledge_source_build_tags(
 
 pub fn knowledge_source_to_wire_parts(
     source: &RadrootsKnowledgeSource,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_SOURCE,
         content: json_content(source)?,
         tags: knowledge_source_build_tags(source)?,
@@ -271,8 +272,8 @@ pub fn evidence_bounty_build_tags(
 
 pub fn evidence_bounty_to_wire_parts(
     bounty: &RadrootsEvidenceBounty,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_EVIDENCE_BOUNTY,
         content: json_content(bounty)?,
         tags: evidence_bounty_build_tags(bounty)?,
@@ -296,8 +297,8 @@ pub fn knowledge_claim_build_tags(
 
 pub fn knowledge_claim_to_wire_parts(
     claim: &RadrootsKnowledgeClaim,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_CLAIM,
         content: json_content(claim)?,
         tags: knowledge_claim_build_tags(claim)?,
@@ -315,8 +316,8 @@ pub fn knowledge_relation_build_tags(
 
 pub fn knowledge_relation_to_wire_parts(
     relation: &RadrootsKnowledgeRelation,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_RELATION,
         content: json_content(relation)?,
         tags: knowledge_relation_build_tags(relation)?,
@@ -338,8 +339,8 @@ pub fn knowledge_review_build_tags(
 
 pub fn knowledge_review_to_wire_parts(
     review: &RadrootsKnowledgeReview,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_REVIEW,
         content: json_content(review)?,
         tags: knowledge_review_build_tags(review)?,
@@ -364,8 +365,8 @@ pub fn knowledge_field_report_build_tags(
 
 pub fn knowledge_field_report_to_wire_parts(
     report: &RadrootsKnowledgeFieldReport,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_FIELD_REPORT,
         content: json_content(report)?,
         tags: knowledge_field_report_build_tags(report)?,
@@ -383,8 +384,8 @@ pub fn knowledge_change_proposal_build_tags(
 
 pub fn knowledge_change_proposal_to_wire_parts(
     proposal: &RadrootsKnowledgeChangeProposal,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_KNOWLEDGE_CHANGE_PROPOSAL,
         content: json_content(proposal)?,
         tags: knowledge_change_proposal_build_tags(proposal)?,
@@ -402,8 +403,8 @@ pub fn contribution_attestation_build_tags(
 
 pub fn contribution_attestation_to_wire_parts(
     attestation: &RadrootsContributionAttestation,
-) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_CONTRIBUTION_ATTESTATION,
         content: json_content(attestation)?,
         tags: contribution_attestation_build_tags(attestation)?,

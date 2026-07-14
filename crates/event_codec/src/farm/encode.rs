@@ -16,7 +16,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -82,7 +82,7 @@ pub fn farm_ref_tags(farm: &RadrootsFarmRef) -> Result<Vec<Vec<String>>, EventEn
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(farm: &RadrootsFarm) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(farm: &RadrootsFarm) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(farm, KIND_FARM)
 }
 
@@ -90,13 +90,13 @@ pub fn to_wire_parts(farm: &RadrootsFarm) -> Result<WireEventParts, EventEncodeE
 pub fn to_wire_parts_with_kind(
     farm: &RadrootsFarm,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_build_tags(farm)?;
     let content = serde_json::to_string(farm).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

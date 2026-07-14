@@ -18,7 +18,7 @@ use crate::field_helpers::{
     parse_address_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
 use crate::social_helpers::validate_http_url;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn report_build_tags(report: &RadrootsReport) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_report(report)?;
@@ -38,18 +38,20 @@ pub fn report_build_tags(report: &RadrootsReport) -> Result<Vec<Vec<String>>, Ev
     Ok(tags)
 }
 
-pub fn to_wire_parts(report: &RadrootsReport) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    report: &RadrootsReport,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(report, KIND_REPORT)
 }
 
 pub fn to_wire_parts_with_kind(
     report: &RadrootsReport,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_REPORT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: report.content.clone().unwrap_or_default(),
         tags: report_build_tags(report)?,

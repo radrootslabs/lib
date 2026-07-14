@@ -13,6 +13,7 @@ use radroots_event::kinds::{
 use radroots_event::knowledge::{
     RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RadrootsWikiArticle,
 };
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
@@ -27,7 +28,6 @@ use radroots_event_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
-use radroots_event_codec::wire::WireEventParts;
 use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 use radroots_test_fixtures::knowledge::{
     RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES, RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS,
@@ -36,7 +36,7 @@ use radroots_test_fixtures::knowledge::{
     wiki_redirect,
 };
 
-fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+fn event_from_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: hex_64('0'),
         author: hex_64('a'),
@@ -49,7 +49,7 @@ fn event_from_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
     .unwrap()
 }
 
-fn sign_parts(parts: WireEventParts) -> RadrootsEventEnvelope {
+fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -123,7 +123,7 @@ fn replace_sig(event: &mut RadrootsEventEnvelope, sig: String) {
     *event = event_with_parts(event, event.tags_as_vec(), event.content().to_string(), sig);
 }
 
-fn parts_for_fixture(fixture: &RadrootsKnowledgeFixture) -> WireEventParts {
+fn parts_for_fixture(fixture: &RadrootsKnowledgeFixture) -> RadrootsNip01EventWireParts {
     match fixture {
         RadrootsKnowledgeFixture::WikiArticle(value) => wiki_article_to_wire_parts(value).unwrap(),
         RadrootsKnowledgeFixture::WikiRedirect(value) => {
@@ -278,7 +278,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
     mutate_tags(&mut missing_contract_event, |tags| {
         tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("contract"));
     });
-    let signed = sign_parts(WireEventParts {
+    let signed = sign_parts(RadrootsNip01EventWireParts {
         kind: missing_contract_event.kind_u32(),
         content: missing_contract_event.content().to_string(),
         tags: missing_contract_event.tags_as_vec(),
@@ -300,7 +300,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
         &mut private_event,
         serde_json::to_string(&private_value).unwrap(),
     );
-    let signed = sign_parts(WireEventParts {
+    let signed = sign_parts(RadrootsNip01EventWireParts {
         kind: private_event.kind_u32(),
         content: private_event.content().to_string(),
         tags: private_event.tags_as_vec(),
@@ -327,7 +327,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
             }
         }
     });
-    let signed = sign_parts(WireEventParts {
+    let signed = sign_parts(RadrootsNip01EventWireParts {
         kind: unsupported_event.kind_u32(),
         content: unsupported_event.content().to_string(),
         tags: unsupported_event.tags_as_vec(),

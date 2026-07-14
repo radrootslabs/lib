@@ -5,7 +5,7 @@ use radroots_event::kinds::KIND_SEAL;
 use radroots_event::seal::RadrootsSeal;
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_SEAL;
 
@@ -16,9 +16,9 @@ pub fn seal_build_tags(_seal: &RadrootsSeal) -> Result<Vec<Vec<String>>, EventEn
     Ok(Vec::new())
 }
 
-pub fn to_wire_parts(seal: &RadrootsSeal) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(seal: &RadrootsSeal) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     let tags = seal_build_tags(seal)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: DEFAULT_KIND,
         content: seal.content.clone(),
         tags,
@@ -28,7 +28,7 @@ pub fn to_wire_parts(seal: &RadrootsSeal) -> Result<WireEventParts, EventEncodeE
 pub fn to_wire_parts_with_kind(
     seal: &RadrootsSeal,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }

@@ -13,7 +13,7 @@ use nostr::prelude::Url;
 use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
@@ -71,7 +71,9 @@ pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> 
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(p: &RadrootsProfile) -> Result<WireEventParts, ProfileEncodeError> {
+pub fn to_wire_parts(
+    p: &RadrootsProfile,
+) -> Result<RadrootsNip01EventWireParts, ProfileEncodeError> {
     to_wire_parts_with_profile_type(p, None)
 }
 
@@ -79,11 +81,11 @@ pub fn to_wire_parts(p: &RadrootsProfile) -> Result<WireEventParts, ProfileEncod
 pub fn to_wire_parts_with_profile_type(
     p: &RadrootsProfile,
     profile_type: Option<RadrootsProfileType>,
-) -> Result<WireEventParts, ProfileEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, ProfileEncodeError> {
     let md = to_metadata(p)?;
     let content = serde_json::to_string(&md).map_err(|_| ProfileEncodeError::Json)?;
     let tags = profile_build_tags(profile_type);
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: KIND_PROFILE,
         content,
         tags,

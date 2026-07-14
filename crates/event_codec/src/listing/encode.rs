@@ -14,7 +14,7 @@ use crate::listing::tags::listing_tags;
 #[cfg(feature = "serde_json")]
 use crate::listing::tags::listing_tags_full;
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[cfg(feature = "serde_json")]
 const DEFAULT_KIND: u32 = KIND_LISTING;
@@ -24,7 +24,9 @@ pub fn listing_build_tags(listing: &RadrootsListing) -> Result<Vec<Vec<String>>,
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(listing: &RadrootsListing) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    listing: &RadrootsListing,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(listing, DEFAULT_KIND)
 }
 
@@ -32,13 +34,13 @@ pub fn to_wire_parts(listing: &RadrootsListing) -> Result<WireEventParts, EventE
 pub fn to_wire_parts_with_kind(
     listing: &RadrootsListing,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if !is_listing_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = listing_tags_full(listing)?;
     let content = listing_markdown_content(listing);
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,
@@ -49,13 +51,13 @@ pub fn to_wire_parts_with_kind(
 pub fn to_json_wire_parts_with_kind(
     listing: &RadrootsListing,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if !is_listing_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = listing_tags_full(listing)?;
     let content = serde_json::to_string(listing).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

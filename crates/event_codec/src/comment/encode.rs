@@ -16,7 +16,7 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     parse_address_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_COMMENT;
 
@@ -27,14 +27,16 @@ pub fn comment_build_tags(comment: &RadrootsComment) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(comment: &RadrootsComment) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    comment: &RadrootsComment,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(comment, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     comment: &RadrootsComment,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
@@ -42,7 +44,7 @@ pub fn to_wire_parts_with_kind(
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = comment_build_tags(comment)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: comment.content.clone(),
         tags,

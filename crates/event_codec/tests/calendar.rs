@@ -40,6 +40,10 @@ use radroots_event_codec::{
 const VALID_D_TAG: &str = "CCCCCCCCCCCCCCCCCCCCCA";
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const EVENT_AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const EVENT_SIG: &str = concat!(
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+);
 const EVENT_D_TAG: &str = "EEEEEEEEEEEEEEEEEEEEEA";
 
 fn sample_date_event() -> RadrootsCalendarDateEvent {
@@ -735,16 +739,16 @@ fn calendar_wrappers_preserve_event_metadata() {
     ));
 
     let date_parsed = date_parsed_from_event(
-        "date_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
         7,
         date_parts.kind,
         date_parts.content,
         date_parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(date_parsed.event.sig_str(), "sig");
+    assert_eq!(date_parsed.event.sig_str(), EVENT_SIG);
 
     let time = sample_time_event();
     let time_parts = time_to_wire_parts(&time).unwrap();
@@ -779,13 +783,13 @@ fn calendar_wrappers_preserve_event_metadata() {
     ));
 
     let time_parsed = time_parsed_from_event(
-        "time_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
         8,
         time_parts.kind,
         time_parts.content,
         time_parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(time_parsed.event.created_at_u64(), 8);
@@ -823,16 +827,16 @@ fn calendar_wrappers_preserve_event_metadata() {
     ));
 
     let calendar_parsed = calendar_parsed_from_event(
-        "calendar_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
         9,
         calendar_parts.kind,
         calendar_parts.content,
         calendar_parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(calendar_parsed.event.sig_str(), "sig");
+    assert_eq!(calendar_parsed.event.sig_str(), EVENT_SIG);
 
     let rsvp = sample_rsvp();
     let rsvp_parts = rsvp_to_wire_parts(&rsvp).unwrap();
@@ -867,13 +871,13 @@ fn calendar_wrappers_preserve_event_metadata() {
     ));
 
     let rsvp_parsed = rsvp_parsed_from_event(
-        "rsvp_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
         10,
         rsvp_parts.kind,
         rsvp_parts.content,
         rsvp_parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(rsvp_parsed.event.created_at_u64(), 10);

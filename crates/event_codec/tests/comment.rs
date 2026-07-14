@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR as EVENT_AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     comment::RadrootsComment,
     kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST},
@@ -533,16 +536,16 @@ fn comment_metadata_and_index_from_event_roundtrip() {
     ));
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
         77,
         KIND_COMMENT,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.created_at_u64(), 77);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_address_target(&index.data.data.parent, PARENT_AUTHOR, KIND_ARTICLE, D_TAG);
 }

@@ -1,7 +1,8 @@
 use radroots_event::{job_feedback::RadrootsJobFeedback, kinds::KIND_JOB_FEEDBACK};
 
-use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
+use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -51,7 +52,7 @@ pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
 pub fn to_wire_parts(
     fb: &RadrootsJobFeedback,
     content: &str,
-) -> Result<WireEventParts, JobEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, JobEncodeError> {
     let kind = fb.kind as u32;
     if kind != KIND_JOB_FEEDBACK {
         return Err(JobEncodeError::InvalidKind(kind));
@@ -60,7 +61,7 @@ pub fn to_wire_parts(
     let mut tags = job_feedback_build_tags(fb);
     canonicalize_tags(&mut tags);
 
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: content.to_string(),
         tags,

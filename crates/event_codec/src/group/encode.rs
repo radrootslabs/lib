@@ -24,7 +24,7 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     push_optional_tag, push_tag, push_tag_values, validate_non_empty_field,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_ABOUT: &str = "about";
 const TAG_CLOSED: &str = "closed";
@@ -151,7 +151,7 @@ pub fn group_roles_build_tags(
 
 pub fn group_put_user_to_wire_parts(
     event: &RadrootsGroupPutUser,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_PUT_USER,
         group_put_user_build_tags(event)?,
@@ -161,7 +161,7 @@ pub fn group_put_user_to_wire_parts(
 
 pub fn group_remove_user_to_wire_parts(
     event: &RadrootsGroupRemoveUser,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_REMOVE_USER,
         group_remove_user_build_tags(event)?,
@@ -171,7 +171,7 @@ pub fn group_remove_user_to_wire_parts(
 
 pub fn group_create_group_to_wire_parts(
     event: &RadrootsGroupCreateGroup,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_CREATE_GROUP,
         group_create_group_build_tags(event)?,
@@ -181,7 +181,7 @@ pub fn group_create_group_to_wire_parts(
 
 pub fn group_edit_metadata_to_wire_parts(
     event: &RadrootsGroupEditMetadata,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_EDIT_METADATA,
         group_edit_metadata_build_tags(event)?,
@@ -191,7 +191,7 @@ pub fn group_edit_metadata_to_wire_parts(
 
 pub fn group_delete_group_to_wire_parts(
     event: &RadrootsGroupDeleteGroup,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_DELETE_GROUP,
         group_delete_group_build_tags(event)?,
@@ -201,7 +201,7 @@ pub fn group_delete_group_to_wire_parts(
 
 pub fn group_delete_event_to_wire_parts(
     event: &RadrootsGroupDeleteEvent,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_DELETE_EVENT,
         group_delete_event_build_tags(event)?,
@@ -211,7 +211,7 @@ pub fn group_delete_event_to_wire_parts(
 
 pub fn group_create_invite_to_wire_parts(
     event: &RadrootsGroupCreateInvite,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_CREATE_INVITE,
         group_create_invite_build_tags(event)?,
@@ -221,7 +221,7 @@ pub fn group_create_invite_to_wire_parts(
 
 pub fn group_join_request_to_wire_parts(
     event: &RadrootsGroupJoinRequest,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_JOIN_REQUEST,
         group_join_request_build_tags(event)?,
@@ -231,7 +231,7 @@ pub fn group_join_request_to_wire_parts(
 
 pub fn group_leave_request_to_wire_parts(
     event: &RadrootsGroupLeaveRequest,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_LEAVE_REQUEST,
         group_leave_request_build_tags(event)?,
@@ -241,13 +241,13 @@ pub fn group_leave_request_to_wire_parts(
 
 pub fn group_metadata_to_wire_parts(
     event: &RadrootsGroupMetadata,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     empty_wire(KIND_GROUP_METADATA, group_metadata_build_tags(event)?)
 }
 
 pub fn group_admins_to_wire_parts(
     event: &RadrootsGroupAdmins,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_ADMINS,
         group_admins_build_tags(event)?,
@@ -257,7 +257,7 @@ pub fn group_admins_to_wire_parts(
 
 pub fn group_members_to_wire_parts(
     event: &RadrootsGroupMembers,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_MEMBERS,
         group_members_build_tags(event)?,
@@ -267,7 +267,7 @@ pub fn group_members_to_wire_parts(
 
 pub fn group_roles_to_wire_parts(
     event: &RadrootsGroupRoles,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     message_wire(
         KIND_GROUP_ROLES,
         group_roles_build_tags(event)?,
@@ -366,8 +366,11 @@ fn validate_optional(value: Option<&str>, field: &'static str) -> Result<(), Eve
     Ok(())
 }
 
-fn empty_wire(kind: u32, tags: Vec<Vec<String>>) -> Result<WireEventParts, EventEncodeError> {
-    Ok(WireEventParts {
+fn empty_wire(
+    kind: u32,
+    tags: Vec<Vec<String>>,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: String::new(),
         tags,
@@ -378,9 +381,9 @@ fn message_wire(
     kind: u32,
     tags: Vec<Vec<String>>,
     message: Option<&str>,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     validate_optional(message, "message")?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: message.unwrap_or_default().to_string(),
         tags,

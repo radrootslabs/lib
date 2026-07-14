@@ -13,9 +13,9 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
-#[cfg(feature = "serde_json")]
 use radroots_event::kinds::KIND_RESOURCE_HARVEST_CAP;
+#[cfg(feature = "serde_json")]
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_A: &str = "a";
 const TAG_P: &str = "p";
@@ -79,7 +79,9 @@ pub fn resource_harvest_cap_build_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(cap: &RadrootsResourceHarvestCap) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    cap: &RadrootsResourceHarvestCap,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(cap, KIND_RESOURCE_HARVEST_CAP)
 }
 
@@ -87,13 +89,13 @@ pub fn to_wire_parts(cap: &RadrootsResourceHarvestCap) -> Result<WireEventParts,
 pub fn to_wire_parts_with_kind(
     cap: &RadrootsResourceHarvestCap,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_RESOURCE_HARVEST_CAP {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = resource_harvest_cap_build_tags(cap)?;
     let content = serde_json::to_string(cap).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

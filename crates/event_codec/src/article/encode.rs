@@ -14,7 +14,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{push_optional_tag, push_tag, validate_non_empty_field};
 use crate::social_helpers::push_location_tags;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_ARTICLE;
 
@@ -42,18 +42,20 @@ pub fn article_build_tags(article: &RadrootsArticle) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(article: &RadrootsArticle) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    article: &RadrootsArticle,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(article, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     article: &RadrootsArticle,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: article.content.clone(),
         tags: article_build_tags(article)?,

@@ -3,6 +3,9 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
+mod common;
+
+use common::{EVENT_ID, EVENT_SIG};
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
@@ -271,16 +274,16 @@ fn farm_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsFarm> = farm_index_from_event(
-        "id1".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         55,
         KIND_FARM,
         content,
         tags,
-        "sig1".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("farm index");
-    assert_eq!(index.event.id_str(), "id1");
+    assert_eq!(index.event.id_str(), EVENT_ID);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -333,13 +336,13 @@ fn coop_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsCoop> = coop_index_from_event(
-        "id2".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         56,
         KIND_COOP,
         content,
         tags,
-        "sig2".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("coop index");
     assert_eq!(index.event.kind_u32(), KIND_COOP);
@@ -565,13 +568,13 @@ fn plot_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsPlot> = plot_index_from_event(
-        "id3".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         57,
         KIND_PLOT,
         content,
         tags,
-        "sig3".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("plot index");
     assert_eq!(index.event.author_str(), TEST_PUBKEY_HEX);
@@ -745,13 +748,13 @@ fn document_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsDocument> = document_index_from_event(
-        "id4".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         58,
         KIND_DOCUMENT,
         content,
         tags,
-        "sig4".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("document index");
     assert_eq!(index.event.kind_u32(), KIND_DOCUMENT);
@@ -824,16 +827,16 @@ fn resource_area_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsResourceArea> = resource_area_index_from_event(
-        "id5".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         59,
         KIND_RESOURCE_AREA,
         content,
         tags,
-        "sig5".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("area index");
-    assert_eq!(index.event.id_str(), "id5");
+    assert_eq!(index.event.id_str(), EVENT_ID);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -907,15 +910,15 @@ fn resource_cap_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsResourceHarvestCap> = resource_cap_index_from_event(
-        "id6".to_string(),
+        EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         60,
         KIND_RESOURCE_HARVEST_CAP,
         content,
         tags,
-        "sig6".to_string(),
+        EVENT_SIG.to_string(),
     )
     .expect("cap index");
-    assert_eq!(index.event.sig_str(), "sig6");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.d_tag, d_tag);
 }

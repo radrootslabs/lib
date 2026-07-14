@@ -24,6 +24,10 @@ use radroots_event_codec::{
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const EVENT_SIG: &str = concat!(
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+);
 const ARTICLE_D_TAG: &str = "DDDDDDDDDDDDDDDDDDDDDA";
 
 fn note_repost() -> RadrootsRepost {
@@ -419,16 +423,16 @@ fn repost_wrappers_preserve_event_metadata() {
     assert_eq!(data.published_at, 10);
 
     let parsed = repost_parsed_from_event(
-        "repost_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         10,
         parts.kind,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), "sig");
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
 
     let generic_parts = generic_repost_to_wire_parts(&generic_article_repost()).unwrap();
     let generic_data = generic_repost_data_from_event(
@@ -443,13 +447,13 @@ fn repost_wrappers_preserve_event_metadata() {
     assert_eq!(generic_data.data.target_kind, KIND_ARTICLE);
 
     let generic_parsed = generic_repost_parsed_from_event(
-        "generic_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         11,
         generic_parts.kind,
         generic_parts.content,
         generic_parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(generic_parsed.event.created_at_u64(), 11);

@@ -1,5 +1,8 @@
 #![cfg(feature = "serde_json")]
 
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     farm_crdt::RadrootsFarmCrdtDocumentKind,
     farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
@@ -370,17 +373,17 @@ fn file_metadata_wrappers_preserve_event_metadata() {
     assert_eq!(data.data.url, "https://media.example.test/field.jpg");
 
     let parsed = parsed_from_event(
-        "file_id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         90,
         parts.kind,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
 
     assert_eq!(parsed.event.created_at_u64(), 90);
-    assert_eq!(parsed.event.sig_str(), "sig");
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.sha256, VALID_HASH);
 }

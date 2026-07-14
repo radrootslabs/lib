@@ -23,6 +23,13 @@ mod tests {
     use radroots_event::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
     use radroots_event::plot::RadrootsPlot;
 
+    const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const EVENT_SIG: &str = concat!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
+
     fn d_tag(raw: &str) -> RadrootsDTag {
         raw.parse().unwrap()
     }
@@ -282,21 +289,20 @@ mod tests {
         };
         let content = serde_json::to_string(&farm).expect("farm content");
         let tags = vec![
-            Vec::new(),
             vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()],
             vec!["g".to_string(), "9q8yy".to_string()],
         ];
         let parsed = parsed_from_event(
-            "event-id".to_string(),
-            "author".to_string(),
+            EVENT_ID.to_string(),
+            AUTHOR.to_string(),
             42,
             KIND_FARM,
             content.clone(),
             tags,
-            "sig".to_string(),
+            EVENT_SIG.to_string(),
         )
         .expect("parsed farm");
-        assert_eq!(parsed.event.sig_str(), "sig");
+        assert_eq!(parsed.event.sig_str(), EVENT_SIG);
         assert_eq!(parsed.data.data.name, "Test Farm");
 
         for (tag, expected) in [

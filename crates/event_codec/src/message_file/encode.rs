@@ -12,7 +12,7 @@ use radroots_event::message_file::{RadrootsMessageFile, RadrootsMessageFileDimen
 
 use crate::error::EventEncodeError;
 use crate::message::tags::{build_recipient_tags, build_reply_tag, build_subject_tag};
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE_FILE;
 
@@ -99,10 +99,12 @@ pub fn message_file_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(message: &RadrootsMessageFile) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    message: &RadrootsMessageFile,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     validate_required(&message.file_url, "file_url")?;
     let tags = message_file_build_tags(message)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: DEFAULT_KIND,
         content: message.file_url.clone(),
         tags,
@@ -112,7 +114,7 @@ pub fn to_wire_parts(message: &RadrootsMessageFile) -> Result<WireEventParts, Ev
 pub fn to_wire_parts_with_kind(
     message: &RadrootsMessageFile,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }

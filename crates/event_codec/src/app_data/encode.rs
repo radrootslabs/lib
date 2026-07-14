@@ -9,7 +9,7 @@ use radroots_event::app_data::{KIND_APP_DATA, RadrootsAppData};
 use radroots_event::tags::TAG_D;
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn app_data_build_tags(
     app_data: &RadrootsAppData,
@@ -20,19 +20,21 @@ pub fn app_data_build_tags(
     Ok(vec![vec![TAG_D.to_string(), app_data.d_tag.clone()]])
 }
 
-pub fn to_wire_parts(app_data: &RadrootsAppData) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    app_data: &RadrootsAppData,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(app_data, KIND_APP_DATA)
 }
 
 pub fn to_wire_parts_with_kind(
     app_data: &RadrootsAppData,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_APP_DATA {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = app_data_build_tags(app_data)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: app_data.content.clone(),
         tags,

@@ -10,7 +10,7 @@ use radroots_event::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 use radroots_event::kinds::KIND_GIFT_WRAP;
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_GIFT_WRAP;
 
@@ -43,12 +43,14 @@ pub fn gift_wrap_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(gift_wrap: &RadrootsGiftWrap) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    gift_wrap: &RadrootsGiftWrap,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if gift_wrap.content.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = gift_wrap_build_tags(gift_wrap)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: DEFAULT_KIND,
         content: gift_wrap.content.clone(),
         tags,
@@ -58,7 +60,7 @@ pub fn to_wire_parts(gift_wrap: &RadrootsGiftWrap) -> Result<WireEventParts, Eve
 pub fn to_wire_parts_with_kind(
     gift_wrap: &RadrootsGiftWrap,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }

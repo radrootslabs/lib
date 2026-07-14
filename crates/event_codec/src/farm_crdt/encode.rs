@@ -16,7 +16,7 @@ use crate::field_helpers::{
     validate_non_empty_field,
 };
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn farm_crdt_change_build_tags(
     change: &RadrootsFarmCrdtChange,
@@ -48,7 +48,9 @@ pub fn farm_crdt_change_build_tags_with_author(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(change: &RadrootsFarmCrdtChange) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    change: &RadrootsFarmCrdtChange,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(change, KIND_FARM_CRDT_CHANGE)
 }
 
@@ -56,7 +58,7 @@ pub fn to_wire_parts(change: &RadrootsFarmCrdtChange) -> Result<WireEventParts, 
 pub fn to_wire_parts_with_author(
     change: &RadrootsFarmCrdtChange,
     author_pubkey: &str,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind_and_author(change, KIND_FARM_CRDT_CHANGE, Some(author_pubkey))
 }
 
@@ -64,7 +66,7 @@ pub fn to_wire_parts_with_author(
 pub fn to_wire_parts_with_kind(
     change: &RadrootsFarmCrdtChange,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind_and_author(change, kind, None)
 }
 
@@ -73,13 +75,13 @@ pub fn to_wire_parts_with_kind_and_author(
     change: &RadrootsFarmCrdtChange,
     kind: u32,
     author_pubkey: Option<&str>,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_CRDT_CHANGE {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_crdt_change_build_tags_with_author(change, author_pubkey)?;
     let content = serde_json::to_string(change).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

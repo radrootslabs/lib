@@ -6,7 +6,7 @@ use radroots_event::message::RadrootsMessage;
 
 use crate::error::EventEncodeError;
 use crate::message::tags::{build_recipient_tags, build_reply_tag, build_subject_tag};
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE;
 
@@ -21,12 +21,14 @@ pub fn message_build_tags(message: &RadrootsMessage) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(message: &RadrootsMessage) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    message: &RadrootsMessage,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if message.content.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = message_build_tags(message)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: DEFAULT_KIND,
         content: message.content.clone(),
         tags,

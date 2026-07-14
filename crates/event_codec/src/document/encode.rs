@@ -16,7 +16,7 @@ use crate::error::EventEncodeError;
 use radroots_event::kinds::KIND_DOCUMENT;
 
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_P: &str = "p";
@@ -64,7 +64,9 @@ pub fn document_build_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(document: &RadrootsDocument) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(
+    document: &RadrootsDocument,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(document, KIND_DOCUMENT)
 }
 
@@ -72,13 +74,13 @@ pub fn to_wire_parts(document: &RadrootsDocument) -> Result<WireEventParts, Even
 pub fn to_wire_parts_with_kind(
     document: &RadrootsDocument,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_DOCUMENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = document_build_tags(document)?;
     let content = serde_json::to_string(document).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

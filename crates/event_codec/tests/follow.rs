@@ -1,6 +1,8 @@
+mod common;
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     follow::{RadrootsFollow, RadrootsFollowProfile},
     kinds::{KIND_FOLLOW, KIND_POST},
@@ -178,17 +180,17 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.list[0].contact_name.as_deref(), Some("alice"));
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         50,
         KIND_FOLLOW,
         "".to_string(),
         tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_FOLLOW);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.list.len(), 1);
 }
 

@@ -1,7 +1,8 @@
 use radroots_event::{job_result::RadrootsJobResult, kinds::is_result_kind};
 
-use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
+use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -64,7 +65,7 @@ pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
 pub fn to_wire_parts(
     res: &RadrootsJobResult,
     content: &str,
-) -> Result<WireEventParts, JobEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, JobEncodeError> {
     let kind = res.kind as u32;
     if !is_result_kind(kind) {
         return Err(JobEncodeError::InvalidKind(kind));
@@ -77,7 +78,7 @@ pub fn to_wire_parts(
 
     canonicalize_tags(&mut tags);
 
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: content.to_string(),
         tags,

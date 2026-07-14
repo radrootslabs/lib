@@ -22,7 +22,7 @@ use crate::field_helpers::{
     address_string, push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
     validate_non_empty_field,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_ALT: &str = "alt";
 const TAG_BLURHASH: &str = "blurhash";
@@ -82,19 +82,19 @@ pub fn farm_file_metadata_build_tags(
 
 pub fn to_wire_parts(
     metadata: &RadrootsFarmFileMetadata,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(metadata, KIND_FARM_FILE_METADATA)
 }
 
 pub fn to_wire_parts_with_kind(
     metadata: &RadrootsFarmFileMetadata,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_FILE_METADATA {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_file_metadata_build_tags(metadata)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: metadata.caption.clone().unwrap_or_default(),
         tags,

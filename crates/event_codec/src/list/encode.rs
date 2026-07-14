@@ -8,7 +8,7 @@ use radroots_event::{
 };
 
 use crate::error::EventEncodeError;
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError> {
     if entry.tag.trim().is_empty() {
@@ -44,7 +44,7 @@ pub fn list_build_tags(list: &RadrootsList) -> Result<Vec<Vec<String>>, EventEnc
 pub fn to_wire_parts_with_kind(
     list: &RadrootsList,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if !is_supported_list_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
@@ -52,7 +52,7 @@ pub fn to_wire_parts_with_kind(
         validate_relay_entries(&list.entries)?;
     }
     let tags = list_build_tags(list)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: list.content.clone(),
         tags,

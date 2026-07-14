@@ -203,6 +203,17 @@ impl From<RadrootsCanonicalEventIdError> for RadrootsEventWireError {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsNip01EventWireParts {
+    pub kind: u32,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip01EventWire {
     pub id: String,
     pub pubkey: String,

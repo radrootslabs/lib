@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     farm::RadrootsFarmRef,
     kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_FARM, KIND_POST},
@@ -702,21 +705,21 @@ fn post_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.content, "hello");
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        EVENT_ID.to_string(),
+        AUTHOR.to_string(),
         77,
         KIND_POST,
         "hello".to_string(),
         Vec::new(),
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(index.event.id_str(), "id");
-    assert_eq!(index.event.author_str(), "author");
+    assert_eq!(index.event.id_str(), EVENT_ID);
+    assert_eq!(index.event.author_str(), AUTHOR);
     assert_eq!(index.event.created_at_u64(), 77);
     assert_eq!(index.event.kind_u32(), KIND_POST);
     assert_eq!(index.event.content(), "hello");
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_eq!(index.data.data.content, "hello");
 }
 

@@ -16,7 +16,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -91,7 +91,7 @@ pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEnc
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(plot: &RadrootsPlot) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(plot: &RadrootsPlot) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(plot, KIND_PLOT)
 }
 
@@ -99,13 +99,13 @@ pub fn to_wire_parts(plot: &RadrootsPlot) -> Result<WireEventParts, EventEncodeE
 pub fn to_wire_parts_with_kind(
     plot: &RadrootsPlot,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_PLOT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = plot_build_tags(plot)?;
     let content = serde_json::to_string(plot).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

@@ -17,7 +17,7 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     parse_address_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn repost_build_tags(repost: &RadrootsRepost) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::new();
@@ -35,24 +35,26 @@ pub fn generic_repost_build_tags(
     Ok(tags)
 }
 
-pub fn repost_to_wire_parts(repost: &RadrootsRepost) -> Result<WireEventParts, EventEncodeError> {
+pub fn repost_to_wire_parts(
+    repost: &RadrootsRepost,
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     repost_to_wire_parts_with_kind(repost, KIND_REPOST)
 }
 
 pub fn generic_repost_to_wire_parts(
     repost: &RadrootsGenericRepost,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     generic_repost_to_wire_parts_with_kind(repost, KIND_GENERIC_REPOST)
 }
 
 pub fn repost_to_wire_parts_with_kind(
     repost: &RadrootsRepost,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_REPOST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: repost.content.clone().unwrap_or_default(),
         tags: repost_build_tags(repost)?,
@@ -62,11 +64,11 @@ pub fn repost_to_wire_parts_with_kind(
 pub fn generic_repost_to_wire_parts_with_kind(
     repost: &RadrootsGenericRepost,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_GENERIC_REPOST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: repost.content.clone().unwrap_or_default(),
         tags: generic_repost_build_tags(repost)?,

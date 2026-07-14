@@ -10,7 +10,9 @@ use radroots_event::{
 };
 
 #[cfg(feature = "serde_json")]
-use crate::{error::EventEncodeError, order::tags::order_envelope_tags, wire::WireEventParts};
+use crate::{error::EventEncodeError, order::tags::order_envelope_tags};
+#[cfg(feature = "serde_json")]
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[cfg(feature = "serde_json")]
 fn map_order_envelope_error(error: RadrootsOrderEnvelopeError) -> EventEncodeError {
@@ -86,7 +88,7 @@ struct OrderEnvelopeEventBuildParts<'a, T> {
 #[cfg(feature = "serde_json")]
 fn order_envelope_event_build<T: serde::Serialize>(
     parts: OrderEnvelopeEventBuildParts<'_, T>,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if parts.message_type.requires_listing_snapshot() && parts.listing_event.is_none() {
         return Err(EventEncodeError::EmptyRequiredField("listing_event.id"));
     }
@@ -115,7 +117,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
         parts.root_event_id.map(RadrootsEventId::as_str),
         parts.prev_event_id.map(RadrootsEventId::as_str),
     )?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind: parts.message_type.kind(),
         content,
         tags,
@@ -126,7 +128,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
 pub fn order_request_event_build(
     listing_event: &RadrootsEventPtr,
     payload: &RadrootsOrderRequest,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
@@ -145,7 +147,7 @@ pub fn order_decision_event_build(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderDecision,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.buyer_pubkey,
@@ -164,7 +166,7 @@ pub fn order_revision_proposal_event_build(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionProposal,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
@@ -189,7 +191,7 @@ pub fn order_revision_decision_event_build(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionDecision,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
@@ -214,7 +216,7 @@ pub fn order_cancellation_event_build(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderCancellation,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,

@@ -16,7 +16,7 @@ use radroots_event::{
 use crate::error::EventEncodeError;
 use crate::field_helpers::{parse_address_tag, validate_lowercase_hex_64};
 use crate::social_helpers::{dimensions_tag, push_location_tags};
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_POST;
 
@@ -53,14 +53,14 @@ pub fn post_build_tags(post: &RadrootsPost) -> Result<Vec<Vec<String>>, EventEnc
     Ok(tags)
 }
 
-pub fn to_wire_parts(post: &RadrootsPost) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(post: &RadrootsPost) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(post, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
     post: &RadrootsPost,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
@@ -68,7 +68,7 @@ pub fn to_wire_parts_with_kind(
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = post_build_tags(post)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: post.content.clone(),
         tags,

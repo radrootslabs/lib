@@ -14,7 +14,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{address_string, push_tag, validate_non_empty_field};
 #[cfg(feature = "serde_json")]
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn farm_workspace_build_tags(
     manifest: &RadrootsFarmWorkspaceManifest,
@@ -35,7 +35,7 @@ pub fn farm_workspace_build_tags(
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(
     manifest: &RadrootsFarmWorkspaceManifest,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(manifest, KIND_FARM_WORKSPACE_MANIFEST)
 }
 
@@ -43,13 +43,13 @@ pub fn to_wire_parts(
 pub fn to_wire_parts_with_kind(
     manifest: &RadrootsFarmWorkspaceManifest,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_WORKSPACE_MANIFEST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_workspace_build_tags(manifest)?;
     let content = serde_json::to_string(manifest).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content,
         tags,

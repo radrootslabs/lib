@@ -33,7 +33,7 @@ use crate::social_helpers::{
     push_location_tags, push_participants, validate_date, validate_date_end_after_start,
     validate_end_after_start,
 };
-use crate::wire::WireEventParts;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn calendar_date_event_build_tags(
     event: &RadrootsCalendarDateEvent,
@@ -129,36 +129,36 @@ pub fn rsvp_build_tags(
 
 pub fn date_to_wire_parts(
     event: &RadrootsCalendarDateEvent,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     date_to_wire_parts_with_kind(event, KIND_CALENDAR_DATE_EVENT)
 }
 
 pub fn time_to_wire_parts(
     event: &RadrootsCalendarTimeEvent,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     time_to_wire_parts_with_kind(event, KIND_CALENDAR_TIME_EVENT)
 }
 
 pub fn calendar_to_wire_parts(
     calendar: &RadrootsCalendar,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     calendar_to_wire_parts_with_kind(calendar, KIND_CALENDAR)
 }
 
 pub fn rsvp_to_wire_parts(
     rsvp: &RadrootsCalendarEventRsvp,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     rsvp_to_wire_parts_with_kind(rsvp, KIND_CALENDAR_EVENT_RSVP)
 }
 
 pub fn date_to_wire_parts_with_kind(
     event: &RadrootsCalendarDateEvent,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_DATE_EVENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: event.description.clone().unwrap_or_default(),
         tags: calendar_date_event_build_tags(event)?,
@@ -168,11 +168,11 @@ pub fn date_to_wire_parts_with_kind(
 pub fn time_to_wire_parts_with_kind(
     event: &RadrootsCalendarTimeEvent,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_TIME_EVENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: event.description.clone().unwrap_or_default(),
         tags: calendar_time_event_build_tags(event)?,
@@ -182,11 +182,11 @@ pub fn time_to_wire_parts_with_kind(
 pub fn calendar_to_wire_parts_with_kind(
     calendar: &RadrootsCalendar,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: calendar.description.clone().unwrap_or_default(),
         tags: calendar_collection_build_tags(calendar)?,
@@ -196,11 +196,11 @@ pub fn calendar_to_wire_parts_with_kind(
 pub fn rsvp_to_wire_parts_with_kind(
     rsvp: &RadrootsCalendarEventRsvp,
     kind: u32,
-) -> Result<WireEventParts, EventEncodeError> {
+) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_EVENT_RSVP {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(WireEventParts {
+    Ok(RadrootsNip01EventWireParts {
         kind,
         content: rsvp.note.clone().unwrap_or_default(),
         tags: rsvp_build_tags(rsvp)?,

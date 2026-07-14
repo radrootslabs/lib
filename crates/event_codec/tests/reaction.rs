@@ -1,3 +1,6 @@
+mod common;
+
+use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
     kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST, KIND_REACTION},
     reaction::RadrootsReaction,
@@ -423,16 +426,16 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.content, "");
 
     let index = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
+        ENVELOPE_ID.to_string(),
+        ENVELOPE_AUTHOR.to_string(),
         99,
         KIND_REACTION,
         parts.content,
         parts.tags,
-        "sig".to_string(),
+        EVENT_SIG.to_string(),
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_REACTION);
-    assert_eq!(index.event.sig_str(), "sig");
+    assert_eq!(index.event.sig_str(), EVENT_SIG);
     assert_event_target(&index.data.data.target);
 }
