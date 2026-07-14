@@ -9,7 +9,10 @@ use std::{string::String, vec::Vec};
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
-use crate::wire::RadrootsNip01EventWire;
+use crate::wire::{
+    DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
+    DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
+};
 use core::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -76,6 +79,7 @@ impl RadrootsEventKind {
 
     pub const fn class(self) -> RadrootsEventKindClass {
         match self.0 {
+            0 | 3 => RadrootsEventKindClass::Replaceable,
             10_000..=19_999 => RadrootsEventKindClass::Replaceable,
             20_000..=29_999 => RadrootsEventKindClass::Ephemeral,
             30_000..=39_999 => RadrootsEventKindClass::Addressable,
@@ -135,9 +139,33 @@ pub enum RadrootsEventEnvelopeError {
     NonCanonicalId,
     NonCanonicalAuthor,
     NonCanonicalSignature,
-    EmptyTag { index: usize },
-    EmptyTagKey { index: usize },
-    ControlCharacterTagKey { index: usize },
+    EmptyTag {
+        index: usize,
+    },
+    EmptyTagKey {
+        index: usize,
+    },
+    ControlCharacterTagKey {
+        index: usize,
+    },
+    ContentTooLarge {
+        max: usize,
+        actual: usize,
+    },
+    TooManyTags {
+        max: usize,
+        actual: usize,
+    },
+    TagElementTooLarge {
+        tag_index: usize,
+        element_index: usize,
+        max: usize,
+        actual: usize,
+    },
+    TagsTooLarge {
+        max: usize,
+        actual: usize,
+    },
 }
 
 impl fmt::Display for RadrootsEventEnvelopeError {
@@ -166,6 +194,27 @@ impl fmt::Display for RadrootsEventEnvelopeError {
                     "event envelope tag {index} key contains a control character"
                 )
             }
+            Self::ContentTooLarge { max, actual } => {
+                write!(
+                    f,
+                    "event envelope content size {actual} exceeds {max} bytes"
+                )
+            }
+            Self::TooManyTags { max, actual } => {
+                write!(f, "event envelope tag count {actual} exceeds {max}")
+            }
+            Self::TagElementTooLarge {
+                tag_index,
+                element_index,
+                max,
+                actual,
+            } => write!(
+                f,
+                "event envelope tag {tag_index} element {element_index} size {actual} exceeds {max} bytes"
+            ),
+            Self::TagsTooLarge { max, actual } => {
+                write!(f, "event envelope tag bytes {actual} exceed {max}")
+            }
         }
     }
 }
@@ -173,12 +222,46 @@ impl fmt::Display for RadrootsEventEnvelopeError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsEventEnvelopeError {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RadrootsEventEnvelopeLimits {
+    pub max_content_bytes: usize,
+    pub max_tag_count: usize,
+    pub max_tag_element_bytes: usize,
+    pub max_total_tag_bytes: usize,
+}
+
+impl Default for RadrootsEventEnvelopeLimits {
+    fn default() -> Self {
+        Self {
+            max_content_bytes: DEFAULT_CONTENT_MAX_BYTES,
+            max_tag_count: DEFAULT_TAG_MAX_COUNT,
+            max_tag_element_bytes: DEFAULT_TAG_ELEMENT_MAX_BYTES,
+            max_total_tag_bytes: DEFAULT_TAG_TOTAL_MAX_BYTES,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventTag(Vec<String>);
 
 impl RadrootsEventTag {
     pub fn new(index: usize, values: Vec<String>) -> Result<Self, RadrootsEventEnvelopeError> {
+        Self::new_with_limits(index, values, RadrootsEventEnvelopeLimits::default())
+    }
+
+    pub fn new_with_limits(
+        index: usize,
+        values: Vec<String>,
+        limits: RadrootsEventEnvelopeLimits,
+    ) -> Result<Self, RadrootsEventEnvelopeError> {
         validate_tag(index, &values)?;
+        let total_bytes = validate_tag_elements(index, &values, limits)?;
+        if total_bytes > limits.max_total_tag_bytes {
+            return Err(RadrootsEventEnvelopeError::TagsTooLarge {
+                max: limits.max_total_tag_bytes,
+                actual: total_bytes,
+            });
+        }
         Ok(Self(values))
     }
 
@@ -219,9 +302,33 @@ pub struct RadrootsEventTags(Vec<RadrootsEventTag>);
 
 impl RadrootsEventTags {
     pub fn new(values: Vec<Vec<String>>) -> Result<Self, RadrootsEventEnvelopeError> {
+        Self::new_with_limits(values, RadrootsEventEnvelopeLimits::default())
+    }
+
+    pub fn new_with_limits(
+        values: Vec<Vec<String>>,
+        limits: RadrootsEventEnvelopeLimits,
+    ) -> Result<Self, RadrootsEventEnvelopeError> {
+        let tag_count = values.len();
+        if tag_count > limits.max_tag_count {
+            return Err(RadrootsEventEnvelopeError::TooManyTags {
+                max: limits.max_tag_count,
+                actual: tag_count,
+            });
+        }
         let mut tags = Vec::with_capacity(values.len());
+        let mut total_tag_bytes = 0usize;
         for (index, tag) in values.into_iter().enumerate() {
-            tags.push(RadrootsEventTag::new(index, tag)?);
+            validate_tag(index, &tag)?;
+            total_tag_bytes =
+                total_tag_bytes.saturating_add(validate_tag_elements(index, &tag, limits)?);
+            if total_tag_bytes > limits.max_total_tag_bytes {
+                return Err(RadrootsEventEnvelopeError::TagsTooLarge {
+                    max: limits.max_total_tag_bytes,
+                    actual: total_tag_bytes,
+                });
+            }
+            tags.push(RadrootsEventTag(tag));
         }
         Ok(Self(tags))
     }
@@ -311,6 +418,13 @@ pub struct RadrootsEventEnvelope {
 
 impl RadrootsEventEnvelope {
     pub fn new(parts: RadrootsEventEnvelopeParts) -> Result<Self, RadrootsEventEnvelopeError> {
+        Self::new_with_limits(parts, RadrootsEventEnvelopeLimits::default())
+    }
+
+    pub fn new_with_limits(
+        parts: RadrootsEventEnvelopeParts,
+        limits: RadrootsEventEnvelopeLimits,
+    ) -> Result<Self, RadrootsEventEnvelopeError> {
         let id = RadrootsEventId::parse(parts.id.as_str())
             .map_err(RadrootsEventEnvelopeError::InvalidId)?;
         if id.as_str() != parts.id.as_str() {
@@ -326,7 +440,14 @@ impl RadrootsEventEnvelope {
         if sig.as_str() != parts.sig.as_str() {
             return Err(RadrootsEventEnvelopeError::NonCanonicalSignature);
         }
-        let tags = RadrootsEventTags::new(parts.tags)?;
+        let content_len = parts.content.len();
+        if content_len > limits.max_content_bytes {
+            return Err(RadrootsEventEnvelopeError::ContentTooLarge {
+                max: limits.max_content_bytes,
+                actual: content_len,
+            });
+        }
+        let tags = RadrootsEventTags::new_with_limits(parts.tags, limits)?;
         Ok(Self {
             id,
             author,
@@ -439,6 +560,27 @@ fn validate_tag(index: usize, values: &[String]) -> Result<(), RadrootsEventEnve
     Ok(())
 }
 
+fn validate_tag_elements(
+    tag_index: usize,
+    values: &[String],
+    limits: RadrootsEventEnvelopeLimits,
+) -> Result<usize, RadrootsEventEnvelopeError> {
+    let mut total_tag_bytes = 0usize;
+    for (element_index, value) in values.iter().enumerate() {
+        let value_len = value.len();
+        if value_len > limits.max_tag_element_bytes {
+            return Err(RadrootsEventEnvelopeError::TagElementTooLarge {
+                tag_index,
+                element_index,
+                max: limits.max_tag_element_bytes,
+                actual: value_len,
+            });
+        }
+        total_tag_bytes = total_tag_bytes.saturating_add(value_len);
+    }
+    Ok(total_tag_bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,7 +642,19 @@ mod tests {
     #[test]
     fn kind_classifies_nip01_ranges() {
         assert_eq!(
+            RadrootsEventKind::new(0).class(),
+            RadrootsEventKindClass::Replaceable
+        );
+        assert_eq!(
             RadrootsEventKind::new(1).class(),
+            RadrootsEventKindClass::Regular
+        );
+        assert_eq!(
+            RadrootsEventKind::new(3).class(),
+            RadrootsEventKindClass::Replaceable
+        );
+        assert_eq!(
+            RadrootsEventKind::new(9_999).class(),
             RadrootsEventKindClass::Regular
         );
         assert_eq!(
@@ -508,7 +662,15 @@ mod tests {
             RadrootsEventKindClass::Replaceable
         );
         assert_eq!(
+            RadrootsEventKind::new(19_999).class(),
+            RadrootsEventKindClass::Replaceable
+        );
+        assert_eq!(
             RadrootsEventKind::new(20_000).class(),
+            RadrootsEventKindClass::Ephemeral
+        );
+        assert_eq!(
+            RadrootsEventKind::new(29_999).class(),
             RadrootsEventKindClass::Ephemeral
         );
         assert_eq!(
@@ -516,8 +678,92 @@ mod tests {
             RadrootsEventKindClass::Addressable
         );
         assert_eq!(
+            RadrootsEventKind::new(39_999).class(),
+            RadrootsEventKindClass::Addressable
+        );
+        assert_eq!(
             RadrootsEventKind::new(40_000).class(),
             RadrootsEventKindClass::Regular
+        );
+    }
+
+    #[test]
+    fn envelope_rejects_domain_budget_violations() {
+        let mut parts = event_parts();
+        assert_eq!(
+            RadrootsEventEnvelope::new_with_limits(
+                parts.clone(),
+                RadrootsEventEnvelopeLimits {
+                    max_content_bytes: 4,
+                    ..RadrootsEventEnvelopeLimits::default()
+                }
+            ),
+            Err(RadrootsEventEnvelopeError::ContentTooLarge { max: 4, actual: 5 })
+        );
+
+        parts.tags = vec![vec!["d".to_owned()]];
+        assert_eq!(
+            RadrootsEventEnvelope::new_with_limits(
+                parts.clone(),
+                RadrootsEventEnvelopeLimits {
+                    max_tag_count: 0,
+                    ..RadrootsEventEnvelopeLimits::default()
+                }
+            ),
+            Err(RadrootsEventEnvelopeError::TooManyTags { max: 0, actual: 1 })
+        );
+
+        parts.tags = vec![vec!["d".to_owned(), "abcd".to_owned()]];
+        assert_eq!(
+            RadrootsEventEnvelope::new_with_limits(
+                parts.clone(),
+                RadrootsEventEnvelopeLimits {
+                    max_tag_element_bytes: 3,
+                    ..RadrootsEventEnvelopeLimits::default()
+                }
+            ),
+            Err(RadrootsEventEnvelopeError::TagElementTooLarge {
+                tag_index: 0,
+                element_index: 1,
+                max: 3,
+                actual: 4
+            })
+        );
+
+        parts.tags = vec![vec!["d".to_owned(), "soil".to_owned()]];
+        assert_eq!(
+            RadrootsEventEnvelope::new_with_limits(
+                parts,
+                RadrootsEventEnvelopeLimits {
+                    max_total_tag_bytes: 4,
+                    ..RadrootsEventEnvelopeLimits::default()
+                }
+            ),
+            Err(RadrootsEventEnvelopeError::TagsTooLarge { max: 4, actual: 5 })
+        );
+    }
+
+    #[test]
+    fn envelope_accepts_exact_domain_budget_boundaries() {
+        let mut parts = event_parts();
+        parts.content = "hello".to_owned();
+        parts.tags = vec![vec!["d".to_owned(), "soil".to_owned()]];
+
+        let envelope = RadrootsEventEnvelope::new_with_limits(
+            parts,
+            RadrootsEventEnvelopeLimits {
+                max_content_bytes: 5,
+                max_tag_count: 1,
+                max_tag_element_bytes: 4,
+                max_total_tag_bytes: 5,
+            },
+        )
+        .expect("envelope");
+
+        assert_eq!(envelope.content(), "hello");
+        assert_eq!(
+            envelope.tags_as_vec(),
+            vec![vec!["d".to_owned(), "soil".to_owned()]]
         );
     }
 

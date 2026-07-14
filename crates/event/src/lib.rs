@@ -65,9 +65,9 @@ pub mod trade_validation;
 pub mod wire;
 
 pub use envelope::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
-    RadrootsEventKind, RadrootsEventKindClass, RadrootsEventTag, RadrootsEventTags,
-    RadrootsEventTimestamp,
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeLimits,
+    RadrootsEventEnvelopeParts, RadrootsEventKind, RadrootsEventKindClass, RadrootsEventTag,
+    RadrootsEventTags, RadrootsEventTimestamp,
 };
 pub use wire::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsEventWireLimits,
