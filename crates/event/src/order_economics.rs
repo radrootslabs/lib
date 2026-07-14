@@ -12,7 +12,10 @@ use crate::ids::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderItem")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderItem {
     pub bin_id: RadrootsInventoryBinId,
@@ -22,11 +25,14 @@ pub struct RadrootsOrderItem {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderPricingBasis")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderPricingBasis {
-    #[cfg_attr(feature = "serde", serde(rename = "listing_event"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "listing_event"))]
     ListingEvent,
 }
 
@@ -36,45 +42,57 @@ pub enum RadrootsOrderPricingBasis {
     feature = "dto-bindgen",
     dto(ts(name = "RadrootsOrderEconomicLineKind"))
 )]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicLineKind {
-    #[cfg_attr(feature = "serde", serde(rename = "listing_discount"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "listing_discount"))]
     ListingDiscount,
-    #[cfg_attr(feature = "serde", serde(rename = "basket_adjustment"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "basket_adjustment"))]
     BasketAdjustment,
-    #[cfg_attr(feature = "serde", serde(rename = "revision_adjustment"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "revision_adjustment"))]
     RevisionAdjustment,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicActor")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicActor {
-    #[cfg_attr(feature = "serde", serde(rename = "buyer"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "buyer"))]
     Buyer,
-    #[cfg_attr(feature = "serde", serde(rename = "seller"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "seller"))]
     Seller,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicEffect")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicEffect {
-    #[cfg_attr(feature = "serde", serde(rename = "increase"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "increase"))]
     Increase,
-    #[cfg_attr(feature = "serde", serde(rename = "decrease"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "decrease"))]
     Decrease,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,7 +109,10 @@ pub struct RadrootsOrderEconomicItem {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicLine")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicLine {
     pub id: String,
@@ -105,7 +126,10 @@ pub struct RadrootsOrderEconomicLine {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEconomicTotals")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicTotals {
     pub subtotal: RadrootsCoreMoney,
@@ -114,7 +138,10 @@ pub struct RadrootsOrderEconomicTotals {
     pub total: RadrootsCoreMoney,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]

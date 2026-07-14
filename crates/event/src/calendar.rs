@@ -6,7 +6,10 @@ use crate::social::{
     RadrootsCalendarParticipant, RadrootsSocialLocation, RadrootsSocialTarget,
 };
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsCalendar {
     pub d_tag: String,
@@ -29,7 +32,10 @@ pub struct RadrootsCalendar {
     pub image: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsCalendarDateEvent {
     pub d_tag: String,
@@ -72,7 +78,10 @@ pub struct RadrootsCalendarDateEvent {
     pub participants: Option<Vec<RadrootsCalendarParticipant>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsCalendarTimeEvent {
     pub d_tag: String,
@@ -125,7 +134,10 @@ pub struct RadrootsCalendarTimeEvent {
     pub participants: Option<Vec<RadrootsCalendarParticipant>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsCalendarEventRsvp {
     pub d_tag: String,

@@ -3,7 +3,10 @@ use alloc::string::String;
 
 use crate::social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsReport {
     pub reported_pubkey: String,

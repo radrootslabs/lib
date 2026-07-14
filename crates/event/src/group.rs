@@ -33,7 +33,10 @@ pub const KIND_GROUP_ADMINS: u32 = KIND_GROUP_ADMINS_EVENT;
 pub const KIND_GROUP_MEMBERS: u32 = KIND_GROUP_MEMBERS_EVENT;
 pub const KIND_GROUP_ROLES: u32 = KIND_GROUP_ROLES_EVENT;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupPutUser {
     pub group_id: String,
@@ -42,7 +45,10 @@ pub struct RadrootsGroupPutUser {
     pub roles: Vec<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupRemoveUser {
     pub group_id: String,
@@ -50,7 +56,10 @@ pub struct RadrootsGroupRemoveUser {
     pub pubkey: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupCreateGroup {
     pub group_id: String,
@@ -58,7 +67,10 @@ pub struct RadrootsGroupCreateGroup {
     pub metadata: RadrootsGroupEditableMetadata,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupEditMetadata {
     pub group_id: String,
@@ -66,14 +78,20 @@ pub struct RadrootsGroupEditMetadata {
     pub metadata: RadrootsGroupEditableMetadata,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupDeleteGroup {
     pub group_id: String,
     pub message: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupDeleteEvent {
     pub group_id: String,
@@ -81,7 +99,10 @@ pub struct RadrootsGroupDeleteEvent {
     pub event_id: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupCreateInvite {
     pub group_id: String,
@@ -89,7 +110,10 @@ pub struct RadrootsGroupCreateInvite {
     pub code: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupJoinRequest {
     pub group_id: String,
@@ -97,21 +121,30 @@ pub struct RadrootsGroupJoinRequest {
     pub code: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupLeaveRequest {
     pub group_id: String,
     pub message: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupMetadata {
     pub d_tag: String,
     pub metadata: RadrootsGroupEditableMetadata,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupAdmins {
     pub d_tag: String,
@@ -119,7 +152,10 @@ pub struct RadrootsGroupAdmins {
     pub admins: Vec<RadrootsGroupUserRef>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupMembers {
     pub d_tag: String,
@@ -127,7 +163,10 @@ pub struct RadrootsGroupMembers {
     pub members: Vec<RadrootsGroupUserRef>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupRoles {
     pub d_tag: String,
@@ -135,7 +174,10 @@ pub struct RadrootsGroupRoles {
     pub roles: Vec<RadrootsGroupRole>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsGroupEditableMetadata {
     pub name: Option<String>,
@@ -148,14 +190,20 @@ pub struct RadrootsGroupEditableMetadata {
     pub supported_kinds: Option<Vec<u32>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupUserRef {
     pub pubkey: String,
     pub roles: Vec<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupRole {
     pub name: String,

@@ -150,7 +150,7 @@ macro_rules! validated_string_id {
             }
         }
 
-        #[cfg(feature = "serde")]
+        #[cfg(any(feature = "serde", test))]
         impl serde::Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -160,7 +160,7 @@ macro_rules! validated_string_id {
             }
         }
 
-        #[cfg(feature = "serde")]
+        #[cfg(any(feature = "serde", test))]
         impl<'de> serde::Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
@@ -378,7 +378,7 @@ mod tests {
             assert_eq!(converted, value);
             assert_eq!(id.into_string(), value.to_owned());
 
-            #[cfg(feature = "serde")]
+            #[cfg(any(feature = "serde", test))]
             {
                 let id = <$ty>::parse(value).expect("parse");
                 let encoded = serde_json::to_string(&id).expect("serialize");

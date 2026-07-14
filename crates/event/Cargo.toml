@@ -40,3 +40,11 @@ serde_json = { workspace = true, default-features = false, features = [
 sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
+radroots_core = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }

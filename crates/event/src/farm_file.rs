@@ -9,7 +9,10 @@ use alloc::{string::String, vec::Vec};
 
 pub const KIND_FARM_FILE_METADATA: u32 = KIND_FARM_FILE_METADATA_EVENT;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmFileMetadata {
     pub d_tag: String,
@@ -31,14 +34,20 @@ pub struct RadrootsFarmFileMetadata {
     pub fallbacks: Vec<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmFileDimensions {
     pub w: u32,
     pub h: u32,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmFileSource {
     pub url: String,

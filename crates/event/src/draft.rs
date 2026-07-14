@@ -1,18 +1,10 @@
 #![forbid(unsafe_code)]
 
-#[cfg(not(feature = "std"))]
-use alloc::{
-    borrow::ToOwned,
-    string::{String, ToString},
-    vec::Vec,
-};
+#[cfg(all(not(feature = "std"), not(test)))]
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::{
-    borrow::ToOwned,
-    string::{String, ToString},
-    vec::Vec,
-};
+#[cfg(any(feature = "std", test))]
+use std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::RadrootsEventEnvelope;
 use crate::contract::{
@@ -22,8 +14,11 @@ use crate::contract::{
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
+use crate::wire::{
+    RadrootsCanonicalEventIdError, canonical_nip01_event_id_preimage,
+    compute_canonical_nip01_event_id,
+};
 use core::fmt;
-use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsDraftError {
@@ -66,7 +61,7 @@ pub enum RadrootsDraftError {
         computed_event_id: String,
     },
     IdParse(RadrootsIdParseError),
-    JsonString(String),
+    CanonicalEventId(RadrootsCanonicalEventIdError),
 }
 
 impl fmt::Display for RadrootsDraftError {
@@ -138,7 +133,7 @@ impl fmt::Display for RadrootsDraftError {
                 "signed event computed id mismatch: expected {expected_event_id}, computed {computed_event_id}"
             ),
             Self::IdParse(error) => write!(f, "{error}"),
-            Self::JsonString(error) => write!(f, "json string serialization failed: {error}"),
+            Self::CanonicalEventId(error) => write!(f, "{error}"),
         }
     }
 }
@@ -152,13 +147,19 @@ impl From<RadrootsIdParseError> for RadrootsDraftError {
     }
 }
 
-impl From<serde_json::Error> for RadrootsDraftError {
-    fn from(value: serde_json::Error) -> Self {
-        Self::JsonString(value.to_string())
+impl From<RadrootsCanonicalEventIdError> for RadrootsDraftError {
+    fn from(value: RadrootsCanonicalEventIdError) -> Self {
+        match value {
+            RadrootsCanonicalEventIdError::InvalidPubkey(error) => Self::IdParse(error),
+            error => Self::CanonicalEventId(error),
+        }
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventDraft {
     pub contract_id: String,
@@ -226,7 +227,10 @@ impl RadrootsEventDraft {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignedEventParts {
     pub id: String,
@@ -239,7 +243,10 @@ pub struct RadrootsSignedEventParts {
     pub raw_json: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignedEvent {
     pub id: String,
@@ -350,11 +357,14 @@ pub fn compute_nip01_event_id(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<RadrootsEventId, RadrootsDraftError> {
-    let pubkey = RadrootsPublicKey::parse(pubkey)?;
-    let preimage = nip01_event_id_preimage(pubkey.as_str(), created_at, kind, tags, content)?;
-    let digest = Sha256::digest(preimage.as_bytes());
-    let event_id = hex::encode(digest);
-    Ok(RadrootsEventId::parse(event_id)?)
+    RadrootsPublicKey::parse(pubkey)?;
+    Ok(compute_canonical_nip01_event_id(
+        pubkey,
+        u64::from(created_at),
+        kind,
+        tags,
+        content,
+    )?)
 }
 
 pub fn nip01_event_id_preimage(
@@ -364,36 +374,13 @@ pub fn nip01_event_id_preimage(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String, RadrootsDraftError> {
-    let mut preimage = String::new();
-    preimage.push_str("[0,");
-    push_json_string(&mut preimage, pubkey)?;
-    preimage.push(',');
-    preimage.push_str(created_at.to_string().as_str());
-    preimage.push(',');
-    preimage.push_str(kind.to_string().as_str());
-    preimage.push_str(",[");
-    for (tag_index, tag) in tags.iter().enumerate() {
-        if tag_index > 0 {
-            preimage.push(',');
-        }
-        preimage.push('[');
-        for (value_index, value) in tag.iter().enumerate() {
-            if value_index > 0 {
-                preimage.push(',');
-            }
-            push_json_string(&mut preimage, value)?;
-        }
-        preimage.push(']');
-    }
-    preimage.push_str("],");
-    push_json_string(&mut preimage, content)?;
-    preimage.push(']');
-    Ok(preimage)
-}
-
-fn push_json_string(target: &mut String, value: &str) -> Result<(), RadrootsDraftError> {
-    target.push_str(serde_json::to_string(value)?.as_str());
-    Ok(())
+    Ok(canonical_nip01_event_id_preimage(
+        pubkey,
+        u64::from(created_at),
+        kind,
+        tags,
+        content,
+    )?)
 }
 
 #[cfg(test)]
@@ -850,18 +837,25 @@ mod tests {
                 computed_event_id: hex_64('f'),
             },
             RadrootsDraftError::from(RadrootsIdParseError::Empty),
+            RadrootsDraftError::CanonicalEventId(
+                RadrootsCanonicalEventIdError::InvalidComputedEventId(
+                    RadrootsIdParseError::InvalidFormat,
+                ),
+            ),
         ];
 
         for error in errors {
             assert!(!error.to_string().is_empty());
         }
 
-        let json_error = serde_json::from_str::<String>("{").expect_err("json error");
-        let error = RadrootsDraftError::from(json_error);
         assert!(
-            error
-                .to_string()
-                .contains("json string serialization failed")
+            RadrootsDraftError::CanonicalEventId(
+                RadrootsCanonicalEventIdError::InvalidComputedEventId(
+                    RadrootsIdParseError::InvalidFormat,
+                ),
+            )
+            .to_string()
+            .contains("canonical event id digest")
         );
     }
 

@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 #![forbid(unsafe_code)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -61,8 +61,17 @@ pub mod seal;
 pub mod social;
 pub mod tags;
 pub mod trade_validation;
+pub mod wire;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub use wire::{
+    RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsEventWireLimits,
+    RadrootsNip01EventWire, canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
+};
+
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,7 +85,10 @@ pub struct RadrootsEventEnvelope {
     pub sig: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,7 +100,10 @@ pub struct RadrootsEventRef {
     pub relays: Option<Vec<String>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]

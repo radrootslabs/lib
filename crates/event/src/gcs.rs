@@ -3,27 +3,36 @@ use alloc::{string::String, vec::Vec};
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsGeoJsonPoint {
-    #[cfg_attr(feature = "serde", serde(rename = "type"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "type"))]
     pub r#type: String,
     pub coordinates: [f64; 2],
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsGeoJsonPolygon {
-    #[cfg_attr(feature = "serde", serde(rename = "type"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "type"))]
     pub r#type: String,
     pub coordinates: Vec<Vec<[f64; 2]>>,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsGcsLocation {
     pub lat: f64,

@@ -13,7 +13,10 @@ pub const KIND_FARM_CRDT_CHANGE: u32 = KIND_FARM_CRDT_CHANGE_EVENT;
 pub const RADROOTS_FARM_CRDT_CHANGE_SCHEMA: &str = "radroots.farm.crdt.change.v1";
 pub const RADROOTS_FARM_CRDT_TAG: &str = "radroots:farm:crdt";
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmCrdtChange {
     pub schema: String,
@@ -33,8 +36,11 @@ pub struct RadrootsFarmCrdtChange {
     pub app_version: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(from = "String", into = "String"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(from = "String", into = "String"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsFarmCrdtDocumentKind {
     FarmMembership,
@@ -55,7 +61,10 @@ pub enum RadrootsFarmCrdtDocumentKind {
     Other { value: String },
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsCrdtBackend {
     Automerge,
@@ -63,8 +72,11 @@ pub enum RadrootsCrdtBackend {
     Loro,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(from = "String", into = "String"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(from = "String", into = "String"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsFarmSemanticKind {
     FarmTaskCreate,

@@ -3,7 +3,10 @@ use alloc::{string::String, vec::Vec};
 
 use crate::social::{RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsFileMetadata {
     pub url: String,

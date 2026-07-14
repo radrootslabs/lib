@@ -11,7 +11,10 @@ pub const RADROOTS_FARM_WORKSPACE_SCHEMA: &str = "radroots.farm.workspace.v1";
 pub const RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION: &str = "field-nostr-v1";
 pub const RADROOTS_FARM_WORKSPACE_TAG: &str = "radroots:farm:workspace";
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug)]
 pub struct RadrootsFarmWorkspaceManifest {
     pub d_tag: String,
@@ -28,21 +31,30 @@ pub struct RadrootsFarmWorkspaceManifest {
     pub updated_at_ms: Option<u64>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsFarmWorkspaceRef {
     pub pubkey: String,
     pub d_tag: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmWorkspaceRelay {
     pub url: String,
     pub mode: RadrootsFarmWorkspaceRelayMode,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsFarmWorkspaceRelayMode {
     Read,
@@ -50,7 +62,10 @@ pub enum RadrootsFarmWorkspaceRelayMode {
     ReadWrite,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsFarmWorkspaceMediaServer {
     pub url: String,

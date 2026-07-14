@@ -1,0 +1,41 @@
+{
+  "suite": "event",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "nip01_wire_profile_minimal_001",
+      "kind": "event.nip01_wire.valid",
+      "input": {
+        "raw_json": "{\"id\":\"2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"client\":\"radroots-test\"}"
+      },
+      "expected": {
+        "canonical_id_preimage": "[0,\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",1700000001,0,[],\"{}\"]",
+        "computed_event_id": "2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde",
+        "extra_fields": [
+          "client"
+        ]
+      }
+    },
+    {
+      "id": "nip01_wire_escape_002",
+      "kind": "event.nip01_wire.valid",
+      "input": {
+        "raw_json": "{\"id\":\"bb2ca7d7e3718fb17d70263ff0dc4e8bf4e63b9f425b2e32914a20ca9adc7199\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":10,\"kind\":1,\"tags\":[[\"t\",\"line\\nsoil\"]],\"content\":\"\\\"\\\\\\n\\r\\t\\b\\f\\u0001\",\"sig\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"
+      },
+      "expected": {
+        "canonical_id_preimage": "[0,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",10,1,[[\"t\",\"line\\nsoil\"]],\"\\\"\\\\\\n\\r\\t\\b\\f\\u0001\"]",
+        "computed_event_id": "bb2ca7d7e3718fb17d70263ff0dc4e8bf4e63b9f425b2e32914a20ca9adc7199"
+      }
+    },
+    {
+      "id": "nip01_wire_id_mismatch_003",
+      "kind": "event.nip01_wire.invalid",
+      "input": {
+        "raw_json": "{\"id\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
+      },
+      "expected": {
+        "error": "event_id_mismatch"
+      }
+    }
+  ]
+}

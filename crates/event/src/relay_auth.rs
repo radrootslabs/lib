@@ -7,7 +7,10 @@ use alloc::string::String;
 
 pub const KIND_RELAY_AUTH: u32 = KIND_RELAY_AUTH_EVENT;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayAuth {
     pub relay: String,

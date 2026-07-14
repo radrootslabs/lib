@@ -3,41 +3,50 @@ use alloc::string::String;
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum JobInputType {
-    #[cfg_attr(feature = "serde", serde(rename = "url"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "url"))]
     Url,
-    #[cfg_attr(feature = "serde", serde(rename = "event"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "event"))]
     Event,
-    #[cfg_attr(feature = "serde", serde(rename = "job"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "job"))]
     Job,
-    #[cfg_attr(feature = "serde", serde(rename = "text"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "text"))]
     Text,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum JobFeedbackStatus {
-    #[cfg_attr(feature = "serde", serde(rename = "payment_required"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "payment_required"))]
     PaymentRequired,
-    #[cfg_attr(feature = "serde", serde(rename = "processing"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "processing"))]
     Processing,
-    #[cfg_attr(feature = "serde", serde(rename = "error"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "error"))]
     Error,
-    #[cfg_attr(feature = "serde", serde(rename = "success"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "success"))]
     Success,
-    #[cfg_attr(feature = "serde", serde(rename = "partial"))]
+    #[cfg_attr(any(feature = "serde", test), serde(rename = "partial"))]
     Partial,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JobPaymentRequest {
     pub amount_sat: u32,

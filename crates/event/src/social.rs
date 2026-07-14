@@ -3,9 +3,15 @@ use crate::farm::RadrootsFarmRef;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    serde(rename_all = "snake_case", tag = "kind")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsSocialTarget {
     Event {
@@ -27,7 +33,10 @@ pub enum RadrootsSocialTarget {
     },
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default)]
 pub struct RadrootsSocialFarmAnchor {
@@ -35,7 +44,10 @@ pub struct RadrootsSocialFarmAnchor {
     pub relays: Option<Vec<String>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialLocation {
@@ -43,7 +55,10 @@ pub struct RadrootsSocialLocation {
     pub geohash: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaDimensions {
@@ -51,7 +66,10 @@ pub struct RadrootsSocialMediaDimensions {
     pub height: u32,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaThumbnail {
@@ -59,7 +77,10 @@ pub struct RadrootsSocialMediaThumbnail {
     pub dimensions: Option<RadrootsSocialMediaDimensions>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaMetadata {
@@ -82,7 +103,10 @@ pub struct RadrootsSocialMediaMetadata {
     pub imeta: Option<Vec<Vec<String>>>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsCalendarParticipant {
     pub pubkey: String,
@@ -90,14 +114,20 @@ pub struct RadrootsCalendarParticipant {
     pub role: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsCalendarDateValue {
     pub value: String,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsCalendarEventRsvpStatus {
     Accepted,
@@ -105,16 +135,22 @@ pub enum RadrootsCalendarEventRsvpStatus {
     Tentative,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsCalendarEventFreeBusy {
     Free,
     Busy,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsReportType {
     Nudity,
@@ -126,7 +162,10 @@ pub enum RadrootsReportType {
     Other,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsReportFileTarget {
     pub sha256: Option<String>,
@@ -134,7 +173,10 @@ pub struct RadrootsReportFileTarget {
     pub magnet: Option<String>,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReportTarget {
     pub reported_pubkey: String,
