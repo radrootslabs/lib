@@ -4930,10 +4930,8 @@ async fn manual_local_status_perf_gate_measures_100k_events() {
 
     durations.sort_unstable();
     let p95 = durations[(durations.len() * 95 / 100).saturating_sub(1)];
-    let cargo_target_dir =
-        std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "<unset>".to_owned());
     println!(
-        "manual local status performance gate p95_us={} target_us={} total_local_events={PERF_TOTAL_LOCAL_EVENTS} trade_relevant_events={PERF_TRADE_RELEVANT_EVENTS} active_trades={PERF_ACTIVE_TRADES} os={} arch={} cargo_target_dir={cargo_target_dir}",
+        "manual local status performance gate p95_us={} target_us={} total_local_events={PERF_TOTAL_LOCAL_EVENTS} trade_relevant_events={PERF_TRADE_RELEVANT_EVENTS} active_trades={PERF_ACTIVE_TRADES} os={} arch={}",
         p95.as_micros(),
         PERF_STATUS_P95_TARGET.as_micros(),
         std::env::consts::OS,
