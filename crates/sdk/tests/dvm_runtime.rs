@@ -617,10 +617,10 @@ async fn dvm_validation_receipt_ingest_rejects_invalid_receipt_event_id() {
     let mut wire = receipt_event.to_nip01_wire();
     wire.id = "bad id".to_owned();
     let raw_json = serde_json::to_string(&wire).expect("raw event json");
-    let error = RadrootsSignedEvent::from_wire_unchecked(wire, raw_json)
+    let error = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
         .expect_err("invalid receipt event id");
 
-    assert!(error.to_string().contains("event envelope id is invalid"));
+    assert!(error.to_string().contains("event wire id mismatch"));
     assert_eq!(
         store
             .status_summary()

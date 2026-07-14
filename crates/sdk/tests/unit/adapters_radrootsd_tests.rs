@@ -87,8 +87,8 @@ fn spawn_http_server(
 }
 
 fn signed_event() -> RadrootsSignedEvent {
-    let wire = RadrootsNip01EventWire {
-        id: "a".repeat(64),
+    let mut wire = RadrootsNip01EventWire {
+        id: String::new(),
         pubkey: "b".repeat(64),
         created_at: 1_700_000_000,
         kind: 30_402,
@@ -97,17 +97,9 @@ fn signed_event() -> RadrootsSignedEvent {
         sig: "c".repeat(128),
         extra: Default::default(),
     };
-    let raw_json = serde_json::json!({
-        "id": "a".repeat(64),
-        "pubkey": "b".repeat(64),
-        "created_at": 1_700_000_000u32,
-        "kind": 30402u32,
-        "tags": [["d", "listing-1"]],
-        "content": "{\"name\":\"carrots\"}",
-        "sig": "c".repeat(128)
-    })
-    .to_string();
-    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
+    wire.id = wire.computed_event_id().expect("event id").into_string();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
 fn publish_request() -> TransportPublishEventRequest {

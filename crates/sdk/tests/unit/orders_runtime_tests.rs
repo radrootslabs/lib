@@ -654,9 +654,10 @@ fn event_with_content(event: &RadrootsEventEnvelope, content: String) -> Radroot
 }
 
 fn signed_event_from(event: RadrootsEventEnvelope) -> RadrootsSignedEvent {
-    let wire = event.to_nip01_wire();
+    let mut wire = event.to_nip01_wire();
+    wire.id = wire.computed_event_id().expect("event id").into_string();
     let raw_json = serde_json::to_string(&wire).expect("raw event json");
-    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
 fn request_signed_event() -> RadrootsSignedEvent {

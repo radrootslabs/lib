@@ -374,8 +374,8 @@ fn hash32(ch: char) -> String {
 }
 
 fn dummy_event() -> RadrootsSignedEvent {
-    let wire = RadrootsNip01EventWire {
-        id: event_id('9').into_string(),
+    let mut wire = RadrootsNip01EventWire {
+        id: String::new(),
         pubkey: event_id('a').into_string(),
         created_at: 1,
         kind: 3440,
@@ -384,15 +384,7 @@ fn dummy_event() -> RadrootsSignedEvent {
         sig: "b".repeat(128),
         extra: Default::default(),
     };
-    let raw_json = serde_json::json!({
-        "id": wire.id.clone(),
-        "pubkey": wire.pubkey.clone(),
-        "created_at": wire.created_at,
-        "kind": wire.kind,
-        "tags": wire.tags.clone(),
-        "content": wire.content.clone(),
-        "sig": wire.sig.clone()
-    })
-    .to_string();
-    RadrootsSignedEvent::from_wire_unchecked(wire, raw_json).expect("signed event")
+    wire.id = wire.computed_event_id().expect("event id").into_string();
+    let raw_json = serde_json::to_string(&wire).expect("raw event json");
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
