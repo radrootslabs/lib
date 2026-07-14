@@ -480,7 +480,7 @@ impl RadrootsSignedEvent {
         }
         let envelope = wire
             .clone()
-            .into_envelope()
+            .into_envelope_unchecked_id()
             .map_err(RadrootsSignedEventError::Envelope)?;
         Ok(Self {
             envelope,
@@ -495,7 +495,7 @@ impl RadrootsSignedEvent {
     ) -> Result<Self, RadrootsSignedEventError> {
         let envelope = wire
             .clone()
-            .into_envelope()
+            .into_envelope_unchecked_id()
             .map_err(RadrootsSignedEventError::Envelope)?;
         Ok(Self {
             envelope,

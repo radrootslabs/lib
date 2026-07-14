@@ -126,6 +126,7 @@ pub enum RadrootsEventWireError {
         actual: usize,
     },
     CanonicalEventId(RadrootsCanonicalEventIdError),
+    Envelope(RadrootsEventEnvelopeError),
     EventIdMismatch {
         declared: String,
         computed: String,
@@ -181,6 +182,7 @@ impl fmt::Display for RadrootsEventWireError {
                 write!(f, "event wire extra JSON bytes {actual} exceed {max}")
             }
             Self::CanonicalEventId(error) => write!(f, "{error}"),
+            Self::Envelope(error) => write!(f, "{error}"),
             Self::EventIdMismatch { declared, computed } => write!(
                 f,
                 "event wire id mismatch: declared {declared}, computed {computed}"
@@ -195,6 +197,12 @@ impl std::error::Error for RadrootsEventWireError {}
 impl From<RadrootsCanonicalEventIdError> for RadrootsEventWireError {
     fn from(value: RadrootsCanonicalEventIdError) -> Self {
         Self::CanonicalEventId(value)
+    }
+}
+
+impl From<RadrootsEventEnvelopeError> for RadrootsEventWireError {
+    fn from(value: RadrootsEventEnvelopeError) -> Self {
+        Self::Envelope(value)
     }
 }
 
@@ -278,7 +286,15 @@ impl RadrootsNip01EventWire {
         Ok(())
     }
 
-    pub fn into_envelope(self) -> Result<RadrootsEventEnvelope, RadrootsEventEnvelopeError> {
+    pub fn into_envelope(self) -> Result<RadrootsEventEnvelope, RadrootsEventWireError> {
+        self.verify_id()?;
+        self.into_envelope_unchecked_id()
+            .map_err(RadrootsEventWireError::Envelope)
+    }
+
+    pub(crate) fn into_envelope_unchecked_id(
+        self,
+    ) -> Result<RadrootsEventEnvelope, RadrootsEventEnvelopeError> {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: self.id,
             author: self.pubkey,
@@ -666,6 +682,73 @@ mod tests {
             wire.canonical_id_preimage().expect("preimage"),
             r#"[0,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1700000000,1,[["t","soil"]],"hello"]"#
         );
+    }
+
+    #[test]
+    fn into_envelope_verifies_id_before_domain_conversion() {
+        let wire =
+            RadrootsNip01EventWire::parse_json(valid_event_json("hello", default_tags()).as_str())
+                .expect("wire");
+
+        let envelope = wire.clone().into_envelope().expect("envelope");
+        assert_eq!(envelope.id_str(), wire.id);
+        assert_eq!(envelope.content(), "hello");
+
+        let mut tampered_id = wire.clone();
+        tampered_id.id = hex_64('f');
+        assert!(matches!(
+            tampered_id.into_envelope(),
+            Err(RadrootsEventWireError::EventIdMismatch { .. })
+        ));
+
+        let mut tampered_content = wire;
+        tampered_content.content = "tampered".to_owned();
+        assert!(matches!(
+            tampered_content.into_envelope(),
+            Err(RadrootsEventWireError::EventIdMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn into_envelope_ignores_extra_for_id_and_propagates_domain_limits() {
+        let mut value = valid_event_value("hello", default_tags());
+        value
+            .as_object_mut()
+            .expect("object")
+            .insert("client".to_owned(), json!("radroots-test"));
+        let wire = RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
+        let envelope = wire.into_envelope().expect("envelope");
+        assert_eq!(envelope.content(), "hello");
+
+        let content = core::iter::repeat_n('x', DEFAULT_CONTENT_MAX_BYTES + 1).collect::<String>();
+        let tags = default_tags();
+        let pubkey = hex_64('a');
+        let id = compute_canonical_nip01_event_id(
+            pubkey.as_str(),
+            1_700_000_000,
+            1,
+            &tags,
+            content.as_str(),
+        )
+        .expect("event id")
+        .into_string();
+        let wire = RadrootsNip01EventWire {
+            id,
+            pubkey,
+            created_at: 1_700_000_000,
+            kind: 1,
+            tags,
+            content,
+            sig: hex_128('b'),
+            extra: Default::default(),
+        };
+
+        assert!(matches!(
+            wire.into_envelope(),
+            Err(RadrootsEventWireError::Envelope(
+                RadrootsEventEnvelopeError::ContentTooLarge { .. }
+            ))
+        ));
     }
 
     #[cfg(feature = "serde")]
