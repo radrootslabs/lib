@@ -1,0 +1,47 @@
+{
+  "suite": "mesh",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "mesh_frame_cbor_default_001",
+      "kind": "mesh.frame_cbor.valid",
+      "input": {
+        "hex": "a70001010002656c6f63616c03696d6573736167652d3104182a0519ea6006a0"
+      },
+      "expected": {
+        "message_id": "message-1",
+        "scope": "local"
+      }
+    },
+    {
+      "id": "mesh_frame_cbor_unsupported_version_002",
+      "kind": "mesh.frame_cbor.invalid",
+      "input": {
+        "hex": "a70002010002656c6f63616c03696d6573736167652d3104182a0519ea6006a0"
+      },
+      "expected": {
+        "error": "unsupported_version"
+      }
+    },
+    {
+      "id": "mesh_frame_cbor_wrong_key_order_003",
+      "kind": "mesh.frame_cbor.invalid",
+      "input": {
+        "hex": "a70001020002656c6f63616c03696d6573736167652d3104182a0519ea6006a0"
+      },
+      "expected": {
+        "error": "invalid_cbor"
+      }
+    },
+    {
+      "id": "mesh_frame_cbor_payload_bytes_004",
+      "kind": "mesh.frame_cbor.invalid",
+      "input": {
+        "hex": "a70001010002656c6f63616c03696d6573736167652d3104182a0519ea600643010203"
+      },
+      "expected": {
+        "error": "payload_transmission_forbidden"
+      }
+    }
+  ]
+}

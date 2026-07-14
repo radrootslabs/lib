@@ -5,6 +5,7 @@ use radroots_mesh::{
     RadrootsMeshPayloadPolicy, RadrootsMeshPolicyDenyReason, RadrootsMeshPrivacyClass,
     RadrootsMeshScope, decode_mesh_frame_cbor, encode_mesh_frame_cbor,
 };
+use serde_json::Value;
 
 fn default_frame() -> RadrootsMeshFrame {
     RadrootsMeshFrame::new(
@@ -437,4 +438,69 @@ fn decoder_rejects_malformed_cbor_shapes() {
         decode_mesh_frame_cbor(&trailing).expect_err("trailing byte"),
         RadrootsMeshError::InvalidCbor
     );
+}
+
+#[test]
+fn checked_in_mesh_cbor_vectors_match_decoder_behavior() {
+    let vectors = include_str!("../../../contracts/conformance/vectors/mesh/frame_cbor.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("mesh cbor vector json");
+    let entries = document
+        .get("vectors")
+        .and_then(Value::as_array)
+        .expect("mesh cbor vectors");
+
+    for entry in entries {
+        let kind = entry.get("kind").and_then(Value::as_str).expect("kind");
+        let hex = entry
+            .get("input")
+            .and_then(|input| input.get("hex"))
+            .and_then(Value::as_str)
+            .expect("input hex");
+        let bytes = decode_hex(hex);
+        match kind {
+            "mesh.frame_cbor.valid" => {
+                let frame = decode_mesh_frame_cbor(bytes.as_slice()).expect("mesh frame");
+                let expected = entry.get("expected").expect("expected");
+                assert_eq!(
+                    frame.message_id,
+                    expected
+                        .get("message_id")
+                        .and_then(Value::as_str)
+                        .expect("message id")
+                );
+                assert_eq!(
+                    frame.scope_id.label(),
+                    expected
+                        .get("scope")
+                        .and_then(Value::as_str)
+                        .expect("scope")
+                );
+            }
+            "mesh.frame_cbor.invalid" => {
+                assert!(decode_mesh_frame_cbor(bytes.as_slice()).is_err());
+            }
+            other => panic!("unknown mesh cbor vector kind {other}"),
+        }
+    }
+}
+
+fn decode_hex(value: &str) -> Vec<u8> {
+    assert_eq!(value.len() % 2, 0, "hex fixture length must be even");
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|chunk| {
+            let high = hex_nibble(chunk[0]);
+            let low = hex_nibble(chunk[1]);
+            (high << 4) | low
+        })
+        .collect()
+}
+
+fn hex_nibble(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        _ => panic!("hex fixture contains non-lowercase-hex byte"),
+    }
 }

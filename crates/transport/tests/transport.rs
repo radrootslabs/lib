@@ -10,6 +10,7 @@ use radroots_transport::{
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
+use serde_json::Value;
 
 fn opaque_payload() -> RadrootsTransportPayload {
     RadrootsTransportPayload::opaque_bytes("transport-test-payload", b"transport payload")
@@ -592,6 +593,56 @@ fn transport_kind_and_target_parsers_cover_negative_edges() {
             RadrootsTransportTargetUri::parse(invalid).expect_err("invalid uri"),
             RadrootsTransportError::InvalidTargetUri
         );
+    }
+}
+
+#[test]
+fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/transport/target_uri.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("transport target vector json");
+    let entries = document
+        .get("vectors")
+        .and_then(Value::as_array)
+        .expect("transport target vectors");
+
+    for entry in entries {
+        let kind = entry.get("kind").and_then(Value::as_str).expect("kind");
+        let raw_uri = entry
+            .get("input")
+            .and_then(|input| input.get("uri"))
+            .and_then(Value::as_str)
+            .expect("input uri");
+        let expected = entry.get("expected").expect("expected");
+        match kind {
+            "transport.target_uri.valid" => {
+                let target = RadrootsTransportTargetUri::parse(raw_uri).expect("target URI");
+                assert_eq!(
+                    target.as_str(),
+                    expected
+                        .get("canonical_uri")
+                        .and_then(Value::as_str)
+                        .expect("canonical uri")
+                );
+            }
+            "transport.target_uri.invalid" => {
+                assert!(RadrootsTransportTargetUri::parse(raw_uri).is_err());
+            }
+            "transport.nostr_relay_target.valid" => {
+                let target = RadrootsTransportTarget::nostr_relay(raw_uri).expect("relay target");
+                assert_eq!(
+                    target.uri.as_str(),
+                    expected
+                        .get("canonical_uri")
+                        .and_then(Value::as_str)
+                        .expect("canonical uri")
+                );
+            }
+            "transport.nostr_relay_target.invalid" => {
+                assert!(RadrootsTransportTarget::nostr_relay(raw_uri).is_err());
+            }
+            other => panic!("unknown transport target vector kind {other}"),
+        }
     }
 }
 

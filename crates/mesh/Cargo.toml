@@ -19,5 +19,8 @@ serde = ["dep:serde"]
 radroots_transport = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true }
 
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

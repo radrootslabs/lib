@@ -1,4 +1,4 @@
-use radroots_replica_schema::farm::FarmQueryBindValues;
+use radroots_replica_schema::farm::{Farm, FarmQueryBindValues};
 use radroots_replica_schema::farm_gcs_location::FarmGcsLocationQueryBindValues;
 use radroots_replica_schema::farm_member::FarmMemberQueryBindValues;
 use radroots_replica_schema::farm_member_claim::FarmMemberClaimQueryBindValues;
@@ -15,7 +15,7 @@ use radroots_replica_schema::plot_tag::PlotTagQueryBindValues;
 use radroots_replica_schema::result::{
     ReplicaSchemaError, ReplicaSchemaResult, ReplicaSchemaResultList, ReplicaSchemaResultPass,
 };
-use radroots_replica_schema::trade_product::TradeProductQueryBindValues;
+use radroots_replica_schema::trade_product::{TradeProduct, TradeProductQueryBindValues};
 use serde_json::Value;
 
 macro_rules! assert_query_bind_values {
@@ -385,4 +385,52 @@ fn schema_result_wrappers_cover_constructors_and_status_labels() {
 
     assert_eq!(ReplicaSchemaResultPass::new(true).status_label(), "pass");
     assert_eq!(ReplicaSchemaResultPass::new(false).status_label(), "fail");
+}
+
+#[test]
+fn checked_in_replica_schema_json_vectors_match_model_behavior() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/replica_schema/json_models.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("replica schema vector json");
+    let entries = document
+        .get("vectors")
+        .and_then(Value::as_array)
+        .expect("replica schema vectors");
+
+    for entry in entries {
+        let kind = entry.get("kind").and_then(Value::as_str).expect("kind");
+        let input_json = entry
+            .get("input")
+            .and_then(|input| input.get("json"))
+            .expect("input json")
+            .clone();
+        let expected = entry.get("expected").expect("expected");
+        match kind {
+            "replica_schema.farm_json.valid" => {
+                let farm: Farm = serde_json::from_value(input_json).expect("farm json");
+                assert_eq!(
+                    farm.id,
+                    expected.get("id").and_then(Value::as_str).expect("farm id")
+                );
+            }
+            "replica_schema.farm_json.invalid" => {
+                assert!(serde_json::from_value::<Farm>(input_json).is_err());
+            }
+            "replica_schema.trade_product_json.valid" => {
+                let product: TradeProduct =
+                    serde_json::from_value(input_json).expect("trade product json");
+                assert_eq!(
+                    product.id,
+                    expected
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .expect("trade product id")
+                );
+            }
+            "replica_schema.trade_product_json.invalid" => {
+                assert!(serde_json::from_value::<TradeProduct>(input_json).is_err());
+            }
+            other => panic!("unknown replica schema vector kind {other}"),
+        }
+    }
 }

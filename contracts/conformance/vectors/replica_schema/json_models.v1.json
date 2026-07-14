@@ -1,0 +1,115 @@
+{
+  "suite": "replica_schema",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "replica_schema_farm_json_valid_001",
+      "kind": "replica_schema.farm_json.valid",
+      "input": {
+        "json": {
+          "id": "farm-alpha",
+          "created_at": "2026-07-14T00:00:00Z",
+          "updated_at": "2026-07-14T00:00:00Z",
+          "d_tag": "farm-alpha",
+          "pubkey": "1111111111111111111111111111111111111111111111111111111111111111",
+          "name": "Radroots Fixture Farm",
+          "about": null,
+          "website": null,
+          "picture": null,
+          "banner": null,
+          "location_primary": null,
+          "location_city": "Fixture City",
+          "location_region": "Fixture Region",
+          "location_country": "Fixture Country"
+        }
+      },
+      "expected": {
+        "id": "farm-alpha"
+      }
+    },
+    {
+      "id": "replica_schema_farm_json_missing_required_002",
+      "kind": "replica_schema.farm_json.invalid",
+      "input": {
+        "json": {
+          "id": "farm-alpha",
+          "created_at": "2026-07-14T00:00:00Z",
+          "updated_at": "2026-07-14T00:00:00Z",
+          "d_tag": "farm-alpha",
+          "pubkey": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      },
+      "expected": {
+        "error": "missing_required_field"
+      }
+    },
+    {
+      "id": "replica_schema_trade_product_json_valid_003",
+      "kind": "replica_schema.trade_product_json.valid",
+      "input": {
+        "json": {
+          "id": "trade-product-alpha",
+          "created_at": "2026-07-14T00:00:00Z",
+          "updated_at": "2026-07-14T00:00:00Z",
+          "key": "fixture-carrot",
+          "category": "produce",
+          "title": "Fixture Carrots",
+          "summary": "Synthetic fixture product",
+          "process": "fresh",
+          "lot": "lot-alpha",
+          "profile": "farm-alpha",
+          "year": 2026,
+          "qty_amt": 12.5,
+          "qty_amt_exact": "12.5",
+          "qty_unit": "kg",
+          "qty_label": null,
+          "qty_avail": 12,
+          "price_amt": 6.25,
+          "price_amt_exact": "6.25",
+          "price_currency": "USD",
+          "price_qty_amt": 1.0,
+          "price_qty_amt_exact": "1.0",
+          "price_qty_unit": "kg",
+          "listing_addr": null,
+          "primary_bin_id": null,
+          "verified_primary_bin_id": null,
+          "notes": null
+        }
+      },
+      "expected": {
+        "id": "trade-product-alpha"
+      }
+    },
+    {
+      "id": "replica_schema_trade_product_json_wrong_type_004",
+      "kind": "replica_schema.trade_product_json.invalid",
+      "input": {
+        "json": {
+          "id": "trade-product-alpha",
+          "created_at": "2026-07-14T00:00:00Z",
+          "updated_at": "2026-07-14T00:00:00Z",
+          "key": "fixture-carrot",
+          "category": "produce",
+          "title": "Fixture Carrots",
+          "summary": "Synthetic fixture product",
+          "process": "fresh",
+          "lot": "lot-alpha",
+          "profile": "farm-alpha",
+          "year": "2026",
+          "qty_amt": 12.5,
+          "qty_amt_exact": "12.5",
+          "qty_unit": "kg",
+          "price_amt": 6.25,
+          "price_amt_exact": "6.25",
+          "price_currency": "USD",
+          "price_qty_amt": 1.0,
+          "price_qty_amt_exact": "1.0",
+          "price_qty_unit": "kg"
+        }
+      },
+      "expected": {
+        "error": "wrong_type"
+      }
+    }
+  ]
+}
