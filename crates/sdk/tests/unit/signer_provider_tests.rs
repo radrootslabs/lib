@@ -1,6 +1,7 @@
 use super::*;
 use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
+use radroots_authority::RadrootsLocalEventSigner;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::draft::RadrootsEventDraft;
 use radroots_event::kinds::{KIND_COOP, KIND_FARM};
@@ -31,6 +32,13 @@ fn keys(secret_key_hex: &str) -> RadrootsNostrKeys {
 
 fn user_keys() -> RadrootsNostrKeys {
     keys(USER_SECRET_KEY_HEX)
+}
+
+fn local_sdk_signer(keys: RadrootsNostrKeys) -> RadrootsSdkLocalKeySigner {
+    RadrootsSdkLocalKeySigner::from_event_signer(
+        RadrootsLocalEventSigner::new(keys).expect("local event signer"),
+    )
+    .expect("sdk local signer")
 }
 
 fn remote_keys() -> RadrootsNostrKeys {
@@ -230,7 +238,7 @@ impl RadrootsSdkNip46Transport for HangingNip46Transport {
 
 #[tokio::test]
 async fn local_key_provider_signs_authorized_frozen_draft() {
-    let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
+    let signer = local_sdk_signer(user_keys());
     let provider = RadrootsSdkSignerProvider::LocalKey(signer.clone());
     let draft = frozen_draft();
     let actor = actor();
@@ -269,7 +277,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
 
 #[tokio::test]
 async fn local_key_provider_returns_progress_sink_errors_without_transport_state() {
-    let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
+    let signer = local_sdk_signer(user_keys());
     let draft = frozen_draft();
     let actor = actor();
     let wrong_actor = RadrootsActorContext::test("a".repeat(64), [RadrootsActorRole::Farmer])
@@ -1022,7 +1030,7 @@ async fn sdk_builder_installs_configured_signer_provider() {
             if mode == "configured" && reason.contains("no SDK signer provider")
     ));
 
-    let signer = RadrootsSdkLocalKeySigner::new(user_keys()).expect("signer");
+    let signer = local_sdk_signer(user_keys());
     let sdk = crate::RadrootsClient::builder()
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()

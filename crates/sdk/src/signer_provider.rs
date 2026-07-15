@@ -1,7 +1,5 @@
 use crate::RadrootsSdkError;
 use nostr::{JsonUtil, Kind, PublicKey, Tag, Tags, Timestamp, UnsignedEvent};
-#[cfg(feature = "local-signer")]
-use radroots_authority::RadrootsLocalEventSigner;
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, authorize_actor_for_draft,
     authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
@@ -26,6 +24,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
+pub type RadrootsSdkLocalSignerCapability = dyn RadrootsEventSigner + Send + Sync;
 
 pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 5] = [
     KIND_FARM,
@@ -212,17 +211,25 @@ impl RadrootsSdkSignerProvider {
 #[cfg(feature = "local-signer")]
 #[derive(Clone)]
 pub struct RadrootsSdkLocalKeySigner {
-    signer: Arc<RadrootsLocalEventSigner>,
+    signer: Arc<RadrootsSdkLocalSignerCapability>,
     signer_pubkey: String,
 }
 
 #[cfg(feature = "local-signer")]
 impl RadrootsSdkLocalKeySigner {
-    pub fn new(keys: RadrootsNostrKeys) -> Result<Self, RadrootsSdkError> {
-        let signer = RadrootsLocalEventSigner::new(keys)?;
+    pub fn from_event_signer<S>(signer: S) -> Result<Self, RadrootsSdkError>
+    where
+        S: RadrootsEventSigner + Send + Sync + 'static,
+    {
+        Self::from_shared_event_signer(Arc::new(signer))
+    }
+
+    pub fn from_shared_event_signer(
+        signer: Arc<RadrootsSdkLocalSignerCapability>,
+    ) -> Result<Self, RadrootsSdkError> {
         let signer_pubkey = signer.pubkey().as_str().to_owned();
         Ok(Self {
-            signer: Arc::new(signer),
+            signer,
             signer_pubkey,
         })
     }

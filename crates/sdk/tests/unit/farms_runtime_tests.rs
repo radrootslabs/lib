@@ -1,6 +1,5 @@
 use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
-use radroots_nostr::prelude::RadrootsNostrKeys;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 use crate::fixture_signer::FixtureSigner;
@@ -595,18 +594,16 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
 
 #[tokio::test]
 async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer() {
-    let keys = RadrootsNostrKeys::generate();
-    let farmer = keys.public_key().to_hex();
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(keys).expect("signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(FARMER))
+                .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer.as_str(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor");
 
     let receipt = sdk
         .farms()
@@ -629,18 +626,16 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
 
 #[tokio::test]
 async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
-    let keys = RadrootsNostrKeys::generate();
-    let farmer = keys.public_key().to_hex();
     let configured_sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(keys).expect("signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(FARMER))
+                .expect("signer"),
         ))
         .build()
         .await
         .expect("configured sdk");
-    let actor =
-        RadrootsActorContext::test(farmer.as_str(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor");
 
     assert!(matches!(
         configured_sdk

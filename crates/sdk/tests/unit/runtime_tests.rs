@@ -68,7 +68,7 @@ fn sqlite_status() -> SdkSqliteStoreStatus {
 
 fn private_sqlite_status() -> SdkSqliteStoreStatus {
     SdkSqliteStoreStatus {
-        schema_version: 2,
+        schema_version: 1,
         ..sqlite_status()
     }
 }
@@ -276,7 +276,7 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
 
-    sqlx::query("DROP TABLE sdk_private_farm_location")
+    sqlx::query("DROP TABLE private_farm_location")
         .execute(store.pool())
         .await
         .expect("drop private location table");
@@ -779,7 +779,7 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     assert_outbox_error(outbox_status_summary(&outbox_summary_error._outbox, 1).await);
 
     let private_summary_error = RadrootsClient::builder().build().await.expect("sdk");
-    sqlx::query("DROP TABLE sdk_private_farm_location")
+    sqlx::query("DROP TABLE private_farm_location")
         .execute(private_summary_error._private_store.pool())
         .await
         .expect("drop private location");

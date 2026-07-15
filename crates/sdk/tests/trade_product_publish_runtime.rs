@@ -5,7 +5,7 @@
     feature = "radrootsd-execution"
 ))]
 
-use radroots_authority::RadrootsActorContext;
+use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
@@ -240,7 +240,10 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(
+                RadrootsLocalEventSigner::new(signer_keys).expect("local event signer"),
+            )
+            .expect("local signer"),
         ))
         .radrootsd_execution_profile(RadrootsdExecutionProfile::new(endpoint))
         .build()

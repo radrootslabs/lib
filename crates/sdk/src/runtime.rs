@@ -1200,7 +1200,7 @@ async fn private_store_status_summary_from_pool(
     Ok(crate::private_store::SdkPrivateStoreStatusSummary {
         farm_private_locations: sqlite_query_i64(
             pool,
-            "SELECT COUNT(*) FROM sdk_private_farm_location",
+            "SELECT COUNT(*) FROM private_farm_location",
             SqliteStoreRole::PrivateStore,
         )
         .await?,

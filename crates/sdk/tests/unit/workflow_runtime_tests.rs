@@ -481,15 +481,14 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
 #[cfg(feature = "signer-adapters")]
 #[tokio::test]
 async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
-    let secret_key = RadrootsNostrSecretKey::from_hex(FARMER_SECRET_KEY_HEX).expect("secret key");
-    let keys = RadrootsNostrKeys::new(secret_key);
     let sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_011,
         ))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(keys).expect("local signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(WorkflowSigner::new())
+                .expect("local signer"),
         ))
         .build()
         .await

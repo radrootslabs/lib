@@ -1268,6 +1268,100 @@ fn retired_dvm_runtime_public_exports_are_absent() {
 }
 
 #[test]
+fn local_sdk_signer_uses_event_signer_capability_boundary() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let signer_source = read_source(manifest_dir.join("src/signer_provider.rs").as_path());
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
+
+    for required in [
+        "pub type RadrootsSdkLocalSignerCapability",
+        "dyn RadrootsEventSigner + Send + Sync",
+        "Arc<RadrootsSdkLocalSignerCapability>",
+        "pub fn from_event_signer",
+        "pub fn from_shared_event_signer",
+    ] {
+        assert!(
+            signer_source.contains(required),
+            "signer provider must expose the protected local signer capability boundary `{required}`"
+        );
+    }
+
+    assert!(
+        lib_source.contains("RadrootsSdkLocalSignerCapability"),
+        "SDK root exports the local signer capability type for downstream protected signer wiring"
+    );
+    for forbidden in [
+        "RadrootsSdkLocalKeySigner::new",
+        "pub fn new(keys",
+        "RadrootsLocalEventSigner",
+    ] {
+        assert!(
+            !signer_source.contains(forbidden),
+            "signer provider must not expose or couple to retired raw local signer constructor `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn private_store_schema_is_v1_encrypted_private_authority_only() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = read_source(manifest_dir.join("src/private_store.rs").as_path());
+
+    for required in [
+        "private_metadata",
+        "wrapped_profile_key",
+        "wrapped_signing_secret",
+        "private_farm_location",
+        "trade_private_thread",
+        "buyer_contact_private",
+        "cursor_hmac_key",
+        "nip46_session_private",
+        "key_rotation_progress",
+        "RadrootsProtectedStoreEnvelope",
+        "RadrootsProtectedFileKeySource",
+        "credential_backend",
+    ] {
+        assert!(
+            source.contains(required),
+            "private store source must contain V1 encrypted private authority contract `{required}`"
+        );
+    }
+
+    assert!(
+        !source.contains("CREATE TABLE IF NOT EXISTS sdk_private_farm_location"),
+        "retired plaintext SDK private farm-location table must not be created"
+    );
+    assert!(
+        source.matches("sdk_private_farm_location").count() == 1
+            && source.contains("reject_pre_v1_private_store"),
+        "the retired private table name may appear only in the fail-closed pre-V1 rejection check"
+    );
+    let migration_start = source
+        .find("const PRIVATE_STORE_MIGRATION_UP")
+        .expect("private store migration must exist");
+    let migration_end = source[migration_start..]
+        .find("\"#;")
+        .map(|offset| migration_start + offset)
+        .expect("private store migration must close");
+    let migration = &source[migration_start..migration_end];
+    for forbidden_plaintext_column in [
+        "label TEXT",
+        "latitude REAL",
+        "longitude REAL",
+        "locality_city TEXT",
+        "locality_region TEXT",
+        "locality_country TEXT",
+        "geohash5 TEXT",
+        "geonames_id",
+    ] {
+        assert!(
+            !migration.contains(forbidden_plaintext_column),
+            "private farm-location migration must not expose plaintext column `{forbidden_plaintext_column}`"
+        );
+    }
+}
+
+#[test]
 fn identity_public_surface_is_an_explicit_feature_module() {
     let lib_source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))

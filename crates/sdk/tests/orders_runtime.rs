@@ -12,6 +12,8 @@ use futures::future::BoxFuture;
 use nostr::JsonUtil;
 #[cfg(feature = "signer-adapters")]
 use radroots_authority::RadrootsActorContext;
+#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
+use radroots_authority::RadrootsLocalEventSigner;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
@@ -468,7 +470,10 @@ async fn directory_sdk_with_signer_and_relays(
         .directory_storage(storage_root)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(
+                RadrootsLocalEventSigner::new(signer_keys).expect("local event signer"),
+            )
+            .expect("local signer"),
         ));
     if !relays.is_empty() {
         builder = builder.transport_profile(TransportProfile::nostr(

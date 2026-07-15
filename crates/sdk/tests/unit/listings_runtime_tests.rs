@@ -11,7 +11,6 @@ use radroots_event::{
     listing::{RadrootsListingBin, RadrootsListingProduct},
     resource_area::RadrootsResourceAreaRef,
 };
-use radroots_nostr::prelude::RadrootsNostrKeys;
 
 use crate::fixture_signer::FixtureSigner;
 use crate::serializer_failure::assert_struct_serialize_error_paths;
@@ -303,25 +302,23 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
 
 #[tokio::test]
 async fn listing_configured_local_signer_enqueues_publish_without_explicit_signer() {
-    let keys = RadrootsNostrKeys::generate();
-    let seller = keys.public_key().to_hex();
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::new(keys).expect("signer"),
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(SELLER))
+                .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller]).expect("actor");
+    let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor");
 
     let receipt = sdk
         .listings()
         .enqueue_publish(
             ListingEnqueuePublishRequest::new(
                 actor,
-                listing_for_seller(seller.as_str(), LISTING_C_D_TAG, "Configured Greens"),
+                listing_for_seller(SELLER, LISTING_C_D_TAG, "Configured Greens"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )

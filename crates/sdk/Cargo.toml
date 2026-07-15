@@ -81,10 +81,12 @@ runtime = [
   "dep:radroots_event_store",
   "dep:radroots_geocoder",
   "dep:radroots_outbox",
+  "dep:radroots_protected_store",
   "dep:radroots_transport",
   "dep:radroots_transport_nostr",
   "dep:radroots_transport_reticulum",
   "dep:radroots_runtime_paths",
+  "dep:radroots_secret_vault",
   "dep:sha2",
   "dep:sqlx",
   "dep:uuid",
@@ -93,6 +95,8 @@ runtime = [
   "radroots_event_store/runtime-tokio",
   "radroots_outbox/sqlite",
   "radroots_outbox/runtime-tokio",
+  "radroots_protected_store/std",
+  "radroots_secret_vault/std",
   "radroots_transport/serde",
   "radroots_transport_nostr/std",
   "radroots_transport_nostr/storage",
@@ -136,11 +140,13 @@ radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
+radroots_protected_store = { workspace = true, optional = true, default-features = false }
 radroots_transport = { workspace = true, optional = true, default-features = false }
 radroots_transport_publish_protocol = { workspace = true, optional = true, default-features = false }
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
+radroots_secret_vault = { workspace = true, optional = true, default-features = false }
 radroots_runtime_contract_v1 = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }

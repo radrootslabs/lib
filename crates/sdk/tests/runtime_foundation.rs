@@ -230,7 +230,7 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
     assert_eq!(status.paths, None);
     assert_eq!(status.event_store.store.schema_version, 1);
     assert_eq!(status.outbox.store.schema_version, 1);
-    assert_eq!(status.private_store.store.schema_version, 2);
+    assert_eq!(status.private_store.store.schema_version, 1);
     assert!(status.event_store.store.foreign_keys_enabled);
     assert!(status.outbox.store.foreign_keys_enabled);
     assert!(status.private_store.store.foreign_keys_enabled);
@@ -740,7 +740,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         checkpoint_complete: true,
     };
     let private_store = SdkSqliteStoreStatus {
-        schema_version: 2,
+        schema_version: 1,
         ..store.clone()
     };
     assert_eq!(
@@ -829,7 +829,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
             },
             "private_store": {
                 "store": {
-                    "schema_version": 2,
+                    "schema_version": 1,
                     "journal_mode": "wal",
                     "foreign_keys_enabled": true,
                     "busy_timeout_ms": 5000,

@@ -1,4 +1,4 @@
-use radroots_authority::RadrootsActorContext;
+use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
@@ -21,7 +21,8 @@ const LOCAL_RELAY: &str = "ws://localhost:7777";
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keys = RadrootsNostrKeys::generate();
     let seller = keys.public_key().to_hex();
-    let signer = RadrootsSdkLocalKeySigner::new(keys)?;
+    let signer =
+        RadrootsSdkLocalKeySigner::from_event_signer(RadrootsLocalEventSigner::new(keys)?)?;
     let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))

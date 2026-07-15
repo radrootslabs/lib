@@ -1,10 +1,7 @@
 use super::*;
 use radroots_event::ids::RadrootsAddressableCoordinate;
+use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-
-fn farm_addr() -> RadrootsAddressableCoordinate {
-    farm_addr_for("AAAAAAAAAAAAAAAAAAAAAA")
-}
 
 fn farm_addr_for(d_tag: &str) -> RadrootsAddressableCoordinate {
     RadrootsAddressableCoordinate::parse(format!(
@@ -16,11 +13,8 @@ fn farm_addr_for(d_tag: &str) -> RadrootsAddressableCoordinate {
     .expect("farm addr")
 }
 
-fn private_store_error_message<T>(result: Result<T, RadrootsSdkError>) -> String {
-    match result.err().expect("private store error") {
-        RadrootsSdkError::PrivateStore { message } => message,
-        other => panic!("expected private store error, got {other:?}"),
-    }
+fn farm_addr() -> RadrootsAddressableCoordinate {
+    farm_addr_for("AAAAAAAAAAAAAAAAAAAAAA")
 }
 
 fn private_location_record() -> SdkPrivateFarmLocationRecord {
@@ -39,48 +33,6 @@ fn private_location_record() -> SdkPrivateFarmLocationRecord {
         geonames_feature_id: Some(1),
         geonames_country_id: Some("FX".to_owned()),
         updated_at_ms: 1_700_000_123_000,
-    }
-}
-
-#[tokio::test]
-async fn private_farm_location_row_decode_reports_each_missing_column() {
-    let store = SdkPrivateStore::open_memory().await.expect("private store");
-    let columns = [
-        (
-            "farm_pubkey",
-            "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
-        ),
-        ("farm_d_tag", "'AAAAAAAAAAAAAAAAAAAAAA'"),
-        ("label", "'Main pickup point'"),
-        ("latitude", "12.26"),
-        ("longitude", "-34.51"),
-        ("locality_primary", "'Fixture Town'"),
-        ("locality_city", "'Fixture Town'"),
-        ("locality_region", "'Fixture Region'"),
-        ("locality_country", "'Fixture Country'"),
-        ("geohash5", "'e4pmw'"),
-        ("geonames_feature_id", "1"),
-        ("geonames_country_id", "'FX'"),
-        ("updated_at_ms", "1700000123000"),
-    ];
-
-    for missing in columns.map(|(name, _)| name) {
-        let select = columns
-            .iter()
-            .filter(|(name, _)| *name != missing)
-            .map(|(name, value)| format!("{value} AS {name}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!("SELECT {select}");
-        let row = sqlx::query(sqlx::AssertSqlSafe(sql))
-            .fetch_one(store.pool())
-            .await
-            .expect("row");
-        let message = private_store_error_message(private_farm_location_from_row(farm_addr(), row));
-        assert!(
-            message.contains(missing),
-            "{message:?} should mention {missing:?}"
-        );
     }
 }
 
@@ -128,6 +80,7 @@ async fn private_store_status_update_delete_and_pragmas_round_trip() {
         .upsert_farm_location(&record)
         .await
         .expect("insert private location");
+    assert_private_farm_location_payload_is_encrypted(&store, &record).await;
     assert_eq!(
         store
             .status_summary()
@@ -194,7 +147,7 @@ async fn private_store_status_update_delete_and_pragmas_round_trip() {
 }
 
 #[tokio::test]
-async fn private_store_file_open_rejects_pre_label_schema_without_repair() {
+async fn private_store_file_open_rejects_pre_v1_schema_without_repair() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let path = tempdir.path().join("private.sqlite");
     let options = SqliteConnectOptions::new()
@@ -229,10 +182,110 @@ async fn private_store_file_open_rejects_pre_label_schema_without_repair() {
     .expect("old private store schema");
     pool.close().await;
 
-    let store = SdkPrivateStore::open_file(&path).await.expect("open store");
-    let record = private_location_record();
     assert!(matches!(
-        store.upsert_farm_location(&record).await,
-        Err(RadrootsSdkError::PrivateStore { .. })
+        SdkPrivateStore::open_file(&path).await,
+        Err(RadrootsSdkError::UnsupportedProfileSchema { .. })
     ));
+}
+
+#[tokio::test]
+async fn private_store_schema_uses_v1_private_authority_tables() {
+    let store = SdkPrivateStore::open_memory().await.expect("private store");
+    let tables = sqlx::query(
+        r#"
+        SELECT name FROM sqlite_master
+        WHERE type = 'table'
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(store.pool())
+    .await
+    .expect("tables")
+    .into_iter()
+    .map(|row| row.try_get::<String, _>("name").expect("name"))
+    .collect::<Vec<_>>();
+
+    for table in [
+        "buyer_contact_private",
+        "cursor_hmac_key",
+        "key_rotation_progress",
+        "nip46_session_private",
+        "private_farm_location",
+        "private_metadata",
+        "trade_private_thread",
+        "wrapped_profile_key",
+        "wrapped_signing_secret",
+    ] {
+        assert!(tables.iter().any(|name| name == table), "missing {table}");
+    }
+    assert!(
+        !tables
+            .iter()
+            .any(|name| name == "sdk_private_farm_location")
+    );
+
+    let columns = sqlx::query("PRAGMA table_info(private_farm_location)")
+        .fetch_all(store.pool())
+        .await
+        .expect("columns")
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").expect("column name"))
+        .collect::<Vec<_>>();
+    for forbidden in [
+        "label",
+        "latitude",
+        "longitude",
+        "locality_primary",
+        "locality_city",
+        "locality_region",
+        "locality_country",
+        "geohash5",
+        "geonames_feature_id",
+        "geonames_country_id",
+    ] {
+        assert!(
+            !columns.iter().any(|column| column == forbidden),
+            "private_farm_location must not retain plaintext column {forbidden}"
+        );
+    }
+}
+
+async fn assert_private_farm_location_payload_is_encrypted(
+    store: &SdkPrivateStore,
+    record: &SdkPrivateFarmLocationRecord,
+) {
+    let row = sqlx::query(
+        r#"
+        SELECT ciphertext, nonce
+        FROM private_farm_location
+        WHERE farm_kind = 30340
+        "#,
+    )
+    .fetch_one(store.pool())
+    .await
+    .expect("encrypted private location row");
+    let ciphertext: Vec<u8> = row.try_get("ciphertext").expect("ciphertext");
+    let nonce: Vec<u8> = row.try_get("nonce").expect("nonce");
+    assert_eq!(nonce.len(), 24);
+    let rendered = String::from_utf8_lossy(ciphertext.as_slice());
+    let forbidden_values = vec![
+        record.label.clone().expect("label"),
+        record.latitude.to_string(),
+        record.longitude.to_string(),
+        record.locality_primary.clone(),
+        record.locality_city.clone().expect("city"),
+        record.locality_region.clone().expect("region"),
+        record.locality_country.clone().expect("country"),
+        record.geohash5.clone(),
+        record
+            .geonames_country_id
+            .clone()
+            .expect("geonames country"),
+    ];
+    for forbidden in forbidden_values {
+        assert!(
+            !rendered.contains(forbidden.as_str()),
+            "encrypted private location payload leaked {forbidden}"
+        );
+    }
 }
