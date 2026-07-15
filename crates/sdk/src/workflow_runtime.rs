@@ -1,8 +1,8 @@
 #[cfg(feature = "signer-adapters")]
 use crate::RadrootsSdkSignRequest;
 use crate::{
-    RadrootsClient, RadrootsSdkError, ReticulumPreviewBehavior, SatisfactionPolicy,
-    SdkIdempotencyKey, TargetPolicy, TargetSet, TransportProfile, runtime::sdk_now_ms,
+    RadrootsClient, RadrootsSdkError, ReticulumBehavior, SatisfactionPolicy, SdkIdempotencyKey,
+    TargetPolicy, TargetSet, TransportProfile, runtime::sdk_now_ms,
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
@@ -13,10 +13,12 @@ use radroots_event_store::{
     RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_outbox::{
-    RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus,
-    RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus, RadrootsOutboxReticulumBehavior,
+    RadrootsOutboxSignedOperationInput,
 };
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
+use radroots_transport::{
+    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
+};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 
@@ -168,14 +170,9 @@ fn resolved_delivery_plan(
     match target_policy {
         TargetPolicy::Explicit(target_policy) => {
             let targets = target_policy.clone().into_targets();
-            let reticulum_preview_behavior =
-                reticulum_preview_behavior_for_targets(sdk.transport_profile(), &targets);
-            delivery_plan_from_targets(
-                "explicit",
-                targets,
-                satisfaction_policy,
-                reticulum_preview_behavior,
-            )
+            let reticulum_behavior =
+                reticulum_behavior_for_targets(sdk.transport_profile(), &targets);
+            delivery_plan_from_targets("explicit", targets, satisfaction_policy, reticulum_behavior)
         }
         TargetPolicy::DefaultProfile => {
             let transport_profile = sdk.transport_profile();
@@ -192,7 +189,7 @@ fn resolved_delivery_plan(
                 transport_profile.transport_profile_id(),
                 targets,
                 satisfaction_policy,
-                outbox_reticulum_preview_behavior(transport_profile),
+                outbox_reticulum_behavior(transport_profile),
             )
         }
         TargetPolicy::LocalOnly => {
@@ -206,12 +203,13 @@ fn resolved_delivery_plan(
                 "local_only",
                 Vec::new(),
                 satisfaction_policy,
-                RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts,
+                RadrootsOutboxReticulumBehavior::RejectDeliveryAttempts,
             )
         }
         TargetPolicy::MeshScope(scope) => {
             let target_set = TargetSet::transport_targets(vec![
-                RadrootsTransportTarget::reticulum_preview_with_metadata(
+                RadrootsTransportTarget::reticulum_with_metadata(
+                    RADROOTS_RETICULUM_ENDPOINT_URI,
                     Some(scope.transport_scope()),
                     None,
                 )?,
@@ -220,7 +218,7 @@ fn resolved_delivery_plan(
                 "mesh_scope",
                 target_set.into_targets(),
                 satisfaction_policy,
-                outbox_reticulum_preview_behavior(sdk.transport_profile()),
+                outbox_reticulum_behavior(sdk.transport_profile()),
             )
         }
     }
@@ -230,7 +228,7 @@ fn delivery_plan_from_targets(
     transport_profile_id: impl Into<String>,
     targets: Vec<RadrootsTransportTarget>,
     satisfaction_policy: &SatisfactionPolicy,
-    reticulum_preview_behavior: RadrootsOutboxReticulumPreviewBehavior,
+    reticulum_behavior: RadrootsOutboxReticulumBehavior,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
     let delivery_plan = RadrootsOutboxDeliveryPlanInput::new(
         transport_profile_id,
@@ -238,51 +236,45 @@ fn delivery_plan_from_targets(
         satisfaction_policy.transport_satisfaction_policy()?,
         targets,
     )
-    .with_reticulum_preview_behavior(reticulum_preview_behavior);
+    .with_reticulum_behavior(reticulum_behavior);
     Ok(SdkResolvedDeliveryPlan { delivery_plan })
 }
 
-fn reticulum_preview_behavior_for_targets(
+fn reticulum_behavior_for_targets(
     transport_profile: &TransportProfile,
     targets: &[RadrootsTransportTarget],
-) -> RadrootsOutboxReticulumPreviewBehavior {
+) -> RadrootsOutboxReticulumBehavior {
     if targets
         .iter()
         .any(|target| target.kind == RadrootsTransportKind::Reticulum)
     {
-        outbox_reticulum_preview_behavior(transport_profile)
+        outbox_reticulum_behavior(transport_profile)
     } else {
-        RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        RadrootsOutboxReticulumBehavior::RejectDeliveryAttempts
     }
 }
 
-fn outbox_reticulum_preview_behavior(
+fn outbox_reticulum_behavior(
     transport_profile: &TransportProfile,
-) -> RadrootsOutboxReticulumPreviewBehavior {
+) -> RadrootsOutboxReticulumBehavior {
     match transport_profile {
-        TransportProfile::ReticulumPreview { profile } => {
-            reticulum_preview_behavior(profile.behavior())
+        TransportProfile::Reticulum { profile } => reticulum_behavior(profile.behavior()),
+        TransportProfile::MultiTarget { profile } => {
+            reticulum_behavior(profile.reticulum().behavior())
         }
-        TransportProfile::Hybrid { profile } => {
-            reticulum_preview_behavior(profile.reticulum_preview().behavior())
-        }
-        TransportProfile::LocalOnly
-        | TransportProfile::Nostr { .. }
-        | TransportProfile::Proxy { .. } => {
-            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        TransportProfile::LocalOnly | TransportProfile::Nostr { .. } => {
+            RadrootsOutboxReticulumBehavior::RejectDeliveryAttempts
         }
     }
 }
 
-fn reticulum_preview_behavior(
-    behavior: ReticulumPreviewBehavior,
-) -> RadrootsOutboxReticulumPreviewBehavior {
+fn reticulum_behavior(behavior: ReticulumBehavior) -> RadrootsOutboxReticulumBehavior {
     match behavior {
-        ReticulumPreviewBehavior::RejectDeliveryAttempts => {
-            RadrootsOutboxReticulumPreviewBehavior::RejectDeliveryAttempts
+        ReticulumBehavior::RejectDeliveryAttempts => {
+            RadrootsOutboxReticulumBehavior::RejectDeliveryAttempts
         }
-        ReticulumPreviewBehavior::DeferDeliveryPlans => {
-            RadrootsOutboxReticulumPreviewBehavior::DeferDeliveryPlans
+        ReticulumBehavior::DeferDeliveryPlans => {
+            RadrootsOutboxReticulumBehavior::DeferDeliveryPlans
         }
     }
 }

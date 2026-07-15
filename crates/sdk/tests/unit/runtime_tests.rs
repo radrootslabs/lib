@@ -112,7 +112,6 @@ fn storage_status() -> StorageStatusReceipt {
             retryable_events: 0,
             terminal_events: 0,
             failed_terminal_events: 0,
-            preview_unavailable_events: 0,
             deferred_until_implemented_events: 0,
             ready_signed_events: 0,
             publishing_events: 0,
@@ -287,22 +286,15 @@ async fn private_store_validates_location_rows_and_round_trips_valid_records() {
 }
 
 #[test]
-fn transport_profile_defaults_and_delegated_resolution_are_explicit() {
+fn transport_profile_defaults_are_explicit() {
     let local = TransportProfile::default();
     assert_eq!(local, TransportProfile::LocalOnly);
-    assert!(!local.supports_delegated_target_resolution());
 
     let nostr = nostr_profile(
         ["wss://relay.example.com"],
         crate::NostrRelayUrlPolicy::Public,
     );
-    assert!(!nostr.supports_delegated_target_resolution());
-
-    #[cfg(feature = "radrootsd-proxy")]
-    {
-        let proxy = TransportProfile::proxy(crate::ProxyProfile::new("http://127.0.0.1:9/rpc"));
-        assert!(proxy.supports_delegated_target_resolution());
-    }
+    assert_eq!(nostr.transport_profile_id(), "nostr");
 }
 
 #[tokio::test]
@@ -320,6 +312,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
         transport_profile: TransportProfile::local_only(),
+        radrootsd_execution_profile: None,
         #[cfg(feature = "signer-adapters")]
         signer_provider: None,
     };
@@ -343,6 +336,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
         transport_profile: TransportProfile::local_only(),
+        radrootsd_execution_profile: None,
         #[cfg(feature = "signer-adapters")]
         signer_provider: None,
     };

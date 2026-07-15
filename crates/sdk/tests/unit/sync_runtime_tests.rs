@@ -1,8 +1,9 @@
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use super::{
-    CLAIM_OWNER, complete_proxy_publish_attempt, proxy_delivery_policy_from_remaining,
-    proxy_error_message, proxy_outbox_idempotency_key, proxy_required_remaining_targets,
-    proxy_transport_error_receipt, push_proxy_claimed_outbox_event, push_proxy_event_receipt,
+    CLAIM_OWNER, complete_radrootsd_publish_attempt, push_radrootsd_claimed_outbox_event,
+    push_radrootsd_event_receipt, radrootsd_delivery_policy_from_remaining,
+    radrootsd_error_message, radrootsd_outbox_idempotency_key,
+    radrootsd_required_remaining_targets, radrootsd_transport_error_receipt,
     transport_publish_target_from_outbox_target,
 };
 use super::{
@@ -11,30 +12,28 @@ use super::{
     push_event_final_state, push_event_receipt, push_outbox_claim_token,
 };
 use crate::RadrootsSdkError;
-#[cfg(feature = "radrootsd-proxy")]
-use crate::adapters::radrootsd::{
-    RadrootsdError, RadrootsdProxyConfig, RadrootsdProxyPublishAdapter,
-};
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
+use crate::adapters::radrootsd::{RadrootsdError, RadrootsdPublishAdapter, RadrootsdPublishConfig};
+#[cfg(feature = "radrootsd-execution")]
 use crate::workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow};
 use futures::future::BoxFuture;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_event::contract::RadrootsActorRole;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_event::ids::RadrootsEventId;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_event::kinds::KIND_FARM;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
 };
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,
     RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
@@ -47,57 +46,58 @@ use radroots_transport::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
     RadrootsTransportTargetLabel,
 };
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 use radroots_transport_nostr::{
     RadrootsNostrTransport, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
     RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use radroots_transport_publish_protocol::{
     NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishJobStatus,
     TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishTarget,
     TransportPublishTargetOutcome, TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::collections::BTreeSet;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::io::ErrorKind;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::net::TcpListener;
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::time::Duration;
 
-#[cfg(feature = "radrootsd-proxy")]
-const PROXY_SIGNER_SECRET_KEY_HEX: &str =
+#[cfg(feature = "radrootsd-execution")]
+const RADROOTSD_FIXTURE_SIGNER_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
-#[cfg(feature = "radrootsd-proxy")]
-const PROXY_SIGNER_PUBLIC_KEY_HEX: &str =
+#[cfg(feature = "radrootsd-execution")]
+const RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX: &str =
     "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
 struct UnusedPublishAdapter;
 
-#[cfg(feature = "radrootsd-proxy")]
-struct ProxyFixtureSigner {
+#[cfg(feature = "radrootsd-execution")]
+struct RadrootsdFixtureSigner {
     identity: RadrootsSignerIdentity,
     keys: RadrootsNostrKeys,
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-impl ProxyFixtureSigner {
+#[cfg(feature = "radrootsd-execution")]
+impl RadrootsdFixtureSigner {
     fn new() -> Self {
-        let secret_key =
-            RadrootsNostrSecretKey::from_hex(PROXY_SIGNER_SECRET_KEY_HEX).expect("secret key");
+        let secret_key = RadrootsNostrSecretKey::from_hex(RADROOTSD_FIXTURE_SIGNER_SECRET_KEY_HEX)
+            .expect("secret key");
         let keys = RadrootsNostrKeys::new(secret_key);
         Self {
-            identity: RadrootsSignerIdentity::new(PROXY_SIGNER_PUBLIC_KEY_HEX).expect("identity"),
+            identity: RadrootsSignerIdentity::new(RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX)
+                .expect("identity"),
             keys,
         }
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-impl RadrootsEventSigner for ProxyFixtureSigner {
+#[cfg(feature = "radrootsd-execution")]
+impl RadrootsEventSigner for RadrootsdFixtureSigner {
     fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
         self.identity.pubkey()
     }
@@ -124,27 +124,32 @@ impl RadrootsRelayPublishAdapter for UnusedPublishAdapter {
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-fn proxy_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(PROXY_SIGNER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor")
+#[cfg(feature = "radrootsd-execution")]
+fn radrootsd_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(
+        RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
+        [RadrootsActorRole::Farmer],
+    )
+    .expect("actor")
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-fn proxy_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
+#[cfg(feature = "radrootsd-execution")]
+fn radrootsd_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
     RadrootsEventDraft::new(
         "radroots.farm.profile.v1",
         KIND_FARM,
         1_700_000_000,
         vec![vec!["d".to_owned(), d_tag.to_owned()]],
         "{}",
-        PROXY_SIGNER_PUBLIC_KEY_HEX,
+        RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
     )
     .expect("frozen draft")
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOutboxClaimedEvent) {
+#[cfg(feature = "radrootsd-execution")]
+async fn claimed_radrootsd_event(
+    d_tag: &str,
+) -> (crate::RadrootsClient, RadrootsOutboxClaimedEvent) {
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_000,
@@ -152,12 +157,12 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
         .build()
         .await
         .expect("sdk");
-    let actor = proxy_actor();
-    let draft = proxy_frozen_draft(d_tag);
+    let actor = radrootsd_actor();
+    let draft = radrootsd_frozen_draft(d_tag);
     enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
-            operation_kind: "sync.proxy.unit.v1",
+            operation_kind: "sync.radrootsd.unit.v1",
             actor: &actor,
             frozen_draft: &draft,
             target_policy: crate::TargetPolicy::try_nostr_relays(
@@ -166,9 +171,12 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
             )
             .expect("target relays"),
             satisfaction_policy: crate::SatisfactionPolicy::AllAccepted,
-            idempotency_key: None,
+            idempotency_key: Some(
+                crate::SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000025a")
+                    .expect("idempotency key"),
+            ),
         },
-        &ProxyFixtureSigner::new(),
+        &RadrootsdFixtureSigner::new(),
     )
     .await
     .expect("enqueue signed workflow");
@@ -176,7 +184,7 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
-            "proxy-unit-claim",
+            "radrootsd-unit-claim",
             1_700_000_060_000,
             1_700_000_000_000,
         )
@@ -186,23 +194,23 @@ async fn claimed_proxy_event(d_tag: &str) -> (crate::RadrootsClient, RadrootsOut
     (sdk, claimed)
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-async fn claimed_uningested_proxy_event(
+#[cfg(feature = "radrootsd-execution")]
+async fn claimed_uningested_radrootsd_event(
     d_tag: &str,
-    proxy_endpoint: &str,
+    radrootsd_endpoint: &str,
 ) -> (crate::RadrootsClient, RadrootsOutboxClaimedEvent) {
-    claimed_uningested_proxy_event_with_satisfaction(
+    claimed_uningested_radrootsd_event_with_satisfaction(
         d_tag,
-        proxy_endpoint,
+        radrootsd_endpoint,
         RadrootsTransportSatisfactionPolicy::all_accepted(),
     )
     .await
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-async fn claimed_uningested_proxy_event_with_satisfaction(
+#[cfg(feature = "radrootsd-execution")]
+async fn claimed_uningested_radrootsd_event_with_satisfaction(
     d_tag: &str,
-    proxy_endpoint: &str,
+    _radrootsd_endpoint: &str,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
 ) -> (crate::RadrootsClient, RadrootsOutboxClaimedEvent) {
     let sdk = crate::RadrootsClient::builder()
@@ -212,23 +220,24 @@ async fn claimed_uningested_proxy_event_with_satisfaction(
         .build()
         .await
         .expect("sdk");
-    let draft = proxy_frozen_draft(d_tag);
-    let proxy_target = RadrootsTransportTarget::proxy(proxy_endpoint).expect("proxy target");
+    let draft = radrootsd_frozen_draft(d_tag);
+    let radrootsd_target =
+        RadrootsTransportTarget::nostr_relay("wss://relay.example.com").expect("Nostr target");
     let enqueue = sdk
         ._outbox
         .enqueue_operation(
             RadrootsOutboxOperationInput::new(
-                "sync.proxy.unit.v1",
+                "sync.radrootsd.unit.v1",
                 draft,
                 RadrootsOutboxDeliveryPlanInput::new(
-                    "proxy",
+                    "radrootsd",
                     1,
                     satisfaction_policy,
-                    vec![proxy_target],
+                    vec![radrootsd_target],
                 ),
                 1_700_000_000_000,
             )
-            .with_idempotency_key(format!("proxy-uningested-{d_tag}")),
+            .with_idempotency_key(format!("radrootsd-uningested-{d_tag}")),
         )
         .await
         .expect("enqueue");
@@ -236,20 +245,20 @@ async fn claimed_uningested_proxy_event_with_satisfaction(
         ._outbox
         .claim_next_ready_event(
             CLAIM_OWNER,
-            "proxy-unit-sign",
+            "radrootsd-unit-sign",
             1_700_000_000_500,
             1_700_000_000_000,
         )
         .await
         .expect("signing claim")
         .expect("signing claim");
-    let signed_event = ProxyFixtureSigner::new()
+    let signed_event = RadrootsdFixtureSigner::new()
         .sign_frozen_draft(&signing_claim.draft)
         .expect("signed event");
     sdk._outbox
         .complete_signing(
             enqueue.outbox_event_id,
-            "proxy-unit-sign",
+            "radrootsd-unit-sign",
             signed_event,
             1_700_000_000_100,
         )
@@ -269,7 +278,7 @@ async fn claimed_uningested_proxy_event_with_satisfaction(
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
-            "proxy-unit-publish",
+            "radrootsd-unit-publish",
             1_700_000_060_000,
             1_700_000_000_100,
         )
@@ -279,7 +288,7 @@ async fn claimed_uningested_proxy_event_with_satisfaction(
     (sdk, claimed)
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn assert_no_transport_publish_request(listener: &TcpListener) {
     listener.set_nonblocking(true).expect("nonblocking");
     match listener.accept() {
@@ -289,7 +298,7 @@ fn assert_no_transport_publish_request(listener: &TcpListener) {
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn delivery_target_record(
     delivery_target_id: i64,
     delivery_plan_id: i64,
@@ -312,8 +321,11 @@ fn delivery_target_record(
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-fn proxy_job(event_id: &str, outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
+#[cfg(feature = "radrootsd-execution")]
+fn radrootsd_job(
+    event_id: &str,
+    outcome_kind: TransportPublishOutcomeKind,
+) -> TransportPublishJobView {
     let delivery_satisfied = outcome_kind.counts_toward_accepted_delivery();
     let retryable = outcome_kind.is_retryable();
     let terminal_failure = outcome_kind.is_terminal_failure();
@@ -323,18 +335,16 @@ fn proxy_job(event_id: &str, outcome_kind: TransportPublishOutcomeKind) -> Trans
         TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
     } else if outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented {
         TransportPublishJobStatus::DeliveryDeferred
-    } else if outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable {
-        TransportPublishJobStatus::DeliveryPreviewUnavailable
     } else {
         TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
     };
     TransportPublishJobView {
-        job_id: "proxy-unit-job".to_owned(),
+        job_id: "radrootsd-unit-job".to_owned(),
         status,
         terminal: !retryable,
         delivery_satisfied,
         event_id: event_id.to_owned(),
-        pubkey: PROXY_SIGNER_PUBLIC_KEY_HEX.to_owned(),
+        pubkey: RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX.to_owned(),
         event_kind: KIND_FARM,
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -439,7 +449,7 @@ fn push_event_final_state_follows_publish_quorum_and_retryability() {
 }
 
 #[test]
-fn push_relay_outcome_mapping_covers_daemon_proxy_results() {
+fn push_relay_outcome_mapping_covers_daemon_radrootsd_results() {
     assert_eq!(
         PushOutboxTargetOutcomeKind::from(RadrootsRelayOutcomeKind::Muted),
         PushOutboxTargetOutcomeKind::Muted
@@ -542,7 +552,6 @@ fn sync_status_summary_conversions_preserve_all_fields() {
         retryable_events: 4,
         terminal_events: 2,
         failed_terminal_events: 1,
-        preview_unavailable_events: 9,
         deferred_until_implemented_events: 10,
         ready_signed_events: 6,
         publishing_events: 8,
@@ -555,7 +564,6 @@ fn sync_status_summary_conversions_preserve_all_fields() {
     assert_eq!(outbox_status.retryable_events, 4);
     assert_eq!(outbox_status.terminal_events, 2);
     assert_eq!(outbox_status.failed_terminal_events, 1);
-    assert_eq!(outbox_status.preview_unavailable_events, 9);
     assert_eq!(outbox_status.deferred_until_implemented_events, 10);
     assert_eq!(outbox_status.ready_signed_events, 6);
     assert_eq!(outbox_status.publishing_events, 8);
@@ -699,8 +707,8 @@ fn push_outbox_outcome_kind_labels_cover_all_public_variants() {
             "deferred_until_implemented",
         ),
         (
-            PushOutboxTargetOutcomeKind::PreviewUnavailable,
-            "preview_unavailable",
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
+            "deferred_until_implemented",
         ),
         (PushOutboxTargetOutcomeKind::Unknown, "unknown"),
     ] {
@@ -796,58 +804,58 @@ async fn sync_runtime_reports_clock_errors_before_store_or_relay_work() {
     ));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
+async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_proxy_adapter(&adapter, super::PushOutboxRequest::new())
+        .push_outbox_with_radrootsd_adapter(&adapter, super::PushOutboxRequest::new())
         .await
         .expect("empty transport publish push");
 
     assert_eq!(receipt.attempted_events, 0);
     assert_eq!(
-        proxy_delivery_policy_from_remaining(
+        radrootsd_delivery_policy_from_remaining(
             0,
             0,
             None,
             &RadrootsTransportSatisfactionPolicy::no_wait()
         )
-        .expect("no-wait proxy policy"),
+        .expect("no-wait radrootsd policy"),
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
-        proxy_delivery_policy_from_remaining(
+        radrootsd_delivery_policy_from_remaining(
             0,
             0,
             None,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
-        .expect("zero-target proxy policy"),
+        .expect("zero-target radrootsd policy"),
         TransportPublishDeliveryPolicy::Any
     );
     assert_eq!(
-        proxy_delivery_policy_from_remaining(
+        radrootsd_delivery_policy_from_remaining(
             2,
             2,
             None,
             &RadrootsTransportSatisfactionPolicy::all_accepted()
         )
-        .expect("all-target proxy policy"),
+        .expect("all-target radrootsd policy"),
         TransportPublishDeliveryPolicy::All
     );
     assert_eq!(
-        proxy_delivery_policy_from_remaining(
+        radrootsd_delivery_policy_from_remaining(
             2,
             1,
             None,
             &RadrootsTransportSatisfactionPolicy::any_accepted()
         )
-        .expect("any-target proxy policy"),
+        .expect("any-target radrootsd policy"),
         TransportPublishDeliveryPolicy::Any
     );
     let first_required = RadrootsTransportTarget::nostr_relay("wss://required-a.example.com")
@@ -870,35 +878,35 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
     let mut optional_record = delivery_target_record(3, 7, &optional);
     optional_record.status = RadrootsOutboxDeliveryTargetStatus::Accepted;
     let active_targets = vec![&first_record, &second_record, &optional_record];
-    let remaining = proxy_required_remaining_targets(&policy, &active_targets)
+    let remaining = radrootsd_required_remaining_targets(&policy, &active_targets)
         .expect("required remaining targets")
         .expect("required target policy");
     assert_eq!(remaining, vec![second_required.fingerprint]);
     assert_eq!(
-        proxy_delivery_policy_from_remaining(2, remaining.len(), Some(&remaining), &policy)
-            .expect("required target proxy policy"),
+        radrootsd_delivery_policy_from_remaining(2, remaining.len(), Some(&remaining), &policy)
+            .expect("required target radrootsd policy"),
         TransportPublishDeliveryPolicy::RequiredTargets { targets: remaining }
     );
     assert!(matches!(
-        proxy_delivery_policy_from_remaining(0, 1, Some(&[]), &policy),
+        radrootsd_delivery_policy_from_remaining(0, 1, Some(&[]), &policy),
         Err(RadrootsSdkError::InvalidRequest { message })
             if message.contains("unsatisfied required targets")
     ));
     assert_eq!(
-        proxy_outbox_idempotency_key(7, 3, "event-id", 5),
+        radrootsd_outbox_idempotency_key(7, 3, "event-id", 5),
         "radroots-sdk-outbox-7-3-event-id-5"
     );
 
-    let (_sdk, claimed) = claimed_proxy_event("proxy-transport-error-receipt").await;
+    let (_sdk, claimed) = claimed_radrootsd_event("radrootsd-transport-error-receipt").await;
     let signed_event = claimed.signed_event.as_ref().expect("signed event");
-    let message = proxy_error_message(&RadrootsdError::Http("connection refused".to_owned()));
-    let receipt = proxy_transport_error_receipt(
+    let message = radrootsd_error_message(&RadrootsdError::Http("connection refused".to_owned()));
+    let receipt = radrootsd_transport_error_receipt(
         &claimed,
         signed_event,
         &TransportPublishDeliveryPolicy::All,
         message.clone(),
     )
-    .expect("proxy transport error receipt");
+    .expect("radrootsd transport error receipt");
     assert_eq!(receipt.event_id, signed_event.id_str());
     assert_eq!(receipt.final_state, PushOutboxEventState::PublishRetryable);
     assert_eq!(receipt.retryable_count, 1);
@@ -911,15 +919,15 @@ async fn proxy_push_empty_queue_and_private_helpers_are_deterministic() {
     assert!(!receipt.targets[0].attempted);
     assert_eq!(receipt.targets[0].message.as_ref(), Some(&message));
     assert_eq!(
-        proxy_error_message(&RadrootsdError::Http("connection refused".to_owned())),
-        "radrootsd proxy publish failed: connection refused"
+        radrootsd_error_message(&RadrootsdError::Http("connection refused".to_owned())),
+        "radrootsd publish failed: connection refused"
     );
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_publish() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
+async fn radrootsd_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_publish() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind radrootsd listener");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     for (index, satisfaction_policy) in [
         RadrootsTransportSatisfactionPolicy::all_forwarded(),
@@ -931,28 +939,33 @@ async fn proxy_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_p
     .into_iter()
     .enumerate()
     {
-        let d_tag = format!("proxy-non-accepted-rejected-{index}");
-        let (sdk, claimed) = claimed_uningested_proxy_event_with_satisfaction(
+        let d_tag = format!("radrootsd-non-accepted-rejected-{index}");
+        let (sdk, claimed) = claimed_uningested_radrootsd_event_with_satisfaction(
             d_tag.as_str(),
             endpoint.as_str(),
             satisfaction_policy,
         )
         .await;
         let sync = sdk.sync();
-        let adapter = RadrootsdProxyPublishAdapter::new(
-            RadrootsdProxyConfig::new(endpoint.clone()).with_timeout(Duration::from_millis(50)),
+        let adapter = RadrootsdPublishAdapter::new(
+            RadrootsdPublishConfig::new(endpoint.clone()).with_timeout(Duration::from_millis(50)),
         );
 
-        let error =
-            push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
-                .await
-                .expect_err("non-accepted-class proxy satisfaction rejected");
+        let error = push_radrootsd_claimed_outbox_event(
+            &sync,
+            &adapter,
+            &claimed,
+            60_000,
+            1_700_000_000_000,
+        )
+        .await
+        .expect_err("non-accepted-class radrootsd satisfaction rejected");
         assert_no_transport_publish_request(&listener);
 
         assert!(matches!(
             error,
             RadrootsSdkError::InvalidRequest { message }
-                if message.contains("radrootsd proxy publish")
+                if message.contains("radrootsd publish")
                     && message.contains("accepted-class satisfaction")
         ));
         let stored = sdk
@@ -975,10 +988,10 @@ async fn proxy_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_p
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[test]
-fn proxy_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
-    let target = RadrootsTransportTarget::reticulum_preview().expect("Reticulum target");
+fn radrootsd_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
+    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
     let record = RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id: 1,
         delivery_plan_id: 1,
@@ -1001,15 +1014,15 @@ fn proxy_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss
     assert!(matches!(
         error,
         RadrootsSdkError::InvalidRequest { message }
-            if message.contains("radrootsd proxy outbox publish")
+            if message.contains("radrootsd execution")
                 && message.contains("Nostr-only")
                 && message.contains("reticulum target")
     ));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[test]
-fn proxy_outbox_target_conversion_preserves_nostr_scope_and_label() {
+fn radrootsd_outbox_target_conversion_preserves_nostr_scope_and_label() {
     let target = RadrootsTransportTarget::nostr_relay_with_metadata(
         "wss://relay.example.com",
         Some(RadrootsTransportMeshScopeId::parse("farm.local").expect("scope")),
@@ -1024,47 +1037,21 @@ fn proxy_outbox_target_conversion_preserves_nostr_scope_and_label() {
     assert_eq!(converted.endpoint_uri, "wss://relay.example.com");
     assert_eq!(converted.target_scope.as_deref(), Some("farm.local"));
     assert_eq!(converted.target_label.as_deref(), Some("Farm relay"));
-    assert_eq!(converted.preview_behavior, None);
+    assert_eq!(converted.reticulum_behavior, None);
 }
 
-#[cfg(feature = "radrootsd-proxy")]
-#[test]
-fn proxy_outbox_target_conversion_rejects_proxy_targets_before_daemon_explicit_target() {
-    let target = RadrootsTransportTarget::proxy("http://127.0.0.1:8080/rpc").expect("proxy target");
-    let record = RadrootsOutboxDeliveryTargetRecord {
-        delivery_target_id: 1,
-        delivery_plan_id: 1,
-        transport_kind: target.kind.clone(),
-        endpoint_uri: target.uri.clone(),
-        target_scope: target.scope.clone(),
-        target_label: target.label.clone(),
-        endpoint_fingerprint: target.fingerprint.clone(),
-        status: RadrootsOutboxDeliveryTargetStatus::Pending,
-        last_outcome_kind: None,
-        attempt_count: 0,
-        last_attempt_at_ms: None,
-        completed_at_ms: None,
-        last_error: None,
-    };
-
-    let error = transport_publish_target_from_outbox_target(&record).expect_err("proxy rejected");
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::InvalidRequest { message }
-            if message.contains("Nostr-only") && message.contains("proxy target")
-    ));
-}
-
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_push_entrypoints_report_request_clock_and_claim_errors() {
+async fn radrootsd_push_entrypoints_report_request_clock_and_claim_errors() {
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     assert!(matches!(
         sdk.sync()
-            .push_outbox_with_proxy_adapter(&adapter, super::PushOutboxRequest::new().with_limit(0))
+            .push_outbox_with_radrootsd_adapter(
+                &adapter,
+                super::PushOutboxRequest::new().with_limit(0)
+            )
             .await,
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
@@ -1077,7 +1064,7 @@ async fn proxy_push_entrypoints_report_request_clock_and_claim_errors() {
     assert!(matches!(
         clock_sdk
             .sync()
-            .push_outbox_with_proxy_adapter(&adapter, super::PushOutboxRequest::new())
+            .push_outbox_with_radrootsd_adapter(&adapter, super::PushOutboxRequest::new())
             .await,
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
     ));
@@ -1090,19 +1077,19 @@ async fn proxy_push_entrypoints_report_request_clock_and_claim_errors() {
     assert!(matches!(
         closed_outbox_sdk
             .sync()
-            .push_outbox_with_proxy_adapter(&adapter, super::PushOutboxRequest::new())
+            .push_outbox_with_radrootsd_adapter(&adapter, super::PushOutboxRequest::new())
             .await,
         Err(RadrootsSdkError::Outbox { .. })
     ));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
+async fn radrootsd_push_reports_missing_signed_claim_before_daemon_publish() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     let sync = sdk.sync();
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
     let claimed = RadrootsOutboxClaimedEvent {
         outbox_event_id: 41,
         operation_id: 42,
@@ -1117,7 +1104,7 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
             1_700_000_000,
             vec![vec!["d".to_owned(), "missing-signed-event".to_owned()]],
             "{}",
-            PROXY_SIGNER_PUBLIC_KEY_HEX,
+            RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
         )
         .expect("draft"),
         signed_event: None,
@@ -1125,22 +1112,22 @@ async fn proxy_push_reports_missing_signed_claim_before_daemon_publish() {
     };
 
     assert!(matches!(
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_radrootsd_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await,
         Err(RadrootsSdkError::Transport { message })
             if message.contains("Outbox claim 41 does not contain a signed event")
     ));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_claim_publish_marks_retryable_transport_errors() {
-    let (sdk, claimed) = claimed_proxy_event("proxy-transport-error").await;
+async fn radrootsd_claim_publish_marks_retryable_transport_errors() {
+    let (sdk, claimed) = claimed_radrootsd_event("radrootsd-transport-error").await;
     let sync = sdk.sync();
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
     let receipt =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_radrootsd_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
             .expect("transport error job");
 
@@ -1156,7 +1143,7 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
         receipt.targets[0]
             .message
             .as_deref()
-            .is_some_and(|message| message.contains("radrootsd proxy publish failed"))
+            .is_some_and(|message| message.contains("radrootsd publish failed"))
     );
     let stored = sdk
         ._outbox
@@ -1168,13 +1155,14 @@ async fn proxy_claim_publish_marks_retryable_transport_errors() {
     assert!(stored.claim_token.is_none());
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
+async fn radrootsd_local_validation_errors_release_claim_before_daemon_publish() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind radrootsd listener");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     let (sdk, mut claimed) =
-        claimed_uningested_proxy_event("proxy-local-validation-error", endpoint.as_str()).await;
+        claimed_uningested_radrootsd_event("radrootsd-local-validation-error", endpoint.as_str())
+            .await;
     let stored_before = sdk
         ._outbox
         .get_event(claimed.outbox_event_id)
@@ -1183,24 +1171,24 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
         .expect("stored before");
     assert!(!stored_before.event_store_ingested);
     assert_eq!(stored_before.event_store_ingested_at_ms, None);
-    let reticulum_target = RadrootsTransportTarget::reticulum_preview().expect("Reticulum target");
+    let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
     claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
     let sync = sdk.sync();
-    let adapter = RadrootsdProxyPublishAdapter::new(
-        RadrootsdProxyConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
+    let adapter = RadrootsdPublishAdapter::new(
+        RadrootsdPublishConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
     );
     let error =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_radrootsd_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
-            .expect_err("local proxy validation error");
+            .expect_err("local radrootsd validation error");
     assert_no_transport_publish_request(&listener);
 
     assert!(matches!(
         error,
         RadrootsSdkError::InvalidRequest { message }
-            if message.contains("radrootsd proxy outbox publish")
+            if message.contains("radrootsd execution")
                 && message.contains("Nostr-only")
                 && message.contains("reticulum target")
     ));
@@ -1223,10 +1211,10 @@ async fn proxy_local_validation_errors_release_claim_before_daemon_publish() {
     );
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy listener");
+async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimable() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind radrootsd listener");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
@@ -1235,19 +1223,19 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
         .build()
         .await
         .expect("sdk");
-    let draft = proxy_frozen_draft("proxy-local-validation-sibling");
-    let signed_event = ProxyFixtureSigner::new()
+    let draft = radrootsd_frozen_draft("radrootsd-local-validation-sibling");
+    let signed_event = RadrootsdFixtureSigner::new()
         .sign_frozen_draft(&draft)
         .expect("signed event");
     let first = sdk
         ._outbox
         .enqueue_signed_operation(
             RadrootsOutboxSignedOperationInput::new(
-                "sync.proxy.unit.v1",
+                "sync.radrootsd.unit.v1",
                 draft.clone(),
                 signed_event.clone(),
                 RadrootsOutboxDeliveryPlanInput::new(
-                    "proxy.validation.active",
+                    "radrootsd.validation.active",
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![
@@ -1259,7 +1247,7 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
                 1_700_000_000_000,
                 1_700_000_000_000,
             )
-            .with_idempotency_key("proxy-local-validation-sibling"),
+            .with_idempotency_key("radrootsd-local-validation-sibling"),
         )
         .await
         .expect("first plan");
@@ -1267,11 +1255,11 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
         ._outbox
         .enqueue_signed_operation(
             RadrootsOutboxSignedOperationInput::new(
-                "sync.proxy.unit.v1",
+                "sync.radrootsd.unit.v1",
                 draft,
                 signed_event,
                 RadrootsOutboxDeliveryPlanInput::new(
-                    "proxy.validation.sibling",
+                    "radrootsd.validation.sibling",
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![
@@ -1283,7 +1271,7 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
                 1_700_000_000_000,
                 1_700_000_000_000,
             )
-            .with_idempotency_key("proxy-local-validation-sibling"),
+            .with_idempotency_key("radrootsd-local-validation-sibling"),
         )
         .await
         .expect("second plan");
@@ -1292,7 +1280,7 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
-            "proxy-sibling-claim-a",
+            "radrootsd-sibling-claim-a",
             1_700_000_060_000,
             1_700_000_000_000,
         )
@@ -1313,25 +1301,25 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
         .expect("stored before");
     let ingested_before = stored_before.event_store_ingested;
     let ingested_at_before = stored_before.event_store_ingested_at_ms;
-    let reticulum_target = RadrootsTransportTarget::reticulum_preview().expect("Reticulum target");
+    let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
     claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
     let sync = sdk.sync();
-    let adapter = RadrootsdProxyPublishAdapter::new(
-        RadrootsdProxyConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
+    let adapter = RadrootsdPublishAdapter::new(
+        RadrootsdPublishConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
     );
 
     let error =
-        push_proxy_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
+        push_radrootsd_claimed_outbox_event(&sync, &adapter, &claimed, 60_000, 1_700_000_000_000)
             .await
-            .expect_err("local proxy validation error");
+            .expect_err("local radrootsd validation error");
     assert_no_transport_publish_request(&listener);
 
     assert!(matches!(
         error,
         RadrootsSdkError::InvalidRequest { message }
-            if message.contains("radrootsd proxy outbox publish")
+            if message.contains("radrootsd execution")
                 && message.contains("Nostr-only")
                 && message.contains("reticulum target")
     ));
@@ -1387,7 +1375,7 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
-            "proxy-sibling-claim-b",
+            "radrootsd-sibling-claim-b",
             1_700_000_060_000,
             1_700_000_000_000,
         )
@@ -1397,44 +1385,44 @@ async fn proxy_local_validation_failure_keeps_sibling_plan_ready_and_claimable()
     assert_eq!(sibling_claim.active_delivery_plan_id, Some(sibling_plan_id));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_receipts() {
+async fn radrootsd_completion_updates_outbox_for_success_retryable_and_terminal_receipts() {
     let cases = [
         (
-            "proxy-complete-success",
+            "radrootsd-complete-success",
             PushOutboxEventState::Published,
             PushOutboxEventState::Published,
             RadrootsOutboxDeliveryTargetStatus::Accepted,
             TransportPublishOutcomeKind::Accepted,
         ),
         (
-            "proxy-complete-retryable",
+            "radrootsd-complete-retryable",
             PushOutboxEventState::PublishRetryable,
             PushOutboxEventState::PublishRetryable,
             RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
             TransportPublishOutcomeKind::Timeout,
         ),
         (
-            "proxy-complete-terminal",
+            "radrootsd-complete-terminal",
             PushOutboxEventState::FailedTerminal,
             PushOutboxEventState::FailedTerminal,
             RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
             TransportPublishOutcomeKind::Blocked,
         ),
         (
-            "proxy-complete-deferred",
+            "radrootsd-complete-deferred",
             PushOutboxEventState::DeferredUntilImplemented,
             PushOutboxEventState::DeferredUntilImplemented,
             RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
             TransportPublishOutcomeKind::DeferredUntilImplemented,
         ),
         (
-            "proxy-complete-preview-unavailable",
-            PushOutboxEventState::PreviewUnavailable,
-            PushOutboxEventState::PreviewUnavailable,
-            RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable,
-            TransportPublishOutcomeKind::PreviewUnavailable,
+            "radrootsd-complete-deferred-until-implemented",
+            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxEventState::DeferredUntilImplemented,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+            TransportPublishOutcomeKind::DeferredUntilImplemented,
         ),
     ];
 
@@ -1446,8 +1434,8 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
         outcome_kind,
     ) in cases
     {
-        let (sdk, claimed) = claimed_proxy_event(d_tag).await;
-        let publish = proxy_job(
+        let (sdk, claimed) = claimed_radrootsd_event(d_tag).await;
+        let publish = radrootsd_job(
             claimed
                 .signed_event
                 .as_ref()
@@ -1475,13 +1463,14 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
             publish.event_kind,
             claimed.signed_event.as_ref().expect("signed event").kind()
         );
-        let proxy_receipt =
-            push_proxy_event_receipt(claimed.outbox_event_id, publish.clone()).expect("receipt");
-        assert_eq!(proxy_receipt.final_state, expected_receipt_state);
+        let radrootsd_receipt =
+            push_radrootsd_event_receipt(claimed.outbox_event_id, publish.clone())
+                .expect("receipt");
+        assert_eq!(radrootsd_receipt.final_state, expected_receipt_state);
         let sync = sdk.sync();
-        complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
+        complete_radrootsd_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
             .await
-            .expect("complete proxy attempt");
+            .expect("complete radrootsd attempt");
         let stored = sdk
             ._outbox
             .get_event(claimed.outbox_event_id)
@@ -1502,9 +1491,9 @@ async fn proxy_completion_updates_outbox_for_success_retryable_and_terminal_rece
     }
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
+async fn radrootsd_completion_matches_duplicate_endpoint_targets_by_scope() {
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_000,
@@ -1512,8 +1501,8 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
         .build()
         .await
         .expect("sdk");
-    let draft = proxy_frozen_draft("proxy-complete-scoped-targets");
-    let signed_event = ProxyFixtureSigner::new()
+    let draft = radrootsd_frozen_draft("radrootsd-complete-scoped-targets");
+    let signed_event = RadrootsdFixtureSigner::new()
         .sign_frozen_draft(&draft)
         .expect("signed event");
     let farm_a = RadrootsTransportTarget::nostr_relay_with_metadata(
@@ -1532,11 +1521,11 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
         ._outbox
         .enqueue_signed_operation(
             RadrootsOutboxSignedOperationInput::new(
-                "sync.proxy.unit.v1",
+                "sync.radrootsd.unit.v1",
                 draft,
                 signed_event.clone(),
                 RadrootsOutboxDeliveryPlanInput::new(
-                    "proxy.scoped",
+                    "radrootsd.scoped",
                     2,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![farm_a, farm_b],
@@ -1545,15 +1534,15 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
                 1_700_000_000_000,
                 1_700_000_000_000,
             )
-            .with_idempotency_key("proxy-complete-scoped-targets"),
+            .with_idempotency_key("radrootsd-complete-scoped-targets"),
         )
         .await
-        .expect("scoped proxy event");
+        .expect("scoped radrootsd event");
     let claimed = sdk
         ._outbox
         .claim_next_ready_signed_event(
             CLAIM_OWNER,
-            "proxy-scoped-target-claim",
+            "radrootsd-scoped-target-claim",
             1_700_000_060_000,
             1_700_000_000_000,
         )
@@ -1561,7 +1550,7 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
         .expect("claim")
         .expect("claim");
     assert_eq!(claimed.outbox_event_id, enqueue.outbox_event_id);
-    let mut publish = proxy_job(signed_event.id_str(), TransportPublishOutcomeKind::Accepted);
+    let mut publish = radrootsd_job(signed_event.id_str(), TransportPublishOutcomeKind::Accepted);
     publish.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
         TransportPublishTarget::nostr("wss://relay.example.com")
             .with_scope("farm.a")
@@ -1589,9 +1578,9 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
     publish.targets.push(farm_b_outcome);
 
     let sync = sdk.sync();
-    complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
+    complete_radrootsd_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
         .await
-        .expect("complete scoped proxy attempt");
+        .expect("complete scoped radrootsd attempt");
     let targets = sdk
         ._outbox
         .delivery_targets(claimed.outbox_event_id)
@@ -1616,11 +1605,11 @@ async fn proxy_completion_matches_duplicate_endpoint_targets_by_scope() {
     );
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation() {
-    let (sdk, claimed) = claimed_proxy_event("proxy-complete-duplicate-outcome").await;
-    let mut publish = proxy_job(
+async fn radrootsd_completion_rejects_duplicate_daemon_outcome_before_local_mutation() {
+    let (sdk, claimed) = claimed_radrootsd_event("radrootsd-complete-duplicate-outcome").await;
+    let mut publish = radrootsd_job(
         claimed
             .signed_event
             .as_ref()
@@ -1632,7 +1621,7 @@ async fn proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation
 
     let sync = sdk.sync();
     let error =
-        complete_proxy_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
+        complete_radrootsd_publish_attempt(&sync, &claimed, &publish, 60_000, 1_700_000_000_000)
             .await
             .expect_err("duplicate daemon outcome must fail closed");
 
@@ -1653,17 +1642,17 @@ async fn proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation
     );
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[test]
-fn push_proxy_event_receipt_preserves_daemon_target_metadata() {
-    let mut publish = proxy_job(
+fn push_radrootsd_event_receipt_preserves_daemon_target_metadata() {
+    let mut publish = radrootsd_job(
         "a".repeat(64).as_str(),
         TransportPublishOutcomeKind::Accepted,
     );
     publish.targets[0].target_scope = Some("farm.local".to_owned());
     publish.targets[0].target_label = Some("Farm relay".to_owned());
 
-    let receipt = push_proxy_event_receipt(1, publish).expect("receipt");
+    let receipt = push_radrootsd_event_receipt(1, publish).expect("receipt");
 
     assert_eq!(receipt.targets.len(), 1);
     assert_eq!(
@@ -1676,12 +1665,12 @@ fn push_proxy_event_receipt_preserves_daemon_target_metadata() {
     );
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[test]
-fn push_proxy_event_receipt_returns_typed_error_for_invalid_daemon_event_id() {
-    let error = push_proxy_event_receipt(
+fn push_radrootsd_event_receipt_returns_typed_error_for_invalid_daemon_event_id() {
+    let error = push_radrootsd_event_receipt(
         1,
-        proxy_job(
+        radrootsd_job(
             "not-a-valid-event-id",
             TransportPublishOutcomeKind::Accepted,
         ),

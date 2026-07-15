@@ -1,10 +1,10 @@
 use super::*;
 use radroots_event::wire::RadrootsNip01EventWire;
-use radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI;
+use radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI;
 use radroots_transport_publish_protocol::{
     NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
     TransportPublishEventResponse, TransportPublishJobStatus, TransportPublishJobView,
-    TransportPublishOutcomeKind, TransportPublishPreviewBehavior, TransportPublishTarget,
+    TransportPublishOutcomeKind, TransportPublishReticulumBehavior, TransportPublishTarget,
     TransportPublishTargetOutcome, TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::io::{Read, Write};
@@ -115,6 +115,14 @@ fn publish_request() -> TransportPublishEventRequest {
     }
 }
 
+fn signed_event_id() -> String {
+    signed_event().id_str().to_owned()
+}
+
+fn signed_event_pubkey() -> String {
+    signed_event().pubkey_str().to_owned()
+}
+
 fn job_status_for_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobStatus {
     if outcome_kind.counts_toward_accepted_delivery() {
         TransportPublishJobStatus::DeliverySatisfied
@@ -124,8 +132,6 @@ fn job_status_for_outcome(outcome_kind: TransportPublishOutcomeKind) -> Transpor
         TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
     } else if outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented {
         TransportPublishJobStatus::DeliveryDeferred
-    } else if outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable {
-        TransportPublishJobStatus::DeliveryPreviewUnavailable
     } else {
         TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
     }
@@ -141,12 +147,12 @@ fn job(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobView {
             TransportPublishJobStatus::DeliverySatisfied
                 | TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
                 | TransportPublishJobStatus::DeliveryDeferred
-                | TransportPublishJobStatus::DeliveryPreviewUnavailable
+                | TransportPublishJobStatus::DeliveryDeferredUntilImplemented
                 | TransportPublishJobStatus::Rejected
         ),
         delivery_satisfied: status == TransportPublishJobStatus::DeliverySatisfied,
-        event_id: "a".repeat(64),
-        pubkey: "b".repeat(64),
+        event_id: signed_event_id(),
+        pubkey: signed_event_pubkey(),
         event_kind: 30_402,
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -197,8 +203,8 @@ fn explicit_nostr_job(
         status: TransportPublishJobStatus::DeliverySatisfied,
         terminal: true,
         delivery_satisfied: true,
-        event_id: "a".repeat(64),
-        pubkey: "b".repeat(64),
+        event_id: signed_event_id(),
+        pubkey: signed_event_pubkey(),
         event_kind: 30_402,
         target_policy: TransportPublishTargetPolicy::explicit_targets(
             endpoints
@@ -224,12 +230,12 @@ fn reticulum_deferred_job() -> TransportPublishJobView {
         status: TransportPublishJobStatus::DeliveryDeferred,
         terminal: true,
         delivery_satisfied: false,
-        event_id: "a".repeat(64),
-        pubkey: "b".repeat(64),
+        event_id: signed_event_id(),
+        pubkey: signed_event_pubkey(),
         event_kind: 30_402,
         target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-            TransportPublishTarget::reticulum_preview(
-                TransportPublishPreviewBehavior::DeferDeliveryPlans,
+            TransportPublishTarget::reticulum(
+                TransportPublishReticulumBehavior::DeferDeliveryPlans,
             ),
         ]),
         delivery_policy: TransportPublishDeliveryPolicy::Any,
@@ -242,13 +248,13 @@ fn reticulum_deferred_job() -> TransportPublishJobView {
         last_error: Some("delivery_deferred_until_implemented".to_owned()),
         targets: vec![TransportPublishTargetOutcome {
             transport_kind: "reticulum".to_owned(),
-            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
             target_scope: None,
             target_label: None,
-            source: TransportPublishTargetSource::ReticulumPreview,
+            source: TransportPublishTargetSource::Reticulum,
             attempted: false,
             outcome_kind: TransportPublishOutcomeKind::DeferredUntilImplemented,
-            message: Some("reticulum preview unavailable".to_owned()),
+            message: Some("reticulum deferred until implemented".to_owned()),
             latency_ms: None,
         }],
     }
@@ -257,7 +263,7 @@ fn reticulum_deferred_job() -> TransportPublishJobView {
 fn publish_response_json_for_job(job: TransportPublishJobView) -> String {
     serde_json::json!({
         "jsonrpc": "2.0",
-        "id": SDK_RADROOTSD_PROXY_REQUEST_ID,
+        "id": SDK_RADROOTSD_PUBLISH_REQUEST_ID,
         "result": {
             "deduplicated": false,
             "job": job
@@ -273,7 +279,7 @@ fn publish_response_json() -> String {
 fn reticulum_deferred_response_json() -> String {
     serde_json::json!({
         "jsonrpc": "2.0",
-        "id": SDK_RADROOTSD_PROXY_REQUEST_ID,
+        "id": SDK_RADROOTSD_PUBLISH_REQUEST_ID,
         "result": {
             "deduplicated": false,
             "job": reticulum_deferred_job()
@@ -332,12 +338,12 @@ fn auth_headers_omit_or_redact_bearer_authorization() {
 }
 
 #[test]
-fn proxy_config_builders_preserve_typed_runtime_options() {
-    let config = RadrootsdProxyConfig::new("http://127.0.0.1:8080/rpc")
+fn radrootsd_publish_config_builders_preserve_typed_runtime_options() {
+    let config = RadrootsdPublishConfig::new("http://127.0.0.1:8080/rpc")
         .with_auth(RadrootsdAuth::BearerToken("sdk-token".to_owned()))
         .with_timeout(Duration::from_millis(250))
         .with_request_timeout_ms(1_500);
-    let adapter = RadrootsdProxyPublishAdapter::new(config.clone());
+    let adapter = RadrootsdPublishAdapter::new(config.clone());
 
     assert_eq!(adapter.config(), &config);
     assert_eq!(adapter.config().endpoint, "http://127.0.0.1:8080/rpc");
@@ -355,7 +361,7 @@ fn publish_event_request_json_uses_signed_event_contract() {
 
     let raw_event_json = value["raw_event_json"].as_str().expect("raw event json");
     let raw_event: serde_json::Value = serde_json::from_str(raw_event_json).expect("raw event");
-    assert_eq!(raw_event["id"], "a".repeat(64));
+    assert_eq!(raw_event["id"], signed_event_id());
     assert_eq!(raw_event["pubkey"], "b".repeat(64));
     assert_eq!(raw_event["kind"], 30_402);
     assert_eq!(value["target_policy"]["kind"], "nostr");
@@ -378,15 +384,15 @@ fn publish_event_request_json_uses_signed_event_contract() {
 fn decode_jsonrpc_response_validates_envelope_and_errors() {
     let response: TransportPublishEventResponse = decode_jsonrpc_response(
         METHOD_EVENT,
-        SDK_RADROOTSD_PROXY_REQUEST_ID,
+        SDK_RADROOTSD_PUBLISH_REQUEST_ID,
         publish_response_json().as_str(),
     )
     .expect("response");
-    assert_eq!(response.job.event_id, "a".repeat(64));
+    assert_eq!(response.job.event_id, signed_event_id());
 
     let error = decode_jsonrpc_response::<TransportPublishEventResponse>(
         METHOD_EVENT,
-        SDK_RADROOTSD_PROXY_REQUEST_ID,
+        SDK_RADROOTSD_PUBLISH_REQUEST_ID,
         r#"{"jsonrpc":"2.0","id":"radroots-sdk-transport-publish-event","error":{"code":-32001,"message":"principal unauthorized"}}"#,
     )
     .expect_err("jsonrpc error");
@@ -447,7 +453,7 @@ async fn publish_event_posts_transport_publish_jsonrpc() {
     .await
     .expect("publish");
 
-    assert_eq!(receipt.job.event_id, "a".repeat(64));
+    assert_eq!(receipt.job.event_id, signed_event_id());
     let recorded = handle.join().expect("server thread");
     assert_eq!(recorded.request_line, "POST /rpc HTTP/1.1");
     assert!(
@@ -458,7 +464,7 @@ async fn publish_event_posts_transport_publish_jsonrpc() {
     );
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
     assert_eq!(body["method"], METHOD_EVENT);
-    assert_eq!(body["id"], SDK_RADROOTSD_PROXY_REQUEST_ID);
+    assert_eq!(body["id"], SDK_RADROOTSD_PUBLISH_REQUEST_ID);
     let raw_event_json = body["params"]["raw_event_json"]
         .as_str()
         .expect("raw event json");
@@ -472,7 +478,7 @@ async fn publish_event_posts_transport_publish_jsonrpc() {
 }
 
 #[tokio::test]
-async fn publish_signed_event_posts_typed_proxy_request() {
+async fn publish_signed_event_posts_typed_radrootsd_request() {
     let mut response_job = explicit_nostr_job(
         vec!["wss://relay.example.com".to_owned()],
         TransportPublishDeliveryPolicy::All,
@@ -486,14 +492,14 @@ async fn publish_signed_event_posts_typed_proxy_request() {
     response_job.targets[0].target_label = Some("Farm relay".to_owned());
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(
-        RadrootsdProxyConfig::new(endpoint)
+    let adapter = RadrootsdPublishAdapter::new(
+        RadrootsdPublishConfig::new(endpoint)
             .with_auth(RadrootsdAuth::BearerToken("sdk-token".into()))
             .with_request_timeout_ms(7_000),
     );
 
     let receipt = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay.example.com")
@@ -543,17 +549,17 @@ async fn publish_signed_event_posts_typed_proxy_request() {
 }
 
 #[tokio::test]
-async fn publish_signed_event_preserves_typed_reticulum_preview_behavior() {
+async fn publish_signed_event_preserves_typed_reticulum_behavior() {
     let response_json = reticulum_deferred_response_json();
     let (endpoint, handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let response = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::DeferDeliveryPlans,
                 ),
             ]),
             delivery_policy: TransportPublishDeliveryPolicy::Any,
@@ -577,10 +583,10 @@ async fn publish_signed_event_preserves_typed_reticulum_preview_behavior() {
     );
     assert_eq!(
         body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+        RADROOTS_RETICULUM_ENDPOINT_URI
     );
     assert_eq!(
-        body["params"]["target_policy"]["targets"][0]["preview_behavior"],
+        body["params"]["target_policy"]["targets"][0]["reticulum_behavior"],
         "defer_delivery_plans"
     );
 }
@@ -591,10 +597,10 @@ async fn publish_signed_event_rejects_mismatched_daemon_event_identity() {
     response_job.event_id = "0".repeat(64);
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let error = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::nostr(
                 NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -627,10 +633,10 @@ async fn publish_signed_event_rejects_mismatched_daemon_pubkey_and_kind() {
     ] {
         let response_json = publish_response_json_for_job(response_job);
         let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-        let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+        let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
         let error = adapter
-            .publish_signed_event(RadrootsdProxyPublishRequest {
+            .publish_signed_event(RadrootsdPublishRequest {
                 signed_event: signed_event(),
                 target_policy: TransportPublishTargetPolicy::nostr(
                     NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -654,10 +660,10 @@ async fn publish_signed_event_rejects_mismatched_daemon_delivery_policy() {
     response_job.delivery_policy = TransportPublishDeliveryPolicy::All;
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let error = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::nostr(
                 NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -677,14 +683,14 @@ async fn publish_signed_event_rejects_mismatched_daemon_delivery_policy() {
 #[tokio::test]
 async fn publish_signed_event_rejects_mismatched_explicit_target_response() {
     let (endpoint, _handle) = spawn_http_server("200 OK", publish_response_json().as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let error = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::DeferDeliveryPlans,
                 ),
             ]),
             delivery_policy: TransportPublishDeliveryPolicy::Any,
@@ -710,10 +716,10 @@ async fn publish_signed_event_accepts_reordered_explicit_target_outcomes() {
     response_job.targets.reverse();
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let response = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay-a.example.com"),
@@ -746,10 +752,10 @@ async fn publish_signed_event_rejects_mismatched_explicit_target_outcomes() {
     response_job.targets[0].endpoint_uri = "wss://relay-other.example.com".to_owned();
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let error = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay.example.com"),
@@ -777,10 +783,10 @@ async fn publish_signed_event_rejects_mismatched_scoped_explicit_target_outcomes
     response_job.targets[0].target_scope = Some("farm.remote".to_owned());
     let response_json = publish_response_json_for_job(response_job);
     let (endpoint, _handle) = spawn_http_server("200 OK", response_json.as_str());
-    let adapter = RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new(endpoint));
+    let adapter = RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new(endpoint));
 
     let error = adapter
-        .publish_signed_event(RadrootsdProxyPublishRequest {
+        .publish_signed_event(RadrootsdPublishRequest {
             signed_event: signed_event(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
                 TransportPublishTarget::nostr("wss://relay.example.com").with_scope("farm.local"),
@@ -836,8 +842,8 @@ async fn publish_event_empty_http_error_reports_empty_body() {
 #[tokio::test]
 async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
-    let base = RadrootsdProxyPublishRequest {
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
+    let base = RadrootsdPublishRequest {
         signed_event: signed_event(),
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -853,7 +859,7 @@ async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
     let mut too_many_targets = base.clone();
     too_many_targets.target_policy = TransportPublishTargetPolicy::nostr(
         NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
-        (0..=SDK_RADROOTSD_PROXY_MAX_TARGETS)
+        (0..=SDK_RADROOTSD_PUBLISH_MAX_TARGETS)
             .map(|index| format!("wss://relay-{index}.example.com"))
             .collect(),
     );
@@ -862,32 +868,32 @@ async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
         NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
         vec![" ".to_owned()],
     );
-    let mut nostr_preview_behavior = base.clone();
-    nostr_preview_behavior.target_policy =
+    let mut nostr_reticulum_behavior = base.clone();
+    nostr_reticulum_behavior.target_policy =
         TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
             transport_kind: "nostr".to_owned(),
             endpoint_uri: "wss://relay.example.com".to_owned(),
             target_scope: None,
             target_label: None,
-            preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+            reticulum_behavior: Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts),
         }]);
-    let mut explicit_proxy_target = base.clone();
-    explicit_proxy_target.target_policy =
+    let mut explicit_radrootsd_target = base.clone();
+    explicit_radrootsd_target.target_policy =
         TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
-            transport_kind: "proxy".to_owned(),
-            endpoint_uri: "radrootsd-proxy:publish".to_owned(),
+            transport_kind: "radrootsd".to_owned(),
+            endpoint_uri: "radrootsd-execution:publish".to_owned(),
             target_scope: None,
             target_label: None,
-            preview_behavior: None,
+            reticulum_behavior: None,
         }]);
-    let proxy_error = adapter
-        .publish_signed_event(explicit_proxy_target)
+    let radrootsd_error = adapter
+        .publish_signed_event(explicit_radrootsd_target)
         .await
-        .expect_err("explicit proxy target");
+        .expect_err("explicit radrootsd target");
     assert!(matches!(
-        proxy_error,
+        radrootsd_error,
         RadrootsdError::InvalidRequest(message)
-            if message.contains("proxy") && message.contains("daemon explicit target")
+            if message.contains("transport target 0 kind must be canonical lowercase")
     ));
     let mut empty_idempotency = base;
     empty_idempotency.idempotency_key = Some(" ".to_owned());
@@ -896,7 +902,7 @@ async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
         invalid_quorum,
         too_many_targets,
         empty_endpoint_uri,
-        nostr_preview_behavior,
+        nostr_reticulum_behavior,
         empty_idempotency,
     ] {
         assert!(matches!(
@@ -909,8 +915,8 @@ async fn publish_signed_event_rejects_invalid_target_requests_before_http() {
 #[tokio::test]
 async fn adapter_rejects_invalid_request_before_transport() {
     let adapter =
-        RadrootsdProxyPublishAdapter::new(RadrootsdProxyConfig::new("http://127.0.0.1:9/rpc"));
-    let request = RadrootsdProxyPublishRequest {
+        RadrootsdPublishAdapter::new(RadrootsdPublishConfig::new("http://127.0.0.1:9/rpc"));
+    let request = RadrootsdPublishRequest {
         signed_event: signed_event(),
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,

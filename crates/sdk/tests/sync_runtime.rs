@@ -20,17 +20,17 @@ use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventState,
     RadrootsOutboxOperationInput, RadrootsOutboxSignedOperationInput,
 };
-#[cfg(feature = "radrootsd-proxy")]
-use radroots_sdk::ProxyProfile;
+#[cfg(feature = "radrootsd-execution")]
+use radroots_sdk::RadrootsdExecutionProfile;
 use radroots_sdk::{
-    BackupRequest, HybridProfile, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND,
-    ListingEnqueuePublishRequest, ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy,
+    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest,
+    ListingPreparePublishRequest, MultiTargetProfile, NostrProfile, NostrRelayUrlPolicy,
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
     PushOutboxTargetReceipt, PushOutboxTransportOutcomeKind, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkTimestamp, RestoreRequest, ReticulumPreviewBehavior, ReticulumPreviewProfile,
-    ReticulumPreviewTryNowRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
+    RadrootsSdkTimestamp, RestoreRequest, ReticulumBehavior, ReticulumProfile,
+    ReticulumTryNowRequest, SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRestoreState,
     StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
 use radroots_transport::{
@@ -42,13 +42,13 @@ use radroots_transport_nostr::{
     RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
     RadrootsRelayTransportError,
 };
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::io::{Read, Write};
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -65,6 +65,8 @@ const LOCAL_RELAY_B: &str = "ws://127.0.0.1:8081";
 const LOCAL_RELAY_C: &str = "ws://[::1]:8082";
 const NONLOCAL_WS_RELAY: &str = "ws://relay.example.com";
 const PRIVATE_LAN_WS_RELAY: &str = "ws://192.168.1.10:8080";
+#[cfg(feature = "radrootsd-execution")]
+const RADROOTSD_EXECUTION_TEST_RELAY: &str = "wss://daemon-resolved.example.com";
 
 #[derive(Clone)]
 struct FixtureSigner {
@@ -73,12 +75,23 @@ struct FixtureSigner {
 
 struct TransportFailurePublishAdapter;
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 struct RecordedTransportPublishRequest {
     body: String,
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
+fn radrootsd_execution_transport_profile() -> TransportProfile {
+    TransportProfile::nostr(
+        NostrProfile::new(
+            [RADROOTSD_EXECUTION_TEST_RELAY],
+            NostrRelayUrlPolicy::Public,
+        )
+        .expect("radrootsd execution Nostr profile"),
+    )
+}
+
+#[cfg(feature = "radrootsd-execution")]
 #[derive(Clone, Copy)]
 enum TransportPublishResponseMode {
     Accepted,
@@ -95,7 +108,7 @@ struct RecordingPublishAdapter {
     relay_batches: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn spawn_transport_publish_server() -> (String, JoinHandle<RecordedTransportPublishRequest>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind transport publish server");
     let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
@@ -113,7 +126,7 @@ fn spawn_transport_publish_server() -> (String, JoinHandle<RecordedTransportPubl
     (endpoint, handle)
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn spawn_transport_publish_sequence_server(
     responses: Vec<TransportPublishResponseMode>,
 ) -> (String, JoinHandle<Vec<RecordedTransportPublishRequest>>) {
@@ -134,7 +147,7 @@ fn spawn_transport_publish_sequence_server(
     (endpoint, handle)
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn read_transport_publish_request_body(stream: &mut TcpStream) -> String {
     let mut request = Vec::new();
     let mut buffer = [0u8; 1024];
@@ -174,7 +187,7 @@ fn read_transport_publish_request_body(stream: &mut TcpStream) -> String {
     body.to_owned()
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 fn write_transport_publish_response(
     stream: &mut TcpStream,
     body: &str,
@@ -490,30 +503,30 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     (tempdir, sdk)
 }
 
-async fn reticulum_preview_directory_sdk(
-    behavior: ReticulumPreviewBehavior,
+async fn reticulum_directory_sdk(
+    behavior: ReticulumBehavior,
 ) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let profile = ReticulumPreviewProfile::preview_unavailable().with_behavior(behavior);
+    let profile = ReticulumProfile::deferred_until_implemented().with_behavior(behavior);
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::reticulum_preview(profile))
+        .transport_profile(TransportProfile::reticulum(profile))
         .build()
         .await
         .expect("sdk");
     (tempdir, sdk)
 }
 
-async fn hybrid_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
+async fn multi_target_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::hybrid(HybridProfile::new(
+        .transport_profile(TransportProfile::multi_target(MultiTargetProfile::new(
             NostrProfile::new(relays.iter().copied(), NostrRelayUrlPolicy::Public)
                 .expect("Nostr profile"),
-            ReticulumPreviewProfile::preview_unavailable(),
+            ReticulumProfile::deferred_until_implemented(),
         )))
         .build()
         .await
@@ -763,7 +776,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
                 "retryable_events": 0,
                 "terminal_events": 0,
                 "failed_terminal_events": 0,
-                "preview_unavailable_events": 0,
+                "deferred_until_implemented_events": 0,
                 "deferred_until_implemented_events": 0,
                 "ready_signed_events": 0,
                 "publishing_events": 0,
@@ -795,6 +808,8 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
                     "endpoint_uri": null,
                     "configured": true,
                     "implementation": "real",
+                    "maturity": "stable",
+                    "availability": "available",
                     "usable_for_delivery": true,
                     "capabilities": {
                         "deliver": true,
@@ -808,8 +823,8 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
 }
 
 #[tokio::test]
-async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
-    let (_tempdir, sdk) = hybrid_directory_sdk(&[RELAY_A, RELAY_B]).await;
+async fn sync_status_reports_multi_target_transport_targets_and_statuses() {
+    let (_tempdir, sdk) = multi_target_directory_sdk(&[RELAY_A, RELAY_B]).await;
 
     let receipt = sdk
         .sync()
@@ -817,7 +832,10 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
         .await
         .expect("status");
 
-    assert_eq!(receipt.transport_profile.transport_profile_id, "hybrid");
+    assert_eq!(
+        receipt.transport_profile.transport_profile_id,
+        "multi_target"
+    );
     assert_eq!(
         receipt.transport_profile.configured_transport_target_count,
         3
@@ -839,12 +857,7 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
         vec![
             ("nostr", RELAY_A, None, None),
             ("nostr", RELAY_B, None, None),
-            (
-                "reticulum",
-                "reticulum:preview-unavailable",
-                Some("local_preview"),
-                None
-            )
+            ("reticulum", "reticulum:local", Some("local"), None)
         ]
     );
     assert_eq!(
@@ -865,14 +878,7 @@ async fn sync_status_reports_hybrid_transport_targets_and_statuses() {
             .collect::<Vec<_>>(),
         vec![
             ("nostr", "real", true, true, true, false),
-            (
-                "reticulum",
-                "preview_unavailable",
-                true,
-                false,
-                false,
-                false
-            )
+            ("reticulum", "real", true, false, false, false)
         ]
     );
 }
@@ -1735,15 +1741,16 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
     assert!(adapter.captured_raw_events().is_empty());
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved_relays() {
+async fn product_push_outbox_uses_radrootsd_execution_transport_with_daemon_resolved_relays() {
     let (endpoint, handle) = spawn_transport_publish_server();
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(endpoint))
         .build()
         .await
         .expect("sdk");
@@ -1753,7 +1760,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
         .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
-                listing(LISTING_A_D_TAG, "Proxy Coffee"),
+                listing(LISTING_A_D_TAG, "Radrootsd Coffee"),
                 TargetPolicy::default_profile(),
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000250")
@@ -1779,7 +1786,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
     assert_eq!(pre_push_targets.len(), 1);
     assert_eq!(
         pre_push_targets[0].transport_kind,
-        radroots_sdk::RadrootsTransportKind::Proxy
+        radroots_sdk::RadrootsTransportKind::Nostr
     );
     assert_eq!(
         pre_push_targets[0].status,
@@ -1818,14 +1825,10 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
     let recorded = handle.join().expect("transport publish request");
     let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
     assert_eq!(body["method"], "transport.publish.event");
-    assert_eq!(body["params"]["target_policy"]["kind"], "nostr");
+    assert_eq!(body["params"]["target_policy"]["kind"], "explicit_targets");
     assert_eq!(
-        body["params"]["target_policy"]["relay_urls"],
-        serde_json::json!([])
-    );
-    assert_eq!(
-        body["params"]["target_policy"]["source_policy"],
-        "request_then_author_write_then_daemon_default"
+        body["params"]["target_policy"]["targets"][0]["endpoint_uri"],
+        RADROOTSD_EXECUTION_TEST_RELAY
     );
     assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
     let raw_event_json = body["params"]["raw_event_json"]
@@ -1845,9 +1848,9 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
     assert_eq!(status.outbox.ready_signed_events, 0);
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_before_selecting_work()
+async fn product_push_outbox_radrootsd_execution_recovers_expired_publishing_claim_before_selecting_work()
  {
     let (endpoint, handle) = spawn_transport_publish_server();
     let tempdir = tempfile::tempdir().expect("tempdir");
@@ -1855,7 +1858,8 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
     let sdk = RadrootsClient::builder()
         .directory_storage(storage.clone())
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint.clone())))
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(endpoint.clone()))
         .build()
         .await
         .expect("sdk");
@@ -1864,7 +1868,7 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
         .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
-                listing(LISTING_A_D_TAG, "Recovered Proxy Coffee"),
+                listing(LISTING_A_D_TAG, "Recovered Radrootsd Coffee"),
                 TargetPolicy::default_profile(),
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000251")
@@ -1879,14 +1883,14 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
     let stale_claim = outbox
         .claim_ready_signed_event(
             enqueue.outbox_event_id,
-            "stalled-proxy-publisher",
-            "expired-proxy-publish",
+            "stalled-radrootsd-publisher",
+            "expired-radrootsd-publish",
             1_700_000_000_500,
             1_700_000_000_000,
         )
         .await
-        .expect("stale proxy claim")
-        .expect("stale proxy claim");
+        .expect("stale radrootsd claim")
+        .expect("stale radrootsd claim");
     let active_delivery_plan_id = stale_claim
         .active_delivery_plan_id
         .expect("active delivery plan id");
@@ -1898,13 +1902,14 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
     assert_eq!(stored_before.state, RadrootsOutboxEventState::Publishing);
     assert_eq!(
         stored_before.claim_token.as_deref(),
-        Some("expired-proxy-publish")
+        Some("expired-radrootsd-publish")
     );
     drop(sdk);
     let sdk = RadrootsClient::builder()
         .directory_storage(storage)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(endpoint))
         .build()
         .await
         .expect("reopened sdk");
@@ -1940,24 +1945,25 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
             .starts_with(format!("radroots-sdk-outbox-{}-2-", enqueue.outbox_event_id).as_str())
     );
     assert!(idempotency_key.ends_with(format!("-{active_delivery_plan_id}").as_str()));
-    assert_eq!(body["params"]["target_policy"]["kind"], "nostr");
+    assert_eq!(body["params"]["target_policy"]["kind"], "explicit_targets");
     assert_eq!(body["params"]["delivery_policy"]["mode"], "all");
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
+async fn product_push_outbox_radrootsd_execution_idempotency_is_attempt_scoped() {
     let (endpoint, handle) = spawn_transport_publish_sequence_server(vec![
         TransportPublishResponseMode::Retryable,
         TransportPublishResponseMode::Accepted,
     ]);
     let tempdir = tempfile::tempdir().expect("tempdir");
     let storage = tempdir.path().join("sdk");
-    let transport = TransportProfile::proxy(ProxyProfile::new(endpoint));
+    let radrootsd_execution_profile = RadrootsdExecutionProfile::new(endpoint);
     let sdk = RadrootsClient::builder()
         .directory_storage(storage.clone())
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(transport.clone())
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(radrootsd_execution_profile.clone())
         .build()
         .await
         .expect("sdk");
@@ -2008,7 +2014,8 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     let sdk = RadrootsClient::builder()
         .directory_storage(storage)
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_001))
-        .transport_profile(transport)
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(radrootsd_execution_profile)
         .build()
         .await
         .expect("reopened sdk");
@@ -2055,17 +2062,18 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
     assert!(second_key.ends_with(format!("-{active_plan_id}").as_str()));
 }
 
-#[cfg(feature = "radrootsd-proxy")]
+#[cfg(feature = "radrootsd-execution")]
 #[tokio::test]
-async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_outbox() {
-    let closed_listener = TcpListener::bind("127.0.0.1:0").expect("bind closed proxy");
+async fn product_push_outbox_radrootsd_execution_error_and_terminal_paths_update_outbox() {
+    let closed_listener = TcpListener::bind("127.0.0.1:0").expect("bind closed radrootsd");
     let closed_endpoint = format!("http://{}/rpc", closed_listener.local_addr().expect("addr"));
     drop(closed_listener);
     let tempdir = tempfile::tempdir().expect("tempdir");
     let retryable_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("retryable-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(closed_endpoint)))
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(closed_endpoint))
         .build()
         .await
         .expect("retryable sdk");
@@ -2074,7 +2082,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
-                listing(LISTING_A_D_TAG, "Proxy Error Coffee"),
+                listing(LISTING_A_D_TAG, "Radrootsd Error Coffee"),
                 TargetPolicy::default_profile(),
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000253")
@@ -2108,7 +2116,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
         retryable.events[0].targets[0]
             .message
             .as_deref()
-            .is_some_and(|error| error.contains("radrootsd proxy publish failed"))
+            .is_some_and(|error| error.contains("radrootsd publish failed"))
     );
     let retryable_status = retryable_sdk
         .sync()
@@ -2121,7 +2129,7 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
             .outbox
             .last_error
             .as_deref()
-            .is_some_and(|error| error.contains("radrootsd proxy publish failed"))
+            .is_some_and(|error| error.contains("radrootsd publish failed"))
     );
 
     let (terminal_endpoint, terminal_handle) =
@@ -2129,9 +2137,8 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
     let terminal_sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("terminal-sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(
-            terminal_endpoint,
-        )))
+        .transport_profile(radrootsd_execution_transport_profile())
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(terminal_endpoint))
         .build()
         .await
         .expect("terminal sdk");
@@ -2292,17 +2299,16 @@ async fn product_push_outbox_empty_queue_does_not_require_builder_relays() {
 }
 
 #[tokio::test]
-async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempts_with_preview_work()
- {
+async fn sync_runtime_product_push_outbox_reticulum_reports_zero_attempts_with_reticulum_work() {
     let cases = [
         (
-            ReticulumPreviewBehavior::RejectDeliveryAttempts,
-            PushOutboxEventState::PreviewUnavailable,
-            PushOutboxTargetOutcomeKind::PreviewUnavailable,
-            PushOutboxTransportOutcomeKind::TransportUnavailable,
+            ReticulumBehavior::RejectDeliveryAttempts,
+            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
+            PushOutboxTransportOutcomeKind::DeferredUntilImplemented,
         ),
         (
-            ReticulumPreviewBehavior::DeferDeliveryPlans,
+            ReticulumBehavior::DeferDeliveryPlans,
             PushOutboxEventState::DeferredUntilImplemented,
             PushOutboxTargetOutcomeKind::DeferredUntilImplemented,
             PushOutboxTransportOutcomeKind::DeferredUntilImplemented,
@@ -2310,12 +2316,12 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
     ];
 
     for (behavior, expected_state, expected_outcome, expected_transport_outcome) in cases {
-        let (_tempdir, sdk) = reticulum_preview_directory_sdk(behavior).await;
+        let (_tempdir, sdk) = reticulum_directory_sdk(behavior).await;
         let empty = sdk
             .sync()
             .push_outbox(PushOutboxRequest::new())
             .await
-            .expect("empty Reticulum preview push");
+            .expect("empty Reticulum push");
         assert_eq!(empty.attempted_events, 0);
         assert!(empty.events.is_empty());
 
@@ -2324,7 +2330,7 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             .enqueue_publish_with_explicit_signer(
                 ListingEnqueuePublishRequest::new(
                     actor(),
-                    listing(LISTING_A_D_TAG, "Reticulum Preview Coffee"),
+                    listing(LISTING_A_D_TAG, "Reticulum Coffee"),
                     TargetPolicy::default_profile(),
                 )
                 .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000255")
@@ -2338,7 +2344,7 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             .sync()
             .push_outbox(PushOutboxRequest::new().with_limit(1))
             .await
-            .expect("Reticulum preview push receipt");
+            .expect("Reticulum push receipt");
         assert_eq!(receipt.attempted_events, 0);
         assert_eq!(receipt.published_events, 0);
         assert_eq!(receipt.retryable_events, 0);
@@ -2356,8 +2362,8 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
         assert_eq!(event.targets.len(), 1);
         let target = &event.targets[0];
         assert_eq!(target.transport_kind, "reticulum");
-        assert_eq!(target.endpoint_uri, "reticulum:preview-unavailable");
-        assert_eq!(target.target_scope.as_deref(), Some("local_preview"));
+        assert_eq!(target.endpoint_uri, "reticulum:local");
+        assert_eq!(target.target_scope.as_deref(), Some("local"));
         assert_eq!(target.target_label.as_deref(), None);
         assert_eq!(target.outcome_kind, expected_outcome);
         assert_eq!(
@@ -2377,26 +2383,12 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             .expect("status");
         assert_eq!(status.outbox.ready_signed_events, 0);
         assert_eq!(status.outbox.pending_events, 0);
-        let expected_preview = if behavior == ReticulumPreviewBehavior::RejectDeliveryAttempts {
-            1
-        } else {
-            0
-        };
-        let expected_deferred = if behavior == ReticulumPreviewBehavior::DeferDeliveryPlans {
-            1
-        } else {
-            0
-        };
-        assert_eq!(status.outbox.preview_unavailable_events, expected_preview);
-        assert_eq!(
-            status.outbox.deferred_until_implemented_events,
-            expected_deferred
-        );
+        assert_eq!(status.outbox.deferred_until_implemented_events, 1);
         assert_eq!(
             status.transport_profile.configured_transport_targets[0]
                 .target_scope
                 .as_deref(),
-            Some("local_preview")
+            Some("local")
         );
         assert_eq!(status.outbox.total_events, 1);
         assert_eq!(enqueue.outbox_event_id, 1);
@@ -2405,7 +2397,7 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
             .sync()
             .push_outbox(PushOutboxRequest::new().with_outbox_event_id(enqueue.outbox_event_id))
             .await
-            .expect("specific Reticulum preview push receipt");
+            .expect("specific Reticulum push receipt");
         assert_eq!(specific.attempted_events, 0);
         assert_eq!(specific.events.len(), 1);
         assert_eq!(specific.events[0].outbox_event_id, enqueue.outbox_event_id);
@@ -2413,24 +2405,23 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
 }
 
 #[tokio::test]
-async fn sync_runtime_try_reticulum_preview_now_returns_explicit_unavailable_error() {
-    let (_tempdir, sdk) =
-        reticulum_preview_directory_sdk(ReticulumPreviewBehavior::DeferDeliveryPlans).await;
+async fn sync_runtime_try_reticulum_now_returns_explicit_unavailable_error() {
+    let (_tempdir, sdk) = reticulum_directory_sdk(ReticulumBehavior::DeferDeliveryPlans).await;
 
     let error = sdk
         .sync()
-        .try_reticulum_preview_now(ReticulumPreviewTryNowRequest::new())
+        .try_reticulum_now(ReticulumTryNowRequest::new())
         .await
-        .expect_err("Reticulum preview unavailable");
+        .expect_err("Reticulum deferred until implemented");
 
     assert!(matches!(
         error,
-        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+        RadrootsSdkError::ReticulumTransportUnavailable {
             ref operation,
             ref endpoint_uri,
-            behavior: ReticulumPreviewBehavior::DeferDeliveryPlans,
-        } if operation == "sync.try_reticulum_preview_now"
-            && endpoint_uri == "reticulum:preview-unavailable"
+            behavior: ReticulumBehavior::DeferDeliveryPlans,
+        } if operation == "sync.try_reticulum_now"
+            && endpoint_uri == "reticulum:local"
     ));
 }
 

@@ -1,11 +1,11 @@
 use super::{
-    MeshScopeId, NostrProfile, NostrRelayUrlPolicy, PublishMode, ReticulumPreviewAgentEndpoint,
-    ReticulumPreviewBehavior, ReticulumPreviewProfile, SatisfactionPolicy, TargetPolicy, TargetSet,
+    MeshScopeId, NostrProfile, NostrRelayUrlPolicy, PublishMode, ReticulumAgentEndpoint,
+    ReticulumBehavior, ReticulumProfile, SatisfactionPolicy, TargetPolicy, TargetSet,
     TransportProfile,
 };
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 
@@ -223,30 +223,27 @@ fn target_sets_reject_duplicate_transport_fingerprints() {
 }
 
 #[test]
-fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
-    let profile = ReticulumPreviewProfile::preview_unavailable();
+fn reticulum_profile_uses_canonical_endpoint_and_behavior_names() {
+    let profile = ReticulumProfile::deferred_until_implemented();
 
-    assert_eq!(
-        profile.endpoint_uri(),
-        RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
-    );
+    assert_eq!(profile.endpoint_uri(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
         profile.behavior(),
-        ReticulumPreviewBehavior::RejectDeliveryAttempts
+        ReticulumBehavior::RejectDeliveryAttempts
     );
     assert_eq!(
-        ReticulumPreviewBehavior::RejectDeliveryAttempts.as_str(),
+        ReticulumBehavior::RejectDeliveryAttempts.as_str(),
         "reject_delivery_attempts"
     );
     assert_eq!(
-        ReticulumPreviewBehavior::DeferDeliveryPlans.as_str(),
+        ReticulumBehavior::DeferDeliveryPlans.as_str(),
         "defer_delivery_plans"
     );
     assert_eq!(
         serde_json::to_value(profile).expect("profile json"),
         serde_json::json!({
-            "endpoint_uri": "reticulum:preview-unavailable",
-            "scope": "local_preview",
+            "endpoint_uri": "reticulum:local",
+            "scope": "local",
             "agent_endpoint": null,
             "behavior": "reject_delivery_attempts"
         })
@@ -254,11 +251,11 @@ fn reticulum_preview_profile_uses_canonical_endpoint_and_behavior_names() {
 }
 
 #[test]
-fn reticulum_preview_profile_preserves_explicit_scope_and_agent_endpoint() {
-    let profile = ReticulumPreviewProfile::preview_unavailable()
+fn reticulum_profile_preserves_explicit_scope_and_agent_endpoint() {
+    let profile = ReticulumProfile::deferred_until_implemented()
         .with_scope(MeshScopeId::parse("farmers_market").expect("scope"))
         .with_agent_endpoint(
-            ReticulumPreviewAgentEndpoint::parse("reticulum-agent:local").expect("agent endpoint"),
+            ReticulumAgentEndpoint::parse("reticulum-agent:local").expect("agent endpoint"),
         );
 
     assert_eq!(profile.scope().as_str(), "farmers_market");
@@ -269,7 +266,7 @@ fn reticulum_preview_profile_preserves_explicit_scope_and_agent_endpoint() {
     assert_eq!(
         serde_json::to_value(profile).expect("profile json"),
         serde_json::json!({
-            "endpoint_uri": "reticulum:preview-unavailable",
+            "endpoint_uri": "reticulum:local",
             "scope": "farmers_market",
             "agent_endpoint": "reticulum-agent:local",
             "behavior": "reject_delivery_attempts"
@@ -278,7 +275,7 @@ fn reticulum_preview_profile_preserves_explicit_scope_and_agent_endpoint() {
 }
 
 #[test]
-fn reticulum_preview_agent_endpoint_rejects_non_agent_endpoint_families() {
+fn reticulum_agent_endpoint_rejects_non_agent_endpoint_families() {
     for invalid in [
         "",
         "reticulum-agent:",
@@ -290,33 +287,32 @@ fn reticulum_preview_agent_endpoint_rejects_non_agent_endpoint_families() {
         "ws://127.0.0.1:9735",
     ] {
         assert!(matches!(
-            ReticulumPreviewAgentEndpoint::parse(invalid),
+            ReticulumAgentEndpoint::parse(invalid),
             Err(RadrootsSdkError::InvalidRequest { ref message })
-                if message == "Reticulum preview agent endpoint is invalid"
+                if message == "Reticulum agent endpoint is invalid"
         ));
     }
 }
 
 #[test]
-fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
+fn explicit_target_sets_reject_noncanonical_reticulum_endpoints() {
     for invalid in [
-        " reticulum:preview-unavailable",
-        "reticulum:preview-unavailable ",
-        "RETICULUM:preview-unavailable",
-        "reticulum:Preview-Unavailable",
-        "reticulum:preview",
-        "reticulum:preview-unavailable-alt",
-        "reticulum:custom",
+        " reticulum:local".to_owned(),
+        "reticulum:local ".to_owned(),
+        "RETICULUM:deferred-until-implemented".to_owned(),
+        "reticulum:Preview-Unavailable".to_owned(),
+        ["reticulum:", "pre", "view"].concat(),
+        "reticulum:local-alt".to_owned(),
+        "reticulum:custom".to_owned(),
     ] {
         assert_eq!(
-            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid.as_str())
                 .expect_err("invalid Reticulum target"),
             RadrootsTransportError::InvalidTargetUri
         );
     }
 
-    let uri =
-        RadrootsTransportTargetUri::parse("reticulum:preview-unavailable-alt").expect("target uri");
+    let uri = RadrootsTransportTargetUri::parse("reticulum:local-alt").expect("target uri");
     let fingerprint = RadrootsTransportTargetFingerprint::from_target(
         &RadrootsTransportKind::Reticulum,
         &uri,
@@ -332,26 +328,6 @@ fn explicit_target_sets_reject_noncanonical_reticulum_preview_endpoints() {
     .expect_err("noncanonical Reticulum endpoint");
 
     assert!(matches!(err, RadrootsSdkError::InvalidRequest { .. }));
-}
-
-#[test]
-fn explicit_target_sets_reject_mixed_proxy_delegate_targets() {
-    let proxy = RadrootsTransportTarget::proxy("http://127.0.0.1:8080/rpc").expect("proxy target");
-    let nostr =
-        RadrootsTransportTarget::nostr_relay("wss://relay.example.com").expect("Nostr target");
-
-    let error = TargetSet::transport_targets(vec![proxy.clone(), nostr])
-        .expect_err("mixed proxy target set");
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::InvalidRequest { ref message }
-            if message.contains("proxy transport targets must be the only target")
-    ));
-
-    let proxy_only = TargetSet::transport_targets(vec![proxy]).expect("proxy-only target set");
-    assert_eq!(proxy_only.len(), 1);
-    assert_eq!(proxy_only.targets()[0].kind, RadrootsTransportKind::Proxy);
 }
 
 #[test]

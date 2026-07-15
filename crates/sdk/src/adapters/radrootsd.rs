@@ -10,8 +10,8 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
-pub const SDK_RADROOTSD_PROXY_REQUEST_ID: &str = "radroots-sdk-transport-publish-event";
-pub const SDK_RADROOTSD_PROXY_MAX_TARGETS: usize = 20;
+pub const SDK_RADROOTSD_PUBLISH_REQUEST_ID: &str = "radroots-sdk-transport-publish-event";
+pub const SDK_RADROOTSD_PUBLISH_MAX_TARGETS: usize = 20;
 
 #[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum RadrootsdAuth {
@@ -30,14 +30,14 @@ impl fmt::Debug for RadrootsdAuth {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsdProxyConfig {
+pub struct RadrootsdPublishConfig {
     pub endpoint: String,
     pub auth: RadrootsdAuth,
     pub timeout: Duration,
     pub request_timeout_ms: Option<u64>,
 }
 
-impl RadrootsdProxyConfig {
+impl RadrootsdPublishConfig {
     pub fn new(endpoint: impl Into<String>) -> Self {
         Self {
             endpoint: endpoint.into(),
@@ -64,28 +64,28 @@ impl RadrootsdProxyConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsdProxyPublishAdapter {
-    config: RadrootsdProxyConfig,
+pub struct RadrootsdPublishAdapter {
+    config: RadrootsdPublishConfig,
 }
 
-impl RadrootsdProxyPublishAdapter {
-    pub fn new(config: RadrootsdProxyConfig) -> Self {
+impl RadrootsdPublishAdapter {
+    pub fn new(config: RadrootsdPublishConfig) -> Self {
         Self { config }
     }
 
-    pub fn config(&self) -> &RadrootsdProxyConfig {
+    pub fn config(&self) -> &RadrootsdPublishConfig {
         &self.config
     }
 
     pub async fn publish_signed_event(
         &self,
-        request: RadrootsdProxyPublishRequest,
+        request: RadrootsdPublishRequest,
     ) -> Result<TransportPublishEventResponse, RadrootsdError> {
         let event_identity =
-            RadrootsdProxyPublishEventIdentity::from_signed_event(&request.signed_event);
+            RadrootsdPublishEventIdentity::from_signed_event(&request.signed_event);
         let request = request.into_protocol_request();
         request
-            .validate(SDK_RADROOTSD_PROXY_MAX_TARGETS)
+            .validate(SDK_RADROOTSD_PUBLISH_MAX_TARGETS)
             .map_err(RadrootsdError::from_protocol)?;
         let response = publish_event(
             self.config.endpoint.as_str(),
@@ -100,7 +100,7 @@ impl RadrootsdProxyPublishAdapter {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsdProxyPublishRequest {
+pub struct RadrootsdPublishRequest {
     pub signed_event: RadrootsSignedEvent,
     pub target_policy: TransportPublishTargetPolicy,
     pub delivery_policy: TransportPublishDeliveryPolicy,
@@ -108,7 +108,7 @@ pub struct RadrootsdProxyPublishRequest {
     pub timeout_ms: Option<u64>,
 }
 
-impl RadrootsdProxyPublishRequest {
+impl RadrootsdPublishRequest {
     fn into_protocol_request(self) -> TransportPublishEventRequest {
         TransportPublishEventRequest {
             raw_event_json: self.signed_event.raw_json().to_owned(),
@@ -121,13 +121,13 @@ impl RadrootsdProxyPublishRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RadrootsdProxyPublishEventIdentity {
+struct RadrootsdPublishEventIdentity {
     event_id: String,
     pubkey: String,
     kind: u32,
 }
 
-impl RadrootsdProxyPublishEventIdentity {
+impl RadrootsdPublishEventIdentity {
     fn from_signed_event(event: &RadrootsSignedEvent) -> Self {
         Self {
             event_id: event.id_str().to_owned(),
@@ -193,7 +193,7 @@ pub async fn publish_event(
     jsonrpc_call(
         endpoint,
         auth,
-        SDK_RADROOTSD_PROXY_REQUEST_ID,
+        SDK_RADROOTSD_PUBLISH_REQUEST_ID,
         METHOD_EVENT,
         request,
         timeout,
@@ -319,7 +319,7 @@ where
 
 fn validate_transport_publish_response_for_request(
     request: &TransportPublishEventRequest,
-    event_identity: &RadrootsdProxyPublishEventIdentity,
+    event_identity: &RadrootsdPublishEventIdentity,
     response: &TransportPublishEventResponse,
 ) -> Result<(), RadrootsdError> {
     response.job.validate().map_err(|error| {

@@ -229,19 +229,11 @@ const FORBIDDEN_SDK_ROOT_TRADE_ALIAS_NAMES: &[&str] = &[
 ];
 
 const FORBIDDEN_DAEMON_PUBLISH_PROXY_IDENTIFIERS: &[&str] = &[
-    "\"radrootsd_proxy\"",
-    "radrootsd.publish_proxy.v1",
-    "radroots_publish_proxy_protocol",
-    "publish_proxy_protocol",
+    concat!("\"radrootsd", "_", "pro", "xy\""),
+    concat!("radrootsd.publish", "_", "pro", "xy.v1"),
+    concat!("radroots_publish", "_", "pro", "xy_protocol"),
+    concat!("publish", "_", "pro", "xy_protocol"),
     "publish.relays.resolve",
-    "\"publish.event\"",
-    "PublishRelayPolicy",
-    "PublishDeliveryPolicy",
-    "PublishEventRequest",
-    "PublishEventResponse",
-    "PublishJobView",
-    "PublishRelayOutcome",
-    "PublishRelaySource",
 ];
 
 const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
@@ -773,14 +765,14 @@ fn contains_sdk_target_set_new(source: &str) -> bool {
 }
 
 #[test]
-fn sdk_proxy_required_targets_stay_fingerprint_exact() {
+fn sdk_radrootsd_execution_required_targets_stay_fingerprint_exact() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
 
     for required in [
-        "let required_remaining_targets =\n        proxy_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;",
+        "let required_remaining_targets =\n        radrootsd_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;",
         "required_remaining_targets.as_deref()",
-        "fn proxy_required_remaining_targets",
+        "fn radrootsd_required_remaining_targets",
         "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets }",
         "target.endpoint_fingerprint == *required",
         "target.status.counts_as_transport_satisfaction(*class)",
@@ -788,7 +780,7 @@ fn sdk_proxy_required_targets_stay_fingerprint_exact() {
     ] {
         assert!(
             sync_runtime.contains(required),
-            "SDK proxy publish must retain exact required-target witness `{required}`"
+            "SDK radrootsd publish must retain exact required-target witness `{required}`"
         );
     }
 
@@ -804,7 +796,7 @@ fn sdk_proxy_required_targets_stay_fingerprint_exact() {
     ] {
         assert!(
             !required_targets_arm.contains(forbidden),
-            "SDK RequiredTargets proxy arm must not lower to count policy `{forbidden}`"
+            "SDK RequiredTargets radrootsd arm must not lower to count policy `{forbidden}`"
         );
     }
 }
@@ -1662,7 +1654,7 @@ fn sdk_public_api_does_not_export_protocol_workflow_bypass() {
 }
 
 #[test]
-fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
+fn sdk_radrootsd_execution_surfaces_reject_removed_daemon_publish_identifiers() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     for relative_path in [
@@ -1676,34 +1668,29 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
         for forbidden in FORBIDDEN_DAEMON_PUBLISH_PROXY_IDENTIFIERS {
             assert!(
                 !contains_forbidden_concept(source.as_str(), forbidden),
-                "{relative_path} must not reintroduce removed daemon publish proxy identifier `{forbidden}`"
+                "{relative_path} must not reintroduce removed daemon publish identifier `{forbidden}`"
             );
         }
     }
 
     let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
     assert!(
-        transport_source.contains("RadrootsTransportKind::Proxy"),
-        "src/transport.rs must model SDK proxy targets with RadrootsTransportKind::Proxy"
+        !transport_source.contains(concat!("RadrootsTransportKind::", "Pro", "xy")),
+        "src/transport.rs must not model radrootsd execution as a transport kind"
     );
 
     let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
     assert!(
-        sync_runtime_source.contains("target.transport_kind == RadrootsTransportKind::Proxy"),
-        "src/sync_runtime.rs must identify proxy delegate targets with RadrootsTransportKind::Proxy"
+        !sync_runtime_source.contains(concat!("RadrootsTransportKind::", "Pro", "xy")),
+        "src/sync_runtime.rs must not identify radrootsd execution through a transport kind"
     );
     assert!(
-        sync_runtime_source
-            .contains("radrootsd proxy outbox publish explicit targets are Nostr-only"),
-        "src/sync_runtime.rs must reject non-Nostr proxy outbox explicit targets before behavior is lost"
+        sync_runtime_source.contains("radrootsd execution explicit targets are Nostr-only"),
+        "src/sync_runtime.rs must reject non-Nostr radrootsd explicit targets before behavior is lost"
     );
     assert!(
         sync_runtime_source.contains("active_delivery_plan_id(claimed"),
-        "src/sync_runtime.rs must derive proxy publish behavior from the claimed active delivery plan"
-    );
-    assert!(
-        sync_runtime_source.contains("mixed proxy delegate targets"),
-        "src/sync_runtime.rs must fail closed if proxy delegate targets are mixed in a claimed publish set"
+        "src/sync_runtime.rs must derive radrootsd publish behavior from the claimed active delivery plan"
     );
     for required in [
         "let mut completed_target_ids = std::collections::BTreeSet::new();",
@@ -1714,12 +1701,12 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
     ] {
         assert!(
             sync_runtime_source.contains(required),
-            "src/sync_runtime.rs must retain proxy completion uniqueness witness `{required}`"
+            "src/sync_runtime.rs must retain radrootsd completion uniqueness witness `{required}`"
         );
     }
     assert!(
-        !sync_runtime_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
-        "src/sync_runtime.rs must not rewrite Reticulum proxy outbox targets to reject attempts"
+        !sync_runtime_source.contains("TransportPublishReticulumBehavior::RejectDeliveryAttempts"),
+        "src/sync_runtime.rs must not rewrite Reticulum radrootsd outbox targets to reject attempts"
     );
     let sync_runtime_unit_source = read_source(
         manifest_dir
@@ -1727,48 +1714,47 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
             .as_path(),
     );
     for required in [
-        "claimed_uningested_proxy_event",
+        "claimed_uningested_radrootsd_event",
         "assert_no_transport_publish_request",
         "assert!(!stored_before.event_store_ingested)",
         "assert!(!stored.event_store_ingested)",
         "with_timeout(Duration::from_millis(50))",
-        "proxy_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_publish",
-        "proxy_outbox_target_conversion_preserves_nostr_scope_and_label",
-        "proxy_completion_matches_duplicate_endpoint_targets_by_scope",
-        "push_proxy_event_receipt_preserves_daemon_target_metadata",
-        "proxy_completion_rejects_duplicate_daemon_outcome_before_local_mutation",
+        "radrootsd_delivery_policy_rejects_non_accepted_satisfaction_before_daemon_publish",
+        "radrootsd_outbox_target_conversion_preserves_nostr_scope_and_label",
+        "radrootsd_completion_matches_duplicate_endpoint_targets_by_scope",
+        "push_radrootsd_event_receipt_preserves_daemon_target_metadata",
+        "radrootsd_completion_rejects_duplicate_daemon_outcome_before_local_mutation",
     ] {
         assert!(
             sync_runtime_unit_source.contains(required),
-            "tests/unit/sync_runtime_tests.rs must retain proxy local-validation ordering proof `{required}`"
+            "tests/unit/sync_runtime_tests.rs must retain radrootsd local-validation ordering proof `{required}`"
         );
     }
 
     let adapter_source = read_source(manifest_dir.join("src/adapters/radrootsd.rs").as_path());
     assert!(
-        !adapter_source
-            .contains("impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter"),
-        "src/adapters/radrootsd.rs must not implement relay publish traits for RadrootsdProxyPublishAdapter"
+        !adapter_source.contains("impl RadrootsRelayPublishAdapter for RadrootsdPublishAdapter"),
+        "src/adapters/radrootsd.rs must not implement relay publish traits for RadrootsdPublishAdapter"
     );
     assert!(
-        !adapter_source.contains("proxy_relay_receipt_from_response"),
+        !adapter_source.contains("radrootsd_relay_receipt_from_response"),
         "src/adapters/radrootsd.rs must not convert typed transport publish jobs into relay receipts"
     );
     assert!(
-        !adapter_source.contains("TransportPublishPreviewBehavior::RejectDeliveryAttempts"),
+        !adapter_source.contains("TransportPublishReticulumBehavior::RejectDeliveryAttempts"),
         "src/adapters/radrootsd.rs must not rewrite Reticulum relay targets to reject attempts"
     );
 
     for required in [
         "TransportPublishOutcomeKind::DeferredUntilImplemented",
         "mark_delivery_target_deferred_until_implemented",
-        "TransportPublishOutcomeKind::PreviewUnavailable",
-        "mark_delivery_target_preview_unavailable",
+        "TransportPublishOutcomeKind::DeferredUntilImplemented",
+        "mark_delivery_target_deferred_until_implemented",
         "PushOutboxEventState::DeferredUntilImplemented",
-        "PushOutboxEventState::PreviewUnavailable",
+        "PushOutboxEventState::DeferredUntilImplemented",
         "PushOutboxTargetOutcomeKind::DeferredUntilImplemented",
-        "PushOutboxTargetOutcomeKind::PreviewUnavailable",
-        "reject_non_accepted_proxy_satisfaction",
+        "PushOutboxTargetOutcomeKind::DeferredUntilImplemented",
+        "reject_non_accepted_radrootsd_satisfaction",
         "class != RadrootsTransportSatisfactionClass::Accepted",
         "target.target_scope.as_ref()",
         "outcome.target_scope.as_deref()",
@@ -1777,35 +1763,35 @@ fn sdk_proxy_surfaces_reject_removed_daemon_publish_proxy_identifiers() {
     ] {
         assert!(
             sync_runtime_source.contains(required),
-            "src/sync_runtime.rs must preserve proxy preview/deferred outcome witness `{required}`"
+            "src/sync_runtime.rs must preserve radrootsd deferred outcome witness `{required}`"
         );
     }
 
     let receipt_source = source_between(
         sync_runtime_source.as_str(),
-        "fn push_proxy_event_receipt",
-        "fn push_proxy_target_receipt",
+        "fn push_radrootsd_event_receipt",
+        "fn push_radrootsd_target_receipt",
     );
     assert!(
         receipt_source.contains("push_receipt_event_id("),
-        "push_proxy_event_receipt must convert daemon event ids through the typed receipt helper"
+        "push_radrootsd_event_receipt must convert daemon event ids through the typed receipt helper"
     );
     for forbidden in [".expect(", ".unwrap(", "panic!("] {
         assert!(
             !receipt_source.contains(forbidden),
-            "push_proxy_event_receipt must not use production panic path `{forbidden}`"
+            "push_radrootsd_event_receipt must not use production panic path `{forbidden}`"
         );
     }
 
-    let proxy_target_receipt_source = source_between(
+    let radrootsd_target_receipt_source = source_between(
         sync_runtime_source.as_str(),
-        "fn push_proxy_target_receipt",
-        "fn push_proxy_target_outcome_kind",
+        "fn push_radrootsd_target_receipt",
+        "fn push_radrootsd_target_outcome_kind",
     );
     for forbidden in ["target_scope: None", "target_label: None"] {
         assert!(
-            !proxy_target_receipt_source.contains(forbidden),
-            "push_proxy_target_receipt must not hard-code daemon metadata field `{forbidden}`"
+            !radrootsd_target_receipt_source.contains(forbidden),
+            "push_radrootsd_target_receipt must not hard-code daemon metadata field `{forbidden}`"
         );
     }
 }
@@ -1898,7 +1884,6 @@ fn sdk_public_outcome_label_contracts_are_explicit() {
                 r#"Self::TargetUriRejected => "target_uri_rejected""#,
                 r#"Self::SkippedAlreadyAccepted => "skipped_already_accepted""#,
                 r#"Self::DeferredUntilImplemented => "deferred_until_implemented""#,
-                r#"Self::PreviewUnavailable => "preview_unavailable""#,
                 r#"Self::Unknown => "unknown""#,
             ][..],
         ),
@@ -2009,7 +1994,7 @@ fn sdk_public_outcome_label_contracts_are_explicit() {
 }
 
 #[test]
-fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge() {
+fn sdk_transport_policy_sources_reject_configured_profile_and_radrootsd_relay_bridge() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     for relative_path in [
         "src",
@@ -2035,12 +2020,12 @@ fn sdk_transport_policy_sources_reject_configured_profile_and_proxy_relay_bridge
                 "configured_profile()",
                 "UseTransportProfile",
                 "use_transport_profile",
-                "impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter",
-                "proxy_relay_receipt_from_response",
+                "impl RadrootsRelayPublishAdapter for RadrootsdPublishAdapter",
+                "radrootsd_relay_receipt_from_response",
             ] {
                 assert!(
                     !source.contains(forbidden),
-                    "{} must not reintroduce removed transport policy or proxy relay bridge surface `{forbidden}`",
+                    "{} must not reintroduce removed transport policy or relay bridge surface `{forbidden}`",
                     path.display()
                 );
             }
@@ -2249,7 +2234,7 @@ fn sdk_workflow_runtime_records_local_import_observations() {
 }
 
 #[test]
-fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
+fn sdk_transport_sources_keep_reticulum_push_boundary() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     for relative_path in [
@@ -2259,41 +2244,39 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
         "src/adapters/radrootsd.rs",
     ] {
         let source = read_source(manifest_dir.join(relative_path).as_path());
-        if let Some(line) = removed_reticulum_preview_endpoint_lines(source.as_str())
+        if let Some(line) = removed_reticulum_endpoint_lines(source.as_str())
             .into_iter()
             .next()
         {
-            panic!(
-                "{relative_path}:{line} contains removed Reticulum preview endpoint `reticulum:preview`"
-            );
+            panic!("{relative_path}:{line} contains removed Reticulum endpoint");
         }
     }
 
     let transport_source = read_source(manifest_dir.join("src/transport.rs").as_path());
     assert!(
-        transport_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
-        "src/transport.rs must consume the shared Reticulum preview endpoint constant"
+        transport_source.contains("RADROOTS_RETICULUM_ENDPOINT_URI"),
+        "src/transport.rs must consume the shared Reticulum endpoint constant"
     );
     assert!(
         !transport_source.contains("const RETICULUM_PREVIEW_ENDPOINT_URI"),
-        "src/transport.rs must not duplicate the Reticulum preview endpoint constant"
+        "src/transport.rs must not duplicate the Reticulum endpoint constant"
     );
     assert!(
-        !transport_source.contains("reticulum:preview-unavailable"),
-        "src/transport.rs must not duplicate the Reticulum preview endpoint literal"
+        !transport_source.contains("reticulum:local"),
+        "src/transport.rs must not duplicate the Reticulum endpoint literal"
     );
 
     let sync_runtime = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
     for required in [
-        "TransportProfile::ReticulumPreview { .. }",
-        "reticulum_preview_push_receipt",
-        "reticulum_preview_event_receipt",
+        "TransportProfile::Reticulum { .. }",
+        "reticulum_push_receipt",
+        "reticulum_event_receipt",
         "push_reported_event",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
-        "ReticulumPreviewTryNowRequest",
-        "try_reticulum_preview_now",
-        "\"sync.try_reticulum_preview_now\"",
-        "RadrootsSdkError::ReticulumPreviewTransportUnavailable",
+        "ReticulumTryNowRequest",
+        "try_reticulum_now",
+        "\"sync.try_reticulum_now\"",
+        "RadrootsSdkError::ReticulumTransportUnavailable",
         "pub target_scope: Option<String>,",
         "pub target_label: Option<String>,",
         "pub transport_outcome_kind: Option<PushOutboxTransportOutcomeKind>,",
@@ -2301,33 +2284,33 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
     ] {
         assert!(
             sync_runtime.contains(required),
-            "src/sync_runtime.rs must retain Reticulum preview push boundary `{required}`"
+            "src/sync_runtime.rs must retain Reticulum push boundary `{required}`"
         );
     }
     assert!(
-        !sync_runtime.contains("push_outbox_has_no_reticulum_preview_work"),
-        "src/sync_runtime.rs must not revive the Reticulum preview ready-work error probe"
+        !sync_runtime.contains("push_outbox_has_no_reticulum_work"),
+        "src/sync_runtime.rs must not revive the Reticulum ready-work error probe"
     );
     assert!(
-        !sync_runtime.contains("RadrootsSdkError::reticulum_preview_transport_unavailable(\n"),
-        "src/sync_runtime.rs must not return Reticulum preview unavailable errors from push_outbox"
+        !sync_runtime.contains("RadrootsSdkError::reticulum_transport_unavailable(\n"),
+        "src/sync_runtime.rs must not return Reticulum deferred until implemented errors from push_outbox"
     );
 
     let error_source = read_source(manifest_dir.join("src/error.rs").as_path());
     for required in [
-        "reticulum_preview_transport_unavailable",
-        "reticulum_preview_transport_deferred",
-        "Reticulum preview endpoint",
+        "reticulum_transport_unavailable",
+        "reticulum_transport_deferred",
+        "Reticulum endpoint",
     ] {
         assert!(
             error_source.contains(required),
-            "src/error.rs must retain Reticulum preview error witness `{required}`"
+            "src/error.rs must retain Reticulum error witness `{required}`"
         );
     }
 }
 
 #[test]
-fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
+fn sdk_feature_matrix_keeps_reticulum_runtime_owned_without_alias() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let manifest_source = read_source(manifest_dir.join("Cargo.toml").as_path());
     let features_source = source_between(manifest_source.as_str(), "[features]", "[dependencies]");
@@ -2345,7 +2328,7 @@ fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
     ] {
         assert!(
             runtime_source.contains(required),
-            "SDK runtime feature must retain Reticulum preview matrix witness `{required}`"
+            "SDK runtime feature must retain Reticulum matrix witness `{required}`"
         );
     }
     for required in [
@@ -2361,7 +2344,7 @@ fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
     }
 
     for forbidden in [
-        "transport-reticulum-preview",
+        concat!("transport-reticulum-", "pre", "view"),
         "radroots_transport_reticulum/client",
         "reticulum-runtime",
         "dep:rns",
@@ -2373,7 +2356,7 @@ fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
     ] {
         assert!(
             !manifest_source.contains(forbidden),
-            "SDK feature matrix must not introduce Reticulum preview alias or real runtime dependency `{forbidden}`"
+            "SDK feature matrix must not introduce Reticulum alias or real runtime dependency `{forbidden}`"
         );
     }
 
@@ -2399,13 +2382,13 @@ fn sdk_feature_matrix_keeps_reticulum_preview_runtime_owned_without_alias() {
 
     let sync_runtime_source = read_source(manifest_dir.join("src/sync_runtime.rs").as_path());
     for required in [
-        "#[cfg(not(feature = \"radrootsd-proxy\"))]",
-        "TransportProfile::Proxy { .. } => Err(RadrootsSdkError::ProductSyncUnsupported",
-        "required_feature: \"radrootsd-proxy\"",
+        "#[cfg(not(feature = \"radrootsd-execution\"))]",
+        "self.sdk.radrootsd_execution_profile().is_some()",
+        "required_feature: \"radrootsd-execution\"",
     ] {
         assert!(
             sync_runtime_source.contains(required),
-            "SDK runtime-only push_outbox must retain proxy feature gate witness `{required}`"
+            "SDK runtime-only push_outbox must retain radrootsd execution feature gate witness `{required}`"
         );
     }
 }
@@ -2555,11 +2538,12 @@ fn is_doc_surface(path: &Path) -> bool {
     )
 }
 
-fn removed_reticulum_preview_endpoint_lines(source: &str) -> Vec<usize> {
+fn removed_reticulum_endpoint_lines(source: &str) -> Vec<usize> {
+    let removed_endpoint = ["reticulum:", "pre", "view"].concat();
     source
-        .match_indices("reticulum:preview")
+        .match_indices(removed_endpoint.as_str())
         .filter_map(|(index, _)| {
-            let after = source[index + "reticulum:preview".len()..].chars().next();
+            let after = source[index + removed_endpoint.len()..].chars().next();
             (after != Some('-')).then(|| line_number(source, index))
         })
         .collect()

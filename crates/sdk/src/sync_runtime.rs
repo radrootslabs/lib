@@ -1,29 +1,28 @@
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use crate::adapters::radrootsd::{
-    RadrootsdAuth, RadrootsdError, RadrootsdProxyConfig, RadrootsdProxyPublishAdapter,
-    RadrootsdProxyPublishRequest,
+    RadrootsdAuth, RadrootsdError, RadrootsdPublishAdapter, RadrootsdPublishConfig,
+    RadrootsdPublishRequest,
 };
 #[cfg(feature = "runtime")]
 use crate::{
     NostrRelayUrlPolicy, RadrootsSdkError, SyncClient,
     runtime::{RadrootsClient, sdk_now_ms},
-    transport::{ReticulumPreviewProfile, TransportProfile},
+    transport::{ReticulumProfile, TransportProfile},
 };
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-use crate::{ProxyAuth, ProxyProfile};
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+use crate::{RadrootsdExecutionAuth, RadrootsdExecutionProfile};
 #[cfg(feature = "runtime")]
 use radroots_event::ids::RadrootsEventId;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_outbox::RadrootsOutboxClaimedEvent;
 #[cfg(feature = "runtime")]
 use radroots_outbox::{
     RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
-    RadrootsOutboxEventState, RadrootsOutboxReticulumPreviewEventRecord,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxEventState, RadrootsOutboxReticulumEventRecord, RadrootsOutboxStatusSummary,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::projection::{
@@ -31,15 +30,16 @@ use radroots_trade::projection::{
     RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
     refresh_product_projections,
 };
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::RadrootsTransportTargetFingerprint;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportImplementationState,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
     RadrootsTransportTarget,
 };
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
 use radroots_transport_nostr::{RadrootsNostrClientPublishAdapter, RadrootsNostrTransport};
@@ -48,11 +48,11 @@ use radroots_transport_nostr::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
     RadrootsRelayOutcomeKind, publish_claimed_outbox_event_with_transport,
 };
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport_publish_protocol::{
-    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishJobStatus,
-    TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishTarget,
-    TransportPublishTargetOutcome, TransportPublishTargetPolicy,
+    TransportPublishDeliveryPolicy, TransportPublishJobStatus, TransportPublishJobView,
+    TransportPublishOutcomeKind, TransportPublishTarget, TransportPublishTargetOutcome,
+    TransportPublishTargetPolicy,
 };
 
 #[cfg(feature = "runtime")]
@@ -86,10 +86,10 @@ impl SyncStatusRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
-pub struct ReticulumPreviewTryNowRequest {}
+pub struct ReticulumTryNowRequest {}
 
 #[cfg(feature = "runtime")]
-impl ReticulumPreviewTryNowRequest {
+impl ReticulumTryNowRequest {
     pub fn new() -> Self {
         Self::default()
     }
@@ -144,7 +144,6 @@ pub struct SyncOutboxStatus {
     pub retryable_events: i64,
     pub terminal_events: i64,
     pub failed_terminal_events: i64,
-    pub preview_unavailable_events: i64,
     pub deferred_until_implemented_events: i64,
     pub ready_signed_events: i64,
     pub publishing_events: i64,
@@ -161,7 +160,6 @@ impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
             retryable_events: summary.retryable_events,
             terminal_events: summary.terminal_events,
             failed_terminal_events: summary.failed_terminal_events,
-            preview_unavailable_events: summary.preview_unavailable_events,
             deferred_until_implemented_events: summary.deferred_until_implemented_events,
             ready_signed_events: summary.ready_signed_events,
             publishing_events: summary.publishing_events,
@@ -232,6 +230,8 @@ pub struct SyncTransportStatusSummary {
     pub endpoint_uri: Option<String>,
     pub configured: bool,
     pub implementation: String,
+    pub maturity: String,
+    pub availability: String,
     pub usable_for_delivery: bool,
     pub capabilities: SyncTransportOperationCapabilitiesSummary,
     pub message: String,
@@ -253,6 +253,8 @@ impl SyncTransportStatusSummary {
             endpoint_uri: status.endpoint_uri,
             configured: status.configured,
             implementation: transport_implementation_label(status.implementation).to_owned(),
+            maturity: transport_maturity_label(status.maturity).to_owned(),
+            availability: transport_availability_label(status.availability).to_owned(),
             usable_for_delivery: status.usable_for_delivery,
             capabilities: SyncTransportOperationCapabilitiesSummary {
                 deliver: status.capabilities.deliver,
@@ -268,7 +270,25 @@ fn transport_implementation_label(state: RadrootsTransportImplementationState) -
     match state {
         RadrootsTransportImplementationState::Real => "real",
         RadrootsTransportImplementationState::Mock => "mock",
-        RadrootsTransportImplementationState::PreviewUnavailable => "preview_unavailable",
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn transport_maturity_label(maturity: RadrootsTransportCapabilityMaturity) -> &'static str {
+    match maturity {
+        RadrootsTransportCapabilityMaturity::Preview => "preview",
+        RadrootsTransportCapabilityMaturity::Stable => "stable",
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn transport_availability_label(
+    availability: RadrootsTransportCapabilityAvailability,
+) -> &'static str {
+    match availability {
+        RadrootsTransportCapabilityAvailability::Available => "available",
+        RadrootsTransportCapabilityAvailability::Degraded => "degraded",
+        RadrootsTransportCapabilityAvailability::Unavailable => "unavailable",
     }
 }
 
@@ -511,7 +531,6 @@ pub enum PushOutboxEventState {
     SignRetryable,
     PublishRetryable,
     DeferredUntilImplemented,
-    PreviewUnavailable,
     FailedTerminal,
     Cancelled,
 }
@@ -528,7 +547,6 @@ impl From<RadrootsOutboxEventState> for PushOutboxEventState {
             RadrootsOutboxEventState::SignRetryable => Self::SignRetryable,
             RadrootsOutboxEventState::PublishRetryable => Self::PublishRetryable,
             RadrootsOutboxEventState::DeferredUntilImplemented => Self::DeferredUntilImplemented,
-            RadrootsOutboxEventState::PreviewUnavailable => Self::PreviewUnavailable,
             RadrootsOutboxEventState::FailedTerminal => Self::FailedTerminal,
             RadrootsOutboxEventState::Cancelled => Self::Cancelled,
         }
@@ -557,7 +575,6 @@ pub enum PushOutboxTargetOutcomeKind {
     TargetUriRejected,
     SkippedAlreadyAccepted,
     DeferredUntilImplemented,
-    PreviewUnavailable,
     Unknown,
 }
 
@@ -582,7 +599,6 @@ impl PushOutboxTargetOutcomeKind {
             Self::TargetUriRejected => "target_uri_rejected",
             Self::SkippedAlreadyAccepted => "skipped_already_accepted",
             Self::DeferredUntilImplemented => "deferred_until_implemented",
-            Self::PreviewUnavailable => "preview_unavailable",
             Self::Unknown => "unknown",
         }
     }
@@ -711,8 +727,25 @@ impl<'sdk> SyncClient<'sdk> {
         &self,
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
+        #[cfg(feature = "radrootsd-execution")]
+        if let Some(profile) = self.sdk.radrootsd_execution_profile() {
+            let adapter =
+                RadrootsdPublishAdapter::new(radrootsd_publish_config_from_profile(profile));
+            return self
+                .push_outbox_with_radrootsd_adapter(&adapter, request)
+                .await;
+        }
+
+        #[cfg(not(feature = "radrootsd-execution"))]
+        if self.sdk.radrootsd_execution_profile().is_some() {
+            return Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "sync.push_outbox",
+                required_feature: "radrootsd-execution",
+            });
+        }
+
         match self.sdk.transport_profile() {
-            TransportProfile::Nostr { .. } | TransportProfile::Hybrid { .. } => {
+            TransportProfile::Nostr { .. } | TransportProfile::MultiTarget { .. } => {
                 #[cfg(feature = "transport-nostr-runtime")]
                 {
                     let adapter = RadrootsNostrClientPublishAdapter::new(
@@ -731,17 +764,6 @@ impl<'sdk> SyncClient<'sdk> {
                     })
                 }
             }
-            #[cfg(feature = "radrootsd-proxy")]
-            TransportProfile::Proxy { profile } => {
-                let adapter =
-                    RadrootsdProxyPublishAdapter::new(radrootsd_proxy_config_from_profile(profile));
-                self.push_outbox_with_proxy_adapter(&adapter, request).await
-            }
-            #[cfg(not(feature = "radrootsd-proxy"))]
-            TransportProfile::Proxy { .. } => Err(RadrootsSdkError::ProductSyncUnsupported {
-                operation: "sync.push_outbox",
-                required_feature: "radrootsd-proxy",
-            }),
             TransportProfile::LocalOnly => {
                 if self.push_outbox_has_no_ready_signed_work(&request).await? {
                     return Ok(PushOutboxReceipt::default());
@@ -751,26 +773,21 @@ impl<'sdk> SyncClient<'sdk> {
                     required_feature: "delivery-capable transport profile",
                 })
             }
-            TransportProfile::ReticulumPreview { .. } => {
-                self.reticulum_preview_push_receipt(request).await
-            }
+            TransportProfile::Reticulum { .. } => self.reticulum_push_receipt(request).await,
         }
     }
 
-    pub async fn try_reticulum_preview_now(
+    pub async fn try_reticulum_now(
         &self,
-        _request: ReticulumPreviewTryNowRequest,
+        _request: ReticulumTryNowRequest,
     ) -> Result<(), RadrootsSdkError> {
-        let profile =
-            active_reticulum_preview_profile(self.sdk.transport_profile()).ok_or_else(|| {
-                RadrootsSdkError::InvalidRequest {
-                message:
-                    "sync.try_reticulum_preview_now requires a Reticulum preview transport profile"
-                        .to_owned(),
+        let profile = active_reticulum_profile(self.sdk.transport_profile()).ok_or_else(|| {
+            RadrootsSdkError::InvalidRequest {
+                message: "sync.try_reticulum_now requires a Reticulum transport profile".to_owned(),
             }
-            })?;
-        Err(RadrootsSdkError::ReticulumPreviewTransportUnavailable {
-            operation: "sync.try_reticulum_preview_now".to_owned(),
+        })?;
+        Err(RadrootsSdkError::ReticulumTransportUnavailable {
+            operation: "sync.try_reticulum_now".to_owned(),
             endpoint_uri: profile.endpoint_uri().to_owned(),
             behavior: profile.behavior(),
         })
@@ -840,10 +857,10 @@ impl<'sdk> SyncClient<'sdk> {
         Ok(receipt)
     }
 
-    #[cfg(feature = "radrootsd-proxy")]
-    pub async fn push_outbox_with_proxy_adapter(
+    #[cfg(feature = "radrootsd-execution")]
+    pub async fn push_outbox_with_radrootsd_adapter(
         &self,
-        adapter: &RadrootsdProxyPublishAdapter,
+        adapter: &RadrootsdPublishAdapter,
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
         request.validate()?;
@@ -868,7 +885,7 @@ impl<'sdk> SyncClient<'sdk> {
                 break;
             };
             let publish_now_ms = claim_now_ms;
-            let publish = push_proxy_claimed_outbox_event(
+            let publish = push_radrootsd_claimed_outbox_event(
                 self,
                 adapter,
                 &claimed,
@@ -881,7 +898,7 @@ impl<'sdk> SyncClient<'sdk> {
         Ok(receipt)
     }
 
-    async fn reticulum_preview_push_receipt(
+    async fn reticulum_push_receipt(
         &self,
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
@@ -889,22 +906,24 @@ impl<'sdk> SyncClient<'sdk> {
         let records = self
             .sdk
             ._outbox
-            .reticulum_preview_events(request.outbox_event_id, request.limit)
+            .reticulum_events(request.outbox_event_id, request.limit)
             .await?;
         let mut receipt = PushOutboxReceipt::default();
         for record in records {
-            receipt.push_reported_event(reticulum_preview_event_receipt(record)?);
+            receipt.push_reported_event(reticulum_event_receipt(record)?);
         }
         Ok(receipt)
     }
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn radrootsd_proxy_config_from_profile(profile: &ProxyProfile) -> RadrootsdProxyConfig {
-    let config = RadrootsdProxyConfig::new(profile.endpoint_url().to_owned());
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_publish_config_from_profile(
+    profile: &RadrootsdExecutionProfile,
+) -> RadrootsdPublishConfig {
+    let config = RadrootsdPublishConfig::new(profile.endpoint_url().to_owned());
     match profile.auth() {
-        ProxyAuth::None => config,
-        ProxyAuth::BearerToken(token) => {
+        RadrootsdExecutionAuth::None => config,
+        RadrootsdExecutionAuth::BearerToken(token) => {
             config.with_auth(RadrootsdAuth::BearerToken(token.to_owned()))
         }
     }
@@ -951,14 +970,12 @@ async fn claim_ready_signed_event_for_push(
 }
 
 #[cfg(feature = "runtime")]
-fn reticulum_preview_event_receipt(
-    record: RadrootsOutboxReticulumPreviewEventRecord,
+fn reticulum_event_receipt(
+    record: RadrootsOutboxReticulumEventRecord,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
-    let event_id = push_receipt_event_id(
-        record.event.event_id.as_str(),
-        "Reticulum preview outbox event id",
-    )?;
-    let final_state = reticulum_preview_event_final_state(record.event.state, &record.targets);
+    let event_id =
+        push_receipt_event_id(record.event.event_id.as_str(), "Reticulum outbox event id")?;
+    let final_state = reticulum_event_final_state(record.event.state, &record.targets);
     let quorum = record.targets.len();
     Ok(PushOutboxEventReceipt {
         event_id,
@@ -973,36 +990,34 @@ fn reticulum_preview_event_receipt(
         targets: record
             .targets
             .into_iter()
-            .map(reticulum_preview_target_receipt)
+            .map(reticulum_target_receipt)
             .collect(),
     })
 }
 
 #[cfg(feature = "runtime")]
-fn reticulum_preview_event_final_state(
+fn reticulum_event_final_state(
     event_state: RadrootsOutboxEventState,
     targets: &[RadrootsOutboxDeliveryTargetRecord],
 ) -> PushOutboxEventState {
-    if event_state == RadrootsOutboxEventState::PreviewUnavailable
+    if event_state == RadrootsOutboxEventState::DeferredUntilImplemented
         || targets.iter().any(|target| {
             matches!(
                 target.status,
-                RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
                     | RadrootsOutboxDeliveryTargetStatus::Pending
                     | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
             )
         })
     {
-        PushOutboxEventState::PreviewUnavailable
+        PushOutboxEventState::DeferredUntilImplemented
     } else {
         PushOutboxEventState::DeferredUntilImplemented
     }
 }
 
 #[cfg(feature = "runtime")]
-fn reticulum_preview_target_receipt(
-    target: RadrootsOutboxDeliveryTargetRecord,
-) -> PushOutboxTargetReceipt {
+fn reticulum_target_receipt(target: RadrootsOutboxDeliveryTargetRecord) -> PushOutboxTargetReceipt {
     PushOutboxTargetReceipt {
         transport_kind: target.transport_kind.canonical_label(),
         endpoint_uri: target.endpoint_uri.as_str().to_owned(),
@@ -1014,7 +1029,7 @@ fn reticulum_preview_target_receipt(
             .target_label
             .as_ref()
             .map(|label| label.as_str().to_owned()),
-        outcome_kind: reticulum_preview_target_outcome_kind(target.status),
+        outcome_kind: reticulum_target_outcome_kind(target.status),
         transport_outcome_kind: target.last_outcome_kind.map(Into::into),
         attempted: false,
         message: Some(
@@ -1026,20 +1041,16 @@ fn reticulum_preview_target_receipt(
 }
 
 #[cfg(feature = "runtime")]
-fn active_reticulum_preview_profile(
-    profile: &TransportProfile,
-) -> Option<&ReticulumPreviewProfile> {
+fn active_reticulum_profile(profile: &TransportProfile) -> Option<&ReticulumProfile> {
     match profile {
-        TransportProfile::ReticulumPreview { profile } => Some(profile),
-        TransportProfile::Hybrid { profile } => Some(profile.reticulum_preview()),
-        TransportProfile::LocalOnly
-        | TransportProfile::Nostr { .. }
-        | TransportProfile::Proxy { .. } => None,
+        TransportProfile::Reticulum { profile } => Some(profile),
+        TransportProfile::MultiTarget { profile } => Some(profile.reticulum()),
+        TransportProfile::LocalOnly | TransportProfile::Nostr { .. } => None,
     }
 }
 
 #[cfg(feature = "runtime")]
-fn reticulum_preview_target_outcome_kind(
+fn reticulum_target_outcome_kind(
     status: RadrootsOutboxDeliveryTargetStatus,
 ) -> PushOutboxTargetOutcomeKind {
     match status {
@@ -1047,9 +1058,8 @@ fn reticulum_preview_target_outcome_kind(
             PushOutboxTargetOutcomeKind::DeferredUntilImplemented
         }
         RadrootsOutboxDeliveryTargetStatus::Pending
-        | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
-        | RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable => {
-            PushOutboxTargetOutcomeKind::PreviewUnavailable
+        | RadrootsOutboxDeliveryTargetStatus::FailedRetryable => {
+            PushOutboxTargetOutcomeKind::DeferredUntilImplemented
         }
         RadrootsOutboxDeliveryTargetStatus::Accepted
         | RadrootsOutboxDeliveryTargetStatus::Delivered
@@ -1081,10 +1091,10 @@ pub(crate) async fn refresh_product_projections_for_sdk(
     ))
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn push_proxy_claimed_outbox_event(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn push_radrootsd_claimed_outbox_event(
     sync: &SyncClient<'_>,
-    adapter: &RadrootsdProxyPublishAdapter,
+    adapter: &RadrootsdPublishAdapter,
     claimed: &RadrootsOutboxClaimedEvent,
     next_attempt_delay_ms: i64,
     now_ms: i64,
@@ -1094,16 +1104,16 @@ async fn push_proxy_claimed_outbox_event(
             claimed.outbox_event_id,
         ),
     )?;
-    let target_policy = match proxy_transport_publish_target_policy(claimed) {
+    let target_policy = match radrootsd_transport_publish_target_policy(claimed) {
         Ok(target_policy) => target_policy,
         Err(error) => {
-            return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
+            return fail_radrootsd_local_validation(sync, claimed, error, now_ms).await;
         }
     };
-    let delivery_policy = match proxy_delivery_policy(sync, claimed).await {
+    let delivery_policy = match radrootsd_delivery_policy(sync, claimed).await {
         Ok(delivery_policy) => delivery_policy,
         Err(error) => {
-            return fail_proxy_local_validation(sync, claimed, error, now_ms).await;
+            return fail_radrootsd_local_validation(sync, claimed, error, now_ms).await;
         }
     };
     sync.sdk
@@ -1115,22 +1125,22 @@ async fn push_proxy_claimed_outbox_event(
             now_ms,
         )
         .await?;
-    let request = RadrootsdProxyPublishRequest {
+    let request = RadrootsdPublishRequest {
         signed_event: signed_event.clone(),
         delivery_policy: delivery_policy.clone(),
         target_policy,
-        idempotency_key: Some(proxy_outbox_idempotency_key(
+        idempotency_key: Some(radrootsd_outbox_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
             signed_event.id_str(),
-            active_delivery_plan_id(claimed, "radrootsd proxy publish")?,
+            active_delivery_plan_id(claimed, "radrootsd publish")?,
         )),
         timeout_ms: adapter.config().request_timeout_ms,
     };
     let publish = match adapter.publish_signed_event(request).await {
         Ok(response) => response.job,
         Err(error) => {
-            let message = proxy_error_message(&error);
+            let message = radrootsd_error_message(&error);
             sync.sdk
                 ._outbox
                 .mark_publish_retryable(
@@ -1141,7 +1151,7 @@ async fn push_proxy_claimed_outbox_event(
                     now_ms,
                 )
                 .await?;
-            return proxy_transport_error_receipt(
+            return radrootsd_transport_error_receipt(
                 claimed,
                 &signed_event,
                 &delivery_policy,
@@ -1149,12 +1159,13 @@ async fn push_proxy_claimed_outbox_event(
             );
         }
     };
-    complete_proxy_publish_attempt(sync, claimed, &publish, next_attempt_delay_ms, now_ms).await?;
-    push_proxy_event_receipt(claimed.outbox_event_id, publish)
+    complete_radrootsd_publish_attempt(sync, claimed, &publish, next_attempt_delay_ms, now_ms)
+        .await?;
+    push_radrootsd_event_receipt(claimed.outbox_event_id, publish)
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn fail_proxy_local_validation(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn fail_radrootsd_local_validation(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
     error: RadrootsSdkError,
@@ -1173,12 +1184,12 @@ async fn fail_proxy_local_validation(
     Err(error)
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn proxy_delivery_policy(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn radrootsd_delivery_policy(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
-    let active_delivery_plan_id = active_delivery_plan_id(claimed, "radrootsd proxy publish")?;
+    let active_delivery_plan_id = active_delivery_plan_id(claimed, "radrootsd publish")?;
     let plans = sync
         .sdk
         ._outbox
@@ -1189,7 +1200,7 @@ async fn proxy_delivery_policy(
         .find(|plan| plan.delivery_plan_id == active_delivery_plan_id)
         .ok_or_else(|| RadrootsSdkError::InvalidRequest {
             message: format!(
-                "outbox event {} active delivery plan {} was not found for proxy publish",
+                "outbox event {} active delivery plan {} was not found for radrootsd publish",
                 claimed.outbox_event_id, active_delivery_plan_id
             ),
         })?;
@@ -1202,13 +1213,13 @@ async fn proxy_delivery_policy(
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
         .collect::<Vec<_>>();
-    reject_non_accepted_proxy_satisfaction(&plan.satisfaction_policy)?;
+    reject_non_accepted_radrootsd_satisfaction(&plan.satisfaction_policy)?;
     let ready_target_count = active_targets
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
         .count();
     let required_remaining_targets =
-        proxy_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;
+        radrootsd_required_remaining_targets(&plan.satisfaction_policy, &active_targets)?;
     let required_remaining = if let Some(targets) = required_remaining_targets.as_ref() {
         targets.len()
     } else {
@@ -1228,7 +1239,7 @@ async fn proxy_delivery_policy(
             .unwrap_or(0);
         (plan.required_success_count as usize).saturating_sub(satisfied_count)
     };
-    proxy_delivery_policy_from_remaining(
+    radrootsd_delivery_policy_from_remaining(
         ready_target_count,
         required_remaining,
         required_remaining_targets.as_deref(),
@@ -1236,14 +1247,14 @@ async fn proxy_delivery_policy(
     )
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_delivery_policy_from_remaining(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_delivery_policy_from_remaining(
     ready_target_count: usize,
     required_remaining: usize,
     required_remaining_targets: Option<&[RadrootsTransportTargetFingerprint]>,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
-    reject_non_accepted_proxy_satisfaction(satisfaction_policy)?;
+    reject_non_accepted_radrootsd_satisfaction(satisfaction_policy)?;
     if required_remaining == 0 {
         return Ok(TransportPublishDeliveryPolicy::Any);
     }
@@ -1253,9 +1264,8 @@ fn proxy_delivery_policy_from_remaining(
             RadrootsTransportSatisfactionPolicy::RequiredTargets { .. }
         ) {
             return Err(RadrootsSdkError::InvalidRequest {
-                message:
-                    "radrootsd proxy publish has unsatisfied required targets but no ready target"
-                        .to_owned(),
+                message: "radrootsd publish has unsatisfied required targets but no ready target"
+                    .to_owned(),
             });
         }
         return Ok(TransportPublishDeliveryPolicy::Any);
@@ -1268,7 +1278,7 @@ fn proxy_delivery_policy_from_remaining(
             TransportPublishDeliveryPolicy::required_targets(
                 required_remaining_targets
                     .ok_or_else(|| RadrootsSdkError::InvalidRequest {
-                        message: "radrootsd proxy publish missing required target fingerprints"
+                        message: "radrootsd publish missing required target fingerprints"
                             .to_owned(),
                     })?
                     .to_vec(),
@@ -1291,8 +1301,8 @@ fn proxy_delivery_policy_from_remaining(
     })
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_required_remaining_targets(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_required_remaining_targets(
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
     active_targets: &[&RadrootsOutboxDeliveryTargetRecord],
 ) -> Result<Option<Vec<RadrootsTransportTargetFingerprint>>, RadrootsSdkError> {
@@ -1308,7 +1318,7 @@ fn proxy_required_remaining_targets(
             .find(|target| target.endpoint_fingerprint == *required)
             .ok_or_else(|| RadrootsSdkError::InvalidRequest {
                 message: format!(
-                    "radrootsd proxy publish required target {required} is not present in active delivery plan"
+                    "radrootsd publish required target {required} is not present in active delivery plan"
                 ),
             })?;
         if target.status.counts_as_transport_satisfaction(*class) {
@@ -1317,7 +1327,7 @@ fn proxy_required_remaining_targets(
         if !target.status.is_ready_for_attempt() {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!(
-                    "radrootsd proxy publish required target {required} is not ready for publish"
+                    "radrootsd publish required target {required} is not ready for publish"
                 ),
             });
         }
@@ -1326,8 +1336,8 @@ fn proxy_required_remaining_targets(
     Ok(Some(remaining))
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn reject_non_accepted_proxy_satisfaction(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn reject_non_accepted_radrootsd_satisfaction(
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<(), RadrootsSdkError> {
     if satisfaction_policy
@@ -1335,15 +1345,15 @@ fn reject_non_accepted_proxy_satisfaction(
         .is_some_and(|class| class != RadrootsTransportSatisfactionClass::Accepted)
     {
         return Err(RadrootsSdkError::InvalidRequest {
-            message: "radrootsd proxy publish only supports accepted-class satisfaction policies"
+            message: "radrootsd publish only supports accepted-class satisfaction policies"
                 .to_owned(),
         });
     }
     Ok(())
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_outbox_idempotency_key(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_outbox_idempotency_key(
     outbox_event_id: i64,
     attempt_count: i64,
     event_id: &str,
@@ -1354,7 +1364,7 @@ fn proxy_outbox_idempotency_key(
     )
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 fn active_delivery_plan_id(
     claimed: &RadrootsOutboxClaimedEvent,
     operation: &'static str,
@@ -1369,8 +1379,8 @@ fn active_delivery_plan_id(
         })
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn complete_proxy_publish_attempt(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn complete_radrootsd_publish_attempt(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
     publish: &TransportPublishJobView,
@@ -1384,7 +1394,7 @@ async fn complete_proxy_publish_attempt(
             .delivery_targets
             .iter()
             .filter(|target| target.status.is_ready_for_attempt())
-            .filter(|target| proxy_target_matches_outcome(target, outcome))
+            .filter(|target| radrootsd_target_matches_outcome(target, outcome))
             .collect::<Vec<_>>();
         if matched_targets.is_empty() {
             continue;
@@ -1392,7 +1402,7 @@ async fn complete_proxy_publish_attempt(
         if matched_targets.len() > 1 {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!(
-                    "radrootsd proxy publish outcome for {} {} matched multiple ready delivery targets on outbox event {}",
+                    "radrootsd publish outcome for {} {} matched multiple ready delivery targets on outbox event {}",
                     outcome.transport_kind, outcome.endpoint_uri, claimed.outbox_event_id
                 ),
             });
@@ -1401,7 +1411,7 @@ async fn complete_proxy_publish_attempt(
         if !completed_target_ids.insert(target.delivery_target_id) {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!(
-                    "radrootsd proxy publish outcome for {} {} matched delivery target {} more than once on outbox event {}",
+                    "radrootsd publish outcome for {} {} matched delivery target {} more than once on outbox event {}",
                     outcome.transport_kind,
                     outcome.endpoint_uri,
                     target.delivery_target_id,
@@ -1412,7 +1422,7 @@ async fn complete_proxy_publish_attempt(
         matched_outcomes.push((target, outcome));
     }
     for (target, outcome) in matched_outcomes {
-        complete_proxy_delivery_target(sync, claimed, target, outcome, now_ms).await?;
+        complete_radrootsd_delivery_target(sync, claimed, target, outcome, now_ms).await?;
     }
     for target in claimed
         .delivery_targets
@@ -1420,15 +1430,15 @@ async fn complete_proxy_publish_attempt(
         .filter(|target| target.status.is_ready_for_attempt())
         .filter(|target| !completed_target_ids.contains(&target.delivery_target_id))
     {
-        complete_missing_proxy_delivery_target(sync, claimed, target, publish, now_ms).await?;
+        complete_missing_radrootsd_delivery_target(sync, claimed, target, publish, now_ms).await?;
     }
     sync.sdk
         ._outbox
         .complete_publish_attempt(
             claimed.outbox_event_id,
             claimed.claim_token.as_str(),
-            "radrootsd proxy publish incomplete",
-            "radrootsd proxy publish terminal",
+            "radrootsd publish incomplete",
+            "radrootsd publish terminal",
             now_ms.saturating_add(next_attempt_delay_ms),
             now_ms,
         )
@@ -1436,8 +1446,8 @@ async fn complete_proxy_publish_attempt(
     Ok(())
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_transport_publish_target_policy(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_transport_publish_target_policy(
     claimed: &RadrootsOutboxClaimedEvent,
 ) -> Result<TransportPublishTargetPolicy, RadrootsSdkError> {
     let ready_targets = claimed
@@ -1445,40 +1455,22 @@ fn proxy_transport_publish_target_policy(
         .iter()
         .filter(|target| target.status.is_ready_for_attempt())
         .collect::<Vec<_>>();
-    if ready_targets
-        .iter()
-        .any(|target| is_proxy_delegate_target(target))
-    {
-        if ready_targets.len() != 1 || !is_proxy_delegate_target(ready_targets[0]) {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: format!(
-                    "radrootsd proxy outbox publish does not accept mixed proxy delegate targets for outbox event {}",
-                    claimed.outbox_event_id
-                ),
-            });
-        }
-        Ok(TransportPublishTargetPolicy::nostr(
-            NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
-            Vec::new(),
-        ))
-    } else {
-        Ok(TransportPublishTargetPolicy::explicit_targets(
-            ready_targets
-                .into_iter()
-                .map(transport_publish_target_from_outbox_target)
-                .collect::<Result<Vec<_>, _>>()?,
-        ))
-    }
+    Ok(TransportPublishTargetPolicy::explicit_targets(
+        ready_targets
+            .into_iter()
+            .map(transport_publish_target_from_outbox_target)
+            .collect::<Result<Vec<_>, _>>()?,
+    ))
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 fn transport_publish_target_from_outbox_target(
     target: &RadrootsOutboxDeliveryTargetRecord,
 ) -> Result<TransportPublishTarget, RadrootsSdkError> {
     if target.transport_kind != RadrootsTransportKind::Nostr {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
-                "radrootsd proxy outbox publish explicit targets are Nostr-only and cannot publish {} target {}",
+                "radrootsd execution explicit targets are Nostr-only and cannot publish {} target {}",
                 target.transport_kind.canonical_label(),
                 target.endpoint_uri.as_str()
             ),
@@ -1495,12 +1487,12 @@ fn transport_publish_target_from_outbox_target(
             .target_label
             .as_ref()
             .map(|label| label.as_str().to_owned()),
-        preview_behavior: None,
+        reticulum_behavior: None,
     })
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_target_matches_outcome(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_target_matches_outcome(
     target: &RadrootsOutboxDeliveryTargetRecord,
     outcome: &TransportPublishTargetOutcome,
 ) -> bool {
@@ -1510,13 +1502,8 @@ fn proxy_target_matches_outcome(
             == outcome.target_scope.as_deref()
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn is_proxy_delegate_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
-    target.transport_kind == RadrootsTransportKind::Proxy
-}
-
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn complete_proxy_delivery_target(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn complete_radrootsd_delivery_target(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
     target: &RadrootsOutboxDeliveryTargetRecord,
@@ -1543,7 +1530,7 @@ async fn complete_proxy_delivery_target(
                 outcome
                     .message
                     .as_deref()
-                    .unwrap_or("radrootsd proxy publish retryable"),
+                    .unwrap_or("radrootsd publish retryable"),
                 now_ms,
             )
             .await?;
@@ -1557,21 +1544,7 @@ async fn complete_proxy_delivery_target(
                 outcome
                     .message
                     .as_deref()
-                    .unwrap_or("radrootsd proxy publish deferred until implemented"),
-                now_ms,
-            )
-            .await?;
-    } else if outcome.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable {
-        sync.sdk
-            ._outbox
-            .mark_delivery_target_preview_unavailable(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                target.delivery_target_id,
-                outcome
-                    .message
-                    .as_deref()
-                    .unwrap_or("radrootsd proxy publish preview unavailable"),
+                    .unwrap_or("radrootsd publish deferred until implemented"),
                 now_ms,
             )
             .await?;
@@ -1585,7 +1558,7 @@ async fn complete_proxy_delivery_target(
                 outcome
                     .message
                     .as_deref()
-                    .unwrap_or("radrootsd proxy publish terminal"),
+                    .unwrap_or("radrootsd publish terminal"),
                 now_ms,
             )
             .await?;
@@ -1593,43 +1566,33 @@ async fn complete_proxy_delivery_target(
     Ok(())
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-async fn complete_missing_proxy_delivery_target(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+async fn complete_missing_radrootsd_delivery_target(
     sync: &SyncClient<'_>,
     claimed: &RadrootsOutboxClaimedEvent,
     target: &RadrootsOutboxDeliveryTargetRecord,
     publish: &TransportPublishJobView,
     now_ms: i64,
 ) -> Result<(), RadrootsSdkError> {
-    if is_proxy_delegate_target(target) && publish.delivery_satisfied {
-        sync.sdk
-            ._outbox
-            .mark_delivery_target_accepted(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                target.delivery_target_id,
-                now_ms,
-            )
-            .await?;
-    } else if publish.status == TransportPublishJobStatus::DeliveryDeferred {
+    if publish.status == TransportPublishJobStatus::DeliveryDeferred {
         sync.sdk
             ._outbox
             .mark_delivery_target_deferred_until_implemented(
                 claimed.outbox_event_id,
                 claimed.claim_token.as_str(),
                 target.delivery_target_id,
-                "radrootsd proxy publish deferred until implemented",
+                "radrootsd publish deferred until implemented",
                 now_ms,
             )
             .await?;
-    } else if publish.status == TransportPublishJobStatus::DeliveryPreviewUnavailable {
+    } else if publish.status == TransportPublishJobStatus::DeliveryDeferredUntilImplemented {
         sync.sdk
             ._outbox
-            .mark_delivery_target_preview_unavailable(
+            .mark_delivery_target_deferred_until_implemented(
                 claimed.outbox_event_id,
                 claimed.claim_token.as_str(),
                 target.delivery_target_id,
-                "radrootsd proxy publish preview unavailable",
+                "radrootsd publish deferred until implemented",
                 now_ms,
             )
             .await?;
@@ -1643,7 +1606,7 @@ async fn complete_missing_proxy_delivery_target(
                 claimed.outbox_event_id,
                 claimed.claim_token.as_str(),
                 target.delivery_target_id,
-                "radrootsd proxy publish incomplete",
+                "radrootsd publish incomplete",
                 now_ms,
             )
             .await?;
@@ -1654,7 +1617,7 @@ async fn complete_missing_proxy_delivery_target(
                 claimed.outbox_event_id,
                 claimed.claim_token.as_str(),
                 target.delivery_target_id,
-                "radrootsd proxy publish terminal",
+                "radrootsd publish terminal",
                 now_ms,
             )
             .await?;
@@ -1662,13 +1625,13 @@ async fn complete_missing_proxy_delivery_target(
     Ok(())
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_error_message(error: &RadrootsdError) -> String {
-    format!("radrootsd proxy publish failed: {error}")
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_error_message(error: &RadrootsdError) -> String {
+    format!("radrootsd publish failed: {error}")
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_transport_error_receipt(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_transport_error_receipt(
     claimed: &RadrootsOutboxClaimedEvent,
     event: &radroots_event::draft::RadrootsSignedEvent,
     delivery_policy: &TransportPublishDeliveryPolicy,
@@ -1680,7 +1643,7 @@ fn proxy_transport_error_receipt(
         .filter(|target| target.status.is_ready_for_attempt())
         .collect::<Vec<_>>();
     let target_count = ready_targets.len();
-    let event_id = push_receipt_event_id(event.id_str(), "proxy transport failure event id")?;
+    let event_id = push_receipt_event_id(event.id_str(), "radrootsd transport failure event id")?;
     Ok(PushOutboxEventReceipt {
         event_id,
         outbox_event_id: claimed.outbox_event_id,
@@ -1713,14 +1676,14 @@ fn proxy_transport_error_receipt(
     })
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_push_event_final_state(publish: &TransportPublishJobView) -> PushOutboxEventState {
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn radrootsd_push_event_final_state(publish: &TransportPublishJobView) -> PushOutboxEventState {
     if publish.delivery_satisfied {
         PushOutboxEventState::Published
     } else if publish.status == TransportPublishJobStatus::DeliveryDeferred {
         PushOutboxEventState::DeferredUntilImplemented
-    } else if publish.status == TransportPublishJobStatus::DeliveryPreviewUnavailable {
-        PushOutboxEventState::PreviewUnavailable
+    } else if publish.status == TransportPublishJobStatus::DeliveryDeferredUntilImplemented {
+        PushOutboxEventState::DeferredUntilImplemented
     } else if publish.retryable_count > 0 || !publish.terminal {
         PushOutboxEventState::PublishRetryable
     } else {
@@ -1728,8 +1691,8 @@ fn proxy_push_event_final_state(publish: &TransportPublishJobView) -> PushOutbox
     }
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn push_proxy_event_receipt(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn push_radrootsd_event_receipt(
     outbox_event_id: i64,
     publish: TransportPublishJobView,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
@@ -1743,7 +1706,7 @@ fn push_proxy_event_receipt(
     Ok(PushOutboxEventReceipt {
         event_id,
         outbox_event_id,
-        final_state: proxy_push_event_final_state(&publish),
+        final_state: radrootsd_push_event_final_state(&publish),
         attempted_count: publish
             .targets
             .iter()
@@ -1757,27 +1720,29 @@ fn push_proxy_event_receipt(
         targets: publish
             .targets
             .into_iter()
-            .map(push_proxy_target_receipt)
+            .map(push_radrootsd_target_receipt)
             .collect(),
     })
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn push_proxy_target_receipt(outcome: TransportPublishTargetOutcome) -> PushOutboxTargetReceipt {
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn push_radrootsd_target_receipt(
+    outcome: TransportPublishTargetOutcome,
+) -> PushOutboxTargetReceipt {
     PushOutboxTargetReceipt {
         transport_kind: outcome.transport_kind,
         endpoint_uri: outcome.endpoint_uri,
         target_scope: outcome.target_scope,
         target_label: outcome.target_label,
-        outcome_kind: push_proxy_target_outcome_kind(outcome.outcome_kind),
-        transport_outcome_kind: Some(push_proxy_transport_outcome_kind(outcome.outcome_kind)),
+        outcome_kind: push_radrootsd_target_outcome_kind(outcome.outcome_kind),
+        transport_outcome_kind: Some(push_radrootsd_transport_outcome_kind(outcome.outcome_kind)),
         attempted: outcome.attempted,
         message: outcome.message,
     }
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn push_proxy_target_outcome_kind(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn push_radrootsd_target_outcome_kind(
     outcome_kind: TransportPublishOutcomeKind,
 ) -> PushOutboxTargetOutcomeKind {
     match outcome_kind {
@@ -1810,15 +1775,12 @@ fn push_proxy_target_outcome_kind(
         TransportPublishOutcomeKind::DeferredUntilImplemented => {
             PushOutboxTargetOutcomeKind::DeferredUntilImplemented
         }
-        TransportPublishOutcomeKind::PreviewUnavailable => {
-            PushOutboxTargetOutcomeKind::PreviewUnavailable
-        }
         TransportPublishOutcomeKind::Unknown => PushOutboxTargetOutcomeKind::Unknown,
     }
 }
 
-#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn push_proxy_transport_outcome_kind(
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+fn push_radrootsd_transport_outcome_kind(
     outcome_kind: TransportPublishOutcomeKind,
 ) -> PushOutboxTransportOutcomeKind {
     match outcome_kind {
@@ -1845,7 +1807,6 @@ fn push_proxy_transport_outcome_kind(
         }
         TransportPublishOutcomeKind::RateLimited
         | TransportPublishOutcomeKind::Error
-        | TransportPublishOutcomeKind::PreviewUnavailable
         | TransportPublishOutcomeKind::Unknown => {
             PushOutboxTransportOutcomeKind::TransportUnavailable
         }

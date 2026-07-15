@@ -1,6 +1,7 @@
 use super::*;
 
 #[test]
+#[cfg(feature = "transport-nostr-runtime")]
 fn validation_receipt_limit_rejects_out_of_range_values() {
     assert!(validate_validation_receipt_limit(1).is_ok());
     assert!(validate_validation_receipt_limit(TRADE_STATUS_MAX_LIMIT).is_ok());

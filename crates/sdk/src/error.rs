@@ -4,7 +4,7 @@ use std::{fmt, path::PathBuf};
 #[cfg(feature = "runtime")]
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
-use crate::transport::ReticulumPreviewBehavior;
+use crate::transport::ReticulumBehavior;
 #[cfg(feature = "runtime")]
 use radroots_trade::identity::RadrootsTradeLocator;
 #[cfg(feature = "runtime")]
@@ -145,10 +145,10 @@ pub enum RadrootsSdkError {
         operation: &'static str,
         required_feature: &'static str,
     },
-    ReticulumPreviewTransportUnavailable {
+    ReticulumTransportUnavailable {
         operation: String,
         endpoint_uri: String,
-        behavior: ReticulumPreviewBehavior,
+        behavior: ReticulumBehavior,
     },
     ProductSyncTransportSetupFailure {
         message: String,
@@ -218,13 +218,9 @@ impl RadrootsSdkError {
             Self::TradeAmbiguous { .. } => "trade_ambiguous",
             Self::PrivacyPreflight { .. } => "privacy_preflight",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
-            Self::ReticulumPreviewTransportUnavailable { behavior, .. } => match behavior {
-                ReticulumPreviewBehavior::RejectDeliveryAttempts => {
-                    "reticulum_preview_transport_unavailable"
-                }
-                ReticulumPreviewBehavior::DeferDeliveryPlans => {
-                    "reticulum_preview_transport_deferred"
-                }
+            Self::ReticulumTransportUnavailable { behavior, .. } => match behavior {
+                ReticulumBehavior::RejectDeliveryAttempts => "reticulum_transport_unavailable",
+                ReticulumBehavior::DeferDeliveryPlans => "reticulum_transport_deferred",
             },
             Self::ProductSyncTransportSetupFailure { .. } => "product_sync_transport_setup_failure",
             Self::Authority { .. } => "authority",
@@ -288,8 +284,7 @@ impl RadrootsSdkError {
             | Self::UnsupportedProfileSchema { .. }
             | Self::ListingEdit { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
-            Self::ProductSyncUnsupported { .. }
-            | Self::ReticulumPreviewTransportUnavailable { .. } => {
+            Self::ProductSyncUnsupported { .. } | Self::ReticulumTransportUnavailable { .. } => {
                 RadrootsSdkErrorClass::Unsupported
             }
             Self::ProductSyncTransportSetupFailure { .. }
@@ -364,7 +359,7 @@ impl RadrootsSdkError {
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
             }
-            Self::ReticulumPreviewTransportUnavailable { .. } => {
+            Self::ReticulumTransportUnavailable { .. } => {
                 vec![RadrootsSdkRecoveryAction::ConfigureTransportTargets]
             }
             Self::ProductSyncTransportSetupFailure { .. } | Self::Transport { .. } => {
@@ -463,7 +458,7 @@ impl RadrootsSdkError {
                 operation,
                 required_feature,
             } => json!({ "operation": operation, "required_feature": required_feature }),
-            Self::ReticulumPreviewTransportUnavailable {
+            Self::ReticulumTransportUnavailable {
                 operation,
                 endpoint_uri,
                 behavior,
@@ -640,13 +635,13 @@ impl fmt::Display for RadrootsSdkError {
                 f,
                 "sdk product sync operation {operation} requires feature `{required_feature}`"
             ),
-            Self::ReticulumPreviewTransportUnavailable {
+            Self::ReticulumTransportUnavailable {
                 operation,
                 endpoint_uri,
                 behavior,
             } => write!(
                 f,
-                "sdk product sync operation {operation} cannot deliver through Reticulum preview endpoint `{endpoint_uri}` with behavior `{}`",
+                "sdk product sync operation {operation} cannot deliver through Reticulum endpoint `{endpoint_uri}` with behavior `{}`",
                 behavior.as_str()
             ),
             Self::ProductSyncTransportSetupFailure { message } => {

@@ -7,7 +7,7 @@ extern crate alloc;
 #[cfg(feature = "runtime")]
 mod actor_json;
 #[cfg(any(
-    feature = "radrootsd-proxy",
+    feature = "radrootsd-execution",
     feature = "signing",
     feature = "transport-nostr-client",
     feature = "signer-adapters"
@@ -212,7 +212,7 @@ pub use crate::sync_runtime::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRequest, PushOutboxTargetOutcomeKind,
-    PushOutboxTargetReceipt, PushOutboxTransportOutcomeKind, ReticulumPreviewTryNowRequest,
+    PushOutboxTargetReceipt, PushOutboxTransportOutcomeKind, ReticulumTryNowRequest,
     SYNC_PROJECTION_REFRESH_DEFAULT_LIMIT, SYNC_PROJECTION_REFRESH_MAX_LIMIT, SdkRelayAuthPolicy,
     SyncEventStoreStatus, SyncOutboxStatus, SyncProjectionRefreshReceipt,
     SyncProjectionRefreshRequest, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
@@ -226,12 +226,12 @@ pub use crate::trade_storage::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::transport::{
-    HybridProfile, MeshScopeId, NostrProfile, NostrRelayUrlPolicy, ProxyAuth, ProxyProfile,
-    PublishMode, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportKind, RadrootsTransportOutcome, RadrootsTransportSatisfactionClass,
-    RadrootsTransportTargetReceipt, ReticulumPreviewAgentEndpoint, ReticulumPreviewBehavior,
-    ReticulumPreviewProfile, SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy,
-    TargetSet, TransportProfile, TransportReceipt,
+    MeshScopeId, MultiTargetProfile, NostrProfile, NostrRelayUrlPolicy, PublishMode,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportSatisfactionClass, RadrootsTransportTargetReceipt,
+    RadrootsdExecutionAuth, RadrootsdExecutionProfile, ReticulumAgentEndpoint, ReticulumBehavior,
+    ReticulumProfile, SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy, TargetSet,
+    TransportProfile, TransportReceipt,
 };
 #[cfg(feature = "runtime")]
 pub use radroots_trade::validation_receipt::{

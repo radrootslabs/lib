@@ -611,7 +611,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 }
 
 #[tokio::test]
-async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_proxy_transport() {
+async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_radrootsd_execution() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
     let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
         .expect("actor");

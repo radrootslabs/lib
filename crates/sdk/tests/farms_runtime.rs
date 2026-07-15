@@ -20,12 +20,12 @@ use radroots_sdk::{
     FarmPrivateLocationClearRequest, FarmPrivateLocationInput, FarmPrivateLocationLookupCandidate,
     FarmPrivateLocationLookupReceipt, FarmPrivateLocationReceipt, FarmPrivateLocationSetRequest,
     FarmPrivateLocationSetResult, FarmPrivateLocationUpsertRequest, Geocoder,
-    GeocoderLocalityQuery, HybridProfile, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
-    PushOutboxRequest, PushOutboxTargetOutcomeKind, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, ReticulumPreviewProfile, SdkExactLocation, SdkIdempotencyKey,
-    SdkMutationState, SdkPublicLocality, StorageStatusRequest, TargetPolicy, TargetSet,
-    TransportProfile,
+    GeocoderLocalityQuery, MultiTargetProfile, NostrProfile, NostrRelayUrlPolicy,
+    PushOutboxEventState, PushOutboxRequest, PushOutboxTargetOutcomeKind, RadrootsClient,
+    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, ReticulumProfile, SdkExactLocation,
+    SdkIdempotencyKey, SdkMutationState, SdkPublicLocality, StorageStatusRequest, TargetPolicy,
+    TargetSet, TransportProfile,
 };
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -152,14 +152,14 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
     (tempdir, sdk)
 }
 
-async fn hybrid_directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
+async fn multi_target_directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::hybrid(HybridProfile::new(
+        .transport_profile(TransportProfile::multi_target(MultiTargetProfile::new(
             NostrProfile::new([RELAY], NostrRelayUrlPolicy::Public).expect("Nostr profile"),
-            ReticulumPreviewProfile::preview_unavailable(),
+            ReticulumProfile::deferred_until_implemented(),
         )))
         .build()
         .await
@@ -855,14 +855,14 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
 }
 
 #[tokio::test]
-async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum_preview() {
-    let (_tempdir, sdk) = hybrid_directory_sdk().await;
+async fn farm_multi_target_profile_publishes_after_nostr_success_and_retains_reticulum() {
+    let (_tempdir, sdk) = multi_target_directory_sdk().await;
     let enqueue_receipt = sdk
         .farms()
         .enqueue_publish_with_explicit_signer(
             FarmEnqueuePublishRequest::new(
                 farmer_actor(),
-                farm(FARM_E_D_TAG, "Hybrid Farm"),
+                farm(FARM_E_D_TAG, "MultiTarget Farm"),
                 TargetPolicy::default_profile(),
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022f")
@@ -925,8 +925,8 @@ async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum
             && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
     }));
     assert!(targets.iter().any(|target| {
-        target.endpoint_uri.to_string() == "reticulum:preview-unavailable"
-            && target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        target.endpoint_uri.to_string() == "reticulum:local"
+            && target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
             && target.attempt_count == 0
     }));
 }

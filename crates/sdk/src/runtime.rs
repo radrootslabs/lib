@@ -5,7 +5,8 @@ use crate::studio_store::{SDK_STUDIO_STORE_SCHEMA_VERSION, SdkStudioStore};
 #[cfg(feature = "runtime")]
 use crate::{
     FarmsClient, GeoNamesClient, ListingsClient, MarketClient, RadrootsGeoNamesConfig,
-    RadrootsSdkError, SyncClient, TradesClient, transport::TransportProfile,
+    RadrootsSdkError, SyncClient, TradesClient,
+    transport::{RadrootsdExecutionProfile, TransportProfile},
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 use crate::{
@@ -259,7 +260,6 @@ pub struct SdkOutboxStorageStatus {
     pub retryable_events: i64,
     pub terminal_events: i64,
     pub failed_terminal_events: i64,
-    pub preview_unavailable_events: i64,
     pub deferred_until_implemented_events: i64,
     pub ready_signed_events: i64,
     pub publishing_events: i64,
@@ -506,6 +506,7 @@ pub struct RadrootsClientBuilder {
     geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
     transport_profile: TransportProfile,
+    radrootsd_execution_profile: Option<RadrootsdExecutionProfile>,
     #[cfg(feature = "signer-adapters")]
     signer_provider: Option<RadrootsSdkSignerProvider>,
 }
@@ -518,6 +519,7 @@ impl Default for RadrootsClientBuilder {
             geonames: None,
             clock: RadrootsSdkClock::System,
             transport_profile: TransportProfile::default(),
+            radrootsd_execution_profile: None,
             #[cfg(feature = "signer-adapters")]
             signer_provider: None,
         }
@@ -561,6 +563,11 @@ impl RadrootsClientBuilder {
         self
     }
 
+    pub fn radrootsd_execution_profile(mut self, profile: RadrootsdExecutionProfile) -> Self {
+        self.radrootsd_execution_profile = Some(profile);
+        self
+    }
+
     #[cfg(feature = "signer-adapters")]
     pub fn signer_provider(mut self, signer_provider: RadrootsSdkSignerProvider) -> Self {
         self.signer_provider = Some(signer_provider);
@@ -578,6 +585,7 @@ impl RadrootsClientBuilder {
             geonames: self.geonames,
             clock: self.clock,
             transport_profile: self.transport_profile,
+            radrootsd_execution_profile: self.radrootsd_execution_profile,
             #[cfg(feature = "signer-adapters")]
             signer_provider: self.signer_provider,
         })
@@ -595,6 +603,7 @@ pub struct RadrootsClient {
     geonames: Option<RadrootsGeoNamesConfig>,
     clock: RadrootsSdkClock,
     transport_profile: TransportProfile,
+    radrootsd_execution_profile: Option<RadrootsdExecutionProfile>,
     #[cfg(feature = "signer-adapters")]
     signer_provider: Option<RadrootsSdkSignerProvider>,
 }
@@ -635,6 +644,10 @@ impl RadrootsClient {
 
     pub fn transport_profile(&self) -> &TransportProfile {
         &self.transport_profile
+    }
+
+    pub fn radrootsd_execution_profile(&self) -> Option<&RadrootsdExecutionProfile> {
+        self.radrootsd_execution_profile.as_ref()
     }
 
     pub fn configured_nostr_relay_urls(&self) -> Vec<String> {
@@ -710,7 +723,6 @@ impl RadrootsClient {
                 retryable_events: outbox_summary.retryable_events,
                 terminal_events: outbox_summary.terminal_events,
                 failed_terminal_events: outbox_summary.failed_terminal_events,
-                preview_unavailable_events: outbox_summary.preview_unavailable_events,
                 deferred_until_implemented_events: outbox_summary.deferred_until_implemented_events,
                 ready_signed_events: outbox_summary.ready_signed_events,
                 publishing_events: outbox_summary.publishing_events,
@@ -1029,7 +1041,6 @@ async fn directory_storage_status_read_only(
             retryable_events: outbox_summary.retryable_events,
             terminal_events: outbox_summary.terminal_events,
             failed_terminal_events: outbox_summary.failed_terminal_events,
-            preview_unavailable_events: outbox_summary.preview_unavailable_events,
             deferred_until_implemented_events: outbox_summary.deferred_until_implemented_events,
             ready_signed_events: outbox_summary.ready_signed_events,
             publishing_events: outbox_summary.publishing_events,
@@ -1123,7 +1134,7 @@ async fn outbox_status_summary_from_pool(
     now_ms: i64,
 ) -> Result<radroots_outbox::RadrootsOutboxStatusSummary, RadrootsSdkError> {
     let row = sqlx::query(
-        "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'failed_terminal' THEN 1 ELSE 0 END), 0) AS failed_terminal_events, COALESCE(SUM(CASE WHEN state = 'preview_unavailable' THEN 1 ELSE 0 END), 0) AS preview_unavailable_events, COALESCE(SUM(CASE WHEN state = 'deferred_until_implemented' THEN 1 ELSE 0 END), 0) AS deferred_until_implemented_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
+        "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'failed_terminal' THEN 1 ELSE 0 END), 0) AS failed_terminal_events, COALESCE(SUM(CASE WHEN state = 'deferred_until_implemented' THEN 1 ELSE 0 END), 0) AS deferred_until_implemented_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
     )
     .fetch_one(pool)
     .await
@@ -1169,9 +1180,6 @@ async fn outbox_status_summary_from_pool(
             .map_err(|error| SqliteStoreRole::Outbox.error(error.to_string()))?,
         failed_terminal_events: row
             .try_get("failed_terminal_events")
-            .map_err(|error| SqliteStoreRole::Outbox.error(error.to_string()))?,
-        preview_unavailable_events: row
-            .try_get("preview_unavailable_events")
             .map_err(|error| SqliteStoreRole::Outbox.error(error.to_string()))?,
         deferred_until_implemented_events: row
             .try_get("deferred_until_implemented_events")

@@ -8,7 +8,7 @@ The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
 `RadrootsClient::builder()` defaults to memory storage, the system clock, the `LocalOnly` transport
 profile, and no production network publishing. Directory storage is opt-in and creates
 `runtime.sqlite`, `private.sqlite`, and `studio.sqlite` in the selected directory. Configured Nostr
-relay URLs live inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::Hybrid`,
+relay URLs live inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::MultiTarget`,
 and product enqueue requests choose the active profile through `TargetPolicy::default_profile()`.
 
 When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
@@ -35,12 +35,11 @@ clock at enqueue time. Listing enqueue receipts report mutation state with the p
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued signed outbox work
 when `transport-nostr-runtime` is enabled. Push time uses the delivery targets already stored on each
 queued outbox event, so already queued work does not require a configured builder profile. Reticulum
-preview work reports explicit preview-unavailable or deferred receipt state with zero network
+work reports explicit deferred-until-implemented receipt state with zero network
 attempts; it does not deliver and does not fall back to another transport. Nostr transport publishing
-and the `radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither transport
-owns signing. `push_outbox_with_transport(...)` remains available for tests and controlled
-transport-level substrate checks. `radrootsd-proxy` adds daemon-resolved publishing through
-`publish.event`.
+and radrootsd execution consume signed outbox events; neither path owns signing.
+`push_outbox_with_transport(...)` remains available for tests and controlled transport-level
+substrate checks. `radrootsd-execution` adds daemon-resolved publishing through `publish.event`.
 
 `sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
 evidence, read `sdk.trades().status(...)`, resync through `sdk.trades().resync()`, inspect
@@ -59,7 +58,7 @@ The `local-runtime` feature is the curated feature bundle for local product runt
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `transport-nostr-runtime`, and
 `transport-nostr-client`. `signer-adapters` contains the SDK `local_key` and `myc_nip46` signing surface.
 `transport-nostr-client` supplies the Nostr relay WebSocket publish adapter used when signed outbox work
-targets Nostr relay URLs. `local-runtime-radrootsd-proxy` uses daemon-resolved publishing through
+targets Nostr relay URLs. `local-runtime-radrootsd-execution` uses daemon-resolved publishing through
 `publish.event` and the same configured signer provider API.
 
 `radroots_sdk_myc_nip46_product_permissions()` and

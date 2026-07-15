@@ -1,6 +1,6 @@
 use super::{RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, redacted_relay_url};
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
-use crate::transport::ReticulumPreviewBehavior;
+use crate::transport::ReticulumBehavior;
 use radroots_authority::RadrootsAuthorityError;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
@@ -306,15 +306,15 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             operation: "sync.push_outbox",
             required_feature: "transport-nostr-runtime",
         },
-        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+        RadrootsSdkError::ReticulumTransportUnavailable {
             operation: "sync.push_outbox".to_owned(),
-            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
-            behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
+            endpoint_uri: "reticulum:local".to_owned(),
+            behavior: ReticulumBehavior::RejectDeliveryAttempts,
         },
-        RadrootsSdkError::ReticulumPreviewTransportUnavailable {
+        RadrootsSdkError::ReticulumTransportUnavailable {
             operation: "sync.push_outbox".to_owned(),
-            endpoint_uri: "reticulum:preview-unavailable".to_owned(),
-            behavior: ReticulumPreviewBehavior::DeferDeliveryPlans,
+            endpoint_uri: "reticulum:local".to_owned(),
+            behavior: ReticulumBehavior::DeferDeliveryPlans,
         },
         RadrootsSdkError::ProductSyncTransportSetupFailure {
             message: "offline".to_owned(),

@@ -48,7 +48,7 @@ identity-models = [
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:nostr", "dep:radroots_nostr", "nostr"]
 transport-nostr-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
-radrootsd-proxy = [
+radrootsd-execution = [
   "std",
   "serde_json",
   "dep:futures",
@@ -115,13 +115,13 @@ local-runtime = [
   "transport-nostr-runtime",
   "transport-nostr-client",
 ]
-local-runtime-radrootsd-proxy = [
+local-runtime-radrootsd-execution = [
   "std",
   "serde",
   "serde_json",
   "runtime",
   "signer-adapters",
-  "radrootsd-proxy",
+  "radrootsd-execution",
 ]
 test-fixture-geonames-asset = [
   "runtime",

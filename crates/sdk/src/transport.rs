@@ -1,6 +1,7 @@
 use crate::RadrootsSdkError;
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportImplementationState, RadrootsTransportMeshScopeId,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
@@ -244,8 +245,8 @@ impl MeshScopeId {
         Ok(Self(RadrootsTransportMeshScopeId::parse(raw)?))
     }
 
-    pub fn local_preview() -> Self {
-        Self(RadrootsTransportMeshScopeId::local_preview())
+    pub fn local_reticulum() -> Self {
+        Self(RadrootsTransportMeshScopeId::local_reticulum())
     }
 
     pub fn as_str(&self) -> &str {
@@ -332,23 +333,13 @@ impl TargetSet {
                 targets.len(),
             ));
         }
-        if targets
-            .iter()
-            .any(|target| target.kind == RadrootsTransportKind::Proxy)
-            && (targets.len() != 1 || targets[0].kind != RadrootsTransportKind::Proxy)
-        {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "proxy transport targets must be the only target in a target set"
-                    .to_owned(),
-            });
-        }
         for target in &targets {
             if target.kind == RadrootsTransportKind::Reticulum
-                && target.uri.as_str() != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+                && target.uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
             {
                 return Err(RadrootsSdkError::InvalidRequest {
                     message: format!(
-                        "Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
+                        "Reticulum endpoint must be {RADROOTS_RETICULUM_ENDPOINT_URI}"
                     ),
                 });
             }
@@ -405,24 +396,24 @@ impl NostrProfile {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct ReticulumPreviewProfile {
+pub struct ReticulumProfile {
     endpoint_uri: String,
     scope: MeshScopeId,
-    agent_endpoint: Option<ReticulumPreviewAgentEndpoint>,
-    behavior: ReticulumPreviewBehavior,
+    agent_endpoint: Option<ReticulumAgentEndpoint>,
+    behavior: ReticulumBehavior,
 }
 
-impl ReticulumPreviewProfile {
-    pub fn preview_unavailable() -> Self {
+impl ReticulumProfile {
+    pub fn deferred_until_implemented() -> Self {
         Self {
-            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
-            scope: MeshScopeId::local_preview(),
+            endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
+            scope: MeshScopeId::local_reticulum(),
             agent_endpoint: None,
-            behavior: ReticulumPreviewBehavior::RejectDeliveryAttempts,
+            behavior: ReticulumBehavior::RejectDeliveryAttempts,
         }
     }
 
-    pub fn with_behavior(mut self, behavior: ReticulumPreviewBehavior) -> Self {
+    pub fn with_behavior(mut self, behavior: ReticulumBehavior) -> Self {
         self.behavior = behavior;
         self
     }
@@ -435,11 +426,11 @@ impl ReticulumPreviewProfile {
         &self.scope
     }
 
-    pub fn agent_endpoint(&self) -> Option<&ReticulumPreviewAgentEndpoint> {
+    pub fn agent_endpoint(&self) -> Option<&ReticulumAgentEndpoint> {
         self.agent_endpoint.as_ref()
     }
 
-    pub fn with_agent_endpoint(mut self, agent_endpoint: ReticulumPreviewAgentEndpoint) -> Self {
+    pub fn with_agent_endpoint(mut self, agent_endpoint: ReticulumAgentEndpoint) -> Self {
         self.agent_endpoint = Some(agent_endpoint);
         self
     }
@@ -449,34 +440,32 @@ impl ReticulumPreviewProfile {
         self
     }
 
-    pub fn behavior(&self) -> ReticulumPreviewBehavior {
+    pub fn behavior(&self) -> ReticulumBehavior {
         self.behavior
     }
 
     pub fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
-        if self.endpoint_uri.as_str() != radroots_transport::RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
-        {
+        if self.endpoint_uri.as_str() != radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(radroots_transport::RadrootsTransportError::InvalidTargetUri.into());
         }
-        TargetSet::transport_targets(vec![
-            RadrootsTransportTarget::reticulum_preview_with_metadata(
-                Some(self.scope.transport_scope()),
-                None,
-            )?,
-        ])
+        TargetSet::transport_targets(vec![RadrootsTransportTarget::reticulum_with_metadata(
+            self.endpoint_uri.as_str(),
+            Some(self.scope.transport_scope()),
+            None,
+        )?])
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(transparent)]
-pub struct ReticulumPreviewAgentEndpoint(String);
+pub struct ReticulumAgentEndpoint(String);
 
-impl ReticulumPreviewAgentEndpoint {
+impl ReticulumAgentEndpoint {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsSdkError> {
         let uri = raw.as_ref();
         let Some(suffix) = uri.strip_prefix(RETICULUM_AGENT_ENDPOINT_PREFIX) else {
             return Err(RadrootsSdkError::InvalidRequest {
-                message: "Reticulum preview agent endpoint is invalid".to_owned(),
+                message: "Reticulum agent endpoint is invalid".to_owned(),
             });
         };
         if uri.is_empty()
@@ -487,7 +476,7 @@ impl ReticulumPreviewAgentEndpoint {
                 .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
         {
             return Err(RadrootsSdkError::InvalidRequest {
-                message: "Reticulum preview agent endpoint is invalid".to_owned(),
+                message: "Reticulum agent endpoint is invalid".to_owned(),
             });
         }
         Ok(Self(uri.to_owned()))
@@ -498,21 +487,21 @@ impl ReticulumPreviewAgentEndpoint {
     }
 }
 
-impl Default for ReticulumPreviewProfile {
+impl Default for ReticulumProfile {
     fn default() -> Self {
-        Self::preview_unavailable()
+        Self::deferred_until_implemented()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum ReticulumPreviewBehavior {
+pub enum ReticulumBehavior {
     RejectDeliveryAttempts,
     DeferDeliveryPlans,
 }
 
-impl ReticulumPreviewBehavior {
+impl ReticulumBehavior {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::RejectDeliveryAttempts => "reject_delivery_attempts",
@@ -522,36 +511,33 @@ impl ReticulumPreviewBehavior {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct HybridProfile {
+pub struct MultiTargetProfile {
     nostr: NostrProfile,
-    reticulum_preview: ReticulumPreviewProfile,
+    reticulum: ReticulumProfile,
 }
 
-impl HybridProfile {
-    pub fn new(nostr: NostrProfile, reticulum_preview: ReticulumPreviewProfile) -> Self {
-        Self {
-            nostr,
-            reticulum_preview,
-        }
+impl MultiTargetProfile {
+    pub fn new(nostr: NostrProfile, reticulum: ReticulumProfile) -> Self {
+        Self { nostr, reticulum }
     }
 
     pub fn nostr(&self) -> &NostrProfile {
         &self.nostr
     }
 
-    pub fn reticulum_preview(&self) -> &ReticulumPreviewProfile {
-        &self.reticulum_preview
+    pub fn reticulum(&self) -> &ReticulumProfile {
+        &self.reticulum
     }
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
-pub enum ProxyAuth {
+pub enum RadrootsdExecutionAuth {
     #[default]
     None,
     BearerToken(String),
 }
 
-impl core::fmt::Debug for ProxyAuth {
+impl core::fmt::Debug for RadrootsdExecutionAuth {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::None => f.write_str("None"),
@@ -560,12 +546,12 @@ impl core::fmt::Debug for ProxyAuth {
     }
 }
 
-impl serde::Serialize for ProxyAuth {
+impl serde::Serialize for RadrootsdExecutionAuth {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("ProxyAuth", 1)?;
+        let mut state = serializer.serialize_struct("RadrootsdExecutionAuth", 1)?;
         match self {
             Self::None => state.serialize_field("kind", "none")?,
             Self::BearerToken(_) => state.serialize_field("kind", "bearer_token")?,
@@ -575,21 +561,21 @@ impl serde::Serialize for ProxyAuth {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct ProxyProfile {
+pub struct RadrootsdExecutionProfile {
     endpoint_url: String,
-    auth: ProxyAuth,
+    auth: RadrootsdExecutionAuth,
 }
 
-impl ProxyProfile {
+impl RadrootsdExecutionProfile {
     pub fn new(endpoint_url: impl Into<String>) -> Self {
         Self {
             endpoint_url: endpoint_url.into(),
-            auth: ProxyAuth::None,
+            auth: RadrootsdExecutionAuth::None,
         }
     }
 
     pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {
-        self.auth = ProxyAuth::BearerToken(token.into());
+        self.auth = RadrootsdExecutionAuth::BearerToken(token.into());
         self
     }
 
@@ -597,14 +583,8 @@ impl ProxyProfile {
         self.endpoint_url.as_str()
     }
 
-    pub fn auth(&self) -> &ProxyAuth {
+    pub fn auth(&self) -> &RadrootsdExecutionAuth {
         &self.auth
-    }
-
-    pub(crate) fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
-        TargetSet::transport_targets(vec![RadrootsTransportTarget::proxy(
-            self.endpoint_url.as_str(),
-        )?])
     }
 }
 
@@ -617,14 +597,11 @@ pub enum TransportProfile {
     Nostr {
         profile: NostrProfile,
     },
-    ReticulumPreview {
-        profile: ReticulumPreviewProfile,
+    Reticulum {
+        profile: ReticulumProfile,
     },
-    Hybrid {
-        profile: HybridProfile,
-    },
-    Proxy {
-        profile: ProxyProfile,
+    MultiTarget {
+        profile: MultiTargetProfile,
     },
 }
 
@@ -637,29 +614,20 @@ impl TransportProfile {
         Self::Nostr { profile }
     }
 
-    pub fn reticulum_preview(profile: ReticulumPreviewProfile) -> Self {
-        Self::ReticulumPreview { profile }
+    pub fn reticulum(profile: ReticulumProfile) -> Self {
+        Self::Reticulum { profile }
     }
 
-    pub fn hybrid(profile: HybridProfile) -> Self {
-        Self::Hybrid { profile }
-    }
-
-    pub fn proxy(profile: ProxyProfile) -> Self {
-        Self::Proxy { profile }
-    }
-
-    pub fn supports_delegated_target_resolution(&self) -> bool {
-        matches!(self, Self::Proxy { .. })
+    pub fn multi_target(profile: MultiTargetProfile) -> Self {
+        Self::MultiTarget { profile }
     }
 
     pub(crate) fn transport_profile_id(&self) -> &'static str {
         match self {
             Self::LocalOnly => "local_only",
             Self::Nostr { .. } => "nostr",
-            Self::ReticulumPreview { .. } => "reticulum_preview",
-            Self::Hybrid { .. } => "hybrid",
-            Self::Proxy { .. } => "proxy",
+            Self::Reticulum { .. } => "reticulum",
+            Self::MultiTarget { .. } => "multi_target",
         }
     }
 
@@ -667,13 +635,12 @@ impl TransportProfile {
         match self {
             Self::LocalOnly => Ok(None),
             Self::Nostr { profile } => Ok(Some(profile.target_set().clone())),
-            Self::ReticulumPreview { profile } => Ok(Some(profile.target_set()?)),
-            Self::Hybrid { profile } => {
+            Self::Reticulum { profile } => Ok(Some(profile.target_set()?)),
+            Self::MultiTarget { profile } => {
                 let mut targets = profile.nostr().target_set().targets().to_vec();
-                targets.extend(profile.reticulum_preview().target_set()?.into_targets());
+                targets.extend(profile.reticulum().target_set()?.into_targets());
                 Ok(Some(TargetSet::transport_targets(targets)?))
             }
-            Self::Proxy { profile } => Ok(Some(profile.target_set()?)),
         }
     }
 
@@ -699,45 +666,27 @@ impl TransportProfile {
                 .with_profile_id(self.transport_profile_id()),
             ],
             Self::Nostr { .. } => vec![nostr_transport_status(self.transport_profile_id())],
-            Self::ReticulumPreview { profile } => {
-                vec![reticulum_preview_transport_status(
+            Self::Reticulum { profile } => {
+                vec![reticulum_transport_status(
                     self.transport_profile_id(),
                     profile.endpoint_uri(),
                 )]
             }
-            Self::Hybrid { profile } => vec![
+            Self::MultiTarget { profile } => vec![
                 nostr_transport_status(self.transport_profile_id()),
-                reticulum_preview_transport_status(
+                reticulum_transport_status(
                     self.transport_profile_id(),
-                    profile.reticulum_preview().endpoint_uri(),
+                    profile.reticulum().endpoint_uri(),
                 ),
             ],
-            Self::Proxy { profile } => {
-                let auth_configured = matches!(profile.auth(), ProxyAuth::BearerToken(_));
-                vec![
-                    RadrootsTransportStatus::new(
-                        RadrootsTransportKind::Proxy,
-                        auth_configured,
-                        RadrootsTransportImplementationState::Real,
-                        auth_configured,
-                        if auth_configured {
-                            "ready"
-                        } else {
-                            "proxy transport requires bearer token"
-                        },
-                    )
-                    .with_profile_id(self.transport_profile_id())
-                    .with_endpoint_uri(profile.endpoint_url()),
-                ]
-            }
         }
     }
 
     pub(crate) fn configured_nostr_relay_urls(&self) -> Vec<String> {
         match self {
             Self::Nostr { profile } => profile.relay_urls(),
-            Self::Hybrid { profile } => profile.nostr().relay_urls(),
-            Self::LocalOnly | Self::ReticulumPreview { .. } | Self::Proxy { .. } => Vec::new(),
+            Self::MultiTarget { profile } => profile.nostr().relay_urls(),
+            Self::LocalOnly | Self::Reticulum { .. } => Vec::new(),
         }
     }
 }
@@ -753,19 +702,18 @@ fn nostr_transport_status(profile_id: &str) -> RadrootsTransportStatus {
     .with_profile_id(profile_id)
 }
 
-fn reticulum_preview_transport_status(
-    profile_id: &str,
-    endpoint_uri: &str,
-) -> RadrootsTransportStatus {
+fn reticulum_transport_status(profile_id: &str, endpoint_uri: &str) -> RadrootsTransportStatus {
     RadrootsTransportStatus::new(
         RadrootsTransportKind::Reticulum,
         true,
-        RadrootsTransportImplementationState::PreviewUnavailable,
+        RadrootsTransportImplementationState::Real,
         false,
         RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     )
     .with_profile_id(profile_id)
     .with_endpoint_uri(endpoint_uri)
+    .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
+    .with_availability(RadrootsTransportCapabilityAvailability::Unavailable)
 }
 
 impl From<RadrootsTransportDeliveryReceipt> for TransportReceipt {

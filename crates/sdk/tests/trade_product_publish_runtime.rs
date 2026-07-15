@@ -2,7 +2,7 @@
     feature = "runtime",
     feature = "signer-adapters",
     feature = "local-signer",
-    feature = "radrootsd-proxy"
+    feature = "radrootsd-execution"
 ))]
 
 use radroots_authority::RadrootsActorContext;
@@ -21,9 +21,10 @@ use radroots_event::{
 };
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
 use radroots_sdk::{
-    NostrRelayUrlPolicy, ProxyProfile, PublishMode, PushOutboxTargetOutcomeKind, RadrootsClient,
-    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SatisfactionPolicy,
-    TargetPolicy, TargetSet, TradeMutationOutcome, TradeProposeRequest, TransportProfile,
+    NostrRelayUrlPolicy, PublishMode, PushOutboxTargetOutcomeKind, RadrootsClient,
+    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
+    RadrootsdExecutionProfile, SatisfactionPolicy, TargetPolicy, TargetSet, TradeMutationOutcome,
+    TradeProposeRequest,
 };
 use std::{
     io::{Read, Write},
@@ -241,7 +242,7 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
             RadrootsSdkLocalKeySigner::new(signer_keys).expect("local signer"),
         ))
-        .transport_profile(TransportProfile::proxy(ProxyProfile::new(endpoint)))
+        .radrootsd_execution_profile(RadrootsdExecutionProfile::new(endpoint))
         .build()
         .await
         .expect("sdk");

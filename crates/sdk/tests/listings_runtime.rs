@@ -21,11 +21,11 @@ use radroots_outbox::{
     RadrootsOutboxEventState,
 };
 use radroots_sdk::{
-    HybridProfile, LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest,
-    ListingPreparePublishRequest, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState,
-    PushOutboxRequest, PushOutboxTargetOutcomeKind, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, ReticulumPreviewProfile, SdkIdempotencyKey,
-    SdkMutationState, TargetPolicy, TargetSet, TransportProfile,
+    LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
+    MultiTargetProfile, NostrProfile, NostrRelayUrlPolicy, PushOutboxEventState, PushOutboxRequest,
+    PushOutboxTargetOutcomeKind, RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, ReticulumProfile, SdkIdempotencyKey, SdkMutationState, TargetPolicy,
+    TargetSet, TransportProfile,
 };
 use radroots_trade::listing::RadrootsListingEditDocumentV1;
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
@@ -187,14 +187,14 @@ async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, Radro
     (tempdir, sdk)
 }
 
-async fn hybrid_directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
+async fn multi_target_directory_sdk() -> (tempfile::TempDir, RadrootsClient) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
         .directory_storage(tempdir.path().join("sdk"))
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .transport_profile(TransportProfile::hybrid(HybridProfile::new(
+        .transport_profile(TransportProfile::multi_target(MultiTargetProfile::new(
             NostrProfile::new([RELAY], NostrRelayUrlPolicy::Public).expect("Nostr profile"),
-            ReticulumPreviewProfile::preview_unavailable(),
+            ReticulumProfile::deferred_until_implemented(),
         )))
         .build()
         .await
@@ -926,14 +926,14 @@ async fn enqueue_publish_uses_explicit_idempotency_key_across_equivalent_target_
 }
 
 #[tokio::test]
-async fn listing_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum_preview() {
-    let (_tempdir, sdk) = hybrid_directory_sdk().await;
+async fn listing_multi_target_profile_publishes_after_nostr_success_and_retains_reticulum() {
+    let (_tempdir, sdk) = multi_target_directory_sdk().await;
     let enqueue_receipt = sdk
         .listings()
         .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
-                listing(LISTING_G_D_TAG, "Hybrid Coffee"),
+                listing(LISTING_G_D_TAG, "MultiTarget Coffee"),
                 TargetPolicy::default_profile(),
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023c")
@@ -996,8 +996,8 @@ async fn listing_hybrid_profile_publishes_after_nostr_success_and_retains_reticu
             && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
     }));
     assert!(targets.iter().any(|target| {
-        target.endpoint_uri.to_string() == "reticulum:preview-unavailable"
-            && target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+        target.endpoint_uri.to_string() == "reticulum:local"
+            && target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
             && target.attempt_count == 0
     }));
 }
