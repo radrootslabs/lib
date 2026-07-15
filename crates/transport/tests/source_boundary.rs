@@ -551,6 +551,9 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
         "pub struct TransportPublishOperationCapabilities",
         "pub deliver: bool,",
         "pub fetch: bool,",
+        "pub discovery: bool,",
+        "pub gateway_forwarding: bool,",
+        "pub receipt_observation: bool,",
         "TransportPublishImplementation::Real",
         "TransportPublishCapabilityMaturity::Preview",
         "TransportPublishCapabilityAvailability::Unavailable",
@@ -560,6 +563,9 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
         "capabilities: TransportPublishOperationCapabilities",
         "deliver: true",
         "fetch: false",
+        "discovery: false",
+        "gateway_forwarding: false",
+        "receipt_observation: false",
     ] {
         assert!(
             source.contains(required),

@@ -9,6 +9,9 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    ReticulumCapabilityReportV1, ReticulumDuplicateFragmentBehaviorV1,
+    ReticulumFragmentIntegrityV1, ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1,
+    ReticulumPrivacySemanticsV1,
 };
 use serde_json::Value;
 
@@ -36,6 +39,82 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
     assert_eq!(
         nostr_upper.fingerprint.as_str(),
         "d0903c3067150d7b4f7efd92a9be002b97d74e83f8bb6827327fa7ecd869332b"
+    );
+}
+
+#[test]
+fn reticulum_destination_v1_is_canonical_and_stable() {
+    let target = RadrootsTransportTarget::reticulum().expect("reticulum target");
+    let destination = radroots_transport::ReticulumDestinationV1::from_target(&target)
+        .expect("destination from target");
+    let local = radroots_transport::ReticulumDestinationV1::local();
+
+    assert_eq!(destination, local);
+    assert_eq!(destination.uri.as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(
+        destination.routing.scope.as_str(),
+        RADROOTS_RETICULUM_SCOPE_ID
+    );
+    assert_eq!(
+        destination.routing.gateway,
+        ReticulumGatewaySemanticsV1::NoGatewayForwarding
+    );
+    assert_eq!(
+        destination.routing.privacy,
+        ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
+    );
+    assert_eq!(destination.fingerprint, target.fingerprint);
+    assert_eq!(
+        destination
+            .transport_target()
+            .expect("transport target")
+            .fingerprint,
+        target.fingerprint
+    );
+    assert_eq!(
+        destination.fingerprint.as_str(),
+        "39142c9a79d6912655e0ad00fb5dbfbe9d2d91b4999e5d68d04a81d89a77f831"
+    );
+    assert!(
+        radroots_transport::ReticulumDestinationV1::new(
+            "reticulum:other",
+            RadrootsTransportMeshScopeId::local_reticulum(),
+            None,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn reticulum_capability_report_v1_is_explicitly_unavailable_without_fragmentation() {
+    let report = ReticulumCapabilityReportV1::unavailable_local();
+
+    assert!(report.delivery_required);
+    assert!(!report.fetch_required);
+    assert!(!report.can_deliver);
+    assert!(!report.can_fetch);
+    assert!(!report.can_discover);
+    assert!(!report.can_forward_gateway);
+    assert!(!report.can_observe_receipts);
+    assert_eq!(
+        report.payload_policy.fragment_policy.mode,
+        ReticulumFragmentationModeV1::Unsupported
+    );
+    assert_eq!(report.payload_policy.fragment_policy.max_fragment_count, 1);
+    assert_eq!(
+        report.payload_policy.fragment_policy.max_reassembled_bytes,
+        report.payload_policy.max_payload_bytes
+    );
+    assert_eq!(
+        report
+            .payload_policy
+            .fragment_policy
+            .duplicate_fragment_behavior,
+        ReticulumDuplicateFragmentBehaviorV1::Reject
+    );
+    assert_eq!(
+        report.payload_policy.fragment_policy.integrity_verification,
+        ReticulumFragmentIntegrityV1::PayloadDigest
     );
 }
 
@@ -298,6 +377,9 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
     assert_eq!(json["usable_for_delivery"], true);
     assert_eq!(json["capabilities"]["deliver"], true);
     assert_eq!(json["capabilities"]["fetch"], false);
+    assert_eq!(json["capabilities"]["discovery"], false);
+    assert_eq!(json["capabilities"]["gateway_forwarding"], false);
+    assert_eq!(json["capabilities"]["receipt_observation"], false);
     assert_eq!(json["message"], "ready");
     for retired in [
         "kind",

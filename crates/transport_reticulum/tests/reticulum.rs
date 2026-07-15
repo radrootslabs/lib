@@ -6,6 +6,8 @@ use radroots_transport::{
     RadrootsTransportFetchRequest, RadrootsTransportImplementationState, RadrootsTransportKind,
     RadrootsTransportMeshScopeId, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
+    ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
+    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumAgentEndpoint, RadrootsReticulumBehavior, RadrootsReticulumEndpoint,
@@ -77,6 +79,61 @@ fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
     assert_eq!(
         status.transport_status.endpoint_uri.as_deref(),
         Some(RADROOTS_RETICULUM_ENDPOINT_URI)
+    );
+    assert_eq!(
+        profile.destination().uri.as_str(),
+        RADROOTS_RETICULUM_ENDPOINT_URI
+    );
+    assert_eq!(
+        profile.destination().routing.scope.as_str(),
+        RADROOTS_RETICULUM_SCOPE_ID
+    );
+    assert_eq!(
+        status.destination.routing.gateway,
+        ReticulumGatewaySemanticsV1::NoGatewayForwarding
+    );
+    assert_eq!(
+        status.destination.routing.privacy,
+        ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
+    );
+    assert!(status.capability_report.delivery_required);
+    assert!(!status.capability_report.fetch_required);
+    assert!(!status.capability_report.can_deliver);
+    assert!(!status.capability_report.can_fetch);
+    assert!(!status.capability_report.can_discover);
+    assert!(!status.capability_report.can_forward_gateway);
+    assert!(!status.capability_report.can_observe_receipts);
+    assert_eq!(
+        status.capability_report.destination.fingerprint,
+        status.destination.fingerprint
+    );
+    assert_eq!(
+        status.capability_report.payload_policy.fragment_policy.mode,
+        ReticulumFragmentationModeV1::Unsupported
+    );
+    assert_eq!(
+        status
+            .capability_report
+            .payload_policy
+            .fragment_policy
+            .max_fragment_count,
+        1
+    );
+    assert_eq!(
+        status
+            .capability_report
+            .payload_policy
+            .fragment_policy
+            .duplicate_fragment_behavior,
+        ReticulumDuplicateFragmentBehaviorV1::Reject
+    );
+    assert_eq!(
+        status
+            .capability_report
+            .payload_policy
+            .fragment_policy
+            .integrity_verification,
+        ReticulumFragmentIntegrityV1::PayloadDigest
     );
     assert_eq!(
         status.transport_status.message,
@@ -214,6 +271,15 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     assert_eq!(
         profile.agent_endpoint().map(|endpoint| endpoint.as_str()),
         Some("reticulum-agent://localhost:19999")
+    );
+    assert_eq!(
+        profile
+            .capability_report()
+            .destination
+            .routing
+            .scope
+            .as_str(),
+        RADROOTS_RETICULUM_SCOPE_ID
     );
 }
 
@@ -497,6 +563,9 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
     assert!(!status.transport_status.usable_for_delivery);
     assert!(!status.transport_status.capabilities.deliver);
     assert!(!status.transport_status.capabilities.fetch);
+    assert!(!status.transport_status.capabilities.discovery);
+    assert!(!status.transport_status.capabilities.gateway_forwarding);
+    assert!(!status.transport_status.capabilities.receipt_observation);
 
     let receipt = transport
         .deliver(delivery_request(vec![reticulum_target(

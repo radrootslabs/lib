@@ -949,6 +949,9 @@ impl TransportPublishCapabilities {
                         capabilities: TransportPublishOperationCapabilities {
                             deliver: true,
                             fetch: false,
+                            discovery: false,
+                            gateway_forwarding: false,
+                            receipt_observation: false,
                         },
                         reticulum_behavior: None,
                         message: "Nostr relay publish is available".to_owned(),
@@ -963,6 +966,9 @@ impl TransportPublishCapabilities {
                         capabilities: TransportPublishOperationCapabilities {
                             deliver: false,
                             fetch: false,
+                            discovery: false,
+                            gateway_forwarding: false,
+                            receipt_observation: false,
                         },
                         reticulum_behavior: Some(
                             TransportPublishReticulumBehavior::RejectDeliveryAttempts,
@@ -1045,6 +1051,9 @@ pub struct TransportPublishTransportCapability {
 pub struct TransportPublishOperationCapabilities {
     pub deliver: bool,
     pub fetch: bool,
+    pub discovery: bool,
+    pub gateway_forwarding: bool,
+    pub receipt_observation: bool,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1543,6 +1552,9 @@ mod tests {
         assert!(nostr.usable_for_delivery);
         assert!(nostr.capabilities.deliver);
         assert!(!nostr.capabilities.fetch);
+        assert!(!nostr.capabilities.discovery);
+        assert!(!nostr.capabilities.gateway_forwarding);
+        assert!(!nostr.capabilities.receipt_observation);
         let reticulum = capabilities
             .publish
             .transports
@@ -1565,6 +1577,9 @@ mod tests {
         assert!(!reticulum.usable_for_delivery);
         assert!(!reticulum.capabilities.deliver);
         assert!(!reticulum.capabilities.fetch);
+        assert!(!reticulum.capabilities.discovery);
+        assert!(!reticulum.capabilities.gateway_forwarding);
+        assert!(!reticulum.capabilities.receipt_observation);
         assert_eq!(
             reticulum.reticulum_behavior,
             Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts)

@@ -4548,6 +4548,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_reticulum_signed_delivery_reuses_one_logical_operation_and_plan() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum repeated");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let first = outbox
+            .enqueue_signed_operation(
+                RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft.clone(),
+                    signed_event.clone(),
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.reticulum.default",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![reticulum_target("reticulum:local")],
+                    ),
+                    true,
+                    1_007,
+                    1_000,
+                )
+                .with_idempotency_key("idem-reticulum-repeated"),
+            )
+            .await
+            .expect("first enqueue");
+        let second = outbox
+            .enqueue_signed_operation(
+                RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event,
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.reticulum.default",
+                        1,
+                        RadrootsTransportSatisfactionPolicy::all_accepted(),
+                        vec![reticulum_target("reticulum:local")],
+                    ),
+                    true,
+                    1_017,
+                    1_010,
+                )
+                .with_idempotency_key("idem-reticulum-repeated"),
+            )
+            .await
+            .expect("second enqueue");
+
+        assert_eq!(first.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Existing);
+        assert_eq!(first.operation_id, second.operation_id);
+        assert_eq!(first.outbox_event_id, second.outbox_event_id);
+        assert_eq!(first.delivery_plan_id, second.delivery_plan_id);
+        assert_eq!(
+            first.operation_idempotency_digest,
+            second.operation_idempotency_digest
+        );
+        assert_eq!(
+            first.delivery_plan_idempotency_digest,
+            second.delivery_plan_idempotency_digest
+        );
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_delivery_target").await, 1);
+        let records = outbox.reticulum_events(None, 10).await.expect("records");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].event.outbox_event_id, first.outbox_event_id);
+    }
+
+    #[tokio::test]
     async fn reticulum_events_report_deferred_records() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let reject_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum record");

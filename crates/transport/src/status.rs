@@ -180,6 +180,9 @@ impl RadrootsTransportOutcome {
 pub struct RadrootsTransportCapabilities {
     pub deliver: bool,
     pub fetch: bool,
+    pub discovery: bool,
+    pub gateway_forwarding: bool,
+    pub receipt_observation: bool,
 }
 
 impl RadrootsTransportCapabilities {
@@ -187,6 +190,9 @@ impl RadrootsTransportCapabilities {
         Self {
             deliver: false,
             fetch: false,
+            discovery: false,
+            gateway_forwarding: false,
+            receipt_observation: false,
         }
     }
 
@@ -194,6 +200,9 @@ impl RadrootsTransportCapabilities {
         Self {
             deliver: true,
             fetch: false,
+            discovery: false,
+            gateway_forwarding: false,
+            receipt_observation: false,
         }
     }
 
@@ -201,6 +210,9 @@ impl RadrootsTransportCapabilities {
         Self {
             deliver: false,
             fetch: true,
+            discovery: false,
+            gateway_forwarding: false,
+            receipt_observation: false,
         }
     }
 
@@ -208,6 +220,34 @@ impl RadrootsTransportCapabilities {
         Self {
             deliver: true,
             fetch: true,
+            discovery: false,
+            gateway_forwarding: false,
+            receipt_observation: false,
+        }
+    }
+
+    pub const fn with_discovery(mut self, discovery: bool) -> Self {
+        self.discovery = discovery;
+        self
+    }
+
+    pub const fn with_gateway_forwarding(mut self, gateway_forwarding: bool) -> Self {
+        self.gateway_forwarding = gateway_forwarding;
+        self
+    }
+
+    pub const fn with_receipt_observation(mut self, receipt_observation: bool) -> Self {
+        self.receipt_observation = receipt_observation;
+        self
+    }
+
+    pub const fn reticulum_unavailable() -> Self {
+        Self {
+            deliver: false,
+            fetch: false,
+            discovery: false,
+            gateway_forwarding: false,
+            receipt_observation: false,
         }
     }
 }

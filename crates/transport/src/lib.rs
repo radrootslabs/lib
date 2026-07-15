@@ -8,6 +8,7 @@ mod error;
 mod kind;
 mod message;
 mod payload;
+mod reticulum;
 mod status;
 mod target;
 mod transport;
@@ -27,6 +28,12 @@ pub use message::{
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
 pub use payload::RadrootsTransportPayload;
+pub use reticulum::{
+    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
+    ReticulumFragmentIntegrityV1, ReticulumFragmentPolicyV1, ReticulumFragmentationModeV1,
+    ReticulumGatewaySemanticsV1, ReticulumPayloadPolicyV1, ReticulumPrivacySemanticsV1,
+    ReticulumRoutingMetadataV1,
+};
 pub use status::{
     RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportStatus,

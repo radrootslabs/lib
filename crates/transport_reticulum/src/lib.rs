@@ -10,13 +10,14 @@ use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt,
+    RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumPayloadPolicyV1,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.default";
@@ -118,6 +119,8 @@ pub struct RadrootsReticulumProfile {
     scope: RadrootsTransportMeshScopeId,
     agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
     behavior: RadrootsReticulumBehavior,
+    destination: ReticulumDestinationV1,
+    capability_report: ReticulumCapabilityReportV1,
 }
 
 impl RadrootsReticulumProfile {
@@ -132,22 +135,34 @@ impl RadrootsReticulumProfile {
         if profile_id.trim().is_empty() || profile_id.chars().any(char::is_whitespace) {
             return Err(RadrootsReticulumError::InvalidProfileId);
         }
+        let destination = ReticulumDestinationV1::new(endpoint.as_str(), scope.clone(), None)
+            .map_err(|_| RadrootsReticulumError::InvalidEndpoint)?;
+        let capability_report = ReticulumCapabilityReportV1 {
+            destination: destination.clone(),
+            payload_policy: ReticulumPayloadPolicyV1::v1(),
+            ..ReticulumCapabilityReportV1::unavailable_local()
+        };
         Ok(Self {
             profile_id,
             endpoint,
             scope,
             agent_endpoint,
             behavior,
+            destination,
+            capability_report,
         })
     }
 
     pub fn deferred_until_implemented() -> Self {
+        let capability_report = ReticulumCapabilityReportV1::unavailable_local();
         Self {
             profile_id: DEFAULT_PROFILE_ID.to_owned(),
             endpoint: RadrootsReticulumEndpoint::default(),
             scope: RadrootsTransportMeshScopeId::local_reticulum(),
             agent_endpoint: None,
             behavior: RadrootsReticulumBehavior::RejectDeliveryAttempts,
+            destination: capability_report.destination.clone(),
+            capability_report,
         }
     }
 
@@ -181,11 +196,21 @@ impl RadrootsReticulumProfile {
         self.behavior
     }
 
+    pub fn destination(&self) -> &ReticulumDestinationV1 {
+        &self.destination
+    }
+
+    pub fn capability_report(&self) -> &ReticulumCapabilityReportV1 {
+        &self.capability_report
+    }
+
     pub fn status(&self) -> RadrootsReticulumStatus {
         RadrootsReticulumStatus {
             behavior: self.behavior,
             scope: self.scope.clone(),
             agent_endpoint: self.agent_endpoint.clone(),
+            destination: self.destination.clone(),
+            capability_report: self.capability_report.clone(),
             transport_status: RadrootsTransportStatus::new(
                 RadrootsTransportKind::Reticulum,
                 true,
@@ -195,6 +220,7 @@ impl RadrootsReticulumProfile {
             )
             .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
             .with_availability(RadrootsTransportCapabilityAvailability::Unavailable)
+            .with_capabilities(RadrootsTransportCapabilities::reticulum_unavailable())
             .with_profile_id(self.profile_id.clone())
             .with_endpoint_uri(self.endpoint.as_str()),
         }
@@ -213,6 +239,8 @@ pub struct RadrootsReticulumStatus {
     pub behavior: RadrootsReticulumBehavior,
     pub scope: RadrootsTransportMeshScopeId,
     pub agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    pub destination: ReticulumDestinationV1,
+    pub capability_report: ReticulumCapabilityReportV1,
     pub transport_status: RadrootsTransportStatus,
 }
 

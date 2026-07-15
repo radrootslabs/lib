@@ -1,0 +1,194 @@
+use crate::{
+    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetLabel, RadrootsTransportTargetUri,
+};
+
+pub const RETICULUM_V1_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReticulumFragmentationModeV1 {
+    Unsupported,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReticulumDuplicateFragmentBehaviorV1 {
+    Reject,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReticulumFragmentIntegrityV1 {
+    PayloadDigest,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReticulumFragmentPolicyV1 {
+    pub mode: ReticulumFragmentationModeV1,
+    pub max_fragment_count: u16,
+    pub max_reassembled_bytes: usize,
+    pub duplicate_fragment_behavior: ReticulumDuplicateFragmentBehaviorV1,
+    pub integrity_verification: ReticulumFragmentIntegrityV1,
+}
+
+impl ReticulumFragmentPolicyV1 {
+    pub const fn unsupported() -> Self {
+        Self {
+            mode: ReticulumFragmentationModeV1::Unsupported,
+            max_fragment_count: 1,
+            max_reassembled_bytes: RETICULUM_V1_MAX_PAYLOAD_BYTES,
+            duplicate_fragment_behavior: ReticulumDuplicateFragmentBehaviorV1::Reject,
+            integrity_verification: ReticulumFragmentIntegrityV1::PayloadDigest,
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReticulumPayloadPolicyV1 {
+    pub max_payload_bytes: usize,
+    pub fragment_policy: ReticulumFragmentPolicyV1,
+}
+
+impl ReticulumPayloadPolicyV1 {
+    pub const fn v1() -> Self {
+        Self {
+            max_payload_bytes: RETICULUM_V1_MAX_PAYLOAD_BYTES,
+            fragment_policy: ReticulumFragmentPolicyV1::unsupported(),
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReticulumGatewaySemanticsV1 {
+    NoGatewayForwarding,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReticulumPrivacySemanticsV1 {
+    CanonicalSignedEventBytesOnly,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReticulumRoutingMetadataV1 {
+    pub scope: RadrootsTransportMeshScopeId,
+    pub gateway: ReticulumGatewaySemanticsV1,
+    pub privacy: ReticulumPrivacySemanticsV1,
+}
+
+impl ReticulumRoutingMetadataV1 {
+    pub fn local() -> Self {
+        Self {
+            scope: RadrootsTransportMeshScopeId::local_reticulum(),
+            gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
+            privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReticulumDestinationV1 {
+    pub uri: RadrootsTransportTargetUri,
+    pub routing: ReticulumRoutingMetadataV1,
+    pub label: Option<RadrootsTransportTargetLabel>,
+    pub fingerprint: RadrootsTransportTargetFingerprint,
+}
+
+impl ReticulumDestinationV1 {
+    pub fn local() -> Self {
+        Self::new(
+            RADROOTS_RETICULUM_ENDPOINT_URI,
+            ReticulumRoutingMetadataV1::local().scope,
+            None,
+        )
+        .expect("local Reticulum destination")
+    }
+
+    pub fn new(
+        uri: impl AsRef<str>,
+        scope: RadrootsTransportMeshScopeId,
+        label: Option<RadrootsTransportTargetLabel>,
+    ) -> Result<Self, RadrootsTransportError> {
+        let target = RadrootsTransportTarget::reticulum_with_metadata(
+            uri.as_ref(),
+            Some(scope),
+            label.clone(),
+        )?;
+        Ok(Self {
+            uri: target.uri,
+            routing: ReticulumRoutingMetadataV1 {
+                scope: target.scope.expect("Reticulum destination scope"),
+                gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
+                privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
+            },
+            label,
+            fingerprint: target.fingerprint,
+        })
+    }
+
+    pub fn from_target(target: &RadrootsTransportTarget) -> Result<Self, RadrootsTransportError> {
+        if target.kind != RadrootsTransportKind::Reticulum
+            || target.uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
+        {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
+        let Some(scope) = target.scope.clone() else {
+            return Err(RadrootsTransportError::EmptyTargetScope);
+        };
+        Ok(Self {
+            uri: target.uri.clone(),
+            routing: ReticulumRoutingMetadataV1 {
+                scope,
+                gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
+                privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
+            },
+            label: target.label.clone(),
+            fingerprint: target.fingerprint.clone(),
+        })
+    }
+
+    pub fn transport_target(&self) -> Result<RadrootsTransportTarget, RadrootsTransportError> {
+        RadrootsTransportTarget::reticulum_with_metadata(
+            self.uri.as_str(),
+            Some(self.routing.scope.clone()),
+            self.label.clone(),
+        )
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReticulumCapabilityReportV1 {
+    pub delivery_required: bool,
+    pub fetch_required: bool,
+    pub can_deliver: bool,
+    pub can_fetch: bool,
+    pub can_discover: bool,
+    pub can_forward_gateway: bool,
+    pub can_observe_receipts: bool,
+    pub destination: ReticulumDestinationV1,
+    pub payload_policy: ReticulumPayloadPolicyV1,
+}
+
+impl ReticulumCapabilityReportV1 {
+    pub fn unavailable_local() -> Self {
+        Self {
+            delivery_required: true,
+            fetch_required: false,
+            can_deliver: false,
+            can_fetch: false,
+            can_discover: false,
+            can_forward_gateway: false,
+            can_observe_receipts: false,
+            destination: ReticulumDestinationV1::local(),
+            payload_policy: ReticulumPayloadPolicyV1::v1(),
+        }
+    }
+}
