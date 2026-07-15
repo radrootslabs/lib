@@ -19,7 +19,6 @@ use radroots_core::{
 };
 #[cfg(feature = "signer-adapters")]
 use radroots_event::contract::RadrootsActorRole;
-#[cfg(feature = "transport-nostr-runtime")]
 use radroots_event::ids::RadrootsPublicKey;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{
@@ -75,8 +74,9 @@ use radroots_trade::order::RadrootsOrderIssue;
 use radroots_trade::validation_receipt::{
     RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
-    RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
+    RadrootsValidationReceiptStatement, RadrootsValidationReceiptType, RadrootsValidatorSetV1,
     validation_receipt_event_build, validation_receipt_public_values_hash_hex,
+    validator_set_address_from_str,
 };
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_transport_nostr::{
@@ -555,6 +555,39 @@ fn deterministic_event_id(raw: &str) -> RadrootsEventId {
     RadrootsEventId::parse(hex).expect("event id")
 }
 
+fn validator_set_id() -> &'static str {
+    "018f3d99-7d35-7c0c-8a0f-7f3b645abcde"
+}
+
+fn validator_set_event_id() -> RadrootsEventId {
+    deterministic_event_id("validator-set-event")
+}
+
+fn validator_set_addr_raw(author_pubkey: &str) -> String {
+    format!("30381:{author_pubkey}:{}", validator_set_id())
+}
+
+fn validator_set_policy_for_validator_pubkey(
+    validator_pubkey: &str,
+) -> RadrootsTradeValidationTrustPolicy {
+    let validator_set = RadrootsValidatorSetV1 {
+        set_id: validator_set_id().to_owned(),
+        validator_pubkey: RadrootsPublicKey::parse(validator_pubkey).expect("validator pubkey"),
+        threshold: 1,
+        valid_from: 1_700_000_000,
+        valid_until: 1_800_000_000,
+        protocol_contract_hash: hash32('7'),
+        operator_name: "Radroots validation operator".to_owned(),
+        operator_contact: None,
+    };
+    RadrootsTradeValidationTrustPolicy::production().with_validator_set(
+        validator_set,
+        validator_set_address_from_str(validator_set_addr_raw(validator_pubkey))
+            .expect("validator set address"),
+        validator_set_event_id().into_string(),
+    )
+}
+
 fn decimal(raw: &str) -> RadrootsCoreDecimal {
     raw.parse().expect("decimal")
 }
@@ -910,10 +943,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         Some(RadrootsTradeValidationTrustState::Untrusted)
     );
 
-    let trusted_local_policy = RadrootsTradeValidationTrustPolicy::production()
-        .with_trusted_rhi_pubkeys(vec![service_pubkey.parse().expect("service pubkey")])
-        .with_allow_deterministic_none(true)
-        .with_require_cryptographic_proof(false);
+    let trusted_local_policy = validator_set_policy_for_validator_pubkey(service_pubkey.as_str());
     let seller_trusted_local = seller_sdk
         .trades()
         .status(
@@ -929,9 +959,9 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         .expect("seller validation trust");
     assert_eq!(
         seller_trust.state,
-        RadrootsTradeValidationTrustState::TrustedLocal
+        RadrootsTradeValidationTrustState::ValidatorSetCommitted
     );
-    assert!(!seller_trust.production_committed);
+    assert!(seller_trust.production_committed);
     assert_eq!(
         seller_trust
             .receipt_author
@@ -1018,8 +1048,7 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
     );
 
     let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
-    let trusted_policy = RadrootsTradeValidationTrustPolicy::production()
-        .with_trusted_rhi_pubkeys(vec![service_pubkey.parse().expect("service pubkey")]);
+    let trusted_policy = validator_set_policy_for_validator_pubkey(service_pubkey.as_str());
     let trusted_status = sdk
         .trades()
         .status(status_request(order_id).with_validation_trust_policy(trusted_policy))
@@ -2724,6 +2753,11 @@ fn validation_receipt_wire_parts_with_proof(
             listing_event_id: listing_event_id.as_str().to_owned(),
             root_event_id: root_event_id.as_str().to_owned(),
             target_event_id: target_event_id.as_str().to_owned(),
+            validator_set_addr: validator_set_address_from_str(validator_set_addr_raw(
+                public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX).as_str(),
+            ))
+            .expect("validator set address"),
+            validator_set_event_id: validator_set_event_id().into_string(),
             statement_type: RadrootsValidationReceiptType::TradeTransition,
         },
         version: 1,
@@ -3184,9 +3218,10 @@ async fn order_status_contract_dtos_serialize_deterministically() {
             "limit": 25,
             "source": "local_only",
             "validation_trust_policy": {
-                "trusted_rhi_pubkeys": [],
-                "allow_deterministic_none": false,
-                "require_cryptographic_proof": true
+                "validator_set": null,
+                "validator_set_addr": null,
+                "validator_set_event_id": null,
+                "require_cryptographic_proof": false
             }
         })
     );

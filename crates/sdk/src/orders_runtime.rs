@@ -791,18 +791,6 @@ impl TradeResyncRequest {
         self
     }
 
-    pub fn try_with_trusted_rhi_pubkeys<I, S>(
-        mut self,
-        pubkeys: I,
-    ) -> Result<Self, RadrootsSdkError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        self.validation_trust_policy.trusted_rhi_pubkeys = parse_worker_pubkeys(pubkeys)?;
-        Ok(self)
-    }
-
     #[cfg(feature = "transport-nostr-runtime")]
     fn validate(&self) -> Result<(), RadrootsSdkError> {
         if self.limit == 0 || self.limit > TRADE_STATUS_MAX_LIMIT {
@@ -1129,6 +1117,8 @@ pub struct TradeValidationReceiptTags {
     pub receipt_type: String,
     pub root_event_id: String,
     pub target_event_id: String,
+    pub validator_set_addr: String,
+    pub validator_set_event_id: String,
 }
 
 #[cfg(feature = "runtime")]
@@ -1294,18 +1284,6 @@ impl TradeStatusRequest {
     ) -> Self {
         self.validation_trust_policy = policy;
         self
-    }
-
-    pub fn try_with_trusted_rhi_pubkeys<I, S>(
-        mut self,
-        pubkeys: I,
-    ) -> Result<Self, RadrootsSdkError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        self.validation_trust_policy.trusted_rhi_pubkeys = parse_worker_pubkeys(pubkeys)?;
-        Ok(self)
     }
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
@@ -1570,8 +1548,9 @@ pub struct TradeStatusEvidenceSummary {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TradeValidationTrustDecision {
     pub state: RadrootsTradeValidationTrustState,
-    pub trusted_rhi_pubkey_count: usize,
-    pub allow_deterministic_none: bool,
+    pub validator_count: usize,
+    pub validator_set_addr: Option<String>,
+    pub validator_set_event_id: Option<String>,
     pub require_cryptographic_proof: bool,
     pub receipt_event_id: Option<RadrootsEventId>,
     pub receipt_author: Option<RadrootsPublicKey>,
@@ -3073,6 +3052,8 @@ async fn trade_status_validation_trust_decision(
             .as_ref()
             .or(status.decision_event_id.as_ref())
             .map(RadrootsEventId::as_str),
+        validator_set_addr: policy.validator_set_addr.as_ref().map(|addr| addr.as_str()),
+        validator_set_event_id: policy.validator_set_event_id.as_deref(),
         ..RadrootsValidationReceiptExpectedBinding::default()
     };
     let verified = match verify_validation_receipt_event(&event, expected) {
@@ -3113,7 +3094,7 @@ async fn trade_status_validation_trust_decision(
             )),
         ));
     }
-    if policy.trusted_rhi_pubkeys.is_empty() {
+    let Some(validator_set) = policy.validator_set.as_ref() else {
         return Ok(trade_validation_trust_decision(
             policy,
             RadrootsTradeValidationTrustState::Untrusted,
@@ -3125,12 +3106,65 @@ async fn trade_status_validation_trust_decision(
             ),
             false,
             Some(TradeValidationTrustReason::new(
-                "validation_trust_policy_empty",
-                "validation trust policy has no trusted RHI public keys",
+                "validator_set_required",
+                "validation trust policy has no configured validator set",
+            )),
+        ));
+    };
+    let Some(validator_set_addr) = policy.validator_set_addr.as_ref() else {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            TradeValidationTrustEvidence::receipt(
+                receipt_event_id,
+                receipt_author,
+                &receipt.receipt,
+                None,
+            ),
+            false,
+            Some(TradeValidationTrustReason::new(
+                "validator_set_address_required",
+                "validation trust policy has no validator set address",
+            )),
+        ));
+    };
+    let Some(validator_set_event_id) = policy.validator_set_event_id.as_ref() else {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            TradeValidationTrustEvidence::receipt(
+                receipt_event_id,
+                receipt_author,
+                &receipt.receipt,
+                None,
+            ),
+            false,
+            Some(TradeValidationTrustReason::new(
+                "validator_set_event_id_required",
+                "validation trust policy has no validator set event id",
+            )),
+        ));
+    };
+    if receipt.receipt.statement.validator_set_addr != *validator_set_addr
+        || receipt.receipt.statement.validator_set_event_id != *validator_set_event_id
+    {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            TradeValidationTrustEvidence::receipt(
+                receipt_event_id,
+                receipt_author,
+                &receipt.receipt,
+                None,
+            ),
+            false,
+            Some(TradeValidationTrustReason::new(
+                "validator_set_binding_mismatch",
+                "validation receipt does not bind the configured validator set",
             )),
         ));
     }
-    if !policy.trusts_rhi_pubkey(&receipt_author) {
+    if !policy.trusts_validator_pubkey(&receipt_author) {
         return Ok(trade_validation_trust_decision(
             policy,
             RadrootsTradeValidationTrustState::Untrusted,
@@ -3142,8 +3176,28 @@ async fn trade_status_validation_trust_decision(
             ),
             false,
             Some(TradeValidationTrustReason::new(
-                "validation_receipt_author_untrusted",
-                "validation receipt author is not trusted by the active policy",
+                "validator_set_author_untrusted",
+                "validation receipt author is not the configured validator set key",
+            )),
+        ));
+    }
+    let receipt_created_at = receipt.event.created_at_u64();
+    if receipt_created_at < validator_set.valid_from
+        || receipt_created_at > validator_set.valid_until
+    {
+        return Ok(trade_validation_trust_decision(
+            policy,
+            RadrootsTradeValidationTrustState::Untrusted,
+            TradeValidationTrustEvidence::receipt(
+                receipt_event_id,
+                receipt_author,
+                &receipt.receipt,
+                None,
+            ),
+            false,
+            Some(TradeValidationTrustReason::new(
+                "validator_set_not_valid_at_receipt_time",
+                "validation receipt was authored outside the configured validator set validity window",
             )),
         ));
     }
@@ -3242,26 +3296,9 @@ fn evaluate_trade_validation_trust_receipt(
     let metadata = validation_receipt_trust_metadata(receipt);
     let authority = metadata.validation_authority;
     let confidence = metadata.commitment_confidence;
-    if authority == RadrootsTradeValidationAuthority::DevDeterministicOnly
-        || confidence == RadrootsTradeCommitmentConfidence::LocalOnly
+    if authority == RadrootsTradeValidationAuthority::ValidatorSetDeterministic
+        || confidence == RadrootsTradeCommitmentConfidence::CommittedByValidatorSet
     {
-        if !policy.allow_deterministic_none {
-            return trade_validation_trust_decision(
-                policy,
-                RadrootsTradeValidationTrustState::Untrusted,
-                TradeValidationTrustEvidence::receipt(
-                    receipt_event_id,
-                    receipt_author,
-                    receipt,
-                    Some(metadata),
-                ),
-                false,
-                Some(TradeValidationTrustReason::new(
-                    "deterministic_none_not_allowed",
-                    "deterministic-none validation is not allowed by the active policy",
-                )),
-            );
-        }
         if policy.require_cryptographic_proof {
             return trade_validation_trust_decision(
                 policy,
@@ -3281,14 +3318,14 @@ fn evaluate_trade_validation_trust_receipt(
         }
         return trade_validation_trust_decision(
             policy,
-            RadrootsTradeValidationTrustState::TrustedLocal,
+            RadrootsTradeValidationTrustState::ValidatorSetCommitted,
             TradeValidationTrustEvidence::receipt(
                 receipt_event_id,
                 receipt_author,
                 receipt,
                 Some(metadata),
             ),
-            false,
+            true,
             None,
         );
     }
@@ -3298,8 +3335,8 @@ fn evaluate_trade_validation_trust_receipt(
             RadrootsTradeValidationAuthority::CryptographicProofVerified,
             RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof
         ) | (
-            RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
-            RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof
+            RadrootsTradeValidationAuthority::ValidatorSetAndProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByValidatorSetAndProof
         )
     );
     if cryptographic_metadata
@@ -3339,11 +3376,8 @@ fn evaluate_trade_validation_trust_receipt(
     if matches!(
         (authority, confidence),
         (
-            RadrootsTradeValidationAuthority::TrustedRhiServiceKey,
-            RadrootsTradeCommitmentConfidence::CommittedByTrustedService
-        ) | (
-            RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
-            RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof
+            RadrootsTradeValidationAuthority::ValidatorSetAndProofVerified,
+            RadrootsTradeCommitmentConfidence::CommittedByValidatorSetAndProof
         ) | (
             RadrootsTradeValidationAuthority::CryptographicProofVerified,
             RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof
@@ -3351,7 +3385,7 @@ fn evaluate_trade_validation_trust_receipt(
     ) {
         return trade_validation_trust_decision(
             policy,
-            RadrootsTradeValidationTrustState::TrustedLocal,
+            RadrootsTradeValidationTrustState::ValidatorSetCommitted,
             TradeValidationTrustEvidence::receipt(
                 receipt_event_id,
                 receipt_author,
@@ -3385,14 +3419,15 @@ fn validation_receipt_trust_metadata(
 ) -> TradeValidationTrustMetadata {
     if receipt.proof.system == RadrootsValidationReceiptProofSystem::None {
         TradeValidationTrustMetadata {
-            validation_authority: RadrootsTradeValidationAuthority::DevDeterministicOnly,
-            commitment_confidence: RadrootsTradeCommitmentConfidence::LocalOnly,
+            validation_authority: RadrootsTradeValidationAuthority::ValidatorSetDeterministic,
+            commitment_confidence: RadrootsTradeCommitmentConfidence::CommittedByValidatorSet,
             cryptographic_proof_verified: false,
         }
     } else {
         TradeValidationTrustMetadata {
-            validation_authority: RadrootsTradeValidationAuthority::CryptographicProofVerified,
-            commitment_confidence: RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof,
+            validation_authority: RadrootsTradeValidationAuthority::ValidatorSetAndProofVerified,
+            commitment_confidence:
+                RadrootsTradeCommitmentConfidence::CommittedByValidatorSetAndProof,
             cryptographic_proof_verified: true,
         }
     }
@@ -3415,8 +3450,12 @@ fn trade_validation_trust_decision(
     };
     TradeValidationTrustDecision {
         state,
-        trusted_rhi_pubkey_count: policy.trusted_rhi_pubkey_count(),
-        allow_deterministic_none: policy.allow_deterministic_none,
+        validator_count: policy.validator_count(),
+        validator_set_addr: policy
+            .validator_set_addr
+            .as_ref()
+            .map(|addr| addr.as_str().to_owned()),
+        validator_set_event_id: policy.validator_set_event_id.clone(),
         require_cryptographic_proof: policy.require_cryptographic_proof,
         receipt_event_id: evidence.receipt_event_id,
         receipt_author: evidence.receipt_author,
@@ -3465,7 +3504,7 @@ fn apply_validation_trust_decision_to_status(status: &mut TradeStatusReceipt) {
             status.lifecycle_terminal = true;
             status.next_action = TradeStatusNextActionKind::InspectEvidenceIssues;
         }
-        RadrootsTradeValidationTrustState::TrustedLocal
+        RadrootsTradeValidationTrustState::ValidatorSetCommitted
         | RadrootsTradeValidationTrustState::CryptographicCommitted => {}
     }
 }
@@ -3550,6 +3589,8 @@ impl From<RadrootsValidationReceiptTags> for TradeValidationReceiptTags {
             receipt_type: tags.receipt_type.as_str().to_owned(),
             root_event_id: tags.root_event_id,
             target_event_id: tags.target_event_id,
+            validator_set_addr: tags.validator_set_addr.as_str().to_owned(),
+            validator_set_event_id: tags.validator_set_event_id,
         }
     }
 }
@@ -3615,23 +3656,6 @@ fn validate_validation_receipt_limit(limit: u32) -> Result<(), RadrootsSdkError>
         ));
     }
     Ok(())
-}
-
-#[cfg(feature = "runtime")]
-fn parse_worker_pubkeys<I, S>(pubkeys: I) -> Result<Vec<RadrootsPublicKey>, RadrootsSdkError>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<str>,
-{
-    pubkeys
-        .into_iter()
-        .map(|pubkey| {
-            let value = pubkey.as_ref();
-            RadrootsPublicKey::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
-                message: format!("invalid trusted worker pubkey `{value}`: {error}"),
-            })
-        })
-        .collect()
 }
 
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
