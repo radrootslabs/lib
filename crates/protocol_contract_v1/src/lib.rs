@@ -305,6 +305,99 @@ pub const PROTOCOL_EVENT_CATALOG_V1: &[ProtocolEventDescriptorV1] = &[
     },
 ];
 
+pub const RETIRED_PROTOCOL_EVENT_KINDS_V1: &[u32] = &[
+    3424, 3425, 3426, 3427, 3428, 3429, 3430, 3433, 3434, 5321, 5322, 6321, 6322, 30403,
+];
+
+pub const RETIRED_PROTOCOL_EVENT_NAMES_V1: &[&str] = &[
+    "listing_draft",
+    "trade_answer",
+    "trade_discount_accept",
+    "trade_discount_offer",
+    "trade_discount_request",
+    "trade_fulfillment_update",
+    "trade_listing_validation_request",
+    "trade_listing_validation_result",
+    "trade_order_revision_decision",
+    "trade_order_revision_proposal",
+    "trade_question",
+    "trade_receipt",
+    "trade_transition_proof_request",
+    "trade_transition_proof_result",
+];
+
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ProtocolTradeStateV1 {
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "missing"))]
+    Missing,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "requested"))]
+    Requested,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "agreed_pending_validation"))]
+    AgreedPendingValidation,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "committed"))]
+    Committed,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "declined"))]
+    Declined,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "cancelled"))]
+    Cancelled,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "validation_expired"))]
+    ValidationExpired,
+    #[cfg_attr(feature = "dto-bindgen", dto(rename = "invalid"))]
+    Invalid,
+}
+
+impl ProtocolTradeStateV1 {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Missing => "missing",
+            Self::Requested => "requested",
+            Self::AgreedPendingValidation => "agreed_pending_validation",
+            Self::Committed => "committed",
+            Self::Declined => "declined",
+            Self::Cancelled => "cancelled",
+            Self::ValidationExpired => "validation_expired",
+            Self::Invalid => "invalid",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, ProtocolContractErrorV1> {
+        match value {
+            "missing" => Ok(Self::Missing),
+            "requested" => Ok(Self::Requested),
+            "agreed_pending_validation" => Ok(Self::AgreedPendingValidation),
+            "committed" => Ok(Self::Committed),
+            "declined" => Ok(Self::Declined),
+            "cancelled" => Ok(Self::Cancelled),
+            "validation_expired" => Ok(Self::ValidationExpired),
+            "invalid" => Ok(Self::Invalid),
+            "revision_proposed" | "agreed_pending_rhi" | "pending_rhi" | "pending_validation" => {
+                Err(ProtocolContractErrorV1::RetiredTradeState {
+                    state: value.to_string(),
+                })
+            }
+            _ => Err(ProtocolContractErrorV1::UnknownTradeState {
+                value: value.to_string(),
+            }),
+        }
+    }
+}
+
+pub const PROTOCOL_TRADE_STATE_VOCABULARY_V1: &[ProtocolTradeStateV1] = &[
+    ProtocolTradeStateV1::Missing,
+    ProtocolTradeStateV1::Requested,
+    ProtocolTradeStateV1::AgreedPendingValidation,
+    ProtocolTradeStateV1::Committed,
+    ProtocolTradeStateV1::Declined,
+    ProtocolTradeStateV1::Cancelled,
+    ProtocolTradeStateV1::ValidationExpired,
+    ProtocolTradeStateV1::Invalid,
+];
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -331,6 +424,11 @@ pub const PROTOCOL_SCHEMA_METADATA_V1: &[ProtocolSchemaMetadataV1] = &[
         schema_version: 1,
     },
     ProtocolSchemaMetadataV1 {
+        type_name: "ProtocolTradeStateV1",
+        schema_id: "radroots.protocol.trade_state.v1",
+        schema_version: 1,
+    },
+    ProtocolSchemaMetadataV1 {
         type_name: "ReticulumTargetV1",
         schema_id: "radroots.protocol.reticulum_target.v1",
         schema_version: 1,
@@ -343,8 +441,13 @@ pub enum ProtocolContractErrorV1 {
     DuplicateEventName { name: String },
     DuplicateEventKind { kind: u32 },
     DuplicateSchemaId { schema_id: String },
+    DuplicateTradeState { state: ProtocolTradeStateV1 },
     MissingRequiredTransport { kind: TransportKindV1 },
+    RetiredEventKind { kind: u32 },
+    RetiredEventName { name: String },
+    RetiredTradeState { state: String },
     RetiredTransportIdentity { identity: String },
+    UnknownTradeState { value: String },
     UnknownTransportKind { value: String },
     InvalidMeshScopeId,
     InvalidReticulumDestination,
@@ -359,12 +462,19 @@ impl core::fmt::Display for ProtocolContractErrorV1 {
             Self::DuplicateEventName { name } => write!(f, "duplicate event name {name}"),
             Self::DuplicateEventKind { kind } => write!(f, "duplicate event kind {kind}"),
             Self::DuplicateSchemaId { schema_id } => write!(f, "duplicate schema id {schema_id}"),
+            Self::DuplicateTradeState { state } => {
+                write!(f, "duplicate trade state {}", state.as_str())
+            }
             Self::MissingRequiredTransport { kind } => {
                 write!(f, "missing required transport {}", kind.as_str())
             }
+            Self::RetiredEventKind { kind } => write!(f, "retired event kind {kind}"),
+            Self::RetiredEventName { name } => write!(f, "retired event name {name}"),
+            Self::RetiredTradeState { state } => write!(f, "retired trade state {state}"),
             Self::RetiredTransportIdentity { identity } => {
                 write!(f, "retired transport identity {identity}")
             }
+            Self::UnknownTradeState { value } => write!(f, "unknown trade state {value}"),
             Self::UnknownTransportKind { value } => write!(f, "unknown transport kind {value}"),
             Self::InvalidMeshScopeId => f.write_str("invalid mesh scope id"),
             Self::InvalidReticulumDestination => f.write_str("invalid Reticulum destination"),
@@ -375,6 +485,7 @@ impl core::fmt::Display for ProtocolContractErrorV1 {
 pub fn validate_protocol_contract_v1() -> Result<(), ProtocolContractErrorV1> {
     validate_transport_capability_catalog(TRANSPORT_CAPABILITY_CATALOG_V1)?;
     validate_event_catalog(PROTOCOL_EVENT_CATALOG_V1)?;
+    validate_trade_state_vocabulary(PROTOCOL_TRADE_STATE_VOCABULARY_V1)?;
     validate_schema_metadata(PROTOCOL_SCHEMA_METADATA_V1)
 }
 
@@ -407,6 +518,16 @@ fn validate_event_catalog(
     let mut names = BTreeSet::new();
     let mut kinds = BTreeSet::new();
     for descriptor in descriptors {
+        if RETIRED_PROTOCOL_EVENT_NAMES_V1.contains(&descriptor.name) {
+            return Err(ProtocolContractErrorV1::RetiredEventName {
+                name: descriptor.name.to_string(),
+            });
+        }
+        if RETIRED_PROTOCOL_EVENT_KINDS_V1.contains(&descriptor.kind) {
+            return Err(ProtocolContractErrorV1::RetiredEventKind {
+                kind: descriptor.kind,
+            });
+        }
         if !names.insert(descriptor.name) {
             return Err(ProtocolContractErrorV1::DuplicateEventName {
                 name: descriptor.name.to_string(),
@@ -416,6 +537,18 @@ fn validate_event_catalog(
             return Err(ProtocolContractErrorV1::DuplicateEventKind {
                 kind: descriptor.kind,
             });
+        }
+    }
+    Ok(())
+}
+
+fn validate_trade_state_vocabulary(
+    states: &[ProtocolTradeStateV1],
+) -> Result<(), ProtocolContractErrorV1> {
+    let mut seen = BTreeSet::new();
+    for state in states {
+        if !seen.insert(*state) {
+            return Err(ProtocolContractErrorV1::DuplicateTradeState { state: *state });
         }
     }
     Ok(())
@@ -447,6 +580,7 @@ pub fn dto_roots() -> alloc::vec::Vec<dto_bindgen::export::RootDescriptor> {
         RootDescriptor::new::<ReticulumTargetV1>(),
         RootDescriptor::new::<TransportCapabilityDescriptorV1>(),
         RootDescriptor::new::<ProtocolEventClassV1>(),
+        RootDescriptor::new::<ProtocolTradeStateV1>(),
     ]
 }
 
@@ -559,6 +693,91 @@ mod tests {
     }
 
     #[test]
+    fn trade_state_v1_vocabulary_is_exact() {
+        let states = PROTOCOL_TRADE_STATE_VOCABULARY_V1
+            .iter()
+            .map(|state| state.as_str())
+            .collect::<alloc::vec::Vec<_>>();
+        assert_eq!(
+            states,
+            alloc::vec![
+                "missing",
+                "requested",
+                "agreed_pending_validation",
+                "committed",
+                "declined",
+                "cancelled",
+                "validation_expired",
+                "invalid",
+            ]
+        );
+
+        for state in PROTOCOL_TRADE_STATE_VOCABULARY_V1 {
+            assert_eq!(
+                ProtocolTradeStateV1::parse(state.as_str()).expect("state parses"),
+                *state
+            );
+        }
+    }
+
+    #[test]
+    fn trade_state_v1_rejects_retired_and_unknown_states() {
+        for state in [
+            "revision_proposed",
+            "agreed_pending_rhi",
+            "pending_rhi",
+            "pending_validation",
+        ] {
+            assert_eq!(
+                ProtocolTradeStateV1::parse(state)
+                    .expect_err("retired state")
+                    .to_string(),
+                alloc::format!("retired trade state {state}")
+            );
+        }
+
+        assert_eq!(
+            ProtocolTradeStateV1::parse("fulfilled")
+                .expect_err("unknown state")
+                .to_string(),
+            "unknown trade state fulfilled"
+        );
+    }
+
+    #[test]
+    fn retired_protocol_event_catalog_entries_fail_closed() {
+        for name in RETIRED_PROTOCOL_EVENT_NAMES_V1 {
+            let event = ProtocolEventDescriptorV1 {
+                name,
+                kind: u32::MAX,
+                event_class: ProtocolEventClassV1::Regular,
+                purpose: "retired",
+            };
+            assert_eq!(
+                validate_event_catalog(&[event])
+                    .expect_err("retired event name")
+                    .to_string(),
+                alloc::format!("retired event name {name}")
+            );
+        }
+
+        for kind in RETIRED_PROTOCOL_EVENT_KINDS_V1 {
+            let event = ProtocolEventDescriptorV1 {
+                name: "synthetic_current_name",
+                kind: *kind,
+                event_class: ProtocolEventClassV1::Regular,
+                purpose: "retired",
+            };
+            assert_eq!(
+                validate_event_catalog(&[event])
+                    .expect_err("retired event kind")
+                    .to_string(),
+                alloc::format!("retired event kind {kind}")
+            );
+        }
+    }
+
+    #[test]
     fn validation_reports_transport_catalog_errors() {
         let local = TRANSPORT_CAPABILITY_CATALOG_V1[0];
         let nostr = TRANSPORT_CAPABILITY_CATALOG_V1[1];
@@ -617,6 +836,15 @@ mod tests {
                 .expect_err("duplicate schema id")
                 .to_string(),
             alloc::format!("duplicate schema id {}", schema.schema_id)
+        );
+        assert_eq!(
+            validate_trade_state_vocabulary(&[
+                ProtocolTradeStateV1::Missing,
+                ProtocolTradeStateV1::Missing,
+            ])
+            .expect_err("duplicate trade state")
+            .to_string(),
+            "duplicate trade state missing"
         );
     }
 }
