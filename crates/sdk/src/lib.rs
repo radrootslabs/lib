@@ -19,7 +19,7 @@ mod error;
 mod farm;
 #[cfg(feature = "runtime")]
 mod farms_runtime;
-#[cfg(test)]
+#[cfg(all(test, feature = "runtime"))]
 #[path = "../tests/support/fixture_signer.rs"]
 pub(crate) mod fixture_signer;
 #[cfg(feature = "runtime")]
@@ -46,7 +46,7 @@ mod private_store;
 mod product_clients;
 #[cfg(feature = "runtime")]
 mod runtime;
-#[cfg(test)]
+#[cfg(all(test, feature = "runtime"))]
 #[path = "../tests/support/serializer_failure.rs"]
 pub(crate) mod serializer_failure;
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
