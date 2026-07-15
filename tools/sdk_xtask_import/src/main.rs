@@ -1,4 +1,5 @@
 mod check;
+mod cli_host;
 mod contracts;
 mod coverage;
 mod coverage_policy;
@@ -16,6 +17,7 @@ mod wasm;
 mod wasm_declarations;
 
 enum CommandAction<'a> {
+    GenerateAll,
     GenerateTs,
     GenerateWasm(&'a [String]),
     GeneratePackageMetadata,
@@ -34,6 +36,7 @@ fn main() {
 fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     let args = args.into_iter().collect::<Vec<_>>();
     match command_action(&args)? {
+        CommandAction::GenerateAll => generate::generate_all(),
         CommandAction::GenerateTs => generate::generate_ts(),
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
         CommandAction::GeneratePackageMetadata => generate::generate_package_metadata(),
@@ -45,6 +48,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
 
 fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
     match args {
+        [command] if command == "generate" => Ok(CommandAction::GenerateAll),
         [command, target] if command == "generate" && target == "ts" => {
             Ok(CommandAction::GenerateTs)
         }
@@ -63,7 +67,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -77,6 +81,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::GenerateTs
+        ));
+    }
+
+    #[test]
+    fn accepts_generate_all() {
+        let args = ["generate".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::GenerateAll
         ));
     }
 
