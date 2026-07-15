@@ -72,7 +72,7 @@ async fn private_farm_location_row_decode_reports_each_missing_column() {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!("SELECT {select}");
-        let row = sqlx::query(sql.as_str())
+        let row = sqlx::query(sqlx::AssertSqlSafe(sql))
             .fetch_one(store.pool())
             .await
             .expect("row");

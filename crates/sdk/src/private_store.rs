@@ -272,7 +272,7 @@ async fn ensure_farm_location_label_column(pool: &SqlitePool) -> Result<(), Radr
     Ok(())
 }
 
-async fn query_i64(pool: &SqlitePool, sql: &str) -> Result<i64, RadrootsSdkError> {
+async fn query_i64(pool: &SqlitePool, sql: &'static str) -> Result<i64, RadrootsSdkError> {
     let row = sqlx::query(sql)
         .fetch_one(pool)
         .await
@@ -280,7 +280,7 @@ async fn query_i64(pool: &SqlitePool, sql: &str) -> Result<i64, RadrootsSdkError
     row.try_get(0).map_err(private_store_error)
 }
 
-async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsSdkError> {
+async fn query_string(pool: &SqlitePool, sql: &'static str) -> Result<String, RadrootsSdkError> {
     let row = sqlx::query(sql)
         .fetch_one(pool)
         .await
