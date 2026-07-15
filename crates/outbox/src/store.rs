@@ -65,6 +65,15 @@ impl RadrootsOutbox {
         Ok(Self { pool })
     }
 
+    pub async fn open_pool(
+        pool: SqlitePool,
+        file_backed: bool,
+    ) -> Result<Self, RadrootsOutboxError> {
+        configure_connection(&pool, file_backed).await?;
+        apply_up(&pool).await?;
+        Ok(Self { pool })
+    }
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
@@ -363,6 +372,112 @@ impl RadrootsOutbox {
                 .await?;
         sync_signed_event_lifecycle(&mut tx, outbox_event_id, input.created_at_ms).await?;
         tx.commit().await?;
+        Ok(RadrootsOutboxEnqueueReceipt {
+            status: RadrootsOutboxEnqueueStatus::Inserted,
+            operation_id,
+            outbox_event_id,
+            delivery_plan_id: plan.delivery_plan_id,
+            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+        })
+    }
+
+    pub async fn enqueue_signed_operation_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        input: RadrootsOutboxSignedOperationInput,
+    ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+        let operation_digest = operation_idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            &input.draft,
+        );
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation(
+                tx,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey_str(),
+                idempotency_key,
+            )
+            .await?
+        {
+            if existing.operation_idempotency_digest != operation_digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    idempotency_key: idempotency_key.to_owned(),
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
+                });
+            }
+            ensure_event_signed(
+                tx,
+                existing.outbox_event_id,
+                &input.signed_event,
+                input.event_store_inserted,
+                input.event_store_ingested_at_ms,
+            )
+            .await?;
+            let plan = insert_or_get_delivery_plan(
+                tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            sync_signed_event_lifecycle(tx, existing.outbox_event_id, input.created_at_ms).await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: plan.status,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
+                expected_event_id: existing.event_id,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+            });
+        }
+
+        let operation = sqlx::query(
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(input.operation_kind.as_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(input.idempotency_key.as_deref())
+        .bind(operation_digest.as_str())
+        .bind(RadrootsOutboxOperationStatus::Queued.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut **tx)
+        .await?;
+        let operation_id = operation.last_insert_rowid();
+        let draft_json = serde_json::to_string(&input.draft)?;
+        let signed_event_json = signed_event_wire_json(&input.signed_event)?;
+        let event = sqlx::query(
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
+        )
+        .bind(operation_id)
+        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(draft_json.as_str())
+        .bind(signed_event_json.as_str())
+        .bind(input.signed_event.raw_json())
+        .bind(RadrootsOutboxEventState::Signed.as_str())
+        .bind(input.created_at_ms)
+        .bind(bool_i64(input.event_store_inserted))
+        .bind(input.event_store_ingested_at_ms)
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut **tx)
+        .await?;
+        let outbox_event_id = event.last_insert_rowid();
+        let plan = insert_or_get_delivery_plan(tx, outbox_event_id, &prepared, input.created_at_ms)
+            .await?;
+        sync_signed_event_lifecycle(tx, outbox_event_id, input.created_at_ms).await?;
         Ok(RadrootsOutboxEnqueueReceipt {
             status: RadrootsOutboxEnqueueStatus::Inserted,
             operation_id,

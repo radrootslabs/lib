@@ -59,6 +59,15 @@ impl RadrootsEventStore {
         Ok(Self { pool })
     }
 
+    pub async fn open_pool(
+        pool: SqlitePool,
+        file_backed: bool,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        configure_connection(&pool, file_backed).await?;
+        apply_up(&pool).await?;
+        Ok(Self { pool })
+    }
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
@@ -105,70 +114,18 @@ impl RadrootsEventStore {
         &self,
         ingest: RadrootsEventIngest,
     ) -> Result<RadrootsEventIngestReceipt, RadrootsEventStoreError> {
-        let event = ingest.event();
-        validate_event_identity(event)?;
-        let verification_status = verify_event(event);
-        let classification = classify_event(event);
-        let tags = event.tags_as_vec();
-        let tags_json = serde_json::to_string(&tags)?;
-        let event_id = event.id_str().to_owned();
         let mut tx = self.pool.begin().await?;
-        let insert = insert_raw_event(
-            &mut tx,
-            &ingest,
-            &classification,
-            verification_status,
-            ingest.raw_json(),
-            tags_json.as_str(),
-        )
-        .await?;
-        let inserted = insert.inserted;
-        let mut head_decision = RadrootsEventHeadStoreDecision::Unsupported;
-        let mut projection_eligible = classification.base_projection_eligible(verification_status);
-
-        if inserted {
-            insert_tags(&mut tx, event, classification.contract).await?;
-            if let Some(contract) = classification.contract {
-                if projection_eligible {
-                    let head =
-                        apply_event_head(&mut tx, event, contract, ingest.observed_at_ms).await?;
-                    projection_eligible = head.projection_eligible;
-                    head_decision = head.decision;
-                    sqlx::query(
-                        "UPDATE event_envelopes SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
-                    )
-                    .bind(bool_i64(projection_eligible))
-                    .bind(ingest.observed_at_ms)
-                    .bind(event_id.as_str())
-                    .execute(&mut *tx)
-                    .await?;
-                } else {
-                    head_decision = RadrootsEventHeadStoreDecision::NotProjectionEligible;
-                }
-            }
-        } else if classification.contract.is_some() {
-            head_decision = RadrootsEventHeadStoreDecision::SkippedDuplicate;
-            projection_eligible = false;
-        }
-
-        if let Some(observation) = ingest.transport_observation.as_ref() {
-            upsert_observation(&mut tx, event_id.as_str(), observation).await?;
-        }
-
+        let receipt = ingest_event_in_transaction(&mut tx, ingest).await?;
         tx.commit().await?;
+        Ok(receipt)
+    }
 
-        Ok(RadrootsEventIngestReceipt {
-            seq: insert.seq,
-            event_id,
-            inserted,
-            verification_status,
-            contract_status: classification.contract_status,
-            contract_id: classification
-                .contract
-                .map(|contract| contract.id.to_owned()),
-            projection_eligible,
-            head_decision,
-        })
+    pub async fn ingest_event_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        ingest: RadrootsEventIngest,
+    ) -> Result<RadrootsEventIngestReceipt, RadrootsEventStoreError> {
+        ingest_event_in_transaction(tx, ingest).await
     }
 
     pub async fn get_event(
@@ -487,6 +444,72 @@ fn verification_status_from_nostr(
             RadrootsEventVerificationStatus::MalformedEnvelope
         }
     }
+}
+
+async fn ingest_event_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ingest: RadrootsEventIngest,
+) -> Result<RadrootsEventIngestReceipt, RadrootsEventStoreError> {
+    let event = ingest.event();
+    validate_event_identity(event)?;
+    let verification_status = verify_event(event);
+    let classification = classify_event(event);
+    let tags = event.tags_as_vec();
+    let tags_json = serde_json::to_string(&tags)?;
+    let event_id = event.id_str().to_owned();
+    let insert = insert_raw_event(
+        tx,
+        &ingest,
+        &classification,
+        verification_status,
+        ingest.raw_json(),
+        tags_json.as_str(),
+    )
+    .await?;
+    let inserted = insert.inserted;
+    let mut head_decision = RadrootsEventHeadStoreDecision::Unsupported;
+    let mut projection_eligible = classification.base_projection_eligible(verification_status);
+
+    if inserted {
+        insert_tags(tx, event, classification.contract).await?;
+        if let Some(contract) = classification.contract {
+            if projection_eligible {
+                let head = apply_event_head(tx, event, contract, ingest.observed_at_ms).await?;
+                projection_eligible = head.projection_eligible;
+                head_decision = head.decision;
+                sqlx::query(
+                    "UPDATE event_envelopes SET projection_eligible = ?, updated_at_ms = ? WHERE event_id = ?",
+                )
+                .bind(bool_i64(projection_eligible))
+                .bind(ingest.observed_at_ms)
+                .bind(event_id.as_str())
+                .execute(&mut **tx)
+                .await?;
+            } else {
+                head_decision = RadrootsEventHeadStoreDecision::NotProjectionEligible;
+            }
+        }
+    } else if classification.contract.is_some() {
+        head_decision = RadrootsEventHeadStoreDecision::SkippedDuplicate;
+        projection_eligible = false;
+    }
+
+    if let Some(observation) = ingest.transport_observation.as_ref() {
+        upsert_observation(tx, event_id.as_str(), observation).await?;
+    }
+
+    Ok(RadrootsEventIngestReceipt {
+        seq: insert.seq,
+        event_id,
+        inserted,
+        verification_status,
+        contract_status: classification.contract_status,
+        contract_id: classification
+            .contract
+            .map(|contract| contract.id.to_owned()),
+        projection_eligible,
+        head_decision,
+    })
 }
 
 async fn insert_raw_event(
