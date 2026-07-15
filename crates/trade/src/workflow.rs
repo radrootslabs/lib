@@ -31,11 +31,11 @@ use crate::validation_receipt::{
 pub enum RadrootsTradeWorkflowState {
     Missing,
     Requested,
-    RevisionProposed,
-    AgreedPendingRhi,
+    AgreedPendingValidation,
     Committed,
     Declined,
     Cancelled,
+    ValidationExpired,
     Invalid,
 }
 
@@ -230,7 +230,7 @@ fn validate_receipt_binding(
     receipt: &RadrootsTradeWorkflowValidationReceiptRecord,
 ) -> bool {
     let mut valid = true;
-    if projection.status != RadrootsTradeWorkflowState::AgreedPendingRhi {
+    if projection.status != RadrootsTradeWorkflowState::AgreedPendingValidation {
         projection.issues.push(
             RadrootsOrderIssue::ValidationReceiptWithoutPendingAgreement {
                 event_id: receipt.event_id.clone(),
@@ -354,16 +354,16 @@ mod tests {
             (RadrootsTradeWorkflowState::Missing, "missing"),
             (RadrootsTradeWorkflowState::Requested, "requested"),
             (
-                RadrootsTradeWorkflowState::RevisionProposed,
-                "revision_proposed",
-            ),
-            (
-                RadrootsTradeWorkflowState::AgreedPendingRhi,
-                "agreed_pending_rhi",
+                RadrootsTradeWorkflowState::AgreedPendingValidation,
+                "agreed_pending_validation",
             ),
             (RadrootsTradeWorkflowState::Committed, "committed"),
             (RadrootsTradeWorkflowState::Declined, "declined"),
             (RadrootsTradeWorkflowState::Cancelled, "cancelled"),
+            (
+                RadrootsTradeWorkflowState::ValidationExpired,
+                "validation_expired",
+            ),
             (RadrootsTradeWorkflowState::Invalid, "invalid"),
         ] {
             assert_eq!(serde_json::to_value(&state).unwrap(), wire_name);
@@ -620,7 +620,7 @@ mod tests {
 
         assert_eq!(
             projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingRhi
+            RadrootsTradeWorkflowState::AgreedPendingValidation
         );
         assert!(!projection.lifecycle_terminal);
         assert_eq!(projection.agreement_event_id, Some(event_id(2)));
@@ -723,7 +723,7 @@ mod tests {
         let projection = reduce_trade_workflow_records(&order_id(), records);
         assert_eq!(
             projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingRhi
+            RadrootsTradeWorkflowState::AgreedPendingValidation
         );
         assert_eq!(projection.agreement_event_id, Some(event_id(4)));
         assert_eq!(projection.pending_inventory_reservations[0].bin_count, 1);

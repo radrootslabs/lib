@@ -98,7 +98,7 @@ impl RadrootsTradeValidationAuthority {
 #[serde(rename_all = "snake_case")]
 pub enum RadrootsTradeCommitmentConfidence {
     LocalOnly,
-    PendingRhi,
+    AwaitingValidation,
     CommittedByTrustedService,
     CommittedByCryptographicProof,
     CommittedByTrustedServiceAndProof,
@@ -109,7 +109,7 @@ impl RadrootsTradeCommitmentConfidence {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::LocalOnly => "local_only",
-            Self::PendingRhi => "pending_rhi",
+            Self::AwaitingValidation => "awaiting_validation",
             Self::CommittedByTrustedService => "committed_by_trusted_service",
             Self::CommittedByCryptographicProof => "committed_by_cryptographic_proof",
             Self::CommittedByTrustedServiceAndProof => "committed_by_trusted_service_and_proof",
@@ -120,7 +120,7 @@ impl RadrootsTradeCommitmentConfidence {
     pub fn from_label(value: &str) -> Option<Self> {
         match value {
             "local_only" => Some(Self::LocalOnly),
-            "pending_rhi" => Some(Self::PendingRhi),
+            "awaiting_validation" => Some(Self::AwaitingValidation),
             "committed_by_trusted_service" => Some(Self::CommittedByTrustedService),
             "committed_by_cryptographic_proof" => Some(Self::CommittedByCryptographicProof),
             "committed_by_trusted_service_and_proof" => {
@@ -1736,7 +1736,10 @@ mod tests {
     fn commitment_confidence_contract_uses_stable_snake_case_labels() {
         for (confidence, label) in [
             (RadrootsTradeCommitmentConfidence::LocalOnly, "local_only"),
-            (RadrootsTradeCommitmentConfidence::PendingRhi, "pending_rhi"),
+            (
+                RadrootsTradeCommitmentConfidence::AwaitingValidation,
+                "awaiting_validation",
+            ),
             (
                 RadrootsTradeCommitmentConfidence::CommittedByTrustedService,
                 "committed_by_trusted_service",

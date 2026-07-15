@@ -891,11 +891,11 @@ fn trade_workflow_status_label(status: &RadrootsTradeWorkflowState) -> &'static 
     match status {
         RadrootsTradeWorkflowState::Missing => "missing",
         RadrootsTradeWorkflowState::Requested => "requested",
-        RadrootsTradeWorkflowState::RevisionProposed => "revision_proposed",
-        RadrootsTradeWorkflowState::AgreedPendingRhi => "agreed_pending_rhi",
+        RadrootsTradeWorkflowState::AgreedPendingValidation => "agreed_pending_validation",
         RadrootsTradeWorkflowState::Committed => "committed",
         RadrootsTradeWorkflowState::Declined => "declined",
         RadrootsTradeWorkflowState::Cancelled => "cancelled",
+        RadrootsTradeWorkflowState::ValidationExpired => "validation_expired",
         RadrootsTradeWorkflowState::Invalid => "invalid",
     }
 }
@@ -905,8 +905,9 @@ fn trade_rhi_state_label(
     validation_receipt_event_id: Option<&RadrootsEventId>,
 ) -> &'static str {
     match status {
-        RadrootsTradeWorkflowState::AgreedPendingRhi => "pending",
+        RadrootsTradeWorkflowState::AgreedPendingValidation => "pending",
         RadrootsTradeWorkflowState::Committed => "final",
+        RadrootsTradeWorkflowState::ValidationExpired => "expired",
         RadrootsTradeWorkflowState::Invalid if validation_receipt_event_id.is_some() => "invalid",
         RadrootsTradeWorkflowState::Invalid => "invalid",
         _ => "not_required",

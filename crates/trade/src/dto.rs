@@ -286,11 +286,11 @@ mod tests {
             [
                 "missing",
                 "requested",
-                "revision_proposed",
-                "agreed_pending_rhi",
+                "agreed_pending_validation",
                 "committed",
                 "declined",
                 "cancelled",
+                "validation_expired",
                 "invalid",
             ]
         );

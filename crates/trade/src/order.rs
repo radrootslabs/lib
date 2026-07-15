@@ -1260,7 +1260,7 @@ fn reduce_listing_inventory_accounting_records(
             },
         );
         match projection.status {
-            RadrootsTradeWorkflowState::AgreedPendingRhi => {
+            RadrootsTradeWorkflowState::AgreedPendingValidation => {
                 for (agreement_event_id, economics) in projection
                     .agreement_event_id
                     .iter()
@@ -1296,8 +1296,8 @@ fn reduce_listing_inventory_accounting_records(
             }
             RadrootsTradeWorkflowState::Missing
             | RadrootsTradeWorkflowState::Requested
-            | RadrootsTradeWorkflowState::RevisionProposed
             | RadrootsTradeWorkflowState::Committed => {}
+            RadrootsTradeWorkflowState::ValidationExpired => {}
         }
     }
 
@@ -1515,7 +1515,7 @@ fn negotiation_projection(
                     let mut projection = request_projection(
                         order_id,
                         request,
-                        RadrootsTradeWorkflowState::RevisionProposed,
+                        RadrootsTradeWorkflowState::Requested,
                     );
                     projection.pending_revision_event_id = Some(proposal.event_id.clone());
                     projection.economics = Some(proposal.payload.economics.clone());
@@ -1590,7 +1590,7 @@ fn decided_projection(
             let mut projection = request_projection(
                 order_id,
                 request,
-                RadrootsTradeWorkflowState::AgreedPendingRhi,
+                RadrootsTradeWorkflowState::AgreedPendingValidation,
             );
             projection.decision_event_id = Some(decision.event_id.clone());
             projection.economics = Some(request.payload.economics.clone());
@@ -1641,7 +1641,7 @@ fn revision_decision_projection(
             let mut projection = request_projection(
                 order_id,
                 request,
-                RadrootsTradeWorkflowState::AgreedPendingRhi,
+                RadrootsTradeWorkflowState::AgreedPendingValidation,
             );
             projection.economics = Some(proposal.payload.economics.clone());
             projection.agreement_event_id = Some(decision.event_id.clone());
@@ -4488,7 +4488,7 @@ mod tests {
         );
         assert_eq!(
             pending_revision.status,
-            RadrootsTradeWorkflowState::RevisionProposed
+            RadrootsTradeWorkflowState::Requested
         );
         assert_eq!(
             pending_revision.pending_revision_event_id,
@@ -5261,7 +5261,7 @@ mod tests {
 
         assert_eq!(
             projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingRhi
+            RadrootsTradeWorkflowState::AgreedPendingValidation
         );
         assert_eq!(projection.decision_event_id, Some(event_id(2)));
         assert_eq!(projection.agreement_event_id, Some(event_id(2)));
@@ -5295,7 +5295,7 @@ mod tests {
 
         assert_eq!(
             projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingRhi
+            RadrootsTradeWorkflowState::AgreedPendingValidation
         );
         assert_eq!(projection.agreement_event_id, Some(event_id(4)));
         assert_eq!(
@@ -5346,7 +5346,7 @@ mod tests {
 
         assert_eq!(
             projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingRhi
+            RadrootsTradeWorkflowState::AgreedPendingValidation
         );
         assert_eq!(projection.agreement_event_id, Some(event_id(2)));
     }
