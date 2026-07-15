@@ -1,5 +1,5 @@
 use radroots_mesh::{
-    RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE, RADROOTS_MESH_PREVIEW_POLICY_ID,
+    RADROOTS_MESH_RETICULUM_POLICY_ID, RADROOTS_MESH_UNAVAILABLE_MESSAGE,
     RadrootsMeshAdmissionDecision, RadrootsMeshAdmissionInput, RadrootsMeshCompressionPolicy,
     RadrootsMeshError, RadrootsMeshFrame, RadrootsMeshFrameType, RadrootsMeshPayload,
     RadrootsMeshPayloadPolicy, RadrootsMeshPolicyDenyReason, RadrootsMeshPrivacyClass,
@@ -80,10 +80,10 @@ fn all_frame_types_round_trip_with_stable_codes_and_labels() {
 }
 
 #[test]
-fn preview_policy_has_zero_delivery_budgets_and_disabled_compression() {
-    let policy = RadrootsMeshPayloadPolicy::preview_unavailable();
+fn reticulum_policy_has_zero_delivery_budgets_and_disabled_compression() {
+    let policy = RadrootsMeshPayloadPolicy::reticulum_unavailable();
 
-    assert_eq!(policy.policy_id(), RADROOTS_MESH_PREVIEW_POLICY_ID);
+    assert_eq!(policy.policy_id(), RADROOTS_MESH_RETICULUM_POLICY_ID);
     assert_eq!(policy.max_payload_bytes, 0);
     assert_eq!(policy.max_frame_bytes, 0);
     assert_eq!(policy.compression, RadrootsMeshCompressionPolicy::Disabled);
@@ -93,8 +93,8 @@ fn preview_policy_has_zero_delivery_budgets_and_disabled_compression() {
 }
 
 #[test]
-fn preview_policy_denies_real_payload_admission_deterministically() {
-    let policy = RadrootsMeshPayloadPolicy::preview_unavailable();
+fn reticulum_policy_denies_real_payload_admission_deterministically() {
+    let policy = RadrootsMeshPayloadPolicy::reticulum_unavailable();
     let input = RadrootsMeshAdmissionInput::new(
         RadrootsMeshScope::Local,
         RadrootsMeshPrivacyClass::PublicEvent,
@@ -106,15 +106,15 @@ fn preview_policy_denies_real_payload_admission_deterministically() {
     assert_eq!(
         decision,
         RadrootsMeshAdmissionDecision::Denied {
-            reason: RadrootsMeshPolicyDenyReason::PreviewUnavailable
+            reason: RadrootsMeshPolicyDenyReason::DeliveryUnavailable
         }
     );
     assert_eq!(decision.label(), "denied");
     assert_eq!(
         decision.deny_reason(),
-        Some(RadrootsMeshPolicyDenyReason::PreviewUnavailable)
+        Some(RadrootsMeshPolicyDenyReason::DeliveryUnavailable)
     );
-    assert_eq!(decision.message(), RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE);
+    assert_eq!(decision.message(), RADROOTS_MESH_UNAVAILABLE_MESSAGE);
     assert!(!decision.usable_for_delivery());
     assert_eq!(
         RadrootsMeshPrivacyClass::PublicEvent.label(),
@@ -125,15 +125,15 @@ fn preview_policy_denies_real_payload_admission_deterministically() {
         "private_event"
     );
     assert_eq!(
-        RadrootsMeshPolicyDenyReason::PreviewUnavailable.label(),
-        "preview_unavailable"
+        RadrootsMeshPolicyDenyReason::DeliveryUnavailable.label(),
+        "delivery_unavailable"
     );
 }
 
 #[test]
 fn custom_scope_has_explicit_namespace() {
-    let scope = RadrootsMeshScope::custom("farm-north.preview_1").expect("custom scope");
-    assert_eq!(scope.label(), "farm-north.preview_1");
+    let scope = RadrootsMeshScope::custom("farm-north.mesh_1").expect("custom scope");
+    assert_eq!(scope.label(), "farm-north.mesh_1");
     let frame = RadrootsMeshFrame::new(
         RadrootsMeshFrameType::RouteProbe,
         scope,
@@ -144,7 +144,7 @@ fn custom_scope_has_explicit_namespace() {
     let encoded = encode_mesh_frame_cbor(&frame).expect("encode custom scope");
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode custom scope");
 
-    assert_eq!(decoded.scope_id.cbor_label(), "custom:farm-north.preview_1");
+    assert_eq!(decoded.scope_id.cbor_label(), "custom:farm-north.mesh_1");
     assert_eq!(encode_mesh_frame_cbor(&decoded).expect("reencode"), encoded);
 }
 

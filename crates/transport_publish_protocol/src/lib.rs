@@ -11,7 +11,7 @@ use std::{collections::BTreeSet, string::String, vec::Vec};
 
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportError, RadrootsTransportKind, RadrootsTransportMeshScopeId,
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };
@@ -58,14 +58,11 @@ pub enum TransportPublishProtocolError {
     InvalidTargetLabel {
         index: usize,
     },
-    InvalidPreviewBehavior {
+    InvalidReticulumBehavior {
         index: usize,
     },
     InvalidTimeoutMs,
-    InvalidReticulumPreviewEndpoint {
-        index: usize,
-    },
-    ExplicitProxyTarget {
+    InvalidReticulumEndpoint {
         index: usize,
     },
     DuplicateTarget {
@@ -160,18 +157,14 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::InvalidTargetLabel { index } => {
                 write!(f, "transport target {index} target_label is invalid")
             }
-            Self::InvalidPreviewBehavior { index } => write!(
+            Self::InvalidReticulumBehavior { index } => write!(
                 f,
-                "transport target {index} preview_behavior is only valid for Reticulum targets"
+                "transport target {index} reticulum_behavior is only valid for Reticulum targets"
             ),
             Self::InvalidTimeoutMs => f.write_str("timeout_ms must be greater than zero"),
-            Self::InvalidReticulumPreviewEndpoint { index } => write!(
+            Self::InvalidReticulumEndpoint { index } => write!(
                 f,
-                "transport target {index} Reticulum preview endpoint must be {RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI}"
-            ),
-            Self::ExplicitProxyTarget { index } => write!(
-                f,
-                "transport target {index} proxy is an SDK delegation target and cannot be used as a daemon explicit target"
+                "transport target {index} Reticulum endpoint must be {RADROOTS_RETICULUM_ENDPOINT_URI}"
             ),
             Self::DuplicateTarget { index } => {
                 write!(f, "transport target {index} duplicates an earlier target")
@@ -243,7 +236,7 @@ impl fmt::Display for TransportPublishProtocolError {
             }
             Self::InvalidReticulumOutcome { index } => write!(
                 f,
-                "transport target outcome {index} Reticulum preview must be unavailable or deferred"
+                "transport target outcome {index} Reticulum must be unavailable or deferred"
             ),
         }
     }
@@ -255,7 +248,7 @@ impl std::error::Error for TransportPublishProtocolError {}
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum TransportPublishPreviewBehavior {
+pub enum TransportPublishReticulumBehavior {
     #[default]
     RejectDeliveryAttempts,
     DeferDeliveryPlans,
@@ -281,7 +274,7 @@ pub struct TransportPublishTarget {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub preview_behavior: Option<TransportPublishPreviewBehavior>,
+    pub reticulum_behavior: Option<TransportPublishReticulumBehavior>,
 }
 
 impl TransportPublishTarget {
@@ -291,17 +284,17 @@ impl TransportPublishTarget {
             endpoint_uri: endpoint_uri.into(),
             target_scope: None,
             target_label: None,
-            preview_behavior: None,
+            reticulum_behavior: None,
         }
     }
 
-    pub fn reticulum_preview(behavior: TransportPublishPreviewBehavior) -> Self {
+    pub fn reticulum(behavior: TransportPublishReticulumBehavior) -> Self {
         Self {
             transport_kind: "reticulum".to_owned(),
-            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
             target_scope: None,
             target_label: None,
-            preview_behavior: Some(behavior),
+            reticulum_behavior: Some(behavior),
         }
     }
 
@@ -321,19 +314,16 @@ impl TransportPublishTarget {
         }
         let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
-        if transport_kind == RadrootsTransportKind::Proxy {
-            return Err(TransportPublishProtocolError::ExplicitProxyTarget { index });
-        }
         if self.endpoint_uri.trim().is_empty() {
             return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
         }
-        if transport_kind != RadrootsTransportKind::Reticulum && self.preview_behavior.is_some() {
-            return Err(TransportPublishProtocolError::InvalidPreviewBehavior { index });
+        if transport_kind != RadrootsTransportKind::Reticulum && self.reticulum_behavior.is_some() {
+            return Err(TransportPublishProtocolError::InvalidReticulumBehavior { index });
         }
         if transport_kind == RadrootsTransportKind::Reticulum
-            && self.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
+            && self.endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI
         {
-            return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
+            return Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index });
         }
         validate_target_metadata(
             self.target_scope.as_deref(),
@@ -669,7 +659,7 @@ pub enum TransportPublishJobStatus {
     DeliveryUnsatisfiedRetryable,
     DeliveryUnsatisfiedTerminal,
     DeliveryDeferred,
-    DeliveryPreviewUnavailable,
+    DeliveryDeferredUntilImplemented,
     Rejected,
 }
 
@@ -694,7 +684,6 @@ pub enum TransportPublishOutcomeKind {
     TargetRejected,
     SkippedAlreadyAccepted,
     DeferredUntilImplemented,
-    PreviewUnavailable,
     Unknown,
 }
 
@@ -732,11 +721,8 @@ impl TransportPublishOutcomeKind {
         )
     }
 
-    pub fn is_deferred_preview(self) -> bool {
-        matches!(
-            self,
-            Self::DeferredUntilImplemented | Self::PreviewUnavailable
-        )
+    pub fn is_deferred_until_implemented(self) -> bool {
+        matches!(self, Self::DeferredUntilImplemented)
     }
 }
 
@@ -747,7 +733,7 @@ pub enum TransportPublishTargetSource {
     Request,
     NostrAuthorWrite,
     DaemonDefault,
-    ReticulumPreview,
+    Reticulum,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -957,25 +943,29 @@ impl TransportPublishCapabilities {
                         transport: "nostr".to_owned(),
                         configured: true,
                         implementation: TransportPublishImplementation::Real,
+                        maturity: TransportPublishCapabilityMaturity::Stable,
+                        availability: TransportPublishCapabilityAvailability::Available,
                         usable_for_delivery: true,
                         capabilities: TransportPublishOperationCapabilities {
                             deliver: true,
                             fetch: false,
                         },
-                        preview_behavior: None,
+                        reticulum_behavior: None,
                         message: "Nostr relay publish is available".to_owned(),
                     },
                     TransportPublishTransportCapability {
                         transport: "reticulum".to_owned(),
                         configured: true,
-                        implementation: TransportPublishImplementation::PreviewUnavailable,
+                        implementation: TransportPublishImplementation::Real,
+                        maturity: TransportPublishCapabilityMaturity::Preview,
+                        availability: TransportPublishCapabilityAvailability::Unavailable,
                         usable_for_delivery: false,
                         capabilities: TransportPublishOperationCapabilities {
                             deliver: false,
                             fetch: false,
                         },
-                        preview_behavior: Some(
-                            TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                        reticulum_behavior: Some(
+                            TransportPublishReticulumBehavior::RejectDeliveryAttempts,
                         ),
                         message: RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE.to_owned(),
                     },
@@ -1011,7 +1001,23 @@ pub struct TransportPublishSurfaceCapabilities {
 pub enum TransportPublishImplementation {
     Real,
     Mock,
-    PreviewUnavailable,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportPublishCapabilityMaturity {
+    Preview,
+    Stable,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportPublishCapabilityAvailability {
+    Available,
+    Degraded,
+    Unavailable,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1021,13 +1027,15 @@ pub struct TransportPublishTransportCapability {
     pub transport: String,
     pub configured: bool,
     pub implementation: TransportPublishImplementation,
+    pub maturity: TransportPublishCapabilityMaturity,
+    pub availability: TransportPublishCapabilityAvailability,
     pub usable_for_delivery: bool,
     pub capabilities: TransportPublishOperationCapabilities,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub preview_behavior: Option<TransportPublishPreviewBehavior>,
+    pub reticulum_behavior: Option<TransportPublishReticulumBehavior>,
     pub message: String,
 }
 
@@ -1097,7 +1105,7 @@ fn job_status_is_terminal(status: TransportPublishJobStatus) -> bool {
         TransportPublishJobStatus::DeliverySatisfied
             | TransportPublishJobStatus::DeliveryUnsatisfiedTerminal
             | TransportPublishJobStatus::DeliveryDeferred
-            | TransportPublishJobStatus::DeliveryPreviewUnavailable
+            | TransportPublishJobStatus::DeliveryDeferredUntilImplemented
             | TransportPublishJobStatus::Rejected
     )
 }
@@ -1127,21 +1135,21 @@ fn validate_target_outcome(
         index,
     )?;
     if transport_kind == RadrootsTransportKind::Reticulum {
-        if target.endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
-            return Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index });
+        if target.endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
+            return Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index });
         }
-        if target.source != TransportPublishTargetSource::ReticulumPreview {
+        if target.source != TransportPublishTargetSource::Reticulum {
             return Err(TransportPublishProtocolError::InvalidTargetSource { index });
         }
-        if target.attempted || !target.outcome_kind.is_deferred_preview() {
+        if target.attempted || !target.outcome_kind.is_deferred_until_implemented() {
             return Err(TransportPublishProtocolError::InvalidReticulumOutcome { index });
         }
         return Ok(());
     }
-    if target.source == TransportPublishTargetSource::ReticulumPreview {
+    if target.source == TransportPublishTargetSource::Reticulum {
         return Err(TransportPublishProtocolError::InvalidTargetSource { index });
     }
-    if target.outcome_kind.is_deferred_preview() {
+    if target.outcome_kind.is_deferred_until_implemented() {
         return Err(TransportPublishProtocolError::InvalidTargetOutcomeKind { index });
     }
     Ok(())
@@ -1182,19 +1190,13 @@ fn transport_target_from_parts(
             RadrootsTransportTarget::nostr_relay_with_metadata(endpoint_uri, scope, label)
         }
         RadrootsTransportKind::Reticulum => {
-            if endpoint_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI {
+            if endpoint_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
                 return Err(RadrootsTransportError::InvalidTargetUri);
             }
-            RadrootsTransportTarget::reticulum_preview_with_metadata(scope, label)
+            RadrootsTransportTarget::reticulum_with_metadata(endpoint_uri, scope, label)
         }
         RadrootsTransportKind::Local => {
             RadrootsTransportTarget::local_with_metadata(endpoint_uri, scope, label)
-        }
-        RadrootsTransportKind::Proxy => {
-            RadrootsTransportTarget::proxy_with_metadata(endpoint_uri, scope, label)
-        }
-        RadrootsTransportKind::Mesh | RadrootsTransportKind::Custom(_) => {
-            RadrootsTransportTarget::new_with_metadata(transport_kind, endpoint_uri, scope, label)
         }
     }
 }
@@ -1291,51 +1293,55 @@ fn validate_job_status_state(
         return Err(TransportPublishProtocolError::InvalidJobStatusState);
     }
     let required_count = job.delivery_policy.required_target_count(job.target_count);
-    let (satisfied, retryable_status_count, terminal_status_count, has_deferred, has_preview) =
-        match &job.delivery_policy {
-            TransportPublishDeliveryPolicy::RequiredTargets { targets } => {
-                let required_outcomes = required_policy_outcomes(targets, &job.targets)?;
-                let satisfied = targets.iter().all(|required| {
-                    required_outcomes.iter().any(|outcome| {
-                        target_outcome_fingerprint(outcome, 0).is_ok_and(|fingerprint| {
-                            fingerprint == *required
-                                && outcome.outcome_kind.counts_toward_accepted_delivery()
-                        })
+    let (
+        satisfied,
+        retryable_status_count,
+        terminal_status_count,
+        has_deferred,
+        has_deferred_until_implemented,
+    ) = match &job.delivery_policy {
+        TransportPublishDeliveryPolicy::RequiredTargets { targets } => {
+            let required_outcomes = required_policy_outcomes(targets, &job.targets)?;
+            let satisfied = targets.iter().all(|required| {
+                required_outcomes.iter().any(|outcome| {
+                    target_outcome_fingerprint(outcome, 0).is_ok_and(|fingerprint| {
+                        fingerprint == *required
+                            && outcome.outcome_kind.counts_toward_accepted_delivery()
                     })
-                });
-                (
-                    satisfied,
-                    required_outcomes
-                        .iter()
-                        .filter(|outcome| outcome.outcome_kind.is_retryable())
-                        .count(),
-                    required_outcomes
-                        .iter()
-                        .filter(|outcome| outcome.outcome_kind.is_terminal_failure())
-                        .count(),
-                    required_outcomes.iter().any(|outcome| {
-                        outcome.outcome_kind
-                            == TransportPublishOutcomeKind::DeferredUntilImplemented
-                    }),
-                    required_outcomes.iter().any(|outcome| {
-                        outcome.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
-                    }),
-                )
-            }
-            TransportPublishDeliveryPolicy::Any
-            | TransportPublishDeliveryPolicy::All
-            | TransportPublishDeliveryPolicy::Quorum { .. } => (
-                required_count > 0 && acknowledged_count >= required_count,
-                retryable_count,
-                terminal_count,
-                job.targets.iter().any(|target| {
-                    target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
+                })
+            });
+            (
+                satisfied,
+                required_outcomes
+                    .iter()
+                    .filter(|outcome| outcome.outcome_kind.is_retryable())
+                    .count(),
+                required_outcomes
+                    .iter()
+                    .filter(|outcome| outcome.outcome_kind.is_terminal_failure())
+                    .count(),
+                required_outcomes.iter().any(|outcome| {
+                    outcome.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
                 }),
-                job.targets.iter().any(|target| {
-                    target.outcome_kind == TransportPublishOutcomeKind::PreviewUnavailable
+                required_outcomes.iter().any(|outcome| {
+                    outcome.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
                 }),
-            ),
-        };
+            )
+        }
+        TransportPublishDeliveryPolicy::Any
+        | TransportPublishDeliveryPolicy::All
+        | TransportPublishDeliveryPolicy::Quorum { .. } => (
+            required_count > 0 && acknowledged_count >= required_count,
+            retryable_count,
+            terminal_count,
+            job.targets.iter().any(|target| {
+                target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
+            }),
+            job.targets.iter().any(|target| {
+                target.outcome_kind == TransportPublishOutcomeKind::DeferredUntilImplemented
+            }),
+        ),
+    };
     match job.status {
         TransportPublishJobStatus::DeliverySatisfied if satisfied => Ok(()),
         TransportPublishJobStatus::DeliveryUnsatisfiedRetryable
@@ -1356,11 +1362,11 @@ fn validate_job_status_state(
         {
             Ok(())
         }
-        TransportPublishJobStatus::DeliveryPreviewUnavailable
+        TransportPublishJobStatus::DeliveryDeferredUntilImplemented
             if !satisfied
                 && terminal_status_count == 0
                 && retryable_status_count == 0
-                && has_preview =>
+                && has_deferred_until_implemented =>
         {
             Ok(())
         }
@@ -1417,10 +1423,10 @@ mod tests {
     ) -> TransportPublishTargetOutcome {
         TransportPublishTargetOutcome {
             transport_kind: "reticulum".to_owned(),
-            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
             target_scope: None,
             target_label: None,
-            source: TransportPublishTargetSource::ReticulumPreview,
+            source: TransportPublishTargetSource::Reticulum,
             attempted: false,
             outcome_kind,
             message: None,
@@ -1529,6 +1535,11 @@ mod tests {
             .expect("nostr capability");
         assert!(nostr.configured);
         assert_eq!(nostr.implementation, TransportPublishImplementation::Real);
+        assert_eq!(nostr.maturity, TransportPublishCapabilityMaturity::Stable);
+        assert_eq!(
+            nostr.availability,
+            TransportPublishCapabilityAvailability::Available
+        );
         assert!(nostr.usable_for_delivery);
         assert!(nostr.capabilities.deliver);
         assert!(!nostr.capabilities.fetch);
@@ -1541,14 +1552,22 @@ mod tests {
         assert!(reticulum.configured);
         assert_eq!(
             reticulum.implementation,
-            TransportPublishImplementation::PreviewUnavailable
+            TransportPublishImplementation::Real
+        );
+        assert_eq!(
+            reticulum.maturity,
+            TransportPublishCapabilityMaturity::Preview
+        );
+        assert_eq!(
+            reticulum.availability,
+            TransportPublishCapabilityAvailability::Unavailable
         );
         assert!(!reticulum.usable_for_delivery);
         assert!(!reticulum.capabilities.deliver);
         assert!(!reticulum.capabilities.fetch);
         assert_eq!(
-            reticulum.preview_behavior,
-            Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts)
+            reticulum.reticulum_behavior,
+            Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts)
         );
     }
 
@@ -1569,8 +1588,8 @@ mod tests {
         let mut too_many = request.clone();
         too_many.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example.com"),
-            TransportPublishTarget::reticulum_preview(
-                TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+            TransportPublishTarget::reticulum(
+                TransportPublishReticulumBehavior::RejectDeliveryAttempts,
             ),
         ]);
         assert!(matches!(
@@ -1602,50 +1621,50 @@ mod tests {
         invalid_reticulum_endpoint.target_policy =
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "reticulum".to_owned(),
-                endpoint_uri: "reticulum:preview-unavailable-alt".to_owned(),
+                endpoint_uri: "reticulum:alternate".to_owned(),
                 target_scope: None,
                 target_label: None,
-                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+                reticulum_behavior: Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
             invalid_reticulum_endpoint.validate(1),
-            Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 0 })
+            Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index: 0 })
         );
 
         let mut noncanonical_reticulum_kind = request.clone();
         noncanonical_reticulum_kind.target_policy =
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "Reticulum".to_owned(),
-                endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
+                endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
                 target_scope: None,
                 target_label: None,
-                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+                reticulum_behavior: Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
             noncanonical_reticulum_kind.validate(1),
             Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
         );
 
-        let mut nostr_preview_behavior = request.clone();
-        nostr_preview_behavior.target_policy =
+        let mut nostr_reticulum_behavior = request.clone();
+        nostr_reticulum_behavior.target_policy =
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
                 transport_kind: "nostr".to_owned(),
                 endpoint_uri: "wss://relay.example.com".to_owned(),
                 target_scope: None,
                 target_label: None,
-                preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+                reticulum_behavior: Some(TransportPublishReticulumBehavior::RejectDeliveryAttempts),
             }]);
         assert_eq!(
-            nostr_preview_behavior.validate(1),
-            Err(TransportPublishProtocolError::InvalidPreviewBehavior { index: 0 })
+            nostr_reticulum_behavior.validate(1),
+            Err(TransportPublishProtocolError::InvalidReticulumBehavior { index: 0 })
         );
 
         for invalid in [
-            " reticulum:preview-unavailable",
-            "reticulum:preview-unavailable ",
-            "RETICULUM:preview-unavailable",
-            "reticulum:Preview-Unavailable",
-            "reticulum:preview",
+            " reticulum:local",
+            "reticulum:local ",
+            "RETICULUM:local",
+            "reticulum:Local",
+            "reticulum:temporary",
             "reticulum:custom",
         ] {
             let mut invalid_reticulum_endpoint = request.clone();
@@ -1655,41 +1674,15 @@ mod tests {
                     endpoint_uri: invalid.to_owned(),
                     target_scope: None,
                     target_label: None,
-                    preview_behavior: Some(TransportPublishPreviewBehavior::RejectDeliveryAttempts),
+                    reticulum_behavior: Some(
+                        TransportPublishReticulumBehavior::RejectDeliveryAttempts,
+                    ),
                 }]);
             assert_eq!(
                 invalid_reticulum_endpoint.validate(1),
-                Err(TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 0 })
+                Err(TransportPublishProtocolError::InvalidReticulumEndpoint { index: 0 })
             );
         }
-
-        let mut removed_proxy_kind = request.clone();
-        removed_proxy_kind.target_policy =
-            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
-                transport_kind: removed_proxy_kind_string(),
-                endpoint_uri: "radrootsd-proxy:publish".to_owned(),
-                target_scope: None,
-                target_label: None,
-                preview_behavior: None,
-            }]);
-        assert_eq!(
-            removed_proxy_kind.validate(1),
-            Err(TransportPublishProtocolError::InvalidTransportKind { index: 0 })
-        );
-
-        let mut explicit_proxy_target = request.clone();
-        explicit_proxy_target.target_policy =
-            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget {
-                transport_kind: "proxy".to_owned(),
-                endpoint_uri: "radrootsd-proxy:publish".to_owned(),
-                target_scope: None,
-                target_label: None,
-                preview_behavior: None,
-            }]);
-        assert_eq!(
-            explicit_proxy_target.validate(1),
-            Err(TransportPublishProtocolError::ExplicitProxyTarget { index: 0 })
-        );
 
         let mut duplicate_targets = request.clone();
         duplicate_targets.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
@@ -1762,10 +1755,6 @@ mod tests {
         );
     }
 
-    fn removed_proxy_kind_string() -> String {
-        ["radrootsd", "_proxy"].concat()
-    }
-
     #[test]
     fn outcome_kinds_classify_satisfaction_retry_and_terminal() {
         assert!(TransportPublishOutcomeKind::Accepted.counts_toward_accepted_delivery());
@@ -1773,9 +1762,9 @@ mod tests {
             TransportPublishOutcomeKind::SkippedAlreadyAccepted.counts_toward_accepted_delivery()
         );
         assert!(TransportPublishOutcomeKind::Timeout.is_retryable());
-        assert!(TransportPublishOutcomeKind::PreviewUnavailable.is_deferred_preview());
-        assert!(TransportPublishOutcomeKind::DeferredUntilImplemented.is_deferred_preview());
-        assert!(!TransportPublishOutcomeKind::PreviewUnavailable.is_terminal_failure());
+        assert!(
+            TransportPublishOutcomeKind::DeferredUntilImplemented.is_deferred_until_implemented()
+        );
         assert!(!TransportPublishOutcomeKind::DeferredUntilImplemented.is_terminal_failure());
     }
 
@@ -1817,18 +1806,18 @@ mod tests {
         .validate()
         .expect("terminal job");
         job_from_targets(
-            TransportPublishJobStatus::DeliveryPreviewUnavailable,
+            TransportPublishJobStatus::DeliveryDeferredUntilImplemented,
             TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::RejectDeliveryAttempts,
                 ),
             ]),
             vec![reticulum_outcome(
-                TransportPublishOutcomeKind::PreviewUnavailable,
+                TransportPublishOutcomeKind::DeferredUntilImplemented,
             )],
         )
         .validate()
-        .expect("preview unavailable job");
+        .expect("Reticulum unavailable job");
         rejected_job().validate().expect("rejected job");
     }
 
@@ -2072,12 +2061,12 @@ mod tests {
     }
 
     #[test]
-    fn job_view_validation_rejects_reticulum_success_and_non_reticulum_preview() {
+    fn job_view_validation_rejects_reticulum_success_and_non_reticulum() {
         let mut reticulum_success = job_from_targets(
             TransportPublishJobStatus::DeliverySatisfied,
             TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::RejectDeliveryAttempts,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::RejectDeliveryAttempts,
                 ),
             ]),
             vec![reticulum_outcome(TransportPublishOutcomeKind::Accepted)],
@@ -2088,25 +2077,25 @@ mod tests {
             Err(TransportPublishProtocolError::InvalidReticulumOutcome { index: 0 })
         );
 
-        let non_reticulum_preview = job_from_targets(
-            TransportPublishJobStatus::DeliveryPreviewUnavailable,
+        let non_reticulum = job_from_targets(
+            TransportPublishJobStatus::DeliveryDeferredUntilImplemented,
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
                 "wss://relay.example.com",
             )]),
             vec![nostr_outcome(
-                TransportPublishOutcomeKind::PreviewUnavailable,
+                TransportPublishOutcomeKind::DeferredUntilImplemented,
             )],
         );
         assert_eq!(
-            non_reticulum_preview.validate(),
+            non_reticulum.validate(),
             Err(TransportPublishProtocolError::InvalidTargetOutcomeKind { index: 0 })
         );
 
         let mut reticulum_wrong_source = job_from_targets(
             TransportPublishJobStatus::DeliveryDeferred,
             TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::DeferDeliveryPlans,
                 ),
             ]),
             vec![reticulum_outcome(
@@ -2122,8 +2111,8 @@ mod tests {
         let reticulum_deferred = job_from_targets(
             TransportPublishJobStatus::DeliveryDeferred,
             TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::DeferDeliveryPlans,
                 ),
             ]),
             vec![reticulum_outcome(
@@ -2136,12 +2125,12 @@ mod tests {
     }
 
     #[test]
-    fn serde_round_trip_preserves_preview_target() {
+    fn serde_round_trip_preserves_reticulum_target() {
         let request = TransportPublishEventRequest {
             raw_event_json: raw_event_json(),
             target_policy: TransportPublishTargetPolicy::explicit_targets(vec![
-                TransportPublishTarget::reticulum_preview(
-                    TransportPublishPreviewBehavior::DeferDeliveryPlans,
+                TransportPublishTarget::reticulum(
+                    TransportPublishReticulumBehavior::DeferDeliveryPlans,
                 ),
             ]),
             delivery_policy: TransportPublishDeliveryPolicy::All,
@@ -2150,7 +2139,7 @@ mod tests {
         };
         let encoded = serde_json::to_string(&request).expect("encode");
         assert!(encoded.contains("\"transport_kind\":\"reticulum\""));
-        assert!(encoded.contains("\"preview_behavior\":\"defer_delivery_plans\""));
+        assert!(encoded.contains("\"reticulum_behavior\":\"defer_delivery_plans\""));
         let decoded: TransportPublishEventRequest =
             serde_json::from_str(encoded.as_str()).expect("decode");
         assert_eq!(decoded, request);
@@ -2232,16 +2221,16 @@ mod tests {
                 "transport target 3 target_label is invalid",
             ),
             (
-                TransportPublishProtocolError::InvalidPreviewBehavior { index: 4 },
-                "transport target 4 preview_behavior is only valid for Reticulum targets",
+                TransportPublishProtocolError::InvalidReticulumBehavior { index: 4 },
+                "transport target 4 reticulum_behavior is only valid for Reticulum targets",
             ),
             (
                 TransportPublishProtocolError::InvalidTimeoutMs,
                 "timeout_ms must be greater than zero",
             ),
             (
-                TransportPublishProtocolError::InvalidReticulumPreviewEndpoint { index: 5 },
-                "transport target 5 Reticulum preview endpoint must be reticulum:preview-unavailable",
+                TransportPublishProtocolError::InvalidReticulumEndpoint { index: 5 },
+                "transport target 5 Reticulum endpoint must be reticulum:local",
             ),
             (
                 TransportPublishProtocolError::TargetLimitExceeded { max: 1, actual: 2 },
@@ -2299,13 +2288,13 @@ mod tests {
     #[test]
     fn target_and_delivery_policy_validation_cover_all_modes() {
         assert_eq!(
-            TransportPublishPreviewBehavior::default(),
-            TransportPublishPreviewBehavior::RejectDeliveryAttempts
+            TransportPublishReticulumBehavior::default(),
+            TransportPublishReticulumBehavior::RejectDeliveryAttempts
         );
         let explicit = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example"),
-            TransportPublishTarget::reticulum_preview(
-                TransportPublishPreviewBehavior::DeferDeliveryPlans,
+            TransportPublishTarget::reticulum(
+                TransportPublishReticulumBehavior::DeferDeliveryPlans,
             ),
         ]);
         let nostr = TransportPublishTargetPolicy::nostr(
@@ -2333,7 +2322,7 @@ mod tests {
                 endpoint_uri: "wss://relay.example".to_owned(),
                 target_scope: None,
                 target_label: None,
-                preview_behavior: None,
+                reticulum_behavior: None,
             }]);
         assert_eq!(
             empty_targets.validate(10),
@@ -2346,7 +2335,7 @@ mod tests {
                 endpoint_uri: "wss://relay.example".to_owned(),
                 target_scope: None,
                 target_label: None,
-                preview_behavior: None,
+                reticulum_behavior: None,
             }]);
         assert_eq!(
             empty_targets.validate(10),
@@ -2460,10 +2449,7 @@ mod tests {
             TransportPublishOutcomeKind::PaymentRequired,
             TransportPublishOutcomeKind::TargetRejected,
         ];
-        let deferred_preview = [
-            TransportPublishOutcomeKind::DeferredUntilImplemented,
-            TransportPublishOutcomeKind::PreviewUnavailable,
-        ];
+        let deferred_until_implemented = [TransportPublishOutcomeKind::DeferredUntilImplemented];
 
         for kind in satisfied {
             assert!(kind.counts_toward_accepted_delivery());
@@ -2480,11 +2466,11 @@ mod tests {
             assert!(!kind.is_retryable());
             assert!(kind.is_terminal_failure());
         }
-        for kind in deferred_preview {
+        for kind in deferred_until_implemented {
             assert!(!kind.counts_toward_accepted_delivery());
             assert!(!kind.is_retryable());
             assert!(!kind.is_terminal_failure());
-            assert!(kind.is_deferred_preview());
+            assert!(kind.is_deferred_until_implemented());
         }
     }
 

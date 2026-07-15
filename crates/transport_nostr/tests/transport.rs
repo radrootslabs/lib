@@ -810,7 +810,7 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
         .expect_err("payload rejected");
     assert_eq!(payload_error, RadrootsTransportError::InvalidPayloadBytes);
 
-    let non_nostr_target = RadrootsTransportTarget::reticulum_preview().expect("reticulum target");
+    let non_nostr_target = RadrootsTransportTarget::reticulum().expect("reticulum target");
     let target_error = transport
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-request-target",
@@ -2429,7 +2429,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
                 RadrootsTransportSatisfactionPolicy::all_accepted(),
                 vec![
                     nostr_target(RELAY_PRIMARY_WSS),
-                    RadrootsTransportTarget::reticulum_preview().expect("reticulum target"),
+                    RadrootsTransportTarget::reticulum().expect("reticulum target"),
                 ],
             ),
             1_000,
@@ -2474,7 +2474,7 @@ async fn outbox_publish_skips_non_nostr_targets() {
         .expect("targets");
     assert!(targets.iter().any(|target| {
         target.transport_kind == RadrootsTransportKind::Reticulum
-            && target.status == RadrootsOutboxDeliveryTargetStatus::PreviewUnavailable
+            && target.status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
     }));
 }
 

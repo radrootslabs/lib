@@ -5,10 +5,7 @@ use alloc::string::{String, ToString};
 pub enum RadrootsTransportKind {
     Nostr,
     Reticulum,
-    Mesh,
     Local,
-    Proxy,
-    Custom(String),
 }
 
 impl RadrootsTransportKind {
@@ -32,43 +29,16 @@ impl RadrootsTransportKind {
         match canonical {
             "nostr" => Ok(Self::Nostr),
             "reticulum" => Ok(Self::Reticulum),
-            "mesh" => Ok(Self::Mesh),
             "local" => Ok(Self::Local),
-            "proxy" => Ok(Self::Proxy),
-            _ => Self::custom_canonical(canonical),
+            _ => Err(RadrootsTransportError::InvalidTransportKind),
         }
-    }
-
-    pub fn custom(value: impl Into<String>) -> Result<Self, RadrootsTransportError> {
-        let value = value.into();
-        let canonical = value.trim().to_ascii_lowercase();
-        Self::custom_canonical(canonical.as_str())
-    }
-
-    fn custom_canonical(canonical: &str) -> Result<Self, RadrootsTransportError> {
-        if canonical.is_empty() {
-            return Err(RadrootsTransportError::EmptyTransportKind);
-        }
-        if removed_first_party_kind(canonical) {
-            return Err(RadrootsTransportError::InvalidTransportKind);
-        }
-        if canonical
-            .chars()
-            .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace() || ch == ':' || ch == '/')
-        {
-            return Err(RadrootsTransportError::InvalidTransportKind);
-        }
-        Ok(Self::Custom(canonical.to_string()))
     }
 
     pub fn canonical_label(&self) -> String {
         match self {
             Self::Nostr => "nostr".to_string(),
             Self::Reticulum => "reticulum".to_string(),
-            Self::Mesh => "mesh".to_string(),
             Self::Local => "local".to_string(),
-            Self::Proxy => "proxy".to_string(),
-            Self::Custom(value) => value.clone(),
         }
     }
 }
@@ -94,19 +64,27 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportKind {
     }
 }
 
-fn removed_first_party_kind(canonical: &str) -> bool {
-    const RADROOTSD_PROXY_PREFIX: &str = "radrootsd";
-    const RADROOTSD_PROXY_SUFFIX: &str = "_proxy";
-    canonical.len() == RADROOTSD_PROXY_PREFIX.len() + RADROOTSD_PROXY_SUFFIX.len()
-        && canonical.starts_with(RADROOTSD_PROXY_PREFIX)
-        && canonical.ends_with(RADROOTSD_PROXY_SUFFIX)
-}
-
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsTransportImplementationState {
     Real,
     Mock,
-    PreviewUnavailable,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportCapabilityMaturity {
+    Preview,
+    Stable,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportCapabilityAvailability {
+    Available,
+    Degraded,
+    Unavailable,
 }

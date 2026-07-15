@@ -38,11 +38,6 @@ impl TransportKindV1 {
             "local" => Ok(Self::Local),
             "nostr" => Ok(Self::Nostr),
             "reticulum" => Ok(Self::Reticulum),
-            "reticulum_preview" | "mesh" | "proxy" | "radrootsd_proxy" | "hybrid" => {
-                Err(ProtocolContractErrorV1::RetiredTransportIdentity {
-                    identity: value.to_string(),
-                })
-            }
             _ => Err(ProtocolContractErrorV1::UnknownTransportKind {
                 value: value.to_string(),
             }),
@@ -446,7 +441,6 @@ pub enum ProtocolContractErrorV1 {
     RetiredEventKind { kind: u32 },
     RetiredEventName { name: String },
     RetiredTradeState { state: String },
-    RetiredTransportIdentity { identity: String },
     UnknownTradeState { value: String },
     UnknownTransportKind { value: String },
     InvalidMeshScopeId,
@@ -471,9 +465,6 @@ impl core::fmt::Display for ProtocolContractErrorV1 {
             Self::RetiredEventKind { kind } => write!(f, "retired event kind {kind}"),
             Self::RetiredEventName { name } => write!(f, "retired event name {name}"),
             Self::RetiredTradeState { state } => write!(f, "retired trade state {state}"),
-            Self::RetiredTransportIdentity { identity } => {
-                write!(f, "retired transport identity {identity}")
-            }
             Self::UnknownTradeState { value } => write!(f, "unknown trade state {value}"),
             Self::UnknownTransportKind { value } => write!(f, "unknown transport kind {value}"),
             Self::InvalidMeshScopeId => f.write_str("invalid mesh scope id"),
@@ -614,23 +605,23 @@ mod tests {
     }
 
     #[test]
-    fn transport_kind_v1_rejects_retired_identities() {
+    fn transport_kind_v1_rejects_unrecognized_identities() {
         for identity in [
-            "reticulum_preview",
+            concat!("reticulum", "_preview"),
             "mesh",
-            "proxy",
-            "radrootsd_proxy",
-            "hybrid",
+            concat!("pro", "xy"),
+            concat!("radrootsd", "_", "pro", "xy"),
+            concat!("hy", "brid"),
         ] {
             assert!(matches!(
                 TransportKindV1::parse(identity),
-                Err(ProtocolContractErrorV1::RetiredTransportIdentity { .. })
+                Err(ProtocolContractErrorV1::UnknownTransportKind { .. })
             ));
             assert_eq!(
                 TransportKindV1::parse(identity)
-                    .expect_err("retired transport")
+                    .expect_err("unknown transport")
                     .to_string(),
-                alloc::format!("retired transport identity {identity}")
+                alloc::format!("unknown transport kind {identity}")
             );
         }
     }

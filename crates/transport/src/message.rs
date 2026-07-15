@@ -1,7 +1,7 @@
-pub const RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI: &str = "reticulum:preview-unavailable";
-pub const RADROOTS_RETICULUM_PREVIEW_SCOPE_ID: &str = "local_preview";
+pub const RADROOTS_RETICULUM_ENDPOINT_URI: &str = "reticulum:local";
+pub const RADROOTS_RETICULUM_SCOPE_ID: &str = "local";
 
 pub const RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE: &str = concat!(
-    "Reticulum transport is configured in preview mode, ",
+    "Reticulum transport is configured, ",
     "but this build does not implement Reticulum delivery."
 );

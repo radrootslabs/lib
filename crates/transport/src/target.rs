@@ -1,6 +1,6 @@
 use crate::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RadrootsTransportError, RadrootsTransportKind,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransportError,
+    RadrootsTransportKind,
 };
 use alloc::collections::BTreeSet;
 use alloc::format;
@@ -54,9 +54,8 @@ impl RadrootsTransportMeshScopeId {
         Ok(Self(value.to_string()))
     }
 
-    pub fn local_preview() -> Self {
-        Self::parse(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
-            .expect("default Reticulum preview scope id")
+    pub fn local_reticulum() -> Self {
+        Self::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("default Reticulum scope id")
     }
 
     pub fn as_str(&self) -> &str {
@@ -178,20 +177,16 @@ impl RadrootsTransportTarget {
         Self::new_with_metadata(RadrootsTransportKind::Nostr, uri, scope, label)
     }
 
-    pub fn reticulum_preview() -> Result<Self, RadrootsTransportError> {
-        Self::reticulum_preview_with_metadata(None, None)
+    pub fn reticulum() -> Result<Self, RadrootsTransportError> {
+        Self::reticulum_with_metadata(RADROOTS_RETICULUM_ENDPOINT_URI, None, None)
     }
 
-    pub fn reticulum_preview_with_metadata(
+    pub fn reticulum_with_metadata(
+        uri: impl AsRef<str>,
         scope: Option<RadrootsTransportMeshScopeId>,
         label: Option<RadrootsTransportTargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
-        Self::new_with_metadata(
-            RadrootsTransportKind::Reticulum,
-            RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI,
-            scope,
-            label,
-        )
+        Self::new_with_metadata(RadrootsTransportKind::Reticulum, uri, scope, label)
     }
 
     pub fn local(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
@@ -206,18 +201,6 @@ impl RadrootsTransportTarget {
         Self::new_with_metadata(RadrootsTransportKind::Local, uri, scope, label)
     }
 
-    pub fn proxy(uri: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
-        Self::proxy_with_metadata(uri, None, None)
-    }
-
-    pub fn proxy_with_metadata(
-        uri: impl AsRef<str>,
-        scope: Option<RadrootsTransportMeshScopeId>,
-        label: Option<RadrootsTransportTargetLabel>,
-    ) -> Result<Self, RadrootsTransportError> {
-        Self::new_with_metadata(RadrootsTransportKind::Proxy, uri, scope, label)
-    }
-
     pub fn new_with_metadata(
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
@@ -225,15 +208,16 @@ impl RadrootsTransportTarget {
         label: Option<RadrootsTransportTargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         let raw_uri = uri.as_ref();
-        if kind == RadrootsTransportKind::Reticulum
-            && raw_uri != RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI
-        {
-            return Err(RadrootsTransportError::InvalidTargetUri);
-        }
         let uri = match kind {
             RadrootsTransportKind::Nostr => RadrootsTransportTargetUri::parse_nostr_relay(raw_uri)?,
             _ => RadrootsTransportTargetUri::parse(raw_uri)?,
         };
+        if kind == RadrootsTransportKind::Reticulum
+            && (raw_uri != RADROOTS_RETICULUM_ENDPOINT_URI
+                || uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI)
+        {
+            return Err(RadrootsTransportError::InvalidTargetUri);
+        }
         let scope = scope.or_else(|| default_scope_for_kind(&kind));
         let fingerprint =
             RadrootsTransportTargetFingerprint::from_target(&kind, &uri, scope.as_ref());
@@ -248,7 +232,7 @@ impl RadrootsTransportTarget {
 }
 
 fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<RadrootsTransportMeshScopeId> {
-    (*kind == RadrootsTransportKind::Reticulum).then(RadrootsTransportMeshScopeId::local_preview)
+    (*kind == RadrootsTransportKind::Reticulum).then(RadrootsTransportMeshScopeId::local_reticulum)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -288,6 +272,9 @@ fn canonicalize_uri(raw: &str) -> Result<String, RadrootsTransportError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(RadrootsTransportError::EmptyTargetUri);
+    }
+    if raw != trimmed {
+        return Err(RadrootsTransportError::InvalidTargetUri);
     }
     if trimmed
         .chars()
@@ -329,6 +316,9 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportEr
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(RadrootsTransportError::EmptyTargetUri);
+    }
+    if raw != trimmed {
+        return Err(RadrootsTransportError::InvalidTargetUri);
     }
     if trimmed
         .chars()

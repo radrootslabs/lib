@@ -1,6 +1,6 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
-    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransport,
+    RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
     RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
     RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
@@ -20,16 +20,16 @@ fn opaque_payload() -> RadrootsTransportPayload {
 #[test]
 fn target_fingerprints_are_stable_and_transport_scoped() {
     let nostr_upper =
-        RadrootsTransportTarget::nostr_relay(" WSS://Relay.Example/Events ").expect("nostr target");
+        RadrootsTransportTarget::nostr_relay("WSS://Relay.Example/Events").expect("nostr target");
     let nostr_lower =
         RadrootsTransportTarget::nostr_relay("wss://relay.example/Events").expect("nostr target");
-    let reticulum = RadrootsTransportTarget::reticulum_preview().expect("reticulum target");
+    let reticulum = RadrootsTransportTarget::reticulum().expect("reticulum target");
 
     assert_eq!(nostr_upper.uri.as_str(), "wss://relay.example/Events");
     assert_eq!(nostr_upper.scope, None);
     assert_eq!(
         reticulum.scope.as_ref().map(|scope| scope.as_str()),
-        Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+        Some(RADROOTS_RETICULUM_SCOPE_ID)
     );
     assert_eq!(nostr_upper.fingerprint, nostr_lower.fingerprint);
     assert_ne!(nostr_upper.fingerprint, reticulum.fingerprint);
@@ -40,7 +40,7 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
 }
 
 #[test]
-fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
+fn transport_kind_parser_round_trips_first_wave_canonical_labels() {
     assert_eq!(
         RadrootsTransportKind::parse(" NOSTR ").expect("nostr kind"),
         RadrootsTransportKind::Nostr
@@ -50,46 +50,25 @@ fn transport_kind_parser_round_trips_canonical_labels_and_custom_values() {
         RadrootsTransportKind::Reticulum
     );
     assert_eq!(
-        RadrootsTransportKind::parse("mesh").expect("mesh kind"),
-        RadrootsTransportKind::Mesh
-    );
-    assert_eq!(
         RadrootsTransportKind::parse("local").expect("local kind"),
         RadrootsTransportKind::Local
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse("PROXY").expect("proxy kind"),
-        RadrootsTransportKind::Proxy
     );
     assert_eq!(
         RadrootsTransportKind::Local.canonical_label(),
         "local".to_owned()
     );
-    assert_eq!(
-        RadrootsTransportKind::Proxy.canonical_label(),
-        "proxy".to_owned()
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse("fieldbus").expect("custom kind"),
-        RadrootsTransportKind::Custom("fieldbus".to_owned())
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse(removed_proxy_kind()).expect_err("removed proxy kind"),
-        RadrootsTransportError::InvalidTransportKind
-    );
-    assert_eq!(
-        RadrootsTransportKind::custom(removed_proxy_kind().to_ascii_uppercase())
-            .expect_err("removed proxy custom kind"),
-        RadrootsTransportError::InvalidTransportKind
-    );
-    assert_eq!(
-        RadrootsTransportKind::Custom("fieldbus".to_owned()).canonical_label(),
-        "fieldbus".to_owned()
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse("bad kind").expect_err("invalid kind"),
-        RadrootsTransportError::InvalidTransportKind
-    );
+    for retired in [
+        "mesh".to_owned(),
+        ["pro", "xy"].concat(),
+        ["hy", "brid"].concat(),
+        ["reticulum", "_preview"].concat(),
+        "fieldbus".to_owned(),
+    ] {
+        assert_eq!(
+            RadrootsTransportKind::parse(retired).expect_err("retired or unknown kind"),
+            RadrootsTransportError::InvalidTransportKind
+        );
+    }
 }
 
 #[test]
@@ -97,10 +76,6 @@ fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
     assert_eq!(
         RadrootsTransportKind::parse_canonical("nostr").expect("nostr kind"),
         RadrootsTransportKind::Nostr
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse_canonical("fieldbus").expect("custom kind"),
-        RadrootsTransportKind::Custom("fieldbus".to_owned())
     );
     assert_eq!(
         RadrootsTransportKind::parse_canonical("NOSTR").expect_err("uppercase kind"),
@@ -111,8 +86,12 @@ fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
         RadrootsTransportError::InvalidTransportKind
     );
     assert_eq!(
-        RadrootsTransportKind::parse_canonical(removed_proxy_kind())
-            .expect_err("removed proxy kind"),
+        RadrootsTransportKind::parse_canonical(removed_radrootsd_execution_transport_kind())
+            .expect_err("removed radrootsd execution kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
+    assert_eq!(
+        RadrootsTransportKind::parse_canonical("fieldbus").expect_err("custom kind"),
         RadrootsTransportError::InvalidTransportKind
     );
     assert_eq!(
@@ -121,8 +100,8 @@ fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
     );
 }
 
-fn removed_proxy_kind() -> String {
-    ["radrootsd", "_proxy"].concat()
+fn removed_radrootsd_execution_transport_kind() -> String {
+    ["radrootsd", "_", "pro", "xy"].concat()
 }
 
 #[test]
@@ -337,16 +316,19 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
 
 #[test]
 fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
-    let target = RadrootsTransportTarget::reticulum_preview().expect("target");
+    let target = RadrootsTransportTarget::reticulum().expect("target");
     let receipt = RadrootsTransportDeliveryReceipt {
-        request_id: "reticulum-preview".to_owned(),
+        request_id: "reticulum".to_owned(),
         target_receipts: vec![RadrootsTransportTargetReceipt::new(
             target,
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented),
         )],
     };
 
-    assert!(RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented.is_deferred_preview());
+    assert!(
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+            .is_deferred_until_implemented()
+    );
     assert_eq!(
         receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
         0
@@ -553,23 +535,15 @@ fn transport_errors_have_stable_display_strings() {
 
 #[test]
 fn transport_kind_and_target_parsers_cover_negative_edges() {
-    assert_eq!(
-        RadrootsTransportKind::custom(" ").expect_err("empty kind"),
-        RadrootsTransportError::EmptyTransportKind
-    );
-    for invalid in ["bad kind", "bad:kind", "bad/kind", "bad\nkind"] {
+    for invalid in ["bad kind", "bad:kind", "bad/kind", "bad\nkind", "fieldbus"] {
         assert_eq!(
-            RadrootsTransportKind::custom(invalid).expect_err("invalid kind"),
+            RadrootsTransportKind::parse(invalid).expect_err("invalid kind"),
             RadrootsTransportError::InvalidTransportKind
         );
     }
-    assert_eq!(
-        RadrootsTransportKind::custom(" FieldBus ").expect("custom kind"),
-        RadrootsTransportKind::Custom("fieldbus".to_owned())
-    );
 
     let no_scheme =
-        RadrootsTransportTargetUri::parse(" transport-target ").expect("schemeless target uri");
+        RadrootsTransportTargetUri::parse("transport-target").expect("schemeless target uri");
     assert_eq!(no_scheme.as_str(), "transport-target");
     assert_eq!(no_scheme.to_string(), "transport-target");
     let opaque = RadrootsTransportTargetUri::parse("RNS:PeerA").expect("opaque uri");
@@ -584,6 +558,7 @@ fn transport_kind_and_target_parsers_cover_negative_edges() {
     );
     for invalid in [
         "bad target",
+        " transport-target ",
         ":target",
         "1bad:target",
         "bad_scheme://target",
@@ -647,28 +622,24 @@ fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
 }
 
 #[test]
-fn reticulum_transport_targets_require_exact_preview_endpoint() {
-    let target =
-        RadrootsTransportTarget::reticulum_preview().expect("exact Reticulum preview endpoint");
-    assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI);
+fn reticulum_transport_targets_use_default_destination_and_scope() {
+    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
+    assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
         target.scope.as_ref().map(|scope| scope.as_str()),
-        Some(RADROOTS_RETICULUM_PREVIEW_SCOPE_ID)
+        Some(RADROOTS_RETICULUM_SCOPE_ID)
     );
 
+    let invalid_reticulum_destination = ["reticulum:", "remote"].concat();
     for invalid in [
-        " reticulum:preview-unavailable",
-        "reticulum:preview-unavailable ",
-        "RETICULUM:preview-unavailable",
-        "reticulum:Preview-Unavailable",
-        "reticulum:preview",
-        "reticulum:preview-unavailable-alt",
-        "reticulum:custom",
-        "wss://relay.example/Events",
+        " reticulum:local".to_owned(),
+        "reticulum:local ".to_owned(),
+        "RETICULUM:local".to_owned(),
+        invalid_reticulum_destination,
     ] {
         assert_eq!(
-            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid)
-                .expect_err("invalid Reticulum preview endpoint"),
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid.as_str())
+                .expect_err("invalid Reticulum endpoint"),
             RadrootsTransportError::InvalidTargetUri
         );
     }
@@ -676,8 +647,7 @@ fn reticulum_transport_targets_require_exact_preview_endpoint() {
 
 #[test]
 fn target_fingerprints_and_sets_cover_accessors_and_validation() {
-    let target = RadrootsTransportTarget::new(RadrootsTransportKind::Mesh, "mesh://node.example")
-        .expect("mesh target");
+    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
     let parsed =
         RadrootsTransportTargetFingerprint::parse(target.fingerprint.as_str().to_ascii_uppercase())
             .expect("uppercase fingerprint parses");
@@ -700,39 +670,39 @@ fn target_fingerprints_and_sets_cover_accessors_and_validation() {
 
 #[test]
 fn target_scope_participates_in_identity_and_label_does_not() {
-    let local_scope = RadrootsTransportMeshScopeId::parse("local_preview").expect("local scope");
-    let remote_scope = RadrootsTransportMeshScopeId::parse("remote_preview").expect("remote scope");
+    let local_scope = RadrootsTransportMeshScopeId::parse("local").expect("local scope");
+    let remote_scope = RadrootsTransportMeshScopeId::parse("remote").expect("remote scope");
     let local = RadrootsTransportTarget::new_with_metadata(
-        RadrootsTransportKind::Mesh,
-        "mesh://node.example",
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_ENDPOINT_URI,
         Some(local_scope.clone()),
-        Some(RadrootsTransportTargetLabel::parse("Local mesh node").expect("label")),
+        Some(RadrootsTransportTargetLabel::parse("Local Reticulum node").expect("label")),
     )
-    .expect("local mesh target");
+    .expect("local Reticulum target");
     let relabeled = RadrootsTransportTarget::new_with_metadata(
-        RadrootsTransportKind::Mesh,
-        "mesh://node.example",
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_ENDPOINT_URI,
         Some(local_scope),
         Some(RadrootsTransportTargetLabel::parse("Renamed node").expect("label")),
     )
     .expect("relabeled mesh target");
     let remote = RadrootsTransportTarget::new_with_metadata(
-        RadrootsTransportKind::Mesh,
-        "mesh://node.example",
+        RadrootsTransportKind::Reticulum,
+        RADROOTS_RETICULUM_ENDPOINT_URI,
         Some(remote_scope),
         None,
     )
-    .expect("remote mesh target");
+    .expect("remote Reticulum target");
 
     assert_eq!(local.fingerprint, relabeled.fingerprint);
     assert_ne!(local.fingerprint, remote.fingerprint);
     assert_eq!(
         local.scope.as_ref().map(|scope| scope.as_str()),
-        Some("local_preview")
+        Some("local")
     );
     assert_eq!(
         local.label.as_ref().map(|label| label.as_str()),
-        Some("Local mesh node")
+        Some("Local Reticulum node")
     );
     assert_eq!(
         RadrootsTransportMeshScopeId::parse("").expect_err("empty scope"),
@@ -834,7 +804,7 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
             &[],
         ),
         (
-            RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
+            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
             &[],
         ),
         (
@@ -855,7 +825,10 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
             );
         }
     }
-    assert!(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable.is_deferred_preview());
+    assert!(
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+            .is_deferred_until_implemented()
+    );
     assert!(RadrootsTransportDeliveryTargetStatus::FailedRetryable.is_retryable_failure());
     assert!(RadrootsTransportDeliveryTargetStatus::FailedTerminal.is_terminal_failure());
 }
@@ -989,12 +962,12 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
         assert_eq!(outcome.message.as_deref(), Some("transport detail"));
     }
 
-    let preview_unavailable =
+    let deferred_until_implemented =
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
-            .with_target_status(RadrootsTransportDeliveryTargetStatus::PreviewUnavailable);
+            .with_target_status(RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented);
     assert_eq!(
-        preview_unavailable.status,
-        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
+        deferred_until_implemented.status,
+        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }
 

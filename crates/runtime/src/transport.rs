@@ -650,7 +650,8 @@ mod tests {
     #[cfg(feature = "transport-workers")]
     use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
     use radroots_transport::{
-        RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
+        RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
+        RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
         RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
         RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
         RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
@@ -936,10 +937,10 @@ mod tests {
 
     #[cfg(feature = "transport-reticulum")]
     #[tokio::test]
-    async fn registry_dispatches_reticulum_preview_transport_without_success() {
+    async fn registry_dispatches_reticulum_transport_without_success() {
         let mut registry = RadrootsRuntimeTransportRegistry::new();
         registry
-            .register(radroots_transport_reticulum::RadrootsReticulumPreviewTransport::default())
+            .register(radroots_transport_reticulum::RadrootsReticulumTransport::default())
             .expect("register");
         let transport = registry
             .transport(&RadrootsTransportKind::Reticulum)
@@ -947,10 +948,7 @@ mod tests {
         let request = RadrootsRuntimeTransportDispatchRequest::new(
             "reticulum-delivery",
             opaque_payload(),
-            vec![target(
-                RadrootsTransportKind::Reticulum,
-                "reticulum:preview-unavailable",
-            )],
+            vec![target(RadrootsTransportKind::Reticulum, "reticulum:local")],
             RadrootsTransportSatisfactionPolicy::any_accepted(),
             1_000,
         )
@@ -966,7 +964,15 @@ mod tests {
         let status = transport.status().await.expect("status");
         assert_eq!(
             status.implementation,
-            RadrootsTransportImplementationState::PreviewUnavailable
+            RadrootsTransportImplementationState::Real
+        );
+        assert_eq!(
+            status.maturity,
+            RadrootsTransportCapabilityMaturity::Preview
+        );
+        assert_eq!(
+            status.availability,
+            RadrootsTransportCapabilityAvailability::Unavailable
         );
         assert!(!status.capabilities.deliver);
         assert!(!status.capabilities.fetch);
@@ -975,7 +981,7 @@ mod tests {
                 "reticulum-fetch",
                 RadrootsTransportTargetSet::new(vec![target(
                     RadrootsTransportKind::Reticulum,
-                    "reticulum:preview-unavailable",
+                    "reticulum:local",
                 )])
                 .expect("target set"),
             ))
@@ -989,7 +995,7 @@ mod tests {
         );
         assert_eq!(
             receipt.target_receipts[0].status,
-            RadrootsTransportDeliveryTargetStatus::PreviewUnavailable
+            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
         );
     }
 
@@ -1030,10 +1036,7 @@ mod tests {
         );
         let deferred = RadrootsRuntimeDeliveryTarget::deferred_until_implemented(
             2,
-            target(
-                RadrootsTransportKind::Reticulum,
-                "reticulum:preview-unavailable",
-            ),
+            target(RadrootsTransportKind::Reticulum, "reticulum:local"),
         );
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
@@ -1160,10 +1163,7 @@ mod tests {
                 bounded_queue_capacity: 8,
             },
         );
-        let required_target = target(
-            RadrootsTransportKind::Reticulum,
-            "reticulum:preview-unavailable",
-        );
+        let required_target = target(RadrootsTransportKind::Reticulum, "reticulum:local");
         let required_fingerprint = required_target.fingerprint.clone();
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
@@ -1300,7 +1300,7 @@ mod tests {
 
     #[cfg(feature = "transport-workers")]
     #[tokio::test]
-    async fn delivery_worker_reports_reticulum_preview_targets_unsatisfied_without_retry_failure() {
+    async fn delivery_worker_reports_reticulum_targets_unsatisfied_without_retry_failure() {
         let registry = RadrootsRuntimeTransportRegistry::new();
         let worker = RadrootsRuntimeDeliveryWorker::new(
             &registry,
@@ -1308,13 +1308,10 @@ mod tests {
                 bounded_queue_capacity: 8,
             },
         );
-        let preview_target = RadrootsRuntimeDeliveryTarget {
+        let reticulum_target = RadrootsRuntimeDeliveryTarget {
             delivery_target_id: 1,
-            target: target(
-                RadrootsTransportKind::Reticulum,
-                "reticulum:preview-unavailable",
-            ),
-            status: RadrootsTransportDeliveryTargetStatus::PreviewUnavailable,
+            target: target(RadrootsTransportKind::Reticulum, "reticulum:local"),
+            status: RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented,
         };
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
@@ -1323,7 +1320,7 @@ mod tests {
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
                     satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
-                    targets: vec![preview_target],
+                    targets: vec![reticulum_target],
                 }],
                 now_ms: 1_000,
             })

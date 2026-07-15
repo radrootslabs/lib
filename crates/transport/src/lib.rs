@@ -18,9 +18,12 @@ pub use delivery::{
     RadrootsTransportTargetReceipt,
 };
 pub use error::RadrootsTransportError;
-pub use kind::{RadrootsTransportImplementationState, RadrootsTransportKind};
+pub use kind::{
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportImplementationState, RadrootsTransportKind,
+};
 pub use message::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RADROOTS_RETICULUM_PREVIEW_SCOPE_ID,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
     RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
 };
 pub use payload::RadrootsTransportPayload;

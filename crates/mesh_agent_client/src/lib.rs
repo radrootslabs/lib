@@ -1,14 +1,13 @@
 #![forbid(unsafe_code)]
 
 use radroots_mesh::{
-    RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE, RADROOTS_MESH_PREVIEW_POLICY_ID,
-    RadrootsMeshPayloadPolicy,
+    RADROOTS_MESH_RETICULUM_POLICY_ID, RADROOTS_MESH_UNAVAILABLE_MESSAGE, RadrootsMeshPayloadPolicy,
 };
 use radroots_mesh_agent_proto::{
     RADROOTS_MESH_AGENT_SCHEMA_ID, RADROOTS_MESH_AGENT_SCHEMA_NAMESPACE, schema_sha256_hex,
 };
 use radroots_transport::{
-    RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportMeshScopeId,
 };
 
 pub const RADROOTS_MESH_AGENT_CLIENT_SCHEMA_ID: &str = RADROOTS_MESH_AGENT_SCHEMA_ID;
@@ -37,6 +36,8 @@ pub struct MeshAgentTransportStatus {
     pub endpoint_uri: String,
     pub configured: bool,
     pub implementation: MeshAgentImplementation,
+    pub maturity: MeshAgentCapabilityMaturity,
+    pub availability: MeshAgentCapabilityAvailability,
     pub usable_for_delivery: bool,
     pub message: String,
 }
@@ -47,7 +48,6 @@ pub struct MeshAgentTransportStatus {
 pub enum MeshAgentImplementation {
     Real,
     Mock,
-    PreviewUnavailable,
 }
 
 impl MeshAgentImplementation {
@@ -55,7 +55,42 @@ impl MeshAgentImplementation {
         match self {
             Self::Real => "real",
             Self::Mock => "mock",
-            Self::PreviewUnavailable => "previewUnavailable",
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MeshAgentCapabilityMaturity {
+    Preview,
+    Stable,
+}
+
+impl MeshAgentCapabilityMaturity {
+    pub fn schema_name(self) -> &'static str {
+        match self {
+            Self::Preview => "preview",
+            Self::Stable => "stable",
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MeshAgentCapabilityAvailability {
+    Available,
+    Degraded,
+    Unavailable,
+}
+
+impl MeshAgentCapabilityAvailability {
+    pub fn schema_name(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::Degraded => "degraded",
+            Self::Unavailable => "unavailable",
         }
     }
 }
@@ -183,12 +218,12 @@ pub struct RadrootsMockMeshAgentClient {
 }
 
 impl RadrootsMockMeshAgentClient {
-    pub fn preview_unavailable() -> Self {
+    pub fn reticulum_unavailable() -> Self {
         Self {
-            profile_id: RADROOTS_MESH_PREVIEW_POLICY_ID.to_owned(),
-            endpoint_uri: RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI.to_owned(),
-            scope: RadrootsTransportMeshScopeId::local_preview(),
-            policy: RadrootsMeshPayloadPolicy::preview_unavailable(),
+            profile_id: RADROOTS_MESH_RETICULUM_POLICY_ID.to_owned(),
+            endpoint_uri: RADROOTS_RETICULUM_ENDPOINT_URI.to_owned(),
+            scope: RadrootsTransportMeshScopeId::local_reticulum(),
+            policy: RadrootsMeshPayloadPolicy::reticulum_unavailable(),
         }
     }
 
@@ -203,7 +238,7 @@ impl RadrootsMockMeshAgentClient {
 
 impl Default for RadrootsMockMeshAgentClient {
     fn default() -> Self {
-        Self::preview_unavailable()
+        Self::reticulum_unavailable()
     }
 }
 
@@ -215,9 +250,11 @@ impl RadrootsMeshAgentClient for RadrootsMockMeshAgentClient {
                 profile_id: self.profile_id.clone(),
                 endpoint_uri: self.endpoint_uri.clone(),
                 configured: true,
-                implementation: MeshAgentImplementation::PreviewUnavailable,
+                implementation: MeshAgentImplementation::Real,
+                maturity: MeshAgentCapabilityMaturity::Preview,
+                availability: MeshAgentCapabilityAvailability::Unavailable,
                 usable_for_delivery: false,
-                message: RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE.to_owned(),
+                message: RADROOTS_MESH_UNAVAILABLE_MESSAGE.to_owned(),
             }]
         } else {
             Vec::new()
@@ -233,7 +270,7 @@ impl RadrootsMeshAgentClient for RadrootsMockMeshAgentClient {
                 transport_kind: MeshAgentTransportKind::Reticulum,
                 endpoint_uri: self.endpoint_uri.clone(),
                 outcome: MeshAgentTransportOutcome::TransportUnavailable,
-                message: RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE.to_owned(),
+                message: RADROOTS_MESH_UNAVAILABLE_MESSAGE.to_owned(),
             }],
             event_id: request.event_id,
         }

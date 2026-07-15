@@ -4,9 +4,9 @@ use alloc::vec::Vec;
 use radroots_transport::{RadrootsTransportError, RadrootsTransportMeshScopeId};
 
 pub const RADROOTS_MESH_FRAME_VERSION: u16 = 1;
-pub const RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE: &str =
-    "Reticulum mesh preview is explicit and unavailable for real delivery";
-pub const RADROOTS_MESH_PREVIEW_POLICY_ID: &str = "reticulum_preview_delivery";
+pub const RADROOTS_MESH_UNAVAILABLE_MESSAGE: &str =
+    "Reticulum mesh delivery is unavailable until implementation";
+pub const RADROOTS_MESH_RETICULUM_POLICY_ID: &str = "reticulum_mesh_delivery";
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -136,7 +136,7 @@ impl RadrootsMeshCompressionPolicy {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsMeshPolicyDenyReason {
-    PreviewUnavailable,
+    DeliveryUnavailable,
     PayloadBudgetExceeded,
     CustomScopeUnavailable,
 }
@@ -144,7 +144,7 @@ pub enum RadrootsMeshPolicyDenyReason {
 impl RadrootsMeshPolicyDenyReason {
     pub fn label(self) -> &'static str {
         match self {
-            Self::PreviewUnavailable => "preview_unavailable",
+            Self::DeliveryUnavailable => "delivery_unavailable",
             Self::PayloadBudgetExceeded => "payload_budget_exceeded",
             Self::CustomScopeUnavailable => "custom_scope_unavailable",
         }
@@ -152,7 +152,7 @@ impl RadrootsMeshPolicyDenyReason {
 
     pub fn message(self) -> &'static str {
         match self {
-            Self::PreviewUnavailable => RADROOTS_MESH_PREVIEW_DENIAL_MESSAGE,
+            Self::DeliveryUnavailable => RADROOTS_MESH_UNAVAILABLE_MESSAGE,
             Self::PayloadBudgetExceeded => "mesh payload exceeds the configured delivery budget",
             Self::CustomScopeUnavailable => {
                 "mesh custom scopes are not enabled for the configured policy"
@@ -232,7 +232,7 @@ pub struct RadrootsMeshPayloadPolicy {
 }
 
 impl RadrootsMeshPayloadPolicy {
-    pub fn preview_unavailable() -> Self {
+    pub fn reticulum_unavailable() -> Self {
         Self {
             max_payload_bytes: 0,
             max_frame_bytes: 0,
@@ -242,7 +242,7 @@ impl RadrootsMeshPayloadPolicy {
     }
 
     pub fn policy_id(&self) -> &'static str {
-        RADROOTS_MESH_PREVIEW_POLICY_ID
+        RADROOTS_MESH_RETICULUM_POLICY_ID
     }
 
     pub fn usable_for_delivery(&self) -> bool {
@@ -252,7 +252,7 @@ impl RadrootsMeshPayloadPolicy {
     pub fn evaluate(&self, input: &RadrootsMeshAdmissionInput) -> RadrootsMeshAdmissionDecision {
         if !self.usable_for_delivery() {
             return RadrootsMeshAdmissionDecision::Denied {
-                reason: RadrootsMeshPolicyDenyReason::PreviewUnavailable,
+                reason: RadrootsMeshPolicyDenyReason::DeliveryUnavailable,
             };
         }
         if matches!(input.scope, RadrootsMeshScope::Custom(_)) && !self.custom_scopes_enabled {

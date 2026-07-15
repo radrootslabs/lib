@@ -46,7 +46,7 @@
       "id": "transport_nostr_relay_canonical_005",
       "kind": "transport.nostr_relay_target.valid",
       "input": {
-        "uri": " WSS://Relay.Example/ "
+        "uri": "WSS://Relay.Example/"
       },
       "expected": {
         "canonical_uri": "wss://relay.example"

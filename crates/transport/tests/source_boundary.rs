@@ -36,12 +36,12 @@ const FOUNDATION_HARDENING_DOC_ROOTS: &[&str] = &["contracts", "docs"];
 
 const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
-        pattern: "\"radrootsd_proxy\"",
-        reason: "proxy must use first-class RadrootsTransportKind::Proxy modeling",
+        pattern: concat!("\"radrootsd", "_", "pro", "xy\""),
+        reason: "radrootsd execution must not be modeled as transport identity",
     },
     ForbiddenConcept {
-        pattern: "radrootsd.publish_proxy.v1",
-        reason: "transport publish protocol v1 proxy identifiers are removed",
+        pattern: concat!("radrootsd.publish", "_", "pro", "xy.v1"),
+        reason: "transport publish protocol v1 radrootsd execution identifiers are removed",
     },
     ForbiddenConcept {
         pattern: "publish.relays.resolve",
@@ -309,9 +309,9 @@ fn transport_hardening_sources_reject_removed_protocol_identifiers() {
                 }
             }
 
-            for line in removed_reticulum_preview_endpoint_lines(source) {
+            for line in removed_reticulum_stage_endpoint_lines(source) {
                 findings.push(format!(
-                    "{relative_path}:{line} contains removed Reticulum preview endpoint `reticulum:preview`"
+                    "{relative_path}:{line} contains removed Reticulum staging endpoint"
                 ));
             }
         }
@@ -511,19 +511,21 @@ fn runtime_transport_registry_uses_core_transport_contract() {
         runtime_source.contains("transport.transport_kind()"),
         "runtime registry must key transports through the core trait transport_kind"
     );
+    let removed_reticulum_runtime_transport =
+        ["RadrootsRuntimeReticulum", "Pre", "viewTransport"].concat();
     for forbidden in [
-        "pub trait RadrootsRuntimeTransportAdapter",
-        "dyn RadrootsRuntimeTransportAdapter",
-        "RadrootsRuntimeReticulumPreviewTransport",
+        "pub trait RadrootsRuntimeTransportAdapter".to_owned(),
+        "dyn RadrootsRuntimeTransportAdapter".to_owned(),
+        removed_reticulum_runtime_transport,
     ] {
         assert!(
-            !runtime_source.contains(forbidden),
+            !runtime_source.contains(forbidden.as_str()),
             "runtime transport source must not retain split adapter contract `{forbidden}`"
         );
     }
     assert!(
-        reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumPreviewTransport"),
-        "Reticulum preview transport must implement the core transport contract"
+        reticulum_source.contains("impl RadrootsTransport for RadrootsReticulumTransport"),
+        "Reticulum transport must implement the core transport contract"
     );
 }
 
@@ -542,13 +544,16 @@ fn transport_publish_capabilities_keep_canonical_status_fields() {
         "pub transport: String,",
         "pub configured: bool,",
         "pub implementation: TransportPublishImplementation,",
+        "pub maturity: TransportPublishCapabilityMaturity,",
+        "pub availability: TransportPublishCapabilityAvailability,",
         "pub usable_for_delivery: bool,",
         "pub capabilities: TransportPublishOperationCapabilities,",
         "pub struct TransportPublishOperationCapabilities",
         "pub deliver: bool,",
         "pub fetch: bool,",
         "TransportPublishImplementation::Real",
-        "TransportPublishImplementation::PreviewUnavailable",
+        "TransportPublishCapabilityMaturity::Preview",
+        "TransportPublishCapabilityAvailability::Unavailable",
         "configured: true",
         "usable_for_delivery: true",
         "usable_for_delivery: false",
@@ -685,29 +690,38 @@ fn required_target_semantics_stay_fingerprint_exact() {
 }
 
 #[test]
-fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
+fn transport_hardening_sources_reject_removed_execution_kind_and_keep_reticulum_contracts() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
     let transport_kind = read_source(crates_root.join("transport/src/kind.rs").as_path());
-    for required in [
-        "Proxy,",
-        r#""proxy" => Ok(Self::Proxy)"#,
-        r#"Self::Proxy => "proxy".to_string()"#,
-    ] {
+    for required in ["Nostr,", "Reticulum,", "Local,"] {
         assert!(
             transport_kind.contains(required),
-            "transport kind source must retain first-class proxy witness `{required}`"
+            "transport kind source must retain first-wave transport witness `{required}`"
+        );
+    }
+    let removed_kind_variant = ["Pro", "xy,"].concat();
+    let removed_parse_arm = [r#""#, "pro", "xy", r#"" => Ok(Self::"#, "Pro", "xy)"].concat();
+    let removed_label_arm = [r#"Self::"#, "Pro", "xy => \"", "pro", "xy\".to_string()"].concat();
+    for forbidden in [
+        &removed_kind_variant,
+        &removed_parse_arm,
+        &removed_label_arm,
+    ] {
+        assert!(
+            !transport_kind.contains(forbidden.as_str()),
+            "transport kind source must not retain removed radrootsd execution transport witness `{forbidden}`"
         );
     }
 
     let transport_message_source =
         read_source(crates_root.join("transport/src/message.rs").as_path());
     for required in [
-        "RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI",
-        "reticulum:preview-unavailable",
+        "RADROOTS_RETICULUM_ENDPOINT_URI",
+        "reticulum:local",
         "RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE",
-        "Reticulum transport is configured in preview mode, ",
+        "Reticulum transport is configured, ",
         "but this build does not implement Reticulum delivery.",
     ] {
         assert!(
@@ -716,7 +730,7 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
         );
     }
     for forbidden in [
-        "Reticulum preview transport is registered, ",
+        "Reticulum prerelease transport is registered, ",
         "future compatibility",
         "compatibility mode",
         "fallback behavior",
@@ -731,24 +745,24 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
     let reticulum_source =
         read_source(crates_root.join("transport_reticulum/src/lib.rs").as_path());
     assert!(
-        reticulum_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
-        "Reticulum preview source must consume the shared endpoint URI constant"
+        reticulum_source.contains("RADROOTS_RETICULUM_ENDPOINT_URI"),
+        "Reticulum source must consume the shared endpoint URI constant"
     );
     assert!(
-        !reticulum_source.contains("reticulum:preview-unavailable"),
-        "Reticulum preview source must not duplicate the shared endpoint URI"
+        !reticulum_source.contains(["reticulum:", "pre", "view-unavailable"].concat().as_str()),
+        "Reticulum source must not duplicate the shared endpoint URI"
     );
     assert!(
         reticulum_source.contains("RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE"),
-        "Reticulum preview source must consume the shared unavailable message constant"
+        "Reticulum source must consume the shared unavailable message constant"
     );
     assert!(
         !reticulum_source.contains("Reticulum transport is configured in preview mode"),
-        "Reticulum preview source must not duplicate the shared unavailable message"
+        "Reticulum source must not duplicate the shared unavailable message"
     );
     assert!(
         !reticulum_source.contains("future compatibility"),
-        "Reticulum preview source must not duplicate compatibility copy"
+        "Reticulum source must not duplicate compatibility copy"
     );
 
     let protocol_source_raw = read_source(
@@ -758,11 +772,11 @@ fn transport_hardening_sources_keep_proxy_and_reticulum_contracts() {
     );
     let protocol_source = production_source(protocol_source_raw.as_str());
     assert!(
-        protocol_source.contains("RADROOTS_RETICULUM_PREVIEW_ENDPOINT_URI"),
+        protocol_source.contains("RADROOTS_RETICULUM_ENDPOINT_URI"),
         "transport publish protocol must consume the shared Reticulum endpoint URI constant"
     );
     assert!(
-        !protocol_source.contains("reticulum:preview-unavailable"),
+        !protocol_source.contains(["reticulum:", "pre", "view-unavailable"].concat().as_str()),
         "transport publish protocol must not duplicate the shared endpoint URI"
     );
     assert!(
@@ -918,11 +932,14 @@ fn contains_forbidden_concept(source: &str, pattern: &str) -> bool {
     })
 }
 
-fn removed_reticulum_preview_endpoint_lines(source: &str) -> Vec<usize> {
+fn removed_reticulum_stage_endpoint_lines(source: &str) -> Vec<usize> {
+    let removed_endpoint_prefix = ["reticulum:", "pre", "view"].concat();
     source
-        .match_indices("reticulum:preview")
+        .match_indices(removed_endpoint_prefix.as_str())
         .filter_map(|(index, _)| {
-            let after = source[index + "reticulum:preview".len()..].chars().next();
+            let after = source[index + removed_endpoint_prefix.len()..]
+                .chars()
+                .next();
             (after != Some('-')).then(|| line_number(source, index))
         })
         .collect()

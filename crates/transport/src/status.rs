@@ -1,4 +1,5 @@
 use crate::{
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportImplementationState, RadrootsTransportKind,
     delivery::RadrootsTransportSatisfactionClass,
 };
@@ -14,7 +15,6 @@ pub enum RadrootsTransportDeliveryTargetStatus {
     StoredByGateway,
     Seen,
     DeferredUntilImplemented,
-    PreviewUnavailable,
     SkippedPolicyDenied,
     FailedRetryable,
     FailedTerminal,
@@ -66,11 +66,8 @@ impl RadrootsTransportDeliveryTargetStatus {
         matches!(self, Self::SkippedPolicyDenied | Self::FailedTerminal)
     }
 
-    pub fn is_deferred_preview(self) -> bool {
-        matches!(
-            self,
-            Self::DeferredUntilImplemented | Self::PreviewUnavailable
-        )
+    pub fn is_deferred_until_implemented(self) -> bool {
+        matches!(self, Self::DeferredUntilImplemented)
     }
 }
 
@@ -224,6 +221,8 @@ pub struct RadrootsTransportStatus {
     pub endpoint_uri: Option<String>,
     pub configured: bool,
     pub implementation: RadrootsTransportImplementationState,
+    pub maturity: RadrootsTransportCapabilityMaturity,
+    pub availability: RadrootsTransportCapabilityAvailability,
     pub usable_for_delivery: bool,
     pub capabilities: RadrootsTransportCapabilities,
     pub message: String,
@@ -243,6 +242,12 @@ impl RadrootsTransportStatus {
             endpoint_uri: None,
             configured,
             implementation,
+            maturity: RadrootsTransportCapabilityMaturity::Stable,
+            availability: if usable_for_delivery {
+                RadrootsTransportCapabilityAvailability::Available
+            } else {
+                RadrootsTransportCapabilityAvailability::Unavailable
+            },
             usable_for_delivery,
             capabilities: if usable_for_delivery {
                 RadrootsTransportCapabilities::deliver_only()
@@ -255,6 +260,19 @@ impl RadrootsTransportStatus {
 
     pub fn with_capabilities(mut self, capabilities: RadrootsTransportCapabilities) -> Self {
         self.capabilities = capabilities;
+        self
+    }
+
+    pub fn with_maturity(mut self, maturity: RadrootsTransportCapabilityMaturity) -> Self {
+        self.maturity = maturity;
+        self
+    }
+
+    pub fn with_availability(
+        mut self,
+        availability: RadrootsTransportCapabilityAvailability,
+    ) -> Self {
+        self.availability = availability;
         self
     }
 

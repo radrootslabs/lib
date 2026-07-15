@@ -570,21 +570,6 @@ async fn complete_outbox_delivery_target(
                 )
                 .await?;
         }
-        RadrootsTransportDeliveryTargetStatus::PreviewUnavailable => {
-            outbox
-                .mark_delivery_target_preview_unavailable(
-                    claimed.outbox_event_id,
-                    claimed.claim_token.as_str(),
-                    receipt.delivery_target_id,
-                    receipt
-                        .outcome
-                        .message
-                        .as_deref()
-                        .unwrap_or("relay publish preview unavailable"),
-                    now_ms,
-                )
-                .await?;
-        }
         RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied => {
             outbox
                 .mark_delivery_target_skipped_policy_denied(
