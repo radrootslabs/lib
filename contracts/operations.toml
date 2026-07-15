@@ -74,6 +74,7 @@ classes = [
 
 [implementation_provenance]
 model_crates = [
+  "radroots_protocol_contract_v1",
   "radroots_core",
   "radroots_event",
   "radroots_trade",

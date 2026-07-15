@@ -50,6 +50,8 @@ fn workspace_root() -> PathBuf {
 }
 
 fn validate_contract() -> Result<(), String> {
+    radroots_protocol_contract_v1::validate_protocol_contract_v1()
+        .map_err(|error| error.to_string())?;
     let root = workspace_root();
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))

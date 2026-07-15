@@ -4557,6 +4557,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_protocol_contract_v1"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "dto_bindgen",
+ "serde",
+]
+
+[[package]]
 name = "radroots_replica_schema"
 version = "0.1.0-alpha.2"
 dependencies = [
@@ -8649,6 +8657,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
  "radroots_event_codec",
+ "radroots_protocol_contract_v1",
  "serde",
  "serde_json",
  "sha2",

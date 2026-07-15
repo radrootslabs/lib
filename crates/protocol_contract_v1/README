@@ -1,0 +1,13 @@
+# radroots_protocol_contract_v1
+
+This is the README for `radroots_protocol_contract_v1`, which contains the source-owned Protocol Contract V1 descriptors for public Radroots event catalogs and transport capability vocabulary.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_protocol_contract_v1` distribution are
+
+    Copyright (c) 2026 Tyson Lupul
+
+## License
+
+This repository is licensed under either MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.

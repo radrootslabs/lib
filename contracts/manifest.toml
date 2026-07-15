@@ -5,6 +5,7 @@ source = "rust"
 
 [surface]
 model_crates = [
+  "radroots_protocol_contract_v1",
   "radroots_core",
   "radroots_event",
   "radroots_trade",
@@ -32,6 +33,7 @@ published_support = [
   "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
+  "radroots_protocol_contract_v1",
   "radroots_geocoder",
   "radroots_event_index",
   "radroots_sql_core",
