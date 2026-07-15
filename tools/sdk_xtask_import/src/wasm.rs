@@ -791,30 +791,30 @@ mod tests {
     #[test]
     fn rustup_target_list_args_are_bound_to_selected_toolchain() {
         assert_eq!(
-            rustup_target_list_args("1.92.0"),
-            ["target", "list", "--installed", "--toolchain", "1.92.0"]
+            rustup_target_list_args("1.97.0"),
+            ["target", "list", "--installed", "--toolchain", "1.97.0"]
         );
     }
 
     #[test]
     fn missing_wasm_target_error_names_selected_toolchain() {
-        let error = validate_target_list("aarch64-apple-darwin\n", WASM_TARGET, "1.92.0")
+        let error = validate_target_list("aarch64-apple-darwin\n", WASM_TARGET, "1.97.0")
             .expect_err("missing target");
 
         assert!(error.contains("wasm32-unknown-unknown"));
-        assert!(error.contains("--toolchain 1.92.0"));
+        assert!(error.contains("--toolchain 1.97.0"));
     }
 
     #[test]
     fn parses_rust_toolchain_channel() {
         let channel = rust_toolchain_channel_from(
             r#"[toolchain]
-channel = "1.92.0"
+channel = "1.97.0"
 "#,
         )
         .expect("channel");
 
-        assert_eq!(channel, "1.92.0");
+        assert_eq!(channel, "1.97.0");
     }
 
     #[test]

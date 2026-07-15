@@ -253,7 +253,7 @@ nostr = { version = "0.44.2" }
     fn smoke_command_uses_resolved_cargo_path() {
         let cargo = PathBuf::from("/tmp/rust-toolchain/bin/cargo");
         let toolchain = ResolvedRustToolchain {
-            channel: "1.92.0".to_owned(),
+            channel: "1.97.0".to_owned(),
             rustc: PathBuf::from("/tmp/rust-toolchain/bin/rustc"),
             cargo: cargo.clone(),
             bin_dir: PathBuf::from("/tmp/rust-toolchain/bin"),
