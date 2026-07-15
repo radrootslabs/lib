@@ -550,7 +550,7 @@ async fn enqueue_scoped_duplicate_listing(sdk: &RadrootsClient, d_tag: &str, tit
     let signed_event = signer
         .sign_frozen_draft(&plan.frozen_draft)
         .expect("signed listing");
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     outbox
@@ -570,7 +570,7 @@ async fn enqueue_scoped_duplicate_listing(sdk: &RadrootsClient, d_tag: &str, tit
 
 async fn assert_local_import_observation(sdk: &RadrootsClient, outbox_event_id: i64) {
     let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let stored_event = outbox
@@ -578,7 +578,7 @@ async fn assert_local_import_observation(sdk: &RadrootsClient, outbox_event_id: 
         .await
         .expect("outbox event")
         .expect("outbox event");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     let observations = event_store
@@ -659,6 +659,22 @@ fn rewrite_backup_manifest(source: &Path, mutate: impl FnOnce(&mut serde_json::V
     .expect("write manifest");
 }
 
+fn sync_fixture_idempotency_key(d_tag: &str, title: &str, relays: &[&str]) -> String {
+    let mut suffix = 0xcbf29ce484222325u64;
+    for byte in d_tag
+        .bytes()
+        .chain(title.bytes())
+        .chain(relays.iter().flat_map(|relay| relay.bytes()))
+    {
+        suffix ^= u64::from(byte);
+        suffix = suffix.wrapping_mul(0x100000001b3);
+    }
+    format!(
+        "01890f0e-6c00-7000-8000-{:012x}",
+        suffix & 0x0000_ffff_ffff_ffff
+    )
+}
+
 async fn enqueue_listing_with_policy(
     sdk: &RadrootsClient,
     d_tag: &str,
@@ -674,7 +690,9 @@ async fn enqueue_listing_with_policy(
                 TargetPolicy::default_profile(),
             )
             .try_with_nostr_targets(relays, url_policy)
-            .expect("relay targets"),
+            .expect("relay targets")
+            .try_with_idempotency_key(sync_fixture_idempotency_key(d_tag, title, relays))
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -934,9 +952,9 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert_eq!(
         integrity.checked_paths,
         vec![
-            source_paths.event_store_path.clone(),
-            source_paths.outbox_path.clone(),
-            source_paths.private_store_path.clone()
+            source_paths.runtime_path.clone(),
+            source_paths.private_path.clone(),
+            source_paths.studio_path.clone()
         ]
     );
     assert!(integrity.event_store_ok);
@@ -948,35 +966,29 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
         .backup(BackupRequest::new(backup_destination.clone()))
         .await
         .expect("backup");
-    let event_store_path = backup
-        .event_store_path
-        .as_ref()
-        .expect("event store backup");
-    let outbox_path = backup.outbox_path.as_ref().expect("outbox backup");
-    let private_store_path = backup
-        .private_store_path
-        .as_ref()
-        .expect("private store backup");
+    let runtime_path = backup.runtime_path.as_ref().expect("runtime backup");
+    let private_store_path = backup.private_path.as_ref().expect("private store backup");
+    let studio_store_path = backup.studio_path.as_ref().expect("studio store backup");
     let manifest_path = backup.manifest_path.as_ref().expect("manifest");
-    assert!(event_store_path.exists());
-    assert!(outbox_path.exists());
+    assert!(runtime_path.exists());
     assert!(private_store_path.exists());
+    assert!(studio_store_path.exists());
     assert!(manifest_path.exists());
     assert_eq!(
         backup.manifest.manifest_kind,
         SdkBackupManifestKind::StorageBackup
     );
     assert_eq!(
-        backup.manifest.backup_paths.event_store_path,
-        PathBuf::from("event_store.sqlite")
+        backup.manifest.backup_paths.runtime_path,
+        PathBuf::from("runtime.sqlite")
     );
     assert_eq!(
-        backup.manifest.backup_paths.outbox_path,
-        PathBuf::from("outbox.sqlite")
-    );
-    assert_eq!(
-        backup.manifest.backup_paths.private_store_path,
+        backup.manifest.backup_paths.private_path,
         PathBuf::from("private.sqlite")
+    );
+    assert_eq!(
+        backup.manifest.backup_paths.studio_path,
+        PathBuf::from("studio.sqlite")
     );
     assert_eq!(backup.manifest.created_at_ms, 1_700_000_000_000);
     assert_eq!(backup.manifest.source_status.event_store.total_events, 1);
@@ -992,10 +1004,12 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert!(backup.manifest.backup_verification.event_store_ok);
     assert!(backup.manifest.backup_verification.outbox_ok);
     assert!(backup.manifest.backup_verification.private_store_ok);
+    assert!(backup.manifest.backup_verification.studio_store_ok);
     assert_eq!(
         backup.manifest.backup_verification.private_farm_locations,
         0
     );
+    assert_eq!(backup.manifest.backup_verification.studio_state_records, 0);
 
     let restore_archive = RadrootsClient::inspect_restore_archive(backup_destination.clone())
         .await
@@ -1006,24 +1020,26 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
         backup.manifest.backup_verification
     );
     assert_eq!(
-        restore_archive.event_store_path,
-        event_store_path.canonicalize().expect("event canonical")
+        restore_archive.runtime_path,
+        runtime_path.canonicalize().expect("runtime canonical")
     );
     assert_eq!(
-        restore_archive.outbox_path,
-        outbox_path.canonicalize().expect("outbox canonical")
-    );
-    assert_eq!(
-        restore_archive.private_store_path,
+        restore_archive.private_path,
         private_store_path
             .canonicalize()
             .expect("private store canonical")
     );
+    assert_eq!(
+        restore_archive.studio_path,
+        studio_store_path
+            .canonicalize()
+            .expect("studio store canonical")
+    );
 
-    let backup_event_store = RadrootsEventStore::open_file(event_store_path)
+    let backup_event_store = RadrootsEventStore::open_file(runtime_path)
         .await
         .expect("backup event store");
-    let backup_outbox = RadrootsOutbox::open_file(outbox_path)
+    let backup_outbox = RadrootsOutbox::open_file(runtime_path)
         .await
         .expect("backup outbox");
     assert_eq!(
@@ -1092,21 +1108,15 @@ async fn runtime_backup_rejects_empty_destination_and_overwrites_file_destinatio
         .await
         .expect("overwrite file backup");
     assert!(destination.is_dir());
+    assert!(receipt.runtime_path.as_ref().expect("runtime").exists());
     assert!(
         receipt
-            .event_store_path
-            .as_ref()
-            .expect("event store")
-            .exists()
-    );
-    assert!(receipt.outbox_path.as_ref().expect("outbox").exists());
-    assert!(
-        receipt
-            .private_store_path
+            .private_path
             .as_ref()
             .expect("private store")
             .exists()
     );
+    assert!(receipt.studio_path.as_ref().expect("studio store").exists());
 }
 
 #[cfg(unix)]
@@ -1246,7 +1256,7 @@ async fn runtime_restore_rejects_manifest_contract_edges() {
 
     let empty_path_source = backup_source(&sdk, tempdir.path(), "backup-empty-path").await;
     rewrite_backup_manifest(&empty_path_source, |manifest| {
-        manifest["backup_paths"]["event_store_path"] = serde_json::json!("");
+        manifest["backup_paths"]["runtime_path"] = serde_json::json!("");
     });
     let empty_path_error = RadrootsClient::inspect_restore_archive(empty_path_source)
         .await
@@ -1282,7 +1292,7 @@ async fn sdk_restore_archive_rejects_traversal_backup_paths() {
     let mut manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).expect("read manifest"))
             .expect("manifest json");
-    manifest["backup_paths"]["event_store_path"] = serde_json::json!("../event_store.sqlite");
+    manifest["backup_paths"]["runtime_path"] = serde_json::json!("../runtime.sqlite");
     std::fs::write(
         &manifest_path,
         serde_json::to_vec_pretty(&manifest).expect("manifest bytes"),
@@ -1303,7 +1313,7 @@ async fn sdk_restore_archive_rejects_corrupt_store() {
     sdk.backup(BackupRequest::new(source.clone()))
         .await
         .expect("backup");
-    std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
+    std::fs::write(source.join("runtime.sqlite"), b"not sqlite").expect("corrupt store");
 
     let error = RadrootsClient::inspect_restore_archive(source)
         .await
@@ -1323,10 +1333,10 @@ async fn sdk_restore_archive_rejects_symlink_store_member() {
     sdk.backup(BackupRequest::new(source.clone()))
         .await
         .expect("backup");
-    let event_store_path = source.join("event_store.sqlite");
-    let target = tempdir.path().join("sdk").join("event_store.sqlite");
-    std::fs::remove_file(&event_store_path).expect("remove backup event store");
-    std::os::unix::fs::symlink(target, &event_store_path).expect("symlink");
+    let runtime_path = source.join("runtime.sqlite");
+    let target = tempdir.path().join("sdk").join("runtime.sqlite");
+    std::fs::remove_file(&runtime_path).expect("remove backup runtime store");
+    std::os::unix::fs::symlink(target, &runtime_path).expect("symlink");
 
     let error = RadrootsClient::inspect_restore_archive(source)
         .await
@@ -1385,8 +1395,8 @@ async fn sdk_restore_dry_run_validates_destination_without_writing() {
             .destination_paths
             .as_ref()
             .expect("destination paths")
-            .event_store_path,
-        destination.join("event_store.sqlite")
+            .runtime_path,
+        destination.join("runtime.sqlite")
     );
     assert!(!destination.exists());
     assert_eq!(receipt.restored_paths, None);
@@ -1402,7 +1412,7 @@ async fn sdk_restore_dry_run_rejects_existing_destination_without_overwrite() {
         .await
         .expect("backup");
     std::fs::create_dir(&destination).expect("destination");
-    std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
+    std::fs::write(destination.join("runtime.sqlite"), b"existing").expect("existing file");
 
     let error = RadrootsClient::restore(
         RestoreRequest::new(source)
@@ -1413,7 +1423,7 @@ async fn sdk_restore_dry_run_rejects_existing_destination_without_overwrite() {
     .expect_err("existing destination");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
-    assert!(destination.join("event_store.sqlite").exists());
+    assert!(destination.join("runtime.sqlite").exists());
 }
 
 #[tokio::test]
@@ -1426,7 +1436,7 @@ async fn sdk_restore_dry_run_overwrite_keeps_existing_destination_untouched() {
         .await
         .expect("backup");
     std::fs::create_dir(&destination).expect("destination");
-    std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
+    std::fs::write(destination.join("runtime.sqlite"), b"existing").expect("existing file");
 
     let receipt = RadrootsClient::restore(
         RestoreRequest::new(source)
@@ -1439,7 +1449,7 @@ async fn sdk_restore_dry_run_overwrite_keeps_existing_destination_untouched() {
 
     assert_eq!(receipt.state, SdkRestoreState::DryRun);
     assert_eq!(
-        std::fs::read(destination.join("event_store.sqlite")).expect("existing file"),
+        std::fs::read(destination.join("runtime.sqlite")).expect("existing file"),
         b"existing"
     );
 }
@@ -1474,7 +1484,7 @@ async fn sdk_restore_dry_run_rejects_corrupt_source_without_destination_writes()
     sdk.backup(BackupRequest::new(source.clone()))
         .await
         .expect("backup");
-    std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
+    std::fs::write(source.join("runtime.sqlite"), b"not sqlite").expect("corrupt store");
 
     let error = RadrootsClient::restore(
         RestoreRequest::new(source)
@@ -1549,7 +1559,7 @@ async fn runtime_restore_handles_existing_file_destinations_by_overwrite_policy(
             .restored_paths
             .as_ref()
             .expect("restored paths")
-            .event_store_path
+            .runtime_path
             .exists()
     );
 }
@@ -1576,8 +1586,9 @@ async fn sdk_restore_to_empty_destination_succeeds() {
         receipt.restored_paths.as_ref(),
         receipt.destination_paths.as_ref()
     );
-    assert!(destination.join("event_store.sqlite").exists());
-    assert!(destination.join("outbox.sqlite").exists());
+    assert!(destination.join("runtime.sqlite").exists());
+    assert!(destination.join("private.sqlite").exists());
+    assert!(destination.join("studio.sqlite").exists());
     let restored_sdk = RadrootsClient::builder()
         .directory_storage(destination)
         .build()
@@ -1666,7 +1677,7 @@ async fn sdk_restore_corrupt_backup_leaves_destination_unchanged() {
     sdk.backup(BackupRequest::new(source.clone()))
         .await
         .expect("backup");
-    std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
+    std::fs::write(source.join("runtime.sqlite"), b"not sqlite").expect("corrupt store");
     std::fs::create_dir(&destination).expect("destination");
     std::fs::write(destination.join("sentinel"), b"keep").expect("sentinel");
 
@@ -1744,13 +1755,15 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000250")
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
         .expect("enqueue");
     let pre_push_outbox =
-        RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("pre-push outbox");
     let pre_push_stored = pre_push_outbox
@@ -1853,12 +1866,14 @@ async fn product_push_outbox_radrootsd_proxy_recovers_expired_publishing_claim_b
                 actor(),
                 listing(LISTING_A_D_TAG, "Recovered Proxy Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000251")
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
         .expect("enqueue");
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stale_claim = outbox
@@ -1954,12 +1969,14 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
                 actor(),
                 listing(LISTING_A_D_TAG, "Retry Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000252")
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
         .expect("enqueue");
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let plans = outbox
@@ -2059,7 +2076,9 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Error Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000253")
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -2123,7 +2142,9 @@ async fn product_push_outbox_radrootsd_proxy_error_and_terminal_paths_update_out
                 actor(),
                 listing(LISTING_B_D_TAG, "Terminal Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000254")
+            .expect("idempotency key"),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -2185,7 +2206,7 @@ fn push_outbox_contract_dtos_serialize_deterministically() {
         retryable_events: 0,
         terminal_events: 0,
         events: vec![PushOutboxEventReceipt {
-            event_id: RadrootsEventId::parse(&"a".repeat(64)).expect("event id"),
+            event_id: RadrootsEventId::parse("a".repeat(64)).expect("event id"),
             outbox_event_id: 7,
             final_state: PushOutboxEventState::Published,
             attempted_count: 2,
@@ -2305,7 +2326,9 @@ async fn sync_runtime_product_push_outbox_reticulum_preview_reports_zero_attempt
                     actor(),
                     listing(LISTING_A_D_TAG, "Reticulum Preview Coffee"),
                     TargetPolicy::default_profile(),
-                ),
+                )
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000255")
+                .expect("idempotency key"),
                 &FixtureSigner::new(SELLER),
             )
             .await
@@ -2495,7 +2518,7 @@ async fn push_outbox_with_transport_uses_queued_targets_without_builder_relays()
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox
@@ -2550,7 +2573,7 @@ async fn push_outbox_with_transport_preserves_scoped_duplicate_target_metadata()
             && target.target_label.as_deref() == Some("Farm B")
     }));
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox
@@ -2623,7 +2646,7 @@ async fn push_outbox_adapter_transport_failure_preserves_scoped_target_metadata(
             && target.target_label.as_deref() == Some("Farm B")
     }));
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox
@@ -2664,7 +2687,7 @@ async fn push_outbox_with_transport_recovers_expired_publishing_claim_before_sel
         .expect("sdk");
     let outbox_event_id =
         enqueue_listing(&sdk, LISTING_A_D_TAG, "Recovered Coffee", &[RELAY_A]).await;
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stale_claim = outbox
@@ -2753,13 +2776,13 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
             )
             .try_with_nostr_targets([RELAY_A], NostrRelayUrlPolicy::Public)
             .expect("first targets")
-            .try_with_idempotency_key("sdk-duplicate-endpoint-plan")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022e")
             .expect("first idempotency"),
             &FixtureSigner::new(SELLER),
         )
         .await
         .expect("first enqueue");
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored_event = outbox
@@ -2787,7 +2810,7 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
                 1_700_000_000_000,
                 1_700_000_000_000,
             )
-            .with_idempotency_key("sdk-duplicate-endpoint-plan"),
+            .with_idempotency_key("01890f0e-6c00-7000-8000-00000000022e"),
         )
         .await
         .expect("second plan");
@@ -2933,7 +2956,7 @@ async fn push_outbox_with_transport_can_publish_targeted_ready_event() {
     assert_eq!(receipt.events[0].outbox_event_id, targeted_outbox_event_id);
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let older = outbox
@@ -3178,7 +3201,7 @@ async fn push_outbox_continues_after_adapter_transport_failure_and_releases_clai
             })
     );
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     for outbox_event_id in [first_outbox_event_id, second_outbox_event_id] {
@@ -3246,7 +3269,7 @@ async fn push_outbox_returns_fatal_error_for_malformed_signed_event_data() {
         enqueue_listing(&sdk, LISTING_A_D_TAG, "Corrupt Coffee", &[RELAY_A]).await;
     let safe_outbox_event_id =
         enqueue_listing(&sdk, LISTING_B_D_TAG, "Safe Coffee", &[RELAY_B]).await;
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let changed =
@@ -3289,7 +3312,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
             listing(LISTING_C_D_TAG, "Unsigned"),
         ))
         .expect("prepared");
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let unsigned = outbox

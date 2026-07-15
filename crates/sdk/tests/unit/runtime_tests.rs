@@ -39,6 +39,21 @@ fn assert_private_store_error<T>(result: Result<T, RadrootsSdkError>) {
     }
 }
 
+fn assert_studio_store_error<T>(result: Result<T, RadrootsSdkError>) {
+    match result {
+        Err(RadrootsSdkError::StudioStore { .. }) => {}
+        Err(other) => panic!("expected studio store error, got {other:?}"),
+        Ok(_) => panic!("expected studio store error"),
+    }
+}
+
+fn assert_unsupported_profile_error<T>(result: Result<T, RadrootsSdkError>) -> PathBuf {
+    match result.err().expect("expected unsupported profile error") {
+        RadrootsSdkError::UnsupportedProfileSchema { path, .. } => path,
+        other => panic!("expected unsupported profile error, got {other:?}"),
+    }
+}
+
 fn sqlite_status() -> SdkSqliteStoreStatus {
     SdkSqliteStoreStatus {
         schema_version: 1,
@@ -108,6 +123,10 @@ fn storage_status() -> StorageStatusReceipt {
             store: private_sqlite_status(),
             farm_private_locations: 0,
         },
+        studio_store: SdkStudioStoreStorageStatus {
+            store: sqlite_status(),
+            studio_state_records: 0,
+        },
     }
 }
 
@@ -116,9 +135,11 @@ fn verification(event_store_ok: bool, outbox_ok: bool) -> SdkBackupVerification 
         event_store_ok,
         outbox_ok,
         private_store_ok: true,
+        studio_store_ok: true,
         event_store_events: 0,
         outbox_events: 0,
         private_farm_locations: 0,
+        studio_state_records: 0,
     }
 }
 
@@ -154,9 +175,9 @@ fn manifest() -> SdkBackupManifest {
         source_storage: SdkStorageKind::Memory,
         source_paths: None,
         backup_paths: RadrootsSdkStoragePaths {
-            event_store_path: PathBuf::from(EVENT_STORE_BACKUP_FILE),
-            outbox_path: PathBuf::from(OUTBOX_BACKUP_FILE),
-            private_store_path: PathBuf::from(PRIVATE_STORE_BACKUP_FILE),
+            runtime_path: PathBuf::from(RUNTIME_SQLITE_FILE),
+            studio_path: PathBuf::from(STUDIO_SQLITE_FILE),
+            private_path: PathBuf::from(PRIVATE_SQLITE_FILE),
         },
         source_status: storage_status(),
         backup_verification: verification(true, true),
@@ -294,6 +315,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         _event_store: memory.event_store,
         _outbox: memory.outbox,
         _private_store: memory.private_store,
+        _studio_store: memory.studio_store,
         storage_paths: None,
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
@@ -309,13 +331,14 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         .await
         .expect("directory storage");
     let directory_paths = directory_storage.paths.expect("directory paths");
-    assert!(directory_paths.event_store_path.exists());
-    assert!(directory_paths.outbox_path.exists());
-    assert!(directory_paths.private_store_path.exists());
+    assert!(directory_paths.runtime_path.exists());
+    assert!(directory_paths.private_path.exists());
+    assert!(directory_paths.studio_path.exists());
     let directory_sdk = RadrootsClient {
         _event_store: directory_storage.event_store,
         _outbox: directory_storage.outbox,
         _private_store: directory_storage.private_store,
+        _studio_store: directory_storage.studio_store,
         storage_paths: Some(directory_paths),
         geonames: None,
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
@@ -331,18 +354,18 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
 
     let event_store_directory = tempdir.path().join("event-store-directory");
     fs::create_dir(&event_store_directory).expect("event store dir");
-    fs::create_dir(event_store_directory.join(EVENT_STORE_BACKUP_FILE))
+    fs::create_dir(event_store_directory.join(RUNTIME_SQLITE_FILE))
         .expect("event store file slot dir");
     assert_event_store_error(open_directory_storage(&event_store_directory).await);
 
-    let outbox_directory = tempdir.path().join("outbox-directory");
-    fs::create_dir(&outbox_directory).expect("outbox dir");
-    fs::create_dir(outbox_directory.join(OUTBOX_BACKUP_FILE)).expect("outbox file slot dir");
-    assert_outbox_error(open_directory_storage(&outbox_directory).await);
+    let studio_directory = tempdir.path().join("studio-directory");
+    fs::create_dir(&studio_directory).expect("studio dir");
+    fs::create_dir(studio_directory.join(STUDIO_SQLITE_FILE)).expect("studio file slot dir");
+    assert_studio_store_error(open_directory_storage(&studio_directory).await);
 
     let private_store_directory = tempdir.path().join("private-store-directory");
     fs::create_dir(&private_store_directory).expect("private store dir");
-    fs::create_dir(private_store_directory.join(PRIVATE_STORE_BACKUP_FILE))
+    fs::create_dir(private_store_directory.join(PRIVATE_SQLITE_FILE))
         .expect("private store file slot dir");
     assert_private_store_error(open_directory_storage(&private_store_directory).await);
 }
@@ -565,6 +588,74 @@ fn sqlite_wal_checkpoint_receipt_mapping_covers_edge_states() {
 }
 
 #[tokio::test]
+async fn storage_status_inspection_is_read_only_and_never_creates_missing_profiles() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let missing = tempdir.path().join("missing-profile");
+    assert_event_store_error(
+        RadrootsClient::inspect_storage_status(&missing, StorageStatusRequest::new()).await,
+    );
+    assert!(!missing.exists());
+
+    let pre_v1_profile = tempdir.path().join("pre-v1");
+    fs::create_dir(&pre_v1_profile).expect("pre-v1 profile");
+    fs::write(pre_v1_profile.join("event_store.sqlite"), b"old runtime").expect("old event store");
+    let unsupported = assert_unsupported_profile_error(
+        RadrootsClient::inspect_storage_status(&pre_v1_profile, StorageStatusRequest::new()).await,
+    );
+    assert_eq!(unsupported, pre_v1_profile.join("event_store.sqlite"));
+    assert!(!pre_v1_profile.join(RUNTIME_SQLITE_FILE).exists());
+    assert!(!pre_v1_profile.join(PRIVATE_SQLITE_FILE).exists());
+    assert!(!pre_v1_profile.join(STUDIO_SQLITE_FILE).exists());
+}
+
+#[tokio::test]
+async fn quarantine_reset_moves_pre_v1_artifacts_before_materializing_v1_stores() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let profile = tempdir.path().join("profile");
+    let quarantine = tempdir.path().join("quarantine");
+    fs::create_dir(&profile).expect("profile");
+    fs::write(profile.join("event_store.sqlite"), b"old event store").expect("old event store");
+    fs::write(profile.join("event_store.sqlite-wal"), b"old event wal").expect("old event wal");
+    fs::write(profile.join("outbox.sqlite"), b"old outbox").expect("old outbox");
+
+    let unsupported = assert_unsupported_profile_error(
+        RadrootsClient::builder()
+            .directory_storage(&profile)
+            .build()
+            .await,
+    );
+    assert_eq!(unsupported, profile.join("event_store.sqlite"));
+
+    let receipt = RadrootsClient::quarantine_reset_storage(QuarantineResetRequest::new(
+        &profile,
+        &quarantine,
+    ))
+    .await
+    .expect("quarantine reset");
+
+    assert_eq!(receipt.profile, profile);
+    assert_eq!(receipt.quarantine, quarantine);
+    assert_eq!(receipt.quarantined_paths.len(), 3);
+    assert!(receipt.quarantine.join("event_store.sqlite").exists());
+    assert!(receipt.quarantine.join("event_store.sqlite-wal").exists());
+    assert!(receipt.quarantine.join("outbox.sqlite").exists());
+    assert!(!receipt.profile.join("event_store.sqlite").exists());
+    assert!(!receipt.profile.join("outbox.sqlite").exists());
+    assert!(receipt.reset_paths.runtime_path.exists());
+    assert!(receipt.reset_paths.private_path.exists());
+    assert!(receipt.reset_paths.studio_path.exists());
+
+    let status =
+        RadrootsClient::inspect_storage_status(&receipt.profile, StorageStatusRequest::new())
+            .await
+            .expect("read-only status after reset");
+    assert_eq!(status.event_store.total_events, 0);
+    assert_eq!(status.outbox.total_events, 0);
+    assert_eq!(status.private_store.farm_private_locations, 0);
+    assert_eq!(status.studio_store.studio_state_records, 0);
+}
+
+#[tokio::test]
 async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     let event_store_closed = RadrootsClient::builder().build().await.expect("sdk");
     event_store_closed._event_store.pool().close().await;
@@ -595,13 +686,13 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
         outbox_closed
             .storage_status(StorageStatusRequest::new())
             .await,
-        Err(RadrootsSdkError::Outbox { .. })
+        Err(RadrootsSdkError::EventStore { .. })
     ));
     assert_outbox_error(outbox_sqlite_status(&outbox_closed._outbox).await);
     assert_outbox_error(outbox_status_summary(&outbox_closed._outbox, 1).await);
     assert!(matches!(
         outbox_closed.integrity(IntegrityRequest::new()).await,
-        Err(RadrootsSdkError::Outbox { .. })
+        Err(RadrootsSdkError::EventStore { .. })
     ));
 
     let private_store_closed = RadrootsClient::builder().build().await.expect("sdk");
@@ -709,19 +800,19 @@ async fn storage_status_integrity_and_backup_map_closed_pool_errors() {
     let event_store = RadrootsEventStore::open_memory()
         .await
         .expect("event store");
-    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let private_store = SdkPrivateStore::open_memory().await.expect("private store");
+    let studio_store = SdkStudioStore::open_memory().await.expect("studio store");
     private_store.pool().close().await;
     let tempdir = tempfile::tempdir().expect("tempdir");
     assert_private_store_error(
         backup_sqlite_stores(
             event_store.pool(),
-            outbox.pool(),
             private_store.pool(),
+            studio_store.pool(),
             &RadrootsSdkStoragePaths {
-                event_store_path: tempdir.path().join(EVENT_STORE_BACKUP_FILE),
-                outbox_path: tempdir.path().join(OUTBOX_BACKUP_FILE),
-                private_store_path: tempdir.path().join(PRIVATE_STORE_BACKUP_FILE),
+                runtime_path: tempdir.path().join(RUNTIME_SQLITE_FILE),
+                studio_path: tempdir.path().join(STUDIO_SQLITE_FILE),
+                private_path: tempdir.path().join(PRIVATE_SQLITE_FILE),
             },
         )
         .await,
@@ -742,26 +833,26 @@ async fn verify_backup_paths_reports_each_store_member_failure() {
         .await
         .expect("backup");
 
-    let bad_event_store_path = backup_destination.join("bad-event-store.sqlite");
-    fs::create_dir(&bad_event_store_path).expect("bad event store dir");
-    let bad_outbox_path = backup_destination.join("bad-outbox.sqlite");
-    fs::create_dir(&bad_outbox_path).expect("bad outbox dir");
-    let bad_private_store_path = backup_destination.join("bad-private.sqlite");
-    fs::create_dir(&bad_private_store_path).expect("bad private store dir");
+    let bad_runtime_path = backup_destination.join("bad-event-store.sqlite");
+    fs::create_dir(&bad_runtime_path).expect("bad event store dir");
+    let bad_studio_path = backup_destination.join("bad-studio.sqlite");
+    fs::create_dir(&bad_studio_path).expect("bad studio dir");
+    let bad_private_path = backup_destination.join("bad-private.sqlite");
+    fs::create_dir(&bad_private_path).expect("bad private store dir");
 
     let mut invalid_member = RadrootsSdkStoragePaths {
-        event_store_path: bad_event_store_path,
-        outbox_path: backup_destination.join(OUTBOX_BACKUP_FILE),
-        private_store_path: backup_destination.join(PRIVATE_STORE_BACKUP_FILE),
+        runtime_path: bad_runtime_path,
+        studio_path: backup_destination.join(STUDIO_SQLITE_FILE),
+        private_path: backup_destination.join(PRIVATE_SQLITE_FILE),
     };
     assert_event_store_error(verify_backup_paths(&invalid_member).await);
 
-    invalid_member.event_store_path = backup_destination.join(EVENT_STORE_BACKUP_FILE);
-    invalid_member.outbox_path = bad_outbox_path;
-    assert_outbox_error(verify_backup_paths(&invalid_member).await);
+    invalid_member.runtime_path = backup_destination.join(RUNTIME_SQLITE_FILE);
+    invalid_member.studio_path = bad_studio_path;
+    assert_studio_store_error(verify_backup_paths(&invalid_member).await);
 
-    invalid_member.outbox_path = backup_destination.join(OUTBOX_BACKUP_FILE);
-    invalid_member.private_store_path = bad_private_store_path;
+    invalid_member.studio_path = backup_destination.join(STUDIO_SQLITE_FILE);
+    invalid_member.private_path = bad_private_path;
     assert_private_store_error(verify_backup_paths(&invalid_member).await);
 }
 
@@ -771,16 +862,14 @@ fn restore_archive_path_validators_cover_missing_outside_and_manifest_edges() {
     let source = tempdir.path().join("source");
     fs::create_dir(&source).expect("source");
     let source_root = canonical_restore_directory(&source).expect("canonical source");
-    let file_member = source.join(EVENT_STORE_BACKUP_FILE);
+    let file_member = source.join(RUNTIME_SQLITE_FILE);
     fs::write(&file_member, b"sqlite").expect("file member");
     let outside_file = tempdir.path().join("outside.sqlite");
     fs::write(&outside_file, b"sqlite").expect("outside file");
     let dir_member = source.join("dir-member");
     fs::create_dir(&dir_member).expect("dir member");
 
-    assert!(
-        validate_relative_archive_path(Path::new(EVENT_STORE_BACKUP_FILE), "event store").is_ok()
-    );
+    assert!(validate_relative_archive_path(Path::new(RUNTIME_SQLITE_FILE), "event store").is_ok());
     assert!(
         invalid_request_message(validate_relative_archive_path(Path::new(""), "event store"))
             .contains("must not be empty")
@@ -818,12 +907,8 @@ fn restore_archive_path_validators_cover_missing_outside_and_manifest_edges() {
         .contains("No such")
     );
     assert!(
-        restore_archive_member_path(
-            &source_root,
-            Path::new(EVENT_STORE_BACKUP_FILE),
-            "event store",
-        )
-        .is_ok()
+        restore_archive_member_path(&source_root, Path::new(RUNTIME_SQLITE_FILE), "event store",)
+            .is_ok()
     );
     assert!(
         invalid_request_message(restore_archive_member_path(
@@ -886,16 +971,16 @@ fn restore_destination_preflight_covers_empty_existing_new_and_overlap_paths() {
     let paths =
         preflight_restore_destination(&source, &new_destination, false).expect("new preflight");
     assert_eq!(
-        paths.event_store_path,
-        new_destination.join(EVENT_STORE_BACKUP_FILE)
+        paths.runtime_path,
+        new_destination.join(RUNTIME_SQLITE_FILE)
     );
     let nested_new_destination = parent.join("nested").join("new-destination");
     fs::create_dir(nested_new_destination.parent().expect("nested parent")).expect("nested parent");
     let nested_paths = preflight_restore_destination(&source, &nested_new_destination, false)
         .expect("nested new preflight");
     assert_eq!(
-        nested_paths.private_store_path,
-        nested_new_destination.join(PRIVATE_STORE_BACKUP_FILE)
+        nested_paths.private_path,
+        nested_new_destination.join(PRIVATE_SQLITE_FILE)
     );
     let relative_destination = PathBuf::from(format!(
         "relative-restore-{}",
@@ -904,8 +989,8 @@ fn restore_destination_preflight_covers_empty_existing_new_and_overlap_paths() {
     let relative_paths = preflight_restore_destination(&source, &relative_destination, false)
         .expect("relative preflight");
     assert_eq!(
-        relative_paths.event_store_path,
-        relative_destination.join(EVENT_STORE_BACKUP_FILE)
+        relative_paths.runtime_path,
+        relative_destination.join(RUNTIME_SQLITE_FILE)
     );
 
     let file_source = tempdir.path().join("file-source");
@@ -1064,9 +1149,9 @@ fn backup_destination_and_restore_file_helpers_cover_cleanup_and_io_edges() {
         io_message(copy_restore_file(
             &tempdir.path().join("missing-source"),
             &tempdir.path().join("copy-destination"),
-            "event store",
+            "runtime store",
         ))
-        .contains("restore event store copy failed")
+        .contains("restore runtime store copy failed")
     );
     assert!(
         io_message(rename_restore_path(
@@ -1310,42 +1395,41 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
         SqliteStoreRole::EventStore,
     )
     .await
-    .err()
-    .expect("sqlite error");
+    .expect_err("sqlite error");
     assert!(matches!(
         error,
         RadrootsSdkError::EventStore { message } if message.contains("backup failed")
     ));
     let backup_paths = RadrootsSdkStoragePaths {
-        event_store_path: tempdir.path().join("closed-event-store-backup.sqlite"),
-        outbox_path: tempdir.path().join("closed-event-store-outbox.sqlite"),
-        private_store_path: tempdir.path().join("closed-event-store-private.sqlite"),
+        runtime_path: tempdir.path().join("closed-event-store-backup.sqlite"),
+        studio_path: tempdir.path().join("closed-event-store-outbox.sqlite"),
+        private_path: tempdir.path().join("closed-event-store-private.sqlite"),
     };
     assert_event_store_error(
         backup_sqlite_stores(
             storage.event_store.pool(),
-            storage.outbox.pool(),
             storage.private_store.pool(),
+            storage.studio_store.pool(),
             &backup_paths,
         )
         .await,
     );
 
-    let outbox_closed_storage = open_storage(&RadrootsSdkStorageConfig::Memory)
+    let studio_closed_storage = open_storage(&RadrootsSdkStorageConfig::Memory)
         .await
-        .expect("outbox closed storage");
-    outbox_closed_storage.outbox.pool().close().await;
-    let outbox_closed_paths = RadrootsSdkStoragePaths {
-        event_store_path: tempdir.path().join("open-event-store-backup.sqlite"),
-        outbox_path: tempdir.path().join("closed-outbox-backup.sqlite"),
-        private_store_path: tempdir.path().join("outbox-closed-private.sqlite"),
+        .expect("studio closed storage");
+    studio_closed_storage.studio_store.pool().close().await;
+    let studio_closed_paths = RadrootsSdkStoragePaths {
+        runtime_path: tempdir.path().join("open-runtime-backup.sqlite"),
+        studio_path: tempdir.path().join("closed-studio-backup.sqlite"),
+        private_path: tempdir.path().join("studio-closed-private.sqlite"),
     };
-    assert_outbox_error(
+    assert_studio_store_error(
         backup_sqlite_stores(
-            outbox_closed_storage.event_store.pool(),
-            outbox_closed_storage.outbox.pool(),
-            outbox_closed_storage.private_store.pool(),
-            &outbox_closed_paths,
+            studio_closed_storage.event_store.pool(),
+            studio_closed_storage.private_store.pool(),
+            studio_closed_storage.studio_store.pool(),
+            &studio_closed_paths,
         )
         .await,
     );
@@ -1353,9 +1437,9 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
         !io_message(write_backup_receipt(
             tempdir.path().join("receipt-destination"),
             RadrootsSdkStoragePaths {
-                event_store_path: tempdir.path().join(EVENT_STORE_BACKUP_FILE),
-                outbox_path: tempdir.path().join(OUTBOX_BACKUP_FILE),
-                private_store_path: tempdir.path().join(PRIVATE_STORE_BACKUP_FILE),
+                runtime_path: tempdir.path().join(RUNTIME_SQLITE_FILE),
+                studio_path: tempdir.path().join(STUDIO_SQLITE_FILE),
+                private_path: tempdir.path().join(PRIVATE_SQLITE_FILE),
             },
             tempdir.path().to_path_buf(),
             manifest(),
@@ -1401,43 +1485,42 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
 
     let missing_archive = RestoreArchive {
         source: tempdir.path().join("missing-archive"),
-        event_store_path: tempdir.path().join("missing-event-store.sqlite"),
-        outbox_path: tempdir.path().join("missing-outbox.sqlite"),
-        private_store_path: tempdir.path().join("missing-private.sqlite"),
+        runtime_path: tempdir.path().join("missing-event-store.sqlite"),
+        studio_path: tempdir.path().join("missing-outbox.sqlite"),
+        private_path: tempdir.path().join("missing-private.sqlite"),
         manifest_path: tempdir.path().join(BACKUP_MANIFEST_FILE),
         manifest: manifest(),
         verification: verification(true, true),
     };
     let staging_paths = RadrootsSdkStoragePaths {
-        event_store_path: tempdir.path().join("staging-event-store.sqlite"),
-        outbox_path: tempdir.path().join("staging-outbox.sqlite"),
-        private_store_path: tempdir.path().join("staging-private.sqlite"),
+        runtime_path: tempdir.path().join("staging-event-store.sqlite"),
+        studio_path: tempdir.path().join("staging-outbox.sqlite"),
+        private_path: tempdir.path().join("staging-private.sqlite"),
     };
     assert!(
         io_message(copy_restore_archive_to_staging(&missing_archive, &staging_paths).await)
-            .contains("restore event store copy failed")
+            .contains("restore runtime store copy failed")
     );
     let partial_archive = RestoreArchive {
-        event_store_path: staging_paths.event_store_path.clone(),
+        runtime_path: staging_paths.runtime_path.clone(),
         ..missing_archive.clone()
     };
-    fs::write(&partial_archive.event_store_path, b"not sqlite").expect("partial event store");
+    fs::write(&partial_archive.runtime_path, b"not sqlite").expect("partial event store");
     assert!(
         io_message(copy_restore_archive_to_staging(&partial_archive, &staging_paths).await)
-            .contains("restore outbox copy failed")
+            .contains("restore studio copy failed")
     );
     let private_partial_archive = RestoreArchive {
-        event_store_path: tempdir.path().join("private-partial-event-store.sqlite"),
-        outbox_path: tempdir.path().join("private-partial-outbox.sqlite"),
+        runtime_path: tempdir.path().join("private-partial-event-store.sqlite"),
+        studio_path: tempdir.path().join("private-partial-outbox.sqlite"),
         ..missing_archive.clone()
     };
-    fs::write(&private_partial_archive.event_store_path, b"event store")
-        .expect("private partial event store");
-    fs::write(&private_partial_archive.outbox_path, b"outbox").expect("private partial outbox");
+    fs::write(&private_partial_archive.runtime_path, b"runtime").expect("private partial runtime");
+    fs::write(&private_partial_archive.studio_path, b"studio").expect("private partial studio");
     let private_staging_paths = RadrootsSdkStoragePaths {
-        event_store_path: tempdir.path().join("private-staging-event-store.sqlite"),
-        outbox_path: tempdir.path().join("private-staging-outbox.sqlite"),
-        private_store_path: tempdir.path().join("private-staging-missing.sqlite"),
+        runtime_path: tempdir.path().join("private-staging-event-store.sqlite"),
+        studio_path: tempdir.path().join("private-staging-outbox.sqlite"),
+        private_path: tempdir.path().join("private-staging-missing.sqlite"),
     };
     assert!(
         io_message(
@@ -1447,14 +1530,14 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .contains("restore private store copy failed")
     );
     let corrupt_archive = RestoreArchive {
-        event_store_path: tempdir.path().join("corrupt-event-store.sqlite"),
-        outbox_path: tempdir.path().join("corrupt-outbox.sqlite"),
-        private_store_path: tempdir.path().join("corrupt-private.sqlite"),
+        runtime_path: tempdir.path().join("corrupt-event-store.sqlite"),
+        studio_path: tempdir.path().join("corrupt-outbox.sqlite"),
+        private_path: tempdir.path().join("corrupt-private.sqlite"),
         ..missing_archive.clone()
     };
-    fs::write(&corrupt_archive.event_store_path, b"not sqlite").expect("corrupt event store");
-    fs::write(&corrupt_archive.outbox_path, b"not sqlite").expect("corrupt outbox");
-    fs::write(&corrupt_archive.private_store_path, b"not sqlite").expect("corrupt private store");
+    fs::write(&corrupt_archive.runtime_path, b"not sqlite").expect("corrupt runtime");
+    fs::write(&corrupt_archive.studio_path, b"not sqlite").expect("corrupt studio");
+    fs::write(&corrupt_archive.private_path, b"not sqlite").expect("corrupt private store");
     assert_event_store_error(
         copy_restore_archive_to_staging(&corrupt_archive, &staging_paths).await,
     );
@@ -1465,38 +1548,38 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .contains("parent is required")
     );
 
-    let invalid_outbox_member_source = tempdir.path().join("invalid-outbox-member");
-    fs::create_dir(&invalid_outbox_member_source).expect("invalid outbox source");
+    let invalid_studio_member_source = tempdir.path().join("invalid-studio-member");
+    fs::create_dir(&invalid_studio_member_source).expect("invalid studio source");
     fs::write(
-        invalid_outbox_member_source.join(EVENT_STORE_BACKUP_FILE),
+        invalid_studio_member_source.join(RUNTIME_SQLITE_FILE),
         b"not sqlite",
     )
-    .expect("event store member");
-    let mut invalid_outbox_manifest = manifest();
-    invalid_outbox_manifest.backup_paths.outbox_path = PathBuf::from("../outside.sqlite");
+    .expect("runtime member");
+    let mut invalid_studio_manifest = manifest();
+    invalid_studio_manifest.backup_paths.studio_path = PathBuf::from("../outside.sqlite");
     write_backup_manifest(
-        &invalid_outbox_member_source.join(BACKUP_MANIFEST_FILE),
-        &invalid_outbox_manifest,
+        &invalid_studio_member_source.join(BACKUP_MANIFEST_FILE),
+        &invalid_studio_manifest,
     )
-    .expect("invalid outbox manifest");
+    .expect("invalid studio manifest");
     assert!(
-        invalid_request_message(inspect_restore_archive(invalid_outbox_member_source).await)
-            .contains("outbox archive path")
+        invalid_request_message(inspect_restore_archive(invalid_studio_member_source).await)
+            .contains("studio archive path")
     );
     let invalid_private_member_source = tempdir.path().join("invalid-private-member");
     fs::create_dir(&invalid_private_member_source).expect("invalid private source");
     fs::write(
-        invalid_private_member_source.join(EVENT_STORE_BACKUP_FILE),
+        invalid_private_member_source.join(RUNTIME_SQLITE_FILE),
         b"not sqlite",
     )
-    .expect("invalid private event store member");
+    .expect("invalid private runtime member");
     fs::write(
-        invalid_private_member_source.join(OUTBOX_BACKUP_FILE),
+        invalid_private_member_source.join(STUDIO_SQLITE_FILE),
         b"not sqlite",
     )
-    .expect("invalid private outbox member");
+    .expect("invalid private studio member");
     let mut invalid_private_manifest = manifest();
-    invalid_private_manifest.backup_paths.private_store_path = PathBuf::from("../outside.sqlite");
+    invalid_private_manifest.backup_paths.private_path = PathBuf::from("../outside.sqlite");
     write_backup_manifest(
         &invalid_private_member_source.join(BACKUP_MANIFEST_FILE),
         &invalid_private_manifest,
@@ -1511,9 +1594,9 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     fs::create_dir(&protected_parent).expect("protected parent");
     let protected_destination = protected_parent.join("restore");
     let protected_paths = RadrootsSdkStoragePaths {
-        event_store_path: protected_destination.join(EVENT_STORE_BACKUP_FILE),
-        outbox_path: protected_destination.join(OUTBOX_BACKUP_FILE),
-        private_store_path: protected_destination.join(PRIVATE_STORE_BACKUP_FILE),
+        runtime_path: protected_destination.join(RUNTIME_SQLITE_FILE),
+        studio_path: protected_destination.join(STUDIO_SQLITE_FILE),
+        private_path: protected_destination.join(PRIVATE_SQLITE_FILE),
     };
     set_mode(&protected_parent, 0o500);
     let protected_result =
@@ -1545,18 +1628,18 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     .await;
     set_mode(&public_protected_parent, 0o700);
     assert!(!io_message(public_protected_result).is_empty());
-    let missing_outbox_paths = RadrootsSdkStoragePaths {
-        event_store_path: archive.event_store_path.clone(),
-        outbox_path: tempdir.path().to_path_buf(),
-        private_store_path: archive.private_store_path.clone(),
+    let missing_studio_paths = RadrootsSdkStoragePaths {
+        runtime_path: archive.runtime_path.clone(),
+        studio_path: tempdir.path().to_path_buf(),
+        private_path: archive.private_path.clone(),
     };
-    assert!(verify_backup_paths(&missing_outbox_paths).await.is_err());
+    assert!(verify_backup_paths(&missing_studio_paths).await.is_err());
 
     let invalid_destination = tempdir.path().join(nul_path());
     let invalid_paths = RadrootsSdkStoragePaths {
-        event_store_path: invalid_destination.join(EVENT_STORE_BACKUP_FILE),
-        outbox_path: invalid_destination.join(OUTBOX_BACKUP_FILE),
-        private_store_path: invalid_destination.join(PRIVATE_STORE_BACKUP_FILE),
+        runtime_path: invalid_destination.join(RUNTIME_SQLITE_FILE),
+        studio_path: invalid_destination.join(STUDIO_SQLITE_FILE),
+        private_path: invalid_destination.join(PRIVATE_SQLITE_FILE),
     };
     let invalid_restore_message = io_message(
         restore_archive_to_destination(&archive, &invalid_destination, &invalid_paths).await,
@@ -1572,13 +1655,9 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     restore_archive_to_destination(&archive, &existing_destination, &existing_paths)
         .await
         .expect("overwrite existing restore");
-    assert!(existing_destination.join(EVENT_STORE_BACKUP_FILE).exists());
-    assert!(existing_destination.join(OUTBOX_BACKUP_FILE).exists());
-    assert!(
-        existing_destination
-            .join(PRIVATE_STORE_BACKUP_FILE)
-            .exists()
-    );
+    assert!(existing_destination.join(RUNTIME_SQLITE_FILE).exists());
+    assert!(existing_destination.join(STUDIO_SQLITE_FILE).exists());
+    assert!(existing_destination.join(PRIVATE_SQLITE_FILE).exists());
 
     let mut mismatch_archive = archive.clone();
     mismatch_archive.verification.event_store_events += 1;
@@ -1651,9 +1730,9 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     assert_ne!(archive.verification, populated_archive.verification);
     let verification_mismatch_destination = tempdir.path().join("verification-mismatch-restore");
     let wrong_destination_paths = RadrootsSdkStoragePaths {
-        event_store_path: populated_archive.event_store_path.clone(),
-        outbox_path: populated_archive.outbox_path.clone(),
-        private_store_path: populated_archive.private_store_path.clone(),
+        runtime_path: populated_archive.runtime_path.clone(),
+        studio_path: populated_archive.studio_path.clone(),
+        private_path: populated_archive.private_path.clone(),
     };
     assert!(
         invalid_request_message(
@@ -1673,8 +1752,8 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         preflight_restore_destination(&archive.source, &bad_verify_destination, false)
             .expect("bad verify preflight");
     let mut mismatched_verify_paths = bad_verify_paths.clone();
-    mismatched_verify_paths.event_store_path = bad_verify_destination.clone();
-    mismatched_verify_paths.outbox_path = bad_verify_destination.join(OUTBOX_BACKUP_FILE);
+    mismatched_verify_paths.runtime_path = bad_verify_destination.clone();
+    mismatched_verify_paths.studio_path = bad_verify_destination.join(STUDIO_SQLITE_FILE);
     assert!(
             restore_archive_to_destination(
                 &archive,

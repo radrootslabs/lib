@@ -7,9 +7,9 @@ The SDK v1 product runtime is centered on `RadrootsClient::builder()`,
 
 `RadrootsClient::builder()` defaults to memory storage, the system clock, the `LocalOnly` transport
 profile, and no production network publishing. Directory storage is opt-in and creates
-`event_store.sqlite` and `outbox.sqlite` in the selected directory. Configured Nostr relay URLs live
-inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::Hybrid`, and product
-enqueue requests choose the active profile through `TargetPolicy::default_profile()`.
+`runtime.sqlite`, `private.sqlite`, and `studio.sqlite` in the selected directory. Configured Nostr
+relay URLs live inside `TransportProfile::Nostr` or the Nostr side of `TransportProfile::Hybrid`,
+and product enqueue requests choose the active profile through `TargetPolicy::default_profile()`.
 
 When `signer-adapters` is enabled, `RadrootsClient::builder()` accepts a configured
 `RadrootsSdkSignerProvider`. The production signing modes are `local_key` and `myc_nip46`. Product
@@ -23,13 +23,9 @@ that prepared plan, ingests it into the local event store, queues signed outbox 
 typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)` is the convenience path that
 prepares once and delegates to `enqueue_prepared_publish(...)`. Farm and trade write methods follow
 the same configured signer pattern. The enqueue path uses typed transport target and idempotency
-inputs; omitted idempotency keys are derived deterministically. `SatisfactionPolicy::NoWait` records
-first-class no-wait delivery plans, so enqueue-only product workflows can complete without accepted
-or delivered transport targets and without fabricated target delivery receipts.
-
-Explicit signer injection remains available under `*_with_explicit_signer` method names for
-controlled adapter-level tests and advanced integration checks. Those methods are not the primary
-product API.
+inputs; write requests require explicit UUIDv7 idempotency keys. `SatisfactionPolicy::NoWait`
+records first-class no-wait delivery plans, so enqueue-only product workflows can complete without
+accepted or delivered transport targets and without fabricated target delivery receipts.
 
 Event `created_at` and local observation time are separate contracts. The event timestamp remains
 the authored event-envelope timestamp, while event-store and outbox mutation timestamps use the SDK
@@ -47,19 +43,17 @@ transport-level substrate checks. `radrootsd-proxy` adds daemon-resolved publish
 `publish.event`.
 
 `sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
-evidence, ingest DVM validation receipts through `sdk.dvm()`, read `sdk.trades().status(...)`, resync
-through `sdk.trades().resync()`, inspect validation receipts through
-`sdk.trades().validation_receipts()`, and read seller inbox projections through
-`sdk.trades().seller()`.
+evidence, read `sdk.trades().status(...)`, resync through `sdk.trades().resync()`, inspect
+validation receipts through `sdk.trades().validation_receipts()`, and read seller inbox projections
+through `sdk.trades().seller()`.
 `sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local projections; it returns typed
 source, event count, limit state, event IDs, ambiguity candidates, eligibility, next-action, and
 reducer issue data. Status is not a network fetch.
 
 Configured-signer trade writes compile when both `runtime` and `signer-adapters` are enabled. Buyer
-write workflows use `sdk.trades().buyer()` for propose, cancel, and revision-decision actions.
-Seller write workflows use `sdk.trades().seller()` for accept, decline, and revision-proposal
-actions. Runtime-only builds intentionally expose no buyer write handle and no trade mutation request
-DTOs. DVM proof requests and validation receipt ingestion use `sdk.dvm()`.
+write workflows use `sdk.trades().buyer()` for propose and cancel actions. Seller write workflows
+use `sdk.trades().seller()` for accept and decline actions. Runtime-only builds intentionally expose
+no buyer write handle and no trade mutation request DTOs.
 
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `transport-nostr-runtime`, and
@@ -77,9 +71,9 @@ Relay URL policy is explicit. Public relay URLs must use `wss://`. Local develop
 URLs are accepted only under `NostrRelayUrlPolicy::Localhost` and only for `localhost`, `127.0.0.1`,
 or `[::1]`. Non-local insecure `ws://` targets, including private LAN addresses, are rejected.
 
-Low-level event-contract, wire-codec, reducer, and DVM contract ownership lives in the shared
-Radroots libraries. The SDK exposes product APIs and selected adapter boundaries; it does not expose
-a public workflow-bypass namespace for product callers.
+Low-level event-contract, wire-codec, reducer, and validation receipt contract ownership lives in
+the shared Radroots libraries. The SDK exposes product APIs and selected adapter boundaries; it does
+not expose a public workflow-bypass namespace for product callers.
 
 ## Examples
 

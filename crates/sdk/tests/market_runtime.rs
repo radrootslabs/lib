@@ -153,7 +153,9 @@ async fn market_search_refreshes_local_projection_and_reads_fts() {
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("target relays");
+    .expect("target relays")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000240")
+    .expect("idempotency key");
     let receipt = sdk
         .listings()
         .enqueue_publish_with_explicit_signer(publish, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))

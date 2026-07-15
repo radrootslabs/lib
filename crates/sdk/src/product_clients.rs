@@ -109,19 +109,6 @@ pub struct TradeValidationReceiptsClient<'client> {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
-pub struct DvmClient<'client> {
-    pub(crate) sdk: &'client RadrootsClient,
-}
-
-#[cfg(feature = "runtime")]
-impl<'client> DvmClient<'client> {
-    pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
-        Self { sdk }
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy)]
 pub struct SyncClient<'client> {
     pub(crate) sdk: &'client RadrootsClient,
 }

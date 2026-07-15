@@ -264,7 +264,7 @@ async fn farm_prepare_publish_is_side_effect_free() {
     );
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     assert_eq!(
@@ -282,7 +282,7 @@ async fn farm_prepare_publish_is_side_effect_free() {
             .expect("event lookup")
             .is_none()
     );
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     assert!(
@@ -630,7 +630,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         farm(FARM_B_D_TAG, "North Farm"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("farm-idem-b")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000229")
     .expect("idempotency key");
     let prepared = sdk
         .farms()
@@ -655,7 +655,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
     assert!(receipt.idempotency_digest_prefix.is_some());
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     let status = event_store
@@ -675,7 +675,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         Some("radroots.farm.profile.v1")
     );
 
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let outbox_event = outbox
@@ -711,7 +711,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     assert!(!message.contains("ffff"));
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     assert_eq!(
@@ -722,7 +722,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
             .total_events,
         0
     );
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     assert!(
@@ -735,7 +735,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
 }
 
 #[tokio::test]
-async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
+async fn farm_enqueue_publish_uses_explicit_idempotency_key_across_equivalent_target_order() {
     let (_tempdir, sdk) = directory_sdk().await;
     let first = FarmEnqueuePublishRequest::new(
         farmer_actor(),
@@ -743,7 +743,9 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first transport targets");
+    .expect("first transport targets")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022d")
+    .expect("first idempotency key");
     let second = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_D_D_TAG, "North Farm"),
@@ -751,7 +753,9 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
             TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second transport targets"),
         ),
-    );
+    )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022d")
+    .expect("second idempotency key");
 
     let first_receipt = sdk
         .farms()
@@ -775,7 +779,7 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
     assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
 
     let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let relay_urls = outbox
@@ -797,7 +801,9 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
+    .expect("transport targets")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022e")
+    .expect("idempotency key");
     let enqueue_receipt = sdk
         .farms()
         .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
@@ -837,7 +843,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox
@@ -858,7 +864,9 @@ async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum
                 farmer_actor(),
                 farm(FARM_E_D_TAG, "Hybrid Farm"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022f")
+            .expect("idempotency key"),
             &FixtureSigner::new(FARMER),
         )
         .await
@@ -891,7 +899,7 @@ async fn farm_hybrid_profile_publishes_after_nostr_success_and_retains_reticulum
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox
@@ -931,17 +939,17 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
         farm(FARM_E_D_TAG, "North Farm"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("farm-idem-e")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022a")
     .expect("idempotency key");
     sdk.farms()
         .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
         .await
         .expect("first enqueue");
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     assert_eq!(
@@ -966,7 +974,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
         farm(FARM_F_D_TAG, "Changed Farm"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("farm-idem-e")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022a")
     .expect("idempotency key");
     let error = sdk
         .farms()
@@ -983,7 +991,11 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
         error.recovery_actions(),
         vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
     );
-    assert!(!error.to_string().contains("farm-idem-e"));
+    assert!(
+        !error
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-00000000022a")
+    );
     assert_eq!(
         event_store
             .status_summary()
@@ -1043,7 +1055,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
     .with_idempotency_key(
-        SdkIdempotencyKey::new("farm-serialized-idempotency").expect("idempotency"),
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000022b").expect("idempotency"),
     )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
@@ -1091,14 +1103,14 @@ async fn farm_runtime_dtos_serialize_deterministically() {
                     "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
                 ]
             },
-            "idempotency_key": { "value": "<redacted>", "len": 27 },
+            "idempotency_key": { "value": "<redacted>", "len": 36 },
             "created_at": 1_700_000_123
         })
     );
     assert!(
         !enqueue_json
             .to_string()
-            .contains("farm-serialized-idempotency")
+            .contains("01890f0e-6c00-7000-8000-00000000022b")
     );
 
     let try_key_request = FarmEnqueuePublishRequest::new(
@@ -1106,11 +1118,11 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         farm(FARM_C_D_TAG, "Queued Farm"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("farm-serialized-try-key")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022c")
     .expect("try idempotency key");
     assert_eq!(
         serde_json::to_value(&try_key_request).expect("try key request json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 23 })
+        serde_json::json!({ "value": "<redacted>", "len": 36 })
     );
 
     let private_upsert = FarmPrivateLocationUpsertRequest::new(

@@ -9,10 +9,7 @@ use radroots_transport::{
     RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 
-#[path = "../support/serializer_failure.rs"]
-mod serializer_failure;
-
-use serializer_failure::assert_struct_serialize_error_paths;
+use crate::serializer_failure::assert_struct_serialize_error_paths;
 
 #[test]
 fn publish_mode_and_ack_policy_serialize_explicit_product_contracts() {

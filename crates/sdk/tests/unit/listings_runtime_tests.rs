@@ -13,13 +13,8 @@ use radroots_event::{
 };
 use radroots_nostr::prelude::RadrootsNostrKeys;
 
-#[path = "../support/fixture_signer.rs"]
-mod fixture_signer;
-#[path = "../support/serializer_failure.rs"]
-mod serializer_failure;
-
-use fixture_signer::FixtureSigner;
-use serializer_failure::assert_struct_serialize_error_paths;
+use crate::fixture_signer::FixtureSigner;
+use crate::serializer_failure::assert_struct_serialize_error_paths;
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -103,29 +98,35 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
 
     let enqueue = ListingEnqueuePublishRequest::from_document(
         actor(),
-        RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
+        RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
-    .with_idempotency_key(SdkIdempotencyKey::new("listing-unit-key").expect("key"))
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000022f").expect("key"),
+    )
     .with_created_at(created_at);
     assert_struct_serialize_error_paths(&enqueue, 5);
     let enqueue_json = serde_json::to_value(&enqueue).expect("enqueue json");
     assert_eq!(enqueue_json["target_policy"]["kind"], "explicit");
     assert_eq!(enqueue_json["created_at"], 1_700_000_321);
-    assert!(!enqueue_json.to_string().contains("listing-unit-key"));
+    assert!(
+        !enqueue_json
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-00000000022f")
+    );
 
     let try_key = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_C_D_TAG, "Try Key Greens"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("listing-unit-try-key")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000230")
     .expect("try key");
     assert_eq!(
         serde_json::to_value(&try_key).expect("try key json")["idempotency_key"]["len"],
-        "listing-unit-try-key".len()
+        "01890f0e-6c00-7000-8000-000000000230".len()
     );
 }
 
@@ -141,11 +142,10 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
 
     let timestamp_error = listing_publish_plan(
         &actor(),
-        RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Future Greens")),
+        RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Future Greens")),
         RadrootsSdkTimestamp::from_unix_seconds(u64::MAX),
     )
-    .err()
-    .expect("timestamp error");
+    .expect_err("timestamp error");
     assert!(matches!(
         timestamp_error,
         RadrootsSdkError::TimestampOutOfRange { .. }
@@ -159,11 +159,10 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
     });
     let mutation_error = listing_publish_plan(
         &actor(),
-        RadrootsListingDraftDocumentV1::new(invalid_resource_area_listing),
+        RadrootsListingEditDocumentV1::new(invalid_resource_area_listing),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
     )
-    .err()
-    .expect("mutation error");
+    .expect_err("mutation error");
     assert!(matches!(
         mutation_error,
         RadrootsSdkError::ListingMutation { message } if message.contains("failed to encode")
@@ -267,7 +266,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )
-            .try_with_idempotency_key("listing-source-attached-enqueue")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000231")
             .expect("idempotency"),
             &signer,
         )
@@ -280,7 +279,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .listings()
         .prepare_publish(ListingPreparePublishRequest::from_document(
             actor.clone(),
-            RadrootsListingDraftDocumentV1::new(listing(LISTING_B_D_TAG, "Prepared Greens")),
+            RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Prepared Greens")),
         ))
         .expect("prepared listing");
     let prepared = sdk
@@ -290,7 +289,10 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
             plan,
             TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("prepared transport targets"),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000232")
+                    .expect("prepared idempotency"),
+            ),
             &signer,
         )
         .await
@@ -323,7 +325,7 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )
-            .try_with_idempotency_key("listing-configured-local")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000232")
             .expect("idempotency"),
         )
         .await

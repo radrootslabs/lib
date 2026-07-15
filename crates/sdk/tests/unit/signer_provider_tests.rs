@@ -369,7 +369,7 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
         transport.clone(),
     )
     .expect("signer");
-    let provider = RadrootsSdkSignerProvider::MycNip46(signer);
+    let provider = RadrootsSdkSignerProvider::MycNip46(Box::new(signer));
 
     assert_eq!(provider.mode(), RadrootsSdkSignerMode::MycNip46);
     assert_eq!(
@@ -542,7 +542,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let signer =
         RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport.clone())
             .expect("signer");
-    let provider = RadrootsSdkSignerProvider::MycNip46(signer);
+    let provider = RadrootsSdkSignerProvider::MycNip46(Box::new(signer));
     assert_eq!(
         provider.capability().nip46_permissions,
         radroots_sdk_myc_nip46_product_permission_strings()

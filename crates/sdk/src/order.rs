@@ -1,80 +1,54 @@
 pub use radroots_event::order::*;
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 pub use radroots_event_codec::error::EventEncodeError;
 pub use radroots_event_codec::order::RadrootsOrderEnvelopeParseError;
 
 use radroots_event::RadrootsEventEnvelope;
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 use radroots_event::{RadrootsEventPtr, ids::RadrootsEventId, tags::TAG_E};
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRequestDraft {
     parts: RadrootsNip01EventWireParts,
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderDecisionDraft {
     parts: RadrootsNip01EventWireParts,
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
-#[derive(Debug, Clone)]
-pub struct RadrootsOrderRevisionProposalDraft {
-    parts: RadrootsNip01EventWireParts,
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
-#[derive(Debug, Clone)]
-pub struct RadrootsOrderRevisionDecisionDraft {
-    parts: RadrootsNip01EventWireParts,
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderCancellationDraft {
     parts: RadrootsNip01EventWireParts,
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 impl RadrootsOrderRequestDraft {
     pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 impl RadrootsOrderDecisionDraft {
     pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
-impl RadrootsOrderRevisionProposalDraft {
-    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
-        self.parts
-    }
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
-impl RadrootsOrderRevisionDecisionDraft {
-    pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
-        self.parts
-    }
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 impl RadrootsOrderCancellationDraft {
     pub fn into_wire_parts(self) -> RadrootsNip01EventWireParts {
         self.parts
     }
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 fn with_contract_root_event_tag(
     mut parts: RadrootsNip01EventWireParts,
     root_event_id: &RadrootsEventId,
@@ -85,7 +59,7 @@ fn with_contract_root_event_tag(
     parts
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 pub fn build_order_request_draft(
     listing_event: &RadrootsEventPtr,
     payload: &RadrootsOrderRequest,
@@ -95,7 +69,7 @@ pub fn build_order_request_draft(
     })
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 pub fn build_order_decision_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -113,43 +87,7 @@ pub fn build_order_decision_draft(
     })
 }
 
-#[cfg(any(feature = "signer-adapters", test))]
-pub fn build_order_revision_proposal_draft(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderRevisionProposal,
-) -> Result<RadrootsOrderRevisionProposalDraft, EventEncodeError> {
-    Ok(RadrootsOrderRevisionProposalDraft {
-        parts: with_contract_root_event_tag(
-            radroots_event_codec::order::order_revision_proposal_event_build(
-                root_event_id,
-                prev_event_id,
-                payload,
-            )?,
-            root_event_id,
-        ),
-    })
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
-pub fn build_order_revision_decision_draft(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderRevisionDecision,
-) -> Result<RadrootsOrderRevisionDecisionDraft, EventEncodeError> {
-    Ok(RadrootsOrderRevisionDecisionDraft {
-        parts: with_contract_root_event_tag(
-            radroots_event_codec::order::order_revision_decision_event_build(
-                root_event_id,
-                prev_event_id,
-                payload,
-            )?,
-            root_event_id,
-        ),
-    })
-}
-
-#[cfg(any(feature = "signer-adapters", test))]
+#[cfg(feature = "signer-adapters")]
 pub fn build_order_cancellation_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,

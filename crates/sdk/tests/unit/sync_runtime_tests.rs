@@ -770,7 +770,7 @@ async fn sync_status_maps_closed_store_errors() {
             .sync()
             .status(super::SyncStatusRequest::new())
             .await,
-        Err(RadrootsSdkError::Outbox { .. })
+        Err(RadrootsSdkError::EventStore { .. })
     ));
 }
 

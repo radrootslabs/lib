@@ -74,7 +74,11 @@ const FORBIDDEN_SDK_README_CONCEPTS: &[ForbiddenSdkConcept] = &[
     },
     ForbiddenSdkConcept {
         pattern: "sdk.trade_validation()",
-        reason: "SDK docs must use sdk.dvm() for validation receipt ingestion",
+        reason: "SDK docs must use sdk.trades().validation_receipts() for validation receipt inspection",
+    },
+    ForbiddenSdkConcept {
+        pattern: "sdk.dvm()",
+        reason: "SDK docs must not advertise the retired DVM client surface",
     },
     ForbiddenSdkConcept {
         pattern: "`relay-client` is retained",
@@ -249,7 +253,6 @@ const REQUIRED_SDK_README_CONCEPTS: &[&str] = &[
     "sdk.trades().status(...)",
     "sdk.trades().resync()",
     "sdk.trades().validation_receipts()",
-    "sdk.dvm()",
     "event-envelope timestamp",
 ];
 
@@ -295,8 +298,6 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
     "TradeValidationReceiptTags",
     "TradeValidationReceiptVerifyRequest",
     "TradeValidationTrustDecision",
-    "TradeValidationReceiptWorkerEvidence",
-    "TradeValidationReceiptWorkerEvidenceSelection",
     "SdkTradeStatusIssue",
     "SdkTradeStatusIssueKind",
     "SdkTradeStatusSource",
@@ -305,8 +306,6 @@ const REQUIRED_TRADE_RUNTIME_EXPORTS: &[&str] = &[
 const REQUIRED_TRADE_SIGNER_EXPORTS: &[&str] = &[
     "TRADE_CANCELLATION_OPERATION_KIND",
     "TRADE_DECISION_OPERATION_KIND",
-    "TRADE_REVISION_DECISION_OPERATION_KIND",
-    "TRADE_REVISION_PROPOSAL_OPERATION_KIND",
     "TRADE_SUBMIT_OPERATION_KIND",
     "TradeAcceptRequest",
     "TradeCancelRequest",
@@ -318,12 +317,6 @@ const REQUIRED_TRADE_SIGNER_EXPORTS: &[&str] = &[
     "TradeEvidenceMode",
     "TradeMutationOutcome",
     "TradeProposeRequest",
-    "TradeRevisionDecisionPlan",
-    "TradeRevisionDecisionReceipt",
-    "TradeRevisionDecisionRequest",
-    "TradeRevisionProposalPlan",
-    "TradeRevisionProposalRequest",
-    "TradeRevisionProposalReceipt",
     "TradeSubmitPlan",
     "TradeSubmitReceipt",
     "TradeWorkflowEnqueueReceipt",
@@ -331,20 +324,6 @@ const REQUIRED_TRADE_SIGNER_EXPORTS: &[&str] = &[
     "TradeWorkflowKind",
     "TradeWorkflowPlan",
     "TradeWorkflowRetryAdvice",
-];
-
-const REQUIRED_DVM_RUNTIME_EXPORTS: &[&str] = &[
-    "DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID",
-    "DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND",
-    "DvmProofMode",
-    "DvmTradeTransitionProofEnqueueRequest",
-    "DvmTradeTransitionProofPlan",
-    "DvmTradeTransitionProofPrepareRequest",
-    "DvmTradeTransitionProofReceipt",
-    "DvmTradeTransitionProofRequestPayload",
-    "DvmValidationReceiptIngestReceipt",
-    "DvmValidationReceiptIngestRequest",
-    "RadrootsTradeInventoryBinWitnessDto",
 ];
 
 const REQUIRED_IDENTITY_MODEL_EXPORTS: &[&str] = &[
@@ -401,15 +380,6 @@ const REQUIRED_TRADES_CLIENT_METHODS: &[&str] = &[
     "pub async fn status(",
 ];
 
-const REQUIRED_DVM_CLIENT_METHODS: &[&str] = &[
-    "pub fn prepare_trade_transition_proof_request(",
-    "pub async fn enqueue_trade_transition_proof_request_with_explicit_signer(",
-    "pub async fn ingest_validation_receipt(",
-];
-
-const REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS: &[&str] =
-    &["pub async fn enqueue_trade_transition_proof_request("];
-
 const FORBIDDEN_TRADES_CLIENT_PUBLIC_METHODS: &[&str] = &[
     "pub fn prepare_submit(",
     "pub async fn enqueue_submit(",
@@ -438,18 +408,13 @@ const FORBIDDEN_TRADES_CLIENT_PUBLIC_METHODS: &[&str] = &[
     "pub async fn enqueue_prepared_cancellation_with_explicit_signer(",
 ];
 
-const REQUIRED_TRADE_BUYER_CLIENT_METHODS: &[&str] = &[
-    "pub async fn propose_trade(",
-    "pub async fn cancel_trade(",
-    "pub async fn accept_revision(",
-    "pub async fn decline_revision(",
-];
+const REQUIRED_TRADE_BUYER_CLIENT_METHODS: &[&str] =
+    &["pub async fn propose_trade(", "pub async fn cancel_trade("];
 
 const REQUIRED_TRADE_SELLER_CLIENT_METHODS: &[&str] = &[
     "pub async fn inbox(",
     "pub async fn accept_trade(",
     "pub async fn decline_trade(",
-    "pub async fn propose_revision(",
 ];
 
 const REQUIRED_TRADE_RESYNC_CLIENT_METHODS: &[&str] = &["pub async fn resync("];
@@ -461,6 +426,7 @@ const REQUIRED_TRADE_VALIDATION_RECEIPTS_CLIENT_METHODS: &[&str] = &[
 ];
 
 const FORBIDDEN_PRODUCT_CLIENT_HANDLES: &[&str] = &[
+    "DvmClient",
     "TradeStatusClient",
     "TradeValidationClient",
     "pub struct TradeStatusClient",
@@ -1020,15 +986,12 @@ fn private_protocol_helper_modules_are_runtime_gated_by_lib() {
     for helper in [
         "build_order_request_draft",
         "build_order_decision_draft",
-        "build_order_revision_proposal_draft",
-        "build_order_revision_decision_draft",
         "build_order_cancellation_draft",
     ] {
-        let helper_gate =
-            format!("#[cfg(any(feature = \"signer-adapters\", test))]\npub fn {helper}(");
+        let helper_gate = format!("#[cfg(feature = \"signer-adapters\")]\npub fn {helper}(");
         assert!(
             order_source.contains(helper_gate.as_str()),
-            "src/order.rs must keep `{helper}` available only for signer adapters and unit tests"
+            "src/order.rs must keep `{helper}` available only for signer adapters"
         );
     }
 }
@@ -1265,8 +1228,6 @@ fn order_runtime_mutation_requests_require_evidence_mode() {
         "TradeAcceptRequest",
         "TradeDeclineRequest",
         "TradeCancelRequest",
-        "TradeRevisionProposalRequest",
-        "TradeRevisionDecisionRequest",
     ] {
         let struct_block = struct_block(source.as_str(), request);
         assert!(
@@ -1278,8 +1239,6 @@ fn order_runtime_mutation_requests_require_evidence_mode() {
         "impl TradeAcceptRequest",
         "impl TradeDeclineRequest",
         "impl TradeCancelRequest",
-        "impl TradeRevisionProposalRequest",
-        "impl TradeRevisionDecisionRequest",
     ] {
         let impl_source = impl_block(source.as_str(), constructor);
         assert!(
@@ -1290,34 +1249,28 @@ fn order_runtime_mutation_requests_require_evidence_mode() {
 }
 
 #[test]
-fn dvm_runtime_public_exports_are_explicit() {
-    let source = read_source(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/lib.rs")
-            .as_path(),
-    );
+fn retired_dvm_runtime_public_exports_are_absent() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = read_source(manifest_dir.join("src/lib.rs").as_path());
 
     assert!(
-        source.contains("mod dvm_runtime;"),
-        "src/lib.rs must keep dvm_runtime as an internal implementation module"
+        !manifest_dir.join("src/dvm_runtime.rs").exists(),
+        "src/dvm_runtime.rs must not exist after V1 validation receipt consolidation"
     );
-    assert!(
-        source.contains("pub use crate::dvm_runtime::{"),
-        "src/lib.rs must explicitly re-export approved DVM runtime types"
-    );
-    assert!(
-        !source.contains("pub mod dvm_runtime;"),
-        "src/lib.rs must not expose the dvm_runtime module path"
-    );
-    assert!(
-        !source.contains("pub use crate::dvm_runtime::*;"),
-        "src/lib.rs must not wildcard-export the DVM runtime"
-    );
-
-    for export in REQUIRED_DVM_RUNTIME_EXPORTS {
+    for forbidden in [
+        "mod dvm_runtime;",
+        "pub mod dvm_runtime;",
+        "pub use crate::dvm_runtime",
+        "DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID",
+        "DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND",
+        "DvmProofMode",
+        "DvmTradeTransitionProof",
+        "DvmValidationReceipt",
+        "RadrootsTradeInventoryBinWitnessDto",
+    ] {
         assert!(
-            source.contains(export),
-            "src/lib.rs must explicitly expose DVM SDK runtime export `{export}`"
+            !source.contains(forbidden),
+            "src/lib.rs must not expose retired DVM runtime surface `{forbidden}`"
         );
     }
 }
@@ -1489,7 +1442,7 @@ fn trade_product_facade_feature_gates_are_explicit() {
         seller_impl.contains("pub async fn inbox("),
         "TradeSellerClient must expose seller inbox in the runtime impl"
     );
-    for method in ["accept_trade", "decline_trade", "propose_revision"] {
+    for method in ["accept_trade", "decline_trade"] {
         let gated_method =
             format!("#[cfg(feature = \"signer-adapters\")]\n    pub async fn {method}(");
         assert!(
@@ -1528,29 +1481,24 @@ fn trade_propose_request_stays_product_shaped() {
 }
 
 #[test]
-fn dvm_client_surface_is_inventory_guarded() {
-    let source = read_source(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/dvm_runtime.rs")
-            .as_path(),
-    );
+fn retired_dvm_client_surface_is_absent() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = read_source(manifest_dir.join("src/lib.rs").as_path());
+    let clients_source = read_source(manifest_dir.join("src/product_clients.rs").as_path());
 
     assert!(
-        source.contains("impl<'sdk> DvmClient<'sdk> {"),
-        "src/dvm_runtime.rs must own DvmClient runtime methods"
+        !manifest_dir.join("src/dvm_runtime.rs").exists(),
+        "src/dvm_runtime.rs must not exist after V1 validation receipt consolidation"
     );
-
-    for method in REQUIRED_DVM_CLIENT_METHODS {
+    for forbidden in [
+        "DvmClient",
+        "prepare_trade_transition_proof_request",
+        "enqueue_trade_transition_proof_request",
+        "ingest_validation_receipt",
+    ] {
         assert!(
-            source.contains(method),
-            "DvmClient must expose inventory-guarded method `{method}`"
-        );
-    }
-
-    for method in REQUIRED_DVM_CLIENT_CONFIGURED_SIGNER_METHODS {
-        assert!(
-            source.contains(method),
-            "DvmClient must expose configured-signer method `{method}`"
+            !lib_source.contains(forbidden) && !clients_source.contains(forbidden),
+            "SDK product client surface must not expose retired DVM client concept `{forbidden}`"
         );
     }
 }
@@ -1582,7 +1530,6 @@ fn product_clients_remain_thin_sdk_handles() {
     );
 
     for client in [
-        "DvmClient",
         "FarmsClient",
         "ListingsClient",
         "MarketClient",

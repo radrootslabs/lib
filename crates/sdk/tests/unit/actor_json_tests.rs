@@ -2,10 +2,7 @@ use super::{SdkActorContextJson, actor_role_code, actor_source_code};
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
 use radroots_event::contract::RadrootsActorRole;
 
-#[path = "../support/serializer_failure.rs"]
-mod serializer_failure;
-
-use serializer_failure::assert_struct_serialize_error_paths;
+use crate::serializer_failure::assert_struct_serialize_error_paths;
 
 const PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 

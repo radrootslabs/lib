@@ -43,7 +43,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &actor,
             prepared,
             target_policy,
-            Some(SdkIdempotencyKey::new("sdk-v1-local-example")?),
+            Some(SdkIdempotencyKey::new(
+                "01890f0e-6c00-7000-8000-000000000201",
+            )?),
         )
         .await?;
     let adapter = RadrootsMockRelayPublishAdapter::new();

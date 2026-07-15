@@ -103,7 +103,7 @@ impl FarmEnqueuePublishRequest {
     }
 
     pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
-        self.idempotency_key = Some(idempotency_key.into());
+        self.idempotency_key = Some(idempotency_key);
         self
     }
 
@@ -1017,6 +1017,6 @@ fn farm_private_location_candidate(
     }
 }
 
-#[cfg(all(test, feature = "runtime"))]
+#[cfg(all(test, feature = "runtime", feature = "signer-adapters"))]
 #[path = "../tests/unit/farms_runtime_tests.rs"]
 mod tests;

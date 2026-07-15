@@ -196,7 +196,7 @@ impl TargetPolicy {
         Self::MeshScope(scope)
     }
 
-    #[cfg(any(feature = "signer-adapters", test))]
+    #[cfg(feature = "signer-adapters")]
     pub(crate) fn workflow_target_policy(self) -> Self {
         self
     }
@@ -544,16 +544,11 @@ impl HybridProfile {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub enum ProxyAuth {
+    #[default]
     None,
     BearerToken(String),
-}
-
-impl Default for ProxyAuth {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl core::fmt::Debug for ProxyAuth {
@@ -613,21 +608,24 @@ impl ProxyProfile {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 #[non_exhaustive]
 pub enum TransportProfile {
+    #[default]
     LocalOnly,
-    Nostr { profile: NostrProfile },
-    ReticulumPreview { profile: ReticulumPreviewProfile },
-    Hybrid { profile: HybridProfile },
-    Proxy { profile: ProxyProfile },
-}
-
-impl Default for TransportProfile {
-    fn default() -> Self {
-        Self::LocalOnly
-    }
+    Nostr {
+        profile: NostrProfile,
+    },
+    ReticulumPreview {
+        profile: ReticulumPreviewProfile,
+    },
+    Hybrid {
+        profile: HybridProfile,
+    },
+    Proxy {
+        profile: ProxyProfile,
+    },
 }
 
 impl TransportProfile {

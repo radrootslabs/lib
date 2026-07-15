@@ -10,7 +10,6 @@ use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_event::ids::RadrootsPublicKey;
 use radroots_event::kinds::{
     KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
-    KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
 };
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
@@ -28,13 +27,11 @@ use uuid::Uuid;
 
 pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
 
-pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
+pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 5] = [
     KIND_FARM,
     KIND_LISTING,
     KIND_ORDER_REQUEST,
     KIND_ORDER_DECISION,
-    KIND_ORDER_REVISION_PROPOSAL,
-    KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
 ];
 pub const RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS: u64 = 30_000;
@@ -172,7 +169,7 @@ pub struct RadrootsSdkSignReceipt {
 pub enum RadrootsSdkSignerProvider {
     #[cfg(feature = "local-signer")]
     LocalKey(RadrootsSdkLocalKeySigner),
-    MycNip46(RadrootsSdkMycNip46Signer),
+    MycNip46(Box<RadrootsSdkMycNip46Signer>),
 }
 
 impl RadrootsSdkSignerProvider {

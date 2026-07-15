@@ -216,11 +216,7 @@ fn trade_propose_request(
     TradeProposeRequest::new(
         buyer_actor(),
         listing_event_ptr(),
-        order.order_id,
-        order.listing_addr,
-        order.seller_pubkey,
-        order.items,
-        order.economics,
+        order,
         explicit_trade_relays(),
         publish_mode,
         satisfaction_policy,
@@ -255,11 +251,11 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         .buyer()
         .propose_trade(
             trade_propose_request(
-                "trade-product-publish",
+                "01890f0e-6c00-7000-8000-000000000223",
                 PublishMode::EnqueueAndPublish,
                 SatisfactionPolicy::AnyAccepted,
             )
-            .try_with_idempotency_key("trade-product-publish")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000223")
             .expect("idempotency"),
         )
         .await
@@ -270,7 +266,10 @@ async fn trade_product_propose_enqueue_and_publish_uses_ack_policy() {
         TradeMutationOutcome::Enqueued { .. } => panic!("expected published outcome"),
     };
 
-    assert_eq!(receipt.order_id.as_str(), "trade-product-publish");
+    assert_eq!(
+        receipt.order_id.as_str(),
+        "01890f0e-6c00-7000-8000-000000000223"
+    );
     assert_eq!(publish.attempted_events, 1);
     assert_eq!(publish.published_events, 1);
     assert_eq!(publish.events.len(), 1);

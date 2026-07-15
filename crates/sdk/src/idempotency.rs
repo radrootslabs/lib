@@ -2,7 +2,6 @@ use crate::RadrootsSdkError;
 use core::fmt;
 use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 use serde::ser::SerializeStruct;
-use sha2::{Digest, Sha256};
 
 pub const SDK_IDEMPOTENCY_KEY_MAX_LEN: usize = 256;
 
@@ -30,6 +29,9 @@ impl SdkIdempotencyKey {
                 "idempotency key must not contain control characters",
             ));
         }
+        if !is_uuid_v7(value) {
+            return Err(invalid_request("idempotency key must be a UUIDv7"));
+        }
         Ok(Self(value.to_owned()))
     }
 
@@ -39,22 +41,6 @@ impl SdkIdempotencyKey {
 
     pub fn into_string(self) -> String {
         self.0
-    }
-
-    pub(crate) fn derive(
-        operation_kind: &'static str,
-        expected_event_id: &str,
-        expected_pubkey: &str,
-    ) -> Self {
-        let input = SdkIdempotencyDerivationInput {
-            operation_kind,
-            expected_event_id,
-            expected_pubkey,
-        };
-        let bytes = serde_json::to_vec(&input).expect("idempotency derivation input serializes");
-        let digest = hex::encode(Sha256::digest(bytes));
-        Self::new(format!("{operation_kind}:{digest}"))
-            .expect("derived idempotency key satisfies SDK validation")
     }
 }
 
@@ -77,13 +63,6 @@ impl serde::Serialize for SdkIdempotencyKey {
         state.serialize_field("len", &self.0.len())?;
         state.end()
     }
-}
-
-#[derive(serde::Serialize)]
-struct SdkIdempotencyDerivationInput<'a> {
-    operation_kind: &'static str,
-    expected_event_id: &'a str,
-    expected_pubkey: &'a str,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -116,6 +95,21 @@ fn invalid_request(message: impl Into<String>) -> RadrootsSdkError {
     RadrootsSdkError::InvalidRequest {
         message: message.into(),
     }
+}
+
+fn is_uuid_v7(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && bytes[14] == b'7'
+        && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
 }
 
 #[cfg(test)]

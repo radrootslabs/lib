@@ -17,6 +17,8 @@ use radroots_outbox::{
     RadrootsOutboxReticulumPreviewBehavior, RadrootsOutboxSignedOperationInput,
 };
 use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
+use sha2::{Digest, Sha256};
+use sqlx::Row;
 
 const SDK_LOCAL_EVENT_ENDPOINT_URI: &str = "local:sdk";
 
@@ -73,34 +75,37 @@ async fn enqueue_signed_workflow_event(
     signed_event: RadrootsSignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
-    let idempotency_key = match request.idempotency_key {
-        Some(idempotency_key) => idempotency_key,
-        None => SdkIdempotencyKey::derive(
-            request.operation_kind,
-            request.frozen_draft.expected_event_id_str(),
-            request.frozen_draft.expected_pubkey_str(),
-        ),
-    };
+    let idempotency_key =
+        request
+            .idempotency_key
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "{} requires an explicit UUIDv7 idempotency key",
+                    request.operation_kind
+                ),
+            })?;
     let observed_at_ms = sdk_now_ms(sdk)?;
     let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_str())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let idempotency_key_for_enqueue = idempotency_key.clone();
-    let preflight_input = signed_outbox_input(
+    let mut tx =
+        sdk._event_store
+            .pool()
+            .begin()
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+    record_runtime_operation_journal(
+        &mut tx,
         request.operation_kind,
+        request.actor,
         request.frozen_draft,
-        signed_event.clone(),
-        delivery_plan_value.clone(),
-        idempotency_key,
-        false,
+        &idempotency_key_for_enqueue,
         observed_at_ms,
-    );
-    let preflight = sdk
-        ._outbox
-        .preflight_signed_operation_idempotency(&preflight_input)
-        .await?;
-    let partial_failure_digest_prefix =
-        digest_prefix(preflight.operation_idempotency_digest.as_str());
+    )
+    .await?;
     let local_import_observation = RadrootsTransportObservation::new(
         RadrootsTransportKind::Local,
         SDK_LOCAL_EVENT_ENDPOINT_URI,
@@ -109,37 +114,35 @@ async fn enqueue_signed_workflow_event(
     )?;
     let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
         .with_observation(local_import_observation);
-    let ingest_receipt = sdk._event_store.ingest_event(ingest).await?;
+    let ingest_receipt = sdk
+        ._event_store
+        .ingest_event_in_transaction(&mut tx, ingest)
+        .await?;
     let outbox_input = signed_outbox_input(
         request.operation_kind,
         request.frozen_draft,
         signed_event,
         delivery_plan_value,
-        idempotency_key_for_enqueue,
+        idempotency_key_for_enqueue.clone(),
         ingest_receipt.inserted,
         observed_at_ms,
     );
     let outbox_receipt = sdk
         ._outbox
-        .enqueue_signed_operation(outbox_input)
+        .enqueue_signed_operation_in_transaction(&mut tx, outbox_input)
+        .await?;
+    complete_runtime_operation_journal(
+        &mut tx,
+        request.operation_kind,
+        request.actor,
+        &idempotency_key_for_enqueue,
+        observed_at_ms,
+    )
+    .await?;
+    tx.commit()
         .await
-        .map_err(|error| {
-            if matches!(
-                error,
-                radroots_outbox::RadrootsOutboxError::IdempotencyConflict { .. }
-            ) {
-                RadrootsSdkError::partial_outbox_idempotency_conflict_mutation(
-                    signed_event_id.as_str(),
-                    request.operation_kind,
-                    partial_failure_digest_prefix.as_str(),
-                )
-            } else {
-                RadrootsSdkError::partial_outbox_enqueue_mutation(
-                    signed_event_id.as_str(),
-                    request.operation_kind,
-                    partial_failure_digest_prefix.as_str(),
-                )
-            }
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
         })?;
     let idempotency_digest_prefix =
         digest_prefix(outbox_receipt.operation_idempotency_digest.as_str());
@@ -314,6 +317,100 @@ fn signed_outbox_input(
         observed_at_ms,
     )
     .with_idempotency_key(idempotency_key.into_string())
+}
+
+async fn record_runtime_operation_journal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    operation_kind: &'static str,
+    actor: &RadrootsActorContext,
+    frozen_draft: &RadrootsEventDraft,
+    idempotency_key: &SdkIdempotencyKey,
+    observed_at_ms: i64,
+) -> Result<(), RadrootsSdkError> {
+    let request_digest = runtime_request_digest(operation_kind, actor, frozen_draft);
+    if let Some(row) = sqlx::query(
+        "SELECT request_digest_sha256_hex FROM sdk_runtime_operation_journal WHERE contract_version = ? AND operation_id = ? AND actor_pubkey = ? AND idempotency_key = ?",
+    )
+    .bind("1")
+    .bind(operation_kind)
+    .bind(actor.pubkey().as_str())
+    .bind(idempotency_key.as_str())
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|error| RadrootsSdkError::EventStore {
+        message: error.to_string(),
+    })? {
+        let existing_digest: String = row
+            .try_get("request_digest_sha256_hex")
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+        if existing_digest != request_digest {
+            return Err(RadrootsSdkError::IdempotencyConflict {
+                operation_kind: operation_kind.to_owned(),
+                expected_pubkey_prefix: actor.pubkey().as_str().chars().take(12).collect(),
+                existing_digest_prefix: digest_prefix(existing_digest.as_str()),
+                new_digest_prefix: digest_prefix(request_digest.as_str()),
+            });
+        }
+        return Ok(());
+    }
+
+    sqlx::query(
+        "INSERT INTO sdk_runtime_operation_journal(contract_version, operation_id, actor_pubkey, idempotency_key, request_digest_sha256_hex, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind("1")
+    .bind(operation_kind)
+    .bind(actor.pubkey().as_str())
+    .bind(idempotency_key.as_str())
+    .bind(request_digest.as_str())
+    .bind(observed_at_ms)
+    .execute(&mut **tx)
+    .await
+    .map(|_| ())
+    .map_err(|error| RadrootsSdkError::EventStore {
+        message: error.to_string(),
+    })
+}
+
+async fn complete_runtime_operation_journal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    operation_kind: &'static str,
+    actor: &RadrootsActorContext,
+    idempotency_key: &SdkIdempotencyKey,
+    observed_at_ms: i64,
+) -> Result<(), RadrootsSdkError> {
+    sqlx::query(
+        "UPDATE sdk_runtime_operation_journal SET completed_at_ms = ? WHERE contract_version = ? AND operation_id = ? AND actor_pubkey = ? AND idempotency_key = ?",
+    )
+    .bind(observed_at_ms)
+    .bind("1")
+    .bind(operation_kind)
+    .bind(actor.pubkey().as_str())
+    .bind(idempotency_key.as_str())
+    .execute(&mut **tx)
+    .await
+    .map(|_| ())
+    .map_err(|error| RadrootsSdkError::EventStore {
+        message: error.to_string(),
+    })
+}
+
+fn runtime_request_digest(
+    operation_kind: &'static str,
+    actor: &RadrootsActorContext,
+    frozen_draft: &RadrootsEventDraft,
+) -> String {
+    let digest_document = serde_json::json!({
+        "contract_version": "1",
+        "operation_id": operation_kind,
+        "actor_pubkey": actor.pubkey().as_str(),
+        "expected_event_id": frozen_draft.expected_event_id_str(),
+        "expected_pubkey": frozen_draft.expected_pubkey_str(),
+    });
+    let bytes =
+        serde_json::to_vec(&digest_document).expect("runtime journal digest document serializes");
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[cfg(test)]

@@ -10,27 +10,25 @@ use std::time::{Duration, Instant};
 use futures::future::BoxFuture;
 #[cfg(feature = "transport-nostr-runtime")]
 use nostr::JsonUtil;
+#[cfg(feature = "signer-adapters")]
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
+#[cfg(feature = "signer-adapters")]
+use radroots_event::contract::RadrootsActorRole;
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_event::ids::RadrootsPublicKey;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
-    contract::RadrootsActorRole,
     draft::RadrootsSignedEvent,
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsOrderRevisionId},
-    kinds::{
-        KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST,
-        KIND_TRADE_TRANSITION_PROOF_RESULT, KIND_TRADE_VALIDATION_RECEIPT,
-    },
+    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId},
+    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_POST},
     order::{
         RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
         RadrootsOrderEconomicLine, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
         RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
-        RadrootsOrderRevisionOutcome,
     },
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
@@ -38,29 +36,37 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event,
 };
+#[cfg(feature = "signer-adapters")]
 use radroots_outbox::RadrootsOutbox;
-#[cfg(feature = "transport-nostr-runtime")]
+#[cfg(any(feature = "signer-adapters", feature = "transport-nostr-runtime"))]
+use radroots_sdk::{NostrProfile, NostrRelayUrlPolicy, TransportProfile};
+#[cfg(feature = "signer-adapters")]
 use radroots_sdk::{
-    DvmValidationReceiptIngestRequest, TradeEvidenceQueryBranchKind,
-    TradeResyncNostrRelayOutcomeKind, TradeResyncNostrRelayTransportOutcomeKind,
-    TradeResyncRequest, TradeSellerInboxRequest, TradeValidationReceiptInspectRequest,
-    TradeValidationReceiptListRequest, TradeValidationReceiptVerifyRequest,
+    PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField, PublishMode,
+    RadrootsSdkRecoveryAction, SatisfactionPolicy, SdkMutationState, TargetPolicy, TargetSet,
 };
 use radroots_sdk::{
-    NostrProfile, NostrRelayUrlPolicy, PublishMode, RadrootsClient, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy,
-    RadrootsTradeValidationTrustState, SatisfactionPolicy, SdkMutationState, SdkTradeStatusIssue,
-    SdkTradeStatusIssueKind, SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT,
-    TRADE_STATUS_MAX_LIMIT, TRADE_STATUS_WATCH_MAX_CAPACITY, TRADE_SUBMIT_OPERATION_KIND,
-    TargetPolicy, TargetSet, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
-    TradeEvidenceIngestRequest, TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest,
-    TradeRequestEvidenceIngestRequest, TradeRevisionDecisionRequest, TradeRevisionProposalRequest,
+    RadrootsClient, RadrootsSdkError, RadrootsSdkTimestamp, RadrootsTradeValidationTrustPolicy,
+    RadrootsTradeValidationTrustState, SdkTradeStatusIssue, SdkTradeStatusIssueKind,
+    SdkTradeStatusSource, TRADE_STATUS_DEFAULT_LIMIT, TRADE_STATUS_MAX_LIMIT,
+    TRADE_STATUS_WATCH_MAX_CAPACITY, TradeEvidenceIngestRequest, TradeRequestEvidenceIngestRequest,
     TradeStatusKind, TradeStatusNextActionKind, TradeStatusRequest, TradeStatusWatchCancelState,
-    TradeStatusWatchRequest, TransportProfile,
+    TradeStatusWatchRequest,
 };
-use radroots_sdk::{PrivacyPreflightConfirmation, PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
 use radroots_sdk::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
+#[cfg(feature = "signer-adapters")]
+use radroots_sdk::{
+    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeDeclineRequest,
+    TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest,
+};
+#[cfg(feature = "transport-nostr-runtime")]
+use radroots_sdk::{
+    TradeEvidenceQueryBranchKind, TradeResyncNostrRelayOutcomeKind,
+    TradeResyncNostrRelayTransportOutcomeKind, TradeResyncRequest, TradeSellerInboxRequest,
+    TradeValidationReceiptInspectRequest, TradeValidationReceiptListRequest,
+    TradeValidationReceiptVerifyRequest,
+};
 #[cfg(feature = "transport-nostr-runtime")]
 use radroots_trade::identity::RadrootsTradeLocator;
 use radroots_trade::order::RadrootsOrderIssue;
@@ -95,9 +101,6 @@ fn signed_event_from_envelope(event: RadrootsEventEnvelope) -> RadrootsSignedEve
     let raw_json = serde_json::to_string(&wire).expect("raw event json");
     RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
-#[cfg(any())]
-const OTHER_PUBLIC_KEY_HEX: &str =
-    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 #[cfg(feature = "transport-nostr-runtime")]
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 const PERF_TOTAL_LOCAL_EVENTS: i64 = 100_000;
@@ -413,45 +416,6 @@ where
         .expect_err("struct end failure");
 }
 
-#[cfg(any())]
-#[derive(Clone)]
-struct FixtureSigner {
-    identity: radroots_authority::RadrootsSignerIdentity,
-    keys: RadrootsNostrKeys,
-}
-
-#[cfg(any())]
-impl FixtureSigner {
-    fn new(secret_key_hex: &str) -> Self {
-        let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
-        let keys = RadrootsNostrKeys::new(secret_key);
-        let pubkey = keys.public_key().to_hex();
-        Self {
-            identity: radroots_authority::RadrootsSignerIdentity::new(pubkey).expect("identity"),
-            keys,
-        }
-    }
-}
-
-#[cfg(any())]
-impl radroots_authority::RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
-        self.identity.pubkey()
-    }
-
-    fn sign_frozen_draft(
-        &self,
-        draft: &radroots_event::draft::RadrootsEventDraft,
-    ) -> Result<radroots_event::draft::RadrootsSignedEvent, radroots_authority::RadrootsSignerError>
-    {
-        radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(
-            |error| radroots_authority::RadrootsSignerError::SigningFailed {
-                message: error.to_string(),
-            },
-        )
-    }
-}
-
 async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, RadrootsEventStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let sdk = RadrootsClient::builder()
@@ -460,10 +424,9 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsClient, Radroo
         .build()
         .await
         .expect("sdk");
-    let store =
-        RadrootsEventStore::open_file(&sdk.storage_paths().expect("paths").event_store_path)
-            .await
-            .expect("event store");
+    let store = RadrootsEventStore::open_file(&sdk.storage_paths().expect("paths").runtime_path)
+        .await
+        .expect("event store");
     (tempdir, sdk, store)
 }
 
@@ -482,10 +445,9 @@ async fn directory_sdk_and_store_with_relays(
         ));
     }
     let sdk = builder.build().await.expect("sdk");
-    let store =
-        RadrootsEventStore::open_file(&sdk.storage_paths().expect("paths").event_store_path)
-            .await
-            .expect("event store");
+    let store = RadrootsEventStore::open_file(&sdk.storage_paths().expect("paths").runtime_path)
+        .await
+        .expect("event store");
     (tempdir, sdk, store)
 }
 
@@ -525,32 +487,14 @@ fn status_request(raw: &str) -> TradeStatusRequest {
     TradeStatusRequest::parse(raw).expect("order status request")
 }
 
+#[cfg(feature = "signer-adapters")]
 fn buyer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
 }
 
+#[cfg(feature = "signer-adapters")]
 fn seller_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller]).expect("actor")
-}
-
-#[cfg(any())]
-fn other_buyer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(OTHER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
-}
-
-#[cfg(any())]
-fn other_seller_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(OTHER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller]).expect("actor")
-}
-
-#[cfg(any())]
-fn non_buyer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer]).expect("actor")
-}
-
-#[cfg(any())]
-fn non_seller_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
 }
 
 fn listing_address() -> RadrootsListingAddress {
@@ -567,16 +511,19 @@ fn listing_event_ptr() -> RadrootsEventPtr {
     }
 }
 
+#[cfg(feature = "signer-adapters")]
 fn explicit_trade_relays() -> TargetPolicy {
     TargetPolicy::explicit(
         TargetSet::nostr_relays([RELAY], NostrRelayUrlPolicy::Public).expect("transport targets"),
     )
 }
 
+#[cfg(feature = "signer-adapters")]
 fn public_note_confirmation() -> PrivacyPreflightConfirmation {
     PrivacyPreflightConfirmation::new().confirm(ProductSensitivityField::PublicButSensitiveNotes)
 }
 
+#[cfg(feature = "signer-adapters")]
 fn expect_enqueued<Plan, Receipt>(outcome: TradeMutationOutcome<Plan, Receipt>) -> Receipt {
     match outcome {
         TradeMutationOutcome::Enqueued { receipt } => receipt,
@@ -649,6 +596,7 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
     }
 }
 
+#[cfg(feature = "signer-adapters")]
 fn trade_propose_request(
     raw_order_id: &str,
     publish_mode: PublishMode,
@@ -658,312 +606,11 @@ fn trade_propose_request(
     TradeProposeRequest::new(
         buyer_actor(),
         listing_event_ptr(),
-        order.order_id,
-        order.listing_addr,
-        order.seller_pubkey,
-        order.items,
-        order.economics,
+        order,
         explicit_trade_relays(),
         publish_mode,
         satisfaction_policy,
     )
-}
-
-#[cfg(any())]
-fn invalid_listing_event_ptr() -> RadrootsEventPtr {
-    RadrootsEventPtr {
-        id: String::new(),
-        relays: Some(RELAY.to_owned()),
-    }
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_prepare_is_side_effect_free() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let listing_event = listing_event_ptr();
-    let request = TradeSubmitPrepareRequest::new(
-        buyer_actor(),
-        listing_event.clone(),
-        order_request("order-submit-prepare"),
-    );
-
-    let prepared = sdk.trades().prepare_submit(request).expect("prepared");
-
-    assert_eq!(prepared.order_id.as_str(), "order-submit-prepare");
-    assert_eq!(prepared.listing_addr, listing_address());
-    assert_eq!(
-        prepared.listing_event_id.as_str(),
-        listing_event.id.as_str()
-    );
-    assert_eq!(prepared.frozen_draft.kind_u32(), KIND_ORDER_REQUEST);
-    assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
-    assert_eq!(
-        prepared.expected_event_id,
-        prepared.frozen_draft.expected_event_id_str()
-    );
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        0
-    );
-    assert!(
-        store
-            .get_event(prepared.expected_event_id.as_str())
-            .await
-            .expect("event lookup")
-            .is_none()
-    );
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    assert!(
-        outbox
-            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
-            .await
-            .expect("claim")
-            .is_none()
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_prepare_rejects_missing_listing_evidence() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let request = TradeSubmitPrepareRequest::new(
-        buyer_actor(),
-        invalid_listing_event_ptr(),
-        order_request("order-submit-missing-listing"),
-    );
-
-    let error = sdk
-        .trades()
-        .prepare_submit(request)
-        .expect_err("missing listing evidence");
-
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-
-    let non_buyer = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            non_buyer_actor(),
-            listing_event_ptr(),
-            order_request("order-submit-non-buyer"),
-        ))
-        .expect_err("non buyer");
-    assert!(matches!(
-        non_buyer,
-        RadrootsSdkError::UnauthorizedActor { .. }
-    ));
-
-    let wrong_actor = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            other_buyer_actor(),
-            listing_event_ptr(),
-            order_request("order-submit-wrong-actor"),
-        ))
-        .expect_err("wrong actor");
-    assert!(matches!(
-        wrong_actor,
-        RadrootsSdkError::UnauthorizedActor { .. }
-    ));
-
-    let mut seller_mismatch = order_request("order-submit-seller-mismatch");
-    seller_mismatch.seller_pubkey = OTHER_PUBLIC_KEY_HEX.parse().expect("seller pubkey");
-    let seller_error = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            buyer_actor(),
-            listing_event_ptr(),
-            seller_mismatch,
-        ))
-        .expect_err("seller mismatch");
-    assert!(matches!(
-        seller_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let mut empty_items = order_request("order-submit-empty-items");
-    empty_items.items.clear();
-    let empty_items_error = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            buyer_actor(),
-            listing_event_ptr(),
-            empty_items,
-        ))
-        .expect_err("empty items");
-    assert!(matches!(
-        empty_items_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let mut empty_economics = order_request("order-submit-empty-economics");
-    empty_economics.economics.items.clear();
-    let empty_economics_error = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            buyer_actor(),
-            listing_event_ptr(),
-            empty_economics,
-        ))
-        .expect_err("empty economics");
-    assert!(matches!(
-        empty_economics_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let order = order_request("order-submit-enqueue");
-    let prepared = sdk
-        .trades()
-        .prepare_submit(TradeSubmitPrepareRequest::new(
-            buyer_actor(),
-            listing_event_ptr(),
-            order.clone(),
-        ))
-        .expect("prepared");
-    assert_eq!(prepared.workflow.kind, TradeWorkflowKind::Submit);
-    assert_eq!(
-        prepared.workflow.operation_kind,
-        TRADE_SUBMIT_OPERATION_KIND
-    );
-    assert_eq!(prepared.workflow.contract_id, "radroots.order.request.v1");
-    assert_eq!(
-        prepared.workflow.expected_event_id,
-        prepared.expected_event_id
-    );
-    assert_eq!(prepared.workflow.created_at, prepared.created_at);
-    let request = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order,
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets")
-    .try_with_idempotency_key("order-submit-enqueue-idempotency")
-    .expect("idempotency key");
-
-    let receipt = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect("enqueue");
-
-    assert_eq!(receipt.order_id, prepared.order_id);
-    assert_eq!(receipt.listing_addr, prepared.listing_addr);
-    assert_eq!(receipt.listing_event_id, prepared.listing_event_id);
-    assert_eq!(receipt.workflow.kind, TradeWorkflowKind::Submit);
-    assert_eq!(receipt.workflow.operation_kind, TRADE_SUBMIT_OPERATION_KIND);
-    assert_eq!(
-        receipt.workflow.expected_event_id,
-        prepared.expected_event_id
-    );
-    assert_eq!(receipt.workflow.signed_event_id, receipt.signed_event_id);
-    assert_eq!(receipt.workflow.local_event_seq, receipt.local_event_seq);
-    assert_eq!(
-        receipt.workflow.outbox_operation_id,
-        receipt.outbox_operation_id
-    );
-    assert_eq!(receipt.workflow.outbox_event_id, receipt.outbox_event_id);
-    assert_eq!(receipt.workflow.state, receipt.state);
-    assert_eq!(
-        receipt.workflow.idempotency_digest_prefix,
-        receipt.idempotency_digest_prefix
-    );
-    assert_eq!(
-        receipt.workflow.idempotency.digest_prefix,
-        receipt.idempotency_digest_prefix
-    );
-    assert!(!receipt.workflow.idempotency.replayed_existing_operation);
-    assert!(
-        receipt
-            .workflow
-            .idempotency
-            .safe_to_retry_with_same_idempotency_key
-    );
-    assert!(!receipt.workflow.retry.retryable_after_error);
-    assert!(
-        receipt
-            .workflow
-            .retry
-            .safe_to_retry_enqueue_with_same_idempotency_key
-    );
-    assert!(receipt.workflow.retry.recovery_actions.is_empty());
-    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
-    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
-    assert_eq!(receipt.local_event_seq, 1);
-    assert_eq!(receipt.outbox_operation_id, 1);
-    assert_eq!(receipt.outbox_event_id, 1);
-    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
-    assert!(receipt.idempotency_digest_prefix.is_some());
-
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        1
-    );
-    let stored_event = store
-        .get_event(receipt.signed_event_id.as_str())
-        .await
-        .expect("event lookup")
-        .expect("stored event");
-    assert_eq!(stored_event.kind, KIND_ORDER_REQUEST);
-    assert_eq!(
-        stored_event.contract_id.as_deref(),
-        Some("radroots.order.request.v1")
-    );
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    let outbox_event = outbox
-        .get_event(receipt.outbox_event_id)
-        .await
-        .expect("outbox event")
-        .expect("outbox event");
-    assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
-    assert_eq!(outbox_event.draft.kind_u32(), KIND_ORDER_REQUEST);
-    assert!(outbox_event.signed_event.is_some());
-
-    let status = sdk
-        .trades()
-        .status(status_request("order-submit-enqueue"))
-        .await
-        .expect("status");
-    assert!(status.found);
-    assert_eq!(status.status, TradeStatusKind::Requested);
-    assert_eq!(status.event_count, 1);
-    assert_eq!(
-        status
-            .request_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(receipt.signed_event_id.as_str())
-    );
 }
 
 #[cfg(all(
@@ -991,7 +638,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-facade-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000204")
                 .expect("propose idempotency"),
             )
             .await
@@ -1063,7 +710,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
                     SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
-                .try_with_idempotency_key("trade-product-facade-accept")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000205")
                 .expect("accept idempotency"),
             )
             .await
@@ -1081,7 +728,7 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         .status(TradeStatusRequest::new(propose_receipt.locator.clone()))
         .await
         .expect("facade status");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingValidation);
     assert_eq!(
         status
             .decision_event_id
@@ -1102,7 +749,10 @@ async fn trade_product_clients_propose_inbox_accept_status_and_resync() {
         .expect("facade resync");
     assert_eq!(resync.nostr_relay_urls, vec![RELAY.to_owned()]);
     assert_eq!(resync.evidence.eose_count, 1);
-    assert_eq!(resync.status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        resync.status.status,
+        TradeStatusKind::AgreedPendingValidation
+    );
     assert_eq!(
         resync.status.last_event_id,
         Some(accept_receipt.signed_event_id)
@@ -1132,11 +782,11 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     )
     .await;
     let buyer_store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("buyer event store");
     let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("seller event store");
     let propose_receipt = expect_enqueued(
@@ -1149,7 +799,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-committed-resync-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000206")
                 .expect("propose idempotency"),
             )
             .await
@@ -1199,7 +849,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
                     SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::LocalOnly,
                 )
-                .try_with_idempotency_key("trade-product-committed-resync-accept")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000207")
                 .expect("accept idempotency"),
             )
             .await
@@ -1216,35 +866,14 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     let receipt_event_id =
         RadrootsEventId::parse(receipt_raw_event.id.to_hex().as_str()).expect("receipt id");
     let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
-    let worker_raw_event = signed_raw_worker_result_event(
-        "trade-product-committed-resync",
-        &receipt_event_id,
-        &propose_receipt.listing_event_id,
-        &propose_receipt.signed_event_id,
-        &accept_receipt.signed_event_id,
-        34,
-    );
 
-    let ingest = seller_sdk
-        .dvm()
-        .ingest_validation_receipt(
-            DvmValidationReceiptIngestRequest::new(signed_event_from_envelope(receipt_event))
-                .with_expected_order_id(propose_receipt.order_id.clone())
-                .with_expected_listing_event_id(propose_receipt.listing_event_id.clone())
-                .with_expected_root_event_id(propose_receipt.signed_event_id.clone())
-                .with_expected_target_event_id(accept_receipt.signed_event_id.clone()),
-        )
-        .await
-        .expect("ingest validation receipt");
-    assert!(ingest.inserted);
-    assert_eq!(ingest.receipt_event_id, receipt_event_id);
     seller_store
         .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(radroots_event_from_nostr(&worker_raw_event)),
-            4_050,
+            signed_event_from_envelope(receipt_event),
+            4_040,
         ))
         .await
-        .expect("ingest validation result");
+        .expect("ingest validation receipt");
 
     let seller_resync = seller_sdk
         .trades()
@@ -1257,7 +886,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         .expect("seller resync");
     assert_eq!(
         seller_resync.status.status,
-        TradeStatusKind::AgreedPendingRhi
+        TradeStatusKind::AgreedPendingValidation
     );
     assert_eq!(
         seller_resync.status.rhi_receipt_event_id,
@@ -1278,6 +907,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
 
     let trusted_local_policy = RadrootsTradeValidationTrustPolicy::production()
         .with_trusted_rhi_pubkeys(vec![service_pubkey.parse().expect("service pubkey")])
+        .with_allow_deterministic_none(true)
         .with_require_cryptographic_proof(false);
     let seller_trusted_local = seller_sdk
         .trades()
@@ -1299,7 +929,7 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
     assert!(!seller_trust.production_committed);
     assert_eq!(
         seller_trust
-            .result_author
+            .receipt_author
             .as_ref()
             .map(|pubkey| pubkey.as_str()),
         Some(service_pubkey.as_str())
@@ -1309,7 +939,6 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         relay_event_item_from_store(&seller_store, &accept_receipt.signed_event_id, RELAY, 4_100)
             .await,
         relay_raw_event_item(&receipt_raw_event, RELAY, 4_200),
-        relay_raw_event_item(&worker_raw_event, RELAY, 4_201),
         relay_eose(RELAY),
     ]);
     let buyer_resync = buyer_sdk
@@ -1323,13 +952,13 @@ async fn trade_product_clients_resync_committed_after_rhi_validation_receipt() {
         .expect("buyer resync");
     assert_eq!(
         buyer_resync.status.status,
-        TradeStatusKind::AgreedPendingRhi
+        TradeStatusKind::AgreedPendingValidation
     );
     assert_eq!(
         buyer_resync.status.rhi_receipt_event_id,
         Some(receipt_event_id)
     );
-    assert_eq!(buyer_resync.evidence.inserted_count, 3);
+    assert_eq!(buyer_resync.evidence.inserted_count, 2);
 }
 
 #[tokio::test]
@@ -1352,19 +981,10 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
     let receipt_event = radroots_event_from_nostr(&receipt_raw_event);
     let receipt_event_id =
         RadrootsEventId::parse(receipt_raw_event.id.to_hex()).expect("receipt id");
-    let worker_raw_event = signed_raw_sp1_worker_result_event(
-        order_id,
-        &receipt_event_id,
-        &listing_event_id,
-        &request_event_id,
-        &decision_event_id,
-        73,
-    );
     for (event, observed_at_ms) in [
         (request_event, 7_000),
         (decision_event, 7_100),
         (receipt_event, 7_200),
-        (radroots_event_from_nostr(&worker_raw_event), 7_300),
     ] {
         store
             .ingest_event(RadrootsEventIngest::new(
@@ -1380,7 +1000,10 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
         .status(status_request(order_id))
         .await
         .expect("default status");
-    assert_eq!(default_status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(
+        default_status.status,
+        TradeStatusKind::AgreedPendingValidation
+    );
     assert_eq!(
         default_status
             .validation_trust
@@ -1399,6 +1022,10 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
         .expect("trusted status");
 
     assert_eq!(trusted_status.status, TradeStatusKind::Committed);
+    assert_eq!(
+        trusted_status.rhi_receipt_event_id,
+        Some(receipt_event_id.clone())
+    );
     assert!(trusted_status.lifecycle_terminal);
     assert_eq!(
         trusted_status.next_action,
@@ -1414,7 +1041,7 @@ async fn trade_status_trust_policy_requires_trusted_cryptographic_receipt_for_co
     assert!(trust.cryptographic_proof_verified);
     assert_eq!(trust.proof_system.as_deref(), Some("sp1_core"));
     assert_eq!(
-        trust.result_author.as_ref().map(|pubkey| pubkey.as_str()),
+        trust.receipt_author.as_ref().map(|pubkey| pubkey.as_str()),
         Some(service_pubkey.as_str())
     );
 }
@@ -1442,11 +1069,11 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
     )
     .await;
     let buyer_store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("buyer event store");
     let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("seller event store");
     let propose_receipt = expect_enqueued(
@@ -1455,11 +1082,11 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
             .buyer()
             .propose_trade(
                 trade_propose_request(
-                    "trade-product-resync-before-accept",
+                    "01890f0e-6c00-7000-8000-000000000209",
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-resync-before-accept-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000208")
                 .expect("propose idempotency"),
             )
             .await
@@ -1495,7 +1122,7 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
                     SatisfactionPolicy::NoWait,
                     TradeEvidenceMode::ResyncBeforeMutation,
                 )
-                .try_with_idempotency_key("trade-product-resync-before-accept")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000209")
                 .expect("accept idempotency"),
                 &adapter,
             )
@@ -1511,7 +1138,7 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
         .status(TradeStatusRequest::new(propose_receipt.locator))
         .await
         .expect("seller status after accept");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingValidation);
     assert_eq!(
         status.decision_event_id,
         Some(accept_receipt.signed_event_id)
@@ -1521,153 +1148,6 @@ async fn trade_product_accept_resync_before_mutation_imports_relay_visible_reque
             .status_summary()
             .await
             .expect("seller imported request and decision")
-            .total_events,
-        2
-    );
-}
-
-#[cfg(all(
-    feature = "signer-adapters",
-    feature = "local-signer",
-    feature = "transport-nostr-runtime"
-))]
-#[tokio::test]
-async fn trade_product_revision_status_resync_imports_pending_revision_proposal() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let buyer_storage_root = tempdir.path().join("buyer-sdk");
-    let seller_storage_root = tempdir.path().join("seller-sdk");
-    let decision_storage_root = tempdir.path().join("decision-sdk");
-    let buyer_sdk = directory_sdk_with_signer_and_relays(
-        buyer_storage_root.as_path(),
-        BUYER_SECRET_KEY_HEX,
-        &[RELAY],
-    )
-    .await;
-    let seller_sdk = directory_sdk_with_signer_and_relays(
-        seller_storage_root.as_path(),
-        SELLER_SECRET_KEY_HEX,
-        &[RELAY],
-    )
-    .await;
-    let decision_sdk = directory_sdk_with_signer_and_relays(
-        decision_storage_root.as_path(),
-        BUYER_SECRET_KEY_HEX,
-        &[RELAY],
-    )
-    .await;
-    let buyer_store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
-            .await
-            .expect("buyer event store");
-    let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
-            .await
-            .expect("seller event store");
-    let decision_store = RadrootsEventStore::open_file(
-        &decision_sdk
-            .storage_paths()
-            .expect("paths")
-            .event_store_path,
-    )
-    .await
-    .expect("decision event store");
-    let propose_receipt = expect_enqueued(
-        buyer_sdk
-            .trades()
-            .buyer()
-            .propose_trade(
-                trade_propose_request(
-                    "trade-product-resync-before-revision-decision",
-                    PublishMode::EnqueueOnly,
-                    SatisfactionPolicy::NoWait,
-                )
-                .try_with_idempotency_key("trade-product-resync-before-revision-decision-propose")
-                .expect("propose idempotency"),
-            )
-            .await
-            .expect("propose trade"),
-    );
-    seller_sdk
-        .trades()
-        .resync()
-        .resync_with_fetch_adapter(
-            TradeResyncRequest::new(propose_receipt.locator.clone()),
-            &RadrootsMockRelayFetchAdapter::new(vec![
-                relay_event_item_from_store(
-                    &buyer_store,
-                    &propose_receipt.signed_event_id,
-                    RELAY,
-                    4_400,
-                )
-                .await,
-                relay_eose(RELAY),
-            ]),
-        )
-        .await
-        .expect("seller request resync");
-    let revision_id: RadrootsOrderRevisionId = "revision-product-resync-before-decision"
-        .parse()
-        .expect("revision id");
-    let proposal_receipt = expect_enqueued(
-        seller_sdk
-            .trades()
-            .seller()
-            .propose_revision(
-                TradeRevisionProposalRequest::new(
-                    seller_actor(),
-                    propose_receipt.locator.clone(),
-                    revision_id,
-                    vec![RadrootsOrderItem {
-                        bin_id: "bin-1".parse().expect("bin id"),
-                        bin_count: 3,
-                    }],
-                    revision_economics(),
-                    "increase quantity",
-                    explicit_trade_relays(),
-                    PublishMode::EnqueueOnly,
-                    SatisfactionPolicy::NoWait,
-                    TradeEvidenceMode::LocalOnly,
-                )
-                .with_privacy_confirmation(public_note_confirmation())
-                .try_with_idempotency_key("trade-product-resync-before-revision-proposal")
-                .expect("revision proposal idempotency"),
-            )
-            .await
-            .expect("propose revision"),
-    );
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        relay_event_item_from_store(&buyer_store, &propose_receipt.signed_event_id, RELAY, 4_500)
-            .await,
-        relay_event_item_from_store(
-            &seller_store,
-            &proposal_receipt.signed_event_id,
-            RELAY,
-            4_501,
-        )
-        .await,
-        relay_eose(RELAY),
-    ]);
-    let status = decision_sdk
-        .trades()
-        .status_with_fetch_adapter(
-            TradeStatusRequest::new(propose_receipt.locator.clone())
-                .with_source(SdkTradeStatusSource::ResyncThenLocal),
-            &adapter,
-        )
-        .await
-        .expect("decision resync status");
-
-    assert_eq!(status.status, TradeStatusKind::RevisionProposed);
-    assert_eq!(
-        status.pending_revision_event_id,
-        Some(proposal_receipt.signed_event_id)
-    );
-    assert!(status.eligibility.can_decide_revision);
-    assert_eq!(
-        decision_store
-            .status_summary()
-            .await
-            .expect("decision imported request and proposal")
             .total_events,
         2
     );
@@ -1696,7 +1176,7 @@ async fn trade_product_accept_local_only_does_not_fetch_nostr_evidence() {
     )
     .await;
     let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("seller event store");
     let propose_receipt = expect_enqueued(
@@ -1709,7 +1189,7 @@ async fn trade_product_accept_local_only_does_not_fetch_nostr_evidence() {
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-local-only-no-fetch-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020a")
                 .expect("propose idempotency"),
             )
             .await
@@ -1761,11 +1241,11 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
     let seller_sdk =
         directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
     let buyer_store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("buyer event store");
     let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("seller event store");
     let propose_receipt = expect_enqueued(
@@ -1774,11 +1254,11 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
             .buyer()
             .propose_trade(
                 trade_propose_request(
-                    "trade-product-explicit-accept",
+                    "01890f0e-6c00-7000-8000-00000000020c",
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-explicit-accept-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020b")
                 .expect("propose idempotency"),
             )
             .await
@@ -1804,7 +1284,7 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
                         TradeEvidenceIngestRequest::new(signed_event_from_envelope(request_event)),
                     ]),
                 )
-                .try_with_idempotency_key("trade-product-explicit-accept")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020c")
                 .expect("accept idempotency"),
             )
             .await
@@ -1819,7 +1299,7 @@ async fn trade_product_accept_require_explicit_evidence_ingests_supplied_request
         .status(TradeStatusRequest::new(propose_receipt.locator))
         .await
         .expect("seller explicit status after accept");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingValidation);
     assert_eq!(
         seller_store
             .status_summary()
@@ -1841,7 +1321,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
     let seller_sdk =
         directory_sdk_with_signer(seller_storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
     let seller_store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("seller event store");
     let propose_receipt = expect_enqueued(
@@ -1854,7 +1334,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-empty-explicit-accept-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020d")
                 .expect("propose idempotency"),
             )
             .await
@@ -1893,7 +1373,7 @@ async fn trade_product_accept_require_explicit_evidence_rejects_empty_evidence()
 
 #[cfg(feature = "transport-nostr-runtime")]
 #[tokio::test]
-async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence() {
+async fn trade_validation_receipts_fetch_from_relays_and_inspect_receipt() {
     let (_tempdir, sdk, store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
     let order_id = "trade-validation-receipts-sdk";
     let listing_event_id = deterministic_event_id("validation-receipt-listing");
@@ -1908,131 +1388,8 @@ async fn trade_validation_receipts_fetch_from_relays_and_select_worker_evidence(
     );
     let receipt_event_id =
         RadrootsEventId::parse(receipt_raw_event.id.to_hex()).expect("receipt event id");
-    let worker_raw_event = signed_raw_worker_result_event(
-        order_id,
-        &receipt_event_id,
-        &listing_event_id,
-        &root_event_id,
-        &target_event_id,
-        34,
-    );
-    let worker_event_id = worker_raw_event.id.to_hex();
-    let wrong_root_event_id = deterministic_event_id("validation-receipt-worker-wrong-root");
-    let wrong_worker_raw_event = signed_raw_worker_result_event(
-        order_id,
-        &receipt_event_id,
-        &listing_event_id,
-        &wrong_root_event_id,
-        &target_event_id,
-        35,
-    );
-    let wrong_worker_event_id = wrong_worker_raw_event.id.to_hex();
-    let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
         relay_raw_event_item(&receipt_raw_event, RELAY, 4_000),
-        relay_raw_event_item(&worker_raw_event, RELAY, 4_001),
-        relay_raw_event_item(&wrong_worker_raw_event, RELAY, 4_002),
-        relay_eose(RELAY),
-    ]);
-
-    let list = sdk
-        .trades()
-        .validation_receipts()
-        .list_with_fetch_adapter(
-            TradeValidationReceiptListRequest::parse(order_id)
-                .expect("list request")
-                .try_with_trusted_worker_pubkeys([service_pubkey.as_str()])
-                .expect("trusted worker"),
-            &adapter,
-        )
-        .await
-        .expect("validation receipt list");
-
-    assert_eq!(list.nostr_relay_urls, vec![RELAY.to_owned()]);
-    assert_eq!(list.receipts.len(), 1);
-    assert!(list.invalid_receipts.is_empty());
-    assert_eq!(list.nostr_evidence.out_of_filter_count, 2);
-    assert_eq!(list.receipts[0].event.id_str(), receipt_event_id.as_str());
-    let trusted = list.receipts[0]
-        .worker_evidence
-        .trusted
-        .as_ref()
-        .expect("trusted evidence");
-    assert_eq!(trusted.author.as_str(), service_pubkey);
-    assert_eq!(
-        trusted
-            .validation_authority
-            .map(|authority| authority.as_str()),
-        Some("trusted_rhi_service_key")
-    );
-    assert_eq!(
-        trusted
-            .commitment_confidence
-            .map(|confidence| confidence.as_str()),
-        Some("committed_by_trusted_service")
-    );
-    assert!(
-        store
-            .get_event(wrong_worker_event_id.as_str())
-            .await
-            .expect("wrong worker event lookup")
-            .is_none()
-    );
-
-    let inspect = sdk
-        .trades()
-        .validation_receipts()
-        .inspect_with_fetch_adapter(
-            TradeValidationReceiptInspectRequest::new(receipt_event_id.clone())
-                .try_with_trusted_worker_pubkeys([service_pubkey.as_str()])
-                .expect("trusted worker"),
-            &adapter,
-        )
-        .await
-        .expect("validation receipt inspect");
-
-    assert_eq!(inspect.receipt_event_id, receipt_event_id);
-    assert!(inspect.invalid_receipt.is_none());
-    assert_eq!(
-        inspect
-            .receipt
-            .as_ref()
-            .and_then(|receipt| receipt.worker_evidence.trusted.as_ref())
-            .map(|evidence| evidence.result_event_id.as_str()),
-        Some(worker_event_id.as_str())
-    );
-}
-
-#[cfg(feature = "transport-nostr-runtime")]
-#[tokio::test]
-async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_trust_config() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store_with_relays(&[RELAY]).await;
-    let order_id = "trade-validation-receipts-untrusted-default";
-    let listing_event_id = deterministic_event_id("validation-receipt-untrusted-listing");
-    let root_event_id = deterministic_event_id("validation-receipt-untrusted-request");
-    let target_event_id = deterministic_event_id("validation-receipt-untrusted-decision");
-    let receipt_raw_event = signed_raw_validation_receipt_event(
-        order_id,
-        &listing_event_id,
-        &root_event_id,
-        &target_event_id,
-        36,
-    );
-    let receipt_event_id =
-        RadrootsEventId::parse(receipt_raw_event.id.to_hex()).expect("receipt event id");
-    let worker_raw_event = signed_raw_worker_result_event(
-        order_id,
-        &receipt_event_id,
-        &listing_event_id,
-        &root_event_id,
-        &target_event_id,
-        37,
-    );
-    let worker_event_id = worker_raw_event.id.to_hex();
-    let service_pubkey = public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX);
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        relay_raw_event_item(&receipt_raw_event, RELAY, 4_000),
-        relay_raw_event_item(&worker_raw_event, RELAY, 4_001),
         relay_eose(RELAY),
     ]);
 
@@ -2045,16 +1402,15 @@ async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_tr
         )
         .await
         .expect("validation receipt list");
-    let list_evidence = &list.receipts[0].worker_evidence;
-    assert!(list_evidence.trusted.is_none());
-    let list_untrusted = list_evidence.untrusted.as_ref().expect("list untrusted");
-    assert_eq!(list_untrusted.result_event_id.as_str(), worker_event_id);
-    assert_eq!(list_untrusted.author.as_str(), service_pubkey);
+
+    assert_eq!(list.nostr_relay_urls, vec![RELAY.to_owned()]);
+    assert_eq!(list.receipts.len(), 1);
+    assert!(list.invalid_receipts.is_empty());
+    assert_eq!(list.nostr_evidence.out_of_filter_count, 0);
+    assert_eq!(list.receipts[0].event.id_str(), receipt_event_id.as_str());
     assert_eq!(
-        list_untrusted
-            .commitment_confidence
-            .map(|confidence| confidence.as_str()),
-        Some("committed_by_trusted_service")
+        list.receipts[0].tags.root_event_id.as_str(),
+        root_event_id.as_str()
     );
 
     let inspect = sdk
@@ -2066,41 +1422,39 @@ async fn trade_validation_receipts_classify_worker_evidence_untrusted_without_tr
         )
         .await
         .expect("validation receipt inspect");
-    let inspect_evidence = &inspect
-        .receipt
-        .as_ref()
-        .expect("inspect receipt")
-        .worker_evidence;
-    assert!(inspect_evidence.trusted.is_none());
+
+    assert_eq!(inspect.receipt_event_id, receipt_event_id);
+    assert!(inspect.invalid_receipt.is_none());
     assert_eq!(
-        inspect_evidence
-            .untrusted
+        inspect
+            .receipt
             .as_ref()
-            .map(|evidence| evidence.result_event_id.as_str()),
-        Some(worker_event_id.as_str())
+            .map(|receipt| receipt.tags.target_event_id.as_str()),
+        Some(target_event_id.as_str())
     );
 
     let verify = sdk
         .trades()
         .validation_receipts()
         .verify_with_fetch_adapter(
-            TradeValidationReceiptVerifyRequest::new(receipt_event_id),
+            TradeValidationReceiptVerifyRequest::new(receipt_event_id.clone()),
             &adapter,
         )
         .await
         .expect("validation receipt verify");
-    let verify_evidence = &verify
-        .receipt
-        .as_ref()
-        .expect("verify receipt")
-        .worker_evidence;
-    assert!(verify_evidence.trusted.is_none());
     assert_eq!(
-        verify_evidence
-            .untrusted
+        verify
+            .receipt
             .as_ref()
-            .map(|evidence| evidence.result_event_id.as_str()),
-        Some(worker_event_id.as_str())
+            .map(|receipt| receipt.tags.listing_event_id.as_str()),
+        Some(listing_event_id.as_str())
+    );
+    assert!(
+        store
+            .get_event(receipt_event_id.as_str())
+            .await
+            .expect("stored receipt lookup")
+            .is_some()
     );
 }
 
@@ -2294,7 +1648,7 @@ async fn trade_resync_imports_nostr_evidence_into_empty_local_store() {
     assert_eq!(resync.status.status, TradeStatusKind::Requested);
     assert_eq!(resync.evidence.inserted_count, 1);
     assert_eq!(resync.evidence.duplicate_count, 0);
-    assert_eq!(resync.evidence.query_plan.branches.len(), 5);
+    assert_eq!(resync.evidence.query_plan.branches.len(), 4);
     assert!(
         resync
             .evidence
@@ -2486,8 +1840,8 @@ async fn trade_resync_splits_lifecycle_branch_into_single_kind_filters() {
         .expect("resync");
 
     let filters = adapter.filters_json();
-    assert_eq!(filters.len(), 6);
-    for kind in [3422, 3423, 3424, 3425, 3432, 3440] {
+    assert_eq!(filters.len(), 4);
+    for kind in [3422, 3423, 3432, 3440] {
         assert!(
             filters
                 .iter()
@@ -2650,6 +2004,7 @@ async fn relay_event_item_from_store(
     }
 }
 
+#[cfg(feature = "signer-adapters")]
 async fn event_from_store(
     source: &RadrootsEventStore,
     event_id: &RadrootsEventId,
@@ -2708,10 +2063,10 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
     let storage_root = tempdir.path().join("sdk");
     let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
     let storage_paths = buyer_sdk.storage_paths().expect("storage paths");
-    let store = RadrootsEventStore::open_file(&storage_paths.event_store_path)
+    let store = RadrootsEventStore::open_file(&storage_paths.runtime_path)
         .await
         .expect("event store");
-    let outbox = RadrootsOutbox::open_file(&storage_paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&storage_paths.runtime_path)
         .await
         .expect("outbox");
     let request = trade_propose_request(
@@ -2719,7 +2074,7 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
         PublishMode::EnqueueOnly,
         SatisfactionPolicy::NoWait,
     )
-    .try_with_idempotency_key("trade-product-idempotent-key")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020e")
     .expect("idempotency");
 
     let first = expect_enqueued(
@@ -2774,7 +2129,7 @@ async fn trade_product_propose_idempotency_replays_same_payload_and_conflicts_di
                 PublishMode::EnqueueOnly,
                 SatisfactionPolicy::NoWait,
             )
-            .try_with_idempotency_key("trade-product-idempotent-key")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020e")
             .expect("conflict idempotency"),
         )
         .await
@@ -2848,7 +2203,7 @@ async fn trade_product_propose_requires_public_note_privacy_confirmation() {
     );
 
     let store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("event store");
     assert_eq!(
@@ -2874,13 +2229,13 @@ async fn trade_product_propose_publishes_public_note_after_confirmation() {
             .buyer()
             .propose_trade(
                 trade_propose_request(
-                    "trade-product-propose-public-note-confirmed",
+                    "01890f0e-6c00-7000-8000-00000000020f",
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
                 .with_public_note("please leave at the community table")
                 .with_privacy_confirmation(public_note_confirmation())
-                .try_with_idempotency_key("trade-product-propose-public-note-confirmed")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000020f")
                 .expect("proposal idempotency"),
             )
             .await
@@ -2889,10 +2244,10 @@ async fn trade_product_propose_publishes_public_note_after_confirmation() {
 
     assert_eq!(
         receipt.order_id.as_str(),
-        "trade-product-propose-public-note-confirmed"
+        "01890f0e-6c00-7000-8000-00000000020f"
     );
     let store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("event store");
     assert_eq!(
@@ -2939,7 +2294,7 @@ async fn trade_product_propose_blocks_sensitive_fulfillment_note_even_when_confi
     assert_eq!(*status, PrivacyPreflightStatus::ForbiddenPublicFields);
     assert!(fields.contains(&ProductSensitivityField::SensitiveFulfillmentDetails));
     let store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("event store");
     assert_eq!(
@@ -2968,7 +2323,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-privacy-decline-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000210")
                 .expect("propose idempotency"),
             )
             .await
@@ -3011,7 +2366,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
         "public_but_sensitive_notes"
     );
     let store =
-        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&seller_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("event store");
     assert_eq!(
@@ -3038,7 +2393,7 @@ async fn trade_product_decline_requires_public_reason_privacy_confirmation() {
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
-                .try_with_idempotency_key("trade-product-privacy-decline-confirmed")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000211")
                 .expect("decline idempotency"),
             )
             .await
@@ -3072,7 +2427,7 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-privacy-cancel-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000212")
                 .expect("propose idempotency"),
             )
             .await
@@ -3109,7 +2464,7 @@ async fn trade_product_cancel_blocks_sensitive_fulfillment_reason_before_mutatio
     assert_eq!(*status, PrivacyPreflightStatus::ForbiddenPublicFields);
     assert!(fields.contains(&ProductSensitivityField::SensitiveFulfillmentDetails));
     let store =
-        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").event_store_path)
+        RadrootsEventStore::open_file(&buyer_sdk.storage_paths().expect("paths").runtime_path)
             .await
             .expect("event store");
     assert_eq!(
@@ -3134,11 +2489,11 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
             .buyer()
             .propose_trade(
                 trade_propose_request(
-                    "trade-product-cancel",
+                    "01890f0e-6c00-7000-8000-000000000214",
                     PublishMode::EnqueueOnly,
                     SatisfactionPolicy::NoWait,
                 )
-                .try_with_idempotency_key("trade-product-cancel-propose")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000213")
                 .expect("propose idempotency"),
             )
             .await
@@ -3160,7 +2515,7 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
                     TradeEvidenceMode::LocalOnly,
                 )
                 .with_privacy_confirmation(public_note_confirmation())
-                .try_with_idempotency_key("trade-product-cancel")
+                .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000214")
                 .expect("cancel idempotency"),
             )
             .await
@@ -3184,105 +2539,6 @@ async fn trade_product_cancel_enqueues_with_locator_and_updates_status() {
         Some(cancellation.signed_event_id)
     );
     assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
-}
-
-#[cfg(all(feature = "signer-adapters", feature = "local-signer"))]
-#[tokio::test]
-async fn trade_product_revision_lifecycle_uses_locator_and_updates_status() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let storage_root = tempdir.path().join("sdk");
-    let buyer_sdk = directory_sdk_with_signer(storage_root.as_path(), BUYER_SECRET_KEY_HEX).await;
-    let seller_sdk = directory_sdk_with_signer(storage_root.as_path(), SELLER_SECRET_KEY_HEX).await;
-    let propose_receipt = expect_enqueued(
-        buyer_sdk
-            .trades()
-            .buyer()
-            .propose_trade(
-                trade_propose_request(
-                    "trade-product-revision",
-                    PublishMode::EnqueueOnly,
-                    SatisfactionPolicy::NoWait,
-                )
-                .try_with_idempotency_key("trade-product-revision-propose")
-                .expect("propose idempotency"),
-            )
-            .await
-            .expect("propose trade"),
-    );
-    let revision_id: RadrootsOrderRevisionId =
-        "revision-product-revision".parse().expect("revision id");
-    let proposal = expect_enqueued(
-        seller_sdk
-            .trades()
-            .seller()
-            .propose_revision(
-                TradeRevisionProposalRequest::new(
-                    seller_actor(),
-                    propose_receipt.locator.clone(),
-                    revision_id.clone(),
-                    vec![RadrootsOrderItem {
-                        bin_id: "bin-1".parse().expect("bin id"),
-                        bin_count: 3,
-                    }],
-                    revision_economics(),
-                    "increase quantity",
-                    explicit_trade_relays(),
-                    PublishMode::EnqueueOnly,
-                    SatisfactionPolicy::NoWait,
-                    TradeEvidenceMode::LocalOnly,
-                )
-                .with_privacy_confirmation(public_note_confirmation())
-                .try_with_idempotency_key("trade-product-revision-proposal")
-                .expect("revision proposal idempotency"),
-            )
-            .await
-            .expect("propose revision"),
-    );
-    let pending = buyer_sdk
-        .trades()
-        .status(TradeStatusRequest::new(propose_receipt.locator.clone()))
-        .await
-        .expect("pending revision status");
-    assert_eq!(pending.status, TradeStatusKind::RevisionProposed);
-    assert_eq!(
-        pending.pending_revision_event_id,
-        Some(proposal.signed_event_id.clone())
-    );
-    assert!(pending.eligibility.can_decide_revision);
-
-    let decision = expect_enqueued(
-        buyer_sdk
-            .trades()
-            .buyer()
-            .accept_revision(
-                TradeRevisionDecisionRequest::new(
-                    buyer_actor(),
-                    propose_receipt.locator.clone(),
-                    revision_id,
-                    RadrootsOrderRevisionOutcome::Accepted,
-                    explicit_trade_relays(),
-                    PublishMode::EnqueueOnly,
-                    SatisfactionPolicy::NoWait,
-                    TradeEvidenceMode::LocalOnly,
-                )
-                .try_with_idempotency_key("trade-product-revision-decision")
-                .expect("revision decision idempotency"),
-            )
-            .await
-            .expect("accept revision"),
-    );
-    assert_eq!(decision.locator, propose_receipt.locator);
-    assert_eq!(decision.root_event_id, propose_receipt.signed_event_id);
-    assert_eq!(decision.previous_event_id, proposal.signed_event_id);
-    let status = buyer_sdk
-        .trades()
-        .status(TradeStatusRequest::new(propose_receipt.locator))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
-    assert_eq!(status.last_event_id, Some(decision.signed_event_id));
-    assert_eq!(status.pending_revision_event_id, None);
-    assert_eq!(status.economics, Some(revision_economics()));
 }
 
 #[cfg(feature = "signer-adapters")]
@@ -3316,7 +2572,7 @@ async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects()
             .total_events,
         0
     );
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     assert!(
@@ -3325,449 +2581,6 @@ async fn trade_product_propose_dry_run_returns_plan_without_local_side_effects()
             .await
             .expect("claim")
             .is_none()
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-wrong-signer"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-
-    let error = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
-        .await
-        .expect_err("signer error");
-    let message = error.to_string();
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
-    ));
-    assert!(!message.contains("raw"));
-    assert!(!message.contains("ffff"));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        0
-    );
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    assert!(
-        outbox
-            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
-            .await
-            .expect("claim")
-            .is_none()
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let first = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-idempotent"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first transport targets");
-    let second = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-idempotent"),
-        TargetPolicy::explicit(
-            TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-                .expect("second transport targets"),
-        ),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    );
-
-    let first_receipt = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect("first enqueue");
-    let second_receipt = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect("second enqueue");
-
-    assert_eq!(
-        first_receipt.outbox_event_id,
-        second_receipt.outbox_event_id
-    );
-    assert_eq!(
-        first_receipt.idempotency_digest_prefix,
-        second_receipt.idempotency_digest_prefix
-    );
-    assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
-    assert!(
-        !first_receipt
-            .workflow
-            .idempotency
-            .replayed_existing_operation
-    );
-    assert!(
-        second_receipt
-            .workflow
-            .idempotency
-            .replayed_existing_operation
-    );
-    assert!(
-        second_receipt
-            .workflow
-            .idempotency
-            .safe_to_retry_with_same_idempotency_key
-    );
-    assert!(
-        second_receipt
-            .workflow
-            .retry
-            .safe_to_retry_enqueue_with_same_idempotency_key
-    );
-    assert!(!second_receipt.workflow.retry.retryable_after_error);
-    assert!(second_receipt.workflow.retry.recovery_actions.is_empty());
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    let relay_urls = outbox
-        .delivery_targets(first_receipt.outbox_event_id)
-        .await
-        .expect("delivery targets")
-        .into_iter()
-        .map(|target| target.endpoint_uri.to_string())
-        .collect::<Vec<_>>();
-    assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_enqueue_pushes_queued_event_with_mock_relay_sync() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let enqueue_request = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-sync"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-    let enqueue_receipt = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(
-            enqueue_request,
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue");
-    let adapter = RadrootsMockRelayPublishAdapter::new();
-
-    let push_receipt = sdk
-        .sync()
-        .push_outbox_with_transport(
-            &RadrootsNostrTransport::new(&adapter),
-            PushOutboxRequest::new().with_limit(1),
-        )
-        .await
-        .expect("push");
-
-    assert_eq!(push_receipt.attempted_events, 1);
-    assert_eq!(push_receipt.published_events, 1);
-    assert_eq!(push_receipt.retryable_events, 0);
-    assert_eq!(push_receipt.terminal_events, 0);
-    assert_eq!(push_receipt.events.len(), 1);
-    let event = &push_receipt.events[0];
-    assert_eq!(event.event_id, enqueue_receipt.signed_event_id);
-    assert_eq!(event.outbox_event_id, enqueue_receipt.outbox_event_id);
-    assert_eq!(event.final_state, PushOutboxEventState::Published);
-    assert_eq!(event.attempted_count, 1);
-    assert_eq!(event.accepted_count, 1);
-    assert_eq!(event.retryable_count, 0);
-    assert_eq!(event.terminal_count, 0);
-    assert_eq!(event.quorum, 1);
-    assert!(event.quorum_met);
-    assert_eq!(event.targets.len(), 1);
-    assert_eq!(event.targets[0].endpoint_uri, RELAY);
-    assert_eq!(
-        event.targets[0].outcome_kind,
-        PushOutboxTargetOutcomeKind::Accepted
-    );
-    assert_eq!(adapter.captured_raw_events().len(), 1);
-
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
-        .await
-        .expect("outbox");
-    let stored = outbox
-        .get_event(enqueue_receipt.outbox_event_id)
-        .await
-        .expect("stored")
-        .expect("stored");
-    assert_eq!(stored.state, RadrootsOutboxEventState::Published);
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_conflict() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let first = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-conflict-a"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first transport targets")
-    .try_with_idempotency_key("order-submit-conflict-idempotency")
-    .expect("first idempotency key");
-    sdk.trades()
-        .enqueue_submit_with_explicit_signer(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect("first enqueue");
-
-    let second = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-conflict-b"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("second transport targets")
-    .try_with_idempotency_key("order-submit-conflict-idempotency")
-    .expect("second idempotency key");
-    let error = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect_err("partial");
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::PartialLocalMutation(ref partial)
-            if partial.stored
-                && !partial.queued
-                && partial.event_id.is_some()
-                && partial.operation_kind == TRADE_SUBMIT_OPERATION_KIND
-                && partial.idempotency_digest_prefix.is_some()
-                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
-                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
-    ));
-    assert!(error.retryable());
-    assert_eq!(
-        error.recovery_actions(),
-        vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
-    );
-    let detail = error.detail_json();
-    assert_eq!(detail["code"], "partial_local_mutation");
-    assert_eq!(detail["retryable"], true);
-    assert_eq!(
-        detail["recovery_actions"],
-        serde_json::json!(["retry_operation_with_same_idempotency_key"])
-    );
-    assert!(
-        !error
-            .to_string()
-            .contains("order-submit-conflict-idempotency")
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_submit_runtime_dtos_serialize_deterministically() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
-    let prepare_request = TradeSubmitPrepareRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-serialized"),
-    )
-    .with_created_at(created_at);
-    let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
-    assert_struct_serialize_error_paths(&prepare_request, 4);
-
-    assert_eq!(
-        prepare_json["actor"],
-        serde_json::json!({
-            "pubkey": BUYER_PUBLIC_KEY_HEX,
-            "roles": ["buyer"],
-            "account_id": null,
-            "source": "test"
-        })
-    );
-    assert_eq!(
-        prepare_json["listing_event"],
-        serde_json::json!({
-            "id": deterministic_event_id("listing-event").as_str(),
-            "relays": RELAY
-        })
-    );
-    assert_eq!(prepare_json["order"]["order_id"], "order-submit-serialized");
-    assert_eq!(
-        prepare_json["order"]["listing_addr"],
-        listing_address().as_str()
-    );
-    assert_eq!(prepare_json["order"]["buyer_pubkey"], BUYER_PUBLIC_KEY_HEX);
-    assert_eq!(
-        prepare_json["order"]["seller_pubkey"],
-        SELLER_PUBLIC_KEY_HEX
-    );
-    assert_eq!(prepare_json["order"]["items"][0]["bin_id"], "bin-1");
-    assert_eq!(prepare_json["order"]["items"][0]["bin_count"], 2);
-    assert_eq!(prepare_json["created_at"], 1_700_000_123);
-
-    let enqueue_request = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-serialized-enqueue"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("relay targets")
-    .with_idempotency_key(
-        SdkIdempotencyKey::new("order-serialized-idempotency").expect("idempotency"),
-    )
-    .with_created_at(created_at);
-    let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
-    assert_struct_serialize_error_paths(&enqueue_request, 6);
-
-    assert_eq!(
-        enqueue_json["target_policy"],
-        serde_json::json!({
-            "kind": "explicit",
-            "targets": [
-                {
-                    "kind": "nostr",
-                    "uri": RELAY,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-                },
-                {
-                    "kind": "nostr",
-                    "uri": RELAY_B,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
-                }
-            ],
-            "canonical_targets": [
-                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
-                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-            ]
-        })
-    );
-    assert_eq!(
-        enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 28 })
-    );
-    assert_eq!(enqueue_json["created_at"], 1_700_000_123);
-    assert!(
-        !enqueue_json
-            .to_string()
-            .contains("order-serialized-idempotency")
-    );
-
-    let try_key_enqueue = TradeSubmitEnqueueRequest::new(
-        buyer_actor(),
-        listing_event_ptr(),
-        order_request("order-submit-try-idempotency"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_idempotency_key("order-submit-try-key")
-    .expect("try idempotency key");
-    assert_eq!(
-        serde_json::to_value(&try_key_enqueue).expect("try key request json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 20 })
-    );
-
-    let receipt = sdk
-        .trades()
-        .enqueue_submit_with_explicit_signer(
-            enqueue_request,
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue");
-    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
-
-    assert_eq!(
-        receipt_json,
-        serde_json::json!({
-            "workflow": {
-                "kind": "submit",
-                "operation_kind": TRADE_SUBMIT_OPERATION_KIND,
-                "expected_event_id": receipt.workflow.expected_event_id.as_str(),
-                "signed_event_id": receipt.workflow.signed_event_id.as_str(),
-                "local_event_seq": 1,
-                "outbox_operation_id": 1,
-                "outbox_event_id": 1,
-                "state": "stored_and_queued",
-                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref(),
-                "idempotency": {
-                    "digest_prefix": receipt.workflow.idempotency.digest_prefix.as_deref(),
-                    "replayed_existing_operation": false,
-                    "safe_to_retry_with_same_idempotency_key": true
-                },
-                "retry": {
-                    "retryable_after_error": false,
-                    "safe_to_retry_enqueue_with_same_idempotency_key": true,
-                    "recovery_actions": []
-                }
-            },
-            "order_id": receipt.order_id.as_str(),
-            "locator": {
-                "trade_id": receipt.order_id.as_str(),
-                "root_event_id": receipt.signed_event_id.as_str(),
-                "listing_addr": receipt.listing_addr.as_str(),
-                "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
-                "seller_pubkey": SELLER_PUBLIC_KEY_HEX
-            },
-            "listing_addr": receipt.listing_addr.as_str(),
-            "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
-            "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
-            "listing_event_id": receipt.listing_event_id.as_str(),
-            "expected_event_id": receipt.expected_event_id.as_str(),
-            "signed_event_id": receipt.signed_event_id.as_str(),
-            "local_event_seq": 1,
-            "outbox_operation_id": 1,
-            "outbox_event_id": 1,
-            "state": "stored_and_queued",
-            "idempotency_digest_prefix": receipt.idempotency_digest_prefix.as_deref()
-        })
     );
 }
 
@@ -3783,84 +2596,6 @@ fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
                 bin_count: 2,
             }],
         },
-    }
-}
-
-#[cfg(any())]
-fn order_revision_proposal(
-    raw_order_id: &str,
-    root_event_id: &RadrootsEventId,
-    previous_event_id: &RadrootsEventId,
-) -> RadrootsOrderRevisionProposal {
-    RadrootsOrderRevisionProposal {
-        revision_id: format!("revision-{raw_order_id}")
-            .parse()
-            .expect("revision id"),
-        order_id: order_id(raw_order_id),
-        listing_addr: listing_address(),
-        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
-        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
-        root_event_id: root_event_id.clone(),
-        prev_event_id: previous_event_id.clone(),
-        items: vec![RadrootsOrderItem {
-            bin_id: "bin-1".parse().expect("bin id"),
-            bin_count: 3,
-        }],
-        economics: revision_economics(),
-        reason: "increase quantity".to_owned(),
-    }
-}
-
-#[cfg(any())]
-fn order_revision_decision(
-    proposal: &RadrootsOrderRevisionProposal,
-    previous_event_id: &RadrootsEventId,
-    decision: RadrootsOrderRevisionOutcome,
-) -> RadrootsOrderRevisionDecision {
-    RadrootsOrderRevisionDecision {
-        revision_id: proposal.revision_id.clone(),
-        order_id: proposal.order_id.clone(),
-        listing_addr: proposal.listing_addr.clone(),
-        buyer_pubkey: proposal.buyer_pubkey.clone(),
-        seller_pubkey: proposal.seller_pubkey.clone(),
-        root_event_id: proposal.root_event_id.clone(),
-        prev_event_id: previous_event_id.clone(),
-        decision,
-    }
-}
-
-#[cfg(any())]
-fn order_cancellation(raw_order_id: &str) -> RadrootsOrderCancellation {
-    RadrootsOrderCancellation {
-        order_id: order_id(raw_order_id),
-        listing_addr: listing_address(),
-        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
-        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
-        reason: "buyer changed pickup plan".to_owned(),
-    }
-}
-
-fn revision_economics() -> RadrootsOrderEconomics {
-    RadrootsOrderEconomics {
-        quote_id: "revision-quote-1".parse().expect("revision quote id"),
-        quote_version: 2,
-        pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
-        currency: RadrootsCoreCurrency::USD,
-        items: vec![RadrootsOrderEconomicItem {
-            bin_id: "bin-1".parse().expect("bin id"),
-            bin_count: 3,
-            quantity_amount: decimal("1"),
-            quantity_unit: RadrootsCoreUnit::Each,
-            unit_price_amount: decimal("5"),
-            unit_price_currency: RadrootsCoreCurrency::USD,
-            line_subtotal: usd("15"),
-        }],
-        discounts: Vec::<RadrootsOrderEconomicLine>::new(),
-        adjustments: Vec::<RadrootsOrderEconomicLine>::new(),
-        subtotal: usd("15"),
-        discount_total: usd("0"),
-        adjustment_total: usd("0"),
-        total: usd("15"),
     }
 }
 
@@ -3989,109 +2724,6 @@ fn validation_receipt_wire_parts_with_proof(
         version: 1,
     };
     validation_receipt_event_build(raw_order_id, &receipt).expect("receipt event")
-}
-
-fn signed_raw_sp1_worker_result_event(
-    raw_order_id: &str,
-    receipt_event_id: &RadrootsEventId,
-    listing_event_id: &RadrootsEventId,
-    root_event_id: &RadrootsEventId,
-    target_event_id: &RadrootsEventId,
-    created_at: u32,
-) -> nostr::Event {
-    let content = serde_json::json!({
-        "confidence": "committed_by_trusted_service_and_proof",
-        "cryptographic_proof_verified": true,
-        "customer_pubkey": BUYER_PUBLIC_KEY_HEX,
-        "decision_event_id": target_event_id.as_str(),
-        "event_set_root": hash32('c'),
-        "listing_event_id": listing_event_id.as_str(),
-        "order_id": raw_order_id,
-        "proof_generated": true,
-        "proof_mode": "core",
-        "proof_system": "sp1_core",
-        "public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
-        "prover_backend": "local_execute",
-        "receipt_event_id": receipt_event_id.as_str(),
-        "receipt_kind": KIND_TRADE_VALIDATION_RECEIPT,
-        "reducer_output_root": hash32('4'),
-        "request_event_id": root_event_id.as_str(),
-        "request_hash": hash32('9'),
-        "sp1_execute_checked": true,
-        "sp1_execute_public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
-        "status": "succeeded",
-        "validation_authority": "trusted_service_and_proof_verified",
-        "worker_pubkey": public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX),
-        "worker_role": "non_authoritative_prover"
-    })
-    .to_string();
-    signed_raw_event(
-        SERVICE_SECRET_KEY_HEX,
-        created_at,
-        RadrootsNip01EventWireParts {
-            kind: KIND_TRADE_TRANSITION_PROOF_RESULT,
-            content,
-            tags: vec![
-                vec!["e".to_owned(), root_event_id.as_str().to_owned()],
-                vec![
-                    "radroots:validation_receipt".to_owned(),
-                    receipt_event_id.as_str().to_owned(),
-                ],
-            ],
-        },
-    )
-}
-
-#[cfg(feature = "transport-nostr-runtime")]
-fn signed_raw_worker_result_event(
-    raw_order_id: &str,
-    receipt_event_id: &RadrootsEventId,
-    listing_event_id: &RadrootsEventId,
-    root_event_id: &RadrootsEventId,
-    target_event_id: &RadrootsEventId,
-    created_at: u32,
-) -> nostr::Event {
-    let content = serde_json::json!({
-        "confidence": "committed_by_trusted_service",
-        "cryptographic_proof_verified": false,
-        "customer_pubkey": BUYER_PUBLIC_KEY_HEX,
-        "decision_event_id": target_event_id.as_str(),
-        "event_set_root": hash32('c'),
-        "listing_event_id": listing_event_id.as_str(),
-        "order_id": raw_order_id,
-        "proof_generated": false,
-        "proof_mode": "none",
-        "proof_system": "none",
-        "public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
-        "prover_backend": "local_execute",
-        "receipt_event_id": receipt_event_id.as_str(),
-        "receipt_kind": KIND_TRADE_VALIDATION_RECEIPT,
-        "reducer_output_root": hash32('4'),
-        "request_event_id": root_event_id.as_str(),
-        "request_hash": hash32('9'),
-        "sp1_execute_checked": true,
-        "sp1_execute_public_values_hash": validation_receipt_public_values_hash_hex(br#"{"schema_version":1}"#),
-        "status": "succeeded",
-        "validation_authority": "trusted_rhi_service_key",
-        "worker_pubkey": public_key_hex_for_secret(SERVICE_SECRET_KEY_HEX),
-        "worker_role": "non_authoritative_prover"
-    })
-    .to_string();
-    signed_raw_event(
-        SERVICE_SECRET_KEY_HEX,
-        created_at,
-        RadrootsNip01EventWireParts {
-            kind: KIND_TRADE_TRANSITION_PROOF_RESULT,
-            content,
-            tags: vec![
-                vec!["e".to_owned(), root_event_id.as_str().to_owned()],
-                vec![
-                    "radroots:validation_receipt".to_owned(),
-                    receipt_event_id.as_str().to_owned(),
-                ],
-            ],
-        },
-    )
 }
 
 fn public_key_hex_for_secret(secret_key_hex: &str) -> String {
@@ -4236,36 +2868,6 @@ fn signed_raw_order_request_event(raw_order_id: &str, created_at: u32) -> nostr:
     signed_raw_event(BUYER_SECRET_KEY_HEX, created_at, draft)
 }
 
-#[cfg(any())]
-fn request_event_ptr(event: &RadrootsEventEnvelope) -> RadrootsEventPtr {
-    RadrootsEventPtr {
-        id: event.id_str().to_owned(),
-        relays: Some(RELAY.to_owned()),
-    }
-}
-
-#[cfg(any())]
-fn order_event_ptr(event_id: &RadrootsEventId) -> RadrootsEventPtr {
-    RadrootsEventPtr {
-        id: event_id.as_str().to_owned(),
-        relays: Some(RELAY.to_owned()),
-    }
-}
-
-#[cfg(any())]
-async fn outbox_operation_kind(sdk: &RadrootsClient, operation_id: i64) -> String {
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    outbox
-        .get_operation(operation_id)
-        .await
-        .expect("outbox operation")
-        .expect("outbox operation")
-        .operation_kind
-}
-
 fn signed_order_decision_event(
     raw_order_id: &str,
     root_event_id: &RadrootsEventId,
@@ -4302,74 +2904,6 @@ fn signed_non_order_event(created_at: u32) -> RadrootsEventEnvelope {
             tags: vec![vec!["d".to_owned(), "not-an-order".to_owned()]],
         },
     )
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_request_evidence_ingest_stores_request_and_enables_decision_enqueue() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-decision-ingested", 39);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    let ingest_request =
-        TradeRequestEvidenceIngestRequest::new(signed_event_from_envelope(request_event.clone()))
-            .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
-
-    let ingest_receipt = sdk
-        .trades()
-        .ingest_request_evidence(ingest_request)
-        .await
-        .expect("ingest request evidence");
-
-    assert_eq!(ingest_receipt.order_id.as_str(), "order-decision-ingested");
-    assert_eq!(ingest_receipt.listing_addr, listing_address());
-    assert_eq!(ingest_receipt.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
-    assert_eq!(ingest_receipt.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
-    assert_eq!(ingest_receipt.request_event_id, request_event_id);
-    assert_eq!(ingest_receipt.local_event_seq, 1);
-    assert!(ingest_receipt.inserted);
-
-    let actor = seller_actor();
-    let plan = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            actor.clone(),
-            request_event_ptr(&request_event),
-            order_decision("order-decision-ingested"),
-        ))
-        .expect("prepare decision");
-    let receipt = sdk
-        .trades()
-        .enqueue_prepared_decision_with_explicit_signer(
-            &actor,
-            plan,
-            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("transport targets"),
-            PublishMode::EnqueueOnly,
-            SatisfactionPolicy::NoWait,
-            None,
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue decision");
-
-    assert_eq!(receipt.local_event_seq, 2);
-    let duplicate_receipt = sdk
-        .trades()
-        .ingest_request_evidence(TradeRequestEvidenceIngestRequest::new(
-            request_event.clone(),
-        ))
-        .await
-        .expect("duplicate request evidence");
-    assert_eq!(duplicate_receipt.local_event_seq, 1);
-    assert!(!duplicate_receipt.inserted);
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        2
-    );
 }
 
 #[tokio::test]
@@ -4427,7 +2961,7 @@ async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
         .status(status_request("order-evidence-ingest"))
         .await
         .expect("status");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(status.status, TradeStatusKind::AgreedPendingValidation);
     assert_eq!(status.event_count, 2);
     assert_eq!(
         status
@@ -4485,1579 +3019,6 @@ async fn order_request_evidence_ingest_rejects_non_request_events() {
     );
 }
 
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event_id = deterministic_event_id("order-decision-prepare-request");
-    let request_event = RadrootsEventPtr {
-        id: request_event_id.as_str().to_owned(),
-        relays: Some(RELAY.to_owned()),
-    };
-    let accepted_request = TradeDecisionPrepareRequest::new(
-        seller_actor(),
-        request_event.clone(),
-        order_decision("order-decision-prepare-accept"),
-    );
-
-    let accepted = sdk
-        .trades()
-        .prepare_decision(accepted_request)
-        .expect("accepted plan");
-
-    assert_eq!(accepted.order_id.as_str(), "order-decision-prepare-accept");
-    assert_eq!(accepted.listing_addr, listing_address());
-    assert_eq!(accepted.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
-    assert_eq!(accepted.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
-    assert_eq!(accepted.request_event_id, request_event_id);
-    assert_eq!(accepted.frozen_draft.kind_u32(), KIND_ORDER_DECISION);
-    assert_eq!(accepted.created_at.unix_seconds(), 1_700_000_000);
-    assert_eq!(
-        accepted.expected_event_id,
-        accepted.frozen_draft.expected_event_id_str()
-    );
-
-    let mut declined_payload = order_decision("order-decision-prepare-decline");
-    declined_payload.decision = RadrootsOrderDecisionOutcome::Declined {
-        reason: " out of stock ".to_owned(),
-    };
-    let declined = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            seller_actor(),
-            request_event,
-            declined_payload,
-        ))
-        .expect("declined plan");
-
-    assert_eq!(declined.order_id.as_str(), "order-decision-prepare-decline");
-    assert_eq!(declined.frozen_draft.kind_u32(), KIND_ORDER_DECISION);
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        0
-    );
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    assert!(
-        outbox
-            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
-            .await
-            .expect("claim")
-            .is_none()
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
-    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let request_event = RadrootsEventPtr {
-        id: deterministic_event_id("order-decision-invalid-request")
-            .as_str()
-            .to_owned(),
-        relays: Some(RELAY.to_owned()),
-    };
-
-    let non_seller = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            non_seller_actor(),
-            request_event.clone(),
-            order_decision("order-decision-non-seller"),
-        ))
-        .expect_err("non seller");
-    assert!(matches!(
-        non_seller,
-        RadrootsSdkError::UnauthorizedActor { .. }
-    ));
-
-    let wrong_actor = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            other_seller_actor(),
-            request_event.clone(),
-            order_decision("order-decision-wrong-seller"),
-        ))
-        .expect_err("wrong seller");
-    assert!(matches!(
-        wrong_actor,
-        RadrootsSdkError::UnauthorizedActor { .. }
-    ));
-
-    let invalid_evidence = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            seller_actor(),
-            RadrootsEventPtr {
-                id: String::new(),
-                relays: Some(RELAY.to_owned()),
-            },
-            order_decision("order-decision-invalid-evidence"),
-        ))
-        .expect_err("invalid evidence");
-    assert!(matches!(
-        invalid_evidence,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let mut empty_commitments = order_decision("order-decision-empty-commitments");
-    empty_commitments.decision = RadrootsOrderDecisionOutcome::Accepted {
-        inventory_commitments: Vec::new(),
-    };
-    let commitment_error = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            seller_actor(),
-            request_event.clone(),
-            empty_commitments,
-        ))
-        .expect_err("missing commitments");
-    assert!(matches!(
-        commitment_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let mut missing_reason = order_decision("order-decision-missing-reason");
-    missing_reason.decision = RadrootsOrderDecisionOutcome::Declined {
-        reason: " ".to_owned(),
-    };
-    let reason_error = sdk
-        .trades()
-        .prepare_decision(TradeDecisionPrepareRequest::new(
-            seller_actor(),
-            request_event,
-            missing_reason,
-        ))
-        .expect_err("missing reason");
-    assert!(matches!(
-        reason_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_runtime_dtos_serialize_deterministically() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_321);
-    let prepare_event_id = deterministic_event_id("order-decision-serialized-request");
-    let prepare_request = TradeDecisionPrepareRequest::new(
-        seller_actor(),
-        RadrootsEventPtr {
-            id: prepare_event_id.as_str().to_owned(),
-            relays: Some(RELAY.to_owned()),
-        },
-        order_decision("order-decision-serialized"),
-    )
-    .with_created_at(created_at);
-    let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
-    assert_struct_serialize_error_paths(&prepare_request, 4);
-
-    assert_eq!(
-        prepare_json["actor"],
-        serde_json::json!({
-            "pubkey": SELLER_PUBLIC_KEY_HEX,
-            "roles": ["seller"],
-            "account_id": null,
-            "source": "test"
-        })
-    );
-    assert_eq!(
-        prepare_json["request_event"],
-        serde_json::json!({
-            "id": prepare_event_id.as_str(),
-            "relays": RELAY
-        })
-    );
-    assert_eq!(
-        prepare_json["decision"]["order_id"],
-        "order-decision-serialized"
-    );
-    assert_eq!(
-        prepare_json["decision"]["seller_pubkey"],
-        SELLER_PUBLIC_KEY_HEX
-    );
-    assert_eq!(prepare_json["created_at"], 1_700_000_321);
-
-    let request_event = signed_order_request_event("order-decision-serialized-enqueue", 45);
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            4_500,
-        ))
-        .await
-        .expect("ingest request");
-    let enqueue_request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        order_decision("order-decision-serialized-enqueue"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("transport targets")
-    .with_idempotency_key(
-        SdkIdempotencyKey::new("order-decision-serialized-idempotency").expect("idempotency"),
-    )
-    .with_created_at(created_at);
-    let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
-    assert_struct_serialize_error_paths(&enqueue_request, 6);
-
-    assert_eq!(
-        enqueue_json["target_policy"],
-        serde_json::json!({
-            "kind": "explicit",
-            "targets": [
-                {
-                    "kind": "nostr",
-                    "uri": RELAY,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-                },
-                {
-                    "kind": "nostr",
-                    "uri": RELAY_B,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
-                }
-            ],
-            "canonical_targets": [
-                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
-                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-            ]
-        })
-    );
-    assert_eq!(
-        enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 37 })
-    );
-    assert_eq!(enqueue_json["created_at"], 1_700_000_321);
-    assert!(
-        !enqueue_json
-            .to_string()
-            .contains("order-decision-serialized-idempotency")
-    );
-
-    let try_key_enqueue = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        order_decision("order-decision-try-idempotency"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_idempotency_key("order-decision-try-key")
-    .expect("try idempotency key");
-    assert_eq!(
-        serde_json::to_value(&try_key_enqueue).expect("try key request json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 22 })
-    );
-
-    let receipt = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(
-            enqueue_request,
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue");
-    assert_eq!(receipt.workflow.kind, TradeWorkflowKind::Decision);
-    assert_eq!(
-        receipt.workflow.operation_kind,
-        TRADE_DECISION_OPERATION_KIND
-    );
-    assert_eq!(
-        receipt.workflow.expected_event_id,
-        receipt.expected_event_id
-    );
-    assert_eq!(receipt.workflow.signed_event_id, receipt.signed_event_id);
-    assert_eq!(receipt.workflow.local_event_seq, receipt.local_event_seq);
-    assert_eq!(
-        receipt.workflow.outbox_operation_id,
-        receipt.outbox_operation_id
-    );
-    assert_eq!(receipt.workflow.outbox_event_id, receipt.outbox_event_id);
-    assert_eq!(receipt.workflow.state, receipt.state);
-    assert_eq!(
-        receipt.workflow.idempotency_digest_prefix,
-        receipt.idempotency_digest_prefix
-    );
-    assert!(
-        receipt
-            .workflow
-            .idempotency
-            .safe_to_retry_with_same_idempotency_key
-    );
-    assert!(!receipt.workflow.retry.retryable_after_error);
-    assert!(receipt.workflow.retry.recovery_actions.is_empty());
-    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
-
-    assert_eq!(
-        receipt_json,
-        serde_json::json!({
-            "workflow": {
-                "kind": "decision",
-                "operation_kind": TRADE_DECISION_OPERATION_KIND,
-                "expected_event_id": receipt.workflow.expected_event_id.as_str(),
-                "signed_event_id": receipt.workflow.signed_event_id.as_str(),
-                "local_event_seq": 2,
-                "outbox_operation_id": 1,
-                "outbox_event_id": 1,
-                "state": "stored_and_queued",
-                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref(),
-                "idempotency": {
-                    "digest_prefix": receipt.workflow.idempotency.digest_prefix.as_deref(),
-                    "replayed_existing_operation": false,
-                    "safe_to_retry_with_same_idempotency_key": true
-                },
-                "retry": {
-                    "retryable_after_error": false,
-                    "safe_to_retry_enqueue_with_same_idempotency_key": true,
-                    "recovery_actions": []
-                }
-            },
-            "order_id": receipt.order_id.as_str(),
-            "locator": {
-                "trade_id": receipt.order_id.as_str(),
-                "root_event_id": request_event.id_str(),
-                "listing_addr": receipt.listing_addr.as_str(),
-                "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
-                "seller_pubkey": SELLER_PUBLIC_KEY_HEX
-            },
-            "listing_addr": receipt.listing_addr.as_str(),
-            "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
-            "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
-            "request_event_id": request_event.id_str(),
-            "expected_event_id": receipt.expected_event_id.as_str(),
-            "signed_event_id": receipt.signed_event_id.as_str(),
-            "local_event_seq": 2,
-            "outbox_operation_id": 1,
-            "outbox_event_id": 1,
-            "state": "stored_and_queued",
-            "idempotency_digest_prefix": receipt.idempotency_digest_prefix.as_deref()
-        })
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
-    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_654);
-    let root_event_id = deterministic_event_id("order-dto-root");
-    let previous_event_id = deterministic_event_id("order-dto-previous");
-    let root_event = order_event_ptr(&root_event_id);
-    let previous_event = order_event_ptr(&previous_event_id);
-    let proposal =
-        order_revision_proposal("order-revision-dto", &root_event_id, &previous_event_id);
-    let revision_decision = order_revision_decision(
-        &proposal,
-        &previous_event_id,
-        RadrootsOrderRevisionOutcome::Declined {
-            reason: "not available".to_owned(),
-        },
-    );
-    let cancellation = order_cancellation("order-revision-dto");
-
-    let proposal_prepare = TradeRevisionProposalPrepareRequest::new(
-        seller_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        proposal.clone(),
-    )
-    .with_created_at(created_at);
-    let proposal_prepare_json =
-        serde_json::to_value(&proposal_prepare).expect("proposal prepare json");
-    assert_struct_serialize_error_paths(&proposal_prepare, 5);
-    assert_eq!(
-        proposal_prepare_json["actor"]["pubkey"],
-        SELLER_PUBLIC_KEY_HEX
-    );
-    assert_eq!(
-        proposal_prepare_json["root_event"]["id"],
-        root_event_id.as_str()
-    );
-    assert_eq!(
-        proposal_prepare_json["previous_event"]["id"],
-        previous_event_id.as_str()
-    );
-    assert_eq!(
-        proposal_prepare_json["proposal"]["order_id"],
-        "order-revision-dto"
-    );
-    assert_eq!(
-        proposal_prepare_json["proposal"]["reason"],
-        "increase quantity"
-    );
-    assert_eq!(proposal_prepare_json["created_at"], 1_700_000_654);
-
-    let proposal_enqueue = TradeRevisionProposalEnqueueRequest::new(
-        seller_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        proposal.clone(),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("proposal relays")
-    .with_idempotency_key(SdkIdempotencyKey::new("order-revision-proposal-dto").expect("key"))
-    .with_created_at(created_at);
-    let proposal_enqueue_json =
-        serde_json::to_value(&proposal_enqueue).expect("proposal enqueue json");
-    assert_struct_serialize_error_paths(&proposal_enqueue, 7);
-    assert_eq!(
-        proposal_enqueue_json["target_policy"],
-        serde_json::json!({
-            "kind": "explicit",
-            "targets": [
-                {
-                    "kind": "nostr",
-                    "uri": RELAY,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-                },
-                {
-                    "kind": "nostr",
-                    "uri": RELAY_B,
-                    "scope": null,
-                    "label": null,
-                    "fingerprint": "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05"
-                }
-            ],
-            "canonical_targets": [
-                "5136077cfe7eddcbfaddc5d7bf1f42cdbb8191f3691b86ccc3a81047851cef05",
-                "a1997ec4596596af6ffc65e6a30ab7cffa53ea71f524c1c86d64018b96d130af"
-            ]
-        })
-    );
-    assert_eq!(
-        proposal_enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 27 })
-    );
-    assert!(!proposal_enqueue_json.to_string().contains("proposal-dto"));
-
-    let proposal_try_key = TradeRevisionProposalEnqueueRequest::new(
-        seller_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        proposal.clone(),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_idempotency_key("order-revision-proposal-try")
-    .expect("proposal try key");
-    assert_eq!(
-        serde_json::to_value(&proposal_try_key).expect("proposal try json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 27 })
-    );
-
-    let decision_prepare = TradeRevisionDecisionPrepareRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        revision_decision.clone(),
-    )
-    .with_created_at(created_at);
-    let decision_prepare_json =
-        serde_json::to_value(&decision_prepare).expect("decision prepare json");
-    assert_struct_serialize_error_paths(&decision_prepare, 5);
-    assert_eq!(
-        decision_prepare_json["actor"]["pubkey"],
-        BUYER_PUBLIC_KEY_HEX
-    );
-    assert_eq!(
-        decision_prepare_json["decision"]["revision_id"],
-        proposal.revision_id.as_str()
-    );
-    assert_eq!(
-        decision_prepare_json["decision"]["decision"],
-        serde_json::json!({
-            "decision": "declined",
-            "reason": "not available"
-        })
-    );
-    assert_eq!(decision_prepare_json["created_at"], 1_700_000_654);
-
-    let decision_enqueue = TradeRevisionDecisionEnqueueRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        revision_decision,
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("decision relays")
-    .with_idempotency_key(
-        SdkIdempotencyKey::new("order-revision-decision-dto").expect("decision idempotency"),
-    )
-    .with_created_at(created_at);
-    let decision_enqueue_json =
-        serde_json::to_value(&decision_enqueue).expect("decision enqueue json");
-    assert_struct_serialize_error_paths(&decision_enqueue, 7);
-    assert_eq!(
-        decision_enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 27 })
-    );
-    assert_eq!(decision_enqueue_json["created_at"], 1_700_000_654);
-    assert!(!decision_enqueue_json.to_string().contains("decision-dto"));
-
-    let decision_try_key = TradeRevisionDecisionEnqueueRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        order_revision_decision(
-            &proposal,
-            &previous_event_id,
-            RadrootsOrderRevisionOutcome::Accepted,
-        ),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_idempotency_key("order-revision-decision-try")
-    .expect("decision try key");
-    assert_eq!(
-        serde_json::to_value(&decision_try_key).expect("decision try json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 27 })
-    );
-
-    let cancellation_prepare = TradeCancellationPrepareRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        cancellation.clone(),
-    )
-    .with_created_at(created_at);
-    let cancellation_prepare_json =
-        serde_json::to_value(&cancellation_prepare).expect("cancellation prepare json");
-    assert_struct_serialize_error_paths(&cancellation_prepare, 5);
-    assert_eq!(
-        cancellation_prepare_json["cancellation"]["reason"],
-        "buyer changed pickup plan"
-    );
-    assert_eq!(cancellation_prepare_json["created_at"], 1_700_000_654);
-
-    let cancellation_enqueue = TradeCancellationEnqueueRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        cancellation,
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
-    .expect("cancellation relays")
-    .with_idempotency_key(
-        SdkIdempotencyKey::new("order-cancellation-dto").expect("cancellation idempotency"),
-    )
-    .with_created_at(created_at);
-    let cancellation_enqueue_json =
-        serde_json::to_value(&cancellation_enqueue).expect("cancellation enqueue json");
-    assert_struct_serialize_error_paths(&cancellation_enqueue, 7);
-    assert_eq!(
-        cancellation_enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 22 })
-    );
-    assert_eq!(cancellation_enqueue_json["created_at"], 1_700_000_654);
-    assert!(
-        !cancellation_enqueue_json
-            .to_string()
-            .contains("cancellation-dto")
-    );
-
-    let cancellation_try_key = TradeCancellationEnqueueRequest::new(
-        buyer_actor(),
-        root_event.clone(),
-        previous_event.clone(),
-        order_cancellation("order-revision-dto"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_idempotency_key("order-cancellation-try")
-    .expect("cancellation try key");
-    assert_eq!(
-        serde_json::to_value(&cancellation_try_key).expect("cancellation try json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 22 })
-    );
-
-    let event = signed_order_request_event("order-evidence-dto", 77);
-    let request_evidence =
-        TradeRequestEvidenceIngestRequest::new(signed_event_from_envelope(event.clone()))
-            .with_observed_at(created_at);
-    let request_evidence_json =
-        serde_json::to_value(&request_evidence).expect("request evidence json");
-    assert_struct_serialize_error_paths(&request_evidence, 2);
-    assert_eq!(request_evidence_json["event"]["id"], event.id_str());
-    assert_eq!(request_evidence_json["observed_at"], 1_700_000_654);
-
-    let order_evidence = TradeEvidenceIngestRequest::new(signed_event_from_envelope(event.clone()))
-        .with_observed_at(created_at);
-    let order_evidence_json = serde_json::to_value(&order_evidence).expect("order evidence json");
-    assert_struct_serialize_error_paths(&order_evidence, 2);
-    assert_eq!(order_evidence_json["event"]["id"], event.id_str());
-    assert_eq!(order_evidence_json["observed_at"], 1_700_000_654);
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_status() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-decision-accept", 40);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            4_000,
-        ))
-        .await
-        .expect("ingest request");
-    let request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        order_decision("order-decision-accept"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets")
-    .try_with_idempotency_key("order-decision-accept-idempotency")
-    .expect("idempotency");
-
-    let receipt = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
-        .await
-        .expect("enqueue");
-
-    assert_eq!(receipt.order_id.as_str(), "order-decision-accept");
-    assert_eq!(receipt.listing_addr, listing_address());
-    assert_eq!(receipt.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
-    assert_eq!(receipt.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
-    assert_eq!(receipt.request_event_id, request_event_id);
-    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
-    assert_eq!(receipt.local_event_seq, 2);
-    assert_eq!(receipt.outbox_operation_id, 1);
-    assert_eq!(receipt.outbox_event_id, 1);
-    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
-    assert!(receipt.idempotency_digest_prefix.is_some());
-
-    let stored_event = store
-        .get_event(receipt.signed_event_id.as_str())
-        .await
-        .expect("event lookup")
-        .expect("stored event");
-    assert_eq!(stored_event.kind, KIND_ORDER_DECISION);
-    assert_eq!(
-        stored_event.contract_id.as_deref(),
-        Some("radroots.order.decision.v1")
-    );
-
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    let operation = outbox
-        .get_operation(receipt.outbox_operation_id)
-        .await
-        .expect("outbox operation")
-        .expect("outbox operation");
-    assert_eq!(operation.operation_kind, TRADE_DECISION_OPERATION_KIND);
-    let outbox_event = outbox
-        .get_event(receipt.outbox_event_id)
-        .await
-        .expect("outbox event")
-        .expect("outbox event");
-    assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
-    assert_eq!(outbox_event.draft.kind_u32(), KIND_ORDER_DECISION);
-    assert!(outbox_event.signed_event.is_some());
-
-    let status = sdk
-        .trades()
-        .status(status_request("order-decision-accept"))
-        .await
-        .expect("status");
-    assert!(status.found);
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
-    assert_eq!(status.event_count, 2);
-    assert_eq!(
-        status
-            .request_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(request_event.id_str())
-    );
-    assert_eq!(
-        status
-            .decision_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(receipt.signed_event_id.as_str())
-    );
-    assert_eq!(
-        status
-            .agreement_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(receipt.signed_event_id.as_str())
-    );
-    assert_eq!(status.pending_revision_event_id, None);
-    assert!(status.issues.is_empty());
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-decision-decline", 41);
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            4_100,
-        ))
-        .await
-        .expect("ingest request");
-    let mut decision = order_decision("order-decision-decline");
-    decision.decision = RadrootsOrderDecisionOutcome::Declined {
-        reason: " unavailable ".to_owned(),
-    };
-    let request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        decision,
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-
-    let receipt = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
-        .await
-        .expect("enqueue");
-
-    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
-    let status = sdk
-        .trades()
-        .status(status_request("order-decision-decline"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::Declined);
-    assert_eq!(
-        status
-            .decision_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(receipt.signed_event_id.as_str())
-    );
-    assert!(status.issues.is_empty());
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let missing_request = RadrootsEventPtr {
-        id: deterministic_event_id("missing-order-request")
-            .as_str()
-            .to_owned(),
-        relays: Some(RELAY.to_owned()),
-    };
-    let request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        missing_request,
-        order_decision("order-decision-missing-request"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-
-    let error = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
-        .await
-        .expect_err("missing request evidence");
-
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        0
-    );
-    let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
-        .await
-        .expect("outbox");
-    assert!(
-        outbox
-            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
-            .await
-            .expect("claim")
-            .is_none()
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_mutation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-decision-wrong-signer", 42);
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            4_200,
-        ))
-        .await
-        .expect("ingest request");
-    let request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        order_decision("order-decision-wrong-signer"),
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-
-    let error = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
-        .await
-        .expect_err("signer error");
-    let message = error.to_string();
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::SignerPubkeyMismatch { .. }
-    ));
-    assert!(!message.contains("raw"));
-    assert!(!message.contains("ffff"));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        1
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-decision-conflict", 43);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    let decision_event =
-        signed_order_decision_event("order-decision-conflict", &request_event_id, 44);
-    for (event, observed_at_ms) in [
-        (request_event.clone(), 4_300),
-        (decision_event.clone(), 4_400),
-    ] {
-        store
-            .ingest_event(RadrootsEventIngest::new(
-                signed_event_from_envelope(event),
-                observed_at_ms,
-            ))
-            .await
-            .expect("ingest");
-    }
-    let mut decline = order_decision("order-decision-conflict");
-    decline.decision = RadrootsOrderDecisionOutcome::Declined {
-        reason: "too late".to_owned(),
-    };
-    let request = TradeDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        decline,
-        TargetPolicy::default_profile(),
-        PublishMode::EnqueueOnly,
-        SatisfactionPolicy::NoWait,
-    )
-    .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-    .expect("transport targets");
-
-    let error = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
-        .await
-        .expect_err("existing decision");
-
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        2
-    );
-    let status = sdk
-        .trades()
-        .status(status_request("order-decision-conflict"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
-    assert_eq!(
-        status
-            .decision_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(decision_event.id_str())
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_revision_lifecycle_accepts_proposal_and_waits_for_rhi() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-lifecycle-agreement", 50);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            5_000,
-        ))
-        .await
-        .expect("ingest request");
-
-    let proposal = order_revision_proposal(
-        "order-lifecycle-agreement",
-        &request_event_id,
-        &request_event_id,
-    );
-    let proposal_actor = seller_actor();
-    let proposal_plan = sdk
-        .trades()
-        .prepare_revision_proposal(TradeRevisionProposalPrepareRequest::new(
-            proposal_actor.clone(),
-            request_event_ptr(&request_event),
-            request_event_ptr(&request_event),
-            proposal.clone(),
-        ))
-        .expect("prepare revision proposal");
-    let proposal_receipt = sdk
-        .trades()
-        .enqueue_prepared_revision_proposal_with_explicit_signer(
-            &proposal_actor,
-            proposal_plan,
-            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("proposal transport targets"),
-            PublishMode::EnqueueOnly,
-            SatisfactionPolicy::NoWait,
-            Some(
-                SdkIdempotencyKey::new("order-lifecycle-revision-proposal")
-                    .expect("proposal idempotency"),
-            ),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue revision proposal");
-    assert_eq!(
-        proposal_receipt.signed_event_id,
-        proposal_receipt.expected_event_id
-    );
-    assert_eq!(
-        outbox_operation_kind(&sdk, proposal_receipt.outbox_operation_id).await,
-        TRADE_REVISION_PROPOSAL_OPERATION_KIND
-    );
-    let stored_proposal = store
-        .get_event(proposal_receipt.signed_event_id.as_str())
-        .await
-        .expect("proposal event lookup")
-        .expect("proposal event");
-    assert_eq!(stored_proposal.kind, KIND_ORDER_REVISION_PROPOSAL);
-    assert_eq!(
-        stored_proposal.contract_id.as_deref(),
-        Some("radroots.order.revision_proposal.v1")
-    );
-
-    let revision_decision = order_revision_decision(
-        &proposal,
-        &proposal_receipt.signed_event_id,
-        RadrootsOrderRevisionOutcome::Accepted,
-    );
-    let revision_decision_actor = buyer_actor();
-    let revision_decision_plan = sdk
-        .trades()
-        .prepare_revision_decision(TradeRevisionDecisionPrepareRequest::new(
-            revision_decision_actor.clone(),
-            request_event_ptr(&request_event),
-            order_event_ptr(&proposal_receipt.signed_event_id),
-            revision_decision,
-        ))
-        .expect("prepare revision decision");
-    let revision_decision_receipt = sdk
-        .trades()
-        .enqueue_prepared_revision_decision_with_explicit_signer(
-            &revision_decision_actor,
-            revision_decision_plan,
-            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("revision decision transport targets"),
-            PublishMode::EnqueueOnly,
-            SatisfactionPolicy::NoWait,
-            None,
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue revision decision");
-    assert_eq!(
-        outbox_operation_kind(&sdk, revision_decision_receipt.outbox_operation_id).await,
-        TRADE_REVISION_DECISION_OPERATION_KIND
-    );
-    assert_eq!(
-        store
-            .get_event(revision_decision_receipt.signed_event_id.as_str())
-            .await
-            .expect("revision decision lookup")
-            .expect("revision decision")
-            .kind,
-        KIND_ORDER_REVISION_DECISION
-    );
-
-    let status = sdk
-        .trades()
-        .status(status_request("order-lifecycle-agreement"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::AgreedPendingRhi);
-    assert_eq!(status.event_count, 3);
-    assert_eq!(
-        status
-            .agreement_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(revision_decision_receipt.signed_event_id.as_str())
-    );
-    assert!(status.decision_event_id.is_none());
-    assert!(status.cancellation_event_id.is_none());
-    assert_eq!(status.pending_revision_event_id, None);
-    assert_eq!(status.listing_addr, Some(listing_address()));
-    assert_eq!(
-        status.buyer_pubkey.as_ref().map(ToString::to_string),
-        Some(BUYER_PUBLIC_KEY_HEX.to_owned())
-    );
-    assert_eq!(
-        status.seller_pubkey.as_ref().map(ToString::to_string),
-        Some(SELLER_PUBLIC_KEY_HEX.to_owned())
-    );
-    assert_eq!(status.economics, Some(revision_economics()));
-    assert!(!status.lifecycle_terminal);
-    assert_eq!(
-        status.next_action,
-        TradeStatusNextActionKind::AwaitRhiValidation
-    );
-    assert!(status.evidence.has_request);
-    assert!(!status.evidence.has_decision);
-    assert!(status.evidence.has_agreement);
-    assert!(!status.evidence.has_pending_revision);
-    assert!(!status.evidence.has_cancellation);
-    assert!(!status.evidence.has_issues);
-    assert!(!status.eligibility.can_decide);
-    assert!(!status.eligibility.can_propose_revision);
-    assert!(!status.eligibility.can_decide_revision);
-    assert!(!status.eligibility.can_cancel);
-    assert!(status.issues.is_empty());
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_revision_proposal_status_exposes_pending_and_blocks_follow_on_lifecycle() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-lifecycle-pending-revision", 55);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            5_500,
-        ))
-        .await
-        .expect("ingest request");
-    let proposal = order_revision_proposal(
-        "order-lifecycle-pending-revision",
-        &request_event_id,
-        &request_event_id,
-    );
-    let proposal_receipt = sdk
-        .trades()
-        .enqueue_revision_proposal_with_explicit_signer(
-            TradeRevisionProposalEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                proposal,
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("proposal transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue revision proposal");
-
-    let status = sdk
-        .trades()
-        .status(status_request("order-lifecycle-pending-revision"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::RevisionProposed);
-    assert_eq!(status.event_count, 2);
-    assert!(status.agreement_event_id.is_none());
-    assert_eq!(
-        status
-            .pending_revision_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(proposal_receipt.signed_event_id.as_str())
-    );
-    assert_eq!(
-        status.last_event_id.as_ref().map(RadrootsEventId::as_str),
-        Some(proposal_receipt.signed_event_id.as_str())
-    );
-    assert!(status.issues.is_empty());
-    assert!(!status.eligibility.can_decide);
-    assert!(!status.eligibility.can_propose_revision);
-    assert!(status.eligibility.can_decide_revision);
-    assert!(!status.eligibility.can_cancel);
-
-    let decision_error = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(
-            TradeDecisionEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                order_decision("order-lifecycle-pending-revision"),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("decision transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("pending revision blocks direct decision");
-    assert!(matches!(
-        decision_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let blocked_proposal = order_revision_proposal(
-        "order-lifecycle-pending-revision",
-        &request_event_id,
-        &proposal_receipt.signed_event_id,
-    );
-    let proposal_error = sdk
-        .trades()
-        .enqueue_revision_proposal_with_explicit_signer(
-            TradeRevisionProposalEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&proposal_receipt.signed_event_id),
-                blocked_proposal,
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("blocked proposal transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("pending revision blocks new proposal");
-    assert!(matches!(
-        proposal_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        2
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_declined_revision_finalizes_declined_negotiation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-lifecycle-declined-revision", 56);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            5_600,
-        ))
-        .await
-        .expect("ingest request");
-    let proposal = order_revision_proposal(
-        "order-lifecycle-declined-revision",
-        &request_event_id,
-        &request_event_id,
-    );
-    let proposal_receipt = sdk
-        .trades()
-        .enqueue_revision_proposal_with_explicit_signer(
-            TradeRevisionProposalEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                proposal.clone(),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("proposal transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue revision proposal");
-    let declined_revision = order_revision_decision(
-        &proposal,
-        &proposal_receipt.signed_event_id,
-        RadrootsOrderRevisionOutcome::Declined {
-            reason: "keep original order".to_owned(),
-        },
-    );
-    let declined_revision_receipt = sdk
-        .trades()
-        .enqueue_revision_decision_with_explicit_signer(
-            TradeRevisionDecisionEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&proposal_receipt.signed_event_id),
-                declined_revision,
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("declined revision transport targets"),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue declined revision");
-
-    let status = sdk
-        .trades()
-        .status(status_request("order-lifecycle-declined-revision"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::Declined);
-    assert_eq!(status.event_count, 3);
-    assert!(status.agreement_event_id.is_none());
-    assert_eq!(
-        status
-            .pending_revision_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(proposal_receipt.signed_event_id.as_str())
-    );
-    assert_eq!(
-        status.last_event_id.as_ref().map(RadrootsEventId::as_str),
-        Some(declined_revision_receipt.signed_event_id.as_str())
-    );
-    assert!(status.lifecycle_terminal);
-    assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
-    assert!(!status.eligibility.can_decide);
-    assert!(!status.eligibility.can_propose_revision);
-    assert!(!status.eligibility.can_decide_revision);
-    assert!(!status.eligibility.can_cancel);
-
-    let second_decision = order_revision_decision(
-        &proposal,
-        &proposal_receipt.signed_event_id,
-        RadrootsOrderRevisionOutcome::Accepted,
-    );
-    let second_decision_error = sdk
-        .trades()
-        .enqueue_revision_decision_with_explicit_signer(
-            TradeRevisionDecisionEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&proposal_receipt.signed_event_id),
-                second_decision,
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("second decision transport targets"),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("second revision decision after decline");
-    assert!(matches!(
-        second_decision_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        3
-    );
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_cancel_lifecycle_enqueue_updates_status() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-lifecycle-cancel", 60);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            6_000,
-        ))
-        .await
-        .expect("ingest request");
-    let cancellation_actor = buyer_actor();
-    let cancellation_plan = sdk
-        .trades()
-        .prepare_cancellation(TradeCancellationPrepareRequest::new(
-            cancellation_actor.clone(),
-            request_event_ptr(&request_event),
-            request_event_ptr(&request_event),
-            order_cancellation("order-lifecycle-cancel"),
-        ))
-        .expect("prepare cancellation");
-    let cancellation = sdk
-        .trades()
-        .enqueue_prepared_cancellation_with_explicit_signer(
-            &cancellation_actor,
-            cancellation_plan,
-            TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)
-                .expect("cancellation transport targets"),
-            PublishMode::EnqueueOnly,
-            SatisfactionPolicy::NoWait,
-            Some(
-                SdkIdempotencyKey::new("order-lifecycle-cancel").expect("cancellation idempotency"),
-            ),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue cancellation");
-
-    assert_eq!(cancellation.root_event_id, request_event_id);
-    assert_eq!(cancellation.previous_event_id, request_event_id);
-    assert_eq!(
-        outbox_operation_kind(&sdk, cancellation.outbox_operation_id).await,
-        TRADE_CANCELLATION_OPERATION_KIND
-    );
-    assert_eq!(
-        store
-            .get_event(cancellation.signed_event_id.as_str())
-            .await
-            .expect("cancellation lookup")
-            .expect("cancellation")
-            .kind,
-        KIND_ORDER_CANCELLATION
-    );
-    let replay = sdk
-        .trades()
-        .enqueue_cancellation_with_explicit_signer(
-            TradeCancellationEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                order_cancellation("order-lifecycle-cancel"),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("replay transport targets")
-            .try_with_idempotency_key("order-lifecycle-cancel")
-            .expect("replay idempotency"),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("replay cancellation");
-    assert_eq!(replay.state, SdkMutationState::AlreadyQueued);
-    assert_eq!(replay.signed_event_id, cancellation.signed_event_id);
-    assert_eq!(replay.outbox_event_id, cancellation.outbox_event_id);
-    let status = sdk
-        .trades()
-        .status(status_request("order-lifecycle-cancel"))
-        .await
-        .expect("status");
-    assert_eq!(status.status, TradeStatusKind::Cancelled);
-    assert_eq!(
-        status
-            .cancellation_event_id
-            .as_ref()
-            .map(RadrootsEventId::as_str),
-        Some(cancellation.signed_event_id.as_str())
-    );
-    assert!(status.lifecycle_terminal);
-    assert_eq!(status.next_action, TradeStatusNextActionKind::Terminal);
-    assert!(status.evidence.has_request);
-    assert!(!status.evidence.has_decision);
-    assert!(status.evidence.has_cancellation);
-    assert!(!status.evidence.has_issues);
-    assert!(!status.eligibility.can_cancel);
-    assert!(status.issues.is_empty());
-}
-
-#[cfg(any())]
-#[tokio::test]
-async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
-    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
-    let request_event = signed_order_request_event("order-lifecycle-invalid", 70);
-    let request_event_id = RadrootsEventId::parse(request_event.id_str()).expect("request id");
-    let missing = sdk
-        .trades()
-        .enqueue_revision_proposal_with_explicit_signer(
-            TradeRevisionProposalEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                order_revision_proposal(
-                    "order-lifecycle-invalid",
-                    &request_event_id,
-                    &request_event_id,
-                ),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("missing transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("missing local evidence");
-    assert!(matches!(missing, RadrootsSdkError::InvalidRequest { .. }));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        0
-    );
-
-    store
-        .ingest_event(RadrootsEventIngest::new(
-            signed_event_from_envelope(request_event.clone()),
-            7_000,
-        ))
-        .await
-        .expect("ingest request");
-    let decision_receipt = sdk
-        .trades()
-        .enqueue_decision_with_explicit_signer(
-            TradeDecisionEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                order_decision("order-lifecycle-invalid"),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("decision transport targets"),
-            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect("enqueue decision");
-    let revision_without_proposal = order_revision_decision(
-        &order_revision_proposal(
-            "order-lifecycle-invalid",
-            &request_event_id,
-            &decision_receipt.signed_event_id,
-        ),
-        &decision_receipt.signed_event_id,
-        RadrootsOrderRevisionOutcome::Accepted,
-    );
-    let revision_error = sdk
-        .trades()
-        .enqueue_revision_decision_with_explicit_signer(
-            TradeRevisionDecisionEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&decision_receipt.signed_event_id),
-                revision_without_proposal,
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("revision decision transport targets"),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("revision decision without proposal");
-    assert!(matches!(
-        revision_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-
-    let cancellation_error = sdk
-        .trades()
-        .enqueue_cancellation_with_explicit_signer(
-            TradeCancellationEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&decision_receipt.signed_event_id),
-                order_cancellation("order-lifecycle-invalid"),
-                TargetPolicy::default_profile(),
-                PublishMode::EnqueueOnly,
-                SatisfactionPolicy::NoWait,
-            )
-            .try_with_nostr_targets([RELAY], NostrRelayUrlPolicy::Public)
-            .expect("cancellation transport targets"),
-            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
-        )
-        .await
-        .expect_err("cancellation after accepted agreement");
-    assert!(matches!(
-        cancellation_error,
-        RadrootsSdkError::InvalidRequest { .. }
-    ));
-    assert_eq!(
-        store
-            .status_summary()
-            .await
-            .expect("event store status")
-            .total_events,
-        2
-    );
-}
-
 #[tokio::test]
 async fn order_status_returns_not_found_for_missing_local_order() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
@@ -6085,8 +3046,6 @@ async fn order_status_returns_not_found_for_missing_local_order() {
     assert!(!receipt.evidence.has_issues);
     assert!(!receipt.eligibility.can_decide);
     assert!(!receipt.eligibility.can_cancel);
-    assert!(!receipt.eligibility.can_propose_revision);
-    assert!(!receipt.eligibility.can_decide_revision);
     assert!(receipt.issues.is_empty());
 }
 
@@ -6253,8 +3212,6 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     assert_eq!(receipt_json["evidence"]["has_validation_receipt"], false);
     assert_eq!(receipt_json["eligibility"]["can_decide"], false);
     assert_eq!(receipt_json["eligibility"]["can_cancel"], false);
-    assert_eq!(receipt_json["eligibility"]["can_propose_revision"], false);
-    assert_eq!(receipt_json["eligibility"]["can_decide_revision"], false);
 
     let issue = SdkTradeStatusIssue {
         kind: SdkTradeStatusIssueKind::DecisionPayloadInvalid,
@@ -6407,116 +3364,6 @@ fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
             ConflictingDecisions,
             ConflictingDecisions,
             "conflicting_decisions"
-        ),
-        single_issue!(
-            RevisionProposalPayloadInvalid,
-            RevisionProposalPayloadInvalid,
-            "revision_proposal_payload_invalid"
-        ),
-        single_issue!(
-            RevisionProposalOrderIdMismatch,
-            RevisionProposalOrderIdMismatch,
-            "revision_proposal_order_id_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalAuthorMismatch,
-            RevisionProposalAuthorMismatch,
-            "revision_proposal_author_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalCounterpartyMismatch,
-            RevisionProposalCounterpartyMismatch,
-            "revision_proposal_counterparty_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalBuyerMismatch,
-            RevisionProposalBuyerMismatch,
-            "revision_proposal_buyer_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalSellerMismatch,
-            RevisionProposalSellerMismatch,
-            "revision_proposal_seller_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalListingAddressInvalid,
-            RevisionProposalListingAddressInvalid,
-            "revision_proposal_listing_address_invalid"
-        ),
-        single_issue!(
-            RevisionProposalListingMismatch,
-            RevisionProposalListingMismatch,
-            "revision_proposal_listing_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalRootMismatch,
-            RevisionProposalRootMismatch,
-            "revision_proposal_root_mismatch"
-        ),
-        single_issue!(
-            RevisionProposalPreviousMismatch,
-            RevisionProposalPreviousMismatch,
-            "revision_proposal_previous_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionWithoutProposal,
-            RevisionDecisionWithoutProposal,
-            "revision_decision_without_proposal"
-        ),
-        single_issue!(
-            RevisionDecisionPayloadInvalid,
-            RevisionDecisionPayloadInvalid,
-            "revision_decision_payload_invalid"
-        ),
-        single_issue!(
-            RevisionDecisionOrderIdMismatch,
-            RevisionDecisionOrderIdMismatch,
-            "revision_decision_order_id_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionAuthorMismatch,
-            RevisionDecisionAuthorMismatch,
-            "revision_decision_author_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionCounterpartyMismatch,
-            RevisionDecisionCounterpartyMismatch,
-            "revision_decision_counterparty_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionBuyerMismatch,
-            RevisionDecisionBuyerMismatch,
-            "revision_decision_buyer_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionSellerMismatch,
-            RevisionDecisionSellerMismatch,
-            "revision_decision_seller_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionListingAddressInvalid,
-            RevisionDecisionListingAddressInvalid,
-            "revision_decision_listing_address_invalid"
-        ),
-        single_issue!(
-            RevisionDecisionListingMismatch,
-            RevisionDecisionListingMismatch,
-            "revision_decision_listing_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionRootMismatch,
-            RevisionDecisionRootMismatch,
-            "revision_decision_root_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionPreviousMismatch,
-            RevisionDecisionPreviousMismatch,
-            "revision_decision_previous_mismatch"
-        ),
-        single_issue!(
-            RevisionDecisionRevisionIdMismatch,
-            RevisionDecisionRevisionIdMismatch,
-            "revision_decision_revision_id_mismatch"
         ),
         single_issue!(
             CancellationWithoutCancellableOrder,
@@ -6684,7 +3531,7 @@ async fn order_status_projects_local_request_and_decision_events() {
             .collect::<Vec<_>>(),
         vec![request_event.id_str(), decision_event.id_str()]
     );
-    assert_eq!(receipt.status, TradeStatusKind::AgreedPendingRhi);
+    assert_eq!(receipt.status, TradeStatusKind::AgreedPendingValidation);
     assert_eq!(
         receipt
             .request_event_id
@@ -6717,17 +3564,14 @@ async fn order_status_projects_local_request_and_decision_events() {
     assert!(!receipt.lifecycle_terminal);
     assert_eq!(
         receipt.next_action,
-        TradeStatusNextActionKind::AwaitRhiValidation
+        TradeStatusNextActionKind::AwaitValidation
     );
     assert_eq!(receipt.evidence.event_count, 2);
     assert!(receipt.evidence.has_request);
     assert!(receipt.evidence.has_decision);
     assert!(receipt.evidence.has_agreement);
-    assert!(!receipt.evidence.has_pending_revision);
     assert!(!receipt.evidence.has_issues);
     assert!(!receipt.eligibility.can_decide);
-    assert!(!receipt.eligibility.can_propose_revision);
-    assert!(!receipt.eligibility.can_decide_revision);
     assert!(!receipt.eligibility.can_cancel);
 }
 

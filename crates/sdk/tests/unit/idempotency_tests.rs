@@ -2,10 +2,7 @@ use super::{SdkIdempotencyKey, SdkTradeIdempotencyRecord};
 use crate::RadrootsSdkError;
 use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 
-#[path = "../support/serializer_failure.rs"]
-mod serializer_failure;
-
-use serializer_failure::assert_struct_serialize_error_paths;
+use crate::serializer_failure::assert_struct_serialize_error_paths;
 
 #[test]
 fn empty_key_is_rejected_before_redacted_storage() {
@@ -32,17 +29,21 @@ fn empty_key_is_rejected_before_redacted_storage() {
 }
 
 #[test]
-fn derived_key_is_deterministic_and_consumable() {
-    let first = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a");
-    let second = SdkIdempotencyKey::derive("listing.publish.v1", "event-a", "pubkey-a");
+fn explicit_uuid_v7_key_is_accepted_and_other_shapes_are_rejected() {
+    let key = SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000001").expect("key");
 
-    assert_eq!(first.as_str(), second.as_str());
-    assert!(first.into_string().starts_with("listing.publish.v1:"));
+    assert_eq!(key.as_str(), "01890f0e-6c00-7000-8000-000000000001");
+    assert_eq!(key.into_string(), "01890f0e-6c00-7000-8000-000000000001");
+    assert!(matches!(
+        SdkIdempotencyKey::new("01890f0e-6c00-6000-8000-000000000001"),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message == "idempotency key must be a UUIDv7"
+    ));
 }
 
 #[test]
 fn idempotency_key_reports_serializer_failures() {
-    let key = SdkIdempotencyKey::new("idempotent").expect("key");
+    let key = SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000002").expect("key");
 
     assert_struct_serialize_error_paths(&key, 2);
 }
@@ -50,7 +51,8 @@ fn idempotency_key_reports_serializer_failures() {
 #[test]
 fn trade_idempotency_record_binds_payload_and_reports_conflicts() {
     let record = SdkTradeIdempotencyRecord {
-        idempotency_key: SdkIdempotencyKey::new("trade-idempotent").expect("key"),
+        idempotency_key: SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000003")
+            .expect("key"),
         operation_kind: "trade.submit.v1".to_owned(),
         actor_pubkey: RadrootsPublicKey::parse(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

@@ -18,8 +18,8 @@ use radroots_event::{
 use radroots_outbox::RadrootsOutboxEnqueueStatus;
 #[cfg(feature = "runtime")]
 use radroots_trade::listing::{
-    RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingMutation,
-    build_listing_mutation_draft, canonicalize_listing_draft,
+    RadrootsCanonicalListingEdit, RadrootsListingEditDocumentV1, RadrootsListingMutation,
+    build_listing_mutation_draft, canonicalize_listing_edit,
 };
 #[cfg(feature = "runtime")]
 pub const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
@@ -30,7 +30,7 @@ pub const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
 pub struct ListingPreparePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub document: RadrootsListingDraftDocumentV1,
+    pub document: RadrootsListingEditDocumentV1,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
@@ -39,14 +39,14 @@ impl ListingPreparePublishRequest {
     pub fn new(actor: RadrootsActorContext, listing: RadrootsListing) -> Self {
         Self {
             actor,
-            document: RadrootsListingDraftDocumentV1::new(listing),
+            document: RadrootsListingEditDocumentV1::new(listing),
             created_at: None,
         }
     }
 
     pub fn from_document(
         actor: RadrootsActorContext,
-        document: RadrootsListingDraftDocumentV1,
+        document: RadrootsListingEditDocumentV1,
     ) -> Self {
         Self {
             actor,
@@ -67,7 +67,7 @@ impl ListingPreparePublishRequest {
 pub struct ListingEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub document: RadrootsListingDraftDocumentV1,
+    pub document: RadrootsListingEditDocumentV1,
     pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -82,14 +82,14 @@ impl ListingEnqueuePublishRequest {
     ) -> Self {
         Self::from_document(
             actor,
-            RadrootsListingDraftDocumentV1::new(listing),
+            RadrootsListingEditDocumentV1::new(listing),
             target_policy,
         )
     }
 
     pub fn from_document(
         actor: RadrootsActorContext,
-        document: RadrootsListingDraftDocumentV1,
+        document: RadrootsListingEditDocumentV1,
         target_policy: TargetPolicy,
     ) -> Self {
         Self {
@@ -115,7 +115,7 @@ impl ListingEnqueuePublishRequest {
     }
 
     pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
-        self.idempotency_key = Some(idempotency_key.into());
+        self.idempotency_key = Some(idempotency_key);
         self
     }
 
@@ -137,7 +137,6 @@ impl ListingEnqueuePublishRequest {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingPublishPlan {
     pub public_listing_addr: RadrootsListingAddress,
-    pub draft_listing_addr: RadrootsListingAddress,
     pub expected_event_id: RadrootsEventId,
     pub frozen_draft: RadrootsEventDraft,
     pub created_at: RadrootsSdkTimestamp,
@@ -166,7 +165,6 @@ impl From<RadrootsOutboxEnqueueStatus> for SdkMutationState {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingEnqueueReceipt {
     pub public_listing_addr: RadrootsListingAddress,
-    pub draft_listing_addr: RadrootsListingAddress,
     pub expected_event_id: RadrootsEventId,
     pub signed_event_id: RadrootsEventId,
     pub local_event_seq: i64,
@@ -301,7 +299,6 @@ fn listing_enqueue_receipt(
 ) -> ListingEnqueueReceipt {
     ListingEnqueueReceipt {
         public_listing_addr: plan.public_listing_addr,
-        draft_listing_addr: plan.draft_listing_addr,
         expected_event_id: plan.expected_event_id,
         signed_event_id: enqueue.signed_event_id,
         local_event_seq: enqueue.local_event_seq,
@@ -313,36 +310,34 @@ fn listing_enqueue_receipt(
 }
 
 #[cfg(feature = "runtime")]
-fn canonical_listing_draft(
+fn canonical_listing_edit(
     actor: &RadrootsActorContext,
-    document: RadrootsListingDraftDocumentV1,
-) -> Result<RadrootsCanonicalListingDraft, RadrootsSdkError> {
-    canonicalize_listing_draft(actor, document).map_err(Into::into)
+    document: RadrootsListingEditDocumentV1,
+) -> Result<RadrootsCanonicalListingEdit, RadrootsSdkError> {
+    canonicalize_listing_edit(actor, document).map_err(Into::into)
 }
 
 #[cfg(feature = "runtime")]
 fn listing_publish_plan(
     actor: &RadrootsActorContext,
-    document: RadrootsListingDraftDocumentV1,
+    document: RadrootsListingEditDocumentV1,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<ListingPublishPlan, RadrootsSdkError> {
     let created_at_nostr = created_at.try_into_nostr_created_at()?;
-    let canonical = canonical_listing_draft(actor, document)?;
+    let canonical = canonical_listing_edit(actor, document)?;
     let public_listing_addr = canonical.public_listing_addr().clone();
-    let draft_listing_addr = canonical.draft_listing_addr().clone();
     let mutation = RadrootsListingMutation::publish(canonical);
     let frozen_draft = build_listing_mutation_draft(&mutation, u64::from(created_at_nostr))?;
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
-        .expect("frozen listing draft produces a valid event id");
+        .expect("frozen listing edit produces a valid event id");
     Ok(ListingPublishPlan {
         public_listing_addr,
-        draft_listing_addr,
         expected_event_id,
         frozen_draft,
         created_at,
     })
 }
 
-#[cfg(all(test, feature = "runtime"))]
+#[cfg(all(test, feature = "runtime", feature = "signer-adapters"))]
 #[path = "../tests/unit/listings_runtime_tests.rs"]
 mod tests;

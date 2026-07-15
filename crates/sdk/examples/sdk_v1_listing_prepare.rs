@@ -23,7 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plan = sdk.listings().prepare_publish(request)?;
 
     println!("public listing: {}", plan.public_listing_addr.as_str());
-    println!("draft listing: {}", plan.draft_listing_addr.as_str());
     println!("expected event: {}", plan.expected_event_id.as_str());
     Ok(())
 }

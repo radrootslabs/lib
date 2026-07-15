@@ -9,9 +9,9 @@ use radroots_sdk::{
     SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
     SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
-    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, StorageCheckpointReceipt,
-    StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest, TargetPolicy, TargetSet,
-    TransportProfile,
+    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, SdkStudioStoreStorageStatus,
+    StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
+    TargetPolicy, TargetSet, TransportProfile,
 };
 use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::Row;
@@ -40,7 +40,6 @@ async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
     let _geonames = sdk.geonames();
     let _trades = sdk.trades();
     let _sync = sdk.sync();
-    let _dvm = sdk.dvm();
 }
 
 #[tokio::test]
@@ -156,48 +155,63 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
 
     let paths = sdk.storage_paths().expect("paths");
     assert_eq!(
-        paths.event_store_path,
-        tempdir
-            .path()
-            .join("sdk-runtime")
-            .join("event_store.sqlite")
+        paths.runtime_path,
+        tempdir.path().join("sdk-runtime").join("runtime.sqlite")
     );
     assert_eq!(
-        paths.outbox_path,
-        tempdir.path().join("sdk-runtime").join("outbox.sqlite")
-    );
-    assert_eq!(
-        paths.private_store_path,
+        paths.private_path,
         tempdir.path().join("sdk-runtime").join("private.sqlite")
     );
-    assert!(paths.event_store_path.exists());
-    assert!(paths.outbox_path.exists());
-    assert!(paths.private_store_path.exists());
-    let event_tables = sqlite_table_names(&paths.event_store_path).await;
-    assert!(event_tables.iter().any(|name| name == "event_envelopes"));
+    assert_eq!(
+        paths.studio_path,
+        tempdir.path().join("sdk-runtime").join("studio.sqlite")
+    );
+    assert!(paths.runtime_path.exists());
+    assert!(paths.private_path.exists());
+    assert!(paths.studio_path.exists());
+    let runtime_tables = sqlite_table_names(&paths.runtime_path).await;
+    assert!(runtime_tables.iter().any(|name| name == "event_envelopes"));
     assert!(
-        event_tables
+        runtime_tables
             .iter()
             .any(|name| name == "event_envelope_tags")
     );
-    assert!(event_tables.iter().any(|name| name == "listing_projection"));
-    assert!(event_tables.iter().any(|name| name == "trade_projection"));
-    assert!(event_tables.iter().any(|name| name == "listing_search_fts"));
-    assert!(!event_tables.iter().any(|name| name == "nostr_event"));
-    assert!(!event_tables.iter().any(|name| name == "nostr_event_tag"));
+    assert!(
+        runtime_tables
+            .iter()
+            .any(|name| name == "listing_projection")
+    );
+    assert!(runtime_tables.iter().any(|name| name == "trade_projection"));
+    assert!(
+        runtime_tables
+            .iter()
+            .any(|name| name == "listing_search_fts")
+    );
+    assert!(
+        runtime_tables
+            .iter()
+            .any(|name| name == "outbox_operations")
+    );
+    assert!(
+        runtime_tables
+            .iter()
+            .any(|name| name == "sdk_runtime_operation_journal")
+    );
+    assert!(!runtime_tables.iter().any(|name| name == "nostr_event"));
+    assert!(!runtime_tables.iter().any(|name| name == "nostr_event_tag"));
     assert_eq!(
-        sqlite_trade_projection_primary_key(&paths.event_store_path).await,
+        sqlite_trade_projection_primary_key(&paths.runtime_path).await,
         vec!["order_id", "root_event_id", "projection_version"]
     );
-    let outbox_tables = sqlite_table_names(&paths.outbox_path).await;
-    assert!(outbox_tables.iter().any(|name| name == "outbox_operations"));
-    assert!(!outbox_tables.iter().any(|name| name == "outbox_operation"));
-    let private_tables = sqlite_table_names(&paths.private_store_path).await;
+    assert!(!runtime_tables.iter().any(|name| name == "outbox_operation"));
+    let private_tables = sqlite_table_names(&paths.private_path).await;
     assert!(
         private_tables
             .iter()
             .any(|name| name == "sdk_private_farm_location")
     );
+    let studio_tables = sqlite_table_names(&paths.studio_path).await;
+    assert!(studio_tables.iter().any(|name| name == "sdk_studio_state"));
 }
 
 #[tokio::test]
@@ -326,25 +340,6 @@ fn sdk_timestamp_rejects_values_outside_nostr_created_at_range() {
 }
 
 #[test]
-fn sdk_partial_local_mutation_error_is_sanitized() {
-    let event_id = "a".repeat(64);
-    let error = RadrootsSdkError::partial_outbox_enqueue_mutation(
-        event_id,
-        LISTING_PUBLISH_OPERATION_KIND,
-        "abcdef123456",
-    );
-    let message = error.to_string();
-
-    assert!(message.contains(LISTING_PUBLISH_OPERATION_KIND));
-    assert!(message.contains("abcdef123456"));
-    assert!(message.contains("stored=true"));
-    assert!(message.contains("queued=false"));
-    assert!(!message.contains("sig"));
-    assert!(!message.contains("raw"));
-    assert!(!message.contains("idempotency-key"));
-}
-
-#[test]
 fn sdk_error_contract_methods_cover_all_variants() {
     let cases = vec![
         (
@@ -455,9 +450,9 @@ fn sdk_error_contract_methods_cover_all_variants() {
         (
             RadrootsSdkError::TradeAmbiguous {
                 operation: "trade.accept".to_owned(),
-                locator: RadrootsTradeLocator::from_order_id(
+                locator: Box::new(RadrootsTradeLocator::from_order_id(
                     RadrootsOrderId::parse("trade-error").expect("order id"),
-                ),
+                )),
                 candidates: vec![RadrootsTradeLocator::from_order_id(
                     RadrootsOrderId::parse("trade-error").expect("order id"),
                 )],
@@ -536,10 +531,10 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
-            RadrootsSdkError::ListingDraft {
-                message: "draft".to_owned(),
+            RadrootsSdkError::ListingEdit {
+                message: "edit".to_owned(),
             },
-            "listing_draft",
+            "listing_edit",
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
@@ -589,17 +584,6 @@ fn sdk_error_contract_methods_cover_all_variants() {
             RadrootsSdkErrorClass::Storage,
             true,
             vec![RadrootsSdkRecoveryAction::InspectLocalStores],
-        ),
-        (
-            RadrootsSdkError::partial_outbox_enqueue_mutation(
-                "a".repeat(64),
-                LISTING_PUBLISH_OPERATION_KIND,
-                "abcdef123456",
-            ),
-            "partial_local_mutation",
-            RadrootsSdkErrorClass::LocalMutation,
-            true,
-            vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey],
         ),
     ];
 
@@ -702,14 +686,14 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
 
 #[test]
 fn idempotency_key_validation_is_bounded_and_debug_redacted() {
-    let key = SdkIdempotencyKey::new("idem-a").expect("key");
-    assert_eq!(key.as_str(), "idem-a");
+    let key = SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000022d").expect("key");
+    assert_eq!(key.as_str(), "01890f0e-6c00-7000-8000-00000000022d");
     let debug = format!("{key:?}");
     assert!(debug.contains("<redacted>"));
-    assert!(!debug.contains("idem-a"));
+    assert!(!debug.contains("01890f0e-6c00-7000-8000-00000000022d"));
     assert_eq!(
         serde_json::to_value(&key).expect("key json"),
-        serde_json::json!({ "value": "<redacted>", "len": 6 })
+        serde_json::json!({ "value": "<redacted>", "len": 36 })
     );
 
     assert!(matches!(
@@ -722,7 +706,11 @@ fn idempotency_key_validation_is_bounded_and_debug_redacted() {
         RadrootsSdkError::InvalidRequest { ref message }
             if message == "idempotency key must not include boundary whitespace"
     ));
-    assert!(!untrimmed.to_string().contains("idem-a"));
+    assert!(
+        !untrimmed
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-00000000022d")
+    );
     assert!(matches!(
         SdkIdempotencyKey::new("idem\nbad"),
         Err(RadrootsSdkError::InvalidRequest { .. })
@@ -789,6 +777,10 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 store: private_store,
                 farm_private_locations: 4,
             },
+            studio_store: SdkStudioStoreStorageStatus {
+                store: store.clone(),
+                studio_state_records: 5,
+            },
         })
         .expect("status receipt"),
         serde_json::json!({
@@ -849,6 +841,20 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "integrity_result": "ok"
                 },
                 "farm_private_locations": 4
+            },
+            "studio_store": {
+                "store": {
+                    "schema_version": 1,
+                    "journal_mode": "wal",
+                    "foreign_keys_enabled": true,
+                    "busy_timeout_ms": 5000,
+                    "wal_status": {
+                        "wal_enabled": true
+                    },
+                    "integrity_ok": true,
+                    "integrity_result": "ok"
+                },
+                "studio_state_records": 5
             }
         })
     );
@@ -862,7 +868,8 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
             paths: None,
             event_store: checkpoint.clone(),
             outbox: checkpoint.clone(),
-            private_store: checkpoint,
+            private_store: checkpoint.clone(),
+            studio_store: checkpoint,
         })
         .expect("checkpoint receipt"),
         serde_json::json!({
@@ -883,6 +890,13 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 "checkpoint_complete": true
             },
             "private_store": {
+                "wal_enabled": true,
+                "busy": 0,
+                "log_frame_count": 8,
+                "checkpointed_frame_count": 8,
+                "checkpoint_complete": true
+            },
+            "studio_store": {
                 "wal_enabled": true,
                 "busy": 0,
                 "log_frame_count": 8,
@@ -926,18 +940,22 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
             event_store_ok: true,
             outbox_ok: true,
             private_store_ok: true,
+            studio_store_ok: true,
             event_store_events: 2,
             outbox_events: 3,
             private_farm_locations: 4,
+            studio_state_records: 5,
         })
         .expect("backup verification"),
         serde_json::json!({
             "event_store_ok": true,
             "outbox_ok": true,
             "private_store_ok": true,
+            "studio_store_ok": true,
             "event_store_events": 2,
             "outbox_events": 3,
-            "private_farm_locations": 4
+            "private_farm_locations": 4,
+            "studio_state_records": 5
         })
     );
     assert_eq!(

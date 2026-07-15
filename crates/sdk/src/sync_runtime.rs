@@ -332,18 +332,12 @@ impl SyncProjectionRefreshReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SdkRelayAuthPolicy {
+    #[default]
     DetectOnly,
-}
-
-#[cfg(feature = "runtime")]
-impl Default for SdkRelayAuthPolicy {
-    fn default() -> Self {
-        Self::DetectOnly
-    }
 }
 
 #[cfg(feature = "runtime")]

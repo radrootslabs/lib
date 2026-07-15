@@ -3,13 +3,8 @@ use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_nostr::prelude::RadrootsNostrKeys;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-#[path = "../support/fixture_signer.rs"]
-mod fixture_signer;
-#[path = "../support/serializer_failure.rs"]
-mod serializer_failure;
-
-use fixture_signer::FixtureSigner;
-use serializer_failure::assert_struct_serialize_error_paths;
+use crate::fixture_signer::FixtureSigner;
+use crate::serializer_failure::assert_struct_serialize_error_paths;
 
 const FARMER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -140,8 +135,7 @@ fn farm_publish_plan_rejects_invalid_draft_tags() {
         farm,
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
     )
-    .err()
-    .expect("invalid farm plan");
+    .expect_err("invalid farm plan");
     assert!(matches!(
         error,
         RadrootsSdkError::InvalidRequest { message } if message.contains("draft encode failed")
@@ -171,24 +165,30 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     )
     .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
-    .with_idempotency_key(SdkIdempotencyKey::new("farm-unit-key").expect("key"))
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000233").expect("key"),
+    )
     .with_created_at(created_at);
     assert_struct_serialize_error_paths(&enqueue, 5);
     let enqueue_json = serde_json::to_value(&enqueue).expect("enqueue json");
     assert_eq!(enqueue_json["target_policy"]["kind"], "explicit");
     assert_eq!(enqueue_json["created_at"], 1_700_000_321);
-    assert!(!enqueue_json.to_string().contains("farm-unit-key"));
+    assert!(
+        !enqueue_json
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-000000000233")
+    );
 
     let try_key = FarmEnqueuePublishRequest::new(
         farmer_actor(),
         farm(FARM_C_D_TAG, "Try Key Farm"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("farm-unit-try-key")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000234")
     .expect("try key");
     assert_eq!(
         serde_json::to_value(&try_key).expect("try key json")["idempotency_key"]["len"],
-        "farm-unit-try-key".len()
+        "01890f0e-6c00-7000-8000-000000000234".len()
     );
 
     let private_upsert = FarmPrivateLocationUpsertRequest::new(
@@ -375,8 +375,7 @@ fn farm_request_builders_reject_invalid_options_and_timestamp_bounds() {
         farm(FARM_C_D_TAG, "Future Farm"),
         RadrootsSdkTimestamp::from_unix_seconds(u64::MAX),
     )
-    .err()
-    .expect("timestamp error");
+    .expect_err("timestamp error");
     assert!(matches!(
         timestamp_error,
         RadrootsSdkError::TimestampOutOfRange { .. }
@@ -559,7 +558,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )
-            .try_with_idempotency_key("farm-source-attached-enqueue")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000235")
             .expect("idempotency"),
             &signer,
         )
@@ -582,7 +581,10 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
             plan,
             TargetPolicy::try_nostr_relays([RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("prepared transport targets"),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000236")
+                    .expect("prepared idempotency"),
+            ),
             &signer,
         )
         .await
@@ -615,7 +617,7 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )
-            .try_with_idempotency_key("farm-configured-local")
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000236")
             .expect("idempotency"),
         )
         .await

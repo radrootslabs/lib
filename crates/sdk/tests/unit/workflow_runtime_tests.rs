@@ -14,6 +14,11 @@ const FARMER_SECRET_KEY_HEX: &str =
 const FARMER_PUBLIC_KEY_HEX: &str =
     "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
+fn workflow_idempotency_key(index: u16) -> SdkIdempotencyKey {
+    SdkIdempotencyKey::new(format!("01890f0e-6c00-7000-8000-00000000{index:04x}"))
+        .expect("workflow idempotency")
+}
+
 struct WorkflowSigner {
     identity: RadrootsSignerIdentity,
     keys: RadrootsNostrKeys,
@@ -135,7 +140,8 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     assert_eq!(event.id(), signed.id());
     assert_eq!(event.author(), signed.pubkey());
 
-    let idempotency_key = SdkIdempotencyKey::new("workflow-idempotency").expect("idempotency");
+    let idempotency_key =
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000237").expect("idempotency");
     let input = signed_outbox_input(
         "workflow.test.v1",
         &draft,
@@ -185,7 +191,7 @@ async fn default_operation_idempotency_ignores_target_policy() {
             frozen_draft: &draft,
             target_policy: first_target_policy,
             satisfaction_policy: SatisfactionPolicy::AllAccepted,
-            idempotency_key: None,
+            idempotency_key: Some(workflow_idempotency_key(0x240)),
         },
         &signer,
     )
@@ -199,7 +205,7 @@ async fn default_operation_idempotency_ignores_target_policy() {
             frozen_draft: &draft,
             target_policy: second_target_policy,
             satisfaction_policy: SatisfactionPolicy::AllAccepted,
-            idempotency_key: None,
+            idempotency_key: Some(workflow_idempotency_key(0x240)),
         },
         &signer,
     )
@@ -270,7 +276,7 @@ async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_pro
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
             satisfaction_policy: SatisfactionPolicy::NoWait,
-            idempotency_key: None,
+            idempotency_key: Some(workflow_idempotency_key(0x241)),
         },
         &signer,
     )
@@ -323,6 +329,56 @@ async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_pro
 }
 
 #[tokio::test]
+async fn enqueue_signed_workflow_rejects_missing_explicit_idempotency_key_without_mutation() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_013,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-missing-idempotency");
+
+    let error = match enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: TargetPolicy::default_profile(),
+            satisfaction_policy: SatisfactionPolicy::NoWait,
+            idempotency_key: None,
+        },
+        &WorkflowSigner::new(),
+    )
+    .await
+    {
+        Err(error) => error,
+        Ok(_) => panic!("expected missing idempotency error"),
+    };
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+}
+
+#[tokio::test]
 async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_conflicts() {
     let sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
@@ -336,7 +392,8 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         .expect("actor");
     let signer = WorkflowSigner::new();
     let first_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-success");
-    let idempotency_key = SdkIdempotencyKey::new("workflow-idempotency").expect("idempotency");
+    let idempotency_key =
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000237").expect("idempotency");
     let receipt = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
@@ -449,7 +506,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
             frozen_draft: &draft,
             target_policy: TargetPolicy::default_profile(),
             satisfaction_policy: SatisfactionPolicy::AllAccepted,
-            idempotency_key: None,
+            idempotency_key: Some(workflow_idempotency_key(0x242)),
         },
     )
     .await
@@ -463,7 +520,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
 }
 
 #[tokio::test]
-async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutation() {
+async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() {
     let sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
         .build()
@@ -487,7 +544,7 @@ async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutati
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
         satisfaction_policy: SatisfactionPolicy::AllAccepted,
-        idempotency_key: None,
+        idempotency_key: Some(workflow_idempotency_key(0x243)),
     };
 
     let error = match enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await {
@@ -495,15 +552,7 @@ async fn enqueue_signed_workflow_reports_outbox_preflight_failure_without_mutati
         Ok(_) => panic!("expected closed outbox error"),
     };
 
-    assert!(matches!(error, RadrootsSdkError::Outbox { .. }));
-    assert_eq!(
-        sdk._event_store
-            .status_summary()
-            .await
-            .expect("event store summary")
-            .total_events,
-        0
-    );
+    assert!(matches!(error, RadrootsSdkError::EventStore { .. }));
 }
 
 #[tokio::test]
@@ -523,7 +572,7 @@ async fn enqueue_signed_workflow_reports_store_failures() {
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
         satisfaction_policy: SatisfactionPolicy::AllAccepted,
-        idempotency_key: None,
+        idempotency_key: Some(workflow_idempotency_key(0x244)),
     };
     assert!(matches!(
         enqueue_signed_workflow(
@@ -553,7 +602,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         frozen_draft: &draft,
         target_policy: TargetPolicy::default_profile(),
         satisfaction_policy: SatisfactionPolicy::AllAccepted,
-        idempotency_key: None,
+        idempotency_key: Some(workflow_idempotency_key(0x245)),
     };
     assert!(matches!(
         enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await,
@@ -573,7 +622,7 @@ async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_proxy
         frozen_draft: &draft,
         target_policy: TargetPolicy::DefaultProfile,
         satisfaction_policy: SatisfactionPolicy::AllAccepted,
-        idempotency_key: None,
+        idempotency_key: Some(workflow_idempotency_key(0x246)),
     };
 
     assert!(matches!(

@@ -18,7 +18,6 @@ pub enum RadrootsSdkErrorClass {
     Authorization,
     Clock,
     Configuration,
-    LocalMutation,
     Request,
     Storage,
     Transport,
@@ -30,7 +29,6 @@ pub enum RadrootsSdkErrorClass {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum RadrootsSdkRecoveryAction {
-    RetryOutboxEnqueue,
     InspectLocalStores,
     InspectGeoNamesAsset,
     RetryOperationWithSameIdempotencyKey,
@@ -57,27 +55,6 @@ pub enum RadrootsSdkGeoNamesErrorKind {
     Integrity,
     Schema,
     Lookup,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum RadrootsSdkPartialLocalMutationFailure {
-    OutboxEnqueue,
-    OutboxIdempotencyConflict,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct RadrootsSdkPartialLocalMutationError {
-    pub event_id: Option<String>,
-    pub operation_kind: String,
-    pub idempotency_digest_prefix: Option<String>,
-    pub stored: bool,
-    pub queued: bool,
-    pub recovery: RadrootsSdkRecoveryAction,
-    pub failure: RadrootsSdkPartialLocalMutationFailure,
 }
 
 #[cfg(feature = "runtime")]
@@ -156,7 +133,7 @@ pub enum RadrootsSdkError {
     },
     TradeAmbiguous {
         operation: String,
-        locator: RadrootsTradeLocator,
+        locator: Box<RadrootsTradeLocator>,
         candidates: Vec<RadrootsTradeLocator>,
     },
     PrivacyPreflight {
@@ -185,7 +162,11 @@ pub enum RadrootsSdkError {
     InvalidRequest {
         message: String,
     },
-    ListingDraft {
+    UnsupportedProfileSchema {
+        path: PathBuf,
+        message: String,
+    },
+    ListingEdit {
         message: String,
     },
     ListingMutation {
@@ -195,6 +176,9 @@ pub enum RadrootsSdkError {
         message: String,
     },
     PrivateStore {
+        message: String,
+    },
+    StudioStore {
         message: String,
     },
     GeoNames {
@@ -207,7 +191,6 @@ pub enum RadrootsSdkError {
     Projection {
         message: String,
     },
-    PartialLocalMutation(RadrootsSdkPartialLocalMutationError),
 }
 
 #[cfg(feature = "runtime")]
@@ -247,10 +230,12 @@ impl RadrootsSdkError {
             Self::Authority { .. } => "authority",
             Self::EventStore { .. } => "event_store",
             Self::InvalidRequest { .. } => "invalid_request",
-            Self::ListingDraft { .. } => "listing_draft",
+            Self::UnsupportedProfileSchema { .. } => "unsupported_profile_schema",
+            Self::ListingEdit { .. } => "listing_edit",
             Self::ListingMutation { .. } => "listing_mutation",
             Self::Outbox { .. } => "outbox",
             Self::PrivateStore { .. } => "private_store",
+            Self::StudioStore { .. } => "studio_store",
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => "geonames_configuration",
                 RadrootsSdkGeoNamesErrorKind::Download => "geonames_download",
@@ -261,7 +246,6 @@ impl RadrootsSdkError {
             },
             Self::Transport { .. } => "transport",
             Self::Projection { .. } => "projection",
-            Self::PartialLocalMutation(_) => "partial_local_mutation",
         }
     }
 
@@ -271,6 +255,7 @@ impl RadrootsSdkError {
             | Self::EventStore { .. }
             | Self::Outbox { .. }
             | Self::PrivateStore { .. }
+            | Self::StudioStore { .. }
             | Self::Projection { .. } => RadrootsSdkErrorClass::Storage,
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => RadrootsSdkErrorClass::Configuration,
@@ -300,7 +285,8 @@ impl RadrootsSdkError {
             | Self::SignerProtocol { .. }
             | Self::SignerAuthChallengePending { .. }
             | Self::InvalidRequest { .. }
-            | Self::ListingDraft { .. }
+            | Self::UnsupportedProfileSchema { .. }
+            | Self::ListingEdit { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
             Self::ProductSyncUnsupported { .. }
             | Self::ReticulumPreviewTransportUnavailable { .. } => {
@@ -310,7 +296,6 @@ impl RadrootsSdkError {
             | Self::Transport { .. }
             | Self::SignerRequestTimedOut { .. }
             | Self::SignerTransport { .. } => RadrootsSdkErrorClass::Transport,
-            Self::PartialLocalMutation(_) => RadrootsSdkErrorClass::LocalMutation,
         }
     }
 
@@ -322,6 +307,7 @@ impl RadrootsSdkError {
                 | Self::EventStore { .. }
                 | Self::Outbox { .. }
                 | Self::PrivateStore { .. }
+                | Self::StudioStore { .. }
                 | Self::GeoNames {
                     kind: RadrootsSdkGeoNamesErrorKind::Cache
                         | RadrootsSdkGeoNamesErrorKind::Download,
@@ -331,7 +317,6 @@ impl RadrootsSdkError {
                 | Self::SignerRequestTimedOut { .. }
                 | Self::SignerTransport { .. }
                 | Self::Projection { .. }
-                | Self::PartialLocalMutation(_)
         )
     }
 
@@ -341,6 +326,7 @@ impl RadrootsSdkError {
             | Self::EventStore { .. }
             | Self::Outbox { .. }
             | Self::PrivateStore { .. }
+            | Self::StudioStore { .. }
             | Self::Projection { .. } => vec![RadrootsSdkRecoveryAction::InspectLocalStores],
             Self::GeoNames { kind, .. } => match kind {
                 RadrootsSdkGeoNamesErrorKind::Configuration => {
@@ -372,6 +358,9 @@ impl RadrootsSdkError {
             }
             Self::TradeAmbiguous { .. } => vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
             Self::PrivacyPreflight { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
+            Self::UnsupportedProfileSchema { .. } => {
+                vec![RadrootsSdkRecoveryAction::InspectLocalStores]
+            }
             Self::ProductSyncUnsupported { .. } => {
                 vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
             }
@@ -387,14 +376,13 @@ impl RadrootsSdkError {
             Self::SignerAuthChallengePending { .. } => {
                 vec![RadrootsSdkRecoveryAction::CompleteSignerAuthentication]
             }
-            Self::PartialLocalMutation(error) => vec![error.recovery],
             Self::ClockBeforeUnixEpoch
             | Self::TimestampOutOfRange { .. }
             | Self::TradeStatusLimitInvalid { .. }
             | Self::InvalidTradeId { .. }
             | Self::SignerProtocol { .. }
             | Self::InvalidRequest { .. }
-            | Self::ListingDraft { .. }
+            | Self::ListingEdit { .. }
             | Self::ListingMutation { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
         }
     }
@@ -488,14 +476,17 @@ impl RadrootsSdkError {
             | Self::Authority { message }
             | Self::EventStore { message }
             | Self::InvalidRequest { message }
-            | Self::ListingDraft { message }
+            | Self::ListingEdit { message }
             | Self::ListingMutation { message }
             | Self::Outbox { message }
             | Self::PrivateStore { message }
+            | Self::StudioStore { message }
             | Self::Transport { message }
             | Self::Projection { message } => json!({ "message": message }),
+            Self::UnsupportedProfileSchema { path, message } => {
+                json!({ "path": path.display().to_string(), "message": message })
+            }
             Self::GeoNames { kind, message } => json!({ "kind": kind, "message": message }),
-            Self::PartialLocalMutation(error) => json!(error),
         };
         json!({
             "code": self.code(),
@@ -504,42 +495,6 @@ impl RadrootsSdkError {
             "message": self.to_string(),
             "recovery_actions": self.recovery_actions(),
             "detail": detail
-        })
-    }
-
-    pub fn partial_local_mutation(error: RadrootsSdkPartialLocalMutationError) -> Self {
-        Self::PartialLocalMutation(error)
-    }
-
-    pub fn partial_outbox_enqueue_mutation(
-        event_id: impl Into<String>,
-        operation_kind: impl Into<String>,
-        idempotency_digest_prefix: impl Into<String>,
-    ) -> Self {
-        Self::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            event_id: Some(event_id.into()),
-            operation_kind: operation_kind.into(),
-            idempotency_digest_prefix: Some(idempotency_digest_prefix.into()),
-            stored: true,
-            queued: false,
-            recovery: RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
-            failure: RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue,
-        })
-    }
-
-    pub fn partial_outbox_idempotency_conflict_mutation(
-        event_id: impl Into<String>,
-        operation_kind: impl Into<String>,
-        idempotency_digest_prefix: impl Into<String>,
-    ) -> Self {
-        Self::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            event_id: Some(event_id.into()),
-            operation_kind: operation_kind.into(),
-            idempotency_digest_prefix: Some(idempotency_digest_prefix.into()),
-            stored: true,
-            queued: false,
-            recovery: RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
-            failure: RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict,
         })
     }
 
@@ -700,12 +655,18 @@ impl fmt::Display for RadrootsSdkError {
             Self::Authority { message } => write!(f, "sdk authority error: {message}"),
             Self::EventStore { message } => write!(f, "sdk event store error: {message}"),
             Self::InvalidRequest { message } => write!(f, "sdk invalid request: {message}"),
-            Self::ListingDraft { message } => write!(f, "sdk listing draft error: {message}"),
+            Self::UnsupportedProfileSchema { path, message } => write!(
+                f,
+                "sdk unsupported profile schema at `{}`: {message}",
+                path.display()
+            ),
+            Self::ListingEdit { message } => write!(f, "sdk listing edit error: {message}"),
             Self::ListingMutation { message } => {
                 write!(f, "sdk listing mutation error: {message}")
             }
             Self::Outbox { message } => write!(f, "sdk outbox error: {message}"),
             Self::PrivateStore { message } => write!(f, "sdk private store error: {message}"),
+            Self::StudioStore { message } => write!(f, "sdk studio store error: {message}"),
             Self::GeoNames { kind, message } => {
                 write!(f, "sdk GeoNames {kind:?} error: {message}")
             }
@@ -713,20 +674,6 @@ impl fmt::Display for RadrootsSdkError {
                 write!(f, "sdk transport error: {message}")
             }
             Self::Projection { message } => write!(f, "sdk projection error: {message}"),
-            Self::PartialLocalMutation(error) => write!(
-                f,
-                "sdk local mutation partially completed: event_id={}, operation_kind={}, idempotency_digest_prefix={}, stored={}, queued={}, failure={:?}, recovery={:?}",
-                error.event_id.as_deref().unwrap_or("<unknown>"),
-                error.operation_kind,
-                error
-                    .idempotency_digest_prefix
-                    .as_deref()
-                    .unwrap_or("<none>"),
-                error.stored,
-                error.queued,
-                error.failure,
-                error.recovery
-            ),
         }
     }
 }
@@ -818,16 +765,16 @@ impl From<radroots_geocoder::GeocoderError> for RadrootsSdkError {
 }
 
 #[cfg(feature = "runtime")]
-impl From<radroots_trade::listing::RadrootsListingDraftError> for RadrootsSdkError {
-    fn from(error: radroots_trade::listing::RadrootsListingDraftError) -> Self {
+impl From<radroots_trade::listing::RadrootsListingEditError> for RadrootsSdkError {
+    fn from(error: radroots_trade::listing::RadrootsListingEditError) -> Self {
         match error {
-            radroots_trade::listing::RadrootsListingDraftError::ActorRoleUnsatisfied {
+            radroots_trade::listing::RadrootsListingEditError::ActorRoleUnsatisfied {
                 required_role,
             } => Self::UnauthorizedActor {
                 operation: "listing.prepare_publish".to_owned(),
                 reason: format!("missing role {required_role:?}"),
             },
-            error => Self::ListingDraft {
+            error => Self::ListingEdit {
                 message: error.to_string(),
             },
         }

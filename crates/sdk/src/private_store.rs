@@ -247,29 +247,8 @@ async fn apply_up(pool: &SqlitePool) -> Result<(), RadrootsSdkError> {
     sqlx::raw_sql(PRIVATE_STORE_MIGRATION_UP)
         .execute(pool)
         .await
-        .map_err(private_store_error)?;
-    ensure_farm_location_label_column(pool).await
-}
-
-async fn ensure_farm_location_label_column(pool: &SqlitePool) -> Result<(), RadrootsSdkError> {
-    let rows = sqlx::query("PRAGMA table_info(sdk_private_farm_location)")
-        .fetch_all(pool)
-        .await
-        .map_err(private_store_error)?;
-    let has_label = rows
-        .iter()
-        .map(|row| row.try_get::<String, _>("name"))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(private_store_error)?
-        .iter()
-        .any(|name| name == "label");
-    if !has_label {
-        sqlx::query("ALTER TABLE sdk_private_farm_location ADD COLUMN label TEXT")
-            .execute(pool)
-            .await
-            .map_err(private_store_error)?;
-    }
-    Ok(())
+        .map(|_| ())
+        .map_err(private_store_error)
 }
 
 async fn query_i64(pool: &SqlitePool, sql: &'static str) -> Result<i64, RadrootsSdkError> {

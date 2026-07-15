@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(ExampleNip46Transport),
     )?;
     let sdk = RadrootsClient::builder()
-        .signer_provider(RadrootsSdkSignerProvider::MycNip46(signer))
+        .signer_provider(RadrootsSdkSignerProvider::MycNip46(Box::new(signer)))
         .build()
         .await?;
     let status = sdk.signer_status().expect("configured signer status");

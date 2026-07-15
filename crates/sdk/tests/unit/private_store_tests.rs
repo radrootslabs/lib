@@ -194,7 +194,7 @@ async fn private_store_status_update_delete_and_pragmas_round_trip() {
 }
 
 #[tokio::test]
-async fn private_store_file_open_materializes_label_column_for_existing_stores() {
+async fn private_store_file_open_rejects_pre_label_schema_without_repair() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let path = tempdir.path().join("private.sqlite");
     let options = SqliteConnectOptions::new()
@@ -231,18 +231,8 @@ async fn private_store_file_open_materializes_label_column_for_existing_stores()
 
     let store = SdkPrivateStore::open_file(&path).await.expect("open store");
     let record = private_location_record();
-    store
-        .upsert_farm_location(&record)
-        .await
-        .expect("upsert labeled location");
-    assert_eq!(
-        store
-            .farm_location(&record.farm_addr)
-            .await
-            .expect("read labeled location")
-            .expect("stored location")
-            .label
-            .as_deref(),
-        Some("Main pickup point")
-    );
+    assert!(matches!(
+        store.upsert_farm_location(&record).await,
+        Err(RadrootsSdkError::PrivateStore { .. })
+    ));
 }

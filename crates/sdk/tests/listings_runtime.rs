@@ -27,8 +27,9 @@ use radroots_sdk::{
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, ReticulumPreviewProfile, SdkIdempotencyKey,
     SdkMutationState, TargetPolicy, TargetSet, TransportProfile,
 };
-use radroots_trade::listing::RadrootsListingDraftDocumentV1;
+use radroots_trade::listing::RadrootsListingEditDocumentV1;
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
+use sqlx::Row;
 
 #[path = "support/serializer_failure.rs"]
 mod serializer_failure;
@@ -219,7 +220,7 @@ async fn prepare_publish_is_side_effect_free() {
     );
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     assert!(
@@ -229,7 +230,7 @@ async fn prepare_publish_is_side_effect_free() {
             .expect("event lookup")
             .is_none()
     );
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     assert!(
@@ -263,7 +264,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         listing(LISTING_B_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("idem-b")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000224")
     .expect("idempotency key");
     let prepared = sdk
         .listings()
@@ -281,7 +282,6 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
     assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
     assert_eq!(receipt.public_listing_addr, prepared.public_listing_addr);
-    assert_eq!(receipt.draft_listing_addr, prepared.draft_listing_addr);
     assert_eq!(receipt.local_event_seq, 1);
     assert_eq!(receipt.outbox_operation_id, 1);
     assert_eq!(receipt.outbox_event_id, 1);
@@ -289,7 +289,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
     assert!(receipt.idempotency_digest_prefix.is_some());
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     assert!(
@@ -300,7 +300,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
             .is_some()
     );
 
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let outbox_event = outbox
@@ -351,7 +351,10 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
             &actor,
             prepared.clone(),
             TargetPolicy::default_profile(),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000238")
+                    .expect("idempotency"),
+            ),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -361,7 +364,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
     assert_eq!(receipt.signed_event_id, prepared.expected_event_id);
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     assert!(
@@ -372,7 +375,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
             .is_some()
     );
 
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let outbox_event = outbox
@@ -391,7 +394,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
         listing(LISTING_A_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("debug-secret-idempotency")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000225")
     .expect("idempotency key");
     let receipt = sdk
         .listings()
@@ -402,7 +405,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
 
     assert!(debug.contains("ListingEnqueueReceipt"));
     assert!(debug.contains("StoredAndQueued"));
-    assert!(!debug.contains("debug-secret-idempotency"));
+    assert!(!debug.contains("01890f0e-6c00-7000-8000-000000000225"));
     assert!(!debug.contains("raw_json"));
     assert!(!debug.contains("\"tags\""));
     assert!(!debug.contains("\"content\""));
@@ -427,7 +430,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
     let prepare_request = ListingPreparePublishRequest::from_document(
         actor(),
-        RadrootsListingDraftDocumentV1::new(listing(LISTING_A_D_TAG, "Serialized Coffee")),
+        RadrootsListingEditDocumentV1::new(listing(LISTING_A_D_TAG, "Serialized Coffee")),
     )
     .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
@@ -452,7 +455,9 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     )
     .try_with_nostr_targets([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
     .expect("relay targets")
-    .with_idempotency_key(SdkIdempotencyKey::new("serialized-idempotency").expect("idempotency"))
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000226").expect("idempotency"),
+    )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
     assert_struct_serialize_error_paths(&enqueue_request, 5);
@@ -486,20 +491,24 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     );
     assert_eq!(
         enqueue_json["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 22 })
+        serde_json::json!({ "value": "<redacted>", "len": 36 })
     );
-    assert!(!enqueue_json.to_string().contains("serialized-idempotency"));
+    assert!(
+        !enqueue_json
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-000000000226")
+    );
 
     let try_key_request = ListingEnqueuePublishRequest::from_document(
         actor(),
-        RadrootsListingDraftDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
+        RadrootsListingEditDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("listing-serialized-try-key")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000227")
     .expect("try idempotency key");
     assert_eq!(
         serde_json::to_value(&try_key_request).expect("try key request json")["idempotency_key"],
-        serde_json::json!({ "value": "<redacted>", "len": 26 })
+        serde_json::json!({ "value": "<redacted>", "len": 36 })
     );
 
     let receipt = sdk
@@ -531,7 +540,10 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
             &prepared_actor,
             prepared_plan,
             TargetPolicy::default_profile(),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000239")
+                    .expect("idempotency"),
+            ),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -542,7 +554,9 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
         actor(),
         listing(LISTING_H_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
-    );
+    )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000239")
+    .expect("idempotency");
     let convenience_receipt = convenience_sdk
         .listings()
         .enqueue_publish_with_explicit_signer(convenience_request, &FixtureSigner::new(SELLER))
@@ -619,6 +633,8 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
         listing(LISTING_K_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
     )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023a")
+    .expect("idempotency")
     .with_created_at(created_at);
 
     let receipt = sdk
@@ -628,7 +644,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
         .expect("enqueue");
 
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
     let stored_event = event_store
@@ -640,7 +656,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
     assert_eq!(stored_event.inserted_at_ms, observed_at_ms);
     assert_eq!(stored_event.updated_at_ms, observed_at_ms);
 
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let outbox_event = outbox
@@ -688,17 +704,17 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
         listing(LISTING_D_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("idem-d")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000228")
     .expect("idempotency key");
     sdk.listings()
         .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
     let paths = sdk.storage_paths().expect("paths");
-    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
         .await
         .expect("event store");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     assert_eq!(
@@ -723,7 +739,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
         listing(LISTING_E_D_TAG, "Changed"),
         TargetPolicy::default_profile(),
     )
-    .try_with_idempotency_key("idem-d")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000228")
     .expect("idempotency key");
     let error = sdk
         .listings()
@@ -740,7 +756,11 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
         error.recovery_actions(),
         vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
     );
-    assert!(!error.to_string().contains("idem-d"));
+    assert!(
+        !error
+            .to_string()
+            .contains("01890f0e-6c00-7000-8000-000000000228")
+    );
     assert_eq!(
         event_store
             .status_summary()
@@ -760,7 +780,95 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
 }
 
 #[tokio::test]
-async fn enqueue_publish_derives_order_independent_idempotency_key() {
+async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_after_ingest() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let paths = sdk.storage_paths().expect("paths");
+    let idempotency_key = "01890f0e-6c00-7000-8000-000000000120";
+    let seeded_event_store = RadrootsEventStore::open_file(&paths.runtime_path)
+        .await
+        .expect("seed event store");
+    let conflicting_operation = sqlx::query(
+        "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, 'queued', ?, ?)",
+    )
+    .bind(LISTING_PUBLISH_OPERATION_KIND)
+    .bind(SELLER)
+    .bind(idempotency_key)
+    .bind("conflicting-digest")
+    .bind(1_700_000_000_000i64)
+    .bind(1_700_000_000_000i64)
+    .execute(seeded_event_store.pool())
+    .await
+    .expect("seed conflicting operation")
+    .last_insert_rowid();
+    sqlx::query(
+        "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, '{}', 'signed', 0, ?, 0, 0, ?, ?)",
+    )
+    .bind(conflicting_operation)
+    .bind("0".repeat(64))
+    .bind(SELLER)
+    .bind(1_700_000_000_000i64)
+    .bind(1_700_000_000_000i64)
+    .bind(1_700_000_000_000i64)
+    .execute(seeded_event_store.pool())
+    .await
+    .expect("seed conflicting event");
+
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_E_D_TAG, "Rollback Coffee"),
+        TargetPolicy::default_profile(),
+    )
+    .try_with_idempotency_key(idempotency_key)
+    .expect("idempotency key");
+    let prepared = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor(),
+            listing(LISTING_E_D_TAG, "Rollback Coffee"),
+        ))
+        .expect("prepared");
+    let error = sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .await
+        .expect_err("outbox conflict");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::IdempotencyConflict { .. }
+    ));
+
+    let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
+        .await
+        .expect("event store");
+    assert!(
+        event_store
+            .get_event(prepared.expected_event_id.as_str())
+            .await
+            .expect("event lookup")
+            .is_none()
+    );
+    let journal_count: i64 = sqlx::query("SELECT COUNT(*) FROM sdk_runtime_operation_journal")
+        .fetch_one(event_store.pool())
+        .await
+        .expect("journal count")
+        .try_get(0)
+        .expect("journal count value");
+    assert_eq!(journal_count, 0);
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
+        .await
+        .expect("outbox");
+    assert_eq!(
+        outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status after rollback")
+            .total_events,
+        1
+    );
+}
+
+#[tokio::test]
+async fn enqueue_publish_uses_explicit_idempotency_key_across_equivalent_target_order() {
     let (_tempdir, sdk) = directory_sdk().await;
     let first = ListingEnqueuePublishRequest::new(
         actor(),
@@ -768,7 +876,9 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_B, RELAY], NostrRelayUrlPolicy::Public)
-    .expect("first transport targets");
+    .expect("first transport targets")
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023b")
+    .expect("first idempotency key");
     let second = ListingEnqueuePublishRequest::new(
         actor(),
         listing(LISTING_F_D_TAG, "Coffee"),
@@ -776,7 +886,9 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
             TargetSet::nostr_relays([RELAY, RELAY_B], NostrRelayUrlPolicy::Public)
                 .expect("second transport targets"),
         ),
-    );
+    )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023b")
+    .expect("second idempotency key");
 
     let first_receipt = sdk
         .listings()
@@ -800,7 +912,7 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
     assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
 
     let paths = sdk.storage_paths().expect("paths");
-    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+    let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
     let relay_urls = outbox
@@ -823,7 +935,9 @@ async fn listing_hybrid_profile_publishes_after_nostr_success_and_retains_reticu
                 actor(),
                 listing(LISTING_G_D_TAG, "Hybrid Coffee"),
                 TargetPolicy::default_profile(),
-            ),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023c")
+            .expect("idempotency"),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -856,7 +970,7 @@ async fn listing_hybrid_profile_publishes_after_nostr_success_and_retains_reticu
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
-    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
         .expect("outbox");
     let stored = outbox

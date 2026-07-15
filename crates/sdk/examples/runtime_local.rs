@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
     let target_policy = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;
-    let idempotency_key = SdkIdempotencyKey::new("example-1")?;
+    let idempotency_key = SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000202")?;
 
     let prepared = sdk.listings().prepare_publish(prepare_request)?;
     let enqueue = sdk

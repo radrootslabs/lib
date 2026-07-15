@@ -14,13 +14,14 @@ mod actor_json;
 ))]
 pub mod adapters;
 #[cfg(feature = "runtime")]
-mod dvm_runtime;
-#[cfg(feature = "runtime")]
 mod error;
 #[cfg(feature = "runtime")]
 mod farm;
 #[cfg(feature = "runtime")]
 mod farms_runtime;
+#[cfg(test)]
+#[path = "../tests/support/fixture_signer.rs"]
+pub(crate) mod fixture_signer;
 #[cfg(feature = "runtime")]
 mod geonames;
 #[cfg(feature = "runtime")]
@@ -45,8 +46,13 @@ mod private_store;
 mod product_clients;
 #[cfg(feature = "runtime")]
 mod runtime;
+#[cfg(test)]
+#[path = "../tests/support/serializer_failure.rs"]
+pub(crate) mod serializer_failure;
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 mod signer_provider;
+#[cfg(feature = "runtime")]
+mod studio_store;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
 #[cfg(feature = "runtime")]
@@ -59,18 +65,8 @@ mod workflow_runtime;
 pub use radroots_runtime_contract_v1 as runtime_contract_v1;
 
 #[cfg(feature = "runtime")]
-pub use crate::dvm_runtime::{
-    DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID,
-    DVM_TRADE_TRANSITION_PROOF_REQUEST_OPERATION_KIND, DvmProofMode,
-    DvmTradeTransitionProofEnqueueRequest, DvmTradeTransitionProofPlan,
-    DvmTradeTransitionProofPrepareRequest, DvmTradeTransitionProofReceipt,
-    DvmTradeTransitionProofRequestPayload, DvmValidationReceiptIngestReceipt,
-    DvmValidationReceiptIngestRequest,
-};
-#[cfg(feature = "runtime")]
 pub use crate::error::{
     RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
@@ -166,20 +162,16 @@ pub use crate::orders_runtime::{
     TradeValidationReceiptNostrEvidenceReceipt, TradeValidationReceiptNostrRelayOutcomeKind,
     TradeValidationReceiptNostrRelayOutcomeReceipt,
     TradeValidationReceiptNostrRelayTransportOutcomeKind, TradeValidationReceiptTags,
-    TradeValidationReceiptVerifyRequest, TradeValidationReceiptWorkerEvidence,
-    TradeValidationReceiptWorkerEvidenceSelection, TradeValidationTrustDecision,
+    TradeValidationReceiptVerifyRequest, TradeValidationTrustDecision,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::orders_runtime::{
-    TRADE_CANCELLATION_OPERATION_KIND, TRADE_DECISION_OPERATION_KIND,
-    TRADE_REVISION_DECISION_OPERATION_KIND, TRADE_REVISION_PROPOSAL_OPERATION_KIND,
-    TRADE_SUBMIT_OPERATION_KIND, TradeAcceptRequest, TradeCancelRequest, TradeCancellationPlan,
-    TradeCancellationReceipt, TradeDecisionPlan, TradeDecisionReceipt, TradeDeclineRequest,
-    TradeEvidenceMode, TradeMutationOutcome, TradeProposeRequest, TradeRevisionDecisionPlan,
-    TradeRevisionDecisionReceipt, TradeRevisionDecisionRequest, TradeRevisionProposalPlan,
-    TradeRevisionProposalReceipt, TradeRevisionProposalRequest, TradeSubmitPlan,
-    TradeSubmitReceipt, TradeWorkflowEnqueueReceipt, TradeWorkflowIdempotencyReceipt,
-    TradeWorkflowKind, TradeWorkflowPlan, TradeWorkflowRetryAdvice,
+    TRADE_CANCELLATION_OPERATION_KIND, TRADE_DECISION_OPERATION_KIND, TRADE_SUBMIT_OPERATION_KIND,
+    TradeAcceptRequest, TradeCancelRequest, TradeCancellationPlan, TradeCancellationReceipt,
+    TradeDecisionPlan, TradeDecisionReceipt, TradeDeclineRequest, TradeEvidenceMode,
+    TradeMutationOutcome, TradeProposeRequest, TradeSubmitPlan, TradeSubmitReceipt,
+    TradeWorkflowEnqueueReceipt, TradeWorkflowIdempotencyReceipt, TradeWorkflowKind,
+    TradeWorkflowPlan, TradeWorkflowRetryAdvice,
 };
 #[cfg(feature = "runtime")]
 pub use crate::privacy::{
@@ -190,18 +182,19 @@ pub use crate::privacy::{
 pub use crate::product_clients::TradeBuyerClient;
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{
-    DvmClient, FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient,
-    TradeResyncClient, TradeSellerClient, TradeValidationReceiptsClient, TradesClient,
+    FarmsClient, GeoNamesClient, ListingsClient, MarketClient, SyncClient, TradeResyncClient,
+    TradeSellerClient, TradeValidationReceiptsClient, TradesClient,
 };
 #[cfg(feature = "runtime")]
 pub use crate::runtime::{
-    BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsClient,
-    RadrootsClientBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
-    RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
-    SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
-    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, StorageCheckpointReceipt,
-    StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
+    BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, QuarantineResetReceipt,
+    QuarantineResetRequest, RadrootsClient, RadrootsClientBuilder, RadrootsSdkClock,
+    RadrootsSdkStorageConfig, RadrootsSdkStoragePaths, RadrootsSdkTimestamp, RestoreArchive,
+    RestoreReceipt, RestoreRequest, SdkBackupManifest, SdkBackupManifestKind, SdkBackupState,
+    SdkBackupVerification, SdkEventStoreStorageStatus, SdkOutboxStorageStatus,
+    SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
+    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, SdkStudioStoreStorageStatus,
+    StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::signer_provider::{
@@ -240,8 +233,6 @@ pub use crate::transport::{
     ReticulumPreviewProfile, SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy,
     TargetSet, TransportProfile, TransportReceipt,
 };
-#[cfg(feature = "runtime")]
-pub use radroots_trade::dvm::RadrootsTradeInventoryBinWitnessDto;
 #[cfg(feature = "runtime")]
 pub use radroots_trade::validation_receipt::{
     RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,

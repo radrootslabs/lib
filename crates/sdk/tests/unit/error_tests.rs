@@ -1,70 +1,9 @@
-use super::{
-    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkPartialLocalMutationError,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, redacted_relay_url,
-};
+use super::{RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, redacted_relay_url};
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumPreviewBehavior;
 use radroots_authority::RadrootsAuthorityError;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
-
-#[test]
-fn partial_local_mutation_constructor_preserves_supplied_error() {
-    let error = RadrootsSdkPartialLocalMutationError {
-        event_id: None,
-        operation_kind: "listing.publish.v1".to_owned(),
-        idempotency_digest_prefix: None,
-        stored: true,
-        queued: false,
-        recovery: RadrootsSdkRecoveryAction::RetryOutboxEnqueue,
-        failure: RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue,
-    };
-
-    assert!(matches!(
-        RadrootsSdkError::partial_local_mutation(error),
-        RadrootsSdkError::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            stored: true,
-            queued: false,
-            recovery: RadrootsSdkRecoveryAction::RetryOutboxEnqueue,
-            failure: RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue,
-            ..
-        })
-    ));
-
-    assert!(matches!(
-        RadrootsSdkError::partial_outbox_enqueue_mutation(
-            "a".repeat(64),
-            "listing.publish.v1",
-            "digest-prefix",
-        ),
-        RadrootsSdkError::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            event_id: Some(_),
-            operation_kind,
-            idempotency_digest_prefix: Some(_),
-            stored: true,
-            queued: false,
-            recovery: RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
-            failure: RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue,
-        }) if operation_kind == "listing.publish.v1"
-    ));
-
-    assert!(matches!(
-        RadrootsSdkError::partial_outbox_idempotency_conflict_mutation(
-            "a".repeat(64),
-            "listing.publish.v1",
-            "digest-prefix",
-        ),
-        RadrootsSdkError::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            event_id: Some(_),
-            operation_kind,
-            idempotency_digest_prefix: Some(_),
-            stored: true,
-            queued: false,
-            recovery: RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
-            failure: RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict,
-        }) if operation_kind == "listing.publish.v1"
-    ));
-}
 
 #[test]
 fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
@@ -90,7 +29,7 @@ fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
 #[test]
 fn listing_and_store_errors_convert_to_sdk_error_classes() {
     let draft = RadrootsSdkError::from(
-        radroots_trade::listing::RadrootsListingDraftError::ActorRoleUnsatisfied {
+        radroots_trade::listing::RadrootsListingEditError::ActorRoleUnsatisfied {
             required_role: RadrootsActorRole::Seller,
         },
     );
@@ -101,14 +40,14 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
     ));
 
     let draft_fallback = RadrootsSdkError::from(
-        radroots_trade::listing::RadrootsListingDraftError::InvalidFarmPubkey(
+        radroots_trade::listing::RadrootsListingEditError::InvalidFarmPubkey(
             radroots_event::ids::RadrootsIdParseError::InvalidCharacter,
         ),
     );
     assert!(matches!(
         draft_fallback,
-        RadrootsSdkError::ListingDraft { ref message }
-            if message.contains("invalid listing draft farm pubkey")
+        RadrootsSdkError::ListingEdit { ref message }
+            if message.contains("invalid listing edit farm pubkey")
     ));
 
     let mutation = RadrootsSdkError::from(
@@ -389,8 +328,8 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         RadrootsSdkError::InvalidRequest {
             message: "invalid".to_owned(),
         },
-        RadrootsSdkError::ListingDraft {
-            message: "draft".to_owned(),
+        RadrootsSdkError::ListingEdit {
+            message: "edit".to_owned(),
         },
         RadrootsSdkError::ListingMutation {
             message: "mutation".to_owned(),
@@ -431,11 +370,6 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         RadrootsSdkError::Projection {
             message: "projection".to_owned(),
         },
-        RadrootsSdkError::partial_outbox_idempotency_conflict_mutation(
-            "a".repeat(64),
-            "listing.publish.v1",
-            "digest-prefix",
-        ),
     ];
 
     for error in errors {
