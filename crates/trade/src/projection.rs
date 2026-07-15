@@ -40,11 +40,9 @@ pub const RADROOTS_PRODUCT_PROJECTION_VERSION: u32 = 1;
 pub const RADROOTS_TRADE_VALIDATION_RECEIPT_CONTRACT_ID: &str =
     "radroots.trade.validation_receipt.v1";
 
-const PRODUCT_PROJECTION_CONTRACT_IDS: [&str; 6] = [
+const PRODUCT_PROJECTION_CONTRACT_IDS: [&str; 4] = [
     "radroots.order.request.v1",
     "radroots.order.decision.v1",
-    "radroots.order.revision_proposal.v1",
-    "radroots.order.revision_decision.v1",
     "radroots.order.cancellation.v1",
     RADROOTS_TRADE_VALIDATION_RECEIPT_CONTRACT_ID,
 ];
@@ -532,7 +530,7 @@ async fn upsert_trade_projection_row(
     })?;
 
     sqlx::query(
-        "INSERT INTO trade_projection(order_id, root_event_id, projection_version, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, pending_revision_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, transport_observation_count, evidence_hash, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id, root_event_id, projection_version) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, pending_revision_event_id = excluded.pending_revision_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, transport_observation_count = excluded.transport_observation_count, evidence_hash = excluded.evidence_hash, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
+        "INSERT INTO trade_projection(order_id, root_event_id, projection_version, status, lifecycle_terminal, rhi_state, listing_addr, buyer_pubkey, seller_pubkey, request_event_id, decision_event_id, agreement_event_id, cancellation_event_id, validation_receipt_event_id, last_event_id, expected_listing_event_id, current_listing_event_id, economics_json, pending_inventory_json, committed_inventory_json, issues_json, issue_count, source_event_count, transport_observation_count, evidence_hash, last_source_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id, root_event_id, projection_version) DO UPDATE SET status = excluded.status, lifecycle_terminal = excluded.lifecycle_terminal, rhi_state = excluded.rhi_state, listing_addr = excluded.listing_addr, buyer_pubkey = excluded.buyer_pubkey, seller_pubkey = excluded.seller_pubkey, request_event_id = excluded.request_event_id, decision_event_id = excluded.decision_event_id, agreement_event_id = excluded.agreement_event_id, cancellation_event_id = excluded.cancellation_event_id, validation_receipt_event_id = excluded.validation_receipt_event_id, last_event_id = excluded.last_event_id, expected_listing_event_id = excluded.expected_listing_event_id, current_listing_event_id = excluded.current_listing_event_id, economics_json = excluded.economics_json, pending_inventory_json = excluded.pending_inventory_json, committed_inventory_json = excluded.committed_inventory_json, issues_json = excluded.issues_json, issue_count = excluded.issue_count, source_event_count = excluded.source_event_count, transport_observation_count = excluded.transport_observation_count, evidence_hash = excluded.evidence_hash, last_source_event_seq = excluded.last_source_event_seq, updated_at_ms = excluded.updated_at_ms",
     )
     .bind(order_id.as_str())
     .bind(root_event_id.as_str())
@@ -546,7 +544,6 @@ async fn upsert_trade_projection_row(
     .bind(projection.request_event_id.as_ref().map(|value| value.as_str()))
     .bind(projection.decision_event_id.as_ref().map(|value| value.as_str()))
     .bind(projection.agreement_event_id.as_ref().map(|value| value.as_str()))
-    .bind(projection.pending_revision_event_id.as_ref().map(|value| value.as_str()))
     .bind(projection.cancellation_event_id.as_ref().map(|value| value.as_str()))
     .bind(projection.validation_receipt_event_id.as_ref().map(|value| value.as_str()))
     .bind(projection.last_event_id.as_ref().map(|value| value.as_str()))
@@ -679,7 +676,6 @@ fn projection_source_event_ids(
         projection.request_event_id.clone(),
         projection.decision_event_id.clone(),
         projection.agreement_event_id.clone(),
-        projection.pending_revision_event_id.clone(),
         projection.cancellation_event_id.clone(),
         projection.validation_receipt_event_id.clone(),
         projection.last_event_id.clone(),
@@ -708,12 +704,6 @@ fn push_order_record(
     match record {
         RadrootsOrderEventRecord::Request(record) => records.requests.push(record),
         RadrootsOrderEventRecord::Decision(record) => records.decisions.push(record),
-        RadrootsOrderEventRecord::RevisionProposal(record) => {
-            records.revision_proposals.push(record)
-        }
-        RadrootsOrderEventRecord::RevisionDecision(record) => {
-            records.revision_decisions.push(record)
-        }
         RadrootsOrderEventRecord::Cancellation(record) => records.cancellations.push(record),
     }
 }

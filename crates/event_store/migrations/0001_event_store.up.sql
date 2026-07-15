@@ -143,7 +143,6 @@ CREATE TABLE IF NOT EXISTS trade_projection (
   request_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   decision_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   agreement_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
-  pending_revision_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   cancellation_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   validation_receipt_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,
   last_event_id TEXT REFERENCES event_envelopes(event_id) ON DELETE SET NULL,

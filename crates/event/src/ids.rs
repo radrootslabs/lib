@@ -183,7 +183,6 @@ validated_string_id!(
 );
 validated_string_id!(RadrootsListingAddress, validate_addressable_coordinate);
 validated_string_id!(RadrootsOrderId, validate_commercial_id);
-validated_string_id!(RadrootsOrderRevisionId, validate_commercial_id);
 validated_string_id!(RadrootsOrderQuoteId, validate_commercial_id);
 validated_string_id!(RadrootsInventoryBinId, validate_commercial_id);
 validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
@@ -523,10 +522,6 @@ mod tests {
             "order-1"
         );
         assert_eq!(
-            RadrootsOrderRevisionId::parse("rev 1").unwrap_err(),
-            RadrootsIdParseError::InvalidCharacter
-        );
-        assert_eq!(
             RadrootsInventoryBinId::parse("a".repeat(129)).unwrap_err(),
             RadrootsIdParseError::TooLong {
                 max: 128,
@@ -578,7 +573,6 @@ mod tests {
         assert_identifier_impls!(RadrootsAddressableCoordinate, addressable.as_str());
         assert_identifier_impls!(RadrootsListingAddress, addressable.as_str());
         assert_identifier_impls!(RadrootsOrderId, "order-1");
-        assert_identifier_impls!(RadrootsOrderRevisionId, "revision-1");
         assert_identifier_impls!(RadrootsOrderQuoteId, "quote-1");
         assert_identifier_impls!(RadrootsInventoryBinId, "bin-1");
         assert_identifier_impls!(RadrootsEconomicsDigest, "digest-1");
@@ -723,11 +717,6 @@ mod tests {
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
-        struct MissingOrderRevisionId {
-            value: RadrootsOrderRevisionId,
-        }
-        #[allow(dead_code)]
-        #[derive(Debug, serde::Deserialize)]
         struct MissingOrderQuoteId {
             value: RadrootsOrderQuoteId,
         }
@@ -752,7 +741,6 @@ mod tests {
         assert_eq!(missing_field_message::<MissingDTag>(), missing);
         assert_eq!(missing_field_message::<MissingListingAddress>(), missing);
         assert_eq!(missing_field_message::<MissingOrderId>(), missing);
-        assert_eq!(missing_field_message::<MissingOrderRevisionId>(), missing);
         assert_eq!(missing_field_message::<MissingOrderQuoteId>(), missing);
         assert_eq!(missing_field_message::<MissingInventoryBinId>(), missing);
     }

@@ -192,8 +192,8 @@ mod tests {
     }
 
     #[test]
-    fn listing_model_covers_published_draft_metadata() {
-        use crate::kinds::{KIND_LISTING_DRAFT, is_listing_kind};
+    fn listing_model_covers_published_metadata() {
+        use crate::kinds::{KIND_LISTING, is_listing_kind};
 
         let listing = super::RadrootsListing {
             d_tag: "listing-draft".parse().unwrap(),
@@ -223,7 +223,7 @@ mod tests {
         };
 
         assert_eq!(listing.published_at, Some(1_700_000_000));
-        assert!(is_listing_kind(KIND_LISTING_DRAFT));
+        assert!(is_listing_kind(KIND_LISTING));
     }
 
     #[test]

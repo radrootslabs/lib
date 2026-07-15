@@ -9,7 +9,7 @@ use radroots_event::{
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
         RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
-        RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
+        RadrootsOrderRequest,
     },
     tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
 };
@@ -189,80 +189,6 @@ pub fn order_decision_from_event(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn order_revision_proposal_from_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionProposal>, RadrootsOrderEnvelopeParseError> {
-    let envelope = order_envelope_from_event::<RadrootsOrderRevisionProposal>(event)?;
-    if envelope.message_type != RadrootsOrderEventType::OrderRevisionProposed {
-        return Err(RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch {
-            event_kind: event.kind_u32(),
-            message_type: envelope.message_type,
-        });
-    }
-    envelope
-        .payload
-        .validate()
-        .map_err(RadrootsOrderEnvelopeParseError::InvalidPayload)?;
-    validate_order_binding(
-        event,
-        &envelope,
-        &envelope.payload.order_id,
-        &envelope.payload.listing_addr,
-        &envelope.payload.seller_pubkey,
-        &envelope.payload.buyer_pubkey,
-    )?;
-    let context = order_event_context_from_tags(envelope.message_type, &event.tags_as_vec())?;
-    if context.root_event_id.as_deref() != Some(envelope.payload.root_event_id.as_str()) {
-        return Err(RadrootsOrderEnvelopeParseError::PayloadBindingMismatch(
-            "root_event_id",
-        ));
-    }
-    if context.prev_event_id.as_deref() != Some(envelope.payload.prev_event_id.as_str()) {
-        return Err(RadrootsOrderEnvelopeParseError::PayloadBindingMismatch(
-            "prev_event_id",
-        ));
-    }
-    Ok(envelope)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn order_revision_decision_from_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderRevisionDecision>, RadrootsOrderEnvelopeParseError> {
-    let envelope = order_envelope_from_event::<RadrootsOrderRevisionDecision>(event)?;
-    if envelope.message_type != RadrootsOrderEventType::OrderRevisionDecision {
-        return Err(RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch {
-            event_kind: event.kind_u32(),
-            message_type: envelope.message_type,
-        });
-    }
-    envelope
-        .payload
-        .validate()
-        .map_err(RadrootsOrderEnvelopeParseError::InvalidPayload)?;
-    validate_order_binding(
-        event,
-        &envelope,
-        &envelope.payload.order_id,
-        &envelope.payload.listing_addr,
-        &envelope.payload.buyer_pubkey,
-        &envelope.payload.seller_pubkey,
-    )?;
-    let context = order_event_context_from_tags(envelope.message_type, &event.tags_as_vec())?;
-    if context.root_event_id.as_deref() != Some(envelope.payload.root_event_id.as_str()) {
-        return Err(RadrootsOrderEnvelopeParseError::PayloadBindingMismatch(
-            "root_event_id",
-        ));
-    }
-    if context.prev_event_id.as_deref() != Some(envelope.payload.prev_event_id.as_str()) {
-        return Err(RadrootsOrderEnvelopeParseError::PayloadBindingMismatch(
-            "prev_event_id",
-        ));
-    }
-    Ok(envelope)
-}
-
-#[cfg(feature = "serde_json")]
 pub fn order_cancellation_from_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderCancellation>, RadrootsOrderEnvelopeParseError> {
@@ -417,16 +343,11 @@ mod tests {
         RadrootsOrderEnvelopeParseError, map_tag_parse_error_for_order_envelope,
         order_cancellation_from_event, order_decision_from_event, order_envelope_from_event,
         order_event_context_from_tags, order_request_from_event,
-        order_revision_decision_from_event, order_revision_proposal_from_event,
+    };
+    use crate::order::encode::{
+        order_cancellation_event_build, order_decision_event_build, order_request_event_build,
     };
     use crate::order::tags::TAG_LISTING_EVENT;
-    use crate::{
-        error::EventEncodeError,
-        order::encode::{
-            order_cancellation_event_build, order_decision_event_build, order_request_event_build,
-            order_revision_decision_event_build, order_revision_proposal_event_build,
-        },
-    };
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
@@ -434,19 +355,15 @@ mod tests {
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
-            RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
+            RadrootsOrderQuoteId, RadrootsPublicKey,
         },
-        kinds::{
-            KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
-            KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
-        },
+        kinds::{KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
         order::{
             RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
             RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
             RadrootsOrderEnvelope, RadrootsOrderEnvelopeError, RadrootsOrderEventType,
             RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPayloadError,
-            RadrootsOrderPricingBasis, RadrootsOrderRequest, RadrootsOrderRevisionDecision,
-            RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
+            RadrootsOrderPricingBasis, RadrootsOrderRequest,
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
@@ -485,10 +402,6 @@ mod tests {
     }
 
     fn order_id(raw: &str) -> RadrootsOrderId {
-        raw.parse().unwrap()
-    }
-
-    fn revision_id(raw: &str) -> RadrootsOrderRevisionId {
         raw.parse().unwrap()
     }
 
@@ -591,47 +504,6 @@ mod tests {
                     bin_count: 3,
                 }],
             },
-        }
-    }
-
-    fn order_revision_proposal() -> RadrootsOrderRevisionProposal {
-        let mut economics = request_economics();
-        economics.quote_id = quote_id("revision-quote-1");
-        economics.quote_version = 2;
-        economics.items[0].bin_count = 4;
-        economics.items[0].line_subtotal = usd("20");
-        economics.subtotal = usd("20");
-        economics.total = usd("20");
-        economics.canonicalize();
-        RadrootsOrderRevisionProposal {
-            revision_id: revision_id("rev-1"),
-            order_id: order_id("order-1"),
-            listing_addr: listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            root_event_id: event_id('1'),
-            prev_event_id: event_id('2'),
-            items: vec![RadrootsOrderItem {
-                bin_id: bin_id("lb"),
-                bin_count: 4,
-            }],
-            economics,
-            reason: "update count".into(),
-        }
-    }
-
-    fn order_revision_decision(
-        decision: RadrootsOrderRevisionOutcome,
-    ) -> RadrootsOrderRevisionDecision {
-        RadrootsOrderRevisionDecision {
-            revision_id: revision_id("rev-1"),
-            order_id: order_id("order-1"),
-            listing_addr: listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            root_event_id: event_id('1'),
-            prev_event_id: event_id('3'),
-            decision,
         }
     }
 
@@ -762,121 +634,6 @@ mod tests {
     }
 
     #[test]
-    fn order_revision_proposal_builder_emits_canonical_chain_shape() {
-        let payload = order_revision_proposal();
-        let built = order_revision_proposal_event_build(
-            &payload.root_event_id,
-            &payload.prev_event_id,
-            &payload,
-        )
-        .unwrap();
-        let envelope: RadrootsOrderEnvelope<RadrootsOrderRevisionProposal> =
-            serde_json::from_str(&built.content).unwrap();
-
-        assert_eq!(built.kind, KIND_ORDER_REVISION_PROPOSAL);
-        assert_eq!(
-            envelope.message_type,
-            RadrootsOrderEventType::OrderRevisionProposed
-        );
-        assert_eq!(built.tags[0], vec!["p".to_string(), buyer_pubkey_wire()]);
-        assert_eq!(
-            built.tags[2],
-            vec![TAG_D.to_string(), "order-1".to_string()]
-        );
-        assert_eq!(envelope.payload.revision_id, "rev-1");
-        assert_eq!(envelope.payload.economics.quote_version, 2);
-        assert!(
-            built
-                .tags
-                .iter()
-                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), event_id_wire('1')])
-        );
-        assert!(
-            built
-                .tags
-                .iter()
-                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), event_id_wire('2')])
-        );
-    }
-
-    #[test]
-    fn order_revision_decision_builder_emits_canonical_chain_shape() {
-        let payload = order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
-        let built = order_revision_decision_event_build(
-            &payload.root_event_id,
-            &payload.prev_event_id,
-            &payload,
-        )
-        .unwrap();
-        let envelope: RadrootsOrderEnvelope<RadrootsOrderRevisionDecision> =
-            serde_json::from_str(&built.content).unwrap();
-
-        assert_eq!(built.kind, KIND_ORDER_REVISION_DECISION);
-        assert_eq!(
-            envelope.message_type,
-            RadrootsOrderEventType::OrderRevisionDecision
-        );
-        assert_eq!(built.tags[0], vec!["p".to_string(), seller_pubkey_wire()]);
-        assert_eq!(
-            built.tags[2],
-            vec![TAG_D.to_string(), "order-1".to_string()]
-        );
-        assert_eq!(envelope.payload.revision_id, "rev-1");
-        assert!(
-            built
-                .tags
-                .iter()
-                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), event_id_wire('1')])
-        );
-        assert!(
-            built
-                .tags
-                .iter()
-                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), event_id_wire('3')])
-        );
-    }
-
-    #[test]
-    fn order_revision_builders_reject_mismatched_chain_context() {
-        let proposal = order_revision_proposal();
-        let wrong_root = event_id('9');
-        let wrong_prev = event_id('8');
-
-        let err =
-            order_revision_proposal_event_build(&wrong_root, &proposal.prev_event_id, &proposal)
-                .unwrap_err();
-        assert!(matches!(
-            err,
-            EventEncodeError::InvalidField("root_event_id")
-        ));
-
-        let err =
-            order_revision_proposal_event_build(&proposal.root_event_id, &wrong_prev, &proposal)
-                .unwrap_err();
-        assert!(matches!(
-            err,
-            EventEncodeError::InvalidField("prev_event_id")
-        ));
-
-        let decision = order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
-        let err =
-            order_revision_decision_event_build(&wrong_root, &decision.prev_event_id, &decision)
-                .unwrap_err();
-        assert!(matches!(
-            err,
-            EventEncodeError::InvalidField("root_event_id")
-        ));
-
-        let err =
-            order_revision_decision_event_build(&decision.root_event_id, &wrong_prev, &decision)
-                .unwrap_err();
-        assert!(matches!(
-            err,
-            EventEncodeError::InvalidField("prev_event_id")
-        ));
-    }
-
-    #[test]
     fn order_cancellation_builder_emits_canonical_buyer_chain_shape() {
         let payload = order_cancelled();
         let root_event_id = event_id('1');
@@ -981,56 +738,6 @@ mod tests {
             envelope.message_type,
             RadrootsOrderEventType::OrderCancelled
         );
-    }
-
-    #[test]
-    fn order_revision_proposal_parse_validates_actor_counterparty_and_chain_payload() {
-        let payload = order_revision_proposal();
-        let built = order_revision_proposal_event_build(
-            &payload.root_event_id,
-            &payload.prev_event_id,
-            &payload,
-        )
-        .unwrap();
-        let event = event_envelope(
-            seller_pubkey_wire(),
-            built.kind,
-            built.tags.clone(),
-            built.content.clone(),
-        );
-        let envelope = order_revision_proposal_from_event(&event).unwrap();
-        assert_eq!(envelope.payload, payload);
-
-        let wrong_author_event =
-            event_envelope(buyer_pubkey_wire(), built.kind, built.tags, built.content);
-        let err = order_revision_proposal_from_event(&wrong_author_event).unwrap_err();
-        assert_eq!(err, RadrootsOrderEnvelopeParseError::AuthorMismatch);
-    }
-
-    #[test]
-    fn order_revision_decision_parse_validates_actor_counterparty_and_chain_payload() {
-        let payload = order_revision_decision(RadrootsOrderRevisionOutcome::Declined {
-            reason: "no change".into(),
-        });
-        let built = order_revision_decision_event_build(
-            &payload.root_event_id,
-            &payload.prev_event_id,
-            &payload,
-        )
-        .unwrap();
-        let event = event_envelope(
-            buyer_pubkey_wire(),
-            built.kind,
-            built.tags.clone(),
-            built.content.clone(),
-        );
-        let envelope = order_revision_decision_from_event(&event).unwrap();
-        assert_eq!(envelope.payload, payload);
-
-        let wrong_author_event =
-            event_envelope(seller_pubkey_wire(), built.kind, built.tags, built.content);
-        let err = order_revision_decision_from_event(&wrong_author_event).unwrap_err();
-        assert_eq!(err, RadrootsOrderEnvelopeParseError::AuthorMismatch);
     }
 
     #[cfg(feature = "std")]
@@ -1208,9 +915,6 @@ mod tests {
     fn order_typed_parsers_reject_message_type_mismatches() {
         let request_payload = order_request();
         let decision_payload = order_decision();
-        let proposal_payload = order_revision_proposal();
-        let revision_decision_payload =
-            order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
         let cancellation_payload = order_cancelled();
 
         let request_as_decision = order_event_with_envelope(
@@ -1238,34 +942,6 @@ mod tests {
         );
         assert!(matches!(
             order_decision_from_event(&decision_as_request).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
-        ));
-
-        let proposal_as_cancellation = order_event_with_envelope(
-            KIND_ORDER_CANCELLATION,
-            seller_pubkey_wire(),
-            RadrootsOrderEventType::OrderCancelled,
-            listing_addr_wire(),
-            "order-1",
-            &proposal_payload,
-            order_chain_tags(buyer_pubkey_wire()),
-        );
-        assert!(matches!(
-            order_revision_proposal_from_event(&proposal_as_cancellation).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
-        ));
-
-        let revision_decision_as_cancellation = order_event_with_envelope(
-            KIND_ORDER_CANCELLATION,
-            buyer_pubkey_wire(),
-            RadrootsOrderEventType::OrderCancelled,
-            listing_addr_wire(),
-            "order-1",
-            &revision_decision_payload,
-            order_chain_tags(seller_pubkey_wire()),
-        );
-        assert!(matches!(
-            order_revision_decision_from_event(&revision_decision_as_cancellation).unwrap_err(),
             RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
         ));
 
@@ -1327,85 +1003,6 @@ mod tests {
         assert_eq!(
             order_request_from_event(&request_event).unwrap_err(),
             RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("listing_addr")
-        );
-
-        let proposal_payload = order_revision_proposal();
-        let proposal_built = order_revision_proposal_event_build(
-            &proposal_payload.root_event_id,
-            &proposal_payload.prev_event_id,
-            &proposal_payload,
-        )
-        .unwrap();
-        let mut proposal_tags = proposal_built.tags.clone();
-        proposal_tags
-            .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_ROOT))
-            .unwrap()[1] = event_id_wire('4');
-        let proposal_event = event_envelope(
-            seller_pubkey_wire(),
-            proposal_built.kind,
-            proposal_tags,
-            proposal_built.content.clone(),
-        );
-        assert_eq!(
-            order_revision_proposal_from_event(&proposal_event).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("root_event_id")
-        );
-
-        let mut proposal_tags = proposal_built.tags;
-        proposal_tags
-            .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_PREV))
-            .unwrap()[1] = event_id_wire('5');
-        let proposal_event = event_envelope(
-            seller_pubkey_wire(),
-            proposal_built.kind,
-            proposal_tags,
-            proposal_built.content,
-        );
-        assert_eq!(
-            order_revision_proposal_from_event(&proposal_event).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("prev_event_id")
-        );
-
-        let revision_decision_payload =
-            order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
-        let revision_decision_built = order_revision_decision_event_build(
-            &revision_decision_payload.root_event_id,
-            &revision_decision_payload.prev_event_id,
-            &revision_decision_payload,
-        )
-        .unwrap();
-        let mut revision_decision_tags = revision_decision_built.tags.clone();
-        revision_decision_tags
-            .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_ROOT))
-            .unwrap()[1] = event_id_wire('6');
-        let revision_decision_event = event_envelope(
-            buyer_pubkey_wire(),
-            revision_decision_built.kind,
-            revision_decision_tags,
-            revision_decision_built.content.clone(),
-        );
-        assert_eq!(
-            order_revision_decision_from_event(&revision_decision_event).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("root_event_id")
-        );
-
-        let mut revision_decision_tags = revision_decision_built.tags;
-        revision_decision_tags
-            .iter_mut()
-            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_PREV))
-            .unwrap()[1] = event_id_wire('7');
-        let revision_decision_event = event_envelope(
-            buyer_pubkey_wire(),
-            revision_decision_built.kind,
-            revision_decision_tags,
-            revision_decision_built.content,
-        );
-        assert_eq!(
-            order_revision_decision_from_event(&revision_decision_event).unwrap_err(),
-            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("prev_event_id")
         );
     }
 
@@ -1477,40 +1074,6 @@ mod tests {
             )),
             RadrootsOrderEnvelopeParseError::InvalidTag("json")
         );
-    }
-
-    #[test]
-    fn order_revision_kinds_parse_with_chain_tags() {
-        for (kind, message_type) in [
-            (
-                KIND_ORDER_REVISION_PROPOSAL,
-                RadrootsOrderEventType::OrderRevisionProposed,
-            ),
-            (
-                KIND_ORDER_REVISION_DECISION,
-                RadrootsOrderEventType::OrderRevisionDecision,
-            ),
-        ] {
-            let payload = serde_json::json!({});
-            let envelope =
-                RadrootsOrderEnvelope::new(message_type, listing_addr_wire(), "order-1", &payload);
-            let event = event_envelope(
-                seller_pubkey_wire(),
-                kind,
-                vec![
-                    vec!["p".into(), buyer_pubkey_wire()],
-                    vec!["a".into(), listing_addr_wire()],
-                    vec![TAG_D.into(), "order-1".into()],
-                    vec![TAG_E_ROOT.into(), event_id_wire('1')],
-                    vec![TAG_E_PREV.into(), event_id_wire('9')],
-                ],
-                serde_json::to_string(&envelope).unwrap(),
-            );
-            let parsed = order_envelope_from_event::<serde_json::Value>(&event).unwrap();
-
-            assert_eq!(parsed.message_type, message_type);
-            assert_eq!(parsed.order_id, "order-1");
-        }
     }
 
     #[test]

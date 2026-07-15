@@ -44,21 +44,6 @@
       }
     },
     {
-      "id": "social_listing_draft_uses_listing_model_valid_003",
-      "kind": "social.listing_draft.parse_event.valid",
-      "input": {
-        "event": {
-          "kind": 30403,
-          "content_shape": "listing_markdown",
-          "tags_shape": "listing_tags_full"
-        }
-      },
-      "expected": {
-        "result": "ok",
-        "model": "RadrootsListing"
-      }
-    },
-    {
       "id": "social_relay_list_read_write_valid_004",
       "kind": "social.relay_list.parse_event.valid",
       "input": {
@@ -234,7 +219,7 @@
       "input": {
         "kinds": {
           "active_listing": 30402,
-          "listing_draft": 30403,
+          "retired_listing_kind": 30403,
           "report": 1984,
           "farm_crdt_change": 78,
           "relay_auth": 22242,
@@ -244,15 +229,15 @@
       "expected": {
         "result": "ok",
         "home_feed_active_listing": true,
-        "home_feed_listing_draft": false,
+        "home_feed_retired_listing_kind": false,
         "home_feed_report": false,
         "home_feed_farm_crdt_change": false,
         "home_feed_relay_auth": false,
         "home_feed_http_auth": false,
         "market_active_listing": true,
-        "market_listing_draft": false,
+        "market_retired_listing_kind": false,
         "moderation_report": true,
-        "draft_owner_listing_draft": true,
+        "retired_listing_kind_accepted": false,
         "private_farm_ops_farm_crdt_change": true,
         "private_farm_ops_relay_auth": false,
         "private_farm_ops_http_auth": false

@@ -18,8 +18,8 @@ deterministic fixtures live under `contracts/conformance`.
 ## Implementation Inventory
 
 The repository implements public social support for kind `1` `RadrootsPost`, kind `1111`
-`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, listing draft kind
-`30403` through `RadrootsListing`, articles, generic public file metadata, calendar date events,
+`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, stable listing
+records through `RadrootsListing`, articles, generic public file metadata, calendar date events,
 calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
 
 The closeout contract requires:
@@ -50,7 +50,7 @@ The production-v1 public social substrate includes:
 - `RadrootsCalendar` for NIP-52 kind `31924`
 - `RadrootsCalendarEventRsvp` for NIP-52 kind `31925`
 - `RadrootsReport` for NIP-56 kind `1984`
-- listing draft kind `30403` validation through `RadrootsListing`
+- stable listing kind `30402` validation through `RadrootsListing`
 - relay-list kind `10002` validation through `RadrootsList`
 
 ## Contract Decisions
@@ -85,16 +85,14 @@ uppercase `D` tag so timestamped events retain a deterministic calendar-date anc
 
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
 Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`
-can appear in public product surfaces, but listing draft kind `30403` is limited to draft-owner
-contexts. Report kind `1984` is a moderation/admin candidate, not normal feed content. Relay and HTTP
-auth kinds are transient and excluded from durable social and farm-ops candidate sets. Private farm
-operations candidates include the farm workspace manifest, farm CRDT change envelope, farm file
-metadata, and the supported NIP-29 group event subset.
+can appear in public product surfaces. Report kind `1984` is a moderation/admin candidate, not
+normal feed content. Relay and HTTP auth kinds are transient and excluded from durable social and
+farm-ops candidate sets. Private farm operations candidates include the farm workspace manifest,
+farm CRDT change envelope, farm file metadata, and the supported NIP-29 group event subset.
 
-`RadrootsListingDraft` and `RadrootsRelayList` are not separate model types in the target contract.
-Listing draft kind `30403` is represented through `RadrootsListing`, and NIP-51 standard and
-list-set entries, including NIP-65 relay metadata kind `10002`, are represented through
-`RadrootsList`.
+`RadrootsRelayList` is not a separate model type in the target contract. Stable listings are
+represented through `RadrootsListing`, and NIP-51 standard and list-set entries, including NIP-65
+relay metadata kind `10002`, are represented through `RadrootsList`.
 
 ## Exclusions
 

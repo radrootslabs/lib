@@ -8,9 +8,9 @@ use radroots_event::{
     group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
     kinds::{
         KIND_ARTICLE, KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_GROUP_METADATA, KIND_HTTP_AUTH,
-        KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH,
-        KIND_REPORT, is_home_feed_candidate_kind, is_market_candidate_kind,
-        is_private_farm_ops_kind, is_public_social_kind,
+        KIND_LISTING, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH, KIND_REPORT,
+        is_home_feed_candidate_kind, is_market_candidate_kind, is_private_farm_ops_kind,
+        is_public_social_kind,
     },
     social::RadrootsSocialMediaDimensions,
 };
@@ -90,7 +90,7 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(matches!(
         listing_from_event(KIND_FARM_CRDT_CHANGE, &[], "farm task"),
         Err(EventParseError::InvalidKind {
-            expected: "30402 or 30403",
+            expected: "30402",
             got: KIND_FARM_CRDT_CHANGE
         })
     ));
@@ -102,13 +102,13 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(is_home_feed_candidate_kind(KIND_LISTING));
     assert!(is_home_feed_candidate_kind(KIND_FARM));
     assert!(is_home_feed_candidate_kind(KIND_PUBLIC_FILE_METADATA));
-    assert!(!is_home_feed_candidate_kind(KIND_LISTING_DRAFT));
+    assert!(!is_home_feed_candidate_kind(30403));
     assert!(!is_home_feed_candidate_kind(KIND_REPORT));
     assert!(!is_home_feed_candidate_kind(KIND_FARM_CRDT_CHANGE));
     assert!(!is_home_feed_candidate_kind(KIND_RELAY_AUTH));
     assert!(!is_home_feed_candidate_kind(KIND_HTTP_AUTH));
     assert!(is_market_candidate_kind(KIND_LISTING));
-    assert!(!is_market_candidate_kind(KIND_LISTING_DRAFT));
+    assert!(!is_market_candidate_kind(30403));
 }
 
 #[test]

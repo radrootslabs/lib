@@ -110,9 +110,6 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderInventoryCommitment>(
         ),
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderRequest>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderRevisionDecision>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderRevisionOutcome>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderRevisionProposal>(),
         ::dto_bindgen::export::RootDescriptor::new::<
             crate::order_economics::RadrootsOrderEconomicActor,
         >(),
@@ -160,12 +157,6 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::seal::RadrootsSeal>(),
         ::dto_bindgen::export::RootDescriptor::new::<
             crate::trade_validation::RadrootsTradeValidationListingError,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade_validation::RadrootsTradeValidationListingRequest,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade_validation::RadrootsTradeValidationListingResult,
         >(),
     ]
 }

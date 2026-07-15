@@ -30,7 +30,7 @@ use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
-const EXPECTED_LISTING_KINDS: &str = "30402 or 30403";
+const EXPECTED_LISTING_KINDS: &str = "30402";
 const TAG_A: &str = "a";
 const TAG_P: &str = "p";
 const TAG_PRICE: &str = "price";

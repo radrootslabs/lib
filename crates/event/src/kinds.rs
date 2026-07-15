@@ -76,30 +76,16 @@ pub const KIND_ACCOUNT_CLAIM: u32 = 30380;
 pub const KIND_APP_DATA: u32 = 30078;
 pub const KIND_FARM_WORKSPACE_MANIFEST: u32 = KIND_APP_DATA;
 pub const KIND_LISTING: u32 = 30402;
-pub const KIND_LISTING_DRAFT: u32 = 30403;
 pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 pub const KIND_GROUP_METADATA: u32 = 39000;
 pub const KIND_GROUP_ADMINS: u32 = 39001;
 pub const KIND_GROUP_MEMBERS: u32 = 39002;
 pub const KIND_GROUP_ROLES: u32 = 39003;
 
-pub const KIND_TRADE_LISTING_VALIDATION_REQUEST: u32 = 5321;
-pub const KIND_TRADE_LISTING_VALIDATION_RESULT: u32 = 6321;
-pub const KIND_TRADE_TRANSITION_PROOF_REQUEST: u32 = 5322;
-pub const KIND_TRADE_TRANSITION_PROOF_RESULT: u32 = 6322;
 pub const KIND_ORDER_REQUEST: u32 = 3422;
 pub const KIND_ORDER_DECISION: u32 = 3423;
-pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;
-pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;
 pub const KIND_ORDER_CANCELLATION: u32 = 3432;
-pub const KIND_TRADE_QUESTION: u32 = 3426;
-pub const KIND_TRADE_ANSWER: u32 = 3427;
-pub const KIND_TRADE_DISCOUNT_REQUEST: u32 = 3428;
-pub const KIND_TRADE_DISCOUNT_OFFER: u32 = 3429;
-pub const KIND_TRADE_DISCOUNT_ACCEPT: u32 = 3430;
 pub const KIND_TRADE_FORBIDDEN_3431: u32 = 3431;
-pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
-pub const KIND_TRADE_RECEIPT: u32 = 3434;
 pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;
 pub const KIND_KNOWLEDGE_CLAIM: u32 = 3460;
 pub const KIND_KNOWLEDGE_RELATION: u32 = 3461;
@@ -110,7 +96,7 @@ pub const KIND_CONTRIBUTION_ATTESTATION: u32 = 3465;
 pub const KIND_KNOWLEDGE_SOURCE: u32 = 30450;
 pub const KIND_EVIDENCE_BOUNTY: u32 = 30451;
 
-pub const LISTING_EVENT_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
+pub const LISTING_EVENT_KINDS: [u32; 1] = [KIND_LISTING];
 
 pub const WIKI_EVENT_KINDS: [u32; 3] = [
     KIND_WIKI_MERGE_REQUEST,
@@ -166,41 +152,19 @@ pub const KNOWLEDGE_REGULAR_EVENT_KINDS: [u32; 7] = [
     KIND_CONTRIBUTION_ATTESTATION,
 ];
 
-pub const ORDER_EVENT_KINDS: [u32; 5] = [
+pub const ORDER_EVENT_KINDS: [u32; 3] = [
     KIND_ORDER_REQUEST,
     KIND_ORDER_DECISION,
-    KIND_ORDER_REVISION_PROPOSAL,
-    KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
 ];
 
-pub const TRADE_VALIDATION_SERVICE_EVENT_KINDS: [u32; 4] = [
-    KIND_TRADE_LISTING_VALIDATION_REQUEST,
-    KIND_TRADE_LISTING_VALIDATION_RESULT,
-    KIND_TRADE_TRANSITION_PROOF_REQUEST,
-    KIND_TRADE_TRANSITION_PROOF_RESULT,
-];
+pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 1] = [KIND_TRADE_VALIDATION_RECEIPT];
 
-pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 5] = [
-    KIND_TRADE_LISTING_VALIDATION_REQUEST,
-    KIND_TRADE_LISTING_VALIDATION_RESULT,
-    KIND_TRADE_TRANSITION_PROOF_REQUEST,
-    KIND_TRADE_TRANSITION_PROOF_RESULT,
-    KIND_TRADE_VALIDATION_RECEIPT,
-];
-
-pub const COMMERCIAL_EVENT_KINDS: [u32; 12] = [
+pub const COMMERCIAL_EVENT_KINDS: [u32; 5] = [
     KIND_LISTING,
-    KIND_LISTING_DRAFT,
     KIND_ORDER_REQUEST,
     KIND_ORDER_DECISION,
-    KIND_ORDER_REVISION_PROPOSAL,
-    KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
-    KIND_TRADE_LISTING_VALIDATION_REQUEST,
-    KIND_TRADE_LISTING_VALIDATION_RESULT,
-    KIND_TRADE_TRANSITION_PROOF_REQUEST,
-    KIND_TRADE_TRANSITION_PROOF_RESULT,
     KIND_TRADE_VALIDATION_RECEIPT,
 ];
 
@@ -253,8 +217,6 @@ pub const PROFILE_PUBLIC_CONTENT_KINDS: [u32; 8] = [
 ];
 
 pub const MODERATION_ADMIN_CANDIDATE_KINDS: [u32; 1] = [KIND_REPORT];
-
-pub const DRAFT_OWNER_CANDIDATE_KINDS: [u32; 1] = [KIND_LISTING_DRAFT];
 
 pub const NIP29_GROUP_KINDS: [u32; 13] = [
     KIND_GROUP_METADATA,
@@ -335,7 +297,7 @@ pub const PRODUCTION_SOCIAL_KINDS: [u32; 4] = [
 
 #[inline]
 pub const fn is_listing_kind(kind: u32) -> bool {
-    matches!(kind, KIND_LISTING | KIND_LISTING_DRAFT)
+    kind == KIND_LISTING
 }
 
 #[inline]
@@ -520,11 +482,6 @@ pub const fn is_moderation_admin_candidate_kind(kind: u32) -> bool {
 }
 
 #[inline]
-pub const fn is_draft_owner_candidate_kind(kind: u32) -> bool {
-    kind == KIND_LISTING_DRAFT
-}
-
-#[inline]
 pub const fn is_nip29_group_kind(kind: u32) -> bool {
     matches!(
         kind,
@@ -554,18 +511,14 @@ pub const fn is_private_farm_ops_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_trade_validation_service_request_kind(kind: u32) -> bool {
-    matches!(
-        kind,
-        KIND_TRADE_LISTING_VALIDATION_REQUEST | KIND_TRADE_TRANSITION_PROOF_REQUEST
-    )
+    let _ = kind;
+    false
 }
 
 #[inline]
 pub const fn is_trade_validation_service_result_kind(kind: u32) -> bool {
-    matches!(
-        kind,
-        KIND_TRADE_LISTING_VALIDATION_RESULT | KIND_TRADE_TRANSITION_PROOF_RESULT
-    )
+    let _ = kind;
+    false
 }
 
 #[inline]
@@ -577,11 +530,7 @@ pub const fn is_trade_validation_service_event_kind(kind: u32) -> bool {
 pub const fn is_order_event_kind(kind: u32) -> bool {
     matches!(
         kind,
-        KIND_ORDER_REQUEST
-            | KIND_ORDER_DECISION
-            | KIND_ORDER_REVISION_PROPOSAL
-            | KIND_ORDER_REVISION_DECISION
-            | KIND_ORDER_CANCELLATION
+        KIND_ORDER_REQUEST | KIND_ORDER_DECISION | KIND_ORDER_CANCELLATION
     )
 }
 
@@ -602,20 +551,14 @@ pub const fn is_commercial_event_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn trade_validation_service_result_kind_for_request(kind: u32) -> Option<u32> {
-    match kind {
-        KIND_TRADE_LISTING_VALIDATION_REQUEST => Some(KIND_TRADE_LISTING_VALIDATION_RESULT),
-        KIND_TRADE_TRANSITION_PROOF_REQUEST => Some(KIND_TRADE_TRANSITION_PROOF_RESULT),
-        _ => None,
-    }
+    let _ = kind;
+    None
 }
 
 #[inline]
 pub const fn trade_validation_service_request_kind_for_result(kind: u32) -> Option<u32> {
-    match kind {
-        KIND_TRADE_LISTING_VALIDATION_RESULT => Some(KIND_TRADE_LISTING_VALIDATION_REQUEST),
-        KIND_TRADE_TRANSITION_PROOF_RESULT => Some(KIND_TRADE_TRANSITION_PROOF_REQUEST),
-        _ => None,
-    }
+    let _ = kind;
+    None
 }
 
 #[inline]
@@ -775,7 +718,6 @@ mod tests {
         assert!(is_public_social_kind(KIND_CALENDAR_EVENT_RSVP));
         assert!(!is_public_social_kind(KIND_REPORT));
         assert!(!is_public_social_kind(KIND_LISTING));
-        assert!(!is_public_social_kind(KIND_LISTING_DRAFT));
         assert!(!is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
         assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
         assert!(!is_public_social_kind(KIND_FARM_WORKSPACE_MANIFEST));
@@ -846,7 +788,6 @@ mod tests {
         assert_eq!(MAP_CANDIDATE_KINDS.len(), 7);
         assert_eq!(PROFILE_PUBLIC_CONTENT_KINDS.len(), 8);
         assert_eq!(MODERATION_ADMIN_CANDIDATE_KINDS.len(), 1);
-        assert_eq!(DRAFT_OWNER_CANDIDATE_KINDS.len(), 1);
         assert_eq!(NIP29_GROUP_KINDS.len(), 13);
         assert_eq!(PRIVATE_FARM_OPS_KINDS.len(), 16);
 
@@ -859,7 +800,6 @@ mod tests {
         assert!(is_home_feed_candidate_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_home_feed_candidate_kind(KIND_FARM));
         assert!(is_home_feed_candidate_kind(KIND_PUBLIC_FILE_METADATA));
-        assert!(!is_home_feed_candidate_kind(KIND_LISTING_DRAFT));
         assert!(!is_home_feed_candidate_kind(KIND_REPORT));
         assert!(!is_home_feed_candidate_kind(KIND_FARM_CRDT_CHANGE));
         assert!(!is_home_feed_candidate_kind(KIND_RELAY_AUTH));
@@ -875,7 +815,6 @@ mod tests {
         assert!(is_market_candidate_kind(KIND_LISTING));
         assert!(is_market_candidate_kind(KIND_FARM));
         assert!(is_market_candidate_kind(KIND_PUBLIC_FILE_METADATA));
-        assert!(!is_market_candidate_kind(KIND_LISTING_DRAFT));
         assert!(!is_market_candidate_kind(KIND_REPORT));
 
         assert!(is_map_candidate_kind(KIND_FARM));
@@ -885,7 +824,6 @@ mod tests {
         assert!(is_map_candidate_kind(KIND_POST));
         assert!(is_map_candidate_kind(KIND_ARTICLE));
         assert!(is_map_candidate_kind(KIND_PUBLIC_FILE_METADATA));
-        assert!(!is_map_candidate_kind(KIND_LISTING_DRAFT));
         assert!(!is_map_candidate_kind(KIND_REPORT));
 
         assert!(is_profile_public_content_kind(KIND_POST));
@@ -896,13 +834,10 @@ mod tests {
         assert!(is_profile_public_content_kind(KIND_CALENDAR_DATE_EVENT));
         assert!(is_profile_public_content_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_profile_public_content_kind(KIND_PUBLIC_FILE_METADATA));
-        assert!(!is_profile_public_content_kind(KIND_LISTING_DRAFT));
         assert!(!is_profile_public_content_kind(KIND_REPORT));
 
         assert!(is_moderation_admin_candidate_kind(KIND_REPORT));
         assert!(!is_moderation_admin_candidate_kind(KIND_POST));
-        assert!(is_draft_owner_candidate_kind(KIND_LISTING_DRAFT));
-        assert!(!is_draft_owner_candidate_kind(KIND_LISTING));
 
         assert!(is_private_farm_ops_kind(KIND_FARM_WORKSPACE_MANIFEST));
         assert!(is_private_farm_ops_kind(KIND_FARM_CRDT_CHANGE));
@@ -924,7 +859,6 @@ mod tests {
         assert!(!is_private_farm_ops_kind(KIND_RELAY_AUTH));
         assert!(!is_private_farm_ops_kind(KIND_HTTP_AUTH));
         assert!(!is_private_farm_ops_kind(KIND_REPORT));
-        assert!(!is_private_farm_ops_kind(KIND_LISTING_DRAFT));
     }
 
     #[test]
@@ -946,85 +880,53 @@ mod tests {
 
     #[test]
     fn classifies_commercial_event_kinds() {
-        assert_eq!(LISTING_EVENT_KINDS, [KIND_LISTING, KIND_LISTING_DRAFT]);
+        assert_eq!(LISTING_EVENT_KINDS, [KIND_LISTING]);
         assert_eq!(
             ORDER_EVENT_KINDS,
             [
                 KIND_ORDER_REQUEST,
                 KIND_ORDER_DECISION,
-                KIND_ORDER_REVISION_PROPOSAL,
-                KIND_ORDER_REVISION_DECISION,
-                KIND_ORDER_CANCELLATION,
-            ]
-        );
-        assert_eq!(
-            TRADE_VALIDATION_SERVICE_EVENT_KINDS,
-            [
-                KIND_TRADE_LISTING_VALIDATION_REQUEST,
-                KIND_TRADE_LISTING_VALIDATION_RESULT,
-                KIND_TRADE_TRANSITION_PROOF_REQUEST,
-                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                KIND_ORDER_CANCELLATION
             ]
         );
         assert_eq!(
             TRADE_VALIDATION_EVENT_KINDS,
+            [KIND_TRADE_VALIDATION_RECEIPT]
+        );
+        assert_eq!(
+            COMMERCIAL_EVENT_KINDS,
             [
-                KIND_TRADE_LISTING_VALIDATION_REQUEST,
-                KIND_TRADE_LISTING_VALIDATION_RESULT,
-                KIND_TRADE_TRANSITION_PROOF_REQUEST,
-                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                KIND_LISTING,
+                KIND_ORDER_REQUEST,
+                KIND_ORDER_DECISION,
+                KIND_ORDER_CANCELLATION,
                 KIND_TRADE_VALIDATION_RECEIPT,
             ]
         );
-        assert_eq!(COMMERCIAL_EVENT_KINDS.len(), 12);
 
         assert!(is_listing_event_kind(KIND_LISTING));
-        assert!(is_listing_event_kind(KIND_LISTING_DRAFT));
         assert!(!is_listing_event_kind(KIND_PROFILE));
 
         assert!(is_order_event_kind(KIND_ORDER_REQUEST));
         assert!(is_order_event_kind(KIND_ORDER_DECISION));
-        assert!(is_order_event_kind(KIND_ORDER_REVISION_PROPOSAL));
-        assert!(is_order_event_kind(KIND_ORDER_REVISION_DECISION));
         assert!(is_order_event_kind(KIND_ORDER_CANCELLATION));
+        assert!(!is_order_event_kind(3424));
+        assert!(!is_order_event_kind(3425));
         assert!(!is_order_event_kind(3433));
         assert!(!is_order_event_kind(3434));
         assert!(!is_order_event_kind(3435));
         assert!(!is_order_event_kind(3436));
-        assert!(!is_order_event_kind(KIND_TRADE_LISTING_VALIDATION_REQUEST));
         assert!(!is_order_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
         assert!(!is_order_event_kind(3431));
 
-        assert!(is_trade_validation_service_request_kind(
-            KIND_TRADE_LISTING_VALIDATION_REQUEST
-        ));
-        assert!(is_trade_validation_service_request_kind(
-            KIND_TRADE_TRANSITION_PROOF_REQUEST
-        ));
-        assert!(!is_trade_validation_service_request_kind(
-            KIND_TRADE_LISTING_VALIDATION_RESULT
-        ));
-        assert!(is_trade_validation_service_result_kind(
-            KIND_TRADE_LISTING_VALIDATION_RESULT
-        ));
-        assert!(is_trade_validation_service_result_kind(
-            KIND_TRADE_TRANSITION_PROOF_RESULT
-        ));
-        assert!(!is_trade_validation_service_result_kind(
-            KIND_TRADE_LISTING_VALIDATION_REQUEST
-        ));
-        assert!(is_trade_validation_service_event_kind(
-            KIND_TRADE_LISTING_VALIDATION_REQUEST
-        ));
-        assert!(is_trade_validation_service_event_kind(
-            KIND_TRADE_LISTING_VALIDATION_RESULT
-        ));
-        assert!(is_trade_validation_service_event_kind(
-            KIND_TRADE_TRANSITION_PROOF_REQUEST
-        ));
-        assert!(is_trade_validation_service_event_kind(
-            KIND_TRADE_TRANSITION_PROOF_RESULT
-        ));
+        assert!(!is_trade_validation_service_request_kind(5321));
+        assert!(!is_trade_validation_service_request_kind(5322));
+        assert!(!is_trade_validation_service_result_kind(6321));
+        assert!(!is_trade_validation_service_result_kind(6322));
+        assert!(!is_trade_validation_service_event_kind(5321));
+        assert!(!is_trade_validation_service_event_kind(6321));
+        assert!(!is_trade_validation_service_event_kind(5322));
+        assert!(!is_trade_validation_service_event_kind(6322));
         assert!(!is_trade_validation_service_event_kind(KIND_ORDER_REQUEST));
         assert!(is_trade_validation_receipt_kind(
             KIND_TRADE_VALIDATION_RECEIPT
@@ -1033,42 +935,18 @@ mod tests {
         assert!(is_trade_validation_event_kind(
             KIND_TRADE_VALIDATION_RECEIPT
         ));
-        assert!(is_trade_validation_event_kind(
-            KIND_TRADE_TRANSITION_PROOF_RESULT
-        ));
+        assert!(!is_trade_validation_event_kind(6322));
         assert!(!is_trade_validation_event_kind(3434));
 
         assert!(is_commercial_event_kind(KIND_LISTING));
         assert!(is_commercial_event_kind(KIND_ORDER_REQUEST));
-        assert!(is_commercial_event_kind(
-            KIND_TRADE_LISTING_VALIDATION_REQUEST
-        ));
         assert!(is_commercial_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
         assert!(!is_commercial_event_kind(KIND_PROFILE));
+        assert!(!is_commercial_event_kind(30403));
+        assert!(!is_commercial_event_kind(5321));
+        assert!(!is_commercial_event_kind(6321));
 
-        assert_eq!(
-            trade_validation_service_result_kind_for_request(KIND_TRADE_LISTING_VALIDATION_REQUEST),
-            Some(KIND_TRADE_LISTING_VALIDATION_RESULT)
-        );
-        assert_eq!(
-            trade_validation_service_result_kind_for_request(KIND_TRADE_TRANSITION_PROOF_REQUEST),
-            Some(KIND_TRADE_TRANSITION_PROOF_RESULT)
-        );
-        assert_eq!(
-            trade_validation_service_result_kind_for_request(KIND_ORDER_REQUEST),
-            None
-        );
-        assert_eq!(
-            trade_validation_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATION_RESULT),
-            Some(KIND_TRADE_LISTING_VALIDATION_REQUEST)
-        );
-        assert_eq!(
-            trade_validation_service_request_kind_for_result(KIND_TRADE_TRANSITION_PROOF_RESULT),
-            Some(KIND_TRADE_TRANSITION_PROOF_REQUEST)
-        );
-        assert_eq!(
-            trade_validation_service_request_kind_for_result(KIND_ORDER_DECISION),
-            None
-        );
+        assert_eq!(trade_validation_service_result_kind_for_request(5321), None);
+        assert_eq!(trade_validation_service_request_kind_for_result(6321), None);
     }
 }

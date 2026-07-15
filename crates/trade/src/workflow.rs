@@ -310,22 +310,19 @@ mod tests {
     use radroots_event::{
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
-            RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
+            RadrootsOrderQuoteId, RadrootsPublicKey,
         },
         kinds::KIND_LISTING,
         order::{
             RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
             RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
             RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
-            RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
-            RadrootsOrderRevisionProposal,
         },
     };
 
     use crate::order::{
         RadrootsGroupedOrderEventRecords, RadrootsOrderCancellationRecord,
         RadrootsOrderDecisionRecord, RadrootsOrderIssue, RadrootsOrderRequestRecord,
-        RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
         RadrootsTradeLocatorProjectionResolution,
     };
     use crate::validation_receipt::{
@@ -384,10 +381,6 @@ mod tests {
 
     fn order_id() -> RadrootsOrderId {
         RadrootsOrderId::parse("order-1").expect("order id")
-    }
-
-    fn revision_id() -> RadrootsOrderRevisionId {
-        RadrootsOrderRevisionId::parse("revision-1").expect("revision id")
     }
 
     fn quote_id(raw: &str) -> RadrootsOrderQuoteId {
@@ -477,51 +470,6 @@ mod tests {
         }
     }
 
-    fn revision_proposal() -> RadrootsOrderRevisionProposalRecord {
-        RadrootsOrderRevisionProposalRecord {
-            event_id: event_id(3),
-            author_pubkey: public_key(SELLER),
-            counterparty_pubkey: public_key(BUYER),
-            root_event_id: event_id(1),
-            prev_event_id: event_id(1),
-            payload: RadrootsOrderRevisionProposal {
-                revision_id: revision_id(),
-                order_id: order_id(),
-                listing_addr: listing_addr(),
-                buyer_pubkey: public_key(BUYER),
-                seller_pubkey: public_key(SELLER),
-                root_event_id: event_id(1),
-                prev_event_id: event_id(1),
-                items: vec![RadrootsOrderItem {
-                    bin_id: bin_id("bin-1"),
-                    bin_count: 1,
-                }],
-                economics: economics(1),
-                reason: "one bin remains".to_string(),
-            },
-        }
-    }
-
-    fn accepted_revision_decision() -> RadrootsOrderRevisionDecisionRecord {
-        RadrootsOrderRevisionDecisionRecord {
-            event_id: event_id(4),
-            author_pubkey: public_key(BUYER),
-            counterparty_pubkey: public_key(SELLER),
-            root_event_id: event_id(1),
-            prev_event_id: event_id(3),
-            payload: RadrootsOrderRevisionDecision {
-                revision_id: revision_id(),
-                order_id: order_id(),
-                listing_addr: listing_addr(),
-                buyer_pubkey: public_key(BUYER),
-                seller_pubkey: public_key(SELLER),
-                root_event_id: event_id(1),
-                prev_event_id: event_id(3),
-                decision: RadrootsOrderRevisionOutcome::Accepted,
-            },
-        }
-    }
-
     fn cancellation(prev_event_id: RadrootsEventId) -> RadrootsOrderCancellationRecord {
         RadrootsOrderCancellationRecord {
             event_id: event_id(5),
@@ -544,8 +492,6 @@ mod tests {
             order_events: RadrootsGroupedOrderEventRecords {
                 requests: vec![request_record()],
                 decisions: Vec::new(),
-                revision_proposals: Vec::new(),
-                revision_decisions: Vec::new(),
                 cancellations: Vec::new(),
             },
             validation_receipts: Vec::new(),
@@ -709,25 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn workflow_revision_acceptance_waits_for_rhi_and_cancellation_after_agreement_is_invalid() {
-        let mut records = workflow_records();
-        records
-            .order_events
-            .revision_proposals
-            .push(revision_proposal());
-        records
-            .order_events
-            .revision_decisions
-            .push(accepted_revision_decision());
-
-        let projection = reduce_trade_workflow_records(&order_id(), records);
-        assert_eq!(
-            projection.status,
-            RadrootsTradeWorkflowState::AgreedPendingValidation
-        );
-        assert_eq!(projection.agreement_event_id, Some(event_id(4)));
-        assert_eq!(projection.pending_inventory_reservations[0].bin_count, 1);
-
+    fn workflow_cancellation_after_agreement_is_invalid() {
         let mut cancelled = workflow_records();
         cancelled.order_events.decisions.push(accepted_decision());
         cancelled

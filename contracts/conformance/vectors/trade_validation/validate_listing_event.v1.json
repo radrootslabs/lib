@@ -13,7 +13,7 @@
         }
       },
       "expected": {
-        "validation_shape": "trade_listing_validation_result"
+        "validation_shape": "trade_validation_receipt"
       }
     }
   ]

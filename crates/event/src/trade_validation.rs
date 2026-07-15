@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 
-use crate::{RadrootsEventPtr, order::RadrootsListingParseError};
+use crate::order::RadrootsListingParseError;
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -80,37 +80,6 @@ impl core::fmt::Display for RadrootsTradeValidationListingError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsTradeValidationListingError {}
-
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeListingValidateRequest"))
-)]
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeValidationListingRequest {
-    pub listing_event: Option<RadrootsEventPtr>,
-}
-
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsTradeListingValidateResult"))
-)]
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeValidationListingResult {
-    pub valid: bool,
-    pub errors: Vec<RadrootsTradeValidationListingError>,
-}
 
 #[cfg(test)]
 mod tests {

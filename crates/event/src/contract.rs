@@ -573,20 +573,6 @@ const TAG_LISTING_EVENT: RadrootsTagContract = tag(
     RadrootsTagValueType::EventId,
     false,
 );
-const TAG_SERVICE_INPUT: RadrootsTagContract = tag(
-    "i",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ServiceInput,
-    RadrootsTagValueType::Text,
-    true,
-);
-const TAG_SERVICE_REQUEST: RadrootsTagContract = tag(
-    "request",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ServiceInput,
-    RadrootsTagValueType::EventId,
-    false,
-);
 const TAG_SERVICE_OUTPUT: RadrootsTagContract = tag(
     "output",
     RadrootsTagCardinality::RequiredOne,
@@ -702,9 +688,6 @@ const CHAINED_ORDER_TAGS: &[RadrootsTagContract] = &[
     TAG_E_ROOT,
     TAG_E_PREVIOUS,
 ];
-const TRADE_VALIDATION_REQUEST_TAGS: &[RadrootsTagContract] = &[TAG_SERVICE_INPUT, TAG_A_REQUIRED];
-const TRADE_VALIDATION_RESULT_TAGS: &[RadrootsTagContract] =
-    &[TAG_SERVICE_REQUEST, TAG_SERVICE_OUTPUT];
 const TRADE_VALIDATION_RECEIPT_TAGS: &[RadrootsTagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
 const KNOWLEDGE_SOURCE_TAGS: &[RadrootsTagContract] = &[
@@ -1482,14 +1465,6 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.listing.published.v1"]
     ),
     kind_contract!(
-        KIND_LISTING_DRAFT,
-        "KIND_LISTING_DRAFT",
-        "Listing Draft",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.listing.draft.v1"]
-    ),
-    kind_contract!(
         KIND_KNOWLEDGE_SOURCE,
         "KIND_KNOWLEDGE_SOURCE",
         "Knowledge Source",
@@ -1594,38 +1569,6 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.group.roles.v1"]
     ),
     kind_contract!(
-        KIND_TRADE_LISTING_VALIDATION_REQUEST,
-        "KIND_TRADE_LISTING_VALIDATION_REQUEST",
-        "Trade Listing Validation Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip90,
-        ["radroots.trade.listing_validation.request.v1"]
-    ),
-    kind_contract!(
-        KIND_TRADE_LISTING_VALIDATION_RESULT,
-        "KIND_TRADE_LISTING_VALIDATION_RESULT",
-        "Trade Listing Validation Result",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip90,
-        ["radroots.trade.listing_validation.result.v1"]
-    ),
-    kind_contract!(
-        KIND_TRADE_TRANSITION_PROOF_REQUEST,
-        "KIND_TRADE_TRANSITION_PROOF_REQUEST",
-        "Trade Transition Proof Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip90,
-        ["radroots.trade.transition_proof.request.v1"]
-    ),
-    kind_contract!(
-        KIND_TRADE_TRANSITION_PROOF_RESULT,
-        "KIND_TRADE_TRANSITION_PROOF_RESULT",
-        "Trade Transition Proof Result",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip90,
-        ["radroots.trade.transition_proof.result.v1"]
-    ),
-    kind_contract!(
         KIND_ORDER_REQUEST,
         "KIND_ORDER_REQUEST",
         "Order Request",
@@ -1640,22 +1583,6 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         RadrootsEventClass::Regular,
         RadrootsNostrStandard::Radroots,
         ["radroots.order.decision.v1"]
-    ),
-    kind_contract!(
-        KIND_ORDER_REVISION_PROPOSAL,
-        "KIND_ORDER_REVISION_PROPOSAL",
-        "Order Revision Proposal",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.revision_proposal.v1"]
-    ),
-    kind_contract!(
-        KIND_ORDER_REVISION_DECISION,
-        "KIND_ORDER_REVISION_DECISION",
-        "Order Revision Decision",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.revision_decision.v1"]
     ),
     kind_contract!(
         KIND_ORDER_CANCELLATION,
@@ -2690,19 +2617,6 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         LISTING_TAGS,
         LISTING_REDUCERS
     ),
-    event_contract!(
-        "radroots.listing.draft.v1",
-        KIND_LISTING_DRAFT,
-        "Listing Draft",
-        "RadrootsListing",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Secret,
-        RadrootsActorRole::Seller,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        LISTING_TAGS,
-        LISTING_REDUCERS
-    ),
     experimental_event_contract!(
         "radroots.knowledge.source.v1",
         KIND_KNOWLEDGE_SOURCE,
@@ -2897,58 +2811,6 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         GROUP_REDUCERS
     ),
     event_contract!(
-        "radroots.trade.listing_validation.request.v1",
-        KIND_TRADE_LISTING_VALIDATION_REQUEST,
-        "Trade Listing Validation Request",
-        "RadrootsTradeValidationListingRequest",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Service,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        TRADE_VALIDATION_REQUEST_TAGS,
-        TRADE_VALIDATION_REDUCERS
-    ),
-    event_contract!(
-        "radroots.trade.listing_validation.result.v1",
-        KIND_TRADE_LISTING_VALIDATION_RESULT,
-        "Trade Listing Validation Result",
-        "RadrootsTradeValidationListingResult",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Service,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        TRADE_VALIDATION_RESULT_TAGS,
-        TRADE_VALIDATION_REDUCERS
-    ),
-    event_contract!(
-        "radroots.trade.transition_proof.request.v1",
-        KIND_TRADE_TRANSITION_PROOF_REQUEST,
-        "Trade Transition Proof Request",
-        "RadrootsTradeTransitionProofRequest",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Service,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        TRADE_VALIDATION_REQUEST_TAGS,
-        TRADE_VALIDATION_REDUCERS
-    ),
-    event_contract!(
-        "radroots.trade.transition_proof.result.v1",
-        KIND_TRADE_TRANSITION_PROOF_RESULT,
-        "Trade Transition Proof Result",
-        "RadrootsTradeTransitionProofResult",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Service,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        TRADE_VALIDATION_RESULT_TAGS,
-        TRADE_VALIDATION_REDUCERS
-    ),
-    event_contract!(
         "radroots.order.request.v1",
         KIND_ORDER_REQUEST,
         "Order Request",
@@ -2969,32 +2831,6 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Seller,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.revision_proposal.v1",
-        KIND_ORDER_REVISION_PROPOSAL,
-        "Order Revision Proposal",
-        "RadrootsOrderRevisionProposal",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Seller,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.revision_decision.v1",
-        KIND_ORDER_REVISION_DECISION,
-        "Order Revision Decision",
-        "RadrootsOrderRevisionDecision",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Buyer,
         RadrootsContentSchema::JsonObject,
         RadrootsEventDiscriminator::KindOnly,
         CHAINED_ORDER_TAGS,
@@ -3108,16 +2944,10 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_RESOURCE_HARVEST_CAP
         | KIND_FARM_WORKSPACE_MANIFEST
         | KIND_FARM_CRDT_CHANGE => RadrootsContractFamily::Farm,
-        KIND_LISTING | KIND_LISTING_DRAFT => RadrootsContractFamily::Market,
-        KIND_TRADE_LISTING_VALIDATION_REQUEST
-        | KIND_TRADE_LISTING_VALIDATION_RESULT
-        | KIND_TRADE_TRANSITION_PROOF_REQUEST
-        | KIND_TRADE_TRANSITION_PROOF_RESULT
-        | KIND_TRADE_VALIDATION_RECEIPT
+        KIND_LISTING => RadrootsContractFamily::Market,
+        KIND_TRADE_VALIDATION_RECEIPT
         | KIND_ORDER_REQUEST
         | KIND_ORDER_DECISION
-        | KIND_ORDER_REVISION_PROPOSAL
-        | KIND_ORDER_REVISION_DECISION
         | KIND_ORDER_CANCELLATION => RadrootsContractFamily::Trade,
         KIND_WIKI_MERGE_REQUEST
         | KIND_WIKI_ARTICLE

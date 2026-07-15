@@ -13,7 +13,6 @@ pub const RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH: &str =
     "0x3d8f7f463904d71f2d0d14b1551450756697e51c7b658e10c6d5c20a7bc61f08";
 pub const RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET: &str = "trade.order_acceptance.v1";
 pub const RADROOTS_SP1_TRADE_KIND_LISTING: u32 = 30402;
-pub const RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT: u32 = 30403;
 pub const RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST: u32 = 3422;
 pub const RADROOTS_SP1_TRADE_KIND_ORDER_DECISION: u32 = 3423;
 
@@ -422,10 +421,7 @@ fn validate_event_evidence(
         &witness.listing_event_id,
         &witness.request.seller_pubkey,
         RadrootsSp1TradeEventEvidenceRole::Seller,
-        &[
-            RADROOTS_SP1_TRADE_KIND_LISTING,
-            RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT,
-        ],
+        &[RADROOTS_SP1_TRADE_KIND_LISTING],
         "listing",
     )?;
 
@@ -806,17 +802,17 @@ struct StateRootMaterial<'a> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
-        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT,
-        RADROOTS_SP1_TRADE_KIND_ORDER_DECISION, RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST,
-        RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET, RADROOTS_SP1_TRADE_PROTOCOL_VERSION,
-        RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH, RADROOTS_SP1_TRADE_WITNESS_VERSION,
-        RadrootsSp1TradeCanonicalEventEvidence, RadrootsSp1TradeEventEvidenceRole,
-        RadrootsSp1TradeEventWorkflowPosition, RadrootsSp1TradeGuestError,
-        RadrootsSp1TradeInventoryBinWitness, RadrootsSp1TradeInventoryCommitmentWitness,
-        RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeOrderDecisionEventWitness,
-        RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
-        RadrootsSp1TradeOrderRequestWitness, RadrootsSp1TradeProofResult,
-        RadrootsSp1TradeProofTransitionKind, canonical_public_values_bytes, public_values_hash_hex,
+        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
+        RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,
+        RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
+        RADROOTS_SP1_TRADE_WITNESS_VERSION, RadrootsSp1TradeCanonicalEventEvidence,
+        RadrootsSp1TradeEventEvidenceRole, RadrootsSp1TradeEventWorkflowPosition,
+        RadrootsSp1TradeGuestError, RadrootsSp1TradeInventoryBinWitness,
+        RadrootsSp1TradeInventoryCommitmentWitness, RadrootsSp1TradeOrderAcceptanceWitness,
+        RadrootsSp1TradeOrderDecisionEventWitness, RadrootsSp1TradeOrderDecisionWitness,
+        RadrootsSp1TradeOrderItemWitness, RadrootsSp1TradeOrderRequestWitness,
+        RadrootsSp1TradeProofResult, RadrootsSp1TradeProofTransitionKind,
+        canonical_public_values_bytes, public_values_hash_hex,
         reduce_order_acceptance_canonical_public_values, reduce_order_acceptance_public_values,
     };
 
@@ -1278,8 +1274,11 @@ mod tests {
         );
 
         let mut input = witness();
-        input.event_evidence[0].kind = RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT;
-        reduce_order_acceptance_public_values(&input).expect("listing draft evidence");
+        input.event_evidence[0].kind = 30403;
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("retired listing evidence"),
+            RadrootsSp1TradeGuestError::UnsupportedEventEvidenceKind(30403)
+        );
     }
 
     #[test]

@@ -13,6 +13,60 @@ const BINDING_DEPENDENCIES: &[&str] = &[
     "wasm-bindgen-test",
 ];
 
+const RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS: &[&str] = &[
+    "KIND_LISTING_DRAFT",
+    "KIND_ORDER_REVISION",
+    "KIND_TRADE_QUESTION",
+    "KIND_TRADE_ANSWER",
+    "KIND_TRADE_DISCOUNT_REQUEST",
+    "KIND_TRADE_DISCOUNT_OFFER",
+    "KIND_TRADE_DISCOUNT_ACCEPT",
+    "KIND_TRADE_FULFILLMENT_UPDATE",
+    "KIND_TRADE_RECEIPT",
+    "KIND_TRADE_LISTING_VALIDATION_REQUEST",
+    "KIND_TRADE_LISTING_VALIDATION_RESULT",
+    "KIND_TRADE_TRANSITION_PROOF_REQUEST",
+    "KIND_TRADE_TRANSITION_PROOF_RESULT",
+    "RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT",
+    "RadrootsListingDraft",
+    "RadrootsCanonicalListingDraft",
+    "RadrootsListingDraftError",
+    "RadrootsOrderRevision",
+    "RadrootsOrderRevisionId",
+    "RadrootsTradeValidationListingRequest",
+    "RadrootsTradeValidationListingResult",
+    "ListingValidationRequest",
+    "ListingValidationResult",
+    "TransitionProof",
+    "TradeQuestion",
+    "TradeAnswer",
+    "TradeFulfillment",
+    "TradeReceipt",
+    "canonicalize_listing_draft",
+    "listing_draft",
+    "order_revision",
+    "pending_revision_event_id",
+    "trade_answer",
+    "trade_discount_accept",
+    "trade_discount_offer",
+    "trade_discount_request",
+    "trade_fulfillment_update",
+    "trade_listing_validation_request",
+    "trade_listing_validation_result",
+    "trade_order_revision_decision",
+    "trade_order_revision_proposal",
+    "trade_question",
+    "trade_receipt",
+    "trade_transition_proof_request",
+    "trade_transition_proof_result",
+];
+
+const RETIRED_PROTOCOL_EVENT_SURFACE_ALLOWED_PATHS: &[&str] = &[
+    "crates/event/src/dto.rs",
+    "crates/protocol_contract_v1/src/lib.rs",
+    "tools/xtask/src/hygiene.rs",
+];
+
 pub fn run(args: &[String], root: &Path) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("forbidden-identifiers") => validate_forbidden_identifiers(root),
@@ -104,6 +158,18 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         ],
         "removed trade and DVM kind constants must not reappear",
         &[],
+        &mut failures,
+    );
+    reject_substrings(
+        root,
+        &[
+            PathBuf::from("crates"),
+            PathBuf::from("contracts"),
+            PathBuf::from("tools"),
+        ],
+        RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS,
+        "retired V1 public event surfaces must not reappear outside negative contract guards",
+        RETIRED_PROTOCOL_EVENT_SURFACE_ALLOWED_PATHS,
         &mut failures,
     );
     reject_substrings(
@@ -421,6 +487,21 @@ mod tests {
             "crates/trade/src/order.rs",
             "pub struct RadrootsOrderProjection { pub order_id: RadrootsOrderId, }\n",
         );
+        write_file(
+            &root,
+            "crates/protocol_contract_v1/src/lib.rs",
+            "const RETIRED: &str = \"listing_draft\";\n",
+        );
+        write_file(
+            &root,
+            "crates/event/src/dto.rs",
+            "const OBSOLETE: &str = \"RadrootsOrderRevision\";\n",
+        );
+        write_file(
+            &root,
+            "tools/xtask/src/hygiene.rs",
+            "const GUARD: &str = \"trade_order_revision_proposal\";\n",
+        );
         validate_forbidden_identifiers(&root).expect("clean tree");
         let _ = fs::remove_dir_all(root);
     }
@@ -447,7 +528,12 @@ mod tests {
         write_file(
             &root,
             "crates/event/src/kinds.rs",
-            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\n",
+            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\npub const KIND_LISTING_DRAFT: u32 = 30403;\n",
+        );
+        write_file(
+            &root,
+            "contracts/conformance/retired.json",
+            "{\"name\":\"trade_order_revision_proposal\"}\n",
         );
         write_file(
             &root,
@@ -463,6 +549,7 @@ mod tests {
         assert!(err.contains("raw commercial protocol identifier String fields are forbidden"));
         assert!(err.contains("removed identifier 'tangle' must not reappear"));
         assert!(err.contains("removed trade and DVM kind constants must not reappear"));
+        assert!(err.contains("retired V1 public event surfaces must not reappear"));
         assert!(err.contains("wasm-bindgen"));
         assert!(err.contains("uniffi"));
         assert!(err.contains("crates/sql_wasm_bridge"));

@@ -39,3 +39,4 @@ sha2 = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
 radroots_test_fixtures = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }

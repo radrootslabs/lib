@@ -17,8 +17,8 @@ use radroots_event::{
 use thiserror::Error;
 
 pub use self::draft::{
-    RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
-    canonicalize_listing_draft,
+    RadrootsCanonicalListingEdit, RadrootsListingEditDocumentV1, RadrootsListingEditError,
+    canonicalize_listing_edit,
 };
 #[cfg(feature = "serde_json")]
 pub use self::mutation::build_listing_mutation_draft;
@@ -146,7 +146,7 @@ mod tests {
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         ids::RadrootsListingAddress,
-        kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE},
+        kinds::{KIND_LISTING, KIND_PROFILE},
         order::RadrootsListingParseError,
     };
 
@@ -246,25 +246,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_listing_address_accepts_draft_listing_kind() {
-        let raw = format!("{KIND_LISTING_DRAFT}:{SELLER}:listing-1");
-        let parsed = parse_listing_address(&raw).expect("listing address");
-
-        assert_eq!(parsed.address.as_str(), raw);
-        assert_eq!(parsed.kind, KIND_LISTING_DRAFT);
-        assert_eq!(parsed.seller_pubkey.as_str(), SELLER);
-        assert_eq!(parsed.listing_id.as_str(), "listing-1");
-    }
-
-    #[test]
-    fn parse_public_listing_address_rejects_draft_listing_kind() {
-        let raw = format!("{KIND_LISTING_DRAFT}:{SELLER}:listing-1");
+    fn parse_listing_address_rejects_retired_listing_kind() {
+        let raw = format!("30403:{SELLER}:listing-1");
 
         assert!(matches!(
+            parse_listing_address(&raw),
+            Err(RadrootsListingAddressError::InvalidKind { actual: 30403 })
+        ));
+        assert!(matches!(
             parse_public_listing_address(&raw),
-            Err(RadrootsPublicListingAddressError::InvalidKind {
-                actual: KIND_LISTING_DRAFT
-            })
+            Err(RadrootsPublicListingAddressError::InvalidListingKind { actual: 30403 })
         ));
     }
 

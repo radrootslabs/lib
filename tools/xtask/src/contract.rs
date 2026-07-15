@@ -679,17 +679,6 @@ const LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const LISTING_DRAFT_WITNESSES: [EventBoundarySourceWitness; 2] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/listing.rs",
-        required_fragments: &["pub struct RadrootsListing"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/kinds.rs",
-        required_fragments: &["pub const KIND_LISTING_DRAFT: u32 = 30403;"],
-    },
-];
-
 const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/job_request.rs",
@@ -788,65 +777,6 @@ const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     },
 ];
 
-const TRADE_ORDER_REVISION_PROPOSED_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderRevisionProposal",
-            "Self::OrderRevisionProposed => KIND_ORDER_REVISION_PROPOSAL",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_revision_proposal_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_revision_proposal_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderRevisionProposalRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
-const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event/src/order.rs",
-        required_fragments: &[
-            "pub enum RadrootsOrderRevisionOutcome",
-            "pub struct RadrootsOrderRevisionDecision",
-            "Self::OrderRevisionDecision => KIND_ORDER_REVISION_DECISION",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_revision_decision_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_revision_decision_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderRevisionDecisionRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
 const TRADE_ORDER_CANCELLED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -900,7 +830,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 39] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -1219,17 +1149,6 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
         witnesses: &LISTING_WITNESSES,
     },
     EventBoundaryExpectation {
-        domain: "listing_draft",
-        kind: "30403",
-        radroots_type: "RadrootsListing",
-        rpc_methods: &[
-            "events.listing_draft.publish",
-            "events.listing_draft.list",
-            "events.listing_draft.get",
-        ],
-        witnesses: &LISTING_DRAFT_WITNESSES,
-    },
-    EventBoundaryExpectation {
         domain: "dvm_request",
         kind: "5000-5999",
         radroots_type: "RadrootsJobRequest",
@@ -1284,29 +1203,6 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
             "trade reducer",
         ],
         witnesses: &TRADE_ORDER_DECISION_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:order_revision_proposed",
-        kind: "3424",
-        radroots_type: "TradeOrderRevisionProposed",
-        rpc_methods: &[
-            "active CLI `order revision propose`",
-            "SDK encode/decode/validate",
-            "trade reducer",
-        ],
-        witnesses: &TRADE_ORDER_REVISION_PROPOSED_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:order_revision_decision",
-        kind: "3425",
-        radroots_type: "TradeOrderRevisionDecision",
-        rpc_methods: &[
-            "active CLI `order revision accept`",
-            "active CLI `order revision decline`",
-            "SDK encode/decode/validate",
-            "trade reducer",
-        ],
-        witnesses: &TRADE_ORDER_REVISION_DECISION_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "trade:order_cancelled",

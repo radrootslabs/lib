@@ -4,7 +4,9 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use crate::error::{EventEncodeError, EventParseError};
+    use crate::error::EventEncodeError;
+    #[cfg(feature = "serde_json")]
+    use crate::error::EventParseError;
     #[cfg(feature = "serde_json")]
     use crate::farm::decode::{farm_from_event, parsed_from_event};
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
@@ -23,8 +25,11 @@ mod tests {
     use radroots_event::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
     use radroots_event::plot::RadrootsPlot;
 
+    #[cfg(feature = "serde_json")]
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    #[cfg(feature = "serde_json")]
     const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    #[cfg(feature = "serde_json")]
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

@@ -9,9 +9,7 @@ use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
-    kinds::{
-        KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_PLOT, KIND_POST, KIND_RESOURCE_AREA,
-    },
+    kinds::{KIND_FARM, KIND_LISTING, KIND_PLOT, KIND_POST, KIND_RESOURCE_AREA},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
@@ -241,9 +239,9 @@ fn listing_roundtrip_from_event() {
 #[test]
 fn listing_json_wire_parts_with_kind_serializes_listing_object() {
     let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
-    let parts = to_json_wire_parts_with_kind(&listing, KIND_LISTING_DRAFT).unwrap();
+    let parts = to_json_wire_parts_with_kind(&listing, KIND_LISTING).unwrap();
 
-    assert_eq!(parts.kind, KIND_LISTING_DRAFT);
+    assert_eq!(parts.kind, KIND_LISTING);
     let decoded: RadrootsListing = serde_json::from_str(&parts.content).unwrap();
     assert_eq!(decoded.d_tag, listing.d_tag);
     assert_eq!(decoded.product.title, listing.product.title);
@@ -311,7 +309,7 @@ fn listing_from_event_rejects_wrong_kind() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "30402 or 30403",
+            expected: "30402",
             got: KIND_POST
         }
     ));
@@ -968,23 +966,21 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "30402 or 30403",
+            expected: "30402",
             got: KIND_POST
         }
     ));
 }
 
 #[test]
-fn draft_listing_roundtrip_from_event() {
+fn retired_listing_kind_is_rejected() {
     let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
     listing.published_at = Some(1_781_895_600);
-    let parts = to_wire_parts_with_kind(&listing, KIND_LISTING_DRAFT).unwrap();
 
-    let decoded = listing_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
-    assert_eq!(parts.kind, KIND_LISTING_DRAFT);
-    assert_eq!(parts.content, "# Widget");
-    assert_eq!(decoded.d_tag, listing.d_tag);
-    assert_eq!(decoded.published_at, Some(1_781_895_600));
+    assert!(matches!(
+        to_wire_parts_with_kind(&listing, 30403),
+        Err(EventEncodeError::InvalidKind(30403))
+    ));
 }
 
 #[test]

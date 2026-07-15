@@ -309,7 +309,6 @@ mod tests {
             "validation_receipt_event_id",
             "economics",
             "agreement_event_id",
-            "pending_revision_event_id",
             "listing_addr",
             "buyer_pubkey",
             "seller_pubkey",

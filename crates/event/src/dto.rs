@@ -125,6 +125,11 @@ mod tests {
             "RadrootsOrderResponse",
             "RadrootsOrderRevision",
             "RadrootsOrderRevisionResponse",
+            "RadrootsOrderRevisionProposal",
+            "RadrootsOrderRevisionDecision",
+            "RadrootsOrderRevisionOutcome",
+            "RadrootsTradeValidationListingRequest",
+            "RadrootsTradeValidationListingResult",
         ] {
             assert!(
                 !export_names.contains(obsolete_export),
@@ -138,9 +143,6 @@ mod tests {
             "RadrootsOrderRequest",
             "RadrootsOrderDecision",
             "RadrootsOrderDecisionOutcome",
-            "RadrootsOrderRevisionProposal",
-            "RadrootsOrderRevisionDecision",
-            "RadrootsOrderRevisionOutcome",
             "RadrootsOrderCancellation",
             "RadrootsListingParseError",
         ] {

@@ -194,7 +194,7 @@ mod tests {
         RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
-        kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
+        kinds::KIND_LISTING,
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
             RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
@@ -321,18 +321,18 @@ mod tests {
     }
 
     #[test]
-    fn validate_draft_listing_ok() {
+    fn validate_listing_rejects_retired_kind() {
         let listing = base_listing();
         let event = event_with_parts(
             SELLER,
-            KIND_LISTING_DRAFT,
+            30403,
             base_event(&listing).tags_as_vec(),
             serde_json::to_string(&listing).unwrap(),
         );
-        let validated = validate_listing_event(&event).expect("draft listing");
+        let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(
-            validated.listing_addr,
-            format!("30403:{SELLER}:{}", listing.d_tag)
+            err,
+            TradeListingValidationError::InvalidKind { kind: 30403 }
         );
     }
 

@@ -9,8 +9,7 @@ use alloc::{
 #[cfg(test)]
 use crate::ids::RadrootsOrderQuoteId;
 use crate::ids::{
-    RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
-    RadrootsOrderRevisionId, RadrootsPublicKey,
+    RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey,
 };
 use crate::kinds::*;
 pub use crate::order_economics::*;
@@ -199,106 +198,6 @@ impl RadrootsOrderRequest {
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(
     feature = "dto-bindgen",
-    dto(ts(name = "RadrootsOrderRevisionProposal"))
-)]
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderRevisionProposal {
-    pub revision_id: RadrootsOrderRevisionId,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub prev_event_id: RadrootsEventId,
-    pub items: Vec<RadrootsOrderItem>,
-    pub economics: RadrootsOrderEconomics,
-    pub reason: String,
-}
-
-impl RadrootsOrderRevisionProposal {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.revision_id, "revision_id")?;
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        validate_required_field(&self.root_event_id, "root_event_id")?;
-        validate_required_field(&self.prev_event_id, "prev_event_id")?;
-        validate_required_field(&self.reason, "reason")?;
-        validate_order_items(&self.items)?;
-        self.economics.validate()?;
-        validate_order_economics_binding(&self.items, &self.economics)
-    }
-}
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    any(feature = "serde", test),
-    serde(rename_all = "snake_case", tag = "decision")
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderRevisionOutcome {
-    Accepted,
-    Declined { reason: String },
-}
-
-impl RadrootsOrderRevisionOutcome {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        match self {
-            Self::Accepted => Ok(()),
-            Self::Declined { reason } => validate_required_field(reason, "reason"),
-        }
-    }
-}
-
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    feature = "dto-bindgen",
-    dto(ts(name = "RadrootsOrderRevisionDecision"))
-)]
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderRevisionDecision {
-    pub revision_id: RadrootsOrderRevisionId,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub prev_event_id: RadrootsEventId,
-    pub decision: RadrootsOrderRevisionOutcome,
-}
-
-impl RadrootsOrderRevisionDecision {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.revision_id, "revision_id")?;
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        validate_required_field(&self.root_event_id, "root_event_id")?;
-        validate_required_field(&self.prev_event_id, "prev_event_id")?;
-        self.decision.validate()
-    }
-}
-
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    feature = "dto-bindgen",
     dto(ts(name = "RadrootsOrderInventoryCommitment"))
 )]
 #[cfg_attr(
@@ -425,16 +324,6 @@ pub enum RadrootsOrderEventType {
     OrderRequested,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "TradeOrderDecision"))]
     OrderDecision,
-    #[cfg_attr(
-        any(feature = "serde", test),
-        serde(rename = "TradeOrderRevisionProposed")
-    )]
-    OrderRevisionProposed,
-    #[cfg_attr(
-        any(feature = "serde", test),
-        serde(rename = "TradeOrderRevisionDecision")
-    )]
-    OrderRevisionDecision,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "TradeOrderCancelled"))]
     OrderCancelled,
 }
@@ -445,8 +334,6 @@ impl RadrootsOrderEventType {
         match kind {
             KIND_ORDER_REQUEST => Some(Self::OrderRequested),
             KIND_ORDER_DECISION => Some(Self::OrderDecision),
-            KIND_ORDER_REVISION_PROPOSAL => Some(Self::OrderRevisionProposed),
-            KIND_ORDER_REVISION_DECISION => Some(Self::OrderRevisionDecision),
             KIND_ORDER_CANCELLATION => Some(Self::OrderCancelled),
             _ => None,
         }
@@ -457,8 +344,6 @@ impl RadrootsOrderEventType {
         match self {
             Self::OrderRequested => KIND_ORDER_REQUEST,
             Self::OrderDecision => KIND_ORDER_DECISION,
-            Self::OrderRevisionProposed => KIND_ORDER_REVISION_PROPOSAL,
-            Self::OrderRevisionDecision => KIND_ORDER_REVISION_DECISION,
             Self::OrderCancelled => KIND_ORDER_CANCELLATION,
         }
     }
@@ -468,8 +353,6 @@ impl RadrootsOrderEventType {
         match self {
             Self::OrderRequested => "TradeOrderRequested",
             Self::OrderDecision => "TradeOrderDecision",
-            Self::OrderRevisionProposed => "TradeOrderRevisionProposed",
-            Self::OrderRevisionDecision => "TradeOrderRevisionDecision",
             Self::OrderCancelled => "TradeOrderCancelled",
         }
     }
@@ -481,13 +364,7 @@ impl RadrootsOrderEventType {
 
     #[inline]
     pub const fn requires_order_chain(self) -> bool {
-        matches!(
-            self,
-            Self::OrderDecision
-                | Self::OrderRevisionProposed
-                | Self::OrderRevisionDecision
-                | Self::OrderCancelled
-        )
+        matches!(self, Self::OrderDecision | Self::OrderCancelled)
     }
 }
 
@@ -925,13 +802,6 @@ mod tests {
             .unwrap()
     }
 
-    fn event_id(character: char) -> RadrootsEventId {
-        core::iter::repeat_n(character, 64)
-            .collect::<String>()
-            .parse()
-            .unwrap()
-    }
-
     fn buyer_pubkey() -> RadrootsPublicKey {
         pubkey('b')
     }
@@ -947,10 +817,6 @@ mod tests {
     }
 
     fn order_id(raw: &str) -> RadrootsOrderId {
-        raw.parse().unwrap()
-    }
-
-    fn revision_id(raw: &str) -> RadrootsOrderRevisionId {
         raw.parse().unwrap()
     }
 
@@ -1096,39 +962,6 @@ mod tests {
         }
     }
 
-    fn sample_order_revision_proposal() -> RadrootsOrderRevisionProposal {
-        RadrootsOrderRevisionProposal {
-            revision_id: revision_id("rev-1"),
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            root_event_id: event_id('1'),
-            prev_event_id: event_id('2'),
-            items: vec![RadrootsOrderItem {
-                bin_id: bin_id("bin-1"),
-                bin_count: 2,
-            }],
-            economics: sample_bound_order_economics(),
-            reason: "update quantity".into(),
-        }
-    }
-
-    fn sample_order_revision_decision(
-        decision: RadrootsOrderRevisionOutcome,
-    ) -> RadrootsOrderRevisionDecision {
-        RadrootsOrderRevisionDecision {
-            revision_id: revision_id("rev-1"),
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            root_event_id: event_id('1'),
-            prev_event_id: event_id('2'),
-            decision,
-        }
-    }
-
     #[test]
     fn order_message_type_uses_canonical_names_and_kinds() {
         assert_eq!(
@@ -1139,14 +972,8 @@ mod tests {
             RadrootsOrderEventType::from_kind(KIND_ORDER_DECISION),
             Some(RadrootsOrderEventType::OrderDecision)
         );
-        assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_REVISION_PROPOSAL),
-            Some(RadrootsOrderEventType::OrderRevisionProposed)
-        );
-        assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_REVISION_DECISION),
-            Some(RadrootsOrderEventType::OrderRevisionDecision)
-        );
+        assert_eq!(RadrootsOrderEventType::from_kind(3424), None);
+        assert_eq!(RadrootsOrderEventType::from_kind(3425), None);
         assert_eq!(
             RadrootsOrderEventType::from_kind(KIND_ORDER_CANCELLATION),
             Some(RadrootsOrderEventType::OrderCancelled)
@@ -1165,14 +992,6 @@ mod tests {
             KIND_ORDER_DECISION
         );
         assert_eq!(
-            RadrootsOrderEventType::OrderRevisionProposed.kind(),
-            KIND_ORDER_REVISION_PROPOSAL
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderRevisionDecision.kind(),
-            KIND_ORDER_REVISION_DECISION
-        );
-        assert_eq!(
             RadrootsOrderEventType::OrderCancelled.kind(),
             KIND_ORDER_CANCELLATION
         );
@@ -1185,42 +1004,20 @@ mod tests {
             "TradeOrderDecision"
         );
         assert_eq!(
-            RadrootsOrderEventType::OrderRevisionProposed.name(),
-            "TradeOrderRevisionProposed"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderRevisionDecision.name(),
-            "TradeOrderRevisionDecision"
-        );
-        assert_eq!(
             RadrootsOrderEventType::OrderCancelled.name(),
             "TradeOrderCancelled"
         );
         assert!(RadrootsOrderEventType::OrderRequested.requires_listing_snapshot());
         assert!(RadrootsOrderEventType::OrderDecision.requires_order_chain());
-        assert!(RadrootsOrderEventType::OrderRevisionProposed.requires_order_chain());
-        assert!(RadrootsOrderEventType::OrderRevisionDecision.requires_order_chain());
         assert!(RadrootsOrderEventType::OrderCancelled.requires_order_chain());
         assert!(!RadrootsOrderEventType::OrderRequested.requires_order_chain());
 
         let request_name = serde_json::to_value(RadrootsOrderEventType::OrderRequested).unwrap();
         let decision_name = serde_json::to_value(RadrootsOrderEventType::OrderDecision).unwrap();
-        let revision_proposed_name =
-            serde_json::to_value(RadrootsOrderEventType::OrderRevisionProposed).unwrap();
-        let revision_decision_name =
-            serde_json::to_value(RadrootsOrderEventType::OrderRevisionDecision).unwrap();
         let cancellation_name =
             serde_json::to_value(RadrootsOrderEventType::OrderCancelled).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
-        assert_eq!(
-            revision_proposed_name,
-            serde_json::json!("TradeOrderRevisionProposed")
-        );
-        assert_eq!(
-            revision_decision_name,
-            serde_json::json!("TradeOrderRevisionDecision")
-        );
         assert_eq!(cancellation_name, serde_json::json!("TradeOrderCancelled"));
     }
 
@@ -1269,10 +1066,6 @@ mod tests {
         let mut request = serde_json::to_value(sample_order_request()).unwrap();
         request["buyer_pubkey"] = serde_json::json!("not-a-pubkey");
         assert!(serde_json::from_value::<RadrootsOrderRequest>(request).is_err());
-
-        let mut revision = serde_json::to_value(sample_order_revision_proposal()).unwrap();
-        revision["root_event_id"] = serde_json::json!("not-an-event-id");
-        assert!(serde_json::from_value::<RadrootsOrderRevisionProposal>(revision).is_err());
     }
 
     #[test]
@@ -1295,38 +1088,6 @@ mod tests {
             }))
             .unwrap(),
             RadrootsListingParseError::InvalidJson("bins".into())
-        );
-    }
-
-    #[test]
-    fn order_revision_outcome_json_preserves_internal_tagged_shape() {
-        assert_eq!(
-            serde_json::to_value(RadrootsOrderRevisionOutcome::Accepted).unwrap(),
-            serde_json::json!({ "decision": "accepted" })
-        );
-        assert_eq!(
-            serde_json::to_value(RadrootsOrderRevisionOutcome::Declined {
-                reason: "out of stock".into(),
-            })
-            .unwrap(),
-            serde_json::json!({ "decision": "declined", "reason": "out of stock" })
-        );
-        assert_eq!(
-            serde_json::from_value::<RadrootsOrderRevisionOutcome>(serde_json::json!({
-                "decision": "accepted"
-            }))
-            .unwrap(),
-            RadrootsOrderRevisionOutcome::Accepted
-        );
-        assert_eq!(
-            serde_json::from_value::<RadrootsOrderRevisionOutcome>(serde_json::json!({
-                "decision": "declined",
-                "reason": "out of stock"
-            }))
-            .unwrap(),
-            RadrootsOrderRevisionOutcome::Declined {
-                reason: "out of stock".into()
-            }
         );
     }
 
@@ -1714,32 +1475,6 @@ mod tests {
             decision: RadrootsOrderDecisionOutcome::Declined { reason: " ".into() },
             ..sample_order_decision()
         };
-        assert_eq!(
-            declined_without_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("reason")
-        );
-    }
-
-    #[test]
-    fn order_revision_validation_covers_proposed_and_decision_paths() {
-        assert_eq!(sample_order_revision_proposal().validate(), Ok(()));
-
-        assert_eq!(
-            sample_order_revision_decision(RadrootsOrderRevisionOutcome::Accepted).validate(),
-            Ok(())
-        );
-        assert_eq!(
-            sample_order_revision_decision(RadrootsOrderRevisionOutcome::Declined {
-                reason: "out of stock".into(),
-            })
-            .validate(),
-            Ok(())
-        );
-
-        let declined_without_reason =
-            sample_order_revision_decision(RadrootsOrderRevisionOutcome::Declined {
-                reason: " ".into(),
-            });
         assert_eq!(
             declined_without_reason.validate().unwrap_err(),
             RadrootsOrderPayloadError::EmptyField("reason")

@@ -1,10 +1,4 @@
 //! Mutation draft preparation for Radroots Listing v1.
-//!
-//! Publish and update produce the stable public NIP-99 listing-kind event with
-//! Radroots-specific JSON content, save-draft produces the stable listing-draft
-//! event, and archive remains unsupported because Listing v1 has no archive
-//! wire event. Strict NIP-99 Markdown-content interoperability is protocol-v2
-//! work.
 
 #![forbid(unsafe_code)]
 
@@ -18,29 +12,28 @@ use radroots_event::ids::RadrootsListingAddress;
 #[cfg(feature = "serde_json")]
 use radroots_event::{
     draft::{RadrootsDraftError, RadrootsEventDraft},
-    kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
+    kinds::KIND_LISTING,
 };
 #[cfg(feature = "serde_json")]
 use radroots_event_codec::listing::encode::to_json_wire_parts_with_kind;
 use thiserror::Error;
 
-use crate::listing::draft::RadrootsCanonicalListingDraft;
+use crate::listing::draft::RadrootsCanonicalListingEdit;
 
 /// Listing v1 mutation intent for draft preparation only.
 ///
-/// Publish and update target the public listing event, save-draft targets the
-/// secret listing-draft event, and archive is intentionally unsupported because
-/// listing v1 defines no archive wire event.
+/// Publish and update target the public listing event, while local-only draft
+/// persistence and archive are intentionally unsupported as wire events.
 #[derive(Clone, Debug)]
 pub enum RadrootsListingMutation {
     Publish {
-        draft: RadrootsCanonicalListingDraft,
+        draft: RadrootsCanonicalListingEdit,
     },
     Update {
-        draft: RadrootsCanonicalListingDraft,
+        draft: RadrootsCanonicalListingEdit,
     },
     SaveDraft {
-        draft: RadrootsCanonicalListingDraft,
+        draft: RadrootsCanonicalListingEdit,
     },
     Archive {
         listing_addr: RadrootsListingAddress,
@@ -66,18 +59,17 @@ pub enum RadrootsListingMutationError {
 }
 
 const LISTING_PUBLISHED_CONTRACT_ID: &str = "radroots.listing.published.v1";
-const LISTING_DRAFT_CONTRACT_ID: &str = "radroots.listing.draft.v1";
 
 impl RadrootsListingMutation {
-    pub fn publish(draft: RadrootsCanonicalListingDraft) -> Self {
+    pub fn publish(draft: RadrootsCanonicalListingEdit) -> Self {
         Self::Publish { draft }
     }
 
-    pub fn update(draft: RadrootsCanonicalListingDraft) -> Self {
+    pub fn update(draft: RadrootsCanonicalListingEdit) -> Self {
         Self::Update { draft }
     }
 
-    pub fn save_draft(draft: RadrootsCanonicalListingDraft) -> Self {
+    pub fn save_draft(draft: RadrootsCanonicalListingEdit) -> Self {
         Self::SaveDraft { draft }
     }
 
@@ -99,7 +91,7 @@ impl RadrootsListingMutation {
 
     pub fn canonical_draft(
         &self,
-    ) -> Result<&RadrootsCanonicalListingDraft, RadrootsListingMutationError> {
+    ) -> Result<&RadrootsCanonicalListingEdit, RadrootsListingMutationError> {
         match self {
             Self::Publish { draft } | Self::Update { draft } | Self::SaveDraft { draft } => {
                 Ok(draft)
@@ -111,7 +103,7 @@ impl RadrootsListingMutation {
     pub fn listing_addr(&self) -> Result<&RadrootsListingAddress, RadrootsListingMutationError> {
         match self {
             Self::Publish { draft } | Self::Update { draft } => Ok(draft.public_listing_addr()),
-            Self::SaveDraft { draft } => Ok(draft.draft_listing_addr()),
+            Self::SaveDraft { draft } => Ok(draft.public_listing_addr()),
             Self::Archive { .. } => Err(RadrootsListingMutationError::UnsupportedMutation),
         }
     }
@@ -126,10 +118,7 @@ pub fn build_listing_mutation_draft(
         RadrootsListingMutation::Publish { draft } | RadrootsListingMutation::Update { draft } => {
             (draft, KIND_LISTING, LISTING_PUBLISHED_CONTRACT_ID)
         }
-        RadrootsListingMutation::SaveDraft { draft } => {
-            (draft, KIND_LISTING_DRAFT, LISTING_DRAFT_CONTRACT_ID)
-        }
-        RadrootsListingMutation::Archive { .. } => {
+        RadrootsListingMutation::SaveDraft { .. } | RadrootsListingMutation::Archive { .. } => {
             return Err(RadrootsListingMutationError::UnsupportedMutation);
         }
     };
@@ -156,7 +145,7 @@ mod tests {
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
-        kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
+        kinds::KIND_LISTING,
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
             RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
@@ -165,12 +154,12 @@ mod tests {
         resource_area::RadrootsResourceAreaRef,
     };
 
-    use crate::listing::draft::RadrootsCanonicalListingDraft;
+    use crate::listing::draft::RadrootsCanonicalListingEdit;
     use crate::listing::validation::validate_listing_event;
 
     use super::{
-        LISTING_DRAFT_CONTRACT_ID, LISTING_PUBLISHED_CONTRACT_ID, RadrootsListingLifecycleState,
-        RadrootsListingMutation, RadrootsListingMutationError, build_listing_mutation_draft,
+        LISTING_PUBLISHED_CONTRACT_ID, RadrootsListingLifecycleState, RadrootsListingMutation,
+        RadrootsListingMutationError, build_listing_mutation_draft,
     };
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -244,12 +233,12 @@ mod tests {
         }
     }
 
-    fn canonical_draft() -> RadrootsCanonicalListingDraft {
-        RadrootsCanonicalListingDraft::new(
+    fn canonical_draft() -> RadrootsCanonicalListingEdit {
+        RadrootsCanonicalListingEdit::new(
             listing(),
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
-        .expect("canonical listing draft")
+        .expect("canonical listing edit")
     }
 
     #[test]
@@ -331,7 +320,7 @@ mod tests {
         );
         assert_eq!(
             save_draft.listing_addr().expect("address").as_str(),
-            format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
     }
 
@@ -379,18 +368,13 @@ mod tests {
     }
 
     #[test]
-    fn build_listing_mutation_draft_maps_save_draft_to_listing_draft() {
+    fn build_listing_mutation_draft_rejects_save_draft() {
         let save_draft = RadrootsListingMutation::save_draft(canonical_draft());
 
-        let draft = build_listing_mutation_draft(&save_draft, 1_700_000_000).expect("draft");
-
-        assert_eq!(draft.kind_u32(), KIND_LISTING_DRAFT);
-        assert_eq!(draft.contract_id(), LISTING_DRAFT_CONTRACT_ID);
-        assert_eq!(draft.expected_pubkey_str(), SELLER);
-        assert_eq!(draft.created_at_u64(), 1_700_000_000);
-        let draft_content: RadrootsListing =
-            serde_json::from_str(draft.content()).expect("listing json");
-        assert_eq!(draft_content.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
+        assert_eq!(
+            build_listing_mutation_draft(&save_draft, 1_700_000_000).unwrap_err(),
+            RadrootsListingMutationError::UnsupportedMutation
+        );
     }
 
     #[test]
@@ -415,11 +399,11 @@ mod tests {
             pubkey: SELLER.to_string(),
             d_tag: "bad d tag".to_string(),
         });
-        let draft = RadrootsCanonicalListingDraft::new(
+        let draft = RadrootsCanonicalListingEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
-        .expect("canonical listing draft");
+        .expect("canonical listing edit");
         let publish = RadrootsListingMutation::publish(draft);
 
         let err = build_listing_mutation_draft(&publish, 1_700_000_000).unwrap_err();
