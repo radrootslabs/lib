@@ -13,7 +13,7 @@ readme = "README"
 
 [features]
 default = ["sqlite", "runtime-tokio"]
-sqlite = ["dep:sqlx", "sqlx/sqlite"]
+sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
 runtime-tokio = ["sqlx/runtime-tokio"]
 
 [dependencies]

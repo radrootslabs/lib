@@ -348,7 +348,7 @@ impl RadrootsEventStore {
         let sql = format!(
             "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM event_envelope_tags AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
         );
-        let mut query = sqlx::query(sql.as_str());
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
         for contract_id in contract_ids {
             query = query.bind(contract_id.as_ref());
         }
@@ -435,13 +435,16 @@ async fn apply_down(pool: &SqlitePool) -> Result<(), RadrootsEventStoreError> {
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-async fn query_i64(pool: &SqlitePool, sql: &str) -> Result<i64, RadrootsEventStoreError> {
+async fn query_i64(pool: &SqlitePool, sql: &'static str) -> Result<i64, RadrootsEventStoreError> {
     let row = sqlx::query(sql).fetch_one(pool).await?;
     Ok(row.try_get(0)?)
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsEventStoreError> {
+async fn query_string(
+    pool: &SqlitePool,
+    sql: &'static str,
+) -> Result<String, RadrootsEventStoreError> {
     let row = sqlx::query(sql).fetch_one(pool).await?;
     Ok(row.try_get(0)?)
 }

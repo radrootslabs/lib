@@ -11,29 +11,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = ["std", "sqlcipher", "os-keyring"]
-std = [
-  "radroots_secret_vault/std",
-  "serde/std",
-  "serde_json/std",
-  "zeroize/std",
-]
-sqlcipher = ["std", "dep:rusqlite"]
-os-keyring = ["std", "radroots_secret_vault/os-keyring"]
+default = ["std"]
+std = ["serde/std", "serde_json/std"]
 
 [dependencies]
-base64 = { workspace = true }
-getrandom = { workspace = true }
 hex = { workspace = true }
-radroots_secret_vault = { workspace = true, default-features = false }
-rusqlite = { workspace = true, optional = true, features = [
-  "bundled-sqlcipher-vendored-openssl",
-] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
-zeroize = { workspace = true }
-
-[dev-dependencies]
-radroots_secret_vault = { workspace = true, features = ["memory-vault"] }
-tempfile = { workspace = true }

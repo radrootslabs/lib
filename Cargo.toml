@@ -6,6 +6,7 @@ members = [
   "crates/event_codec",
   "crates/event_index",
   "crates/authority",
+  "crates/libsqlite3_sys_3_53_3",
   "crates/geocoder",
   "crates/identity",
   "crates/runtime_store",
@@ -164,7 +165,7 @@ sntrup761 = { version = "0.4.0", default-features = false, features = [
   "kgen",
 ] }
 subtle = { version = "2.6", default-features = false }
-sqlx = { version = "0.8.6", default-features = false }
+sqlx = { version = "0.9.0", default-features = false }
 sp1-build = { version = "6.2.3" }
 sp1-sdk = { version = "6.2.3", default-features = false }
 sp1-zkvm = { version = "6.2.3" }
@@ -196,4 +197,7 @@ uuid = { version = "1.22.0", features = ["v4", "v7"] }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }
-rusqlite = { version = "0.32.1", default-features = false }
+rusqlite = { version = "0.39.0", default-features = false }
+
+[patch.crates-io]
+libsqlite3-sys = { path = "crates/libsqlite3_sys_3_53_3" }

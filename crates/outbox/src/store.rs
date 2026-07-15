@@ -1375,13 +1375,13 @@ async fn apply_down(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-async fn query_i64(pool: &SqlitePool, sql: &str) -> Result<i64, RadrootsOutboxError> {
+async fn query_i64(pool: &SqlitePool, sql: &'static str) -> Result<i64, RadrootsOutboxError> {
     let row = sqlx::query(sql).fetch_one(pool).await?;
     Ok(row.try_get(0)?)
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-async fn query_string(pool: &SqlitePool, sql: &str) -> Result<String, RadrootsOutboxError> {
+async fn query_string(pool: &SqlitePool, sql: &'static str) -> Result<String, RadrootsOutboxError> {
     let row = sqlx::query(sql).fetch_one(pool).await?;
     Ok(row.try_get(0)?)
 }
@@ -1824,7 +1824,7 @@ async fn claim_event(
     let sql = format!(
         "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, active_delivery_plan_id = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? {suffix}"
     );
-    let changed = sqlx::query(sql.as_str())
+    let changed = sqlx::query(sqlx::AssertSqlSafe(sql))
         .bind(claimed_state.as_str())
         .bind(claim_token)
         .bind(claim_owner)
@@ -1987,7 +1987,7 @@ async fn reticulum_preview_event_ids_pool(
         query.push_str(" AND event.outbox_event_id = ?");
     }
     query.push_str(" ORDER BY event.created_at_ms, event.outbox_event_id LIMIT ?");
-    let mut query = sqlx::query(query.as_str());
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(query));
     if let Some(outbox_event_id) = outbox_event_id {
         query = query.bind(outbox_event_id);
     }
@@ -2941,7 +2941,7 @@ mod tests {
 
     async fn table_count(outbox: &RadrootsOutbox, table_name: &str) -> i64 {
         let sql = format!("SELECT COUNT(*) FROM {table_name}");
-        sqlx::query_scalar(sql.as_str())
+        sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
             .fetch_one(outbox.pool())
             .await
             .expect("table count")
@@ -2949,7 +2949,7 @@ mod tests {
 
     async fn table_columns(outbox: &RadrootsOutbox, table_name: &str) -> Vec<String> {
         let sql = format!("PRAGMA table_info({table_name})");
-        sqlx::query(sql.as_str())
+        sqlx::query(sqlx::AssertSqlSafe(sql))
             .fetch_all(outbox.pool())
             .await
             .expect("table columns")

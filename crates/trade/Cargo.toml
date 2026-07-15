@@ -35,7 +35,7 @@ event_store = [
   "dep:sqlx",
   "radroots_event_store/sqlite",
   "radroots_event_store/runtime-tokio",
-  "sqlx/sqlite",
+  "sqlx/sqlite-bundled",
 ]
 serde = [
   "dep:serde",
@@ -83,7 +83,7 @@ radroots_nostr = { workspace = true, default-features = false, features = [
 radroots_transport = { workspace = true, default-features = false }
 sqlx = { workspace = true, default-features = false, features = [
   "runtime-tokio",
-  "sqlite",
+  "sqlite-bundled",
 ] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 

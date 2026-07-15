@@ -7,8 +7,6 @@ extern crate std;
 
 pub mod error;
 pub mod model;
-#[cfg(all(feature = "std", feature = "sqlcipher"))]
-pub mod store;
 
 pub mod prelude {
     pub use crate::error::RadrootsSimplexAppStoreError;
@@ -22,8 +20,6 @@ pub mod prelude {
         RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
         RadrootsSimplexAppUnsupportedProtocolEvent,
     };
-    #[cfg(all(feature = "std", feature = "sqlcipher"))]
-    pub use crate::store::RadrootsSimplexAppStore;
 }
 
 pub use error::RadrootsSimplexAppStoreError;
@@ -37,5 +33,3 @@ pub use model::{
     RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
     RadrootsSimplexAppUnsupportedProtocolEvent,
 };
-#[cfg(all(feature = "std", feature = "sqlcipher"))]
-pub use store::RadrootsSimplexAppStore;
