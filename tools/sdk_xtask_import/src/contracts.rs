@@ -104,6 +104,8 @@ struct SdkArtifacts {
 }
 
 pub fn validate_sdk_contracts(root: &Path) -> Result<(), String> {
+    radroots_runtime_contract_v1::validate_runtime_contract_v1()
+        .map_err(|error| error.to_string())?;
     let exports = load_contract_dir::<ExportContract>(&root.join("contracts").join("exports"))?;
     let packages = load_contract_dir::<PackageContract>(&root.join("contracts").join("packages"))?;
     if exports.is_empty() {

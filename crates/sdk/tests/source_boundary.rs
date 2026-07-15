@@ -2312,7 +2312,10 @@ fn sdk_transport_sources_keep_reticulum_preview_push_boundary() {
         "src/adapters/radrootsd.rs",
     ] {
         let source = read_source(manifest_dir.join(relative_path).as_path());
-        for line in removed_reticulum_preview_endpoint_lines(source.as_str()) {
+        if let Some(line) = removed_reticulum_preview_endpoint_lines(source.as_str())
+            .into_iter()
+            .next()
+        {
             panic!(
                 "{relative_path}:{line} contains removed Reticulum preview endpoint `reticulum:preview`"
             );

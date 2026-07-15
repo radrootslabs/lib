@@ -56,6 +56,8 @@ pub mod transport;
 #[cfg(feature = "runtime")]
 mod workflow_runtime;
 
+pub use radroots_runtime_contract_v1 as runtime_contract_v1;
+
 #[cfg(feature = "runtime")]
 pub use crate::dvm_runtime::{
     DVM_TRADE_TRANSITION_PROOF_REQUEST_CONTRACT_ID,

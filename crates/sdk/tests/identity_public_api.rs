@@ -10,7 +10,7 @@ fn identity_models_are_public_through_identity_module() {
     };
 
     assert_eq!(DEFAULT_IDENTITY_PATH, "default.json");
-    assert!(RADROOTS_USERNAME_MIN_LEN <= RADROOTS_USERNAME_MAX_LEN);
+    const { assert!(RADROOTS_USERNAME_MIN_LEN <= RADROOTS_USERNAME_MAX_LEN) };
     assert!(RADROOTS_USERNAME_REGEX.contains("[a-z0-9._-]"));
 
     let normalized = radroots_username_normalize(" Field_User ").expect("normalized username");

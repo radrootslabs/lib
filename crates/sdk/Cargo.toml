@@ -13,8 +13,18 @@ readme = "README"
 
 [features]
 default = ["std", "serde", "serde_json", "identity-models"]
-std = ["radroots_event/std", "radroots_event_codec/std", "radroots_trade/std"]
-serde = ["dep:serde", "radroots_event/serde", "radroots_trade/serde"]
+std = [
+  "radroots_event/std",
+  "radroots_event_codec/std",
+  "radroots_runtime_contract_v1/std",
+  "radroots_trade/std",
+]
+serde = [
+  "dep:serde",
+  "radroots_event/serde",
+  "radroots_runtime_contract_v1/serde",
+  "radroots_trade/serde",
+]
 serde_json = [
   "dep:serde_json",
   "serde",
@@ -131,6 +141,7 @@ radroots_transport_publish_protocol = { workspace = true, optional = true, defau
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
+radroots_runtime_contract_v1 = { workspace = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
