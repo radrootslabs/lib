@@ -19,10 +19,10 @@ pub fn workspace_root() -> Result<PathBuf, String> {
 
 #[allow(dead_code)]
 pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, String> {
-    if let Ok(existing) = fs::read_to_string(path) {
-        if existing == contents {
-            return Ok(false);
-        }
+    if let Ok(existing) = fs::read_to_string(path)
+        && existing == contents
+    {
+        return Ok(false);
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -34,10 +34,10 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, String> {
 }
 
 pub fn write_bytes_if_changed(path: &Path, contents: &[u8]) -> Result<bool, String> {
-    if let Ok(existing) = fs::read(path) {
-        if existing == contents {
-            return Ok(false);
-        }
+    if let Ok(existing) = fs::read(path)
+        && existing == contents
+    {
+        return Ok(false);
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)

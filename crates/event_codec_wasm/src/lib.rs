@@ -1249,9 +1249,11 @@ mod tests {
         })
     }
 
+    type BindingEncoder = fn(&str) -> Result<String, RadrootsJsValue>;
+
     #[test]
     fn bindings_reject_invalid_json() {
-        let bindings: [fn(&str) -> Result<String, RadrootsJsValue>; 46] = [
+        let bindings: [BindingEncoder; 46] = [
             listing_tags,
             listing_tags_full,
             post_tags,

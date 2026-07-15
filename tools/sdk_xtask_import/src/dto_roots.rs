@@ -665,8 +665,6 @@ mod tests {
         "RadrootsSocialMediaMetadata",
         "RadrootsSocialMediaThumbnail",
         "RadrootsSocialTarget",
-        "RadrootsTradeListingValidateRequest",
-        "RadrootsTradeListingValidateResult",
         "RadrootsTradeValidationListingError",
         "RadrootsVerifiedSignedEventDto",
         "RadrootsVerifiedSignedEventVerificationStateDto",

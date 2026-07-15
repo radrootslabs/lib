@@ -387,12 +387,7 @@ fn check_package_source_metadata(root: &Path) -> Result<(), String> {
         let index_path = package_dir.join("src/index.ts");
         let package_json =
             check_package_json(&package_json_path, spec.package_name, spec.package_dir)?;
-        check_package_distribution_metadata(
-            &root,
-            &package_dir,
-            &package_json_path,
-            &package_json,
-        )?;
+        check_package_distribution_metadata(root, &package_dir, &package_json_path, &package_json)?;
         if !index_path.is_file() {
             return Err(format!("missing package index: {}", index_path.display()));
         }
@@ -2594,8 +2589,8 @@ transport-reticulum-preview = []
     }
 
     fn write_distribution_metadata(
-        root: &PathBuf,
-        package_dir: &PathBuf,
+        root: &Path,
+        package_dir: &Path,
         package_name: &str,
         description: &str,
     ) {

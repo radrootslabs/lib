@@ -423,7 +423,7 @@ mod tests {
         let _guard = native_test_lock().lock().expect("native test lock");
         reset_native_state();
 
-        let executor = WasmSqlExecutor::default();
+        let executor = WasmSqlExecutor;
         push_exec_result(Ok(json!({"changes": 2, "lastInsertRowid": 99})));
         let outcome = executor
             .exec("insert into listing values (?)", r#"["bin-1"]"#)

@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -97,13 +97,13 @@ fn report_json(filename: &str, file_metrics: Metrics, totals: Metrics) -> String
     )
 }
 
-fn write_report(root: &PathBuf, raw: &str) -> PathBuf {
+fn write_report(root: &Path, raw: &str) -> PathBuf {
     let report_path = root.join("summary.json");
     fs::write(&report_path, raw).expect("write report");
     report_path
 }
 
-fn scope_file(root: &PathBuf) -> String {
+fn scope_file(root: &Path) -> String {
     root.join("tools/xtask/src/coverage_policy.rs")
         .display()
         .to_string()

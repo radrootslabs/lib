@@ -95,10 +95,7 @@ fn output(command: &str, args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        return Err(format!(
-            "{}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
