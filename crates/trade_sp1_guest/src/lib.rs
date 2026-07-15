@@ -52,6 +52,8 @@ pub struct RadrootsSp1TradeProofPublicValues {
     pub order_id_hash: Option<String>,
     pub root_event_id: Option<String>,
     pub target_event_id: Option<String>,
+    pub validator_set_addr: Option<String>,
+    pub validator_set_event_id: Option<String>,
     pub previous_state_root: String,
     pub new_state_root: String,
     pub transition: Option<RadrootsSp1TradeProofTransitionKind>,
@@ -155,6 +157,8 @@ pub struct RadrootsSp1TradeOrderAcceptanceWitness {
     pub listing_event_id: String,
     pub request_event_id: String,
     pub decision_event_id: String,
+    pub validator_set_addr: String,
+    pub validator_set_event_id: String,
     pub event_evidence: Vec<RadrootsSp1TradeCanonicalEventEvidence>,
     pub request: RadrootsSp1TradeOrderRequestWitness,
     pub decision: RadrootsSp1TradeOrderDecisionEventWitness,
@@ -291,6 +295,8 @@ pub fn reduce_order_acceptance_public_values(
         )),
         root_event_id: Some(witness.request_event_id.clone()),
         target_event_id: Some(witness.decision_event_id.clone()),
+        validator_set_addr: Some(witness.validator_set_addr.clone()),
+        validator_set_event_id: Some(witness.validator_set_event_id.clone()),
         previous_state_root,
         new_state_root,
         transition: Some(RadrootsSp1TradeProofTransitionKind::OrderAccepted),
@@ -355,6 +361,8 @@ fn validate_witness_header(
     validate_event_id(&witness.listing_event_id, "listing_event_id")?;
     validate_event_id(&witness.request_event_id, "request_event_id")?;
     validate_event_id(&witness.decision_event_id, "decision_event_id")?;
+    validate_addressable_coordinate(&witness.validator_set_addr, "validator_set_addr")?;
+    validate_event_id(&witness.validator_set_event_id, "validator_set_event_id")?;
     validate_required_str(&witness.reducer_program_hash, "reducer_program_hash")?;
     validate_hash32(&witness.reducer_program_hash, "reducer_program_hash")?;
     if witness.reducer_program_hash != RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH {
@@ -673,6 +681,16 @@ fn validate_public_values(
     if let Some(event_id) = &public_values.target_event_id {
         validate_event_id(event_id, "target_event_id")?;
     }
+    let Some(validator_set_addr) = &public_values.validator_set_addr else {
+        return Err(RadrootsSp1TradeGuestError::EmptyField("validator_set_addr"));
+    };
+    validate_addressable_coordinate(validator_set_addr, "validator_set_addr")?;
+    let Some(validator_set_event_id) = &public_values.validator_set_event_id else {
+        return Err(RadrootsSp1TradeGuestError::EmptyField(
+            "validator_set_event_id",
+        ));
+    };
+    validate_event_id(validator_set_event_id, "validator_set_event_id")?;
     validate_hash32(&public_values.previous_state_root, "previous_state_root")?;
     validate_hash32(&public_values.new_state_root, "new_state_root")?;
     validate_hash32(&public_values.changed_records_root, "changed_records_root")?;
@@ -741,6 +759,32 @@ fn validate_hash32(value: &str, field: &'static str) -> Result<(), RadrootsSp1Tr
 fn validate_event_id(value: &str, field: &'static str) -> Result<(), RadrootsSp1TradeGuestError> {
     if value.len() != 64 || !is_lower_hex(value) {
         return Err(RadrootsSp1TradeGuestError::InvalidEventId(field));
+    }
+    Ok(())
+}
+
+fn validate_addressable_coordinate(
+    value: &str,
+    field: &'static str,
+) -> Result<(), RadrootsSp1TradeGuestError> {
+    validate_required_str(value, field)?;
+    let mut parts = value.split(':');
+    let Some(kind) = parts.next() else {
+        return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
+    };
+    let Some(pubkey) = parts.next() else {
+        return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
+    };
+    let Some(d_tag) = parts.next() else {
+        return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
+    };
+    if parts.next().is_some()
+        || kind.parse::<u32>().is_err()
+        || pubkey.len() != 64
+        || !is_lower_hex(pubkey)
+        || d_tag.trim().is_empty()
+    {
+        return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
     }
     Ok(())
 }
@@ -835,6 +879,11 @@ mod tests {
                 .to_string(),
             decision_event_id: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                 .to_string(),
+            validator_set_addr:
+                "30381:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:018f3d99-7d35-7c0c-8a0f-7f3b645abcde"
+                    .to_string(),
+            validator_set_event_id:
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
             event_evidence: event_evidence(),
             request: request(2),
             decision: decision(2),

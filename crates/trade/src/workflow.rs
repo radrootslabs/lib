@@ -330,7 +330,7 @@ mod tests {
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
         RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
         validation_receipt_public_values_hash_hex, validation_receipt_tags,
-        validation_receipt_tags_from_tags,
+        validation_receipt_tags_from_tags, validator_set_address_from_str,
     };
 
     use super::{
@@ -540,6 +540,13 @@ mod tests {
                 listing_event_id: listing_event_id.into_string(),
                 root_event_id: root_event_id.into_string(),
                 target_event_id: target_event_id.into_string(),
+                validator_set_addr: validator_set_address_from_str(
+                    "30381:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:018f3d99-7d35-7c0c-8a0f-7f3b645abcde",
+                )
+                .expect("validator set address"),
+                validator_set_event_id:
+                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        .to_string(),
                 statement_type: RadrootsValidationReceiptType::TradeTransition,
             },
             version: 1,

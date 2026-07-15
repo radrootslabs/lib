@@ -9,8 +9,11 @@ use alloc::{
 
 use base64::Engine as _;
 use radroots_event::{
-    RadrootsEventEnvelope, ids::RadrootsPublicKey, kinds::KIND_TRADE_VALIDATION_RECEIPT,
-    tags::TAG_D, wire::RadrootsNip01EventWireParts,
+    RadrootsEventEnvelope,
+    ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsPublicKey},
+    kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
+    tags::{TAG_A, TAG_D},
+    wire::RadrootsNip01EventWireParts,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -26,6 +29,31 @@ pub const TAG_VALIDATION_RECEIPT_PROOF_SYSTEM: &str = "proof_system";
 pub const TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH: &str = "public_values_hash";
 pub const TAG_VALIDATION_RECEIPT_RECEIPT_TYPE: &str = "receipt_type";
 pub const TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT: &str = "reducer_output_root";
+pub const TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER: &str = "validator_set";
+pub const VALIDATOR_SET_V1_OPERATOR_CONTACT_MAX_CHARS: usize = 240;
+pub const VALIDATOR_SET_V1_OPERATOR_NAME_MAX_CHARS: usize = 120;
+pub const VALIDATOR_SET_V1_THRESHOLD: u8 = 1;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsValidatorSetV1 {
+    pub set_id: String,
+    pub validator_pubkey: RadrootsPublicKey,
+    pub threshold: u8,
+    pub valid_from: u64,
+    pub valid_until: u64,
+    pub protocol_contract_hash: String,
+    pub operator_name: String,
+    pub operator_contact: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsVerifiedValidatorSetV1 {
+    pub set: RadrootsValidatorSetV1,
+    pub event_id: String,
+    pub address: RadrootsAddressableCoordinate,
+    pub authority_pubkey: RadrootsPublicKey,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -67,28 +95,25 @@ pub enum RadrootsValidationReceiptResult {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RadrootsTradeValidationAuthority {
-    DevDeterministicOnly,
-    TrustedRhiServiceKey,
+    ValidatorSetDeterministic,
     CryptographicProofVerified,
-    TrustedServiceAndProofVerified,
+    ValidatorSetAndProofVerified,
 }
 
 impl RadrootsTradeValidationAuthority {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::DevDeterministicOnly => "dev_deterministic_only",
-            Self::TrustedRhiServiceKey => "trusted_rhi_service_key",
+            Self::ValidatorSetDeterministic => "validator_set_deterministic",
             Self::CryptographicProofVerified => "cryptographic_proof_verified",
-            Self::TrustedServiceAndProofVerified => "trusted_service_and_proof_verified",
+            Self::ValidatorSetAndProofVerified => "validator_set_and_proof_verified",
         }
     }
 
     pub fn from_label(value: &str) -> Option<Self> {
         match value {
-            "dev_deterministic_only" => Some(Self::DevDeterministicOnly),
-            "trusted_rhi_service_key" => Some(Self::TrustedRhiServiceKey),
+            "validator_set_deterministic" => Some(Self::ValidatorSetDeterministic),
             "cryptographic_proof_verified" => Some(Self::CryptographicProofVerified),
-            "trusted_service_and_proof_verified" => Some(Self::TrustedServiceAndProofVerified),
+            "validator_set_and_proof_verified" => Some(Self::ValidatorSetAndProofVerified),
             _ => None,
         }
     }
@@ -97,35 +122,30 @@ impl RadrootsTradeValidationAuthority {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RadrootsTradeCommitmentConfidence {
-    LocalOnly,
     AwaitingValidation,
-    CommittedByTrustedService,
+    CommittedByValidatorSet,
     CommittedByCryptographicProof,
-    CommittedByTrustedServiceAndProof,
+    CommittedByValidatorSetAndProof,
     Invalid,
 }
 
 impl RadrootsTradeCommitmentConfidence {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::LocalOnly => "local_only",
             Self::AwaitingValidation => "awaiting_validation",
-            Self::CommittedByTrustedService => "committed_by_trusted_service",
+            Self::CommittedByValidatorSet => "committed_by_validator_set",
             Self::CommittedByCryptographicProof => "committed_by_cryptographic_proof",
-            Self::CommittedByTrustedServiceAndProof => "committed_by_trusted_service_and_proof",
+            Self::CommittedByValidatorSetAndProof => "committed_by_validator_set_and_proof",
             Self::Invalid => "invalid",
         }
     }
 
     pub fn from_label(value: &str) -> Option<Self> {
         match value {
-            "local_only" => Some(Self::LocalOnly),
             "awaiting_validation" => Some(Self::AwaitingValidation),
-            "committed_by_trusted_service" => Some(Self::CommittedByTrustedService),
+            "committed_by_validator_set" => Some(Self::CommittedByValidatorSet),
             "committed_by_cryptographic_proof" => Some(Self::CommittedByCryptographicProof),
-            "committed_by_trusted_service_and_proof" => {
-                Some(Self::CommittedByTrustedServiceAndProof)
-            }
+            "committed_by_validator_set_and_proof" => Some(Self::CommittedByValidatorSetAndProof),
             "invalid" => Some(Self::Invalid),
             _ => None,
         }
@@ -135,8 +155,9 @@ impl RadrootsTradeCommitmentConfidence {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RadrootsTradeValidationTrustPolicy {
-    pub trusted_rhi_pubkeys: Vec<RadrootsPublicKey>,
-    pub allow_deterministic_none: bool,
+    pub validator_set: Option<RadrootsValidatorSetV1>,
+    pub validator_set_addr: Option<RadrootsAddressableCoordinate>,
+    pub validator_set_event_id: Option<String>,
     pub require_cryptographic_proof: bool,
 }
 
@@ -149,28 +170,33 @@ impl Default for RadrootsTradeValidationTrustPolicy {
 impl RadrootsTradeValidationTrustPolicy {
     pub fn production() -> Self {
         Self {
-            trusted_rhi_pubkeys: Vec::new(),
-            allow_deterministic_none: false,
-            require_cryptographic_proof: true,
-        }
-    }
-
-    pub fn explicit_dev_test() -> Self {
-        Self {
-            trusted_rhi_pubkeys: Vec::new(),
-            allow_deterministic_none: true,
+            validator_set: None,
+            validator_set_addr: None,
+            validator_set_event_id: None,
             require_cryptographic_proof: false,
         }
     }
 
-    pub fn with_trusted_rhi_pubkeys(mut self, pubkeys: Vec<RadrootsPublicKey>) -> Self {
-        self.trusted_rhi_pubkeys = pubkeys;
+    pub fn explicit_dev_test() -> Self {
+        Self::production()
+    }
+
+    pub fn with_validator_set(
+        mut self,
+        validator_set: RadrootsValidatorSetV1,
+        validator_set_addr: RadrootsAddressableCoordinate,
+        validator_set_event_id: impl Into<String>,
+    ) -> Self {
+        self.validator_set = Some(validator_set);
+        self.validator_set_addr = Some(validator_set_addr);
+        self.validator_set_event_id = Some(validator_set_event_id.into());
         self
     }
 
-    pub fn with_allow_deterministic_none(mut self, allow_deterministic_none: bool) -> Self {
-        self.allow_deterministic_none = allow_deterministic_none;
-        self
+    pub fn has_validator_set(&self) -> bool {
+        self.validator_set.is_some()
+            && self.validator_set_addr.is_some()
+            && self.validator_set_event_id.is_some()
     }
 
     pub fn with_require_cryptographic_proof(mut self, require_cryptographic_proof: bool) -> Self {
@@ -178,14 +204,14 @@ impl RadrootsTradeValidationTrustPolicy {
         self
     }
 
-    pub fn trusts_rhi_pubkey(&self, pubkey: &RadrootsPublicKey) -> bool {
-        self.trusted_rhi_pubkeys
-            .iter()
-            .any(|trusted| trusted == pubkey)
+    pub fn trusts_validator_pubkey(&self, pubkey: &RadrootsPublicKey) -> bool {
+        self.validator_set
+            .as_ref()
+            .is_some_and(|validator_set| validator_set.validator_pubkey == *pubkey)
     }
 
-    pub fn trusted_rhi_pubkey_count(&self) -> usize {
-        self.trusted_rhi_pubkeys.len()
+    pub fn validator_count(&self) -> usize {
+        usize::from(self.validator_set.is_some())
     }
 }
 
@@ -194,7 +220,7 @@ impl RadrootsTradeValidationTrustPolicy {
 pub enum RadrootsTradeValidationTrustState {
     Pending,
     Untrusted,
-    TrustedLocal,
+    ValidatorSetCommitted,
     CryptographicCommitted,
     Invalid,
 }
@@ -204,7 +230,7 @@ impl RadrootsTradeValidationTrustState {
         match self {
             Self::Pending => "pending",
             Self::Untrusted => "untrusted",
-            Self::TrustedLocal => "trusted_local",
+            Self::ValidatorSetCommitted => "validator_set_committed",
             Self::CryptographicCommitted => "cryptographic_committed",
             Self::Invalid => "invalid",
         }
@@ -214,7 +240,7 @@ impl RadrootsTradeValidationTrustState {
         match value {
             "pending" => Some(Self::Pending),
             "untrusted" => Some(Self::Untrusted),
-            "trusted_local" => Some(Self::TrustedLocal),
+            "validator_set_committed" => Some(Self::ValidatorSetCommitted),
             "cryptographic_committed" => Some(Self::CryptographicCommitted),
             "invalid" => Some(Self::Invalid),
             _ => None,
@@ -271,6 +297,8 @@ pub struct RadrootsValidationReceiptStatement {
     pub listing_event_id: String,
     pub root_event_id: String,
     pub target_event_id: String,
+    pub validator_set_addr: RadrootsAddressableCoordinate,
+    pub validator_set_event_id: String,
     #[serde(rename = "type")]
     pub statement_type: RadrootsValidationReceiptType,
 }
@@ -314,6 +342,8 @@ pub struct RadrootsValidationReceiptTags {
     pub reducer_output_root: String,
     pub root_event_id: String,
     pub target_event_id: String,
+    pub validator_set_addr: RadrootsAddressableCoordinate,
+    pub validator_set_event_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -327,6 +357,8 @@ pub struct RadrootsValidationReceiptExpectedBinding<'a> {
     pub reducer_output_root: Option<&'a str>,
     pub root_event_id: Option<&'a str>,
     pub target_event_id: Option<&'a str>,
+    pub validator_set_addr: Option<&'a str>,
+    pub validator_set_event_id: Option<&'a str>,
     pub verifying_key_hash: Option<&'a str>,
 }
 
@@ -360,6 +392,136 @@ pub enum RadrootsValidationReceiptError {
     ExpectedBindingMismatch(&'static str),
 }
 
+impl RadrootsValidatorSetV1 {
+    pub fn validate(&self) -> Result<(), RadrootsValidationReceiptError> {
+        validate_uuidv7(&self.set_id, "validator_set.set_id")?;
+        if self.threshold != VALIDATOR_SET_V1_THRESHOLD {
+            return Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.threshold",
+            ));
+        }
+        if self.valid_from >= self.valid_until {
+            return Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.valid_until",
+            ));
+        }
+        validate_hash32(
+            &self.protocol_contract_hash,
+            "validator_set.protocol_contract_hash",
+        )?;
+        validate_bounded_text(
+            &self.operator_name,
+            VALIDATOR_SET_V1_OPERATOR_NAME_MAX_CHARS,
+            "validator_set.operator_name",
+        )?;
+        if let Some(operator_contact) = self.operator_contact.as_ref() {
+            validate_bounded_text(
+                operator_contact,
+                VALIDATOR_SET_V1_OPERATOR_CONTACT_MAX_CHARS,
+                "validator_set.operator_contact",
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub fn validator_set_address(
+    authority_pubkey: &RadrootsPublicKey,
+    set_id: &str,
+) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
+    validate_uuidv7(set_id, "validator_set.set_id")?;
+    RadrootsAddressableCoordinate::parse(format!(
+        "{KIND_VALIDATOR_SET}:{authority_pubkey}:{set_id}"
+    ))
+    .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))
+}
+
+pub fn validator_set_address_from_str(
+    value: impl AsRef<str>,
+) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
+    let address = RadrootsAddressableCoordinate::parse(value.as_ref())
+        .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))?;
+    validate_validator_set_address(&address, "validator_set.address")?;
+    Ok(address)
+}
+
+pub fn validator_set_canonical_content(
+    validator_set: &RadrootsValidatorSetV1,
+) -> Result<String, RadrootsValidationReceiptError> {
+    validator_set.validate()?;
+    serde_json::to_string(validator_set).map_err(|_| RadrootsValidationReceiptError::InvalidJson)
+}
+
+pub fn validator_set_content_from_str(
+    content: &str,
+) -> Result<RadrootsValidatorSetV1, RadrootsValidationReceiptError> {
+    let validator_set: RadrootsValidatorSetV1 =
+        serde_json::from_str(content).map_err(|_| RadrootsValidationReceiptError::InvalidJson)?;
+    validator_set.validate()?;
+    let canonical = validator_set_canonical_content(&validator_set)?;
+    if canonical != content {
+        return Err(RadrootsValidationReceiptError::NonCanonicalJson);
+    }
+    Ok(validator_set)
+}
+
+pub fn validator_set_event_build(
+    validator_set: &RadrootsValidatorSetV1,
+) -> Result<RadrootsNip01EventWireParts, RadrootsValidationReceiptError> {
+    Ok(RadrootsNip01EventWireParts {
+        kind: KIND_VALIDATOR_SET,
+        content: validator_set_canonical_content(validator_set)?,
+        tags: vec![vec![TAG_D.to_string(), validator_set.set_id.clone()]],
+    })
+}
+
+pub fn validator_set_from_event(
+    event: &RadrootsEventEnvelope,
+) -> Result<RadrootsVerifiedValidatorSetV1, RadrootsValidationReceiptError> {
+    verify_validator_set_event(event, None)
+}
+
+pub fn verify_validator_set_event(
+    event: &RadrootsEventEnvelope,
+    expected_author: Option<&RadrootsPublicKey>,
+) -> Result<RadrootsVerifiedValidatorSetV1, RadrootsValidationReceiptError> {
+    if event.kind_u32() != KIND_VALIDATOR_SET {
+        return Err(RadrootsValidationReceiptError::InvalidKind {
+            expected: KIND_VALIDATOR_SET,
+            got: event.kind_u32(),
+        });
+    }
+    if let Some(expected_author) = expected_author
+        && event.author() != expected_author
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "validator_set.author",
+        ));
+    }
+    let validator_set = validator_set_content_from_str(event.content())?;
+    let tags = event.tags_as_vec();
+    let d_tag = required_tag_value(&tags, TAG_D)?;
+    if d_tag != validator_set.set_id {
+        return Err(RadrootsValidationReceiptError::TagMismatch(
+            "validator_set.set_id",
+        ));
+    }
+    let address = validator_set_address(event.author(), &validator_set.set_id)?;
+    let parts = RadrootsAddressableCoordinateParts::parse(address.as_str())
+        .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))?;
+    if parts.kind != KIND_VALIDATOR_SET || parts.pubkey != *event.author() {
+        return Err(RadrootsValidationReceiptError::InvalidField(
+            "validator_set.address",
+        ));
+    }
+    Ok(RadrootsVerifiedValidatorSetV1 {
+        set: validator_set,
+        event_id: event.id_str().to_owned(),
+        address,
+        authority_pubkey: event.author().clone(),
+    })
+}
+
 impl RadrootsTradeValidationReceipt {
     pub fn validate(&self) -> Result<(), RadrootsValidationReceiptError> {
         if self.version != VALIDATION_RECEIPT_VERSION {
@@ -385,6 +547,14 @@ impl RadrootsTradeValidationReceipt {
         )?;
         validate_event_id(&self.statement.root_event_id, "statement.root_event_id")?;
         validate_event_id(&self.statement.target_event_id, "statement.target_event_id")?;
+        validate_event_id(
+            &self.statement.validator_set_event_id,
+            "statement.validator_set_event_id",
+        )?;
+        validate_validator_set_address(
+            &self.statement.validator_set_addr,
+            "statement.validator_set_addr",
+        )?;
         validate_result_error_bitmap(self.result, &self.error_bitmap)?;
         self.proof.validate()?;
         Ok(())
@@ -494,6 +664,19 @@ pub fn validation_receipt_tags(
             "target".to_string(),
         ],
         vec![
+            TAG_A.to_string(),
+            receipt.statement.validator_set_addr.as_str().to_owned(),
+            String::new(),
+            TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER.to_string(),
+        ],
+        vec![
+            "e".to_string(),
+            receipt.statement.validator_set_event_id.clone(),
+            String::new(),
+            String::new(),
+            TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER.to_string(),
+        ],
+        vec![
             TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT.to_string(),
             receipt.event_set_root.clone(),
         ],
@@ -523,6 +706,10 @@ pub fn validation_receipt_tags_from_tags(
     let listing_event_id = required_event_marker(tags, "listing")?;
     let root_event_id = required_event_marker(tags, "root")?;
     let target_event_id = required_event_marker(tags, "target")?;
+    let validator_set_addr =
+        required_address_marker(tags, TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER)?;
+    let validator_set_event_id =
+        required_event_marker(tags, TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER)?;
     let event_set_root = required_tag_value(tags, TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT)?;
     let reducer_output_root = required_tag_value(tags, TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT)?;
     let public_values_hash = required_tag_value(tags, TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH)?;
@@ -539,6 +726,8 @@ pub fn validation_receipt_tags_from_tags(
     validate_event_id(&listing_event_id, "tags.e.listing")?;
     validate_event_id(&root_event_id, "tags.e.root")?;
     validate_event_id(&target_event_id, "tags.e.target")?;
+    validate_event_id(&validator_set_event_id, "tags.e.validator_set")?;
+    validate_validator_set_address(&validator_set_addr, "tags.a.validator_set")?;
     validate_hash32(&event_set_root, TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT)?;
     validate_hash32(
         &reducer_output_root,
@@ -559,6 +748,8 @@ pub fn validation_receipt_tags_from_tags(
         reducer_output_root,
         root_event_id,
         target_event_id,
+        validator_set_addr,
+        validator_set_event_id,
     })
 }
 
@@ -605,6 +796,16 @@ pub fn verify_validation_receipt_event(
     if tags.target_event_id != receipt.statement.target_event_id {
         return Err(RadrootsValidationReceiptError::TagMismatch(
             "target_event_id",
+        ));
+    }
+    if tags.validator_set_addr != receipt.statement.validator_set_addr {
+        return Err(RadrootsValidationReceiptError::TagMismatch(
+            "validator_set_addr",
+        ));
+    }
+    if tags.validator_set_event_id != receipt.statement.validator_set_event_id {
+        return Err(RadrootsValidationReceiptError::TagMismatch(
+            "validator_set_event_id",
         ));
     }
     if tags.event_set_root != receipt.event_set_root {
@@ -665,6 +866,20 @@ fn validate_expected_binding(
     {
         return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
             "target_event_id",
+        ));
+    }
+    if let Some(validator_set_addr) = expected.validator_set_addr
+        && tags.validator_set_addr.as_str() != validator_set_addr
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "validator_set_addr",
+        ));
+    }
+    if let Some(validator_set_event_id) = expected.validator_set_event_id
+        && tags.validator_set_event_id != validator_set_event_id
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "validator_set_event_id",
         ));
     }
     if let Some(event_set_root) = expected.event_set_root
@@ -751,6 +966,28 @@ fn required_event_marker(
     Ok(value.clone())
 }
 
+fn required_address_marker(
+    tags: &[Vec<String>],
+    marker: &'static str,
+) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
+    let mut matches = tags.iter().filter(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_A)
+            && tag.get(3).map(|value| value.as_str()) == Some(marker)
+    });
+    let tag = matches
+        .next()
+        .ok_or(RadrootsValidationReceiptError::MissingTag(marker))?;
+    if matches.next().is_some() {
+        return Err(RadrootsValidationReceiptError::InvalidTag(marker));
+    }
+    let value = tag
+        .get(1)
+        .ok_or(RadrootsValidationReceiptError::InvalidTag(marker))?;
+    validate_required_str(value, marker)?;
+    RadrootsAddressableCoordinate::parse(value)
+        .map_err(|_| RadrootsValidationReceiptError::InvalidTag(marker))
+}
+
 fn validate_required_option_hash32(
     value: &Option<String>,
     field: &'static str,
@@ -769,6 +1006,54 @@ fn validate_required_str(
         return Err(RadrootsValidationReceiptError::EmptyField(field));
     }
     Ok(())
+}
+
+fn validate_bounded_text(
+    value: &str,
+    max_chars: usize,
+    field: &'static str,
+) -> Result<(), RadrootsValidationReceiptError> {
+    validate_required_str(value, field)?;
+    if value.chars().count() > max_chars {
+        return Err(RadrootsValidationReceiptError::InvalidField(field));
+    }
+    Ok(())
+}
+
+fn validate_uuidv7(value: &str, field: &'static str) -> Result<(), RadrootsValidationReceiptError> {
+    validate_required_str(value, field)?;
+    let bytes = value.as_bytes();
+    if bytes.len() != 36
+        || bytes[8] != b'-'
+        || bytes[13] != b'-'
+        || bytes[18] != b'-'
+        || bytes[23] != b'-'
+        || bytes[14] != b'7'
+        || !matches!(bytes[19], b'8'..=b'9' | b'a'..=b'b')
+    {
+        return Err(RadrootsValidationReceiptError::InvalidField(field));
+    }
+    for (index, byte) in bytes.iter().enumerate() {
+        if matches!(index, 8 | 13 | 18 | 23) {
+            continue;
+        }
+        if !byte.is_ascii_digit() && !(b'a'..=b'f').contains(byte) {
+            return Err(RadrootsValidationReceiptError::InvalidField(field));
+        }
+    }
+    Ok(())
+}
+
+fn validate_validator_set_address(
+    value: &RadrootsAddressableCoordinate,
+    field: &'static str,
+) -> Result<(), RadrootsValidationReceiptError> {
+    let parts = RadrootsAddressableCoordinateParts::parse(value.as_str())
+        .map_err(|_| RadrootsValidationReceiptError::InvalidField(field))?;
+    if parts.kind != KIND_VALIDATOR_SET {
+        return Err(RadrootsValidationReceiptError::InvalidField(field));
+    }
+    validate_uuidv7(parts.d_tag.as_str(), field)
 }
 
 fn validate_inline_proof_base64(value: &str) -> Result<(), RadrootsValidationReceiptError> {
@@ -854,18 +1139,22 @@ mod tests {
         RadrootsTradeValidationTrustState, RadrootsValidationReceiptError,
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
-        RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
+        RadrootsValidationReceiptStatement, RadrootsValidationReceiptType, RadrootsValidatorSetV1,
         TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT, TAG_VALIDATION_RECEIPT_PROOF_SYSTEM,
         TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH, TAG_VALIDATION_RECEIPT_RECEIPT_TYPE,
-        TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT, validation_receipt_canonical_content,
-        validation_receipt_content_from_str, validation_receipt_event_build,
-        validation_receipt_from_event, validation_receipt_public_values_hash_hex,
-        validation_receipt_tags, validation_receipt_tags_from_tags,
-        verify_validation_receipt_event,
+        TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT, TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER,
+        validation_receipt_canonical_content, validation_receipt_content_from_str,
+        validation_receipt_event_build, validation_receipt_from_event,
+        validation_receipt_public_values_hash_hex, validation_receipt_tags,
+        validation_receipt_tags_from_tags, validator_set_address, validator_set_canonical_content,
+        validator_set_event_build, validator_set_from_event, verify_validation_receipt_event,
+        verify_validator_set_event,
     };
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, ids::RadrootsPublicKey,
-        kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D,
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
+        ids::RadrootsPublicKey,
+        kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
+        tags::TAG_D,
     };
 
     fn hash32(c: char) -> String {
@@ -874,6 +1163,36 @@ mod tests {
 
     fn event_id(c: char) -> String {
         c.to_string().repeat(64)
+    }
+
+    fn validator_set_id() -> String {
+        "018f3d99-7d35-7c0c-8a0f-7f3b645abcde".to_string()
+    }
+
+    fn validator_set_author() -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(event_id('d')).expect("validator set author")
+    }
+
+    fn validator_set_pubkey() -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(event_id('e')).expect("validator pubkey")
+    }
+
+    fn validator_set_addr() -> radroots_event::ids::RadrootsAddressableCoordinate {
+        validator_set_address(&validator_set_author(), &validator_set_id())
+            .expect("validator set address")
+    }
+
+    fn sample_validator_set() -> RadrootsValidatorSetV1 {
+        RadrootsValidatorSetV1 {
+            set_id: validator_set_id(),
+            validator_pubkey: validator_set_pubkey(),
+            threshold: 1,
+            valid_from: 1_700_000_000,
+            valid_until: 1_800_000_000,
+            protocol_contract_hash: hash32('7'),
+            operator_name: "Radroots validation operator".to_string(),
+            operator_contact: Some("validator@example.invalid".to_string()),
+        }
     }
 
     fn sample_validation_receipt() -> RadrootsTradeValidationReceipt {
@@ -901,6 +1220,8 @@ mod tests {
                 listing_event_id: event_id('0'),
                 root_event_id: event_id('1'),
                 target_event_id: event_id('2'),
+                validator_set_addr: validator_set_addr(),
+                validator_set_event_id: event_id('8'),
                 statement_type: RadrootsValidationReceiptType::TradeTransition,
             },
             version: 1,
@@ -1050,20 +1371,68 @@ mod tests {
 
     #[test]
     fn validation_trust_policy_builders_preserve_explicit_settings() {
-        let trusted = RadrootsPublicKey::parse(event_id('a')).unwrap();
+        let trusted = validator_set_pubkey();
         let other = RadrootsPublicKey::parse(event_id('b')).unwrap();
         let policy = RadrootsTradeValidationTrustPolicy::production()
-            .with_trusted_rhi_pubkeys(vec![trusted.clone()])
-            .with_allow_deterministic_none(true)
+            .with_validator_set(sample_validator_set(), validator_set_addr(), event_id('8'))
             .with_require_cryptographic_proof(false);
 
-        assert_eq!(policy.trusted_rhi_pubkey_count(), 1);
-        assert!(policy.trusts_rhi_pubkey(&trusted));
-        assert!(!policy.trusts_rhi_pubkey(&other));
-        assert!(policy.allow_deterministic_none);
+        assert_eq!(policy.validator_count(), 1);
+        assert!(policy.has_validator_set());
+        assert!(policy.trusts_validator_pubkey(&trusted));
+        assert!(!policy.trusts_validator_pubkey(&other));
         assert!(!policy.require_cryptographic_proof);
-        assert!(RadrootsTradeValidationTrustPolicy::default().require_cryptographic_proof);
-        assert!(RadrootsTradeValidationTrustPolicy::explicit_dev_test().allow_deterministic_none);
+        assert!(!RadrootsTradeValidationTrustPolicy::default().require_cryptographic_proof);
+        assert!(
+            !RadrootsTradeValidationTrustPolicy::explicit_dev_test().require_cryptographic_proof
+        );
+    }
+
+    #[test]
+    fn validator_set_round_trips_canonical_payload_and_address() {
+        let validator_set = sample_validator_set();
+        let content =
+            validator_set_canonical_content(&validator_set).expect("validator set content");
+        assert_eq!(
+            content,
+            format!(
+                "{{\"set_id\":\"{}\",\"validator_pubkey\":\"{}\",\"threshold\":1,\"valid_from\":1700000000,\"valid_until\":1800000000,\"protocol_contract_hash\":\"{}\",\"operator_name\":\"Radroots validation operator\",\"operator_contact\":\"validator@example.invalid\"}}",
+                validator_set_id(),
+                validator_set_pubkey(),
+                hash32('7'),
+            )
+        );
+        let parts = validator_set_event_build(&validator_set).expect("validator set parts");
+        assert_eq!(parts.kind, KIND_VALIDATOR_SET);
+        assert_eq!(
+            parts.tags,
+            vec![vec![TAG_D.to_string(), validator_set_id()]]
+        );
+
+        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: event_id('7'),
+            author: validator_set_author().as_str().to_string(),
+            created_at: 1_700_000_001,
+            kind: parts.kind,
+            tags: parts.tags,
+            content: parts.content,
+            sig: "f".repeat(128),
+        })
+        .expect("validator set event");
+
+        let verified = validator_set_from_event(&event).expect("verified validator set");
+        assert_eq!(verified.set, validator_set);
+        assert_eq!(verified.event_id, event_id('7'));
+        assert_eq!(verified.address, validator_set_addr());
+        assert_eq!(verified.authority_pubkey, validator_set_author());
+        verify_validator_set_event(&event, Some(&validator_set_author()))
+            .expect("expected authority");
+        assert_eq!(
+            verify_validator_set_event(&event, Some(&validator_set_pubkey())),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "validator_set.author"
+            ))
+        );
     }
 
     #[test]
@@ -1366,8 +1735,26 @@ mod tests {
             ))
         );
 
+        let mut invalid_validator_set_addr = tags.clone();
+        invalid_validator_set_addr[4][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_validator_set_addr),
+            Err(RadrootsValidationReceiptError::InvalidTag(
+                TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER
+            ))
+        );
+
+        let mut invalid_validator_set_event = tags.clone();
+        invalid_validator_set_event[5][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_validator_set_event),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "tags.e.validator_set"
+            ))
+        );
+
         let mut invalid_event_set = tags.clone();
-        invalid_event_set[4][1] = "bad".to_string();
+        invalid_event_set[6][1] = "bad".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_event_set),
             Err(RadrootsValidationReceiptError::InvalidField(
@@ -1376,7 +1763,7 @@ mod tests {
         );
 
         let mut invalid_reducer = tags.clone();
-        invalid_reducer[5][1] = "bad".to_string();
+        invalid_reducer[7][1] = "bad".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_reducer),
             Err(RadrootsValidationReceiptError::InvalidField(
@@ -1385,7 +1772,7 @@ mod tests {
         );
 
         let mut invalid_public_values = tags.clone();
-        invalid_public_values[6][1] = "bad".to_string();
+        invalid_public_values[8][1] = "bad".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_public_values),
             Err(RadrootsValidationReceiptError::InvalidField(
@@ -1394,7 +1781,7 @@ mod tests {
         );
 
         let mut invalid_proof_system = tags.clone();
-        invalid_proof_system[7][1] = "sp1_unknown".to_string();
+        invalid_proof_system[9][1] = "sp1_unknown".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_proof_system),
             Err(RadrootsValidationReceiptError::InvalidTag(
@@ -1403,7 +1790,7 @@ mod tests {
         );
 
         let mut invalid_receipt_type = tags.clone();
-        invalid_receipt_type[8][1] = "unknown".to_string();
+        invalid_receipt_type[10][1] = "unknown".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_receipt_type),
             Err(RadrootsValidationReceiptError::InvalidTag(
@@ -1493,22 +1880,27 @@ mod tests {
         );
 
         let mut tags = sample_validation_receipt_event().tags_as_vec();
-        tags[4][1] = hash32('d');
+        tags[4][1] = format!(
+            "{}:{}:{}",
+            KIND_VALIDATOR_SET,
+            event_id('a'),
+            validator_set_id()
+        );
         let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
-                "event_set_root"
+                "validator_set_addr"
             ))
         );
 
         let mut tags = sample_validation_receipt_event().tags_as_vec();
-        tags[5][1] = hash32('d');
+        tags[5][1] = event_id('3');
         let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
-                "reducer_output_root"
+                "validator_set_event_id"
             ))
         );
 
@@ -1518,12 +1910,32 @@ mod tests {
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::TagMismatch(
+                "event_set_root"
+            ))
+        );
+
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[7][1] = hash32('d');
+        let event = validation_receipt_event_with_tags(tags);
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "reducer_output_root"
+            ))
+        );
+
+        let mut tags = sample_validation_receipt_event().tags_as_vec();
+        tags[8][1] = hash32('d');
+        let event = validation_receipt_event_with_tags(tags);
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
                 "public_values_hash"
             ))
         );
 
         let mut tags = sample_validation_receipt_event().tags_as_vec();
-        tags[7][1] = "sp1_core".to_string();
+        tags[9][1] = "sp1_core".to_string();
         let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
@@ -1531,7 +1943,7 @@ mod tests {
         );
 
         let mut tags = sample_validation_receipt_event().tags_as_vec();
-        tags[8][1] = "listing_validation".to_string();
+        tags[10][1] = "listing_validation".to_string();
         let event = validation_receipt_event_with_tags(tags);
         assert_eq!(
             validation_receipt_from_event(&event),
@@ -1542,6 +1954,8 @@ mod tests {
     #[test]
     fn validation_receipt_expected_binding_checks_all_supported_fields() {
         let event = sample_validation_receipt_event();
+        let validator_set_addr = validator_set_addr();
+        let validator_set_addr_raw = validator_set_addr.as_str().to_string();
         verify_validation_receipt_event(
             &event,
             RadrootsValidationReceiptExpectedBinding {
@@ -1555,11 +1969,19 @@ mod tests {
                 reducer_output_root: Some(&hash32('4')),
                 root_event_id: Some(&event_id('1')),
                 target_event_id: Some(&event_id('2')),
+                validator_set_addr: Some(validator_set_addr_raw.as_str()),
+                validator_set_event_id: Some(&event_id('8')),
                 ..RadrootsValidationReceiptExpectedBinding::default()
             },
         )
         .expect("matching expected binding");
 
+        let wrong_validator_set_addr = format!(
+            "{}:{}:{}",
+            KIND_VALIDATOR_SET,
+            event_id('a'),
+            validator_set_id()
+        );
         assert_eq!(
             verify_validation_receipt_event(
                 &event,
@@ -1594,6 +2016,30 @@ mod tests {
             ),
             Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
                 "target_event_id"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    validator_set_addr: Some(wrong_validator_set_addr.as_str()),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "validator_set_addr"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    validator_set_event_id: Some(&event_id('3')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "validator_set_event_id"
             ))
         );
         assert_eq!(
@@ -1665,7 +2111,7 @@ mod tests {
         assert_eq!(
             content,
             format!(
-                "{{\"changed_records_root\":\"{}\",\"domain\":\"radroots.receipt\",\"error_bitmap\":\"0x00000000000000000000000000000000\",\"event_set_root\":\"{}\",\"new_state_root\":\"{}\",\"previous_state_root\":\"{}\",\"proof\":{{\"inline_proof_base64\":null,\"mode\":null,\"program_hash\":null,\"proof_reference\":null,\"system\":\"none\",\"verifying_key_hash\":null}},\"public_values_hash\":\"{}\",\"receipt_type\":\"trade_transition\",\"result\":\"valid\",\"statement\":{{\"listing_event_id\":\"{}\",\"root_event_id\":\"{}\",\"target_event_id\":\"{}\",\"type\":\"trade_transition\"}},\"version\":1}}",
+                "{{\"changed_records_root\":\"{}\",\"domain\":\"radroots.receipt\",\"error_bitmap\":\"0x00000000000000000000000000000000\",\"event_set_root\":\"{}\",\"new_state_root\":\"{}\",\"previous_state_root\":\"{}\",\"proof\":{{\"inline_proof_base64\":null,\"mode\":null,\"program_hash\":null,\"proof_reference\":null,\"system\":\"none\",\"verifying_key_hash\":null}},\"public_values_hash\":\"{}\",\"receipt_type\":\"trade_transition\",\"result\":\"valid\",\"statement\":{{\"listing_event_id\":\"{}\",\"root_event_id\":\"{}\",\"target_event_id\":\"{}\",\"validator_set_addr\":\"{}\",\"validator_set_event_id\":\"{}\",\"type\":\"trade_transition\"}},\"version\":1}}",
                 hash32('6'),
                 hash32('c'),
                 hash32('4'),
@@ -1674,6 +2120,8 @@ mod tests {
                 event_id('0'),
                 event_id('1'),
                 event_id('2'),
+                validator_set_addr().as_str(),
+                event_id('8'),
             )
         );
         assert_eq!(
@@ -1686,6 +2134,8 @@ mod tests {
         let verified = validation_receipt_from_event(&event).expect("verified receipt");
         assert_eq!(verified.tags.order_id, "order-1");
         assert_eq!(verified.tags.listing_event_id, event_id('0'));
+        assert_eq!(verified.tags.validator_set_addr, validator_set_addr());
+        assert_eq!(verified.tags.validator_set_event_id, event_id('8'));
         assert_eq!(verified.tags.event_set_root, hash32('c'));
         assert_eq!(verified.tags.reducer_output_root, hash32('4'));
         assert_eq!(
@@ -1698,20 +2148,16 @@ mod tests {
     fn validation_authority_contract_uses_stable_snake_case_labels() {
         for (authority, label) in [
             (
-                RadrootsTradeValidationAuthority::DevDeterministicOnly,
-                "dev_deterministic_only",
-            ),
-            (
-                RadrootsTradeValidationAuthority::TrustedRhiServiceKey,
-                "trusted_rhi_service_key",
+                RadrootsTradeValidationAuthority::ValidatorSetDeterministic,
+                "validator_set_deterministic",
             ),
             (
                 RadrootsTradeValidationAuthority::CryptographicProofVerified,
                 "cryptographic_proof_verified",
             ),
             (
-                RadrootsTradeValidationAuthority::TrustedServiceAndProofVerified,
-                "trusted_service_and_proof_verified",
+                RadrootsTradeValidationAuthority::ValidatorSetAndProofVerified,
+                "validator_set_and_proof_verified",
             ),
         ] {
             assert_eq!(authority.as_str(), label);
@@ -1735,22 +2181,21 @@ mod tests {
     #[test]
     fn commitment_confidence_contract_uses_stable_snake_case_labels() {
         for (confidence, label) in [
-            (RadrootsTradeCommitmentConfidence::LocalOnly, "local_only"),
             (
                 RadrootsTradeCommitmentConfidence::AwaitingValidation,
                 "awaiting_validation",
             ),
             (
-                RadrootsTradeCommitmentConfidence::CommittedByTrustedService,
-                "committed_by_trusted_service",
+                RadrootsTradeCommitmentConfidence::CommittedByValidatorSet,
+                "committed_by_validator_set",
             ),
             (
                 RadrootsTradeCommitmentConfidence::CommittedByCryptographicProof,
                 "committed_by_cryptographic_proof",
             ),
             (
-                RadrootsTradeCommitmentConfidence::CommittedByTrustedServiceAndProof,
-                "committed_by_trusted_service_and_proof",
+                RadrootsTradeCommitmentConfidence::CommittedByValidatorSetAndProof,
+                "committed_by_validator_set_and_proof",
             ),
             (RadrootsTradeCommitmentConfidence::Invalid, "invalid"),
         ] {
@@ -1781,8 +2226,8 @@ mod tests {
             (RadrootsTradeValidationTrustState::Pending, "pending"),
             (RadrootsTradeValidationTrustState::Untrusted, "untrusted"),
             (
-                RadrootsTradeValidationTrustState::TrustedLocal,
-                "trusted_local",
+                RadrootsTradeValidationTrustState::ValidatorSetCommitted,
+                "validator_set_committed",
             ),
             (
                 RadrootsTradeValidationTrustState::CryptographicCommitted,
@@ -1814,14 +2259,15 @@ mod tests {
     #[test]
     fn validation_trust_policy_defaults_to_empty_production_trust() {
         let production = RadrootsTradeValidationTrustPolicy::default();
-        assert!(production.trusted_rhi_pubkeys.is_empty());
-        assert!(!production.allow_deterministic_none);
-        assert!(production.require_cryptographic_proof);
-        assert_eq!(production.trusted_rhi_pubkey_count(), 0);
+        assert!(production.validator_set.is_none());
+        assert!(production.validator_set_addr.is_none());
+        assert!(production.validator_set_event_id.is_none());
+        assert!(!production.has_validator_set());
+        assert!(!production.require_cryptographic_proof);
+        assert_eq!(production.validator_count(), 0);
 
         let dev_test = RadrootsTradeValidationTrustPolicy::explicit_dev_test();
-        assert!(dev_test.trusted_rhi_pubkeys.is_empty());
-        assert!(dev_test.allow_deterministic_none);
+        assert!(!dev_test.has_validator_set());
         assert!(!dev_test.require_cryptographic_proof);
     }
 

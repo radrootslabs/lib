@@ -7,6 +7,7 @@ use radroots_trade::validation_receipt::{
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
     RadrootsValidationReceiptStatement, RadrootsValidationReceiptType, VALIDATION_RECEIPT_DOMAIN,
     VALIDATION_RECEIPT_PROOF_REFERENCE_SHA256_PREFIX, VALIDATION_RECEIPT_VERSION,
+    validator_set_address_from_str,
 };
 use radroots_trade_sp1_guest::{
     RadrootsSp1TradeGuestError, RadrootsSp1TradeOrderAcceptanceWitness,
@@ -132,8 +133,6 @@ impl RadrootsSp1TradeResolvedProofArtifact {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RadrootsSp1TradeProverBackend {
-    Disabled,
-    DeterministicNone,
     LocalExecute,
     LocalCpuProve,
     LocalCudaProve,
@@ -143,8 +142,6 @@ pub enum RadrootsSp1TradeProverBackend {
 impl RadrootsSp1TradeProverBackend {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Disabled => "disabled",
-            Self::DeterministicNone => "deterministic_none",
             Self::LocalExecute => "local_execute",
             Self::LocalCpuProve => "local_cpu_prove",
             Self::LocalCudaProve => "local_cuda_prove",
@@ -154,8 +151,6 @@ impl RadrootsSp1TradeProverBackend {
 
     pub fn from_label(value: &str) -> Option<Self> {
         match value {
-            "disabled" => Some(Self::Disabled),
-            "deterministic_none" => Some(Self::DeterministicNone),
             "local_execute" => Some(Self::LocalExecute),
             "local_cpu_prove" => Some(Self::LocalCpuProve),
             "local_cuda_prove" => Some(Self::LocalCudaProve),
@@ -942,6 +937,20 @@ fn verify_validation_receipt_matches_public_values(
             "target_event_id",
         ));
     }
+    if public_values.validator_set_addr.as_deref()
+        != Some(receipt.statement.validator_set_addr.as_str())
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "validator_set_addr",
+        ));
+    }
+    if public_values.validator_set_event_id.as_deref()
+        != Some(receipt.statement.validator_set_event_id.as_str())
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "validator_set_event_id",
+        ));
+    }
     if !receipt_result_matches_public_values(receipt.result, public_values.result) {
         return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
             "result",
@@ -1057,6 +1066,14 @@ pub fn validation_receipt_for_order_acceptance_proof(
     let target_event_id = public_values.target_event_id.clone().ok_or(
         RadrootsSp1TradeHostError::MissingReceiptBinding("target_event_id"),
     )?;
+    let validator_set_addr = public_values.validator_set_addr.clone().ok_or(
+        RadrootsSp1TradeHostError::MissingReceiptBinding("validator_set_addr"),
+    )?;
+    let validator_set_addr = validator_set_address_from_str(validator_set_addr)
+        .map_err(|_| RadrootsSp1TradeHostError::MissingReceiptBinding("validator_set_addr"))?;
+    let validator_set_event_id = public_values.validator_set_event_id.clone().ok_or(
+        RadrootsSp1TradeHostError::MissingReceiptBinding("validator_set_event_id"),
+    )?;
     Ok(RadrootsTradeValidationReceipt {
         changed_records_root: public_values.changed_records_root.clone(),
         domain: VALIDATION_RECEIPT_DOMAIN.to_string(),
@@ -1079,6 +1096,8 @@ pub fn validation_receipt_for_order_acceptance_proof(
             listing_event_id,
             root_event_id,
             target_event_id,
+            validator_set_addr,
+            validator_set_event_id,
             statement_type: RadrootsValidationReceiptType::TradeTransition,
         },
         version: VALIDATION_RECEIPT_VERSION,
@@ -1799,6 +1818,11 @@ mod tests {
                 .to_string(),
             decision_event_id: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                 .to_string(),
+            validator_set_addr:
+                "30381:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:018f3d99-7d35-7c0c-8a0f-7f3b645abcde"
+                    .to_string(),
+            validator_set_event_id:
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
             event_evidence: event_evidence(),
             request: request(2),
             decision: decision(2),
@@ -2082,8 +2106,6 @@ mod tests {
         assert_eq!(RadrootsSp1TradeProofMode::from_label("legacy"), None);
 
         for backend in [
-            super::RadrootsSp1TradeProverBackend::Disabled,
-            super::RadrootsSp1TradeProverBackend::DeterministicNone,
             super::RadrootsSp1TradeProverBackend::LocalExecute,
             super::RadrootsSp1TradeProverBackend::LocalCpuProve,
             super::RadrootsSp1TradeProverBackend::LocalCudaProve,
@@ -2097,6 +2119,14 @@ mod tests {
         }
         assert_eq!(
             super::RadrootsSp1TradeProverBackend::from_label("legacy"),
+            None
+        );
+        assert_eq!(
+            super::RadrootsSp1TradeProverBackend::from_label("disabled"),
+            None
+        );
+        assert_eq!(
+            super::RadrootsSp1TradeProverBackend::from_label("deterministic_none"),
             None
         );
 

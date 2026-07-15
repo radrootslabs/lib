@@ -947,6 +947,7 @@ mod tests {
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
         RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
         validation_receipt_event_build, validation_receipt_public_values_hash_hex,
+        validator_set_address_from_str,
     };
 
     const SELLER_SECRET: &str = "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -1171,6 +1172,13 @@ mod tests {
                 listing_event_id: listing_event_id.into_string(),
                 root_event_id: request_id.into_string(),
                 target_event_id: decision_id.into_string(),
+                validator_set_addr: validator_set_address_from_str(
+                    "30381:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:018f3d99-7d35-7c0c-8a0f-7f3b645abcde",
+                )
+                .expect("validator set address"),
+                validator_set_event_id:
+                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        .to_owned(),
                 statement_type: RadrootsValidationReceiptType::TradeTransition,
             },
             version: 1,
