@@ -793,6 +793,7 @@ impl From<radroots_geocoder::GeocoderError> for RadrootsSdkError {
             }
             radroots_geocoder::GeocoderError::Io(_)
             | radroots_geocoder::GeocoderError::Sqlite(_)
+            | radroots_geocoder::GeocoderError::SqliteConnectionLockUnavailable
             | radroots_geocoder::GeocoderError::AssetLockUnavailable { .. } => {
                 RadrootsSdkGeoNamesErrorKind::Cache
             }

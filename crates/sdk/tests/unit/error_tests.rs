@@ -525,6 +525,10 @@ fn geonames_error_conversion_maps_source_errors_to_sdk_kinds() {
             RadrootsSdkGeoNamesErrorKind::Cache,
         ),
         (
+            GeocoderError::SqliteConnectionLockUnavailable,
+            RadrootsSdkGeoNamesErrorKind::Cache,
+        ),
+        (
             GeocoderError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "missing")),
             RadrootsSdkGeoNamesErrorKind::Cache,
         ),

@@ -2,7 +2,7 @@ use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts, farm::Ra
 use radroots_replica_schema::farm::IFarmFindMany;
 use radroots_replica_store::ReplicaSql;
 use radroots_replica_sync::{RadrootsReplicaIngestOutcome, radroots_replica_ingest_event};
-use radroots_sql_core::{SqlExecutor, SqliteExecutor};
+use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
 use tempfile::{TempDir, tempdir};
 
 fn seller_pubkey() -> String {
@@ -42,10 +42,10 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
-fn open_replica() -> (TempDir, ReplicaSql<SqliteExecutor>) {
+fn open_replica() -> (TempDir, ReplicaSql<SqlxSqliteExecutor>) {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("replica.sqlite");
-    let executor = SqliteExecutor::open(&db_path).expect("open sqlite");
+    let executor = SqlxSqliteExecutor::open(&db_path).expect("open sqlite");
     executor
         .exec("PRAGMA foreign_keys = ON;", "[]")
         .expect("enable foreign keys");
@@ -54,7 +54,7 @@ fn open_replica() -> (TempDir, ReplicaSql<SqliteExecutor>) {
     (dir, replica)
 }
 
-fn ingest_farm(replica: &ReplicaSql<SqliteExecutor>) -> RadrootsEventEnvelope {
+fn ingest_farm(replica: &ReplicaSql<SqlxSqliteExecutor>) -> RadrootsEventEnvelope {
     let farm_value = sample_farm();
     let author = seller_pubkey();
     let parts = radroots_event_codec::farm::encode::to_wire_parts(&farm_value).expect("farm draft");

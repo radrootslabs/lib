@@ -25,6 +25,7 @@ use crate::{
 use radroots_authority::RadrootsActorContext;
 #[cfg(all(feature = "runtime", test))]
 use radroots_authority::RadrootsEventSigner;
+#[cfg(any(feature = "signer-adapters", test))]
 use radroots_event::wire::RadrootsNip01EventWireParts;
 #[cfg(feature = "runtime")]
 use radroots_event::{
