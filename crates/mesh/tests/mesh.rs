@@ -66,7 +66,7 @@ fn all_frame_types_round_trip_with_stable_codes_and_labels() {
             frame_type,
             RadrootsMeshScope::Community,
             format!("{label}-message"),
-            u64::from(code) + 1,
+            code + 1,
             1_000,
         );
         let encoded = encode_mesh_frame_cbor(&frame).expect("encode frame");

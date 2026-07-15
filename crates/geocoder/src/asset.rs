@@ -3,8 +3,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use radroots_runtime_paths::default_shared_geonames_database_path_from_cache_root;
-use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
+use sqlx::Connection;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use url::Url;
 
 use crate::GeocoderError;
@@ -273,14 +274,14 @@ fn install_geonames_asset_bytes(
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_sqlite_integrity_and_schema(path: &Path) -> Result<(), GeocoderError> {
-    let conn =
-        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
-            GeocoderError::InvalidAssetSqlite {
-                path: path.to_path_buf(),
-                detail: error.to_string(),
-            }
-        })?;
-    validate_sqlite_integrity(path, &conn)?;
+    let mut conn = futures_executor::block_on(SqliteConnection::connect_with(
+        &SqliteConnectOptions::new().filename(path).read_only(true),
+    ))
+    .map_err(|error| GeocoderError::InvalidAssetSqlite {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    })?;
+    validate_sqlite_integrity(path, &mut conn)?;
     for query in [
         "SELECT id, name FROM countries LIMIT 1",
         "SELECT country_id, id, name FROM admin1 LIMIT 1",
@@ -288,7 +289,7 @@ fn validate_sqlite_integrity_and_schema(path: &Path) -> Result<(), GeocoderError
         "SELECT feature_id, latitude, longitude FROM coordinates LIMIT 1",
         "SELECT id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude FROM geonames LIMIT 1",
     ] {
-        conn.prepare(query)
+        futures_executor::block_on(sqlx::query(query).fetch_optional(&mut conn))
             .map(|_| ())
             .map_err(|error| GeocoderError::InvalidAssetSchema {
                 path: path.to_path_buf(),
@@ -299,25 +300,17 @@ fn validate_sqlite_integrity_and_schema(path: &Path) -> Result<(), GeocoderError
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn validate_sqlite_integrity(path: &Path, conn: &Connection) -> Result<(), GeocoderError> {
-    let mut stmt = conn.prepare("PRAGMA integrity_check").map_err(|error| {
-        GeocoderError::InvalidAssetSqlite {
-            path: path.to_path_buf(),
-            detail: error.to_string(),
-        }
+fn validate_sqlite_integrity(
+    path: &Path,
+    conn: &mut SqliteConnection,
+) -> Result<(), GeocoderError> {
+    let results = futures_executor::block_on(
+        sqlx::query_scalar::<_, String>("PRAGMA integrity_check").fetch_all(conn),
+    )
+    .map_err(|error| GeocoderError::InvalidAssetSqlite {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
     })?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| GeocoderError::InvalidAssetSqlite {
-            path: path.to_path_buf(),
-            detail: error.to_string(),
-        })?;
-    let results =
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| GeocoderError::InvalidAssetSqlite {
-                path: path.to_path_buf(),
-                detail: error.to_string(),
-            })?;
     if results.as_slice() == ["ok"] {
         return Ok(());
     }
@@ -388,8 +381,9 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use rusqlite::Connection;
     use sha2::Digest;
+    use sqlx::Connection;
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 
     use super::{
         GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetSpec, GeoNamesAssetState,
@@ -573,38 +567,68 @@ mod tests {
     }
 
     fn build_fixture_database(path: &Path) {
-        let conn = Connection::open(path).expect("open fixture db");
-        conn.execute_batch(FIXTURE_SCHEMA).expect("fixture schema");
-        conn.execute(
-            "INSERT INTO countries (id, name) VALUES (?1, ?2)",
-            ("FX", "Fixtureland"),
+        let mut conn = open_test_path_connection(path);
+        execute_batch(&mut conn, FIXTURE_SCHEMA);
+        futures_executor::block_on(
+            sqlx::query("INSERT INTO countries (id, name) VALUES (?, ?)")
+                .bind("FX")
+                .bind("Fixtureland")
+                .execute(&mut conn),
         )
         .expect("insert country");
-        conn.execute(
-            "INSERT INTO admin1 (country_id, id, name) VALUES (?1, ?2, ?3)",
-            ("FX", 1_i64, "Fixture Region"),
+        futures_executor::block_on(
+            sqlx::query("INSERT INTO admin1 (country_id, id, name) VALUES (?, ?, ?)")
+                .bind("FX")
+                .bind(1_i64)
+                .bind("Fixture Region")
+                .execute(&mut conn),
         )
         .expect("insert admin1");
-        conn.execute(
-            "INSERT INTO features (id, name, country_id, admin1_id) VALUES (?1, ?2, ?3, ?4)",
-            (1_i64, "Fixture Town", "FX", 1_i64),
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO features (id, name, country_id, admin1_id) VALUES (?, ?, ?, ?)",
+            )
+            .bind(1_i64)
+            .bind("Fixture Town")
+            .bind("FX")
+            .bind(1_i64)
+            .execute(&mut conn),
         )
         .expect("insert feature");
-        conn.execute(
-            "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
-            (1_i64, 12.25_f64, -34.5_f64),
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?, ?, ?)",
+            )
+            .bind(1_i64)
+            .bind(12.25_f64)
+            .bind(-34.5_f64)
+            .execute(&mut conn),
         )
         .expect("insert coordinates");
     }
 
-    fn build_bad_schema_database(path: &PathBuf) {
-        let conn = Connection::open(path).expect("open bad schema db");
-        conn.execute_batch(
+    fn build_bad_schema_database(path: &Path) {
+        let mut conn = open_test_path_connection(path);
+        execute_batch(
+            &mut conn,
             r#"
             CREATE TABLE countries(id TEXT, name TEXT);
             "#,
-        )
-        .expect("bad schema");
+        );
+    }
+
+    fn open_test_path_connection(path: &Path) -> SqliteConnection {
+        futures_executor::block_on(SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        ))
+        .expect("open fixture database")
+    }
+
+    fn execute_batch(conn: &mut SqliteConnection, sql: &str) {
+        futures_executor::block_on(sqlx::raw_sql(sqlx::AssertSqlSafe(sql)).execute(conn))
+            .expect("execute fixture sql batch");
     }
 
     const FIXTURE_SCHEMA: &str = r#"

@@ -497,14 +497,16 @@ impl RadrootsOutbox {
         } else {
             claim_event(
                 &mut tx,
-                outbox_event_id,
-                claimed_state,
-                None,
-                claim_owner.as_ref(),
-                claim_token.as_ref(),
-                claim_expires_at_ms,
-                now_ms,
-                "AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+                ClaimEventUpdate {
+                    outbox_event_id,
+                    claimed_state,
+                    active_delivery_plan_id: None,
+                    claim_owner: claim_owner.as_ref(),
+                    claim_token: claim_token.as_ref(),
+                    claim_expires_at_ms,
+                    now_ms,
+                    suffix: "AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+                },
             )
             .await?
         };
@@ -1810,17 +1812,31 @@ async fn ensure_event_signed(
     Ok(())
 }
 
-async fn claim_event(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+struct ClaimEventUpdate<'a> {
     outbox_event_id: i64,
     claimed_state: RadrootsOutboxEventState,
     active_delivery_plan_id: Option<i64>,
-    claim_owner: &str,
-    claim_token: &str,
+    claim_owner: &'a str,
+    claim_token: &'a str,
     claim_expires_at_ms: i64,
     now_ms: i64,
-    suffix: &str,
+    suffix: &'a str,
+}
+
+async fn claim_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    update: ClaimEventUpdate<'_>,
 ) -> Result<SqliteQueryResult, RadrootsOutboxError> {
+    let ClaimEventUpdate {
+        outbox_event_id,
+        claimed_state,
+        active_delivery_plan_id,
+        claim_owner,
+        claim_token,
+        claim_expires_at_ms,
+        now_ms,
+        suffix,
+    } = update;
     let sql = format!(
         "UPDATE outbox_event SET state = ?, claim_token = ?, claim_owner = ?, claim_expires_at_ms = ?, active_delivery_plan_id = ?, attempt_count = attempt_count + 1, updated_at_ms = ? WHERE outbox_event_id = ? {suffix}"
     );
@@ -2167,11 +2183,7 @@ fn delivery_plan_status_targets<'a>(
             ..
         } => targets
             .iter()
-            .filter(|target| {
-                required_targets
-                    .iter()
-                    .any(|required| target.endpoint_fingerprint == *required)
-            })
+            .filter(|target| required_targets.contains(&target.endpoint_fingerprint))
             .collect(),
         RadrootsTransportSatisfactionPolicy::NoWait
         | RadrootsTransportSatisfactionPolicy::Any { .. }
@@ -2631,15 +2643,13 @@ fn parse_satisfaction_policy(
     if let Some((class_label, threshold)) = value
         .strip_prefix("quorum_")
         .and_then(|stored| stored.split_once(':'))
+        && threshold == required_success_count.to_string()
+        && let Some(class) = parse_satisfaction_class_storage_value(class_label)
     {
-        if threshold == required_success_count.to_string()
-            && let Some(class) = parse_satisfaction_class_storage_value(class_label)
-        {
-            return Ok(RadrootsTransportSatisfactionPolicy::Quorum {
-                class,
-                threshold: required_count_u16(required_success_count)?,
-            });
-        }
+        return Ok(RadrootsTransportSatisfactionPolicy::Quorum {
+            class,
+            threshold: required_count_u16(required_success_count)?,
+        });
     }
     if let Some((class_label, fingerprints)) = value
         .strip_prefix("required_")
@@ -2767,7 +2777,7 @@ mod tests {
         .expect("required targets policy");
 
         let stored = satisfaction_policy_storage_value(&policy);
-        let mut fingerprints = vec![first.fingerprint.as_str(), second.fingerprint.as_str()];
+        let mut fingerprints = [first.fingerprint.as_str(), second.fingerprint.as_str()];
         fingerprints.sort();
         assert_eq!(
             stored,

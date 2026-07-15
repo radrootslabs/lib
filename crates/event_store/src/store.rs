@@ -1197,8 +1197,7 @@ mod tests {
         let missing = sqlx::query("SELECT COUNT(*) FROM event_envelopes")
             .fetch_one(store.pool())
             .await
-            .err()
-            .expect("table should be removed");
+            .expect_err("table should be removed");
         assert!(missing.to_string().contains("event_envelopes"));
     }
 

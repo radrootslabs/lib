@@ -1,10 +1,10 @@
 use crate::error::RadrootsNostrSignerError;
 use crate::migrations;
-use radroots_sql_core::{SqlExecutor, SqliteExecutor};
+use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
 use std::path::Path;
 
 pub struct RadrootsNostrSignerSqliteDb {
-    executor: SqliteExecutor,
+    executor: SqlxSqliteExecutor,
     file_backed: bool,
 }
 
@@ -17,7 +17,7 @@ impl RadrootsNostrSignerSqliteDb {
             std::fs::create_dir_all(parent)
                 .map_err(|error| RadrootsNostrSignerError::Store(error.to_string()))?;
         }
-        let executor = SqliteExecutor::open(path)?;
+        let executor = SqlxSqliteExecutor::open(path)?;
         let db = Self {
             executor,
             file_backed: true,
@@ -28,7 +28,7 @@ impl RadrootsNostrSignerSqliteDb {
     }
 
     pub fn open_memory() -> Result<Self, RadrootsNostrSignerError> {
-        let executor = SqliteExecutor::open_memory()?;
+        let executor = SqlxSqliteExecutor::open_memory()?;
         let db = Self {
             executor,
             file_backed: false,
@@ -38,7 +38,7 @@ impl RadrootsNostrSignerSqliteDb {
         Ok(db)
     }
 
-    pub fn executor(&self) -> &SqliteExecutor {
+    pub fn executor(&self) -> &SqlxSqliteExecutor {
         &self.executor
     }
 

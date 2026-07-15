@@ -390,13 +390,13 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
+    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqlxSqliteExecutor};
     use serde_json::json;
 
     use super::*;
 
-    fn store() -> RuntimeStore<SqliteExecutor> {
-        let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+    fn store() -> RuntimeStore<SqlxSqliteExecutor> {
+        let executor = SqlxSqliteExecutor::open_memory().expect("open memory sqlite");
         let store = RuntimeStore::new(executor);
         store.migrate_up().expect("migrate up");
         store

@@ -6,8 +6,9 @@ use radroots_geocoder::{
     inspect_default_geonames_asset_in_cache_root, inspect_geonames_asset_path,
     validate_geonames_asset_file, validate_geonames_asset_spec_source,
 };
-use rusqlite::Connection;
 use sha2::Digest;
+use sqlx::Connection;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use std::cell::Cell;
 use std::fs;
 use std::path::Path;
@@ -459,12 +460,12 @@ fn reverse_and_country_propagate_row_mapping_errors() {
             }),
         )
         .expect_err("reverse should fail on invalid row mapping");
-    assert_sqlite_error_contains(reverse_err, "Invalid column type");
+    assert_sqlite_error_contains(reverse_err, "unexpected null");
 
     let country_err = geocoder
         .country("US")
         .expect_err("country should fail on invalid row mapping");
-    assert_sqlite_error_contains(country_err, "Invalid column type");
+    assert_sqlite_error_contains(country_err, "unexpected null");
 }
 
 #[test]
@@ -474,7 +475,7 @@ fn country_list_propagates_aggregate_row_mapping_errors() {
     let err = geocoder
         .country_list()
         .expect_err("country_list should fail on null aggregate row");
-    assert_sqlite_error_contains(err, "Invalid column type");
+    assert_sqlite_error_contains(err, "unexpected null");
 }
 
 fn open_fixture_geocoder() -> Geocoder {
@@ -534,53 +535,55 @@ fn build_forward_fixture_database() -> tempfile::TempPath {
 }
 
 fn seed_fixture_database(path: &str) {
-    let conn = Connection::open(path).expect("open fixture database");
-    seed_schema(&conn);
+    let mut conn = open_test_path_connection(path);
+    seed_schema(&mut conn);
 
-    insert_country(&conn, "US", "United States");
-    insert_country(&conn, "BR", "Brazil");
+    insert_country(&mut conn, "US", "United States");
+    insert_country(&mut conn, "BR", "Brazil");
 
-    insert_admin1(&conn, "US", 6, "California");
-    insert_admin1(&conn, "US", 36, "New York");
-    insert_admin1(&conn, "BR", 27, "Sao Paulo");
+    insert_admin1(&mut conn, "US", 6, "California");
+    insert_admin1(&mut conn, "US", 36, "New York");
+    insert_admin1(&mut conn, "BR", 27, "Sao Paulo");
 
-    insert_feature(&conn, 1, "San Francisco", "US", 6, 37.7749, -122.4194);
-    insert_feature(&conn, 2, "Los Angeles", "US", 6, 34.0522, -118.2437);
-    insert_feature(&conn, 3, "New York City", "US", 36, 40.7128, -74.0060);
-    insert_feature(&conn, 4, "Sao Paulo", "BR", 27, -23.5505, -46.6333);
+    insert_feature(&mut conn, 1, "San Francisco", "US", 6, 37.7749, -122.4194);
+    insert_feature(&mut conn, 2, "Los Angeles", "US", 6, 34.0522, -118.2437);
+    insert_feature(&mut conn, 3, "New York City", "US", 36, 40.7128, -74.0060);
+    insert_feature(&mut conn, 4, "Sao Paulo", "BR", 27, -23.5505, -46.6333);
 }
 
 fn seed_high_latitude_database(path: &str) {
-    let conn = Connection::open(path).expect("open fixture database");
-    seed_schema(&conn);
+    let mut conn = open_test_path_connection(path);
+    seed_schema(&mut conn);
 
-    insert_country(&conn, "NO", "Norway");
-    insert_admin1(&conn, "NO", 1, "Nord");
+    insert_country(&mut conn, "NO", "Norway");
+    insert_admin1(&mut conn, "NO", 1, "Nord");
 
-    insert_feature(&conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
-    insert_feature(&conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
+    insert_feature(&mut conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
+    insert_feature(&mut conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
 }
 
 fn seed_forward_fixture_database(path: &str) {
-    let conn = Connection::open(path).expect("open fixture database");
-    seed_schema(&conn);
+    let mut conn = open_test_path_connection(path);
+    seed_schema(&mut conn);
 
-    insert_country(&conn, "CA", "Canada");
-    insert_country(&conn, "US", "United States");
-    conn.execute(
-        "INSERT INTO countries (id, name) VALUES (?1, ?2)",
-        rusqlite::params!["ZZ", Option::<String>::None],
+    insert_country(&mut conn, "CA", "Canada");
+    insert_country(&mut conn, "US", "United States");
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO countries (id, name) VALUES (?, ?)")
+            .bind("ZZ")
+            .bind(Option::<String>::None)
+            .execute(&mut conn),
     )
     .expect("insert unnamed country");
 
-    insert_admin1(&conn, "CA", 2, "British Columbia");
-    insert_admin1(&conn, "CA", 3, "Prairie Region");
-    insert_admin1(&conn, "US", 4, "River Region");
-    insert_admin1(&conn, "US", 6, "California");
-    insert_admin1(&conn, "ZZ", 100, "No Alias Region");
+    insert_admin1(&mut conn, "CA", 2, "British Columbia");
+    insert_admin1(&mut conn, "CA", 3, "Prairie Region");
+    insert_admin1(&mut conn, "US", 4, "River Region");
+    insert_admin1(&mut conn, "US", 6, "California");
+    insert_admin1(&mut conn, "ZZ", 100, "No Alias Region");
 
     insert_feature(
-        &conn,
+        &mut conn,
         3001,
         "Fixture Victoria",
         "CA",
@@ -588,18 +591,19 @@ fn seed_forward_fixture_database(path: &str) {
         48.4359,
         -123.35155,
     );
-    insert_feature(&conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
-    insert_feature(&conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
-    insert_feature(&conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
-    insert_feature(&conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
-    insert_feature(&conn, 3006, "Alias Market", "US", 6, 38.5, -121.5);
-    insert_feature(&conn, 3007, "No Country Place", "ZZ", 99, 10.0, 11.0);
-    insert_feature(&conn, 3008, "No Alias Place", "ZZ", 100, 10.5, 11.5);
+    insert_feature(&mut conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
+    insert_feature(&mut conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
+    insert_feature(&mut conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
+    insert_feature(&mut conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
+    insert_feature(&mut conn, 3006, "Alias Market", "US", 6, 38.5, -121.5);
+    insert_feature(&mut conn, 3007, "No Country Place", "ZZ", 99, 10.0, 11.0);
+    insert_feature(&mut conn, 3008, "No Alias Place", "ZZ", 100, 10.5, 11.5);
 }
 
 fn seed_reverse_country_row_error_database(path: &str) {
-    let conn = Connection::open(path).expect("open invalid row fixture database");
-    conn.execute_batch(
+    let mut conn = open_test_path_connection(path);
+    execute_batch(
+        &mut conn,
         r#"
         CREATE TABLE geonames(
           id INTEGER,
@@ -617,23 +621,34 @@ fn seed_reverse_country_row_error_database(path: &str) {
           longitude REAL
         );
         "#,
-    )
-    .expect("create invalid row schema");
-    conn.execute(
-        "INSERT INTO geonames (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        rusqlite::params![1_i64, Option::<String>::None, Option::<i64>::None, Option::<String>::None, "US", "United States", 37.7749_f64, -122.4194_f64],
+    );
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO geonames (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(1_i64)
+            .bind(Option::<String>::None)
+            .bind(Option::<i64>::None)
+            .bind(Option::<String>::None)
+            .bind("US")
+            .bind("United States")
+            .bind(37.7749_f64)
+            .bind(-122.4194_f64)
+            .execute(&mut conn),
     )
     .expect("insert invalid reverse/country row");
-    conn.execute(
-        "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
-        (1_i64, 37.7749_f64, -122.4194_f64),
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?, ?, ?)")
+            .bind(1_i64)
+            .bind(37.7749_f64)
+            .bind(-122.4194_f64)
+            .execute(&mut conn),
     )
     .expect("insert invalid reverse/country coordinate");
 }
 
 fn seed_country_list_row_error_database(path: &str) {
-    let conn = Connection::open(path).expect("open aggregate error fixture database");
-    conn.execute_batch(
+    let mut conn = open_test_path_connection(path);
+    execute_batch(
+        &mut conn,
         r#"
         CREATE TABLE geonames(
           country_id TEXT,
@@ -642,17 +657,37 @@ fn seed_country_list_row_error_database(path: &str) {
           longitude REAL
         );
         "#,
-    )
-    .expect("create aggregate error schema");
-    conn.execute(
-        "INSERT INTO geonames (country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params!["US", "United States", Option::<f64>::None, Option::<f64>::None],
+    );
+    futures_executor::block_on(
+        sqlx::query(
+            "INSERT INTO geonames (country_id, country_name, latitude, longitude) VALUES (?, ?, ?, ?)",
+        )
+        .bind("US")
+        .bind("United States")
+        .bind(Option::<f64>::None)
+        .bind(Option::<f64>::None)
+        .execute(&mut conn),
     )
     .expect("insert aggregate error row");
 }
 
-fn seed_schema(conn: &Connection) {
-    conn.execute_batch(
+fn open_test_path_connection(path: &str) -> SqliteConnection {
+    futures_executor::block_on(SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true),
+    ))
+    .expect("open fixture database")
+}
+
+fn execute_batch(conn: &mut SqliteConnection, sql: &str) {
+    futures_executor::block_on(sqlx::raw_sql(sqlx::AssertSqlSafe(sql)).execute(conn))
+        .expect("execute fixture sql batch");
+}
+
+fn seed_schema(conn: &mut SqliteConnection) {
+    execute_batch(
+        conn,
         r#"
         CREATE TABLE countries(
           id TEXT,
@@ -694,28 +729,32 @@ fn seed_schema(conn: &Connection) {
             LEFT JOIN admin1 ON features.country_id = admin1.country_id AND features.admin1_id = admin1.id
             JOIN coordinates ON features.id = coordinates.feature_id;
         "#,
-    )
-    .expect("create fixture schema");
+    );
 }
 
-fn insert_country(conn: &Connection, id: &str, name: &str) {
-    conn.execute(
-        "INSERT INTO countries (id, name) VALUES (?1, ?2)",
-        (id, name),
+fn insert_country(conn: &mut SqliteConnection, id: &str, name: &str) {
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO countries (id, name) VALUES (?, ?)")
+            .bind(id)
+            .bind(name)
+            .execute(conn),
     )
     .expect("insert country");
 }
 
-fn insert_admin1(conn: &Connection, country_id: &str, id: i64, name: &str) {
-    conn.execute(
-        "INSERT INTO admin1 (country_id, id, name) VALUES (?1, ?2, ?3)",
-        (country_id, id, name),
+fn insert_admin1(conn: &mut SqliteConnection, country_id: &str, id: i64, name: &str) {
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO admin1 (country_id, id, name) VALUES (?, ?, ?)")
+            .bind(country_id)
+            .bind(id)
+            .bind(name)
+            .execute(conn),
     )
     .expect("insert admin1");
 }
 
 fn insert_feature(
-    conn: &Connection,
+    conn: &mut SqliteConnection,
     id: i64,
     name: &str,
     country_id: &str,
@@ -723,14 +762,21 @@ fn insert_feature(
     latitude: f64,
     longitude: f64,
 ) {
-    conn.execute(
-        "INSERT INTO features (id, name, country_id, admin1_id) VALUES (?1, ?2, ?3, ?4)",
-        (id, name, country_id, admin1_id),
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO features (id, name, country_id, admin1_id) VALUES (?, ?, ?, ?)")
+            .bind(id)
+            .bind(name)
+            .bind(country_id)
+            .bind(admin1_id)
+            .execute(&mut *conn),
     )
     .expect("insert feature");
-    conn.execute(
-        "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
-        (id, latitude, longitude),
+    futures_executor::block_on(
+        sqlx::query("INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?, ?, ?)")
+            .bind(id)
+            .bind(latitude)
+            .bind(longitude)
+            .execute(conn),
     )
     .expect("insert coordinate");
 }

@@ -3,7 +3,9 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum GeocoderError {
     #[error("sqlite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(#[from] sqlx::Error),
+    #[error("sqlite connection lock is unavailable")]
+    SqliteConnectionLockUnavailable,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("invalid GeoNames asset URL {url}")]

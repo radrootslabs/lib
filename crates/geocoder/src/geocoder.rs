@@ -5,20 +5,23 @@ use crate::model::{
     GeocoderLocalityLookup, GeocoderLocalityQuery, GeocoderPoint, GeocoderReverseOptions,
     GeocoderReverseResult,
 };
-use rusqlite::{Connection, OpenFlags, named_params};
 use std::io::Write;
 use std::path::Path;
+use std::sync::Mutex;
+
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteRow};
+use sqlx::{Connection as _, Row};
 
 pub struct Geocoder {
-    conn: Connection,
+    conn: Mutex<SqliteConnection>,
     _temp_path: Option<tempfile::TempPath>,
 }
 
 impl Geocoder {
     pub fn open_path<P: AsRef<Path>>(path: P) -> Result<Self, GeocoderError> {
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let conn = open_read_only_connection(path)?;
         Ok(Self {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: None,
         })
     }
@@ -28,9 +31,9 @@ impl Geocoder {
         temp.as_file_mut().write_all(bytes)?;
         let temp_path = temp.into_temp_path();
         let path: &Path = temp_path.as_ref();
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let conn = open_read_only_connection(path)?;
         Ok(Self {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: Some(temp_path),
         })
     }
@@ -50,8 +53,9 @@ impl Geocoder {
     ) -> Result<Vec<GeocoderReverseResult>, GeocoderError> {
         let options = options.unwrap_or_default();
         let lng_weight = point.lat.to_radians().cos().powi(2);
-        let mut stmt = self.conn.prepare(
-            r#"
+        let rows = self.with_connection(|conn| {
+            let query = sqlx::query(
+                r#"
             SELECT
               g.id,
               g.name,
@@ -64,27 +68,38 @@ impl Geocoder {
             FROM geonames AS g
             JOIN coordinates AS c
               ON g.id = c.feature_id
-            WHERE c.latitude BETWEEN :lat - :degree_offset AND :lat + :degree_offset
-              AND c.longitude BETWEEN :lng - :degree_offset AND :lng + :degree_offset
+            WHERE c.latitude BETWEEN ? - ? AND ? + ?
+              AND c.longitude BETWEEN ? - ? AND ? + ?
             ORDER BY
-              ((:lat - c.latitude) * (:lat - c.latitude))
-              + ((:lng - c.longitude) * (:lng - c.longitude) * :lng_weight) ASC
-            LIMIT :limit
+              ((? - c.latitude) * (? - c.latitude))
+              + ((? - c.longitude) * (? - c.longitude) * ?) ASC
+            LIMIT ?
             "#,
-        )?;
-        let params = named_params! {
-            ":lat": point.lat,
-            ":lng": point.lng,
-            ":degree_offset": options.degree_offset,
-            ":lng_weight": lng_weight,
-            ":limit": options.limit as i64,
-        };
-        collect_mapped_rows(&mut stmt, params, map_reverse_row)
+            )
+            .bind(point.lat)
+            .bind(options.degree_offset)
+            .bind(point.lat)
+            .bind(options.degree_offset)
+            .bind(point.lng)
+            .bind(options.degree_offset)
+            .bind(point.lng)
+            .bind(options.degree_offset)
+            .bind(point.lat)
+            .bind(point.lat)
+            .bind(point.lng)
+            .bind(point.lng)
+            .bind(lng_weight)
+            .bind(options.limit as i64);
+            futures_executor::block_on(query.fetch_all(conn)).map_err(GeocoderError::from)
+        })?;
+        collect_mapped_rows(rows, map_reverse_row)
     }
 
     pub fn country(&self, country_id: &str) -> Result<Vec<GeocoderReverseResult>, GeocoderError> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let rows = self.with_connection(|conn| {
+            futures_executor::block_on(
+                sqlx::query(
+                    r#"
             SELECT
               id,
               name,
@@ -95,20 +110,23 @@ impl Geocoder {
               latitude,
               longitude
             FROM geonames
-            WHERE country_id = :country_id
+            WHERE country_id = ?
             ORDER BY id ASC
             "#,
-        )?;
-        collect_mapped_rows(
-            &mut stmt,
-            named_params! { ":country_id": country_id },
-            map_reverse_row,
-        )
+                )
+                .bind(country_id)
+                .fetch_all(conn),
+            )
+            .map_err(GeocoderError::from)
+        })?;
+        collect_mapped_rows(rows, map_reverse_row)
     }
 
     pub fn country_list(&self) -> Result<Vec<GeocoderCountryListResult>, GeocoderError> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let rows = self.with_connection(|conn| {
+            futures_executor::block_on(
+                sqlx::query(
+                    r#"
             SELECT
               country_id,
               country_name,
@@ -118,19 +136,23 @@ impl Geocoder {
             GROUP BY country_id, country_name
             ORDER BY country_id ASC
             "#,
-        )?;
-        collect_mapped_rows(&mut stmt, [], |row| {
+                )
+                .fetch_all(conn),
+            )
+            .map_err(GeocoderError::from)
+        })?;
+        collect_mapped_rows(rows, |row| {
             Ok(GeocoderCountryListResult {
-                country_id: row.get("country_id")?,
-                country: row.get("country_name")?,
-                lat: row.get("latitude_c")?,
-                lng: row.get("longitude_c")?,
+                country_id: required_string(row, "country_id")?,
+                country: row.try_get("country_name")?,
+                lat: required_f64(row, "latitude_c")?,
+                lng: required_f64(row, "longitude_c")?,
             })
         })
     }
 
     pub fn country_center(&self, country_id: &str) -> Result<GeocoderPoint, GeocoderError> {
-        finalize_country_center(country_center_impl(&self.conn, country_id), country_id)
+        finalize_country_center(country_center_impl(self, country_id), country_id)
     }
 
     pub fn locality(
@@ -168,8 +190,9 @@ impl Geocoder {
             return Ok(GeocoderLocalityLookup::NoMatch);
         };
         let country = normalize_optional_name(country);
-        let mut stmt = self.conn.prepare(
-            r#"
+        let rows = self.with_connection(|conn| {
+            let query = sqlx::query(
+                r#"
             SELECT
               id,
               name,
@@ -180,11 +203,11 @@ impl Geocoder {
               latitude,
               longitude
             FROM geonames
-            WHERE lower(name) = :locality
+            WHERE lower(name) = ?
               AND (
-                :country IS NULL
-                OR lower(country_id) = :country
-                OR lower(country_name) = :country
+                ? IS NULL
+                OR lower(country_id) = ?
+                OR lower(country_name) = ?
               )
             ORDER BY
               lower(name) ASC,
@@ -194,15 +217,14 @@ impl Geocoder {
               coalesce(admin1_id, -1) ASC,
               id ASC
             "#,
-        )?;
-        let candidates = collect_mapped_rows(
-            &mut stmt,
-            named_params! {
-                ":locality": locality,
-                ":country": country,
-            },
-            map_locality_candidate_row,
-        )?;
+            )
+            .bind(locality)
+            .bind(country.as_deref())
+            .bind(country.as_deref())
+            .bind(country.as_deref());
+            futures_executor::block_on(query.fetch_all(conn)).map_err(GeocoderError::from)
+        })?;
+        let candidates = collect_mapped_rows(rows, map_locality_candidate_row)?;
         let region = normalize_optional_name(region);
         let candidates = candidates
             .into_iter()
@@ -212,8 +234,10 @@ impl Geocoder {
     }
 
     fn locality_by_feature_id(&self, id: i64) -> Result<GeocoderLocalityLookup, GeocoderError> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let rows = self.with_connection(|conn| {
+            futures_executor::block_on(
+                sqlx::query(
+                    r#"
             SELECT
               id,
               name,
@@ -224,18 +248,28 @@ impl Geocoder {
               latitude,
               longitude
             FROM geonames
-            WHERE id = :id
+            WHERE id = ?
             LIMIT 1
             "#,
-        )?;
-        let candidates = collect_mapped_rows(
-            &mut stmt,
-            named_params! {
-                ":id": id,
-            },
-            map_locality_candidate_row,
-        )?;
+                )
+                .bind(id)
+                .fetch_all(conn),
+            )
+            .map_err(GeocoderError::from)
+        })?;
+        let candidates = collect_mapped_rows(rows, map_locality_candidate_row)?;
         Ok(finalize_locality_lookup(candidates, 1))
+    }
+
+    fn with_connection<T>(
+        &self,
+        f: impl FnOnce(&mut SqliteConnection) -> Result<T, GeocoderError>,
+    ) -> Result<T, GeocoderError> {
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|_| GeocoderError::SqliteConnectionLockUnavailable)?;
+        f(&mut conn)
     }
 }
 
@@ -245,18 +279,15 @@ struct ParsedLocalityQuery {
     country: Option<String>,
 }
 
-fn query_country_center_row(
-    stmt: &mut rusqlite::Statement<'_>,
-    country_id: &str,
-) -> rusqlite::Result<(Option<f64>, Option<f64>)> {
-    stmt.query_row(
-        named_params! { ":country_id": country_id },
-        map_country_center_row,
-    )
+fn open_read_only_connection(path: impl AsRef<Path>) -> Result<SqliteConnection, GeocoderError> {
+    let options = SqliteConnectOptions::new().filename(path).read_only(true);
+    Ok(futures_executor::block_on(SqliteConnection::connect_with(
+        &options,
+    ))?)
 }
 
-fn map_country_center_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Option<f64>, Option<f64>)> {
-    Ok((row.get("latitude_c")?, row.get("longitude_c")?))
+fn map_country_center_row(row: &SqliteRow) -> Result<(Option<f64>, Option<f64>), sqlx::Error> {
+    Ok((row.try_get("latitude_c")?, row.try_get("longitude_c")?))
 }
 
 #[inline(never)]
@@ -274,68 +305,69 @@ fn finalize_country_center(
 }
 
 fn country_center_impl(
-    conn: &Connection,
+    geocoder: &Geocoder,
     country_id: &str,
 ) -> Result<Option<GeocoderPoint>, GeocoderError> {
-    let mut stmt = conn.prepare(
-        r#"
+    let row = geocoder.with_connection(|conn| {
+        futures_executor::block_on(
+            sqlx::query(
+                r#"
         SELECT
           AVG(latitude) AS latitude_c,
           AVG(longitude) AS longitude_c
         FROM geonames
-        WHERE country_id = :country_id
+        WHERE country_id = ?
         "#,
-    )?;
-    let (lat, lng) = query_country_center_row(&mut stmt, country_id)?;
+            )
+            .bind(country_id)
+            .fetch_one(conn),
+        )
+        .map_err(GeocoderError::from)
+    })?;
+    let (lat, lng) = map_country_center_row(&row)?;
     if let (Some(lat), Some(lng)) = (lat, lng) {
         return Ok(Some(GeocoderPoint { lat, lng }));
     }
     Ok(None)
 }
 
-fn collect_mapped_rows<T, P, F>(
-    stmt: &mut rusqlite::Statement<'_>,
-    params: P,
-    map: F,
-) -> Result<Vec<T>, GeocoderError>
+fn collect_mapped_rows<T, F>(rows: Vec<SqliteRow>, mut map: F) -> Result<Vec<T>, GeocoderError>
 where
-    P: rusqlite::Params,
-    F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+    F: FnMut(&SqliteRow) -> Result<T, sqlx::Error>,
 {
-    let rows = stmt.query_map(params, map)?;
-    rows.collect::<Result<Vec<_>, _>>()
+    rows.iter()
+        .map(&mut map)
+        .collect::<Result<Vec<_>, _>>()
         .map_err(GeocoderError::from)
 }
 
-fn map_reverse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GeocoderReverseResult> {
+fn map_reverse_row(row: &SqliteRow) -> Result<GeocoderReverseResult, sqlx::Error> {
     Ok(GeocoderReverseResult {
-        id: row.get("id")?,
-        name: row.get("name")?,
-        admin1_id: row.get("admin1_id")?,
-        admin1_name: row.get("admin1_name")?,
-        country_id: row.get("country_id")?,
-        country_name: row.get("country_name")?,
-        latitude: row.get("latitude")?,
-        longitude: row.get("longitude")?,
+        id: required_i64(row, "id")?,
+        name: required_string(row, "name")?,
+        admin1_id: row.try_get("admin1_id")?,
+        admin1_name: row.try_get("admin1_name")?,
+        country_id: required_string(row, "country_id")?,
+        country_name: row.try_get("country_name")?,
+        latitude: required_f64(row, "latitude")?,
+        longitude: required_f64(row, "longitude")?,
     })
 }
 
-fn map_locality_candidate_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<GeocoderLocalityCandidate> {
-    let name = row.get("name")?;
-    let admin1_name = row.get("admin1_name")?;
-    let country_name = row.get("country_name")?;
+fn map_locality_candidate_row(row: &SqliteRow) -> Result<GeocoderLocalityCandidate, sqlx::Error> {
+    let name = required_string(row, "name")?;
+    let admin1_name = row.try_get("admin1_name")?;
+    let country_name = row.try_get("country_name")?;
     let candidate = GeocoderLocalityCandidate {
-        id: row.get("id")?,
+        id: required_i64(row, "id")?,
         name,
-        admin1_id: row.get("admin1_id")?,
+        admin1_id: row.try_get("admin1_id")?,
         admin1_name,
-        country_id: row.get("country_id")?,
+        country_id: required_string(row, "country_id")?,
         country_name,
         point: GeocoderPoint {
-            lat: row.get("latitude")?,
-            lng: row.get("longitude")?,
+            lat: required_f64(row, "latitude")?,
+            lng: required_f64(row, "longitude")?,
         },
         display_name: String::new(),
     };
@@ -343,6 +375,33 @@ fn map_locality_candidate_row(
         display_name: locality_candidate_display_name(&candidate),
         ..candidate
     })
+}
+
+fn required_i64(row: &SqliteRow, column: &str) -> Result<i64, sqlx::Error> {
+    required_value(row, column)
+}
+
+fn required_f64(row: &SqliteRow, column: &str) -> Result<f64, sqlx::Error> {
+    required_value(row, column)
+}
+
+fn required_string(row: &SqliteRow, column: &str) -> Result<String, sqlx::Error> {
+    required_value(row, column)
+}
+
+fn required_value<T>(row: &SqliteRow, column: &str) -> Result<T, sqlx::Error>
+where
+    for<'r> T: sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
+{
+    row.try_get::<Option<T>, _>(column)?
+        .ok_or_else(|| unexpected_null_column(column))
+}
+
+fn unexpected_null_column(column: &str) -> sqlx::Error {
+    sqlx::Error::ColumnDecode {
+        index: column.to_owned(),
+        source: Box::new(sqlx::error::UnexpectedNullError),
+    }
 }
 
 fn parse_locality_query(query: &str) -> ParsedLocalityQuery {
@@ -528,8 +587,8 @@ fn region_aliases(country_id: &str) -> &'static [(&'static str, &'static str)] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
     use std::fs;
+    use std::sync::Mutex;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -771,18 +830,18 @@ mod tests {
                 }),
             )
             .expect_err("reverse should fail on invalid row mapping");
-        assert_sqlite_error_contains(reverse_err, "Invalid column type");
+        assert_sqlite_error_contains(reverse_err, "unexpected null");
 
         let country_err = reverse_country
             .country("US")
             .expect_err("country should fail on invalid row mapping");
-        assert_sqlite_error_contains(country_err, "Invalid column type");
+        assert_sqlite_error_contains(country_err, "unexpected null");
 
         let country_list = open_country_list_row_error_geocoder();
         let country_list_err = country_list
             .country_list()
             .expect_err("country_list should fail on null aggregate row");
-        assert_sqlite_error_contains(country_list_err, "Invalid column type");
+        assert_sqlite_error_contains(country_list_err, "unexpected null");
     }
 
     #[test]
@@ -821,27 +880,27 @@ mod tests {
             geocoder_with_country_list_sql_row("1", "'United States'", "37.0", "1.0")
                 .country_list()
                 .expect_err("country_id type mismatch should fail");
-        assert_sqlite_error_contains(country_id_err, "Invalid column type");
+        assert_sqlite_error_contains(country_id_err, "mismatched types");
 
         let country_name_err = geocoder_with_country_list_sql_row("'US'", "1", "37.0", "1.0")
             .country_list()
             .expect_err("country_name type mismatch should fail");
-        assert_sqlite_error_contains(country_name_err, "Invalid column type");
+        assert_sqlite_error_contains(country_name_err, "mismatched types");
 
         let longitude_err =
             geocoder_with_country_list_sql_row("'US'", "'United States'", "37.0", "NULL")
                 .country_list()
                 .expect_err("longitude type mismatch should fail");
-        assert_sqlite_error_contains(longitude_err, "Invalid column type");
+        assert_sqlite_error_contains(longitude_err, "unexpected null");
     }
 
     #[test]
     fn unit_harness_covers_country_center_row_error_paths() {
         let latitude_err = map_country_center_row_error("'bad'", "1.0");
-        assert_sqlite_error_contains(GeocoderError::from(latitude_err), "Invalid column type");
+        assert_sqlite_error_contains(latitude_err, "mismatched types");
 
         let longitude_err = map_country_center_row_error("1.0", "'bad'");
-        assert_sqlite_error_contains(GeocoderError::from(longitude_err), "Invalid column type");
+        assert_sqlite_error_contains(longitude_err, "mismatched types");
     }
 
     #[test]
@@ -909,7 +968,7 @@ mod tests {
                 "'bad'",
             ),
         ] {
-            assert_sqlite_error_contains(GeocoderError::from(err), "Invalid column type");
+            assert_sqlite_error_contains(err, "mismatched types");
         }
     }
 
@@ -935,7 +994,7 @@ mod tests {
         assert!(sqlite_panic.is_err());
 
         let country_center_panic = std::panic::catch_unwind(|| {
-            let mismatch_err = GeocoderError::Sqlite(rusqlite::Error::InvalidQuery);
+            let mismatch_err = GeocoderError::Sqlite(sqlx::Error::RowNotFound);
             assert_country_center_not_found(mismatch_err, "US");
         });
         assert!(country_center_panic.is_err());
@@ -993,8 +1052,9 @@ mod tests {
     }
 
     fn geocoder_with_reverse_country_query_execution_error() -> Geocoder {
-        let conn = Connection::open_in_memory().expect("open in-memory query error db");
-        conn.execute_batch(
+        let mut conn = open_test_memory_connection();
+        execute_batch(
+            &mut conn,
             r#"
             CREATE VIEW geonames AS
               SELECT
@@ -1013,18 +1073,17 @@ mod tests {
             );
             INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (1, 1.0, 2.0);
             "#,
-        )
-        .expect("create reverse/country execution error schema");
+        );
         Geocoder {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: None,
         }
     }
 
     fn geocoder_with_country_list_query_execution_error() -> Geocoder {
-        let conn =
-            Connection::open_in_memory().expect("open in-memory country_list query error db");
-        conn.execute_batch(
+        let mut conn = open_test_memory_connection();
+        execute_batch(
+            &mut conn,
             r#"
             CREATE VIEW geonames AS
               SELECT
@@ -1033,18 +1092,17 @@ mod tests {
                 1.0 AS latitude,
                 2.0 AS longitude;
             "#,
-        )
-        .expect("create country_list execution error schema");
+        );
         Geocoder {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: None,
         }
     }
 
     fn geocoder_with_country_center_query_execution_error() -> Geocoder {
-        let conn =
-            Connection::open_in_memory().expect("open in-memory country_center query error db");
-        conn.execute_batch(
+        let mut conn = open_test_memory_connection();
+        execute_batch(
+            &mut conn,
             r#"
             CREATE VIEW geonames AS
               SELECT
@@ -1052,10 +1110,9 @@ mod tests {
                 missing_latitude() AS latitude,
                 2.0 AS longitude;
             "#,
-        )
-        .expect("create country_center execution error schema");
+        );
         Geocoder {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: None,
         }
     }
@@ -1066,10 +1123,11 @@ mod tests {
         latitude_sql: &str,
         longitude_sql: &str,
     ) -> Geocoder {
-        let conn =
-            Connection::open_in_memory().expect("open in-memory country_list field error db");
-        conn.execute_batch(&format!(
-            r#"
+        let mut conn = open_test_memory_connection();
+        execute_batch(
+            &mut conn,
+            &format!(
+                r#"
             CREATE TABLE geonames(
               country_id,
               country_name,
@@ -1079,23 +1137,26 @@ mod tests {
             INSERT INTO geonames (country_id, country_name, latitude, longitude)
             VALUES ({country_id_sql}, {country_name_sql}, {latitude_sql}, {longitude_sql});
             "#,
-        ))
-        .expect("create country_list field error schema");
+            ),
+        );
         Geocoder {
-            conn,
+            conn: Mutex::new(conn),
             _temp_path: None,
         }
     }
 
-    fn map_country_center_row_error(latitude_sql: &str, longitude_sql: &str) -> rusqlite::Error {
-        let conn =
-            Connection::open_in_memory().expect("open in-memory country center row error db");
-        conn.query_row(
-            &format!("SELECT {latitude_sql} AS latitude_c, {longitude_sql} AS longitude_c"),
-            [],
-            map_country_center_row,
+    fn map_country_center_row_error(latitude_sql: &str, longitude_sql: &str) -> GeocoderError {
+        let mut conn = open_test_memory_connection();
+        let row = futures_executor::block_on(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "SELECT {latitude_sql} AS latitude_c, {longitude_sql} AS longitude_c"
+            )))
+            .fetch_one(&mut conn),
         )
-        .expect_err("country center row decode should fail")
+        .expect("country center row should fetch");
+        map_country_center_row(&row)
+            .map_err(GeocoderError::from)
+            .expect_err("country center row decode should fail")
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1108,10 +1169,10 @@ mod tests {
         country_name_sql: &str,
         latitude_sql: &str,
         longitude_sql: &str,
-    ) -> rusqlite::Error {
-        let conn = Connection::open_in_memory().expect("open in-memory reverse row error db");
-        conn.query_row(
-            &format!(
+    ) -> GeocoderError {
+        let mut conn = open_test_memory_connection();
+        let row = futures_executor::block_on(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 r#"
                 SELECT
                   {id_sql} AS id,
@@ -1123,54 +1184,56 @@ mod tests {
                   {latitude_sql} AS latitude,
                   {longitude_sql} AS longitude
                 "#,
-            ),
-            [],
-            map_reverse_row,
+            )))
+            .fetch_one(&mut conn),
         )
-        .expect_err("reverse row decode should fail")
+        .expect("reverse row should fetch");
+        map_reverse_row(&row)
+            .map_err(GeocoderError::from)
+            .expect_err("reverse row decode should fail")
     }
 
     fn seed_fixture_database(path: &str) {
-        let conn = Connection::open(path).expect("open fixture database");
-        seed_schema(&conn);
+        let mut conn = open_test_path_connection(path);
+        seed_schema(&mut conn);
 
-        insert_country(&conn, "US", "United States");
-        insert_country(&conn, "BR", "Brazil");
+        insert_country(&mut conn, "US", "United States");
+        insert_country(&mut conn, "BR", "Brazil");
 
-        insert_admin1(&conn, "US", 6, "California");
-        insert_admin1(&conn, "US", 36, "New York");
-        insert_admin1(&conn, "BR", 27, "Sao Paulo");
+        insert_admin1(&mut conn, "US", 6, "California");
+        insert_admin1(&mut conn, "US", 36, "New York");
+        insert_admin1(&mut conn, "BR", 27, "Sao Paulo");
 
-        insert_feature(&conn, 1, "San Francisco", "US", 6, 37.7749, -122.4194);
-        insert_feature(&conn, 2, "Los Angeles", "US", 6, 34.0522, -118.2437);
-        insert_feature(&conn, 3, "New York City", "US", 36, 40.7128, -74.0060);
-        insert_feature(&conn, 4, "Sao Paulo", "BR", 27, -23.5505, -46.6333);
+        insert_feature(&mut conn, 1, "San Francisco", "US", 6, 37.7749, -122.4194);
+        insert_feature(&mut conn, 2, "Los Angeles", "US", 6, 34.0522, -118.2437);
+        insert_feature(&mut conn, 3, "New York City", "US", 36, 40.7128, -74.0060);
+        insert_feature(&mut conn, 4, "Sao Paulo", "BR", 27, -23.5505, -46.6333);
     }
 
     fn seed_high_latitude_database(path: &str) {
-        let conn = Connection::open(path).expect("open fixture database");
-        seed_schema(&conn);
+        let mut conn = open_test_path_connection(path);
+        seed_schema(&mut conn);
 
-        insert_country(&conn, "NO", "Norway");
-        insert_admin1(&conn, "NO", 1, "Nord");
+        insert_country(&mut conn, "NO", "Norway");
+        insert_admin1(&mut conn, "NO", 1, "Nord");
 
-        insert_feature(&conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
-        insert_feature(&conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
+        insert_feature(&mut conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
+        insert_feature(&mut conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
     }
 
     fn seed_forward_fixture_database(path: &str) {
-        let conn = Connection::open(path).expect("open fixture database");
-        seed_schema(&conn);
+        let mut conn = open_test_path_connection(path);
+        seed_schema(&mut conn);
 
-        insert_country(&conn, "CA", "Canada");
-        insert_country(&conn, "US", "United States");
+        insert_country(&mut conn, "CA", "Canada");
+        insert_country(&mut conn, "US", "United States");
 
-        insert_admin1(&conn, "CA", 2, "British Columbia");
-        insert_admin1(&conn, "CA", 3, "Prairie Region");
-        insert_admin1(&conn, "US", 4, "River Region");
+        insert_admin1(&mut conn, "CA", 2, "British Columbia");
+        insert_admin1(&mut conn, "CA", 3, "Prairie Region");
+        insert_admin1(&mut conn, "US", 4, "River Region");
 
         insert_feature(
-            &conn,
+            &mut conn,
             3001,
             "Fixture Victoria",
             "CA",
@@ -1178,15 +1241,16 @@ mod tests {
             48.4359,
             -123.35155,
         );
-        insert_feature(&conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
-        insert_feature(&conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
-        insert_feature(&conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
-        insert_feature(&conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
+        insert_feature(&mut conn, 3002, "Shared Market", "CA", 2, 48.7, -123.2);
+        insert_feature(&mut conn, 3003, "Shared Market", "CA", 3, 50.2, -110.4);
+        insert_feature(&mut conn, 3004, "Identifier Grove", "CA", 2, 48.9, -123.4);
+        insert_feature(&mut conn, 3005, "Query Hamlet", "US", 4, 39.25, -77.5);
     }
 
     fn seed_reverse_country_row_error_database(path: &str) {
-        let conn = Connection::open(path).expect("open invalid row fixture database");
-        conn.execute_batch(
+        let mut conn = open_test_path_connection(path);
+        execute_batch(
+            &mut conn,
             r#"
             CREATE TABLE geonames(
               id INTEGER,
@@ -1204,23 +1268,36 @@ mod tests {
               longitude REAL
             );
             "#,
-        )
-        .expect("create invalid row schema");
-        conn.execute(
-            "INSERT INTO geonames (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            rusqlite::params![1_i64, Option::<String>::None, Option::<i64>::None, Option::<String>::None, "US", "United States", 37.7749_f64, -122.4194_f64],
+        );
+        futures_executor::block_on(
+            sqlx::query("INSERT INTO geonames (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(1_i64)
+                .bind(Option::<String>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<String>::None)
+                .bind("US")
+                .bind("United States")
+                .bind(37.7749_f64)
+                .bind(-122.4194_f64)
+                .execute(&mut conn),
         )
         .expect("insert invalid reverse/country row");
-        conn.execute(
-            "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
-            (1_i64, 37.7749_f64, -122.4194_f64),
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?, ?, ?)",
+            )
+            .bind(1_i64)
+            .bind(37.7749_f64)
+            .bind(-122.4194_f64)
+            .execute(&mut conn),
         )
         .expect("insert invalid reverse/country coordinate");
     }
 
     fn seed_country_list_row_error_database(path: &str) {
-        let conn = Connection::open(path).expect("open aggregate error fixture database");
-        conn.execute_batch(
+        let mut conn = open_test_path_connection(path);
+        execute_batch(
+            &mut conn,
             r#"
             CREATE TABLE geonames(
               country_id TEXT,
@@ -1229,17 +1306,44 @@ mod tests {
               longitude REAL
             );
             "#,
-        )
-        .expect("create aggregate error schema");
-        conn.execute(
-            "INSERT INTO geonames (country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params!["US", "United States", Option::<f64>::None, Option::<f64>::None],
+        );
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO geonames (country_id, country_name, latitude, longitude) VALUES (?, ?, ?, ?)",
+            )
+            .bind("US")
+            .bind("United States")
+            .bind(Option::<f64>::None)
+            .bind(Option::<f64>::None)
+            .execute(&mut conn),
         )
         .expect("insert aggregate error row");
     }
 
-    fn seed_schema(conn: &Connection) {
-        conn.execute_batch(
+    fn open_test_path_connection(path: &str) -> SqliteConnection {
+        futures_executor::block_on(SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        ))
+        .expect("open fixture database")
+    }
+
+    fn open_test_memory_connection() -> SqliteConnection {
+        futures_executor::block_on(SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().in_memory(true),
+        ))
+        .expect("open in-memory fixture database")
+    }
+
+    fn execute_batch(conn: &mut SqliteConnection, sql: &str) {
+        futures_executor::block_on(sqlx::raw_sql(sqlx::AssertSqlSafe(sql)).execute(conn))
+            .expect("execute fixture sql batch");
+    }
+
+    fn seed_schema(conn: &mut SqliteConnection) {
+        execute_batch(
+            conn,
             r#"
             CREATE TABLE countries(
               id TEXT,
@@ -1281,28 +1385,32 @@ mod tests {
                 LEFT JOIN admin1 ON features.country_id = admin1.country_id AND features.admin1_id = admin1.id
                 JOIN coordinates ON features.id = coordinates.feature_id;
             "#,
-        )
-        .expect("create fixture schema");
+        );
     }
 
-    fn insert_country(conn: &Connection, id: &str, name: &str) {
-        conn.execute(
-            "INSERT INTO countries (id, name) VALUES (?1, ?2)",
-            (id, name),
+    fn insert_country(conn: &mut SqliteConnection, id: &str, name: &str) {
+        futures_executor::block_on(
+            sqlx::query("INSERT INTO countries (id, name) VALUES (?, ?)")
+                .bind(id)
+                .bind(name)
+                .execute(conn),
         )
         .expect("insert country");
     }
 
-    fn insert_admin1(conn: &Connection, country_id: &str, id: i64, name: &str) {
-        conn.execute(
-            "INSERT INTO admin1 (country_id, id, name) VALUES (?1, ?2, ?3)",
-            (country_id, id, name),
+    fn insert_admin1(conn: &mut SqliteConnection, country_id: &str, id: i64, name: &str) {
+        futures_executor::block_on(
+            sqlx::query("INSERT INTO admin1 (country_id, id, name) VALUES (?, ?, ?)")
+                .bind(country_id)
+                .bind(id)
+                .bind(name)
+                .execute(conn),
         )
         .expect("insert admin1");
     }
 
     fn insert_feature(
-        conn: &Connection,
+        conn: &mut SqliteConnection,
         id: i64,
         name: &str,
         country_id: &str,
@@ -1310,14 +1418,25 @@ mod tests {
         latitude: f64,
         longitude: f64,
     ) {
-        conn.execute(
-            "INSERT INTO features (id, name, country_id, admin1_id) VALUES (?1, ?2, ?3, ?4)",
-            (id, name, country_id, admin1_id),
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO features (id, name, country_id, admin1_id) VALUES (?, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(name)
+            .bind(country_id)
+            .bind(admin1_id)
+            .execute(&mut *conn),
         )
         .expect("insert feature");
-        conn.execute(
-            "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
-            (id, latitude, longitude),
+        futures_executor::block_on(
+            sqlx::query(
+                "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?, ?, ?)",
+            )
+            .bind(id)
+            .bind(latitude)
+            .bind(longitude)
+            .execute(conn),
         )
         .expect("insert coordinate");
     }

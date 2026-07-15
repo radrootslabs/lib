@@ -3,11 +3,11 @@ use radroots_runtime_store::{
     RuntimeStoreRecordInput, RuntimeStoreRecordStatus, RuntimeStoreRecordUpdate, SourceRuntime,
 };
 use radroots_sql_core::migrations::migrations_run_all_up;
-use radroots_sql_core::{SqlExecutor, SqliteExecutor};
+use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
 use serde_json::json;
 
-fn store() -> RuntimeStore<SqliteExecutor> {
-    let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+fn store() -> RuntimeStore<SqlxSqliteExecutor> {
+    let executor = SqlxSqliteExecutor::open_memory().expect("open memory sqlite");
     let store = RuntimeStore::new(executor);
     store.migrate_up().expect("migrate runtime store");
     store
@@ -296,7 +296,7 @@ fn changed_latest_is_not_blocked_by_older_record_volume() {
 
 #[test]
 fn migration_assigns_existing_records_change_seq_from_insert_order() {
-    let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+    let executor = SqlxSqliteExecutor::open_memory().expect("open memory sqlite");
     migrations_run_all_up(&executor, &MIGRATIONS[..1]).expect("apply initial migration");
     let first = insert_pre_change_tracking_record(&executor, "local-a");
     let second = insert_pre_change_tracking_record(&executor, "local-b");
@@ -316,7 +316,7 @@ fn migration_assigns_existing_records_change_seq_from_insert_order() {
 
 #[test]
 fn migration_repairs_pre_network_source_runtime_constraint() {
-    let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+    let executor = SqlxSqliteExecutor::open_memory().expect("open memory sqlite");
     create_pre_network_change_tracking_schema(&executor);
     let legacy_seq = insert_pre_network_change_tracking_record(&executor, "legacy-cli", 1);
     let store = RuntimeStore::new(executor);
@@ -345,7 +345,7 @@ fn migration_repairs_pre_network_source_runtime_constraint() {
     assert_eq!(rows[1].source_runtime, SourceRuntime::Network);
 }
 
-fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str) -> i64 {
+fn insert_pre_change_tracking_record(executor: &SqlxSqliteExecutor, record_id: &str) -> i64 {
     let input = local_work(record_id);
     let params = json!([
         input.record_id,
@@ -412,7 +412,7 @@ fn insert_pre_change_tracking_record(executor: &SqliteExecutor, record_id: &str)
     outcome.last_insert_id
 }
 
-fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
+fn create_pre_network_change_tracking_schema(executor: &SqlxSqliteExecutor) {
     let schema = [
         "create table __migrations(id integer primary key, name text not null unique, applied_at text not null default (datetime('now')))",
         "create table runtime_store_record (
@@ -472,7 +472,7 @@ fn create_pre_network_change_tracking_schema(executor: &SqliteExecutor) {
 }
 
 fn insert_pre_network_change_tracking_record(
-    executor: &SqliteExecutor,
+    executor: &SqlxSqliteExecutor,
     record_id: &str,
     change_seq: i64,
 ) -> i64 {

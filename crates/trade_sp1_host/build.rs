@@ -9,18 +9,22 @@ fn main() {
     if std::env::var(run_real_proof_tests_env).as_deref() == Ok("1") {
         println!("cargo:rustc-cfg=radroots_sp1_real_proof_tests");
     }
-    if std::env::var(build_guest_elf_env).as_deref() != Ok("1") {
-        return;
+    if std::env::var(build_guest_elf_env).as_deref() == Ok("1") {
+        #[cfg(feature = "sp1_verify")]
+        {
+            build_guest_elf();
+        }
     }
-    #[cfg(feature = "sp1_verify")]
-    {
-        let args = sp1_build::BuildArgs {
-            binaries: vec!["radroots_sp1_trade_order_acceptance_guest".to_string()],
-            features: vec!["sp1_guest".to_string()],
-            locked: true,
-            ..sp1_build::BuildArgs::default()
-        };
-        sp1_build::build_program_with_args("../trade_sp1_guest", args);
-        println!("cargo:rustc-cfg=radroots_sp1_guest_elf");
-    }
+}
+
+#[cfg(feature = "sp1_verify")]
+fn build_guest_elf() {
+    let args = sp1_build::BuildArgs {
+        binaries: vec!["radroots_sp1_trade_order_acceptance_guest".to_string()],
+        features: vec!["sp1_guest".to_string()],
+        locked: true,
+        ..sp1_build::BuildArgs::default()
+    };
+    sp1_build::build_program_with_args("../trade_sp1_guest", args);
+    println!("cargo:rustc-cfg=radroots_sp1_guest_elf");
 }

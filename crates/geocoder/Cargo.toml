@@ -17,11 +17,12 @@ test-fixture-geonames-asset = []
 
 [dependencies]
 hex = { workspace = true }
+futures-executor = { workspace = true }
 radroots_runtime_paths = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "rustls-tls"] }
-rusqlite = { workspace = true, features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
+sqlx = { workspace = true, features = ["derive", "sqlite-bundled"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }

@@ -730,11 +730,8 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     let target = nostr_target(RELAY_PRIMARY_WSS);
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-1",
-        RadrootsTransportPayload::unchecked_signed_event_json(
-            signed.id_str().to_owned(),
-            signed.raw_json().to_owned(),
-        )
-        .expect("payload"),
+        RadrootsTransportPayload::unchecked_signed_event_json(signed.id_str(), signed.raw_json())
+            .expect("payload"),
         RadrootsTransportTargetSet::new(vec![target.clone()]).expect("targets"),
         RadrootsTransportSatisfactionPolicy::all_accepted(),
     );
@@ -818,8 +815,8 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-request-target",
             RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str().to_owned(),
-                signed.raw_json().to_owned(),
+                signed.id_str(),
+                signed.raw_json(),
             )
             .expect("payload"),
             RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
@@ -844,8 +841,8 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
         .deliver(RadrootsTransportDeliveryRequest::new(
             "facade-canonical-receipt",
             RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str().to_owned(),
-                signed.raw_json().to_owned(),
+                signed.id_str(),
+                signed.raw_json(),
             )
             .expect("payload"),
             RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
@@ -891,11 +888,8 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
     .expect("required targets");
     let request = RadrootsTransportDeliveryRequest::new(
         "facade-request-scoped",
-        RadrootsTransportPayload::unchecked_signed_event_json(
-            signed.id_str().to_owned(),
-            signed.raw_json().to_owned(),
-        )
-        .expect("payload"),
+        RadrootsTransportPayload::unchecked_signed_event_json(signed.id_str(), signed.raw_json())
+            .expect("payload"),
         RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("targets"),
         policy.clone(),
     );

@@ -672,9 +672,8 @@ fn required_target_semantics_stay_fingerprint_exact() {
     );
     for required in [
         "RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } =>",
-        "required_targets.as_ref().is_none_or(|required|",
-        "target.endpoint_fingerprint == *fingerprint",
-        "let required_for_satisfaction = required_targets.as_ref().is_some_and(|required|",
+        ".is_none_or(|required| required.contains(&target.endpoint_fingerprint))",
+        ".is_some_and(|required| required.contains(&target.endpoint_fingerprint))",
         "required_targets.is_none() || required_for_satisfaction",
         "required_targets.is_some()",
     ] {

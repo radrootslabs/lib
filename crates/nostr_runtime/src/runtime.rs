@@ -306,7 +306,7 @@ impl RadrootsNostrRuntime {
 
         let mut connected = 0usize;
         let mut connecting = 0usize;
-        for (_, status) in statuses.iter() {
+        for status in statuses.values() {
             match status {
                 RadrootsNostrRelayStatus::Connected => connected += 1,
                 RadrootsNostrRelayStatus::Connecting => connecting += 1,

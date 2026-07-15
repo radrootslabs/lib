@@ -25,16 +25,11 @@ const DEFERRED_CODE: &str = "deferred_until_implemented";
 const DEFERRED_MESSAGE: &str = "Reticulum preview delivery is deferred until implementation";
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RadrootsReticulumPreviewBehavior {
+    #[default]
     RejectDeliveryAttempts,
     DeferDeliveryPlans,
-}
-
-impl Default for RadrootsReticulumPreviewBehavior {
-    fn default() -> Self {
-        Self::RejectDeliveryAttempts
-    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

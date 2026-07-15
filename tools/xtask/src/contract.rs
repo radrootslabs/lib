@@ -2363,7 +2363,9 @@ fn coverage_required_workspace_crates(workspace_root: &Path) -> Result<BTreeSet<
 }
 
 fn coverage_policy_excludes_workspace_crate(crate_name: &str) -> bool {
-    crate_name.contains("_simplex_") || crate_name.starts_with("simplex_")
+    crate_name == "libsqlite3-sys"
+        || crate_name.contains("_simplex_")
+        || crate_name.starts_with("simplex_")
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -4686,12 +4688,12 @@ pub enum RadrootsCoreUnitDimension {
     }
 
     #[test]
-    fn coverage_required_workspace_crates_excludes_simplex_packages() {
+    fn coverage_required_workspace_crates_excludes_non_policy_packages() {
         let root = temp_root("coverage_required_workspace_simplex");
         write_file(
             &root.join("Cargo.toml"),
             r#"[workspace]
-members = ["crates/a", "crates/radroots_simplex_probe", "crates/simplex_probe"]
+members = ["crates/a", "crates/libsqlite3_sys_3_53_3", "crates/radroots_simplex_probe", "crates/simplex_probe"]
 resolver = "2"
 "#,
         );
@@ -4699,6 +4701,17 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+version = "0.1.0"
+edition = "2024"
+"#,
+        );
+        write_file(
+            &root
+                .join("crates")
+                .join("libsqlite3_sys_3_53_3")
+                .join("Cargo.toml"),
+            r#"[package]
+name = "libsqlite3-sys"
 version = "0.1.0"
 edition = "2024"
 "#,
@@ -4731,6 +4744,7 @@ edition = "2024"
                 .into_iter()
                 .collect::<BTreeSet<_>>()
         );
+        assert!(coverage_policy_excludes_workspace_crate("libsqlite3-sys"));
         assert!(coverage_policy_excludes_workspace_crate(
             "radroots_simplex_probe"
         ));

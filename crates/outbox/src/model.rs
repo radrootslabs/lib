@@ -250,8 +250,9 @@ impl RadrootsOutboxDeliveryTargetStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RadrootsOutboxReticulumPreviewBehavior {
+    #[default]
     RejectDeliveryAttempts,
     DeferDeliveryPlans,
 }
@@ -262,12 +263,6 @@ impl RadrootsOutboxReticulumPreviewBehavior {
             Self::RejectDeliveryAttempts => "reject_delivery_attempts",
             Self::DeferDeliveryPlans => "defer_delivery_plans",
         }
-    }
-}
-
-impl Default for RadrootsOutboxReticulumPreviewBehavior {
-    fn default() -> Self {
-        Self::RejectDeliveryAttempts
     }
 }
 

@@ -122,10 +122,7 @@ impl RadrootsNostrConnectRequest {
                     });
                 }
                 let remote_signer_public_key = parse_public_key(&params[0])?;
-                let secret = params
-                    .get(1)
-                    .cloned()
-                    .and_then(|value| if value.is_empty() { None } else { Some(value) });
+                let secret = params.get(1).cloned().filter(|value| !value.is_empty());
                 let requested_permissions = match params.get(2) {
                     Some(value) => RadrootsNostrConnectPermissions::from_str(value)?,
                     None => RadrootsNostrConnectPermissions::default(),

@@ -1030,7 +1030,7 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
         policy
             .required_target_fingerprints()
             .expect("required targets"),
-        &[required.fingerprint.clone()]
+        std::slice::from_ref(&required.fingerprint)
     );
     let unordered_policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,

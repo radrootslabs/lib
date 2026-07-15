@@ -426,11 +426,10 @@ impl PublishableRelays {
                     receipt
                         .transport_status
                         .counts_as_satisfied(self.satisfaction_class)
-                        && self.required_targets.as_ref().is_none_or(|required| {
-                            required
-                                .iter()
-                                .any(|fingerprint| receipt.endpoint_fingerprint == *fingerprint)
-                        })
+                        && self
+                            .required_targets
+                            .as_ref()
+                            .is_none_or(|required| required.contains(&receipt.endpoint_fingerprint))
                 })
                 .count()
     }
@@ -730,13 +729,13 @@ fn publishable_transport_targets(
                 relay
                     .target_scope
                     .as_deref()
-                    .map(|scope| radroots_transport::RadrootsTransportMeshScopeId::parse(scope))
+                    .map(radroots_transport::RadrootsTransportMeshScopeId::parse)
                     .transpose()
                     .map_err(transport_error_to_relay_error)?,
                 relay
                     .target_label
                     .as_deref()
-                    .map(|label| radroots_transport::RadrootsTransportTargetLabel::parse(label))
+                    .map(radroots_transport::RadrootsTransportTargetLabel::parse)
                     .transpose()
                     .map_err(transport_error_to_relay_error)?,
             )
@@ -844,13 +843,12 @@ async fn publishable_relays(
     let satisfied_count = active_targets
         .iter()
         .filter(|target| {
-            required_targets.as_ref().is_none_or(|required| {
-                required
-                    .iter()
-                    .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
-            }) && target
-                .status
-                .counts_as_transport_satisfaction(satisfaction_class)
+            required_targets
+                .as_ref()
+                .is_none_or(|required| required.contains(&target.endpoint_fingerprint))
+                && target
+                    .status
+                    .counts_as_transport_satisfaction(satisfaction_class)
         })
         .count();
     let remaining_satisfaction_count =
@@ -875,11 +873,9 @@ async fn publishable_relays(
         if !is_nostr_target(target) {
             continue;
         }
-        let required_for_satisfaction = required_targets.as_ref().is_some_and(|required| {
-            required
-                .iter()
-                .any(|fingerprint| target.endpoint_fingerprint == *fingerprint)
-        });
+        let required_for_satisfaction = required_targets
+            .as_ref()
+            .is_some_and(|required| required.contains(&target.endpoint_fingerprint));
         if target
             .status
             .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)

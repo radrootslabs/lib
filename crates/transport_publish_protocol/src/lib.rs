@@ -254,16 +254,11 @@ impl std::error::Error for TransportPublishProtocolError {}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TransportPublishPreviewBehavior {
+    #[default]
     RejectDeliveryAttempts,
     DeferDeliveryPlans,
-}
-
-impl Default for TransportPublishPreviewBehavior {
-    fn default() -> Self {
-        Self::RejectDeliveryAttempts
-    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

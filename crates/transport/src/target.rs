@@ -389,7 +389,7 @@ fn canonicalize_nostr_relay_authority(
         let host = parts.next().unwrap_or_default();
         let port = parts
             .next()
-            .map(|port| parse_nostr_relay_port_with_prefix(port))
+            .map(parse_nostr_relay_port_with_prefix)
             .transpose()?;
         if host.is_empty() || !is_valid_nostr_relay_host(host) {
             return Err(RadrootsTransportError::InvalidTargetUri);

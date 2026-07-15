@@ -38,13 +38,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use radroots_sql_core::SqliteExecutor;
+    use radroots_sql_core::SqlxSqliteExecutor;
 
     use super::*;
 
     #[test]
     fn migration_entrypoints_apply_and_reverse_schema() {
-        let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+        let executor = SqlxSqliteExecutor::open_memory().expect("open memory sqlite");
 
         run_all_up(&executor).expect("migrate up");
         executor

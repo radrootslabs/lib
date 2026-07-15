@@ -460,6 +460,26 @@ mod tests {
     }
 
     #[test]
+    fn transport_kind_v1_parses_current_and_unknown_identities() {
+        for (raw, expected) in [
+            ("local", TransportKindV1::Local),
+            ("nostr", TransportKindV1::Nostr),
+            ("reticulum", TransportKindV1::Reticulum),
+        ] {
+            let parsed = TransportKindV1::parse(raw).expect("current transport parses");
+            assert_eq!(parsed, expected);
+            assert_eq!(parsed.as_str(), raw);
+        }
+
+        assert_eq!(
+            TransportKindV1::parse("unknown_transport")
+                .expect_err("unknown transport")
+                .to_string(),
+            "unknown transport kind unknown_transport"
+        );
+    }
+
+    #[test]
     fn transport_kind_v1_rejects_retired_identities() {
         for identity in [
             "reticulum_preview",
@@ -472,6 +492,12 @@ mod tests {
                 TransportKindV1::parse(identity),
                 Err(ProtocolContractErrorV1::RetiredTransportIdentity { .. })
             ));
+            assert_eq!(
+                TransportKindV1::parse(identity)
+                    .expect_err("retired transport")
+                    .to_string(),
+                alloc::format!("retired transport identity {identity}")
+            );
         }
     }
 
@@ -503,6 +529,94 @@ mod tests {
         assert_eq!(
             target.mesh_scope.as_ref().expect("scope").as_str(),
             "local_preview"
+        );
+    }
+
+    #[test]
+    fn reticulum_target_newtypes_reject_invalid_values() {
+        for value in ["", " local", "local ", "local/scope"] {
+            assert_eq!(
+                MeshScopeIdV1::parse(value)
+                    .expect_err("invalid mesh scope")
+                    .to_string(),
+                "invalid mesh scope id"
+            );
+        }
+
+        for value in [
+            "",
+            " reticulum:local",
+            "reticulum:local ",
+            "reticulum:\nlocal",
+        ] {
+            assert_eq!(
+                ReticulumDestinationV1::parse(value)
+                    .expect_err("invalid destination")
+                    .to_string(),
+                "invalid Reticulum destination"
+            );
+        }
+    }
+
+    #[test]
+    fn validation_reports_transport_catalog_errors() {
+        let local = TRANSPORT_CAPABILITY_CATALOG_V1[0];
+        let nostr = TRANSPORT_CAPABILITY_CATALOG_V1[1];
+        let reticulum = TRANSPORT_CAPABILITY_CATALOG_V1[2];
+
+        assert_eq!(
+            validate_transport_capability_catalog(&[local, local])
+                .expect_err("duplicate kind")
+                .to_string(),
+            "duplicate transport kind local"
+        );
+        assert_eq!(
+            validate_transport_capability_catalog(&[nostr, reticulum])
+                .expect_err("missing required kind")
+                .to_string(),
+            "missing required transport local"
+        );
+    }
+
+    #[test]
+    fn validation_reports_event_and_schema_catalog_errors() {
+        let event = PROTOCOL_EVENT_CATALOG_V1[0];
+        let duplicate_name = ProtocolEventDescriptorV1 {
+            name: event.name,
+            kind: u32::MAX,
+            event_class: ProtocolEventClassV1::Regular,
+            purpose: "duplicate name",
+        };
+        let duplicate_kind = ProtocolEventDescriptorV1 {
+            name: "duplicate_kind",
+            kind: event.kind,
+            event_class: ProtocolEventClassV1::Regular,
+            purpose: "duplicate kind",
+        };
+        let schema = PROTOCOL_SCHEMA_METADATA_V1[0];
+        let duplicate_schema = ProtocolSchemaMetadataV1 {
+            type_name: "Duplicate",
+            schema_id: schema.schema_id,
+            schema_version: schema.schema_version,
+        };
+
+        assert_eq!(
+            validate_event_catalog(&[event, duplicate_name])
+                .expect_err("duplicate event name")
+                .to_string(),
+            alloc::format!("duplicate event name {}", event.name)
+        );
+        assert_eq!(
+            validate_event_catalog(&[event, duplicate_kind])
+                .expect_err("duplicate event kind")
+                .to_string(),
+            alloc::format!("duplicate event kind {}", event.kind)
+        );
+        assert_eq!(
+            validate_schema_metadata(&[schema, duplicate_schema])
+                .expect_err("duplicate schema id")
+                .to_string(),
+            alloc::format!("duplicate schema id {}", schema.schema_id)
         );
     }
 }
