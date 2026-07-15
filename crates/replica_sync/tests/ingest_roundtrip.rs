@@ -41,7 +41,7 @@ use radroots_replica_sync::{
     RadrootsReplicaSyncRequest, radroots_replica_ingest_event, radroots_replica_sync_all,
     radroots_replica_sync_status,
 };
-use radroots_sql_core::SqliteExecutor;
+use radroots_sql_core::SqlxSqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
 use std::panic;
@@ -54,7 +54,7 @@ fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -
 }
 
 struct BeginFailExecutor<'a> {
-    inner: &'a SqliteExecutor,
+    inner: &'a SqlxSqliteExecutor,
 }
 
 impl SqlExecutor for BeginFailExecutor<'_> {
@@ -80,7 +80,7 @@ impl SqlExecutor for BeginFailExecutor<'_> {
 }
 
 struct CommitFailExecutor<'a> {
-    inner: &'a SqliteExecutor,
+    inner: &'a SqlxSqliteExecutor,
 }
 
 impl SqlExecutor for CommitFailExecutor<'_> {
@@ -106,7 +106,7 @@ impl SqlExecutor for CommitFailExecutor<'_> {
 }
 
 struct DeleteFailExecutor<'a> {
-    inner: &'a SqliteExecutor,
+    inner: &'a SqlxSqliteExecutor,
     table_name: &'static str,
     err: SqlError,
 }
@@ -137,7 +137,7 @@ impl SqlExecutor for DeleteFailExecutor<'_> {
 }
 
 struct QueryFailExecutor<'a> {
-    inner: &'a SqliteExecutor,
+    inner: &'a SqlxSqliteExecutor,
     needle: &'static str,
     err: SqlError,
 }
@@ -191,7 +191,7 @@ fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsEven
 }
 
 fn seed_source(
-    exec: &SqliteExecutor,
+    exec: &SqlxSqliteExecutor,
 ) -> (
     RadrootsReplicaSyncRequest,
     String,
@@ -460,11 +460,11 @@ fn seed_source(
 
 #[test]
 fn ingest_roundtrip_yields_zero_pending_sync() {
-    let source = SqliteExecutor::open_memory().expect("source db");
+    let source = SqlxSqliteExecutor::open_memory().expect("source db");
     let (_source_request, farm_d_tag, farm_pubkey, drafts) = seed_source(&source);
     assert_eq!(drafts.len(), 10);
 
-    let target = SqliteExecutor::open_memory().expect("target db");
+    let target = SqlxSqliteExecutor::open_memory().expect("target db");
     migrations::run_all_up(&target).expect("target migrations");
 
     let mut skipped = 0usize;
@@ -501,7 +501,7 @@ fn ingest_roundtrip_yields_zero_pending_sync() {
 
 #[test]
 fn sync_status_empty_db_is_zero() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
     let status = radroots_replica_sync_status(&exec).expect("status");
     assert_eq!(status.expected_count, 0);
@@ -510,7 +510,7 @@ fn sync_status_empty_db_is_zero() {
 
 #[test]
 fn sync_all_selector_and_options_paths_are_supported() {
-    let source = SqliteExecutor::open_memory().expect("source db");
+    let source = SqlxSqliteExecutor::open_memory().expect("source db");
     let (request, farm_d_tag, farm_pubkey, full_events) = seed_source(&source);
 
     let by_pair = radroots_replica_sync_all(
@@ -544,7 +544,7 @@ fn sync_all_selector_and_options_paths_are_supported() {
 
 #[test]
 fn ingest_rejects_unsupported_kind() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
     let event = event_with_parts(
         1,
@@ -560,7 +560,7 @@ fn ingest_rejects_unsupported_kind() {
 
 #[test]
 fn ingest_reports_transaction_boundary_errors() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
     let author = "a".repeat(64);
     let profile = profile_event(
@@ -580,7 +580,7 @@ fn ingest_reports_transaction_boundary_errors() {
 
 #[test]
 fn ingest_reports_delete_internal_errors() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
     let farm_pubkey = "f".repeat(64);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -618,7 +618,7 @@ fn ingest_reports_delete_internal_errors() {
 
 #[test]
 fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let profile_pubkey = "a".repeat(64);
@@ -764,7 +764,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
 
 #[test]
 fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let assert_query_fail = |needle: &'static str, event: &RadrootsEventEnvelope| {
@@ -1081,7 +1081,7 @@ fn list_set_event(
 
 #[test]
 fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let profile_pubkey = "9".repeat(64);
@@ -1835,9 +1835,9 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
 
 #[test]
 fn sync_status_reports_pending_when_not_all_events_are_ingested() {
-    let source = SqliteExecutor::open_memory().expect("source");
+    let source = SqlxSqliteExecutor::open_memory().expect("source");
     let (_request, _farm_d_tag, _farm_pubkey, drafts) = seed_source(&source);
-    let target = SqliteExecutor::open_memory().expect("target");
+    let target = SqlxSqliteExecutor::open_memory().expect("target");
     migrations::run_all_up(&target).expect("migrations");
 
     for (index, draft) in drafts.iter().enumerate() {
@@ -1858,7 +1858,7 @@ fn sync_status_reports_pending_when_not_all_events_are_ingested() {
 
 #[test]
 fn sync_all_rejects_invalid_selectors_and_resolves_unique_pair() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let missing_selector_err = radroots_replica_sync_all(
@@ -1928,7 +1928,7 @@ fn sync_all_rejects_invalid_selectors_and_resolves_unique_pair() {
 
 #[test]
 fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let farm_pubkey = "0".repeat(64);
@@ -2123,7 +2123,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
 
 #[test]
 fn sync_emit_reports_encode_error_for_invalid_farm_record() {
-    let exec = SqliteExecutor::open_memory().expect("db");
+    let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
     let farm_row = unwrap_sql(

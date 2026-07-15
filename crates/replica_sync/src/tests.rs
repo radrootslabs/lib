@@ -19,7 +19,7 @@ use radroots_replica_store::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
     nostr_profile, plot, plot_gcs_location, plot_tag,
 };
-use radroots_sql_core::SqliteExecutor;
+use radroots_sql_core::SqlxSqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use std::panic;
 
@@ -32,7 +32,7 @@ fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -
 
 #[test]
 fn sync_all_emits_expected_order() {
-    let exec = SqliteExecutor::open_memory().expect("exec");
+    let exec = SqlxSqliteExecutor::open_memory().expect("exec");
     migrations::run_all_up(&exec).expect("migrations");
 
     let farm_pubkey = "f".repeat(64);

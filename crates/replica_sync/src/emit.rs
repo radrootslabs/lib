@@ -265,7 +265,7 @@ pub fn radroots_replica_membership_claim_events(
     }
 
     let mut events = Vec::new();
-    for (member_pubkey, _) in by_member.iter() {
+    for member_pubkey in by_member.keys() {
         let all_claims = load_member_claims_for_member(exec, member_pubkey)?;
         let mut farm_pubkeys = all_claims
             .into_iter()
@@ -937,7 +937,7 @@ mod tests {
         farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
         migrations, nostr_profile, plot, plot_gcs_location, plot_tag,
     };
-    use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor, SqliteExecutor};
+    use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor, SqlxSqliteExecutor};
 
     struct ErrorExecutor;
 
@@ -964,7 +964,7 @@ mod tests {
     }
 
     struct QueryFailExecutor<'a> {
-        inner: &'a SqliteExecutor,
+        inner: &'a SqlxSqliteExecutor,
         needle: &'static str,
         err: SqlError,
     }
@@ -995,7 +995,7 @@ mod tests {
     }
 
     struct DuplicateFarmSelectorExecutor<'a> {
-        inner: &'a SqliteExecutor,
+        inner: &'a SqlxSqliteExecutor,
         duplicated_rows_json: String,
     }
 
@@ -1022,7 +1022,7 @@ mod tests {
         }
     }
 
-    fn seed(exec: &SqliteExecutor) -> (Farm, Plot, Plot) {
+    fn seed(exec: &SqlxSqliteExecutor) -> (Farm, Plot, Plot) {
         migrations::run_all_up(exec).expect("migrations");
         let farm = farm::create(
             exec,
@@ -1286,7 +1286,12 @@ mod tests {
         (farm, plot_primary, plot_secondary)
     }
 
-    fn create_farm_record(exec: &SqliteExecutor, d_tag: &str, pubkey: &str, name: &str) -> Farm {
+    fn create_farm_record(
+        exec: &SqlxSqliteExecutor,
+        d_tag: &str,
+        pubkey: &str,
+        name: &str,
+    ) -> Farm {
         farm::create(
             exec,
             &IFarmFields {
@@ -1307,7 +1312,7 @@ mod tests {
         .result
     }
 
-    fn create_plot_record(exec: &SqliteExecutor, farm_id: &str, d_tag: &str, name: &str) {
+    fn create_plot_record(exec: &SqlxSqliteExecutor, farm_id: &str, d_tag: &str, name: &str) {
         let _ = plot::create(
             exec,
             &IPlotFields {
@@ -1324,7 +1329,12 @@ mod tests {
         .expect("plot");
     }
 
-    fn add_member_record(exec: &SqliteExecutor, farm_id: &str, member_pubkey: &str, role: &str) {
+    fn add_member_record(
+        exec: &SqlxSqliteExecutor,
+        farm_id: &str,
+        member_pubkey: &str,
+        role: &str,
+    ) {
         let _ = farm_member::create(
             exec,
             &IFarmMemberFields {
@@ -1338,7 +1348,7 @@ mod tests {
 
     #[test]
     fn emit_paths_cover_private_and_public_helpers() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, plot_primary, plot_secondary) = seed(&exec);
 
         let by_id = resolve_farm(
@@ -1657,7 +1667,7 @@ mod tests {
 
     #[test]
     fn emit_option_toggles_and_empty_rows_cover_branches() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm = farm::create(
@@ -1734,7 +1744,7 @@ mod tests {
 
     #[test]
     fn emit_profile_variants_and_missing_profiles_are_handled() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, _) = seed(&exec);
 
         let _ = farm_member::create(
@@ -1812,7 +1822,7 @@ mod tests {
 
     #[test]
     fn emit_query_error_paths_are_reported() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm = Farm {
@@ -1906,7 +1916,7 @@ mod tests {
 
     #[test]
     fn load_farm_location_omits_string_only_public_locations() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let farm_row = farm::create(
             &exec,
@@ -1933,7 +1943,7 @@ mod tests {
 
     #[test]
     fn emit_propagates_queryfail_and_builder_errors() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, _) = seed(&exec);
         let selector = RadrootsReplicaFarmSelector {
             id: Some(farm_row.id.clone()),
@@ -2074,7 +2084,7 @@ mod tests {
 
     #[test]
     fn emit_additional_error_branches_are_reported() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, _) = seed(&exec);
 
         crate::canonical::failpoints::set_error();
@@ -2301,7 +2311,7 @@ mod tests {
         create_plot_record(&exec, &list_plot_error_farm.id, "", "plot-list-error");
         assert!(radroots_replica_list_set_events(&exec, &list_plot_error_farm).is_err());
 
-        let clean_exec = SqliteExecutor::open_memory().expect("db clean");
+        let clean_exec = SqlxSqliteExecutor::open_memory().expect("db clean");
         let (clean_farm, _, _) = seed(&clean_exec);
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&clean_exec, &clean_farm).is_err());
@@ -2342,7 +2352,7 @@ mod tests {
 
     #[test]
     fn emit_list_set_wire_error_paths_are_reported() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, _) = seed(&exec);
 
         super::failpoints::set_list_set_to_wire_error();
@@ -2361,7 +2371,7 @@ mod tests {
 
     #[test]
     fn emit_pass_through_executor_instantiation_paths_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, plot_secondary) = seed(&exec);
 
         let pass = QueryFailExecutor {
@@ -2459,7 +2469,7 @@ mod tests {
 
     #[test]
     fn emit_executor_trait_method_paths_are_covered() {
-        let sqlite = SqliteExecutor::open_memory().expect("db");
+        let sqlite = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&sqlite).expect("migrations");
 
         let err_exec = ErrorExecutor;

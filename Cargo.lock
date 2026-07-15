@@ -4805,9 +4805,10 @@ name = "radroots_sql_core"
 version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
- "rusqlite",
+ "futures-executor",
  "serde",
  "serde_json",
+ "sqlx",
  "uuid",
 ]
 

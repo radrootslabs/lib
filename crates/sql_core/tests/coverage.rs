@@ -1,5 +1,5 @@
 #[cfg(feature = "native")]
-use radroots_sql_core::SqliteExecutor;
+use radroots_sql_core::SqlxSqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::migrations::{Migration, migrations_run_all_down, migrations_run_all_up};
 use radroots_sql_core::utils::{
@@ -190,8 +190,8 @@ fn sql_executor_reference_impl_forwards_all_methods() {
 
 #[cfg(feature = "native")]
 #[test]
-fn sqlite_executor_exec_runs_multi_statement_batches_without_params() {
-    let exec = SqliteExecutor::open_memory().expect("open sqlite memory");
+fn sqlx_sqlite_executor_exec_runs_multi_statement_batches_without_params() {
+    let exec = SqlxSqliteExecutor::open_memory().expect("open sqlite memory");
 
     let outcome = exec
         .exec(

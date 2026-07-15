@@ -51,9 +51,9 @@ impl From<serde_json::Error> for SqlError {
     }
 }
 
-#[cfg(all(feature = "native", feature = "std"))]
-impl From<rusqlite::Error> for SqlError {
-    fn from(e: rusqlite::Error) -> Self {
+#[cfg(feature = "native")]
+impl From<sqlx::Error> for SqlError {
+    fn from(e: sqlx::Error) -> Self {
         SqlError::InvalidQuery(e.to_string())
     }
 }

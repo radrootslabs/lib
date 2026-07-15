@@ -1556,7 +1556,7 @@ mod tests {
         gcs_location, migrations, nostr_event_head, plot, plot_gcs_location, plot_tag,
         trade_product,
     };
-    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
+    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqlxSqliteExecutor};
 
     fn test_event_envelope(
         id: u64,
@@ -1612,7 +1612,7 @@ mod tests {
     }
 
     struct TxnExecutor<'a> {
-        inner: Option<&'a SqliteExecutor>,
+        inner: Option<&'a SqlxSqliteExecutor>,
         begin_err: Option<SqlError>,
         commit_err: Option<SqlError>,
         rollback_count: Arc<AtomicUsize>,
@@ -1654,7 +1654,7 @@ mod tests {
     }
 
     struct DeleteErrorExecutor<'a> {
-        inner: &'a SqliteExecutor,
+        inner: &'a SqlxSqliteExecutor,
         table_name: &'static str,
         err: SqlError,
     }
@@ -1686,7 +1686,7 @@ mod tests {
     }
 
     struct PassExecutor<'a> {
-        inner: &'a SqliteExecutor,
+        inner: &'a SqlxSqliteExecutor,
     }
 
     impl SqlExecutor for PassExecutor<'_> {
@@ -1712,7 +1712,7 @@ mod tests {
     }
 
     struct QueryFailExecutor<'a> {
-        inner: &'a SqliteExecutor,
+        inner: &'a SqlxSqliteExecutor,
         needle: &'static str,
         err: SqlError,
     }
@@ -2058,7 +2058,7 @@ mod tests {
         assert!(err.to_string().contains("last_event_id invalid"));
     }
 
-    fn seed_rows(exec: &SqliteExecutor) -> (String, String, String, String) {
+    fn seed_rows(exec: &SqlxSqliteExecutor) -> (String, String, String, String) {
         migrations::run_all_up(exec).expect("migrations");
         let farm_row = farm::create(
             exec,
@@ -2249,7 +2249,7 @@ mod tests {
 
     #[test]
     fn ingest_core_paths_cover_helpers_and_decisions() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let factory = RadrootsReplicaDefaultIdFactory;
@@ -2582,7 +2582,7 @@ mod tests {
 
     #[test]
     fn ingest_listing_projects_trade_product_and_removes_archived_replacements() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let seller_pubkey = "c".repeat(64);
@@ -2747,7 +2747,7 @@ mod tests {
 
     #[test]
     fn ingest_listing_preserves_fractional_exact_economics() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let seller_pubkey = "c".repeat(64);
@@ -2811,7 +2811,7 @@ mod tests {
 
     #[test]
     fn upsert_location_none_paths_are_ok() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm_row = farm::create(
@@ -2853,7 +2853,7 @@ mod tests {
 
     #[test]
     fn ingest_delete_error_paths_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_id, _farm_pubkey, farm_d_tag, _plot_d_tag) = seed_rows(&exec);
 
         let not_found_farm_tags = DeleteErrorExecutor {
@@ -3053,7 +3053,7 @@ mod tests {
 
     #[test]
     fn ingest_pass_executor_and_parse_edge_paths_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let pass = PassExecutor { inner: &exec };
 
@@ -3194,7 +3194,7 @@ mod tests {
 
     #[test]
     fn create_gcs_location_success_path_is_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let id = create_gcs_location(&exec, sample_gcs(1.0, 2.0, "s0"), &FixedFactory)
@@ -3204,7 +3204,7 @@ mod tests {
 
     #[test]
     fn ingest_default_factory_wrapper_paths_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm_pubkey = "f".repeat(64);
@@ -3289,7 +3289,7 @@ mod tests {
 
     #[test]
     fn ingest_txn_executor_instantiation_error_paths_are_covered() {
-        let pass_db = SqliteExecutor::open_memory().expect("db");
+        let pass_db = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&pass_db).expect("migrations");
         let pass_txn = TxnExecutor {
             inner: Some(&pass_db),
@@ -3455,7 +3455,7 @@ mod tests {
 
     #[test]
     fn ingest_sqlite_queryfail_and_parser_edges_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let pass_through = QueryFailExecutor {
             inner: &exec,
@@ -4029,7 +4029,7 @@ mod tests {
 
     #[test]
     fn ingest_insert_and_state_error_branches_are_covered() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_id, farm_pubkey, farm_d_tag, plot_d_tag) = seed_rows(&exec);
 
         let profile = profile_event(
@@ -4218,7 +4218,7 @@ mod tests {
 
     #[test]
     fn upsert_member_helpers_ignore_empty_entry_values() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_id, farm_pubkey, _, _) = seed_rows(&exec);
 
         let member_pubkey = "6".repeat(64);
@@ -4309,7 +4309,7 @@ mod tests {
 
     #[test]
     fn ingest_error_paths_cover_missing_farm_and_bad_list_set_tags() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (_, farm_pubkey, farm_d_tag, plot_d_tag) = seed_rows(&exec);
 
         let missing_farm_plot = plot_event(

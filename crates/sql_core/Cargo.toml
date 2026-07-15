@@ -19,12 +19,13 @@ crate-type = ["rlib"]
 default = ["std"]
 std = ["dep:chrono", "dep:uuid", "serde/std", "serde_json/std"]
 web = ["std", "uuid/js"]
-native = ["std", "dep:rusqlite"]
+native = ["std", "dep:futures-executor", "dep:sqlx", "sqlx/sqlite-bundled"]
 embedded = []
 
 [dependencies]
 serde_json = { workspace = true }
-rusqlite = { workspace = true, features = ["bundled"], optional = true }
+futures-executor = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true, features = ["derive"] }
 chrono = { workspace = true, optional = true }
 serde = { workspace = true }
 uuid = { workspace = true, optional = true }

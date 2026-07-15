@@ -126,11 +126,11 @@ mod tests {
     use radroots_replica_schema::farm::IFarmFields;
     use radroots_replica_schema::nostr_event_head::INostrEventHeadFields;
     use radroots_replica_store::{farm, migrations, nostr_event_head};
-    use radroots_sql_core::{SqlExecutor, SqliteExecutor};
+    use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
 
     #[test]
     fn sync_status_empty_db_is_zero() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let status = radroots_replica_sync_status(&exec).expect("status");
         assert_eq!(status.expected_count, 0);
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn sync_status_tracks_expected_and_pending() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm_row = farm::create(
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn pending_publish_batch_lists_only_missing_or_changed_expected_events() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
         let farm_row = farm::create(
@@ -247,14 +247,14 @@ mod tests {
 
     #[test]
     fn sync_status_reports_farm_query_errors() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let err = radroots_replica_sync_status(&exec).expect_err("farm query error");
         assert!(err.to_string().contains("invalid query"));
     }
 
     #[test]
     fn sync_status_reports_emit_errors() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let _ = farm::create(
             &exec,
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn sync_status_reports_content_hash_errors() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let _ = farm::create(
             &exec,
@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn sync_status_reports_state_query_errors() {
-        let exec = SqliteExecutor::open_memory().expect("db");
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let _ = exec
             .exec("DROP TABLE nostr_event_head;", "[]")

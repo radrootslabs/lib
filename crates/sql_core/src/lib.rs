@@ -6,11 +6,11 @@ pub mod error;
 pub mod migrations;
 
 #[cfg(all(feature = "native", feature = "std"))]
-mod executor_sqlite;
+mod executor_sqlx_sqlite;
 #[cfg(all(feature = "native", feature = "std"))]
-pub use executor_sqlite::SqliteExecutor;
+pub use executor_sqlx_sqlite::SqlxSqliteExecutor;
 #[cfg(all(feature = "native", feature = "std"))]
-pub mod sqlite_util;
+pub mod sqlx_sqlite_util;
 
 #[cfg(feature = "embedded")]
 mod executor_embedded;

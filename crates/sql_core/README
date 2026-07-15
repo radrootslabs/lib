@@ -7,7 +7,7 @@ migration primitives for the `radroots` core libraries.
 
  * the `SqlExecutor` trait and `ExecOutcome` type used by higher-level database
    crates;
- * native SQLite execution and utility support behind the `native` feature;
+ * native SQLx SQLite execution and utility support behind the `native` feature;
  * WebAssembly execution, export locking, and bridge integration for
    browser-facing builds;
  * optional embedded-engine support for self-contained runtimes and migration

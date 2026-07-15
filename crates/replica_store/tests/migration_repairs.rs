@@ -1,13 +1,13 @@
 use radroots_replica_store::migrations;
-use radroots_sql_core::{SqlExecutor, SqliteExecutor};
+use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
 use serde_json::Value;
 
-fn query_rows(exec: &SqliteExecutor, sql: &str) -> Vec<Value> {
+fn query_rows(exec: &SqlxSqliteExecutor, sql: &str) -> Vec<Value> {
     serde_json::from_str(&exec.query_raw(sql, "[]").expect("query should succeed"))
         .expect("query should decode")
 }
 
-fn create_legacy_schema_without_secondary_indexes(exec: &SqliteExecutor) {
+fn create_legacy_schema_without_secondary_indexes(exec: &SqlxSqliteExecutor) {
     let schema = [
         "CREATE TABLE __migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, applied_at TEXT NOT NULL DEFAULT (datetime('now')))",
         "CREATE TABLE farm (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, pubkey TEXT NOT NULL, name TEXT NOT NULL, about TEXT, website TEXT, picture TEXT, banner TEXT, location_primary TEXT, location_city TEXT, location_region TEXT, location_country TEXT)",
@@ -51,7 +51,7 @@ fn create_legacy_schema_without_secondary_indexes(exec: &SqliteExecutor) {
 
 #[test]
 fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
-    let exec = SqliteExecutor::open_memory().expect("open sqlite memory");
+    let exec = SqlxSqliteExecutor::open_memory().expect("open sqlite memory");
     create_legacy_schema_without_secondary_indexes(&exec);
 
     let before = query_rows(
