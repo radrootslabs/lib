@@ -143,11 +143,13 @@ pub use crate::product_clients::{
 pub use crate::runtime::{
     BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsClient,
     RadrootsClientBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
-    RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
-    SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
-    SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, SdkStudioStoreStorageStatus,
-    StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
+    RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupKeyReference,
+    SdkBackupManifest, SdkBackupManifestKind, SdkBackupMemberHash, SdkBackupMemberHashes,
+    SdkBackupRecoveryManifest, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
+    SdkOutboxStorageStatus, SdkPrivateStoreStorageStatus, SdkRestoreFinalization, SdkRestoreState,
+    SdkSqliteStoreStatus, SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind,
+    SdkStudioStoreStorageStatus, StorageCheckpointReceipt, StorageCheckpointRequest,
+    StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(all(feature = "runtime", feature = "signer-adapters"))]
 pub use crate::signer_provider::{

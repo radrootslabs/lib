@@ -166,6 +166,11 @@ fn nul_path() -> PathBuf {
 }
 
 fn manifest() -> SdkBackupManifest {
+    let backup_paths = RadrootsSdkStoragePaths {
+        runtime_path: PathBuf::from(RUNTIME_SQLITE_FILE),
+        studio_path: PathBuf::from(STUDIO_SQLITE_FILE),
+        private_path: PathBuf::from(PRIVATE_SQLITE_FILE),
+    };
     SdkBackupManifest {
         manifest_kind: SDK_STORAGE_MANIFEST_KIND,
         manifest_version: SDK_STORAGE_MANIFEST_VERSION,
@@ -173,13 +178,36 @@ fn manifest() -> SdkBackupManifest {
         created_at_ms: 1_700_000_000_000,
         source_storage: SdkStorageKind::Memory,
         source_paths: None,
-        backup_paths: RadrootsSdkStoragePaths {
-            runtime_path: PathBuf::from(RUNTIME_SQLITE_FILE),
-            studio_path: PathBuf::from(STUDIO_SQLITE_FILE),
-            private_path: PathBuf::from(PRIVATE_SQLITE_FILE),
-        },
+        backup_paths: backup_paths.clone(),
         source_status: storage_status(),
         backup_verification: verification(true, true),
+        member_hashes: SdkBackupMemberHashes {
+            runtime_store: SdkBackupMemberHash {
+                path: backup_paths.runtime_path.clone(),
+                sha256: "0".repeat(64),
+                byte_count: 1,
+            },
+            private_store: SdkBackupMemberHash {
+                path: backup_paths.private_path.clone(),
+                sha256: "1".repeat(64),
+                byte_count: 1,
+            },
+            studio_store: SdkBackupMemberHash {
+                path: backup_paths.studio_path.clone(),
+                sha256: "2".repeat(64),
+                byte_count: 1,
+            },
+        },
+        recovery_manifest: SdkBackupRecoveryManifest {
+            protected_private_store_path: backup_paths.private_path,
+            protected_private_store_ciphertext_preserved: true,
+            key_reference: SdkBackupKeyReference {
+                backend: "configured_protected_store_key_reference".to_owned(),
+                key_material_included: false,
+                recovery_material_required: true,
+            },
+            restore_finalization: SdkRestoreFinalization::AtomicStagingInstall,
+        },
     }
 }
 
@@ -592,6 +620,46 @@ async fn runtime_public_surface_covers_builders_status_integrity_backup_and_rest
         .await
         .expect("restore archive");
     assert_eq!(archive.manifest, backup.manifest);
+    assert_eq!(
+        archive.manifest.member_hashes.runtime_store.path,
+        PathBuf::from(RUNTIME_SQLITE_FILE)
+    );
+    assert_eq!(
+        archive.manifest.member_hashes.runtime_store.sha256.len(),
+        64
+    );
+    assert!(archive.manifest.member_hashes.runtime_store.byte_count > 0);
+    assert_eq!(
+        archive
+            .manifest
+            .recovery_manifest
+            .protected_private_store_path,
+        PathBuf::from(PRIVATE_SQLITE_FILE)
+    );
+    assert!(
+        archive
+            .manifest
+            .recovery_manifest
+            .protected_private_store_ciphertext_preserved
+    );
+    assert!(
+        !archive
+            .manifest
+            .recovery_manifest
+            .key_reference
+            .key_material_included
+    );
+    assert!(
+        archive
+            .manifest
+            .recovery_manifest
+            .key_reference
+            .recovery_material_required
+    );
+    assert_eq!(
+        archive.manifest.recovery_manifest.restore_finalization,
+        SdkRestoreFinalization::AtomicStagingInstall
+    );
 
     let restore_destination = tempdir.path().join("restore");
     let dry_run = RadrootsClient::restore(
@@ -1004,6 +1072,40 @@ fn restore_archive_path_validators_cover_missing_outside_and_manifest_edges() {
     assert!(
         invalid_request_message(validate_restore_manifest(&unsupported_version))
             .contains("version")
+    );
+    let mut mismatched_recovery_path = manifest();
+    mismatched_recovery_path
+        .recovery_manifest
+        .protected_private_store_path = PathBuf::from("other.sqlite");
+    assert!(
+        invalid_request_message(validate_restore_manifest(&mismatched_recovery_path))
+            .contains("private store path")
+    );
+    let mut plaintext_recovery = manifest();
+    plaintext_recovery
+        .recovery_manifest
+        .protected_private_store_ciphertext_preserved = false;
+    assert!(
+        invalid_request_message(validate_restore_manifest(&plaintext_recovery))
+            .contains("private-store ciphertext")
+    );
+    let mut exported_key_material = manifest();
+    exported_key_material
+        .recovery_manifest
+        .key_reference
+        .key_material_included = true;
+    assert!(
+        invalid_request_message(validate_restore_manifest(&exported_key_material))
+            .contains("key material")
+    );
+    let mut missing_recovery_material = manifest();
+    missing_recovery_material
+        .recovery_manifest
+        .key_reference
+        .recovery_material_required = false;
+    assert!(
+        invalid_request_message(validate_restore_manifest(&missing_recovery_material))
+            .contains("recovery material")
     );
 
     let ok = verification(true, true);
@@ -1651,6 +1753,9 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     .expect("invalid private studio member");
     let mut invalid_private_manifest = manifest();
     invalid_private_manifest.backup_paths.private_path = PathBuf::from("../outside.sqlite");
+    invalid_private_manifest
+        .recovery_manifest
+        .protected_private_store_path = invalid_private_manifest.backup_paths.private_path.clone();
     write_backup_manifest(
         &invalid_private_member_source.join(BACKUP_MANIFEST_FILE),
         &invalid_private_manifest,
@@ -1689,6 +1794,23 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let archive = inspect_restore_archive(backup_destination.clone())
         .await
         .expect("archive");
+    let hash_mismatch_sdk = RadrootsClient::builder()
+        .directory_storage(tempdir.path().join("hash-mismatch-sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_003))
+        .build()
+        .await
+        .expect("hash mismatch sdk");
+    let hash_mismatch_backup = tempdir.path().join("hash-mismatch-backup");
+    hash_mismatch_sdk
+        .backup(BackupRequest::new(&hash_mismatch_backup))
+        .await
+        .expect("hash mismatch backup");
+    fs::write(hash_mismatch_backup.join(PRIVATE_SQLITE_FILE), b"tampered")
+        .expect("tamper private store");
+    assert!(
+        invalid_request_message(inspect_restore_archive(hash_mismatch_backup).await)
+            .contains("hash does not match")
+    );
     let public_protected_parent = tempdir.path().join("public-protected-parent");
     fs::create_dir(&public_protected_parent).expect("public protected parent");
     let public_protected_destination = public_protected_parent.join("restore");

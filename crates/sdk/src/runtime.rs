@@ -18,13 +18,15 @@ use radroots_event_store::RadrootsEventStore;
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "runtime")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "runtime")]
 use sqlx::{
     Row, SqlitePool,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 #[cfg(feature = "runtime")]
 use std::{
-    fs,
+    env, fs,
     io::ErrorKind,
     path::{Component, Path, PathBuf},
     str::FromStr,
@@ -407,6 +409,8 @@ pub struct SdkBackupManifest {
     pub backup_paths: RadrootsSdkStoragePaths,
     pub source_status: StorageStatusReceipt,
     pub backup_verification: SdkBackupVerification,
+    pub member_hashes: SdkBackupMemberHashes,
+    pub recovery_manifest: SdkBackupRecoveryManifest,
 }
 
 #[cfg(feature = "runtime")]
@@ -420,6 +424,47 @@ pub struct SdkBackupVerification {
     pub outbox_events: i64,
     pub private_farm_locations: i64,
     pub studio_state_records: i64,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkBackupMemberHashes {
+    pub runtime_store: SdkBackupMemberHash,
+    pub private_store: SdkBackupMemberHash,
+    pub studio_store: SdkBackupMemberHash,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkBackupMemberHash {
+    pub path: PathBuf,
+    pub sha256: String,
+    pub byte_count: u64,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkBackupRecoveryManifest {
+    pub protected_private_store_path: PathBuf,
+    pub protected_private_store_ciphertext_preserved: bool,
+    pub key_reference: SdkBackupKeyReference,
+    pub restore_finalization: SdkRestoreFinalization,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SdkBackupKeyReference {
+    pub backend: String,
+    pub key_material_included: bool,
+    pub recovery_material_required: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkRestoreFinalization {
+    AtomicStagingInstall,
 }
 
 #[cfg(feature = "runtime")]
@@ -882,6 +927,17 @@ impl RadrootsClient {
             &backup_paths,
         )
         .await?;
+        let member_hashes = backup_member_hashes(&backup_paths, &manifest_backup_paths).await?;
+        let recovery_manifest = SdkBackupRecoveryManifest {
+            protected_private_store_path: manifest_backup_paths.private_path.clone(),
+            protected_private_store_ciphertext_preserved: true,
+            key_reference: SdkBackupKeyReference {
+                backend: "configured_protected_store_key_reference".to_owned(),
+                key_material_included: false,
+                recovery_material_required: true,
+            },
+            restore_finalization: SdkRestoreFinalization::AtomicStagingInstall,
+        };
         let manifest = SdkBackupManifest {
             manifest_kind: SDK_STORAGE_MANIFEST_KIND,
             manifest_version: SDK_STORAGE_MANIFEST_VERSION,
@@ -892,6 +948,8 @@ impl RadrootsClient {
             backup_paths: manifest_backup_paths,
             source_status,
             backup_verification,
+            member_hashes,
+            recovery_manifest,
         };
         write_backup_receipt(request.destination, backup_paths, manifest_path, manifest)
     }
@@ -1322,6 +1380,126 @@ async fn backup_sqlite_stores(
 }
 
 #[cfg(feature = "runtime")]
+async fn backup_member_hashes(
+    backup_paths: &RadrootsSdkStoragePaths,
+    manifest_paths: &RadrootsSdkStoragePaths,
+) -> Result<SdkBackupMemberHashes, RadrootsSdkError> {
+    Ok(SdkBackupMemberHashes {
+        runtime_store: backup_member_hash(
+            &backup_paths.runtime_path,
+            manifest_paths.runtime_path.clone(),
+            SqliteStoreRole::RuntimeStore,
+        )
+        .await?,
+        private_store: backup_member_hash(
+            &backup_paths.private_path,
+            manifest_paths.private_path.clone(),
+            SqliteStoreRole::PrivateStore,
+        )
+        .await?,
+        studio_store: backup_member_hash(
+            &backup_paths.studio_path,
+            manifest_paths.studio_path.clone(),
+            SqliteStoreRole::StudioStore,
+        )
+        .await?,
+    })
+}
+
+#[cfg(feature = "runtime")]
+async fn backup_member_hash(
+    source_path: &Path,
+    manifest_path: PathBuf,
+    store_role: SqliteStoreRole,
+) -> Result<SdkBackupMemberHash, RadrootsSdkError> {
+    let scratch_dir = unique_backup_member_hash_dir(source_path)?;
+    let canonical_path = scratch_dir.join("member.sqlite");
+    let result = async {
+        let pool = open_read_only_sqlite_pool(source_path, store_role).await?;
+        let vacuum_result = sqlite_vacuum_into(&pool, &canonical_path, store_role).await;
+        pool.close().await;
+        vacuum_result?;
+        hash_backup_member_file(&canonical_path, manifest_path)
+    }
+    .await;
+    let cleanup_result = cleanup_backup_member_hash_dir(&scratch_dir);
+    match (result, cleanup_result) {
+        (Ok(member_hash), Ok(())) => Ok(member_hash),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+        (Err(error), Err(_)) => Err(error),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn hash_backup_member_file(
+    source_path: &Path,
+    manifest_path: PathBuf,
+) -> Result<SdkBackupMemberHash, RadrootsSdkError> {
+    let bytes = fs::read(source_path).map_err(|error| RadrootsSdkError::Io {
+        path: source_path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let byte_count = u64::try_from(bytes.len()).map_err(|_| RadrootsSdkError::InvalidRequest {
+        message: "backup member size is larger than supported".to_owned(),
+    })?;
+    Ok(SdkBackupMemberHash {
+        path: manifest_path,
+        sha256: hex::encode(Sha256::digest(&bytes)),
+        byte_count,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn unique_backup_member_hash_dir(source_path: &Path) -> Result<PathBuf, RadrootsSdkError> {
+    let file_name = source_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("sqlite");
+    let nanos = system_time_nanos_since_unix_epoch(SystemTime::now())?;
+    for attempt in 0..100u8 {
+        let path = env::temp_dir().join(format!(
+            ".radroots-sdk-backup-member-hash-{file_name}-{nanos}-{attempt}"
+        ));
+        match create_private_backup_member_hash_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                return Err(RadrootsSdkError::Io {
+                    path,
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
+    Err(RadrootsSdkError::InvalidRequest {
+        message: "backup member hash scratch directory could not be reserved".to_owned(),
+    })
+}
+
+#[cfg(all(feature = "runtime", unix))]
+fn create_private_backup_member_hash_dir(path: &Path) -> Result<(), std::io::Error> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700);
+    builder.create(path)
+}
+
+#[cfg(all(feature = "runtime", not(unix)))]
+fn create_private_backup_member_hash_dir(path: &Path) -> Result<(), std::io::Error> {
+    fs::create_dir(path)
+}
+
+#[cfg(feature = "runtime")]
+fn cleanup_backup_member_hash_dir(path: &Path) -> Result<(), RadrootsSdkError> {
+    fs::remove_dir_all(path).map_err(|error| RadrootsSdkError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })
+}
+
+#[cfg(feature = "runtime")]
 fn write_backup_receipt(
     destination: PathBuf,
     backup_paths: RadrootsSdkStoragePaths,
@@ -1393,12 +1571,18 @@ async fn inspect_restore_archive(source: PathBuf) -> Result<RestoreArchive, Radr
         &manifest.backup_paths.private_path,
         "private store",
     )?;
-    let verification = verify_backup_paths(&RadrootsSdkStoragePaths {
+    let archive_paths = RadrootsSdkStoragePaths {
         runtime_path: runtime_path.clone(),
         studio_path: studio_path.clone(),
         private_path: private_path.clone(),
-    })
+    };
+    validate_restore_member_hashes(
+        &manifest.member_hashes,
+        &manifest.backup_paths,
+        &archive_paths,
+    )
     .await?;
+    let verification = verify_backup_paths(&archive_paths).await?;
     validate_restore_verification(&verification, &manifest.backup_verification)?;
     Ok(RestoreArchive {
         source,
@@ -1508,7 +1692,112 @@ fn validate_restore_manifest(manifest: &SdkBackupManifest) -> Result<(), Radroot
             ),
         });
     }
+    if manifest.recovery_manifest.protected_private_store_path != manifest.backup_paths.private_path
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore recovery manifest private store path does not match backup paths"
+                .to_owned(),
+        });
+    }
+    if !manifest
+        .recovery_manifest
+        .protected_private_store_ciphertext_preserved
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore recovery manifest must preserve protected private-store ciphertext"
+                .to_owned(),
+        });
+    }
+    if manifest
+        .recovery_manifest
+        .key_reference
+        .key_material_included
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore recovery manifest must not include key material".to_owned(),
+        });
+    }
+    if !manifest
+        .recovery_manifest
+        .key_reference
+        .recovery_material_required
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore recovery manifest must require recovery material".to_owned(),
+        });
+    }
     Ok(())
+}
+
+#[cfg(feature = "runtime")]
+async fn validate_restore_member_hashes(
+    member_hashes: &SdkBackupMemberHashes,
+    manifest_paths: &RadrootsSdkStoragePaths,
+    archive_paths: &RadrootsSdkStoragePaths,
+) -> Result<(), RadrootsSdkError> {
+    validate_restore_member_hash(
+        "runtime store",
+        &member_hashes.runtime_store,
+        &manifest_paths.runtime_path,
+        &archive_paths.runtime_path,
+        SqliteStoreRole::RuntimeStore,
+    )
+    .await?;
+    validate_restore_member_hash(
+        "private store",
+        &member_hashes.private_store,
+        &manifest_paths.private_path,
+        &archive_paths.private_path,
+        SqliteStoreRole::PrivateStore,
+    )
+    .await?;
+    validate_restore_member_hash(
+        "studio store",
+        &member_hashes.studio_store,
+        &manifest_paths.studio_path,
+        &archive_paths.studio_path,
+        SqliteStoreRole::StudioStore,
+    )
+    .await
+}
+
+#[cfg(feature = "runtime")]
+async fn validate_restore_member_hash(
+    label: &'static str,
+    expected: &SdkBackupMemberHash,
+    manifest_path: &Path,
+    archive_path: &Path,
+    store_role: SqliteStoreRole,
+) -> Result<(), RadrootsSdkError> {
+    if expected.path != manifest_path {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} hash path does not match manifest backup path"),
+        });
+    }
+    let actual = backup_member_hash(archive_path, expected.path.clone(), store_role)
+        .await
+        .map_err(|error| RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "restore {label} hash does not match manifest: canonical member hash failed: {error}"
+            ),
+        })?;
+    if actual != *expected {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "restore {label} hash does not match manifest: expected {} bytes {} actual {} bytes {}",
+                expected.byte_count,
+                hash_prefix(expected.sha256.as_str()),
+                actual.byte_count,
+                hash_prefix(actual.sha256.as_str()),
+            ),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn hash_prefix(value: &str) -> &str {
+    value.get(..12).unwrap_or(value)
 }
 
 #[cfg(feature = "runtime")]
@@ -2392,6 +2681,10 @@ async fn verify_backup_paths(
     let outbox_summary = outbox.status_summary(i64::MAX).await?;
     let private_summary = private_store.status_summary().await?;
     let studio_summary = studio_store.status_summary().await?;
+    event_store.pool().close().await;
+    outbox.pool().close().await;
+    private_store.pool().close().await;
+    studio_store.pool().close().await;
     Ok(SdkBackupVerification {
         event_store_ok: event_store_integrity.ok,
         outbox_ok: outbox_integrity.ok,
