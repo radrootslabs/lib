@@ -53,8 +53,8 @@ impl Clone for NetError {
             NetError::Msg(m) => NetError::Msg(m.clone()),
             NetError::Poisoned => NetError::Poisoned,
             #[cfg(feature = "std")]
-            NetError::Io(_) => {
-                panic!("cannot clone std::io::Error");
+            NetError::Io(error) => {
+                NetError::Io(std::io::Error::new(error.kind(), error.to_string()))
             }
             NetError::MissingKey => NetError::MissingKey,
             NetError::InvalidHex32 => NetError::InvalidHex32,

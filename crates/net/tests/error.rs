@@ -1,5 +1,4 @@
 use radroots_net::error::NetError;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[test]
 fn msg_constructor_creates_msg_variant() {
@@ -29,10 +28,10 @@ fn clone_covers_non_io_variants() {
 }
 
 #[test]
-fn clone_panics_for_io_variant() {
+fn clone_preserves_io_variant_without_panicking() {
     let io_err = NetError::Io(std::io::Error::other("io"));
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = io_err.clone();
-    }));
-    assert!(result.is_err());
+    let cloned = io_err.clone();
+
+    assert!(matches!(cloned, NetError::Io(_)));
+    assert_eq!(format!("{io_err}"), format!("{cloned}"));
 }
