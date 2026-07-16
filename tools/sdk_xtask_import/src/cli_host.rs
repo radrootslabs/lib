@@ -383,22 +383,6 @@ const CLI_OPERATION_METADATA: &[CliOperationMetadata] = &[
         false,
     ),
     meta(
-        "validation.receipt.get",
-        "ValidationReceiptGet",
-        "radroots validation receipt get <receipt-event-id>",
-        "Get a validation receipt.",
-        "Any",
-        false,
-    ),
-    meta(
-        "validation.receipt.verify",
-        "ValidationReceiptVerify",
-        "radroots validation receipt verify <receipt-event-id>",
-        "Verify a validation receipt.",
-        "Any",
-        false,
-    ),
-    meta(
         "sync.status",
         "SyncStatus",
         "radroots sync status",

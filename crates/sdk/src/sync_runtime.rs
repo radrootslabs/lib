@@ -333,7 +333,7 @@ pub struct SyncProjectionRefreshReceipt {
     pub scanned_events: usize,
     pub listing_upserts: usize,
     pub trade_upserts: usize,
-    pub validation_receipts: usize,
+    pub agreement_attestations: usize,
     pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
 }
@@ -353,7 +353,7 @@ impl SyncProjectionRefreshReceipt {
             scanned_events,
             listing_upserts: 0,
             trade_upserts,
-            validation_receipts: 0,
+            agreement_attestations: 0,
             transport_observations: summary.transport_observations,
             last_event_seq: summary.last_event_seq,
         }

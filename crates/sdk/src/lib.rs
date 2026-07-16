@@ -200,8 +200,3 @@ pub use crate::transport::{
     ReticulumProfile, SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy, TargetSet,
     TransportProfile, TransportReceipt,
 };
-#[cfg(feature = "runtime")]
-pub use radroots_trade::validation_receipt::{
-    RadrootsTradeCommitmentConfidence, RadrootsTradeValidationAuthority,
-    RadrootsTradeValidationTrustPolicy, RadrootsTradeValidationTrustState,
-};
