@@ -441,8 +441,7 @@ impl SdkPrivateStore {
         if exists != 0 {
             return Err(RadrootsSdkError::UnsupportedProfileSchema {
                 path: Path::new("private.sqlite").to_path_buf(),
-                message: "pre-V1 SDK private store is unsupported; use explicit quarantine reset"
-                    .to_owned(),
+                message: "pre-V1 SDK private store is unsupported by release-product v1".to_owned(),
             });
         }
         Ok(())

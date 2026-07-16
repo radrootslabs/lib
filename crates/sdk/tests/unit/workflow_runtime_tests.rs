@@ -157,10 +157,25 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         "wss://relay.example.com"
     );
     assert!(input.event_store_inserted);
+    let frozen = frozen_draft_json(&draft).expect("frozen draft json");
+    assert!(frozen.contains("\"expected_event_id\""));
+    let receipt = SdkWorkflowEnqueueReceipt {
+        signed_event_id: RadrootsEventId::parse(draft.expected_event_id_str()).expect("event id"),
+        local_event_seq: 1,
+        outbox_operation_id: 2,
+        outbox_event_id: 3,
+        state: radroots_outbox::RadrootsOutboxEnqueueStatus::Inserted,
+        idempotency_digest_prefix: "abcdef123456".to_owned(),
+    };
+    let receipt_json = workflow_receipt_result_json(&receipt);
+    let decoded =
+        workflow_receipt_from_result_json(receipt_json.to_string().as_str()).expect("receipt");
+    assert_eq!(decoded.outbox_event_id, receipt.outbox_event_id);
+    assert_eq!(outbox_enqueue_status_str(decoded.state), "inserted");
 }
 
 #[tokio::test]
-async fn default_operation_idempotency_ignores_target_policy() {
+async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_command_hash() {
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
             1_700_000_012,
@@ -189,7 +204,7 @@ async fn default_operation_idempotency_ignores_target_policy() {
             operation_kind: "workflow.test.v1",
             actor: &actor,
             frozen_draft: &draft,
-            target_policy: first_target_policy,
+            target_policy: first_target_policy.clone(),
             satisfaction_policy: SatisfactionPolicy::AllAccepted,
             idempotency_key: Some(workflow_idempotency_key(0x240)),
         },
@@ -197,7 +212,21 @@ async fn default_operation_idempotency_ignores_target_policy() {
     )
     .await
     .expect("first enqueue");
-    let second = enqueue_signed_workflow(
+    let replay = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: first_target_policy.clone(),
+            satisfaction_policy: SatisfactionPolicy::AllAccepted,
+            idempotency_key: Some(workflow_idempotency_key(0x240)),
+        },
+        &signer,
+    )
+    .await
+    .expect("replay enqueue");
+    let conflict = enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
             operation_kind: "workflow.test.v1",
@@ -210,32 +239,32 @@ async fn default_operation_idempotency_ignores_target_policy() {
         &signer,
     )
     .await
-    .expect("second enqueue");
+    .expect_err("conflicting command hash");
 
     assert_eq!(
         first.state,
         radroots_outbox::RadrootsOutboxEnqueueStatus::Inserted
     );
     assert_eq!(
-        second.state,
+        replay.state,
         radroots_outbox::RadrootsOutboxEnqueueStatus::Inserted
     );
-    assert_eq!(first.outbox_operation_id, second.outbox_operation_id);
-    assert_eq!(first.outbox_event_id, second.outbox_event_id);
+    assert_eq!(first.outbox_operation_id, replay.outbox_operation_id);
+    assert_eq!(first.outbox_event_id, replay.outbox_event_id);
     assert_eq!(
         first.idempotency_digest_prefix,
-        second.idempotency_digest_prefix
+        replay.idempotency_digest_prefix
     );
+    assert!(matches!(
+        conflict,
+        RadrootsSdkError::IdempotencyConflict { .. }
+    ));
     let plans = sdk
         ._outbox
         .delivery_plans(first.outbox_event_id)
         .await
         .expect("delivery plans");
-    assert_eq!(plans.len(), 2);
-    assert_ne!(
-        plans[0].delivery_plan_idempotency_digest,
-        plans[1].delivery_plan_idempotency_digest
-    );
+    assert_eq!(plans.len(), 1);
     let targets = sdk
         ._outbox
         .delivery_targets(first.outbox_event_id)
@@ -247,11 +276,17 @@ async fn default_operation_idempotency_ignores_target_policy() {
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
         target_uris,
-        std::collections::BTreeSet::from([
-            "wss://relay-a.example.com",
-            "wss://relay-b.example.com",
-        ])
+        std::collections::BTreeSet::from(["wss://relay-a.example.com"])
     );
+    let recovery_count: i64 = sqlx::query(
+        "SELECT COUNT(*) FROM sdk_runtime_recovery_receipt WHERE recovery_code = 'idempotency_conflict'",
+    )
+    .fetch_one(sdk._event_store.pool())
+    .await
+    .expect("recovery count")
+    .try_get(0)
+    .expect("recovery count value");
+    assert_eq!(recovery_count, 1);
 }
 
 #[tokio::test]

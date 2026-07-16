@@ -196,11 +196,6 @@ impl TargetPolicy {
     pub fn mesh_scope(scope: MeshScopeId) -> Self {
         Self::MeshScope(scope)
     }
-
-    #[cfg(feature = "signer-adapters")]
-    pub(crate) fn workflow_target_policy(self) -> Self {
-        self
-    }
 }
 
 impl serde::Serialize for TargetPolicy {

@@ -11,7 +11,7 @@ use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::{
     ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
     RadrootsSdkError, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
-    SdkIdempotencyKey, TargetPolicy, TradeStatusRequest,
+    SdkIdempotencyKey, TargetPolicy,
 };
 
 const RELAY: &str = "wss://relay.example.com";
@@ -47,11 +47,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .sync()
         .push_outbox(PushOutboxRequest::new().with_limit(1))
         .await;
-    let order_status = sdk
-        .trades()
-        .status(TradeStatusRequest::parse("example-order-1")?)
-        .await?;
-
     assert_eq!(
         prepared.public_listing_addr.as_str(),
         enqueue.public_listing_addr.as_str()
@@ -66,7 +61,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         push,
         Err(RadrootsSdkError::ProductSyncUnsupported { .. })
     ));
-    assert!(!order_status.found);
     Ok(())
 }
 

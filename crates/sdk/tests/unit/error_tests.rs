@@ -295,8 +295,15 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             existing_digest_prefix: "existing".to_owned(),
             new_digest_prefix: "new".to_owned(),
         },
-        RadrootsSdkError::trade_status_limit_invalid(0, 1, 100),
-        RadrootsSdkError::invalid_trade_id("bad order", "bad id"),
+        RadrootsSdkError::TradeStatusLimitInvalid {
+            limit: 0,
+            min: 1,
+            max: 100,
+        },
+        RadrootsSdkError::InvalidTradeId {
+            value: "bad order".to_owned(),
+            message: "bad id".to_owned(),
+        },
         RadrootsSdkError::PrivacyPreflight {
             operation: "trade.cancel".to_owned(),
             status: PrivacyPreflightStatus::ExplicitConfirmationRequired,

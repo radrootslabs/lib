@@ -510,17 +510,6 @@ impl RadrootsSdkError {
         }
     }
 
-    pub(crate) fn trade_status_limit_invalid(limit: u32, min: u32, max: u32) -> Self {
-        Self::TradeStatusLimitInvalid { limit, min, max }
-    }
-
-    pub(crate) fn invalid_trade_id(value: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::InvalidTradeId {
-            value: value.into(),
-            message: message.into(),
-        }
-    }
-
     pub(crate) fn missing_geonames_config() -> Self {
         Self::GeoNames {
             kind: RadrootsSdkGeoNamesErrorKind::Configuration,
@@ -781,22 +770,6 @@ impl From<radroots_trade::listing::RadrootsListingMutationError> for RadrootsSdk
     fn from(error: radroots_trade::listing::RadrootsListingMutationError) -> Self {
         Self::ListingMutation {
             message: error.to_string(),
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl From<radroots_trade::projection::RadrootsTradeProjectionError> for RadrootsSdkError {
-    fn from(error: radroots_trade::projection::RadrootsTradeProjectionError) -> Self {
-        match error {
-            radroots_trade::projection::RadrootsTradeProjectionError::InvalidLimit { max } => {
-                Self::InvalidRequest {
-                    message: format!("projection query limit must be between 1 and {max}"),
-                }
-            }
-            error => Self::Projection {
-                message: error.to_string(),
-            },
         }
     }
 }

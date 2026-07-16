@@ -145,16 +145,6 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
     event_override("RadrootsEventPtr"),
     event_override("RadrootsPlotRef"),
     event_override("RadrootsResourceAreaRef"),
-    event_override("RadrootsOrderEconomicActor"),
-    event_override("RadrootsOrderEconomicEffect"),
-    event_override("RadrootsOrderEconomicItem"),
-    event_override("RadrootsOrderEconomicLine"),
-    event_override("RadrootsOrderEconomicLineKind"),
-    event_override("RadrootsOrderEconomics"),
-    event_override("RadrootsOrderEventType"),
-    event_override("RadrootsOrderInventoryCommitment"),
-    event_override("RadrootsOrderItem"),
-    event_override("RadrootsOrderPricingBasis"),
 ];
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
@@ -682,9 +672,15 @@ mod tests {
         "RadrootsEventIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
-        "RadrootsOrderIssue",
-        "RadrootsOrderWorkflowProjection",
+        "RadrootsTradeAgreementClaimV1",
+        "RadrootsTradeAgreementStateV1",
+        "RadrootsTradeAttestationRecordV1",
+        "RadrootsTradeAttestationResultV1",
+        "RadrootsTradeAttestationStateV1",
+        "RadrootsTradeConflictStateV1",
+        "RadrootsTradeEvidenceStateV1",
         "RadrootsTradeFacetCount",
+        "RadrootsTradeFulfillmentStateV1",
         "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
         "RadrootsTradeListingBackofficeQuery",
@@ -699,22 +695,18 @@ mod tests {
         "RadrootsTradeListingSubtotal",
         "RadrootsTradeListingTotal",
         "RadrootsTradeMarketplaceListingSummary",
-        "RadrootsTradeMarketplaceOrderSummary",
         "RadrootsTradeModerationFlag",
         "RadrootsTradeModerationSeverity",
         "RadrootsTradeModerationStatus",
-        "RadrootsTradeOrderBackofficeOverlay",
-        "RadrootsTradeOrderBackofficeQuery",
-        "RadrootsTradeOrderBackofficeView",
-        "RadrootsTradeOrderFacets",
-        "RadrootsTradeOrderQuery",
-        "RadrootsTradeOrderSort",
-        "RadrootsTradeOrderSortField",
+        "RadrootsTradeNegotiationStateV1",
+        "RadrootsTradePaymentStateV1",
+        "RadrootsTradePrivateTermsStateV1",
+        "RadrootsTradeProjectionV1",
+        "RadrootsTradeReducerIssueV1",
         "RadrootsTradeReviewPriority",
         "RadrootsTradeReviewQueueEntry",
         "RadrootsTradeReviewStatus",
         "RadrootsTradeSortDirection",
-        "RadrootsTradeWorkflowState",
     ];
 
     #[test]
@@ -993,17 +985,17 @@ mod tests {
         assert!(
             imports
                 .get("@radroots/event-bindings")
-                .is_some_and(|names| names.contains("RadrootsOrderEventType"))
+                .is_some_and(|names| names.contains("RadrootsFarmRef"))
         );
         assert!(
             imports
                 .get("@radroots/event-bindings")
-                .is_some_and(|names| names.contains("RadrootsOrderEconomics"))
+                .is_some_and(|names| names.contains("RadrootsListing"))
         );
         assert!(
             imports
                 .get("@radroots/event-bindings")
-                .is_some_and(|names| names.contains("RadrootsOrderInventoryCommitment"))
+                .is_some_and(|names| names.contains("RadrootsListingBin"))
         );
 
         for duplicate in [
@@ -1015,27 +1007,19 @@ mod tests {
             "export type RadrootsCommercialMessageType = ",
             "export type RadrootsOrderStatus = ",
             "export type RadrootsTradeOrderWorkflowMessage = ",
+            "export type RadrootsOrderWorkflowProjection = ",
+            "export type RadrootsTradeMarketplaceOrderSummary = ",
+            "export type RadrootsTradeOrderQuery = ",
         ] {
             assert!(!TRADE_BINDINGS_TYPES_TS.contains(duplicate));
         }
 
-        let marketplace_order_summary = type_declaration(
-            TRADE_BINDINGS_TYPES_TS,
-            "RadrootsTradeMarketplaceOrderSummary",
-        );
-        assert!(marketplace_order_summary.contains("status: RadrootsTradeWorkflowState"));
-        assert!(marketplace_order_summary.contains("last_message_type: RadrootsOrderEventType"));
-        assert!(!marketplace_order_summary.contains("has_requested_discounts"));
-
-        let order_query = type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsTradeOrderQuery");
-        assert!(order_query.contains("status?: RadrootsTradeWorkflowState | null"));
-
-        let workflow_projection =
-            type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsOrderWorkflowProjection");
-        assert!(workflow_projection.contains("status: RadrootsTradeWorkflowState"));
-        assert!(workflow_projection.contains("request_event_id?: string | null"));
-        assert!(workflow_projection.contains("last_event_id?: string | null"));
-        assert!(workflow_projection.contains("listing_addr?: string | null"));
+        let projection = type_declaration(TRADE_BINDINGS_TYPES_TS, "RadrootsTradeProjectionV1");
+        assert!(projection.contains("agreement_state: RadrootsTradeAgreementStateV1"));
+        assert!(projection.contains("negotiation_state: RadrootsTradeNegotiationStateV1"));
+        assert!(projection.contains("agreement_claims: Array<RadrootsTradeAgreementClaimV1>"));
+        assert!(projection.contains("issues: Array<RadrootsTradeReducerIssueV1>"));
+        assert!(projection.contains("projection_digest: string"));
         for stale_counter in [
             "root_event_id",
             "last_message_type",
@@ -1051,7 +1035,7 @@ mod tests {
             "discount_accept_count",
             "discount_decline_count",
         ] {
-            assert!(!workflow_projection.contains(stale_counter));
+            assert!(!projection.contains(stale_counter));
         }
     }
 

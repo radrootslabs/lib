@@ -582,7 +582,10 @@ async fn enqueue_prepared_publish_returns_structured_actor_errors() {
             &non_seller_actor(),
             prepared,
             TargetPolicy::default_profile(),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000023e")
+                    .expect("idempotency key"),
+            ),
             &FixtureSigner::new(SELLER),
         )
         .await
@@ -608,7 +611,10 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
             &actor,
             prepared,
             TargetPolicy::default_profile(),
-            None,
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000023f")
+                    .expect("idempotency key"),
+            ),
             &FixtureSigner::new(OTHER),
         )
         .await
@@ -680,7 +686,9 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
         actor(),
         listing(LISTING_C_D_TAG, "Coffee"),
         TargetPolicy::default_profile(),
-    );
+    )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023d")
+    .expect("idempotency key");
     let error = sdk
         .listings()
         .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
@@ -788,7 +796,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         .await
         .expect("seed event store");
     let conflicting_operation = sqlx::query(
-        "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, 'queued', ?, ?)",
+        "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, 'queued', ?, ?)",
     )
     .bind(LISTING_PUBLISH_OPERATION_KIND)
     .bind(SELLER)
@@ -847,13 +855,33 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
             .expect("event lookup")
             .is_none()
     );
-    let journal_count: i64 = sqlx::query("SELECT COUNT(*) FROM sdk_runtime_operation_journal")
+    let journal_row = sqlx::query(
+        "SELECT state, last_error_code FROM sdk_runtime_operation_journal WHERE operation_kind = ? AND actor_pubkey = ? AND idempotency_key = ?",
+    )
+    .bind(LISTING_PUBLISH_OPERATION_KIND)
+    .bind(SELLER)
+    .bind(idempotency_key)
+    .fetch_one(event_store.pool())
+    .await
+    .expect("journal row");
+    let journal_state: String = journal_row.try_get("state").expect("journal state");
+    let last_error_code: String = journal_row
+        .try_get("last_error_code")
+        .expect("journal error code");
+    assert_eq!(journal_state, "failed_recoverable");
+    assert_eq!(last_error_code, "idempotency_conflict");
+    let recovery_count: i64 = sqlx::query(
+        "SELECT COUNT(*) FROM sdk_runtime_recovery_receipt WHERE recovery_code = 'idempotency_conflict' AND operation_kind = ? AND actor_pubkey = ? AND idempotency_key = ?",
+    )
+    .bind(LISTING_PUBLISH_OPERATION_KIND)
+    .bind(SELLER)
+    .bind(idempotency_key)
         .fetch_one(event_store.pool())
         .await
-        .expect("journal count")
+        .expect("recovery count")
         .try_get(0)
-        .expect("journal count value");
-    assert_eq!(journal_count, 0);
+        .expect("recovery count value");
+    assert_eq!(recovery_count, 1);
     let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
         .await
         .expect("outbox");
@@ -909,7 +937,7 @@ async fn enqueue_publish_uses_explicit_idempotency_key_across_equivalent_target_
         first_receipt.idempotency_digest_prefix,
         second_receipt.idempotency_digest_prefix
     );
-    assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
+    assert_eq!(second_receipt.state, SdkMutationState::StoredAndQueued);
 
     let paths = sdk.storage_paths().expect("paths");
     let outbox = RadrootsOutbox::open_file(&paths.runtime_path)

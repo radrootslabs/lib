@@ -1413,14 +1413,14 @@ async fn radrootsd_completion_updates_outbox_for_success_retryable_and_terminal_
         (
             "radrootsd-complete-deferred",
             PushOutboxEventState::DeferredUntilImplemented,
-            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxEventState::FailedTerminal,
             RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
             TransportPublishOutcomeKind::DeferredUntilImplemented,
         ),
         (
             "radrootsd-complete-deferred-until-implemented",
             PushOutboxEventState::DeferredUntilImplemented,
-            PushOutboxEventState::DeferredUntilImplemented,
+            PushOutboxEventState::FailedTerminal,
             RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
             TransportPublishOutcomeKind::DeferredUntilImplemented,
         ),

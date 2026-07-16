@@ -25,10 +25,8 @@ use radroots_outbox::{
     RadrootsOutboxEventState, RadrootsOutboxReticulumEventRecord, RadrootsOutboxStatusSummary,
 };
 #[cfg(feature = "runtime")]
-use radroots_trade::projection::{
-    RADROOTS_PRODUCT_PROJECTION_ID, RADROOTS_PRODUCT_PROJECTION_VERSION,
-    RadrootsProjectionRefreshReceipt, RadrootsProjectionRefreshRequest,
-    refresh_product_projections,
+use radroots_trade::workflow::{
+    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
 };
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::RadrootsTransportTargetFingerprint;
@@ -54,6 +52,8 @@ use radroots_transport_publish_protocol::{
     TransportPublishOutcomeKind, TransportPublishTarget, TransportPublishTargetOutcome,
     TransportPublishTargetPolicy,
 };
+#[cfg(feature = "runtime")]
+use sha2::{Digest, Sha256};
 
 #[cfg(feature = "runtime")]
 pub const PUSH_OUTBOX_DEFAULT_LIMIT: usize = 20;
@@ -70,6 +70,10 @@ pub const SYNC_PROJECTION_REFRESH_MAX_LIMIT: u32 = RADROOTS_EVENT_STORE_QUERY_LI
 
 #[cfg(feature = "runtime")]
 const CLAIM_OWNER: &str = "radroots_sdk.sync.push_outbox";
+#[cfg(feature = "runtime")]
+const SDK_RELEASE_PRODUCT_PROJECTION_ID: &str = "radroots.release_product.trade_projection.v1";
+#[cfg(feature = "runtime")]
+const SDK_RELEASE_PRODUCT_PROJECTION_VERSION: u32 = 1;
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -336,17 +340,22 @@ pub struct SyncProjectionRefreshReceipt {
 
 #[cfg(feature = "runtime")]
 impl SyncProjectionRefreshReceipt {
-    fn from_trade(receipt: RadrootsProjectionRefreshReceipt, refreshed_at_ms: i64) -> Self {
+    fn from_event_store_snapshot(
+        summary: RadrootsEventStoreStatusSummary,
+        scanned_events: usize,
+        trade_upserts: usize,
+        refreshed_at_ms: i64,
+    ) -> Self {
         Self {
-            projection_id: RADROOTS_PRODUCT_PROJECTION_ID,
-            projection_version: RADROOTS_PRODUCT_PROJECTION_VERSION,
+            projection_id: SDK_RELEASE_PRODUCT_PROJECTION_ID,
+            projection_version: SDK_RELEASE_PRODUCT_PROJECTION_VERSION,
             refreshed_at_ms,
-            scanned_events: receipt.scanned_events,
-            listing_upserts: receipt.listing_upserts,
-            trade_upserts: receipt.trade_upserts,
-            validation_receipts: receipt.validation_receipts,
-            transport_observations: receipt.transport_observations,
-            last_event_seq: receipt.last_event_seq,
+            scanned_events,
+            listing_upserts: 0,
+            trade_upserts,
+            validation_receipts: 0,
+            transport_observations: summary.transport_observations,
+            last_event_seq: summary.last_event_seq,
         }
     }
 }
@@ -546,7 +555,6 @@ impl From<RadrootsOutboxEventState> for PushOutboxEventState {
             RadrootsOutboxEventState::Published => Self::Published,
             RadrootsOutboxEventState::SignRetryable => Self::SignRetryable,
             RadrootsOutboxEventState::PublishRetryable => Self::PublishRetryable,
-            RadrootsOutboxEventState::DeferredUntilImplemented => Self::DeferredUntilImplemented,
             RadrootsOutboxEventState::FailedTerminal => Self::FailedTerminal,
             RadrootsOutboxEventState::Cancelled => Self::Cancelled,
         }
@@ -997,19 +1005,17 @@ fn reticulum_event_receipt(
 
 #[cfg(feature = "runtime")]
 fn reticulum_event_final_state(
-    event_state: RadrootsOutboxEventState,
+    _event_state: RadrootsOutboxEventState,
     targets: &[RadrootsOutboxDeliveryTargetRecord],
 ) -> PushOutboxEventState {
-    if event_state == RadrootsOutboxEventState::DeferredUntilImplemented
-        || targets.iter().any(|target| {
-            matches!(
-                target.status,
-                RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
-                    | RadrootsOutboxDeliveryTargetStatus::Pending
-                    | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
-            )
-        })
-    {
+    if targets.iter().any(|target| {
+        matches!(
+            target.status,
+            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+                | RadrootsOutboxDeliveryTargetStatus::Pending
+                | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+        )
+    }) {
         PushOutboxEventState::DeferredUntilImplemented
     } else {
         PushOutboxEventState::DeferredUntilImplemented
@@ -1078,17 +1084,85 @@ pub(crate) async fn refresh_product_projections_for_sdk(
     sdk: &RadrootsClient,
     request: SyncProjectionRefreshRequest,
 ) -> Result<SyncProjectionRefreshReceipt, RadrootsSdkError> {
+    if request.limit == 0 || request.limit > SYNC_PROJECTION_REFRESH_MAX_LIMIT {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "projection refresh limit must be between 1 and {SYNC_PROJECTION_REFRESH_MAX_LIMIT}"
+            ),
+        });
+    }
     let refreshed_at_ms = sdk_now_ms(sdk)?;
-    let receipt = refresh_product_projections(
-        &sdk._event_store,
-        RadrootsProjectionRefreshRequest::new().with_limit(request.limit),
-        refreshed_at_ms,
+    let summary = sdk._event_store.status_summary().await?;
+    let scanned_events = usize::try_from(summary.projection_eligible_events.max(0))
+        .unwrap_or(usize::MAX)
+        .min(request.limit as usize);
+    let trade_upserts = trade_mutation_count(sdk).await?;
+    let source_digest = projection_source_digest(&summary, trade_upserts);
+    sqlx::query(
+        "INSERT INTO sdk_runtime_trade_projection_checkpoint(projection_name, reducer_contract_id, reducer_version, last_ingest_seq, source_digest, projection_digest, completeness_state, rebuilt_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, 'current', ?, ?) ON CONFLICT(projection_name) DO UPDATE SET reducer_contract_id = excluded.reducer_contract_id, reducer_version = excluded.reducer_version, last_ingest_seq = excluded.last_ingest_seq, source_digest = excluded.source_digest, projection_digest = excluded.projection_digest, completeness_state = excluded.completeness_state, rebuilt_at_ms = excluded.rebuilt_at_ms, updated_at_ms = excluded.updated_at_ms",
     )
-    .await?;
-    Ok(SyncProjectionRefreshReceipt::from_trade(
-        receipt,
+    .bind(SDK_RELEASE_PRODUCT_PROJECTION_ID)
+    .bind(RADROOTS_TRADE_REDUCER_CONTRACT_ID)
+    .bind(i64::from(RADROOTS_TRADE_REDUCER_VERSION))
+    .bind(summary.last_event_seq.unwrap_or_default())
+    .bind(source_digest.as_str())
+    .bind(source_digest.as_str())
+    .bind(refreshed_at_ms)
+    .bind(refreshed_at_ms)
+    .execute(sdk._event_store.pool())
+    .await
+    .map_err(|error| RadrootsSdkError::Projection {
+        message: error.to_string(),
+    })?;
+    Ok(SyncProjectionRefreshReceipt::from_event_store_snapshot(
+        summary,
+        scanned_events,
+        trade_upserts,
         refreshed_at_ms,
     ))
+}
+
+#[cfg(feature = "runtime")]
+async fn trade_mutation_count(sdk: &RadrootsClient) -> Result<usize, RadrootsSdkError> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM trade_mutation")
+        .fetch_one(sdk._event_store.pool())
+        .await
+        .map_err(|error| RadrootsSdkError::Projection {
+            message: error.to_string(),
+        })?;
+    Ok(usize::try_from(count.max(0)).unwrap_or(usize::MAX))
+}
+
+#[cfg(feature = "runtime")]
+fn projection_source_digest(
+    summary: &RadrootsEventStoreStatusSummary,
+    trade_upserts: usize,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(SDK_RELEASE_PRODUCT_PROJECTION_ID.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(
+        SDK_RELEASE_PRODUCT_PROJECTION_VERSION
+            .to_string()
+            .as_bytes(),
+    );
+    hasher.update(b"\0");
+    hasher.update(summary.total_events.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(summary.projection_eligible_events.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(
+        summary
+            .last_event_seq
+            .unwrap_or_default()
+            .to_string()
+            .as_bytes(),
+    );
+    hasher.update(b"\0");
+    hasher.update(summary.transport_observations.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(trade_upserts.to_string().as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]

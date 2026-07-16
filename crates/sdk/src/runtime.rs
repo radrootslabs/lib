@@ -52,39 +52,101 @@ const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 #[cfg(feature = "runtime")]
 const PRE_V1_RUNTIME_FILES: [&str; 2] = ["event_store.sqlite", "outbox.sqlite"];
 #[cfg(feature = "runtime")]
-const PRE_V1_RUNTIME_ARTIFACTS: [&str; 6] = [
-    "event_store.sqlite",
-    "event_store.sqlite-wal",
-    "event_store.sqlite-shm",
-    "outbox.sqlite",
-    "outbox.sqlite-wal",
-    "outbox.sqlite-shm",
-];
-#[cfg(feature = "runtime")]
 const SDK_RUNTIME_MIGRATION_UP: &str = r#"
 CREATE TABLE IF NOT EXISTS sdk_runtime_operation_journal (
   journal_id INTEGER PRIMARY KEY AUTOINCREMENT,
   contract_version TEXT NOT NULL,
-  operation_id TEXT NOT NULL,
+  operation_kind TEXT NOT NULL,
   actor_pubkey TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
-  request_digest_sha256_hex TEXT NOT NULL,
+  command_payload_hash TEXT NOT NULL CHECK (length(command_payload_hash) = 64),
+  frozen_draft_json TEXT NOT NULL,
+  expected_transport_id TEXT NOT NULL,
+  mutation_id TEXT,
+  state TEXT NOT NULL CHECK (state IN ('prepared','signature_pending','committed','rejected','failed_recoverable')),
+  result_json TEXT,
+  last_error_code TEXT,
+  last_error_detail TEXT,
   created_at_ms INTEGER NOT NULL,
-  completed_at_ms INTEGER,
-  UNIQUE(contract_version, operation_id, actor_pubkey, idempotency_key)
-);
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE(contract_version, operation_kind, actor_pubkey, idempotency_key),
+  UNIQUE(mutation_id)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS sdk_runtime_operation_journal_state_idx
+ON sdk_runtime_operation_journal(state, updated_at_ms, journal_id);
+
+CREATE TABLE IF NOT EXISTS sdk_runtime_recovery_receipt (
+  recovery_receipt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recovery_code TEXT NOT NULL CHECK (recovery_code IN ('signer_timeout','projection_stale','relay_failure','reservation_expiry','idempotency_conflict')),
+  operation_kind TEXT,
+  actor_pubkey TEXT,
+  idempotency_key TEXT,
+  recovery_action TEXT NOT NULL,
+  detail_json TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS sdk_runtime_recovery_receipt_code_idx
+ON sdk_runtime_recovery_receipt(recovery_code, created_at_ms, recovery_receipt_id);
+
+CREATE TABLE IF NOT EXISTS sdk_seller_inventory_reservation (
+  reservation_id TEXT PRIMARY KEY NOT NULL,
+  farm_id TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  authority_id TEXT NOT NULL,
+  inventory_epoch INTEGER NOT NULL CHECK (inventory_epoch >= 0),
+  assertion_commitment TEXT NOT NULL UNIQUE,
+  state TEXT NOT NULL CHECK (state IN ('prepared','bound','released','expired','conflict')),
+  lease_until_ms INTEGER NOT NULL,
+  bound_mutation_id TEXT UNIQUE,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS sdk_seller_inventory_reservation_line (
+  reservation_id TEXT NOT NULL REFERENCES sdk_seller_inventory_reservation(reservation_id) ON DELETE CASCADE,
+  farm_id TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  line_id TEXT NOT NULL,
+  bin_id TEXT NOT NULL,
+  quantity_mantissa TEXT NOT NULL,
+  quantity_scale INTEGER NOT NULL CHECK (quantity_scale BETWEEN 0 AND 9),
+  unit_code TEXT NOT NULL,
+  PRIMARY KEY (reservation_id, line_id),
+  UNIQUE(farm_id, candidate_id, line_id, bin_id)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS sdk_seller_inventory_reservation_expiring_idx
+ON sdk_seller_inventory_reservation(lease_until_ms, reservation_id)
+WHERE state = 'prepared';
+
+CREATE INDEX IF NOT EXISTS sdk_seller_inventory_reservation_candidate_idx
+ON sdk_seller_inventory_reservation(candidate_id, state, reservation_id);
+
+CREATE TABLE IF NOT EXISTS sdk_runtime_trade_projection_checkpoint (
+  projection_name TEXT PRIMARY KEY NOT NULL,
+  reducer_contract_id TEXT NOT NULL,
+  reducer_version INTEGER NOT NULL,
+  last_ingest_seq INTEGER NOT NULL,
+  source_digest TEXT NOT NULL,
+  projection_digest TEXT NOT NULL,
+  completeness_state TEXT NOT NULL CHECK (completeness_state IN ('current','partial','stale','rebuilding','failed')),
+  rebuilt_at_ms INTEGER,
+  updated_at_ms INTEGER NOT NULL
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS sdk_runtime_health_state (
   key TEXT PRIMARY KEY NOT NULL,
   value_json TEXT NOT NULL,
   updated_at_ms INTEGER NOT NULL
-);
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS sdk_runtime_projection_generation (
   projection_name TEXT PRIMARY KEY NOT NULL,
   generation INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
-);
+) STRICT;
 "#;
 
 #[cfg(feature = "runtime")]
@@ -466,40 +528,6 @@ pub struct RestoreReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-#[non_exhaustive]
-pub struct QuarantineResetRequest {
-    pub profile: PathBuf,
-    pub quarantine: PathBuf,
-    pub overwrite: bool,
-}
-
-#[cfg(feature = "runtime")]
-impl QuarantineResetRequest {
-    pub fn new(profile: impl Into<PathBuf>, quarantine: impl Into<PathBuf>) -> Self {
-        Self {
-            profile: profile.into(),
-            quarantine: quarantine.into(),
-            overwrite: false,
-        }
-    }
-
-    pub fn with_overwrite(mut self, overwrite: bool) -> Self {
-        self.overwrite = overwrite;
-        self
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct QuarantineResetReceipt {
-    pub profile: PathBuf,
-    pub quarantine: PathBuf,
-    pub quarantined_paths: Vec<PathBuf>,
-    pub reset_paths: RadrootsSdkStoragePaths,
-}
-
-#[cfg(feature = "runtime")]
 #[derive(Clone)]
 pub struct RadrootsClientBuilder {
     storage: RadrootsSdkStorageConfig,
@@ -575,7 +603,8 @@ impl RadrootsClientBuilder {
     }
 
     pub async fn build(self) -> Result<RadrootsClient, RadrootsSdkError> {
-        let storage = open_storage(&self.storage).await?;
+        let recovery_now_ms = clock_recovery_now_ms(&self.clock);
+        let storage = open_storage(&self.storage, recovery_now_ms).await?;
         Ok(RadrootsClient {
             _event_store: storage.event_store,
             _outbox: storage.outbox,
@@ -915,12 +944,6 @@ impl RadrootsClient {
             verification: archive.verification,
             restored_paths,
         })
-    }
-
-    pub async fn quarantine_reset_storage(
-        request: QuarantineResetRequest,
-    ) -> Result<QuarantineResetReceipt, RadrootsSdkError> {
-        quarantine_reset_storage(request).await
     }
 }
 
@@ -1802,19 +1825,25 @@ struct OpenedRuntimeStorage {
 #[cfg(feature = "runtime")]
 async fn open_storage(
     storage: &RadrootsSdkStorageConfig,
+    recovery_now_ms: i64,
 ) -> Result<OpenedRuntimeStorage, RadrootsSdkError> {
     match storage {
-        RadrootsSdkStorageConfig::Memory => open_memory_storage().await,
-        RadrootsSdkStorageConfig::Directory(path) => open_directory_storage(path).await,
+        RadrootsSdkStorageConfig::Memory => open_memory_storage(recovery_now_ms).await,
+        RadrootsSdkStorageConfig::Directory(path) => {
+            open_directory_storage(path, recovery_now_ms).await
+        }
     }
 }
 
 #[cfg(feature = "runtime")]
-async fn open_memory_storage() -> Result<OpenedRuntimeStorage, RadrootsSdkError> {
+async fn open_memory_storage(
+    recovery_now_ms: i64,
+) -> Result<OpenedRuntimeStorage, RadrootsSdkError> {
     let runtime_pool = open_runtime_memory_pool().await?;
+    reject_newer_sdk_runtime_schema(&runtime_pool, Path::new(":memory:")).await?;
     let event_store = RadrootsEventStore::open_pool(runtime_pool.clone(), false).await?;
     let outbox = RadrootsOutbox::open_pool(runtime_pool.clone(), false).await?;
-    apply_sdk_runtime_schema(&runtime_pool).await?;
+    apply_sdk_runtime_schema(&runtime_pool, Path::new(":memory:"), recovery_now_ms).await?;
     Ok(OpenedRuntimeStorage {
         event_store,
         outbox,
@@ -1825,7 +1854,10 @@ async fn open_memory_storage() -> Result<OpenedRuntimeStorage, RadrootsSdkError>
 }
 
 #[cfg(feature = "runtime")]
-async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, RadrootsSdkError> {
+async fn open_directory_storage(
+    path: &Path,
+    recovery_now_ms: i64,
+) -> Result<OpenedRuntimeStorage, RadrootsSdkError> {
     reject_pre_v1_profile(path)?;
     fs::create_dir_all(path).map_err(|error| RadrootsSdkError::Io {
         path: path.to_path_buf(),
@@ -1833,9 +1865,10 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
     })?;
     let paths = storage_paths_for_directory(path);
     let runtime_pool = open_runtime_file_pool(&paths.runtime_path).await?;
+    reject_newer_sdk_runtime_schema(&runtime_pool, &paths.runtime_path).await?;
     let event_store = RadrootsEventStore::open_pool(runtime_pool.clone(), true).await?;
     let outbox = RadrootsOutbox::open_pool(runtime_pool.clone(), true).await?;
-    apply_sdk_runtime_schema(&runtime_pool).await?;
+    apply_sdk_runtime_schema(&runtime_pool, &paths.runtime_path, recovery_now_ms).await?;
     Ok(OpenedRuntimeStorage {
         event_store,
         outbox,
@@ -1843,6 +1876,17 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
         studio_store: SdkStudioStore::open_file(&paths.studio_path).await?,
         paths: Some(paths),
     })
+}
+
+#[cfg(feature = "runtime")]
+fn clock_recovery_now_ms(clock: &RadrootsSdkClock) -> i64 {
+    let Ok(timestamp) = clock.now() else {
+        return 0;
+    };
+    let Some(millis) = timestamp.unix_seconds().checked_mul(1_000) else {
+        return i64::MAX;
+    };
+    i64::try_from(millis).unwrap_or(i64::MAX)
 }
 
 #[cfg(feature = "runtime")]
@@ -1878,16 +1922,239 @@ async fn open_runtime_file_pool(path: &Path) -> Result<SqlitePool, RadrootsSdkEr
 }
 
 #[cfg(feature = "runtime")]
-async fn apply_sdk_runtime_schema(pool: &SqlitePool) -> Result<(), RadrootsSdkError> {
+async fn apply_sdk_runtime_schema(
+    pool: &SqlitePool,
+    path: &Path,
+    recovery_now_ms: i64,
+) -> Result<(), RadrootsSdkError> {
     sqlx::raw_sql(SDK_RUNTIME_MIGRATION_UP)
         .execute(pool)
         .await
         .map_err(|error| runtime_store_error(error.to_string()))?;
+    validate_sdk_runtime_schema(pool, path).await?;
+    recover_sdk_runtime_state(pool, recovery_now_ms).await?;
     sqlx::query("PRAGMA user_version = 1")
         .execute(pool)
         .await
         .map(|_| ())
         .map_err(|error| runtime_store_error(error.to_string()))
+}
+
+#[cfg(feature = "runtime")]
+async fn reject_newer_sdk_runtime_schema(
+    pool: &SqlitePool,
+    path: &Path,
+) -> Result<(), RadrootsSdkError> {
+    let version =
+        sqlite_query_i64(pool, "PRAGMA user_version", SqliteStoreRole::RuntimeStore).await?;
+    if version > SDK_RUNTIME_SCHEMA_VERSION {
+        return Err(RadrootsSdkError::UnsupportedProfileSchema {
+            path: path.to_path_buf(),
+            message: format!(
+                "runtime schema version {version} is newer than supported version {SDK_RUNTIME_SCHEMA_VERSION}"
+            ),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+async fn validate_sdk_runtime_schema(
+    pool: &SqlitePool,
+    path: &Path,
+) -> Result<(), RadrootsSdkError> {
+    for (table, columns) in [
+        (
+            "sdk_runtime_operation_journal",
+            &[
+                "operation_kind",
+                "command_payload_hash",
+                "frozen_draft_json",
+                "expected_transport_id",
+                "state",
+                "result_json",
+                "updated_at_ms",
+            ][..],
+        ),
+        (
+            "sdk_seller_inventory_reservation",
+            &[
+                "reservation_id",
+                "state",
+                "lease_until_ms",
+                "bound_mutation_id",
+            ][..],
+        ),
+        (
+            "sdk_runtime_trade_projection_checkpoint",
+            &["projection_name", "completeness_state", "updated_at_ms"][..],
+        ),
+    ] {
+        let actual = sqlite_table_columns(pool, table).await?;
+        for required in columns {
+            if !actual.iter().any(|column| column == required) {
+                return Err(RadrootsSdkError::UnsupportedProfileSchema {
+                    path: path.to_path_buf(),
+                    message: format!(
+                        "runtime table `{table}` is missing required column `{required}`"
+                    ),
+                });
+            }
+        }
+    }
+    let integrity =
+        sqlite_query_string(pool, "PRAGMA quick_check", SqliteStoreRole::RuntimeStore).await?;
+    if integrity != "ok" {
+        return Err(RadrootsSdkError::UnsupportedProfileSchema {
+            path: path.to_path_buf(),
+            message: format!("runtime quick_check failed: {integrity}"),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+async fn sqlite_table_columns(
+    pool: &SqlitePool,
+    table: &str,
+) -> Result<Vec<String>, RadrootsSdkError> {
+    let sql = match table {
+        "sdk_runtime_operation_journal" => "PRAGMA table_info(sdk_runtime_operation_journal)",
+        "sdk_seller_inventory_reservation" => "PRAGMA table_info(sdk_seller_inventory_reservation)",
+        "sdk_runtime_trade_projection_checkpoint" => {
+            "PRAGMA table_info(sdk_runtime_trade_projection_checkpoint)"
+        }
+        _ => {
+            return Err(RadrootsSdkError::UnsupportedProfileSchema {
+                path: PathBuf::from(":memory:"),
+                message: format!("runtime schema validation requested unknown table `{table}`"),
+            });
+        }
+    };
+    let rows = sqlx::query(sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|error| runtime_store_error(error.to_string()))?;
+    rows.into_iter()
+        .map(|row| {
+            row.try_get::<String, _>("name")
+                .map_err(|error| runtime_store_error(error.to_string()))
+        })
+        .collect()
+}
+
+#[cfg(feature = "runtime")]
+async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(), RadrootsSdkError> {
+    let operation_recovery = sqlx::query(
+        "UPDATE sdk_runtime_operation_journal SET state = 'failed_recoverable', last_error_code = 'signer_timeout', last_error_detail = 'operation was incomplete at SDK startup', updated_at_ms = ? WHERE state IN ('prepared','signature_pending')",
+    )
+    .bind(now_ms)
+    .execute(pool)
+    .await
+    .map_err(|error| runtime_store_error(error.to_string()))?;
+    if operation_recovery.rows_affected() > 0 {
+        record_runtime_recovery_receipt(
+            pool,
+            "signer_timeout",
+            None,
+            None,
+            None,
+            "retry_operation_with_same_idempotency_key",
+            serde_json::json!({ "recovered_operations": operation_recovery.rows_affected() }),
+            now_ms,
+        )
+        .await?;
+    }
+    let reservation_expiry = sqlx::query(
+        "UPDATE sdk_seller_inventory_reservation SET state = 'expired', updated_at_ms = ? WHERE state = 'prepared' AND lease_until_ms <= ?",
+    )
+    .bind(now_ms)
+    .bind(now_ms)
+    .execute(pool)
+    .await
+    .map_err(|error| runtime_store_error(error.to_string()))?;
+    if reservation_expiry.rows_affected() > 0 {
+        record_runtime_recovery_receipt(
+            pool,
+            "reservation_expiry",
+            None,
+            None,
+            None,
+            "retry_operation_with_same_idempotency_key",
+            serde_json::json!({ "expired_reservations": reservation_expiry.rows_affected() }),
+            now_ms,
+        )
+        .await?;
+    }
+    let projection_stale = sqlx::query(
+        "UPDATE sdk_runtime_trade_projection_checkpoint SET completeness_state = 'stale', updated_at_ms = ? WHERE completeness_state = 'rebuilding'",
+    )
+    .bind(now_ms)
+    .execute(pool)
+    .await
+    .map_err(|error| runtime_store_error(error.to_string()))?;
+    if projection_stale.rows_affected() > 0 {
+        record_runtime_recovery_receipt(
+            pool,
+            "projection_stale",
+            None,
+            None,
+            None,
+            "inspect_local_stores",
+            serde_json::json!({ "stale_projection_checkpoints": projection_stale.rows_affected() }),
+            now_ms,
+        )
+        .await?;
+    }
+    let outbox_claim_recovery = sqlx::query(
+        "UPDATE outbox_event SET state = CASE WHEN state = 'signing' AND signed_event_json IS NULL THEN 'sign_retryable' WHEN state = 'signing' AND signed_event_json IS NOT NULL THEN 'signed' WHEN state = 'publishing' THEN 'publish_retryable' ELSE state END, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, updated_at_ms = ? WHERE claim_token IS NOT NULL AND claim_expires_at_ms <= ? AND state IN ('signing', 'signed', 'publishing')",
+    )
+    .bind(now_ms)
+    .bind(now_ms)
+    .execute(pool)
+    .await
+    .map_err(|error| runtime_store_error(error.to_string()))?;
+    if outbox_claim_recovery.rows_affected() > 0 {
+        record_runtime_recovery_receipt(
+            pool,
+            "relay_failure",
+            None,
+            None,
+            None,
+            "retry_after_transport_failure",
+            serde_json::json!({ "recovered_outbox_claims": outbox_claim_recovery.rows_affected() }),
+            now_ms,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+pub(crate) async fn record_runtime_recovery_receipt(
+    pool: &SqlitePool,
+    recovery_code: &'static str,
+    operation_kind: Option<&str>,
+    actor_pubkey: Option<&str>,
+    idempotency_key: Option<&str>,
+    recovery_action: &'static str,
+    detail_json: serde_json::Value,
+    created_at_ms: i64,
+) -> Result<(), RadrootsSdkError> {
+    sqlx::query(
+        "INSERT INTO sdk_runtime_recovery_receipt(recovery_code, operation_kind, actor_pubkey, idempotency_key, recovery_action, detail_json, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(recovery_code)
+    .bind(operation_kind)
+    .bind(actor_pubkey)
+    .bind(idempotency_key)
+    .bind(recovery_action)
+    .bind(detail_json.to_string())
+    .bind(created_at_ms)
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|error| runtime_store_error(error.to_string()))
 }
 
 #[cfg(feature = "runtime")]
@@ -1897,124 +2164,11 @@ fn reject_pre_v1_profile(path: &Path) -> Result<(), RadrootsSdkError> {
         if fs::symlink_metadata(&candidate).is_ok() {
             return Err(RadrootsSdkError::UnsupportedProfileSchema {
                 path: candidate,
-                message: "pre-V1 SDK runtime file is unsupported; use explicit quarantine reset"
-                    .to_owned(),
+                message: "pre-V1 SDK runtime file is unsupported by release-product v1".to_owned(),
             });
         }
     }
     Ok(())
-}
-
-#[cfg(feature = "runtime")]
-async fn quarantine_reset_storage(
-    request: QuarantineResetRequest,
-) -> Result<QuarantineResetReceipt, RadrootsSdkError> {
-    let moves = preflight_quarantine_reset(&request)?;
-    fs::create_dir_all(&request.quarantine).map_err(|error| RadrootsSdkError::Io {
-        path: request.quarantine.clone(),
-        message: error.to_string(),
-    })?;
-    let mut quarantined_paths = Vec::with_capacity(moves.len());
-    for (source, destination) in moves {
-        if request.overwrite {
-            remove_existing_restore_path(&destination)?;
-        }
-        rename_restore_path(&source, &destination, "quarantine reset")?;
-        quarantined_paths.push(destination);
-    }
-    let storage = open_directory_storage(&request.profile).await?;
-    let reset_paths = storage
-        .paths
-        .expect("directory storage reset always returns paths");
-    Ok(QuarantineResetReceipt {
-        profile: request.profile,
-        quarantine: request.quarantine,
-        quarantined_paths,
-        reset_paths,
-    })
-}
-
-#[cfg(feature = "runtime")]
-fn preflight_quarantine_reset(
-    request: &QuarantineResetRequest,
-) -> Result<Vec<(PathBuf, PathBuf)>, RadrootsSdkError> {
-    if request.profile.as_os_str().is_empty() {
-        return Err(RadrootsSdkError::InvalidRequest {
-            message: "quarantine reset profile path must not be empty".to_owned(),
-        });
-    }
-    if request.quarantine.as_os_str().is_empty() {
-        return Err(RadrootsSdkError::InvalidRequest {
-            message: "quarantine reset destination must not be empty".to_owned(),
-        });
-    }
-    match fs::symlink_metadata(&request.profile) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "quarantine reset profile must not be a symbolic link".to_owned(),
-            });
-        }
-        Ok(metadata) if metadata.is_dir() => {}
-        Ok(_) => {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "quarantine reset profile must be a directory".to_owned(),
-            });
-        }
-        Err(error) => {
-            return Err(RadrootsSdkError::Io {
-                path: request.profile.clone(),
-                message: error.to_string(),
-            });
-        }
-    }
-    match fs::symlink_metadata(&request.quarantine) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "quarantine reset destination must not be a symbolic link".to_owned(),
-            });
-        }
-        Ok(metadata) if metadata.is_dir() => {}
-        Ok(_) => {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "quarantine reset destination must be a directory".to_owned(),
-            });
-        }
-        Err(error) if error.kind() == ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(RadrootsSdkError::Io {
-                path: request.quarantine.clone(),
-                message: error.to_string(),
-            });
-        }
-    }
-    let mut moves = Vec::new();
-    for file_name in PRE_V1_RUNTIME_ARTIFACTS {
-        let source = request.profile.join(file_name);
-        let Ok(metadata) = fs::symlink_metadata(&source) else {
-            continue;
-        };
-        if metadata.is_dir() {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: format!("quarantine reset artifact `{file_name}` must not be a directory"),
-            });
-        }
-        let destination = request.quarantine.join(file_name);
-        if fs::symlink_metadata(&destination).is_ok() && !request.overwrite {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: format!(
-                    "quarantine reset destination `{}` already exists",
-                    destination.display()
-                ),
-            });
-        }
-        moves.push((source, destination));
-    }
-    if moves.is_empty() {
-        return Err(RadrootsSdkError::InvalidRequest {
-            message: "quarantine reset found no pre-V1 SDK runtime artifacts".to_owned(),
-        });
-    }
-    Ok(moves)
 }
 
 #[cfg(feature = "runtime")]

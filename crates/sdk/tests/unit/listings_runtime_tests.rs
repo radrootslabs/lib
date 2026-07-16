@@ -369,7 +369,10 @@ async fn listing_configured_enqueue_reports_missing_signer_after_prepare() {
                 plan,
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
-                None,
+                Some(
+                    SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000233")
+                        .expect("idempotency"),
+                ),
             )
             .await,
         Err(RadrootsSdkError::SignerUnavailable { .. })

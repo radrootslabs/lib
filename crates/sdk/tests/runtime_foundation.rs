@@ -181,7 +181,11 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
             .iter()
             .any(|name| name == "listing_projection")
     );
-    assert!(runtime_tables.iter().any(|name| name == "trade_projection"));
+    assert!(
+        runtime_tables
+            .iter()
+            .any(|name| name == "sdk_runtime_trade_projection_checkpoint")
+    );
     assert!(
         runtime_tables
             .iter()
@@ -200,15 +204,15 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     assert!(!runtime_tables.iter().any(|name| name == "nostr_event"));
     assert!(!runtime_tables.iter().any(|name| name == "nostr_event_tag"));
     assert_eq!(
-        sqlite_trade_projection_primary_key(&paths.runtime_path).await,
-        vec!["order_id", "root_event_id", "projection_version"]
+        sqlite_runtime_projection_checkpoint_primary_key(&paths.runtime_path).await,
+        vec!["projection_name"]
     );
     assert!(!runtime_tables.iter().any(|name| name == "outbox_operation"));
     let private_tables = sqlite_table_names(&paths.private_path).await;
     assert!(
         private_tables
             .iter()
-            .any(|name| name == "sdk_private_farm_location")
+            .any(|name| name == "private_farm_location")
     );
     let studio_tables = sqlite_table_names(&paths.studio_path).await;
     assert!(studio_tables.iter().any(|name| name == "sdk_studio_state"));
@@ -1008,14 +1012,14 @@ async fn sqlite_table_names(path: &Path) -> Vec<String> {
     names
 }
 
-async fn sqlite_trade_projection_primary_key(path: &Path) -> Vec<String> {
+async fn sqlite_runtime_projection_checkpoint_primary_key(path: &Path) -> Vec<String> {
     let options = SqliteConnectOptions::new().filename(path).read_only(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(options)
         .await
         .expect("open sqlite for trade projection inspection");
-    let rows = sqlx::query("PRAGMA table_info(trade_projection)")
+    let rows = sqlx::query("PRAGMA table_info(sdk_runtime_trade_projection_checkpoint)")
         .fetch_all(&pool)
         .await
         .expect("trade projection table info");
@@ -1089,7 +1093,8 @@ fn sdk_examples_stay_on_product_api_boundary() {
     assert!(local_enqueue.contains("enqueue_prepared_publish"));
     assert!(!local_enqueue.contains("enqueue_prepared_publish_with_explicit_signer"));
     assert!(local_enqueue.contains("push_outbox_with_transport"));
-    assert!(local_enqueue.contains("TradeStatusRequest"));
+    assert!(!local_enqueue.contains("TradeStatusRequest"));
+    assert!(!local_enqueue.contains(".trades()"));
 
     let myc_setup = include_str!("../examples/sdk_v1_myc_nip46_signer_setup.rs");
     assert!(myc_setup.contains("RadrootsSdkMycNip46Signer"));

@@ -670,7 +670,10 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
                 plan,
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
-                None,
+                Some(
+                    SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000237")
+                        .expect("idempotency"),
+                ),
             )
             .await,
         Err(RadrootsSdkError::SignerUnavailable { .. })

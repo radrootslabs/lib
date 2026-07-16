@@ -299,7 +299,7 @@ fn transport_profile_defaults_are_explicit() {
 
 #[tokio::test]
 async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures() {
-    let memory = open_storage(&RadrootsSdkStorageConfig::Memory)
+    let memory = open_storage(&RadrootsSdkStorageConfig::Memory, 0)
         .await
         .expect("memory storage");
     assert!(memory.paths.is_none());
@@ -320,7 +320,7 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
 
     let tempdir = tempfile::tempdir().expect("tempdir");
     let directory = tempdir.path().join("sdk");
-    let directory_storage = open_storage(&RadrootsSdkStorageConfig::Directory(directory))
+    let directory_storage = open_storage(&RadrootsSdkStorageConfig::Directory(directory), 0)
         .await
         .expect("directory storage");
     let directory_paths = directory_storage.paths.expect("directory paths");
@@ -344,24 +344,148 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
 
     let file_path = tempdir.path().join("not-directory");
     fs::write(&file_path, b"file").expect("file");
-    assert!(!io_message(open_directory_storage(&file_path).await).is_empty());
+    assert!(!io_message(open_directory_storage(&file_path, 0).await).is_empty());
 
     let event_store_directory = tempdir.path().join("event-store-directory");
     fs::create_dir(&event_store_directory).expect("event store dir");
     fs::create_dir(event_store_directory.join(RUNTIME_SQLITE_FILE))
         .expect("event store file slot dir");
-    assert_event_store_error(open_directory_storage(&event_store_directory).await);
+    assert_event_store_error(open_directory_storage(&event_store_directory, 0).await);
 
     let studio_directory = tempdir.path().join("studio-directory");
     fs::create_dir(&studio_directory).expect("studio dir");
     fs::create_dir(studio_directory.join(STUDIO_SQLITE_FILE)).expect("studio file slot dir");
-    assert_studio_store_error(open_directory_storage(&studio_directory).await);
+    assert_studio_store_error(open_directory_storage(&studio_directory, 0).await);
 
     let private_store_directory = tempdir.path().join("private-store-directory");
     fs::create_dir(&private_store_directory).expect("private store dir");
     fs::create_dir(private_store_directory.join(PRIVATE_SQLITE_FILE))
         .expect("private store file slot dir");
-    assert_private_store_error(open_directory_storage(&private_store_directory).await);
+    assert_private_store_error(open_directory_storage(&private_store_directory, 0).await);
+}
+
+#[tokio::test]
+async fn runtime_schema_refuses_newer_profiles_before_migration() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let profile = tempdir.path().join("sdk");
+    fs::create_dir(&profile).expect("profile");
+    let runtime_path = profile.join(RUNTIME_SQLITE_FILE);
+    let pool = open_runtime_file_pool(&runtime_path)
+        .await
+        .expect("runtime pool");
+    sqlx::query("PRAGMA user_version = 99")
+        .execute(&pool)
+        .await
+        .expect("user version");
+    pool.close().await;
+
+    let unsupported = assert_unsupported_profile_error(open_directory_storage(&profile, 10).await);
+
+    assert_eq!(unsupported, runtime_path);
+}
+
+#[tokio::test]
+async fn runtime_startup_recovery_updates_journal_reservations_projections_and_outbox() {
+    let storage = open_storage(&RadrootsSdkStorageConfig::Memory, 0)
+        .await
+        .expect("memory storage");
+    let pool = storage.event_store.pool();
+    sqlx::query(
+        "INSERT INTO sdk_runtime_operation_journal(contract_version, operation_kind, actor_pubkey, idempotency_key, command_payload_hash, frozen_draft_json, expected_transport_id, state, created_at_ms, updated_at_ms) VALUES ('1', 'trade.proposal.v1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '019b0000-0000-7000-8000-000000000001', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', '{}', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'signature_pending', 1, 1)",
+    )
+    .execute(pool)
+    .await
+    .expect("operation journal");
+    sqlx::query(
+        "INSERT INTO sdk_seller_inventory_reservation(reservation_id, farm_id, candidate_id, authority_id, inventory_epoch, assertion_commitment, state, lease_until_ms, created_at_ms, updated_at_ms) VALUES ('reservation-1', 'farm-1', 'candidate-1', 'seller-1', 1, 'commitment-1', 'prepared', 5, 1, 1)",
+    )
+    .execute(pool)
+    .await
+    .expect("reservation");
+    sqlx::query(
+        "INSERT INTO sdk_seller_inventory_reservation_line(reservation_id, farm_id, candidate_id, line_id, bin_id, quantity_mantissa, quantity_scale, unit_code) VALUES ('reservation-1', 'farm-1', 'candidate-1', 'line-1', 'bin-1', '1', 0, 'lb')",
+    )
+    .execute(pool)
+    .await
+    .expect("reservation line");
+    sqlx::query(
+        "INSERT INTO sdk_seller_inventory_reservation(reservation_id, farm_id, candidate_id, authority_id, inventory_epoch, assertion_commitment, state, lease_until_ms, created_at_ms, updated_at_ms) VALUES ('reservation-2', 'farm-1', 'candidate-1', 'seller-1', 1, 'commitment-2', 'prepared', 50, 1, 1)",
+    )
+    .execute(pool)
+    .await
+    .expect("second reservation");
+    assert!(
+        sqlx::query(
+            "INSERT INTO sdk_seller_inventory_reservation_line(reservation_id, farm_id, candidate_id, line_id, bin_id, quantity_mantissa, quantity_scale, unit_code) VALUES ('reservation-2', 'farm-1', 'candidate-1', 'line-1', 'bin-1', '1', 0, 'lb')",
+        )
+        .execute(pool)
+        .await
+        .is_err()
+    );
+    sqlx::query(
+        "INSERT INTO sdk_runtime_trade_projection_checkpoint(projection_name, reducer_contract_id, reducer_version, last_ingest_seq, source_digest, projection_digest, completeness_state, updated_at_ms) VALUES ('trade_projection', 'radroots.trade.reducer.v1', 1, 7, 'source', 'projection', 'rebuilding', 1)",
+    )
+    .execute(pool)
+    .await
+    .expect("projection checkpoint");
+    let operation_id = sqlx::query(
+        "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES ('listing.publish.v1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'generic_event', '019b0000-0000-7000-8000-000000000002', 'digest', 'queued', 1, 1)",
+    )
+    .execute(pool)
+    .await
+    .expect("outbox operation")
+    .last_insert_rowid();
+    sqlx::query(
+        "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '{}', 'publishing', 1, 'claim-1', 'worker-1', 5, 1, 0, 0, 1, 1)",
+    )
+    .bind(operation_id)
+    .execute(pool)
+    .await
+    .expect("outbox event");
+
+    recover_sdk_runtime_state(pool, 10).await.expect("recover");
+
+    let operation_state: String = sqlx::query_scalar(
+        "SELECT state FROM sdk_runtime_operation_journal WHERE operation_kind = 'trade.proposal.v1'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("operation state");
+    let reservation_state: String = sqlx::query_scalar(
+        "SELECT state FROM sdk_seller_inventory_reservation WHERE reservation_id = 'reservation-1'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("reservation state");
+    let projection_state: String = sqlx::query_scalar(
+        "SELECT completeness_state FROM sdk_runtime_trade_projection_checkpoint WHERE projection_name = 'trade_projection'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("projection state");
+    let outbox_state: String =
+        sqlx::query_scalar("SELECT state FROM outbox_event WHERE outbox_event_id = 1")
+            .fetch_one(pool)
+            .await
+            .expect("outbox state");
+    let outbox_claim: Option<String> =
+        sqlx::query_scalar("SELECT claim_token FROM outbox_event WHERE outbox_event_id = 1")
+            .fetch_one(pool)
+            .await
+            .expect("outbox claim");
+    let receipts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sdk_runtime_recovery_receipt WHERE recovery_code IN ('signer_timeout','reservation_expiry','projection_stale','relay_failure')",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("recovery receipts");
+
+    assert_eq!(operation_state, "failed_recoverable");
+    assert_eq!(reservation_state, "expired");
+    assert_eq!(projection_state, "stale");
+    assert_eq!(outbox_state, "publish_retryable");
+    assert!(outbox_claim.is_none());
+    assert_eq!(receipts, 4);
 }
 
 #[tokio::test]
@@ -600,53 +724,6 @@ async fn storage_status_inspection_is_read_only_and_never_creates_missing_profil
     assert!(!pre_v1_profile.join(RUNTIME_SQLITE_FILE).exists());
     assert!(!pre_v1_profile.join(PRIVATE_SQLITE_FILE).exists());
     assert!(!pre_v1_profile.join(STUDIO_SQLITE_FILE).exists());
-}
-
-#[tokio::test]
-async fn quarantine_reset_moves_pre_v1_artifacts_before_materializing_v1_stores() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let profile = tempdir.path().join("profile");
-    let quarantine = tempdir.path().join("quarantine");
-    fs::create_dir(&profile).expect("profile");
-    fs::write(profile.join("event_store.sqlite"), b"old event store").expect("old event store");
-    fs::write(profile.join("event_store.sqlite-wal"), b"old event wal").expect("old event wal");
-    fs::write(profile.join("outbox.sqlite"), b"old outbox").expect("old outbox");
-
-    let unsupported = assert_unsupported_profile_error(
-        RadrootsClient::builder()
-            .directory_storage(&profile)
-            .build()
-            .await,
-    );
-    assert_eq!(unsupported, profile.join("event_store.sqlite"));
-
-    let receipt = RadrootsClient::quarantine_reset_storage(QuarantineResetRequest::new(
-        &profile,
-        &quarantine,
-    ))
-    .await
-    .expect("quarantine reset");
-
-    assert_eq!(receipt.profile, profile);
-    assert_eq!(receipt.quarantine, quarantine);
-    assert_eq!(receipt.quarantined_paths.len(), 3);
-    assert!(receipt.quarantine.join("event_store.sqlite").exists());
-    assert!(receipt.quarantine.join("event_store.sqlite-wal").exists());
-    assert!(receipt.quarantine.join("outbox.sqlite").exists());
-    assert!(!receipt.profile.join("event_store.sqlite").exists());
-    assert!(!receipt.profile.join("outbox.sqlite").exists());
-    assert!(receipt.reset_paths.runtime_path.exists());
-    assert!(receipt.reset_paths.private_path.exists());
-    assert!(receipt.reset_paths.studio_path.exists());
-
-    let status =
-        RadrootsClient::inspect_storage_status(&receipt.profile, StorageStatusRequest::new())
-            .await
-            .expect("read-only status after reset");
-    assert_eq!(status.event_store.total_events, 0);
-    assert_eq!(status.outbox.total_events, 0);
-    assert_eq!(status.private_store.farm_private_locations, 0);
-    assert_eq!(status.studio_store.studio_state_records, 0);
 }
 
 #[tokio::test]
@@ -1364,7 +1441,7 @@ fn restore_staging_helpers_cover_new_and_existing_destination_installs() {
 #[cfg(unix)]
 #[tokio::test]
 async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
-    let storage = open_storage(&RadrootsSdkStorageConfig::Memory)
+    let storage = open_storage(&RadrootsSdkStorageConfig::Memory, 0)
         .await
         .expect("memory storage");
 
@@ -1409,7 +1486,7 @@ async fn sqlite_backup_errors_cover_invalid_paths_and_execute_failures() {
         .await,
     );
 
-    let studio_closed_storage = open_storage(&RadrootsSdkStorageConfig::Memory)
+    let studio_closed_storage = open_storage(&RadrootsSdkStorageConfig::Memory, 0)
         .await
         .expect("studio closed storage");
     studio_closed_storage.studio_store.pool().close().await;

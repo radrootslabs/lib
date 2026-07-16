@@ -3,10 +3,7 @@ use dto_bindgen_core::{
     RustTypeId, SourceSpan, TargetFieldNames, TargetOverride, TypeDef, TypeRef, VariantDef,
     VariantShape, WireFieldNames,
 };
-use radroots_trade::{
-    listing::model::RadrootsTradeListingTotal, order::RadrootsOrderWorkflowProjection,
-    workflow::RadrootsTradeWorkflowState,
-};
+use radroots_trade::listing::model::RadrootsTradeListingTotal;
 
 pub fn dto_roots() -> Vec<RootDescriptor> {
     let mut roots = radroots_trade::dto::dto_roots()
@@ -25,17 +22,9 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsTradeListingSort>(),
         RootDescriptor::new::<RadrootsTradeListingSortField>(),
         RootDescriptor::new::<RadrootsTradeMarketplaceListingSummary>(),
-        RootDescriptor::new::<RadrootsTradeMarketplaceOrderSummary>(),
         RootDescriptor::new::<RadrootsTradeModerationFlag>(),
         RootDescriptor::new::<RadrootsTradeModerationSeverity>(),
         RootDescriptor::new::<RadrootsTradeModerationStatus>(),
-        RootDescriptor::new::<RadrootsTradeOrderBackofficeOverlay>(),
-        RootDescriptor::new::<RadrootsTradeOrderBackofficeQuery>(),
-        RootDescriptor::new::<RadrootsTradeOrderBackofficeView>(),
-        RootDescriptor::new::<RadrootsTradeOrderFacets>(),
-        RootDescriptor::new::<RadrootsTradeOrderQuery>(),
-        RootDescriptor::new::<RadrootsTradeOrderSort>(),
-        RootDescriptor::new::<RadrootsTradeOrderSortField>(),
         RootDescriptor::new::<RadrootsTradeReviewPriority>(),
         RootDescriptor::new::<RadrootsTradeReviewQueueEntry>(),
         RootDescriptor::new::<RadrootsTradeReviewStatus>(),
@@ -81,7 +70,6 @@ imported_ts_type!(
 imported_ts_type!(RadrootsListingProductImport, "RadrootsListingProduct");
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
 imported_ts_type!(RadrootsResourceAreaRefImport, "RadrootsResourceAreaRef");
-imported_ts_type!(RadrootsOrderEventTypeImport, "RadrootsOrderEventType");
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeFacetCount {
@@ -262,19 +250,6 @@ pub struct RadrootsTradeMarketplaceListingSummary {
 }
 
 #[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeMarketplaceOrderSummary {
-    pub order_id: String,
-    pub listing_addr: String,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub status: RadrootsTradeWorkflowState,
-    pub last_message_type: RadrootsOrderEventTypeImport,
-    pub item_count: u32,
-    pub total_bin_count: u32,
-    pub last_reason: Option<String>,
-}
-
-#[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeModerationFlag {
     pub code: String,
     pub severity: RadrootsTradeModerationSeverity,
@@ -301,69 +276,6 @@ pub enum RadrootsTradeModerationStatus {
     Snoozed,
     #[serde(rename = "resolved")]
     Resolved,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderBackofficeOverlay {
-    pub order_id: String,
-    pub review_queue: Option<RadrootsTradeReviewQueueEntry>,
-    pub moderation_flags: Vec<RadrootsTradeModerationFlag>,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderBackofficeQuery {
-    pub order: RadrootsTradeOrderQuery,
-    pub requires_review: Option<bool>,
-    pub has_open_moderation_flags: Option<bool>,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderBackofficeView {
-    pub order: RadrootsOrderWorkflowProjection,
-    pub marketplace: RadrootsTradeMarketplaceOrderSummary,
-    pub overlay: Option<RadrootsTradeOrderBackofficeOverlay>,
-    pub requires_review: bool,
-    pub open_moderation_flag_count: u32,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderFacets {
-    pub buyer_pubkeys: Vec<RadrootsTradeFacetCount>,
-    pub seller_pubkeys: Vec<RadrootsTradeFacetCount>,
-    pub listing_addrs: Vec<RadrootsTradeFacetCount>,
-    pub statuses: Vec<RadrootsTradeFacetCount>,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderQuery {
-    pub listing_addr: Option<String>,
-    pub buyer_pubkey: Option<String>,
-    pub seller_pubkey: Option<String>,
-    pub status: Option<RadrootsTradeWorkflowState>,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub struct RadrootsTradeOrderSort {
-    pub field: RadrootsTradeOrderSortField,
-    pub direction: RadrootsTradeSortDirection,
-}
-
-#[derive(dto_bindgen::Dto)]
-pub enum RadrootsTradeOrderSortField {
-    #[serde(rename = "order_id")]
-    OrderId,
-    #[serde(rename = "listing_addr")]
-    ListingAddr,
-    #[serde(rename = "buyer_pubkey")]
-    BuyerPubkey,
-    #[serde(rename = "seller_pubkey")]
-    SellerPubkey,
-    #[serde(rename = "status")]
-    Status,
-    #[serde(rename = "last_message_type")]
-    LastMessageType,
-    #[serde(rename = "total_bin_count")]
-    TotalBinCount,
 }
 
 #[derive(dto_bindgen::Dto)]

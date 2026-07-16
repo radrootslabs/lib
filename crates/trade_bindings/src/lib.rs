@@ -39,11 +39,12 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     event_import("RadrootsListingProduct"),
     event_import("RadrootsListingPublicLocation"),
     event_import("RadrootsListingStatus"),
-    event_import("RadrootsOrderEconomics"),
-    event_import("RadrootsOrderEventType"),
-    event_import("RadrootsOrderInventoryCommitment"),
-    source_support("RadrootsOrderIssue"),
     local_shape("RadrootsTradeFacetCount"),
+    source_root("RadrootsTradeAgreementStateV1"),
+    source_root("RadrootsTradeAttestationStateV1"),
+    source_root("RadrootsTradeConflictStateV1"),
+    source_root("RadrootsTradeEvidenceStateV1"),
+    source_root("RadrootsTradeFulfillmentStateV1"),
     source_root("RadrootsTradeListing"),
     local_shape("RadrootsTradeListingBackofficeOverlay"),
     local_shape("RadrootsTradeListingBackofficeQuery"),
@@ -58,23 +59,17 @@ pub const TRADE_TYPE_INVENTORY: &[TradeTypeInventoryEntry] = &[
     source_root("RadrootsTradeListingSubtotal"),
     source_root("RadrootsTradeListingTotal"),
     local_shape("RadrootsTradeMarketplaceListingSummary"),
-    local_shape("RadrootsTradeMarketplaceOrderSummary"),
     local_shape("RadrootsTradeModerationFlag"),
     local_shape("RadrootsTradeModerationSeverity"),
     local_shape("RadrootsTradeModerationStatus"),
-    local_shape("RadrootsTradeOrderBackofficeOverlay"),
-    local_shape("RadrootsTradeOrderBackofficeQuery"),
-    local_shape("RadrootsTradeOrderBackofficeView"),
-    local_shape("RadrootsTradeOrderFacets"),
-    local_shape("RadrootsTradeOrderQuery"),
-    local_shape("RadrootsTradeOrderSort"),
-    local_shape("RadrootsTradeOrderSortField"),
-    source_root("RadrootsOrderWorkflowProjection"),
+    source_root("RadrootsTradeNegotiationStateV1"),
+    source_root("RadrootsTradePaymentStateV1"),
+    source_root("RadrootsTradePrivateTermsStateV1"),
+    source_root("RadrootsTradeProjectionV1"),
     local_shape("RadrootsTradeReviewPriority"),
     local_shape("RadrootsTradeReviewQueueEntry"),
     local_shape("RadrootsTradeReviewStatus"),
     local_shape("RadrootsTradeSortDirection"),
-    source_root("RadrootsTradeWorkflowState"),
 ];
 
 pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
@@ -92,25 +87,12 @@ pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
         "RadrootsTradeMarketplaceListingSummary",
         "terminal_order_count",
     ),
-    json_number_safe_count("RadrootsTradeMarketplaceOrderSummary", "item_count"),
-    json_number_safe_count("RadrootsTradeMarketplaceOrderSummary", "total_bin_count"),
-    json_number_safe_count(
-        "RadrootsTradeOrderBackofficeView",
-        "open_moderation_flag_count",
-    ),
 ];
 
 const fn source_root(export_name: &'static str) -> TradeTypeInventoryEntry {
     TradeTypeInventoryEntry {
         export_name,
         disposition: TradeTypeDisposition::SourceTradeRoot,
-    }
-}
-
-const fn source_support(export_name: &'static str) -> TradeTypeInventoryEntry {
-    TradeTypeInventoryEntry {
-        export_name,
-        disposition: TradeTypeDisposition::SourceTradeSupport,
     }
 }
 
@@ -174,11 +156,12 @@ mod tests {
                 "RadrootsListingProduct",
                 "RadrootsListingPublicLocation",
                 "RadrootsListingStatus",
-                "RadrootsOrderEconomics",
-                "RadrootsOrderEventType",
-                "RadrootsOrderInventoryCommitment",
-                "RadrootsOrderIssue",
                 "RadrootsTradeFacetCount",
+                "RadrootsTradeAgreementStateV1",
+                "RadrootsTradeAttestationStateV1",
+                "RadrootsTradeConflictStateV1",
+                "RadrootsTradeEvidenceStateV1",
+                "RadrootsTradeFulfillmentStateV1",
                 "RadrootsTradeListing",
                 "RadrootsTradeListingBackofficeOverlay",
                 "RadrootsTradeListingBackofficeQuery",
@@ -193,23 +176,17 @@ mod tests {
                 "RadrootsTradeListingSubtotal",
                 "RadrootsTradeListingTotal",
                 "RadrootsTradeMarketplaceListingSummary",
-                "RadrootsTradeMarketplaceOrderSummary",
                 "RadrootsTradeModerationFlag",
                 "RadrootsTradeModerationSeverity",
                 "RadrootsTradeModerationStatus",
-                "RadrootsTradeOrderBackofficeOverlay",
-                "RadrootsTradeOrderBackofficeQuery",
-                "RadrootsTradeOrderBackofficeView",
-                "RadrootsTradeOrderFacets",
-                "RadrootsTradeOrderQuery",
-                "RadrootsTradeOrderSort",
-                "RadrootsTradeOrderSortField",
-                "RadrootsOrderWorkflowProjection",
+                "RadrootsTradeNegotiationStateV1",
+                "RadrootsTradePaymentStateV1",
+                "RadrootsTradePrivateTermsStateV1",
+                "RadrootsTradeProjectionV1",
                 "RadrootsTradeReviewPriority",
                 "RadrootsTradeReviewQueueEntry",
                 "RadrootsTradeReviewStatus",
-                "RadrootsTradeSortDirection",
-                "RadrootsTradeWorkflowState"
+                "RadrootsTradeSortDirection"
             ]
         );
     }
@@ -225,9 +202,6 @@ mod tests {
             "RadrootsListingProduct",
             "RadrootsListingPublicLocation",
             "RadrootsListingStatus",
-            "RadrootsOrderEconomics",
-            "RadrootsOrderEventType",
-            "RadrootsOrderInventoryCommitment",
         ] {
             assert_eq!(
                 disposition(export_name),
@@ -247,20 +221,28 @@ mod tests {
         assert_eq!(
             source_roots,
             [
+                "RadrootsTradeAgreementStateV1",
+                "RadrootsTradeAttestationStateV1",
+                "RadrootsTradeConflictStateV1",
+                "RadrootsTradeEvidenceStateV1",
+                "RadrootsTradeFulfillmentStateV1",
                 "RadrootsTradeListing",
                 "RadrootsTradeListingSubtotal",
                 "RadrootsTradeListingTotal",
-                "RadrootsOrderWorkflowProjection",
-                "RadrootsTradeWorkflowState"
+                "RadrootsTradeNegotiationStateV1",
+                "RadrootsTradePaymentStateV1",
+                "RadrootsTradePrivateTermsStateV1",
+                "RadrootsTradeProjectionV1"
             ]
         );
     }
 
     #[test]
     fn trade_source_support_types_are_marked_for_source_registry() {
-        assert_eq!(
-            disposition("RadrootsOrderIssue"),
-            TradeTypeDisposition::SourceTradeSupport
+        assert!(
+            TRADE_TYPE_INVENTORY
+                .iter()
+                .all(|entry| entry.disposition != TradeTypeDisposition::SourceTradeSupport)
         );
     }
 
@@ -312,21 +294,6 @@ mod tests {
                 (
                     "RadrootsTradeMarketplaceListingSummary",
                     "terminal_order_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeMarketplaceOrderSummary",
-                    "item_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeMarketplaceOrderSummary",
-                    "total_bin_count",
-                    super::TradeLargeIntegerPolicy::JsonNumberSafeCount
-                ),
-                (
-                    "RadrootsTradeOrderBackofficeView",
-                    "open_moderation_flag_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
             ]

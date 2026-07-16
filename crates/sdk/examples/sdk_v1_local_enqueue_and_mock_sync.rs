@@ -11,7 +11,7 @@ use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::{
     ListingPreparePublishRequest, NostrRelayUrlPolicy, PushOutboxRequest, RadrootsClient,
     RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
-    TargetPolicy, TargetSet, TradeStatusRequest,
+    TargetPolicy, TargetSet,
 };
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 
@@ -55,14 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .sync()
         .push_outbox_with_transport(&transport, PushOutboxRequest::new().with_limit(1))
         .await?;
-    let order_status = sdk
-        .trades()
-        .status(TradeStatusRequest::parse("example-order-1")?)
-        .await?;
 
     println!("queued listing event: {}", enqueue.signed_event_id.as_str());
     println!("published events: {}", push.published_events);
-    println!("order found: {}", order_status.found);
     Ok(())
 }
 

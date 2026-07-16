@@ -695,7 +695,9 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
         farmer_actor(),
         farm(FARM_C_D_TAG, "North Farm"),
         TargetPolicy::default_profile(),
-    );
+    )
+    .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000238")
+    .expect("idempotency key");
     let error = sdk
         .farms()
         .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
@@ -776,7 +778,7 @@ async fn farm_enqueue_publish_uses_explicit_idempotency_key_across_equivalent_ta
         first_receipt.idempotency_digest_prefix,
         second_receipt.idempotency_digest_prefix
     );
-    assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
+    assert_eq!(second_receipt.state, SdkMutationState::StoredAndQueued);
 
     let paths = sdk.storage_paths().expect("paths");
     let outbox = RadrootsOutbox::open_file(&paths.runtime_path)
