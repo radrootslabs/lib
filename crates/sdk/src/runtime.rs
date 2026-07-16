@@ -1227,6 +1227,12 @@ async fn private_store_status_summary_from_pool(
             SqliteStoreRole::PrivateStore,
         )
         .await?,
+        trade_private_artifacts: sqlite_query_i64(
+            pool,
+            "SELECT COUNT(*) FROM private_trade_artifacts WHERE deleted_at_ms IS NULL",
+            SqliteStoreRole::PrivateStore,
+        )
+        .await?,
     })
 }
 

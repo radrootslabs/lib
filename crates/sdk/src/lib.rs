@@ -50,6 +50,8 @@ mod studio_store;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
 #[cfg(feature = "runtime")]
+mod trade_runtime;
+#[cfg(feature = "runtime")]
 pub mod transport;
 #[cfg(feature = "runtime")]
 mod workflow_runtime;
@@ -59,7 +61,7 @@ pub use radroots_runtime_contract_v1 as runtime_contract_v1;
 #[cfg(feature = "runtime")]
 pub use crate::error::{
     RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkRecoveryAction,
+    RadrootsSdkRecoveryAction, RadrootsSdkTradeErrorKind,
 };
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{
@@ -168,6 +170,20 @@ pub use crate::sync_runtime::{
     SyncProjectionRefreshRequest, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
     SyncTransportOperationCapabilitiesSummary, SyncTransportProfileSummary,
     SyncTransportStatusSummary, SyncTransportTargetSummary,
+};
+#[cfg(feature = "runtime")]
+pub use crate::trade_runtime::{
+    CancelTradeRequest, DecideCandidateRequest, EvidenceRefreshReceipt, EvidenceView,
+    GetTradeRequest, InspectEvidenceRequest, ListTradesRequest, Page, ProposeRevisionRequest,
+    RefreshTradeEvidenceRequest, ResumeOperationRequest, SubmitProposalRequest,
+    TRADE_CANCEL_OPERATION_KIND, TRADE_DECIDE_CANDIDATE_OPERATION_KIND,
+    TRADE_PROPOSE_REVISION_OPERATION_KIND, TRADE_QUERY_DEFAULT_LIMIT, TRADE_QUERY_MAX_LIMIT,
+    TRADE_RESUME_OPERATION_KIND, TRADE_SUBMIT_PROPOSAL_OPERATION_KIND, TradeCommandLifecycleState,
+    TradeCommandReceipt, TradeCommandService, TradeListAnyOf, TradeListFilter, TradeListSort,
+    TradePrivateArtifactDeleteReceipt, TradePrivateArtifactDeleteRequest, TradePrivateArtifactKind,
+    TradePrivateArtifactOpenReceipt, TradePrivateArtifactOpenRequest,
+    TradePrivateArtifactSealReceipt, TradePrivateArtifactSealRequest,
+    TradePrivateTermsAvailabilityView, TradeQueryService, TradeStatusView, TradeSummaryView,
 };
 #[cfg(feature = "runtime")]
 pub use crate::transport::{

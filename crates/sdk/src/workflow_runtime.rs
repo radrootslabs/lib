@@ -15,7 +15,7 @@ use radroots_event_store::{
 };
 use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus, RadrootsOutboxReticulumBehavior,
-    RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxSignedTradeMutationInput,
 };
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
@@ -133,6 +133,11 @@ async fn enqueue_signed_workflow_event(
     signed_event: RadrootsSignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
+    if radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS.contains(&request.frozen_draft.kind_u32())
+    {
+        return enqueue_signed_trade_workflow_event(sdk, request, signed_event, delivery_plan)
+            .await;
+    }
     let idempotency_key =
         request
             .idempotency_key
@@ -191,6 +196,93 @@ async fn enqueue_signed_workflow_event(
         state: outbox_receipt.status,
         idempotency_digest_prefix,
     };
+    commit_runtime_operation_journal(&mut tx, request, &idempotency_key, &receipt, observed_at_ms)
+        .await?;
+    tx.commit()
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    Ok(receipt)
+}
+
+async fn enqueue_signed_trade_workflow_event(
+    sdk: &RadrootsClient,
+    request: &SdkWorkflowEnqueueRequest<'_>,
+    signed_event: RadrootsSignedEvent,
+    delivery_plan: SdkResolvedDeliveryPlan,
+) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
+    let idempotency_key =
+        request
+            .idempotency_key
+            .clone()
+            .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                message: format!(
+                    "{} requires an explicit UUIDv7 idempotency key",
+                    request.operation_kind
+                ),
+            })?;
+    let observed_at_ms = sdk_now_ms(sdk)?;
+    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_str())
+        .expect("frozen workflow draft has a valid expected event id");
+    let delivery_plan_value = delivery_plan.delivery_plan;
+    let mut tx =
+        sdk._event_store
+            .pool()
+            .begin()
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+    ensure_runtime_operation_can_commit(&mut tx, request, &idempotency_key).await?;
+    let local_import_observation = RadrootsTransportObservation::new(
+        RadrootsTransportKind::Local,
+        SDK_LOCAL_EVENT_ENDPOINT_URI,
+        RadrootsTransportObservationType::LocalImport,
+        observed_at_ms,
+    )?;
+    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
+        .with_observation(local_import_observation);
+    let ingest_receipt = sdk
+        ._event_store
+        .ingest_event_in_transaction(&mut tx, ingest)
+        .await?;
+    tx.commit()
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let outbox_input = signed_trade_outbox_input(
+        request.operation_kind,
+        request.frozen_draft,
+        signed_event,
+        delivery_plan_value,
+        idempotency_key.clone(),
+        ingest_receipt.inserted,
+        observed_at_ms,
+    )?;
+    let outbox_receipt = sdk
+        ._outbox
+        .enqueue_signed_trade_mutation_operation(outbox_input)
+        .await?;
+    let idempotency_digest_prefix =
+        digest_prefix(outbox_receipt.operation_idempotency_digest.as_str());
+    let receipt = SdkWorkflowEnqueueReceipt {
+        signed_event_id,
+        local_event_seq: ingest_receipt.seq,
+        outbox_operation_id: outbox_receipt.operation_id,
+        outbox_event_id: outbox_receipt.outbox_event_id,
+        state: outbox_receipt.status,
+        idempotency_digest_prefix,
+    };
+    let mut tx =
+        sdk._event_store
+            .pool()
+            .begin()
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
     commit_runtime_operation_journal(&mut tx, request, &idempotency_key, &receipt, observed_at_ms)
         .await?;
     tx.commit()
@@ -391,6 +483,40 @@ fn signed_outbox_input(
         observed_at_ms,
     )
     .with_idempotency_key(idempotency_key.into_string())
+}
+
+fn signed_trade_outbox_input(
+    operation_kind: &'static str,
+    frozen_draft: &RadrootsEventDraft,
+    signed_event: RadrootsSignedEvent,
+    delivery_plan: RadrootsOutboxDeliveryPlanInput,
+    idempotency_key: SdkIdempotencyKey,
+    event_store_inserted: bool,
+    observed_at_ms: i64,
+) -> Result<RadrootsOutboxSignedTradeMutationInput, RadrootsSdkError> {
+    let envelope =
+        radroots_event::trade::trade_mutation_from_canonical_content(frozen_draft.content())
+            .map_err(|error| RadrootsSdkError::InvalidRequest {
+                message: format!("trade mutation draft content is invalid: {error}"),
+            })?;
+    let mutation_id = envelope
+        .mutation_id
+        .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+            message: "trade mutation draft content is missing mutation id".to_owned(),
+        })?;
+    Ok(RadrootsOutboxSignedTradeMutationInput::new(
+        operation_kind,
+        envelope.trade_id,
+        mutation_id,
+        hex::encode(Sha256::digest(frozen_draft.content().as_bytes())),
+        frozen_draft.clone(),
+        signed_event,
+        delivery_plan,
+        event_store_inserted,
+        observed_at_ms,
+        observed_at_ms,
+    )
+    .with_idempotency_key(idempotency_key.into_string()))
 }
 
 async fn prepare_runtime_operation_journal(

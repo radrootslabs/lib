@@ -3,9 +3,14 @@
 use crate::RadrootsSdkError;
 use radroots_event::ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts};
 use radroots_event::kinds::KIND_FARM;
+use radroots_event::trade::RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES;
 use radroots_protected_store::{RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope};
 use radroots_secret_vault::{RadrootsSecretKeyWrapping, RadrootsSecretVaultAccessError};
+use radroots_trade::workflow::{
+    RadrootsTradePrivateTermsEvidenceV1, RadrootsTradePrivateTermsStateV1,
+};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::path::Path;
@@ -61,40 +66,29 @@ CREATE TABLE IF NOT EXISTS private_farm_location (
   PRIMARY KEY(farm_kind, owner_pubkey, farm_d_tag)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS trade_private_thread (
-  private_thread_id BLOB PRIMARY KEY CHECK(length(private_thread_id) = 32),
-  order_id BLOB NOT NULL CHECK(length(order_id) = 16),
-  root_request_event_id BLOB NOT NULL CHECK(length(root_request_event_id) = 32),
-  counterparty_pubkey BLOB NOT NULL CHECK(length(counterparty_pubkey) = 32),
+CREATE TABLE IF NOT EXISTS private_trade_artifacts (
+  artifact_id TEXT PRIMARY KEY NOT NULL,
+  trade_id TEXT NOT NULL CHECK(length(trade_id) = 32),
+  candidate_id TEXT CHECK(candidate_id IS NULL OR length(candidate_id) = 64),
+  artifact_kind TEXT NOT NULL CHECK(artifact_kind IN ('binding_terms','message','contact_bundle','delivery_instruction')),
+  schema_id TEXT NOT NULL,
+  ciphertext_commitment TEXT NOT NULL CHECK(length(ciphertext_commitment) = 64),
   key_version INTEGER NOT NULL REFERENCES wrapped_profile_key(key_version),
   ciphertext BLOB NOT NULL,
-  nonce BLOB NOT NULL CHECK(length(nonce) = 24),
-  expires_at_ms INTEGER,
+  encryption_metadata BLOB NOT NULL,
+  retention_class TEXT NOT NULL,
   created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL,
-  UNIQUE(order_id, root_request_event_id, counterparty_pubkey)
+  expires_at_ms INTEGER,
+  deleted_at_ms INTEGER,
+  UNIQUE(artifact_kind, ciphertext_commitment)
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS trade_private_expiry_idx
-  ON trade_private_thread(expires_at_ms, private_thread_id)
-  WHERE expires_at_ms IS NOT NULL;
+CREATE INDEX IF NOT EXISTS private_trade_artifacts_trade_idx
+  ON private_trade_artifacts(trade_id, candidate_id, artifact_kind, deleted_at_ms);
 
-CREATE TABLE IF NOT EXISTS buyer_contact_private (
-  contact_id BLOB PRIMARY KEY CHECK(length(contact_id) = 16),
-  order_id BLOB NOT NULL CHECK(length(order_id) = 16),
-  root_request_event_id BLOB NOT NULL CHECK(length(root_request_event_id) = 32),
-  key_version INTEGER NOT NULL REFERENCES wrapped_profile_key(key_version),
-  ciphertext BLOB NOT NULL,
-  nonce BLOB NOT NULL CHECK(length(nonce) = 24),
-  expires_at_ms INTEGER,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL,
-  UNIQUE(order_id, root_request_event_id)
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS buyer_contact_expiry_idx
-  ON buyer_contact_private(expires_at_ms, contact_id)
-  WHERE expires_at_ms IS NOT NULL;
+CREATE INDEX IF NOT EXISTS private_trade_artifacts_expiry_idx
+  ON private_trade_artifacts(expires_at_ms, artifact_id)
+  WHERE expires_at_ms IS NOT NULL AND deleted_at_ms IS NULL;
 
 CREATE TABLE IF NOT EXISTS cursor_hmac_key (
   key_id BLOB PRIMARY KEY CHECK(length(key_id) = 16),
@@ -169,6 +163,7 @@ pub(crate) struct SdkPrivateFarmLocationRecord {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SdkPrivateStoreStatusSummary {
     pub farm_private_locations: i64,
+    pub trade_private_artifacts: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -184,6 +179,92 @@ struct SdkPrivateFarmLocationPayload {
     geonames_feature_id: Option<i64>,
     geonames_country_id: Option<String>,
     updated_at_ms: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SdkPrivateTradeArtifactKind {
+    BindingTerms,
+    Message,
+    ContactBundle,
+    DeliveryInstruction,
+}
+
+impl SdkPrivateTradeArtifactKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::BindingTerms => "binding_terms",
+            Self::Message => "message",
+            Self::ContactBundle => "contact_bundle",
+            Self::DeliveryInstruction => "delivery_instruction",
+        }
+    }
+
+    fn from_str(value: &str) -> Result<Self, RadrootsSdkError> {
+        match value {
+            "binding_terms" => Ok(Self::BindingTerms),
+            "message" => Ok(Self::Message),
+            "contact_bundle" => Ok(Self::ContactBundle),
+            "delivery_instruction" => Ok(Self::DeliveryInstruction),
+            _ => Err(RadrootsSdkError::PrivateStore {
+                message: format!("unknown private trade artifact kind `{value}`"),
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SdkPrivateTradeArtifactInput {
+    pub artifact_id: String,
+    pub trade_id: String,
+    pub candidate_id: Option<String>,
+    pub artifact_kind: SdkPrivateTradeArtifactKind,
+    pub schema_id: String,
+    pub plaintext: Vec<u8>,
+    pub retention_class: String,
+    pub created_at_ms: i64,
+    pub expires_at_ms: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SdkPrivateTradeArtifactRecord {
+    pub artifact_id: String,
+    pub trade_id: String,
+    pub candidate_id: Option<String>,
+    pub artifact_kind: SdkPrivateTradeArtifactKind,
+    pub schema_id: String,
+    pub ciphertext_commitment: String,
+    pub plaintext: Vec<u8>,
+    pub retention_class: String,
+    pub created_at_ms: i64,
+    pub expires_at_ms: Option<i64>,
+    pub deleted_at_ms: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SdkPrivateTradeArtifactMetadata {
+    pub artifact_id: String,
+    pub trade_id: String,
+    pub candidate_id: Option<String>,
+    pub artifact_kind: SdkPrivateTradeArtifactKind,
+    pub schema_id: String,
+    pub ciphertext_commitment: String,
+    pub retention_class: String,
+    pub created_at_ms: i64,
+    pub expires_at_ms: Option<i64>,
+    pub deleted_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SdkPrivateTradeArtifactPayload {
+    artifact_id: String,
+    trade_id: String,
+    artifact_kind: SdkPrivateTradeArtifactKind,
+    schema_id: String,
+    plaintext: Vec<u8>,
+    retention_class: String,
+    created_at_ms: i64,
+    expires_at_ms: Option<i64>,
 }
 
 impl SdkPrivateStore {
@@ -249,6 +330,11 @@ impl SdkPrivateStore {
             farm_private_locations: query_i64(
                 &self.pool,
                 "SELECT COUNT(*) FROM private_farm_location",
+            )
+            .await?,
+            trade_private_artifacts: query_i64(
+                &self.pool,
+                "SELECT COUNT(*) FROM private_trade_artifacts WHERE deleted_at_ms IS NULL",
             )
             .await?,
         })
@@ -339,6 +425,185 @@ impl SdkPrivateStore {
         .await
         .map(|receipt| receipt.rows_affected() > 0)
         .map_err(private_store_error)
+    }
+
+    pub async fn upsert_trade_artifact(
+        &self,
+        input: &SdkPrivateTradeArtifactInput,
+    ) -> Result<SdkPrivateTradeArtifactMetadata, RadrootsSdkError> {
+        validate_trade_artifact_input(input)?;
+        let envelope = self.seal_trade_artifact(input)?;
+        let nonce = envelope.header.nonce.to_vec();
+        let ciphertext = envelope.encode_json().map_err(private_store_error)?;
+        let ciphertext_commitment = hex::encode(Sha256::digest(ciphertext.as_slice()));
+        let encryption_metadata = serde_json::to_vec(&serde_json::json!({
+            "key_version": PRIVATE_STORE_KEY_VERSION,
+            "nonce": hex::encode(nonce.as_slice())
+        }))
+        .map_err(private_store_error)?;
+        sqlx::query(
+            r#"
+            INSERT INTO private_trade_artifacts (
+              artifact_id,
+              trade_id,
+              candidate_id,
+              artifact_kind,
+              schema_id,
+              ciphertext_commitment,
+              key_version,
+              ciphertext,
+              encryption_metadata,
+              retention_class,
+              created_at_ms,
+              expires_at_ms,
+              deleted_at_ms
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL)
+            ON CONFLICT(artifact_id) DO UPDATE SET
+              trade_id = excluded.trade_id,
+              candidate_id = excluded.candidate_id,
+              artifact_kind = excluded.artifact_kind,
+              schema_id = excluded.schema_id,
+              ciphertext_commitment = excluded.ciphertext_commitment,
+              key_version = excluded.key_version,
+              ciphertext = excluded.ciphertext,
+              encryption_metadata = excluded.encryption_metadata,
+              retention_class = excluded.retention_class,
+              created_at_ms = excluded.created_at_ms,
+              expires_at_ms = excluded.expires_at_ms,
+              deleted_at_ms = NULL
+            "#,
+        )
+        .bind(input.artifact_id.as_str())
+        .bind(input.trade_id.as_str())
+        .bind(input.candidate_id.as_deref())
+        .bind(input.artifact_kind.as_str())
+        .bind(input.schema_id.as_str())
+        .bind(ciphertext_commitment.as_str())
+        .bind(PRIVATE_STORE_KEY_VERSION)
+        .bind(ciphertext)
+        .bind(encryption_metadata)
+        .bind(input.retention_class.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.expires_at_ms)
+        .execute(&self.pool)
+        .await
+        .map_err(private_store_error)?;
+        Ok(SdkPrivateTradeArtifactMetadata {
+            artifact_id: input.artifact_id.clone(),
+            trade_id: input.trade_id.clone(),
+            candidate_id: input.candidate_id.clone(),
+            artifact_kind: input.artifact_kind,
+            schema_id: input.schema_id.clone(),
+            ciphertext_commitment,
+            retention_class: input.retention_class.clone(),
+            created_at_ms: input.created_at_ms,
+            expires_at_ms: input.expires_at_ms,
+            deleted_at_ms: None,
+        })
+    }
+
+    pub async fn trade_artifact(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Option<SdkPrivateTradeArtifactRecord>, RadrootsSdkError> {
+        let row = sqlx::query(
+            r#"
+            SELECT artifact_id, trade_id, candidate_id, artifact_kind, schema_id,
+              ciphertext_commitment, ciphertext, retention_class, created_at_ms,
+              expires_at_ms, deleted_at_ms
+            FROM private_trade_artifacts
+            WHERE artifact_id = ?1
+            "#,
+        )
+        .bind(artifact_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(private_store_error)?;
+        row.map(|row| self.trade_artifact_from_row(row)).transpose()
+    }
+
+    pub async fn trade_artifact_metadata_for_trade(
+        &self,
+        trade_id: &str,
+    ) -> Result<Vec<SdkPrivateTradeArtifactMetadata>, RadrootsSdkError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT artifact_id, trade_id, candidate_id, artifact_kind, schema_id,
+              ciphertext_commitment, retention_class, created_at_ms, expires_at_ms,
+              deleted_at_ms
+            FROM private_trade_artifacts
+            WHERE trade_id = ?1
+            ORDER BY created_at_ms, artifact_id
+            "#,
+        )
+        .bind(trade_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(private_store_error)?;
+        rows.into_iter()
+            .map(trade_artifact_metadata_from_row)
+            .collect()
+    }
+
+    pub async fn delete_trade_artifact(
+        &self,
+        artifact_id: &str,
+        deleted_at_ms: i64,
+    ) -> Result<bool, RadrootsSdkError> {
+        sqlx::query(
+            r#"
+            UPDATE private_trade_artifacts
+            SET deleted_at_ms = ?2
+            WHERE artifact_id = ?1 AND deleted_at_ms IS NULL
+            "#,
+        )
+        .bind(artifact_id)
+        .bind(deleted_at_ms)
+        .execute(&self.pool)
+        .await
+        .map(|receipt| receipt.rows_affected() > 0)
+        .map_err(private_store_error)
+    }
+
+    pub async fn private_terms_evidence(
+        &self,
+        trade_id: &str,
+        candidate_id: &str,
+        artifact_id: &str,
+        schema_id: &str,
+        ciphertext_commitment: &str,
+    ) -> Result<RadrootsTradePrivateTermsEvidenceV1, RadrootsSdkError> {
+        let state = match self.trade_artifact(artifact_id).await? {
+            None => RadrootsTradePrivateTermsStateV1::Missing,
+            Some(record) => {
+                if record.deleted_at_ms.is_some()
+                    || record.trade_id != trade_id
+                    || record.artifact_kind != SdkPrivateTradeArtifactKind::BindingTerms
+                {
+                    RadrootsTradePrivateTermsStateV1::Missing
+                } else if record
+                    .candidate_id
+                    .as_deref()
+                    .is_some_and(|stored_candidate_id| stored_candidate_id != candidate_id)
+                {
+                    RadrootsTradePrivateTermsStateV1::Missing
+                } else if record.schema_id != schema_id
+                    || record.ciphertext_commitment != ciphertext_commitment
+                {
+                    RadrootsTradePrivateTermsStateV1::CommitmentMismatch
+                } else {
+                    RadrootsTradePrivateTermsStateV1::AvailableVerified
+                }
+            }
+        };
+        Ok(RadrootsTradePrivateTermsEvidenceV1 {
+            candidate_id: candidate_id.parse().map_err(|error| {
+                RadrootsSdkError::InvalidRequest {
+                    message: format!("private terms candidate id is invalid: {error}"),
+                }
+            })?,
+            state,
+        })
     }
 
     async fn configure_connection(&self, file_backed: bool) -> Result<(), RadrootsSdkError> {
@@ -473,6 +738,29 @@ impl SdkPrivateStore {
         .map_err(private_store_error)
     }
 
+    fn seal_trade_artifact(
+        &self,
+        input: &SdkPrivateTradeArtifactInput,
+    ) -> Result<RadrootsProtectedStoreEnvelope, RadrootsSdkError> {
+        let payload = SdkPrivateTradeArtifactPayload {
+            artifact_id: input.artifact_id.clone(),
+            trade_id: input.trade_id.clone(),
+            artifact_kind: input.artifact_kind,
+            schema_id: input.schema_id.clone(),
+            plaintext: input.plaintext.clone(),
+            retention_class: input.retention_class.clone(),
+            created_at_ms: input.created_at_ms,
+            expires_at_ms: input.expires_at_ms,
+        };
+        let plaintext = serde_json::to_vec(&payload).map_err(private_store_error)?;
+        RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
+            &self.key_source,
+            trade_artifact_key_slot(input.artifact_id.as_str()).as_str(),
+            plaintext.as_slice(),
+        )
+        .map_err(private_store_error)
+    }
+
     fn private_farm_location_from_row(
         &self,
         farm_addr: RadrootsAddressableCoordinate,
@@ -508,6 +796,65 @@ impl SdkPrivateStore {
             geonames_feature_id: payload.geonames_feature_id,
             geonames_country_id: payload.geonames_country_id,
             updated_at_ms: payload.updated_at_ms,
+        })
+    }
+
+    fn trade_artifact_from_row(
+        &self,
+        row: sqlx::sqlite::SqliteRow,
+    ) -> Result<SdkPrivateTradeArtifactRecord, RadrootsSdkError> {
+        let artifact_id: String = row.try_get("artifact_id").map_err(private_store_error)?;
+        let trade_id: String = row.try_get("trade_id").map_err(private_store_error)?;
+        let candidate_id: Option<String> =
+            row.try_get("candidate_id").map_err(private_store_error)?;
+        let artifact_kind = SdkPrivateTradeArtifactKind::from_str(
+            row.try_get::<String, _>("artifact_kind")
+                .map_err(private_store_error)?
+                .as_str(),
+        )?;
+        let schema_id: String = row.try_get("schema_id").map_err(private_store_error)?;
+        let ciphertext_commitment: String = row
+            .try_get("ciphertext_commitment")
+            .map_err(private_store_error)?;
+        let ciphertext: Vec<u8> = row.try_get("ciphertext").map_err(private_store_error)?;
+        if hex::encode(Sha256::digest(ciphertext.as_slice())) != ciphertext_commitment {
+            return Err(RadrootsSdkError::PrivateStore {
+                message:
+                    "private trade artifact ciphertext commitment does not match row commitment"
+                        .to_owned(),
+            });
+        }
+        let envelope = RadrootsProtectedStoreEnvelope::decode_json(ciphertext.as_slice())
+            .map_err(private_store_error)?;
+        let plaintext = envelope
+            .open_with_wrapped_key(&self.key_source)
+            .map_err(private_store_error)?;
+        let payload: SdkPrivateTradeArtifactPayload =
+            serde_json::from_slice(plaintext.as_slice()).map_err(private_store_error)?;
+        if payload.artifact_id != artifact_id
+            || payload.trade_id != trade_id
+            || payload.artifact_kind != artifact_kind
+            || payload.schema_id != schema_id
+        {
+            return Err(RadrootsSdkError::PrivateStore {
+                message: "private trade artifact envelope metadata does not match row metadata"
+                    .to_owned(),
+            });
+        }
+        Ok(SdkPrivateTradeArtifactRecord {
+            artifact_id,
+            trade_id,
+            candidate_id,
+            artifact_kind,
+            schema_id,
+            ciphertext_commitment,
+            plaintext: payload.plaintext,
+            retention_class: row
+                .try_get("retention_class")
+                .map_err(private_store_error)?,
+            created_at_ms: row.try_get("created_at_ms").map_err(private_store_error)?,
+            expires_at_ms: row.try_get("expires_at_ms").map_err(private_store_error)?,
+            deleted_at_ms: row.try_get("deleted_at_ms").map_err(private_store_error)?,
         })
     }
 }
@@ -587,6 +934,10 @@ fn farm_location_key_slot(farm_addr: &str) -> String {
     format!("private_farm_location:{farm_addr}")
 }
 
+fn trade_artifact_key_slot(artifact_id: &str) -> String {
+    format!("private_trade_artifact:{artifact_id}")
+}
+
 fn validate_location_record(record: &SdkPrivateFarmLocationRecord) -> Result<(), RadrootsSdkError> {
     if !record.latitude.is_finite()
         || !record.longitude.is_finite()
@@ -631,6 +982,81 @@ fn validate_location_record(record: &SdkPrivateFarmLocationRecord) -> Result<(),
         });
     }
     Ok(())
+}
+
+fn validate_trade_artifact_input(
+    input: &SdkPrivateTradeArtifactInput,
+) -> Result<(), RadrootsSdkError> {
+    for (field, value) in [
+        ("artifact_id", input.artifact_id.as_str()),
+        ("trade_id", input.trade_id.as_str()),
+        ("schema_id", input.schema_id.as_str()),
+        ("retention_class", input.retention_class.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!("private trade artifact {field} must not be empty"),
+            });
+        }
+    }
+    if input.plaintext.is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "private trade artifact plaintext must not be empty".to_owned(),
+        });
+    }
+    if input.plaintext.len() > RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "private trade artifact plaintext exceeds {RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES} bytes"
+            ),
+        });
+    }
+    if input
+        .expires_at_ms
+        .is_some_and(|expires| expires <= input.created_at_ms)
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "private trade artifact expiration must be after creation time".to_owned(),
+        });
+    }
+    if input.trade_id.len() != 32 || !input.trade_id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "private trade artifact trade_id must be 32 hex characters".to_owned(),
+        });
+    }
+    if input.candidate_id.as_deref().is_some_and(|candidate_id| {
+        candidate_id.len() != 64 || !candidate_id.chars().all(|c| c.is_ascii_hexdigit())
+    }) {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "private trade artifact candidate_id must be 64 hex characters".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn trade_artifact_metadata_from_row(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<SdkPrivateTradeArtifactMetadata, RadrootsSdkError> {
+    Ok(SdkPrivateTradeArtifactMetadata {
+        artifact_id: row.try_get("artifact_id").map_err(private_store_error)?,
+        trade_id: row.try_get("trade_id").map_err(private_store_error)?,
+        candidate_id: row.try_get("candidate_id").map_err(private_store_error)?,
+        artifact_kind: SdkPrivateTradeArtifactKind::from_str(
+            row.try_get::<String, _>("artifact_kind")
+                .map_err(private_store_error)?
+                .as_str(),
+        )?,
+        schema_id: row.try_get("schema_id").map_err(private_store_error)?,
+        ciphertext_commitment: row
+            .try_get("ciphertext_commitment")
+            .map_err(private_store_error)?,
+        retention_class: row
+            .try_get("retention_class")
+            .map_err(private_store_error)?,
+        created_at_ms: row.try_get("created_at_ms").map_err(private_store_error)?,
+        expires_at_ms: row.try_get("expires_at_ms").map_err(private_store_error)?,
+        deleted_at_ms: row.try_get("deleted_at_ms").map_err(private_store_error)?,
+    })
 }
 
 fn private_store_error(error: impl ToString) -> RadrootsSdkError {

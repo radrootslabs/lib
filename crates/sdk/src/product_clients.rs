@@ -56,13 +56,13 @@ impl<'client> GeoNamesClient<'client> {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
 pub struct TradesClient<'client> {
-    pub(crate) _sdk: &'client RadrootsClient,
+    pub(crate) sdk: &'client RadrootsClient,
 }
 
 #[cfg(feature = "runtime")]
 impl<'client> TradesClient<'client> {
     pub(crate) fn new(sdk: &'client RadrootsClient) -> Self {
-        Self { _sdk: sdk }
+        Self { sdk }
     }
 }
 

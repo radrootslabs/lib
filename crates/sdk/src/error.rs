@@ -6,8 +6,6 @@ use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
 use crate::transport::ReticulumBehavior;
 #[cfg(feature = "runtime")]
-use radroots_trade::identity::RadrootsTradeLocator;
-#[cfg(feature = "runtime")]
 use serde_json::{Value, json};
 
 #[cfg(feature = "runtime")]
@@ -41,7 +39,6 @@ pub enum RadrootsSdkRecoveryAction {
     RetryAfterTransportFailure,
     RetryGeoNamesDownload,
     EnableRequiredFeature,
-    SelectTradeRoot,
 }
 
 #[cfg(feature = "runtime")]
@@ -55,6 +52,39 @@ pub enum RadrootsSdkGeoNamesErrorKind {
     Integrity,
     Schema,
     Lookup,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RadrootsSdkTradeErrorKind {
+    InvalidEnvelope,
+    InvalidCommandBody,
+    PrivateArtifactMissing,
+    PrivateArtifactCommitmentMismatch,
+    PrivateArtifactAcknowledgementMissing,
+    TradeNotFound,
+    QueryLimitInvalid,
+    CursorInvalid,
+}
+
+#[cfg(feature = "runtime")]
+impl RadrootsSdkTradeErrorKind {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::InvalidEnvelope => "trade_invalid_envelope",
+            Self::InvalidCommandBody => "trade_invalid_command_body",
+            Self::PrivateArtifactMissing => "trade_private_artifact_missing",
+            Self::PrivateArtifactCommitmentMismatch => "trade_private_artifact_commitment_mismatch",
+            Self::PrivateArtifactAcknowledgementMissing => {
+                "trade_private_artifact_acknowledgement_missing"
+            }
+            Self::TradeNotFound => "trade_not_found",
+            Self::QueryLimitInvalid => "trade_query_limit_invalid",
+            Self::CursorInvalid => "trade_cursor_invalid",
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -122,19 +152,10 @@ pub enum RadrootsSdkError {
         existing_digest_prefix: String,
         new_digest_prefix: String,
     },
-    TradeStatusLimitInvalid {
-        limit: u32,
-        min: u32,
-        max: u32,
-    },
-    InvalidTradeId {
-        value: String,
-        message: String,
-    },
-    TradeAmbiguous {
+    Trade {
+        kind: RadrootsSdkTradeErrorKind,
         operation: String,
-        locator: Box<RadrootsTradeLocator>,
-        candidates: Vec<RadrootsTradeLocator>,
+        message: String,
     },
     PrivacyPreflight {
         operation: String,
@@ -213,9 +234,7 @@ impl RadrootsSdkError {
             Self::TransportTargetLimitExceeded { .. } => "transport_target_limit_exceeded",
             Self::InvalidRelayUrl { .. } => "invalid_relay_url",
             Self::IdempotencyConflict { .. } => "idempotency_conflict",
-            Self::TradeStatusLimitInvalid { .. } => "trade_status_limit_invalid",
-            Self::InvalidTradeId { .. } => "invalid_trade_id",
-            Self::TradeAmbiguous { .. } => "trade_ambiguous",
+            Self::Trade { kind, .. } => kind.code(),
             Self::PrivacyPreflight { .. } => "privacy_preflight",
             Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
             Self::ReticulumTransportUnavailable { behavior, .. } => match behavior {
@@ -274,9 +293,7 @@ impl RadrootsSdkError {
             | Self::TransportTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => RadrootsSdkErrorClass::Configuration,
             Self::IdempotencyConflict { .. }
-            | Self::TradeStatusLimitInvalid { .. }
-            | Self::InvalidTradeId { .. }
-            | Self::TradeAmbiguous { .. }
+            | Self::Trade { .. }
             | Self::PrivacyPreflight { .. }
             | Self::SignerProtocol { .. }
             | Self::SignerAuthChallengePending { .. }
@@ -351,7 +368,7 @@ impl RadrootsSdkError {
             Self::IdempotencyConflict { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
             }
-            Self::TradeAmbiguous { .. } => vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
+            Self::Trade { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
             Self::PrivacyPreflight { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
             Self::UnsupportedProfileSchema { .. } => {
                 vec![RadrootsSdkRecoveryAction::InspectLocalStores]
@@ -373,8 +390,6 @@ impl RadrootsSdkError {
             }
             Self::ClockBeforeUnixEpoch
             | Self::TimestampOutOfRange { .. }
-            | Self::TradeStatusLimitInvalid { .. }
-            | Self::InvalidTradeId { .. }
             | Self::SignerProtocol { .. }
             | Self::InvalidRequest { .. }
             | Self::ListingEdit { .. }
@@ -430,20 +445,14 @@ impl RadrootsSdkError {
                 "existing_digest_prefix": existing_digest_prefix,
                 "new_digest_prefix": new_digest_prefix
             }),
-            Self::TradeStatusLimitInvalid { limit, min, max } => {
-                json!({ "limit": limit, "min": min, "max": max })
-            }
-            Self::InvalidTradeId { value, message } => {
-                json!({ "value": value, "message": message })
-            }
-            Self::TradeAmbiguous {
+            Self::Trade {
+                kind,
                 operation,
-                locator,
-                candidates,
+                message,
             } => json!({
+                "kind": kind,
                 "operation": operation,
-                "locator": locator,
-                "candidates": candidates
+                "message": message
             }),
             Self::PrivacyPreflight {
                 operation,
@@ -591,23 +600,11 @@ impl fmt::Display for RadrootsSdkError {
                 f,
                 "sdk idempotency conflict for {operation_kind}: expected_pubkey_prefix={expected_pubkey_prefix}, existing_digest_prefix={existing_digest_prefix}, new_digest_prefix={new_digest_prefix}"
             ),
-            Self::TradeStatusLimitInvalid { limit, min, max } => write!(
-                f,
-                "sdk order status limit invalid: limit={limit}, min={min}, max={max}"
-            ),
-            Self::InvalidTradeId { value, message } => {
-                write!(f, "sdk invalid order id `{value}`: {message}")
-            }
-            Self::TradeAmbiguous {
+            Self::Trade {
+                kind,
                 operation,
-                locator,
-                candidates,
-            } => write!(
-                f,
-                "sdk trade root is ambiguous for {operation}: trade_id={}, candidate_count={}",
-                locator.order_id().as_str(),
-                candidates.len()
-            ),
+                message,
+            } => write!(f, "sdk trade error for {operation} ({kind:?}): {message}"),
             Self::PrivacyPreflight {
                 operation,
                 status,

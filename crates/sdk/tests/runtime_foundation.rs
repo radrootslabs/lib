@@ -1,19 +1,17 @@
 #![cfg(feature = "runtime")]
 
-use radroots_event::ids::RadrootsOrderId;
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, NostrProfile,
     NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass,
     RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, RestoreRequest, ReticulumBehavior, SDK_IDEMPOTENCY_KEY_MAX_LEN,
-    SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState, SdkBackupVerification,
-    SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
+    RadrootsSdkTimestamp, RadrootsSdkTradeErrorKind, RestoreRequest, ReticulumBehavior,
+    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState,
+    SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
     SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, SdkStudioStoreStorageStatus,
     StorageCheckpointReceipt, StorageCheckpointRequest, StorageStatusReceipt, StorageStatusRequest,
     TargetPolicy, TargetSet, TransportProfile,
 };
-use radroots_trade::identity::RadrootsTradeLocator;
 use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::{Path, PathBuf};
@@ -431,40 +429,37 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey],
         ),
         (
-            RadrootsSdkError::TradeStatusLimitInvalid {
-                limit: 0,
-                min: 1,
-                max: 1000,
+            RadrootsSdkError::Trade {
+                kind: RadrootsSdkTradeErrorKind::QueryLimitInvalid,
+                operation: "trade.list".to_owned(),
+                message: "limit out of range".to_owned(),
             },
-            "trade_status_limit_invalid",
+            "trade_query_limit_invalid",
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
-            RadrootsSdkError::InvalidTradeId {
-                value: "bad".to_owned(),
-                message: "invalid".to_owned(),
+            RadrootsSdkError::Trade {
+                kind: RadrootsSdkTradeErrorKind::TradeNotFound,
+                operation: "trade.get".to_owned(),
+                message: "not found".to_owned(),
             },
-            "invalid_trade_id",
+            "trade_not_found",
             RadrootsSdkErrorClass::Request,
             false,
             vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
-            RadrootsSdkError::TradeAmbiguous {
-                operation: "trade.accept".to_owned(),
-                locator: Box::new(RadrootsTradeLocator::from_order_id(
-                    RadrootsOrderId::parse("trade-error").expect("order id"),
-                )),
-                candidates: vec![RadrootsTradeLocator::from_order_id(
-                    RadrootsOrderId::parse("trade-error").expect("order id"),
-                )],
+            RadrootsSdkError::Trade {
+                kind: RadrootsSdkTradeErrorKind::PrivateArtifactAcknowledgementMissing,
+                operation: "trade.decide_candidate".to_owned(),
+                message: "acknowledgement missing".to_owned(),
             },
-            "trade_ambiguous",
+            "trade_private_artifact_acknowledgement_missing",
             RadrootsSdkErrorClass::Request,
             false,
-            vec![RadrootsSdkRecoveryAction::SelectTradeRoot],
+            vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
             RadrootsSdkError::ProductSyncUnsupported {

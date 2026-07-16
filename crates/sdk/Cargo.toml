@@ -76,6 +76,7 @@ runtime = [
   "std",
   "serde_json",
   "dep:tokio",
+  "dep:base64",
   "dep:hex",
   "dep:radroots_authority",
   "dep:radroots_event_store",
@@ -133,6 +134,7 @@ test-fixture-geonames-asset = [
 ]
 
 [dependencies]
+base64 = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 radroots_authority = { workspace = true, optional = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }

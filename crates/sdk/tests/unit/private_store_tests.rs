@@ -206,13 +206,12 @@ async fn private_store_schema_uses_v1_private_authority_tables() {
     .collect::<Vec<_>>();
 
     for table in [
-        "buyer_contact_private",
         "cursor_hmac_key",
         "key_rotation_progress",
         "nip46_session_private",
         "private_farm_location",
         "private_metadata",
-        "trade_private_thread",
+        "private_trade_artifacts",
         "wrapped_profile_key",
         "wrapped_signing_secret",
     ] {

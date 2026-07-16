@@ -1,4 +1,6 @@
-use super::{RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, redacted_relay_url};
+use super::{
+    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkTradeErrorKind, redacted_relay_url,
+};
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
 use radroots_authority::RadrootsAuthorityError;
@@ -295,14 +297,15 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
             existing_digest_prefix: "existing".to_owned(),
             new_digest_prefix: "new".to_owned(),
         },
-        RadrootsSdkError::TradeStatusLimitInvalid {
-            limit: 0,
-            min: 1,
-            max: 100,
+        RadrootsSdkError::Trade {
+            kind: RadrootsSdkTradeErrorKind::QueryLimitInvalid,
+            operation: "trade.list".to_owned(),
+            message: "limit out of range".to_owned(),
         },
-        RadrootsSdkError::InvalidTradeId {
-            value: "bad order".to_owned(),
-            message: "bad id".to_owned(),
+        RadrootsSdkError::Trade {
+            kind: RadrootsSdkTradeErrorKind::PrivateArtifactMissing,
+            operation: "trade.submit_proposal".to_owned(),
+            message: "private artifact missing".to_owned(),
         },
         RadrootsSdkError::PrivacyPreflight {
             operation: "trade.cancel".to_owned(),
