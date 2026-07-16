@@ -51,6 +51,22 @@ public = [
   "RadrootsSellerReservationLineV1",
   "RadrootsTradeDecisionV1",
   "RadrootsTradeCanonicalMutationV1",
+  "RadrootsTradeReductionInputV1",
+  "RadrootsTradeMutationRecordV1",
+  "RadrootsTradePrivateTermsEvidenceV1",
+  "RadrootsTradeAttestationResultV1",
+  "RadrootsTradeAttestationRecordV1",
+  "RadrootsTradeProjectionV1",
+  "RadrootsTradeAgreementClaimV1",
+  "RadrootsTradeReducerIssueV1",
+  "RadrootsTradeNegotiationStateV1",
+  "RadrootsTradeAgreementStateV1",
+  "RadrootsTradeEvidenceStateV1",
+  "RadrootsTradeConflictStateV1",
+  "RadrootsTradePrivateTermsStateV1",
+  "RadrootsTradeAttestationStateV1",
+  "RadrootsTradeFulfillmentStateV1",
+  "RadrootsTradePaymentStateV1",
   "RadrootsWikiArticle",
   "RadrootsWikiRedirect",
   "RadrootsWikiMergeRequest",
@@ -387,6 +403,27 @@ rust_types = ["radroots_event::ids::RadrootsListingAddress"]
 
 [operations.trade_parse_listing_address.conformance]
 vector = "contracts/conformance/vectors/trade/parse_listing_address.v1.json"
+
+[operations.trade_reduce_records]
+domain = "trade"
+id = "trade.reduce_records"
+stability = "beta"
+inputs = ["RadrootsTradeReductionInputV1"]
+outputs = ["RadrootsTradeProjectionV1"]
+error_class = "validation_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_reduce_records.implementation]
+rust_modules = ["crates/trade/src/workflow.rs"]
+rust_types = [
+  "radroots_trade::workflow::RadrootsTradeReductionInputV1",
+  "radroots_trade::workflow::RadrootsTradeProjectionV1",
+]
+
+[operations.trade_reduce_records.conformance]
+vector = "contracts/conformance/vectors/trade/reduce_records.v1.json"
 
 [operations.trade_validation_validate_listing_event]
 domain = "trade_validation"

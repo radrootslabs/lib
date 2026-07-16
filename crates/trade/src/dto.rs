@@ -7,16 +7,26 @@ use crate::listing::{
     model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal},
     validation::RadrootsTradeListing,
 };
-use crate::order::RadrootsOrderWorkflowProjection;
-use crate::workflow::RadrootsTradeWorkflowState;
+use crate::workflow::{
+    RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
+    RadrootsTradeEvidenceStateV1, RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1,
+    RadrootsTradePaymentStateV1, RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
+};
 
-pub fn dto_roots() -> [RootDescriptor; 5] {
+pub fn dto_roots() -> [RootDescriptor; 12] {
     [
         RootDescriptor::new::<RadrootsTradeListing>(),
         RootDescriptor::new::<RadrootsTradeListingSubtotal>(),
         RootDescriptor::new::<RadrootsTradeListingTotal>(),
-        RootDescriptor::new::<RadrootsTradeWorkflowState>(),
-        RootDescriptor::new::<RadrootsOrderWorkflowProjection>(),
+        RootDescriptor::new::<RadrootsTradeNegotiationStateV1>(),
+        RootDescriptor::new::<RadrootsTradeAgreementStateV1>(),
+        RootDescriptor::new::<RadrootsTradeEvidenceStateV1>(),
+        RootDescriptor::new::<RadrootsTradeConflictStateV1>(),
+        RootDescriptor::new::<RadrootsTradePrivateTermsStateV1>(),
+        RootDescriptor::new::<RadrootsTradeAttestationStateV1>(),
+        RootDescriptor::new::<RadrootsTradeFulfillmentStateV1>(),
+        RootDescriptor::new::<RadrootsTradePaymentStateV1>(),
+        RootDescriptor::new::<RadrootsTradeProjectionV1>(),
     ]
 }
 
@@ -233,8 +243,15 @@ mod tests {
         "RadrootsTradeListing",
         "RadrootsTradeListingSubtotal",
         "RadrootsTradeListingTotal",
-        "RadrootsTradeWorkflowState",
-        "RadrootsOrderWorkflowProjection",
+        "RadrootsTradeNegotiationStateV1",
+        "RadrootsTradeAgreementStateV1",
+        "RadrootsTradeEvidenceStateV1",
+        "RadrootsTradeConflictStateV1",
+        "RadrootsTradePrivateTermsStateV1",
+        "RadrootsTradeAttestationStateV1",
+        "RadrootsTradeFulfillmentStateV1",
+        "RadrootsTradePaymentStateV1",
+        "RadrootsTradeProjectionV1",
     ];
 
     #[test]
@@ -277,71 +294,85 @@ mod tests {
     }
 
     #[test]
-    fn trade_workflow_state_uses_approved_wire_vocabulary() {
+    fn trade_reducer_state_roots_use_approved_wire_vocabulary() {
         let registry = build_registry(dto_roots());
-        let workflow_state = find_enum(&registry, "RadrootsTradeWorkflowState");
+        let negotiation = find_enum(&registry, "RadrootsTradeNegotiationStateV1");
+        let agreement = find_enum(&registry, "RadrootsTradeAgreementStateV1");
+        let evidence = find_enum(&registry, "RadrootsTradeEvidenceStateV1");
+        let conflict = find_enum(&registry, "RadrootsTradeConflictStateV1");
 
         assert_eq!(
-            enum_wire_names(workflow_state),
+            enum_wire_names(negotiation),
+            ["none", "open", "closed_declined", "closed_expired"]
+        );
+        assert_eq!(
+            enum_wire_names(agreement),
+            ["none", "agreed", "contested", "cancelled"]
+        );
+        assert_eq!(
+            enum_wire_names(evidence),
             [
+                "complete",
                 "missing",
-                "requested",
-                "agreed_pending_validation",
-                "committed",
-                "declined",
-                "cancelled",
-                "validation_expired",
-                "invalid",
+                "query_partial",
+                "unsupported_version"
+            ]
+        );
+        assert_eq!(
+            enum_wire_names(conflict),
+            [
+                "none",
+                "concurrent_candidates",
+                "double_acceptance",
+                "decision_conflict",
+                "cancellation_conflict",
+                "invalid_causal_chain",
+                "inventory_authority_conflict",
             ]
         );
     }
 
     #[test]
-    fn trade_order_workflow_projection_models_missing_state_with_optional_evidence() {
+    fn trade_projection_exports_orthogonal_state_fields() {
         let registry = build_registry(dto_roots());
-        let projection = find_struct(&registry, "RadrootsOrderWorkflowProjection");
+        let projection = find_struct(&registry, "RadrootsTradeProjectionV1");
+        let fields = field_names(projection);
 
-        assert!(field_names(projection).contains(&"status"));
-        for optional_field in [
-            "request_event_id",
-            "decision_event_id",
-            "cancellation_event_id",
-            "validation_receipt_event_id",
-            "economics",
-            "agreement_event_id",
-            "listing_addr",
-            "buyer_pubkey",
-            "seller_pubkey",
-            "last_event_id",
+        for required_field in [
+            "negotiation_state",
+            "agreement_state",
+            "evidence_state",
+            "conflict_state",
+            "private_terms_state",
+            "attestation_state",
+            "fulfillment_state",
+            "payment_state",
+            "agreement_claims",
+            "contested_claim_ids",
+            "projection_digest",
         ] {
-            let presence = registry
-                .struct_field_presence("RadrootsOrderWorkflowProjection", optional_field)
-                .expect("projection field presence");
             assert!(
-                !presence.required_on_deserialize,
-                "{optional_field} must not be required for missing projections"
-            );
-            assert!(
-                presence.nullable,
-                "{optional_field} must be nullable for missing projections"
+                fields.contains(&required_field),
+                "{required_field} must remain on the source projection contract"
             );
         }
     }
 
     #[test]
-    fn trade_order_workflow_projection_omits_binding_only_discount_fields() {
+    fn trade_projection_omits_order_status_and_validation_finality_fields() {
         let registry = build_registry(dto_roots());
-        let projection = find_struct(&registry, "RadrootsOrderWorkflowProjection");
+        let projection = find_struct(&registry, "RadrootsTradeProjectionV1");
         let fields = field_names(projection);
 
         for stale_field in [
-            "root_event_id",
-            "last_message_type",
-            "last_discount_request",
-            "last_discount_offer",
-            "accepted_discount",
-            "last_discount_decline_reason",
-            "has_requested_discounts",
+            "status",
+            "order_id",
+            "request_event_id",
+            "decision_event_id",
+            "cancellation_event_id",
+            "validation_receipt_event_id",
+            "committed_inventory_reservations",
+            "pending_inventory_reservations",
         ] {
             assert!(
                 !fields.contains(&stale_field),
