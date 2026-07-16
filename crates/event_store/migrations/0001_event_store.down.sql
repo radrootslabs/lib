@@ -1,5 +1,12 @@
 DROP TABLE listing_search_fts;
-DROP TABLE trade_projection;
+DROP TABLE trade_projection_quarantine;
+DROP TABLE trade_projection_checkpoint;
+DROP TABLE seller_inventory_reservation_line;
+DROP TABLE seller_inventory_reservation;
+DROP TABLE trade_transport_envelope;
+DROP TABLE trade_missing_parent;
+DROP TABLE trade_mutation_parent;
+DROP TABLE trade_mutation;
 DROP TABLE listing_projection;
 DROP TABLE projection_cursor;
 DROP TABLE event_envelope_head;

@@ -2,11 +2,19 @@ CREATE TABLE IF NOT EXISTS outbox_operations (
   operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
   operation_kind TEXT NOT NULL,
   expected_pubkey TEXT NOT NULL,
+  semantic_scope TEXT NOT NULL CHECK (semantic_scope IN ('generic_event', 'trade_mutation')),
+  trade_id TEXT,
+  mutation_id TEXT,
+  canonical_payload_sha256 TEXT CHECK (canonical_payload_sha256 IS NULL OR length(canonical_payload_sha256) = 64),
   idempotency_key TEXT,
   operation_idempotency_digest TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'deferred_until_implemented', 'failed_terminal', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'failed_terminal', 'cancelled')),
   created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
+  updated_at_ms INTEGER NOT NULL,
+  CHECK (
+    (semantic_scope = 'generic_event' AND trade_id IS NULL AND mutation_id IS NULL AND canonical_payload_sha256 IS NULL)
+    OR (semantic_scope = 'trade_mutation' AND trade_id IS NOT NULL AND mutation_id IS NOT NULL AND canonical_payload_sha256 IS NOT NULL)
+  )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS outbox_operation_idempotency_idx
@@ -16,6 +24,10 @@ WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS outbox_operation_status_idx
 ON outbox_operations(status, created_at_ms, operation_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS outbox_operation_trade_mutation_idx
+ON outbox_operations(operation_kind, expected_pubkey, mutation_id)
+WHERE semantic_scope = 'trade_mutation';
+
 CREATE TABLE IF NOT EXISTS outbox_event (
   outbox_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
   operation_id INTEGER NOT NULL REFERENCES outbox_operations(operation_id) ON DELETE CASCADE,
@@ -24,7 +36,7 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   draft_json TEXT NOT NULL,
   signed_event_json TEXT,
   raw_event_json TEXT,
-  state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'deferred_until_implemented', 'failed_terminal', 'cancelled')),
+  state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'failed_terminal', 'cancelled')),
   attempt_count INTEGER NOT NULL,
   claim_token TEXT,
   claim_owner TEXT,
@@ -54,7 +66,7 @@ CREATE TABLE IF NOT EXISTS outbox_delivery_plan (
   satisfaction_policy TEXT NOT NULL,
   required_success_count INTEGER NOT NULL,
   delivery_plan_idempotency_digest TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'deferred_until_implemented', 'failed_terminal', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'failed_terminal', 'cancelled')),
   satisfied_at_ms INTEGER,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,

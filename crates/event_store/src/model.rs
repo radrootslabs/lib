@@ -5,6 +5,11 @@ use radroots_event::contract::{
 };
 use radroots_event::draft::RadrootsSignedEvent;
 use radroots_event::event_head::RadrootsEventHeadDecision;
+use radroots_event::ids::{
+    RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsPublicKey,
+    RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
+};
+use radroots_event::trade::RadrootsTradeMutationKindV1;
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
@@ -351,6 +356,105 @@ pub struct RadrootsProjectionCursor {
     pub projection_id: String,
     pub projection_version: u32,
     pub last_event_seq: i64,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredTradeMutation {
+    pub mutation_id: RadrootsTradeMutationId,
+    pub trade_id: RadrootsTradeId,
+    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub contract_id: String,
+    pub mutation_kind: RadrootsTradeMutationKindV1,
+    pub schema_version: u16,
+    pub candidate_id: Option<RadrootsTradeCandidateId>,
+    pub proposal_mutation_id: Option<RadrootsTradeMutationId>,
+    pub target_claim_mutation_id: Option<RadrootsTradeMutationId>,
+    pub author_pubkey: RadrootsPublicKey,
+    pub counterparty_pubkey: RadrootsPublicKey,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub farm_id: RadrootsDTag,
+    pub authored_at_unix_s: u64,
+    pub canonical_payload_bytes: Vec<u8>,
+    pub payload_sha256: String,
+    pub first_event_seq: i64,
+    pub first_transport_event_id: RadrootsEventId,
+    pub inserted_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredTradeMutationParent {
+    pub mutation_id: RadrootsTradeMutationId,
+    pub parent_mutation_id: RadrootsTradeMutationId,
+    pub parent_index: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredTradeMissingParent {
+    pub trade_id: RadrootsTradeId,
+    pub mutation_id: RadrootsTradeMutationId,
+    pub missing_parent_mutation_id: RadrootsTradeMutationId,
+    pub first_transport_event_id: RadrootsEventId,
+    pub first_seen_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredTradeTransportEnvelope {
+    pub transport_event_id: RadrootsEventId,
+    pub mutation_id: RadrootsTradeMutationId,
+    pub trade_id: RadrootsTradeId,
+    pub transport_kind: String,
+    pub pubkey: RadrootsPublicKey,
+    pub created_at: u64,
+    pub event_seq: i64,
+    pub payload_sha256: String,
+    pub observed_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredSellerReservation {
+    pub reservation_id: RadrootsDTag,
+    pub trade_id: RadrootsTradeId,
+    pub candidate_id: RadrootsTradeCandidateId,
+    pub claim_mutation_id: RadrootsTradeMutationId,
+    pub inventory_authority_pubkey: RadrootsPublicKey,
+    pub inventory_epoch: u64,
+    pub assertion_commitment: String,
+    pub reservation_expires_at_unix_s: u64,
+    pub reservation_json: String,
+    pub inserted_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredSellerReservationLine {
+    pub reservation_id: RadrootsDTag,
+    pub line_id: RadrootsDTag,
+    pub bin_id: RadrootsInventoryBinId,
+    pub quantity_mantissa: String,
+    pub quantity_scale: u8,
+    pub unit_code: String,
+    pub line_index: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeProjectionCheckpoint {
+    pub trade_id: RadrootsTradeId,
+    pub reducer_contract_id: String,
+    pub reducer_version: u16,
+    pub projection_digest: String,
+    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub negotiation_state: String,
+    pub agreement_state: String,
+    pub evidence_state: String,
+    pub conflict_state: String,
+    pub private_terms_state: String,
+    pub attestation_state: String,
+    pub fulfillment_state: String,
+    pub payment_state: String,
+    pub projection_json: String,
+    pub last_mutation_id: Option<RadrootsTradeMutationId>,
+    pub last_transport_event_seq: Option<i64>,
     pub updated_at_ms: i64,
 }
 

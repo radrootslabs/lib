@@ -2,6 +2,7 @@
 
 use crate::RadrootsOutboxError;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
     RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
@@ -13,7 +14,6 @@ use radroots_transport::{
 pub enum RadrootsOutboxOperationStatus {
     Queued,
     Complete,
-    DeferredUntilImplemented,
     FailedTerminal,
     Cancelled,
 }
@@ -23,7 +23,6 @@ impl RadrootsOutboxOperationStatus {
         match self {
             Self::Queued => "queued",
             Self::Complete => "complete",
-            Self::DeferredUntilImplemented => "deferred_until_implemented",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -33,7 +32,6 @@ impl RadrootsOutboxOperationStatus {
         match value {
             "queued" => Ok(Self::Queued),
             "complete" => Ok(Self::Complete),
-            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -53,7 +51,6 @@ pub enum RadrootsOutboxEventState {
     Published,
     SignRetryable,
     PublishRetryable,
-    DeferredUntilImplemented,
     FailedTerminal,
     Cancelled,
 }
@@ -68,7 +65,6 @@ impl RadrootsOutboxEventState {
             Self::Published => "published",
             Self::SignRetryable => "sign_retryable",
             Self::PublishRetryable => "publish_retryable",
-            Self::DeferredUntilImplemented => "deferred_until_implemented",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -83,7 +79,6 @@ impl RadrootsOutboxEventState {
             "published" => Ok(Self::Published),
             "sign_retryable" => Ok(Self::SignRetryable),
             "publish_retryable" => Ok(Self::PublishRetryable),
-            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -105,7 +100,6 @@ impl RadrootsOutboxEventState {
 pub enum RadrootsOutboxDeliveryPlanStatus {
     Queued,
     Complete,
-    DeferredUntilImplemented,
     FailedTerminal,
     Cancelled,
 }
@@ -115,7 +109,6 @@ impl RadrootsOutboxDeliveryPlanStatus {
         match self {
             Self::Queued => "queued",
             Self::Complete => "complete",
-            Self::DeferredUntilImplemented => "deferred_until_implemented",
             Self::FailedTerminal => "failed_terminal",
             Self::Cancelled => "cancelled",
         }
@@ -125,7 +118,6 @@ impl RadrootsOutboxDeliveryPlanStatus {
         match value {
             "queued" => Ok(Self::Queued),
             "complete" => Ok(Self::Complete),
-            "deferred_until_implemented" => Ok(Self::DeferredUntilImplemented),
             "failed_terminal" => Ok(Self::FailedTerminal),
             "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
@@ -353,6 +345,95 @@ impl RadrootsOutboxSignedOperationInput {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxTradeMutationInput {
+    pub operation_kind: String,
+    pub trade_id: RadrootsTradeId,
+    pub mutation_id: RadrootsTradeMutationId,
+    pub canonical_payload_sha256: String,
+    pub draft: RadrootsEventDraft,
+    pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
+    pub idempotency_key: Option<String>,
+    pub created_at_ms: i64,
+}
+
+impl RadrootsOutboxTradeMutationInput {
+    pub fn new(
+        operation_kind: impl Into<String>,
+        trade_id: RadrootsTradeId,
+        mutation_id: RadrootsTradeMutationId,
+        canonical_payload_sha256: impl Into<String>,
+        draft: RadrootsEventDraft,
+        delivery_plan: RadrootsOutboxDeliveryPlanInput,
+        created_at_ms: i64,
+    ) -> Self {
+        Self {
+            operation_kind: operation_kind.into(),
+            trade_id,
+            mutation_id,
+            canonical_payload_sha256: canonical_payload_sha256.into(),
+            draft,
+            delivery_plan,
+            idempotency_key: None,
+            created_at_ms,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxSignedTradeMutationInput {
+    pub operation_kind: String,
+    pub trade_id: RadrootsTradeId,
+    pub mutation_id: RadrootsTradeMutationId,
+    pub canonical_payload_sha256: String,
+    pub draft: RadrootsEventDraft,
+    pub signed_event: RadrootsSignedEvent,
+    pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
+    pub idempotency_key: Option<String>,
+    pub event_store_inserted: bool,
+    pub event_store_ingested_at_ms: i64,
+    pub created_at_ms: i64,
+}
+
+impl RadrootsOutboxSignedTradeMutationInput {
+    pub fn new(
+        operation_kind: impl Into<String>,
+        trade_id: RadrootsTradeId,
+        mutation_id: RadrootsTradeMutationId,
+        canonical_payload_sha256: impl Into<String>,
+        draft: RadrootsEventDraft,
+        signed_event: RadrootsSignedEvent,
+        delivery_plan: RadrootsOutboxDeliveryPlanInput,
+        event_store_inserted: bool,
+        event_store_ingested_at_ms: i64,
+        created_at_ms: i64,
+    ) -> Self {
+        Self {
+            operation_kind: operation_kind.into(),
+            trade_id,
+            mutation_id,
+            canonical_payload_sha256: canonical_payload_sha256.into(),
+            draft,
+            signed_event,
+            delivery_plan,
+            idempotency_key: None,
+            event_store_inserted,
+            event_store_ingested_at_ms,
+            created_at_ms,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOutboxEnqueueStatus {
     Inserted,
@@ -381,6 +462,10 @@ pub struct RadrootsOutboxOperationRecord {
     pub operation_id: i64,
     pub operation_kind: String,
     pub expected_pubkey: String,
+    pub semantic_scope: String,
+    pub trade_id: Option<RadrootsTradeId>,
+    pub mutation_id: Option<RadrootsTradeMutationId>,
+    pub canonical_payload_sha256: Option<String>,
     pub idempotency_key: Option<String>,
     pub operation_idempotency_digest: String,
     pub status: RadrootsOutboxOperationStatus,
@@ -508,10 +593,6 @@ mod tests {
             (RadrootsOutboxOperationStatus::Queued, "queued"),
             (RadrootsOutboxOperationStatus::Complete, "complete"),
             (
-                RadrootsOutboxOperationStatus::DeferredUntilImplemented,
-                "deferred_until_implemented",
-            ),
-            (
                 RadrootsOutboxOperationStatus::FailedTerminal,
                 "failed_terminal",
             ),
@@ -535,10 +616,6 @@ mod tests {
                 RadrootsOutboxEventState::PublishRetryable,
                 "publish_retryable",
             ),
-            (
-                RadrootsOutboxEventState::DeferredUntilImplemented,
-                "deferred_until_implemented",
-            ),
             (RadrootsOutboxEventState::FailedTerminal, "failed_terminal"),
             (RadrootsOutboxEventState::Cancelled, "cancelled"),
         ] {
@@ -552,10 +629,6 @@ mod tests {
         for (status, expected) in [
             (RadrootsOutboxDeliveryPlanStatus::Queued, "queued"),
             (RadrootsOutboxDeliveryPlanStatus::Complete, "complete"),
-            (
-                RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented,
-                "deferred_until_implemented",
-            ),
             (
                 RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
                 "failed_terminal",

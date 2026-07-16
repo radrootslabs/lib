@@ -29,11 +29,22 @@ pub enum RadrootsOutboxError {
     #[error("transport profile id cannot be empty")]
     EmptyTransportProfileId,
 
+    #[error("trade mutation drafts require the semantic trade mutation outbox API")]
+    TradeMutationRequiresSemanticOutbox,
+
+    #[error(
+        "trade mutation outbox metadata does not match the canonical mutation content: {field}"
+    )]
+    TradeMutationMetadataMismatch { field: &'static str },
+
     #[error("transport contract error: {0}")]
     Transport(RadrootsTransportError),
 
     #[error("Invalid stored enum for {field}: {value}")]
     InvalidStoredEnum { field: &'static str, value: String },
+
+    #[error("Invalid stored identifier for {field}: {value}")]
+    InvalidStoredIdentifier { field: &'static str, value: String },
 
     #[error("stored integer for {field} is outside the supported range: {value}")]
     IntegerRange { field: &'static str, value: i64 },

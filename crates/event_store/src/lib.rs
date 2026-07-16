@@ -19,7 +19,11 @@ pub use model::{
     RadrootsEventContractStatus, RadrootsEventHeadStoreDecision, RadrootsEventIngest,
     RadrootsEventIngestReceipt, RadrootsEventStoreStatusSummary, RadrootsEventVerificationStatus,
     RadrootsProjectionCursor, RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag,
-    RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
+    RadrootsStoredSellerReservation, RadrootsStoredSellerReservationLine,
+    RadrootsStoredTradeMissingParent, RadrootsStoredTradeMutation,
+    RadrootsStoredTradeMutationParent, RadrootsStoredTradeTransportEnvelope,
+    RadrootsTradeProjectionCheckpoint, RadrootsTransportObservation,
+    RadrootsTransportObservationType, StoredEventClass,
 };
 #[cfg(feature = "sqlite")]
 pub use store::{

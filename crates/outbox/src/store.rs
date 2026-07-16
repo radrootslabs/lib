@@ -11,11 +11,15 @@ use crate::model::{
     RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
     RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxReticulumBehavior,
     RadrootsOutboxReticulumEventRecord, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxStatusSummary,
+    RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
+    RadrootsOutboxTradeMutationInput,
 };
 use radroots_event::draft::{
     RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
+use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
+use radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS;
+use radroots_event::trade::trade_mutation_from_canonical_content;
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
@@ -99,7 +103,7 @@ impl RadrootsOutbox {
         now_ms: i64,
     ) -> Result<RadrootsOutboxStatusSummary, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'failed_terminal' THEN 1 ELSE 0 END), 0) AS failed_terminal_events, COALESCE(SUM(CASE WHEN state = 'deferred_until_implemented' THEN 1 ELSE 0 END), 0) AS deferred_until_implemented_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'failed_terminal' THEN 1 ELSE 0 END), 0) AS failed_terminal_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -108,6 +112,12 @@ impl RadrootsOutbox {
         )
         .bind(now_ms)
         .bind(now_ms)
+        .fetch_one(&self.pool)
+            .await?
+            .try_get(0)?;
+        let deferred_until_implemented_events = sqlx::query(
+            "SELECT COUNT(DISTINCT plan.outbox_event_id) FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE target.status = 'deferred_until_implemented'",
+        )
         .fetch_one(&self.pool)
         .await?
         .try_get(0)?;
@@ -129,7 +139,7 @@ impl RadrootsOutbox {
             retryable_events: row.try_get("retryable_events")?,
             terminal_events: row.try_get("terminal_events")?,
             failed_terminal_events: row.try_get("failed_terminal_events")?,
-            deferred_until_implemented_events: row.try_get("deferred_until_implemented_events")?,
+            deferred_until_implemented_events,
             ready_signed_events,
             publishing_events: row.try_get("publishing_events")?,
             last_attempt_at_ms,
@@ -141,6 +151,7 @@ impl RadrootsOutbox {
         &self,
         input: &RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
+        ensure_not_trade_mutation_draft(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -175,10 +186,73 @@ impl RadrootsOutbox {
         })
     }
 
+    pub async fn preflight_signed_trade_mutation_idempotency(
+        &self,
+        input: &RadrootsOutboxSignedTradeMutationInput,
+    ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
+        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        let semantic = validate_trade_mutation_input(
+            input.trade_id.as_str(),
+            input.mutation_id.as_str(),
+            input.canonical_payload_sha256.as_str(),
+            &input.draft,
+        )?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+        let operation_digest = trade_mutation_operation_idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            &semantic,
+        );
+
+        if let Some(existing) = existing_trade_mutation_operation_for_pool(
+            &self.pool,
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            input.mutation_id.as_str(),
+        )
+        .await?
+            && existing.operation_idempotency_digest != operation_digest
+        {
+            return Err(RadrootsOutboxError::IdempotencyConflict {
+                operation_kind: input.operation_kind.clone(),
+                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                idempotency_key: input.mutation_id.to_string(),
+                existing_digest: existing.operation_idempotency_digest,
+                new_digest: operation_digest,
+            });
+        }
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation_for_pool(
+                &self.pool,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey_str(),
+                idempotency_key,
+            )
+            .await?
+            && existing.operation_idempotency_digest != operation_digest
+        {
+            return Err(RadrootsOutboxError::IdempotencyConflict {
+                operation_kind: input.operation_kind.clone(),
+                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                idempotency_key: idempotency_key.to_owned(),
+                existing_digest: existing.operation_idempotency_digest,
+                new_digest: operation_digest,
+            });
+        }
+
+        Ok(RadrootsOutboxIdempotencyPreflight {
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+        })
+    }
+
     pub async fn enqueue_operation(
         &self,
         input: RadrootsOutboxOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        ensure_not_trade_mutation_draft(&input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
@@ -230,7 +304,7 @@ impl RadrootsOutbox {
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey_str())
@@ -276,6 +350,7 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        ensure_not_trade_mutation_draft(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -334,10 +409,321 @@ impl RadrootsOutbox {
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey_str())
+        .bind(input.idempotency_key.as_deref())
+        .bind(operation_digest.as_str())
+        .bind(RadrootsOutboxOperationStatus::Queued.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let operation_id = operation.last_insert_rowid();
+        let draft_json = serde_json::to_string(&input.draft)?;
+        let signed_event_json = signed_event_wire_json(&input.signed_event)?;
+        let event = sqlx::query(
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
+        )
+        .bind(operation_id)
+        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(draft_json.as_str())
+        .bind(signed_event_json.as_str())
+        .bind(input.signed_event.raw_json())
+        .bind(RadrootsOutboxEventState::Signed.as_str())
+        .bind(input.created_at_ms)
+        .bind(bool_i64(input.event_store_inserted))
+        .bind(input.event_store_ingested_at_ms)
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let outbox_event_id = event.last_insert_rowid();
+        let plan =
+            insert_or_get_delivery_plan(&mut tx, outbox_event_id, &prepared, input.created_at_ms)
+                .await?;
+        sync_signed_event_lifecycle(&mut tx, outbox_event_id, input.created_at_ms).await?;
+        tx.commit().await?;
+        Ok(RadrootsOutboxEnqueueReceipt {
+            status: RadrootsOutboxEnqueueStatus::Inserted,
+            operation_id,
+            outbox_event_id,
+            delivery_plan_id: plan.delivery_plan_id,
+            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+        })
+    }
+
+    pub async fn enqueue_trade_mutation_operation(
+        &self,
+        input: RadrootsOutboxTradeMutationInput,
+    ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        let semantic = validate_trade_mutation_input(
+            input.trade_id.as_str(),
+            input.mutation_id.as_str(),
+            input.canonical_payload_sha256.as_str(),
+            &input.draft,
+        )?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+        let operation_digest = trade_mutation_operation_idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            &semantic,
+        );
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(existing) = existing_trade_mutation_operation(
+            &mut tx,
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            input.mutation_id.as_str(),
+        )
+        .await?
+        {
+            if existing.operation_idempotency_digest != operation_digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    idempotency_key: input.mutation_id.to_string(),
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
+                });
+            }
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            if plan.status == RadrootsOutboxEnqueueStatus::Inserted {
+                sync_signed_event_lifecycle(&mut tx, existing.outbox_event_id, input.created_at_ms)
+                    .await?;
+            }
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: plan.status,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
+                expected_event_id: existing.event_id,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+            });
+        }
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation(
+                &mut tx,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey_str(),
+                idempotency_key,
+            )
+            .await?
+        {
+            if existing.operation_idempotency_digest != operation_digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    idempotency_key: idempotency_key.to_owned(),
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
+                });
+            }
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            if plan.status == RadrootsOutboxEnqueueStatus::Inserted {
+                sync_signed_event_lifecycle(&mut tx, existing.outbox_event_id, input.created_at_ms)
+                    .await?;
+            }
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: plan.status,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
+                expected_event_id: existing.event_id,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+            });
+        }
+
+        let operation = sqlx::query(
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'trade_mutation', ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(input.operation_kind.as_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(input.trade_id.as_str())
+        .bind(input.mutation_id.as_str())
+        .bind(input.canonical_payload_sha256.as_str())
+        .bind(input.idempotency_key.as_deref())
+        .bind(operation_digest.as_str())
+        .bind(RadrootsOutboxOperationStatus::Queued.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let operation_id = operation.last_insert_rowid();
+        let draft_json = serde_json::to_string(&input.draft)?;
+        let event = sqlx::query(
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
+        )
+        .bind(operation_id)
+        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(draft_json.as_str())
+        .bind(RadrootsOutboxEventState::DraftQueued.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let outbox_event_id = event.last_insert_rowid();
+        let plan =
+            insert_or_get_delivery_plan(&mut tx, outbox_event_id, &prepared, input.created_at_ms)
+                .await?;
+        tx.commit().await?;
+        Ok(RadrootsOutboxEnqueueReceipt {
+            status: RadrootsOutboxEnqueueStatus::Inserted,
+            operation_id,
+            outbox_event_id,
+            delivery_plan_id: plan.delivery_plan_id,
+            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            operation_idempotency_digest: operation_digest,
+            delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+        })
+    }
+
+    pub async fn enqueue_signed_trade_mutation_operation(
+        &self,
+        input: RadrootsOutboxSignedTradeMutationInput,
+    ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        let semantic = validate_trade_mutation_input(
+            input.trade_id.as_str(),
+            input.mutation_id.as_str(),
+            input.canonical_payload_sha256.as_str(),
+            &input.draft,
+        )?;
+        let prepared =
+            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+        let operation_digest = trade_mutation_operation_idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            &semantic,
+        );
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(existing) = existing_trade_mutation_operation(
+            &mut tx,
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey_str(),
+            input.mutation_id.as_str(),
+        )
+        .await?
+        {
+            if existing.operation_idempotency_digest != operation_digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    idempotency_key: input.mutation_id.to_string(),
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
+                });
+            }
+            ensure_event_signed(
+                &mut tx,
+                existing.outbox_event_id,
+                &input.signed_event,
+                input.event_store_inserted,
+                input.event_store_ingested_at_ms,
+            )
+            .await?;
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            sync_signed_event_lifecycle(&mut tx, existing.outbox_event_id, input.created_at_ms)
+                .await?;
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: plan.status,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
+                expected_event_id: existing.event_id,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+            });
+        }
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation(
+                &mut tx,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey_str(),
+                idempotency_key,
+            )
+            .await?
+        {
+            if existing.operation_idempotency_digest != operation_digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    idempotency_key: idempotency_key.to_owned(),
+                    existing_digest: existing.operation_idempotency_digest,
+                    new_digest: operation_digest,
+                });
+            }
+            ensure_event_signed(
+                &mut tx,
+                existing.outbox_event_id,
+                &input.signed_event,
+                input.event_store_inserted,
+                input.event_store_ingested_at_ms,
+            )
+            .await?;
+            let plan = insert_or_get_delivery_plan(
+                &mut tx,
+                existing.outbox_event_id,
+                &prepared,
+                input.created_at_ms,
+            )
+            .await?;
+            sync_signed_event_lifecycle(&mut tx, existing.outbox_event_id, input.created_at_ms)
+                .await?;
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: plan.status,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                delivery_plan_id: plan.delivery_plan_id,
+                expected_event_id: existing.event_id,
+                operation_idempotency_digest: operation_digest,
+                delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
+            });
+        }
+
+        let operation = sqlx::query(
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'trade_mutation', ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(input.operation_kind.as_str())
+        .bind(input.draft.expected_pubkey_str())
+        .bind(input.trade_id.as_str())
+        .bind(input.mutation_id.as_str())
+        .bind(input.canonical_payload_sha256.as_str())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -387,6 +773,7 @@ impl RadrootsOutbox {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        ensure_not_trade_mutation_draft(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -442,7 +829,7 @@ impl RadrootsOutbox {
         }
 
         let operation = sqlx::query(
-            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey_str())
@@ -493,7 +880,7 @@ impl RadrootsOutbox {
         operation_id: i64,
     ) -> Result<Option<RadrootsOutboxOperationRecord>, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT operation_id, operation_kind, expected_pubkey, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operations WHERE operation_id = ?",
+            "SELECT operation_id, operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms FROM outbox_operations WHERE operation_id = ?",
         )
         .bind(operation_id)
         .fetch_optional(&self.pool)
@@ -813,7 +1200,7 @@ impl RadrootsOutbox {
 
     pub async fn recover_expired_claims(&self, now_ms: i64) -> Result<u64, RadrootsOutboxError> {
         let changed = sqlx::query(
-            "UPDATE outbox_event SET state = CASE WHEN state = 'signing' AND signed_event_json IS NULL THEN 'sign_retryable' WHEN state = 'signing' AND signed_event_json IS NOT NULL THEN 'signed' WHEN state = 'publishing' THEN 'publish_retryable' ELSE state END, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, updated_at_ms = ? WHERE claim_token IS NOT NULL AND claim_expires_at_ms <= ? AND state IN ('signing', 'signed', 'publishing', 'deferred_until_implemented')",
+            "UPDATE outbox_event SET state = CASE WHEN state = 'signing' AND signed_event_json IS NULL THEN 'sign_retryable' WHEN state = 'signing' AND signed_event_json IS NOT NULL THEN 'signed' WHEN state = 'publishing' THEN 'publish_retryable' ELSE state END, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, updated_at_ms = ? WHERE claim_token IS NOT NULL AND claim_expires_at_ms <= ? AND state IN ('signing', 'signed', 'publishing')",
         )
         .bind(now_ms)
         .bind(now_ms)
@@ -1378,7 +1765,6 @@ struct PlanEvaluation {
     all_complete: bool,
     any_failed_terminal: bool,
     any_ready: bool,
-    any_deferred_until_implemented: bool,
 }
 
 fn publish_lifecycle_from_plan_evaluation<'a>(
@@ -1412,13 +1798,6 @@ fn publish_lifecycle_from_plan_evaluation<'a>(
             RadrootsOutboxEventState::FailedTerminal,
             Some(RadrootsOutboxOperationStatus::FailedTerminal),
             Some(terminal_error),
-            now_ms,
-        )
-    } else if evaluation.any_deferred_until_implemented {
-        (
-            RadrootsOutboxEventState::DeferredUntilImplemented,
-            Some(RadrootsOutboxOperationStatus::DeferredUntilImplemented),
-            None,
             now_ms,
         )
     } else {
@@ -1631,7 +2010,7 @@ fn initial_delivery_plan_status(
     if prepared_targets.iter().all(|target| {
         target.initial_status == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
     }) {
-        return RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented;
+        return RadrootsOutboxDeliveryPlanStatus::FailedTerminal;
     }
     RadrootsOutboxDeliveryPlanStatus::Queued
 }
@@ -1649,6 +2028,40 @@ async fn existing_idempotent_operation(
     .bind(expected_pubkey)
     .bind(idempotency_key)
     .fetch_optional(&mut **tx)
+    .await?;
+    row.map(existing_operation_from_row).transpose()
+}
+
+async fn existing_trade_mutation_operation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    operation_kind: &str,
+    expected_pubkey: &str,
+    mutation_id: &str,
+) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
+    let row = sqlx::query(
+        "SELECT o.operation_id, o.operation_idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.semantic_scope = 'trade_mutation' AND o.mutation_id = ? ORDER BY e.outbox_event_id LIMIT 1",
+    )
+    .bind(operation_kind)
+    .bind(expected_pubkey)
+    .bind(mutation_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    row.map(existing_operation_from_row).transpose()
+}
+
+async fn existing_trade_mutation_operation_for_pool(
+    pool: &SqlitePool,
+    operation_kind: &str,
+    expected_pubkey: &str,
+    mutation_id: &str,
+) -> Result<Option<ExistingOperation>, RadrootsOutboxError> {
+    let row = sqlx::query(
+        "SELECT o.operation_id, o.operation_idempotency_digest, e.outbox_event_id, e.event_id FROM outbox_operations o JOIN outbox_event e ON e.operation_id = o.operation_id WHERE o.operation_kind = ? AND o.expected_pubkey = ? AND o.semantic_scope = 'trade_mutation' AND o.mutation_id = ? ORDER BY e.outbox_event_id LIMIT 1",
+    )
+    .bind(operation_kind)
+    .bind(expected_pubkey)
+    .bind(mutation_id)
+    .fetch_optional(pool)
     .await?;
     row.map(existing_operation_from_row).transpose()
 }
@@ -1825,15 +2238,6 @@ async fn signed_event_lifecycle_for_plans(
         return Ok((
             RadrootsOutboxEventState::FailedTerminal,
             RadrootsOutboxOperationStatus::FailedTerminal,
-        ));
-    }
-    if plans
-        .iter()
-        .any(|plan| plan.status == RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented)
-    {
-        return Ok((
-            RadrootsOutboxEventState::DeferredUntilImplemented,
-            RadrootsOutboxOperationStatus::DeferredUntilImplemented,
         ));
     }
     if plans
@@ -2058,7 +2462,7 @@ async fn reticulum_event_ids_pool(
         value: i64::MAX,
     })?;
     let mut query = String::from(
-        "SELECT event.outbox_event_id FROM outbox_event AS event WHERE event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND plan.status IN ('queued', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'deferred_until_implemented'))",
+        "SELECT event.outbox_event_id FROM outbox_event AS event WHERE event.signed_event_json IS NOT NULL AND EXISTS (SELECT 1 FROM outbox_delivery_plan AS plan JOIN outbox_delivery_target AS target ON target.delivery_plan_id = plan.delivery_plan_id WHERE plan.outbox_event_id = event.outbox_event_id AND plan.status IN ('queued', 'failed_terminal') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'deferred_until_implemented'))",
     );
     if outbox_event_id.is_some() {
         query.push_str(" AND event.outbox_event_id = ?");
@@ -2080,7 +2484,7 @@ async fn reticulum_targets_for_event_pool(
     outbox_event_id: i64,
 ) -> Result<Vec<RadrootsOutboxDeliveryTargetRecord>, RadrootsOutboxError> {
     let rows = sqlx::query(
-        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.target_scope, target.target_label, target.endpoint_fingerprint, target.status, target.last_outcome_kind, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status IN ('queued', 'deferred_until_implemented') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
+        "SELECT target.delivery_target_id, target.delivery_plan_id, target.transport_kind, target.endpoint_uri, target.target_scope, target.target_label, target.endpoint_fingerprint, target.status, target.last_outcome_kind, target.attempt_count, target.last_attempt_at_ms, target.completed_at_ms, target.last_error FROM outbox_delivery_target AS target JOIN outbox_delivery_plan AS plan ON plan.delivery_plan_id = target.delivery_plan_id WHERE plan.outbox_event_id = ? AND plan.status IN ('queued', 'failed_terminal') AND target.transport_kind = 'reticulum' AND target.status IN ('pending', 'failed_retryable', 'deferred_until_implemented') ORDER BY target.delivery_plan_id, target.delivery_target_id",
     )
     .bind(outbox_event_id)
     .fetch_all(pool)
@@ -2162,7 +2566,6 @@ async fn evaluate_delivery_plans(
     let mut all_complete = !plans.is_empty();
     let mut any_failed_terminal = false;
     let mut any_ready = false;
-    let mut any_deferred_until_implemented = false;
     for plan in plans {
         let targets = delivery_targets_for_plan_tx(tx, plan.delivery_plan_id).await?;
         let satisfied_count = outbox_satisfied_target_count(&plan.satisfaction_policy, &targets);
@@ -2183,10 +2586,8 @@ async fn evaluate_delivery_plans(
             RadrootsOutboxDeliveryPlanStatus::Complete
         } else if ready_count > 0 {
             RadrootsOutboxDeliveryPlanStatus::Queued
-        } else if terminal_failure_count > 0 {
+        } else if terminal_failure_count > 0 || deferred_count > 0 {
             RadrootsOutboxDeliveryPlanStatus::FailedTerminal
-        } else if deferred_count > 0 {
-            RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
         } else {
             RadrootsOutboxDeliveryPlanStatus::FailedTerminal
         };
@@ -2198,9 +2599,6 @@ async fn evaluate_delivery_plans(
         }
         if ready_count > 0 {
             any_ready = true;
-        }
-        if plan_status == RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented {
-            any_deferred_until_implemented = true;
         }
         sqlx::query(
             "UPDATE outbox_delivery_plan SET status = ?, satisfied_at_ms = CASE WHEN ? = 'complete' THEN ? ELSE satisfied_at_ms END, updated_at_ms = ? WHERE delivery_plan_id = ?",
@@ -2217,7 +2615,6 @@ async fn evaluate_delivery_plans(
         all_complete,
         any_failed_terminal,
         any_ready,
-        any_deferred_until_implemented,
     })
 }
 
@@ -2276,6 +2673,16 @@ fn operation_from_row(
         operation_id: row.try_get("operation_id")?,
         operation_kind: row.try_get("operation_kind")?,
         expected_pubkey: row.try_get("expected_pubkey")?,
+        semantic_scope: row.try_get("semantic_scope")?,
+        trade_id: parse_optional_stored_trade_id(
+            "outbox_operations.trade_id",
+            row.try_get("trade_id")?,
+        )?,
+        mutation_id: parse_optional_stored_mutation_id(
+            "outbox_operations.mutation_id",
+            row.try_get("mutation_id")?,
+        )?,
+        canonical_payload_sha256: row.try_get("canonical_payload_sha256")?,
         idempotency_key: row.try_get("idempotency_key")?,
         operation_idempotency_digest: row.try_get("operation_idempotency_digest")?,
         status,
@@ -2531,6 +2938,21 @@ struct OperationDigestInput<'a> {
     draft: &'a RadrootsEventDraft,
 }
 
+struct TradeMutationSemantic {
+    trade_id: String,
+    mutation_id: String,
+    canonical_payload_sha256: String,
+}
+
+#[derive(Serialize)]
+struct TradeMutationOperationDigestInput<'a> {
+    operation_kind: &'a str,
+    expected_pubkey: &'a str,
+    trade_id: &'a str,
+    mutation_id: &'a str,
+    canonical_payload_sha256: &'a str,
+}
+
 fn operation_idempotency_digest(
     operation_kind: &str,
     expected_pubkey: &str,
@@ -2542,6 +2964,20 @@ fn operation_idempotency_digest(
         draft,
     };
     sha256_json(&input)
+}
+
+fn trade_mutation_operation_idempotency_digest(
+    operation_kind: &str,
+    expected_pubkey: &str,
+    semantic: &TradeMutationSemantic,
+) -> String {
+    sha256_json(&TradeMutationOperationDigestInput {
+        operation_kind,
+        expected_pubkey,
+        trade_id: semantic.trade_id.as_str(),
+        mutation_id: semantic.mutation_id.as_str(),
+        canonical_payload_sha256: semantic.canonical_payload_sha256.as_str(),
+    })
 }
 
 #[derive(Serialize)]
@@ -2609,6 +3045,100 @@ fn delivery_plan_idempotency_digest(
 fn sha256_json<T: Serialize>(value: &T) -> String {
     let bytes = serde_json::to_vec(value).expect("outbox digest input is serializable");
     hex::encode(Sha256::digest(bytes))
+}
+
+fn validate_trade_mutation_input(
+    trade_id: &str,
+    mutation_id: &str,
+    canonical_payload_sha256: &str,
+    draft: &RadrootsEventDraft,
+) -> Result<TradeMutationSemantic, RadrootsOutboxError> {
+    if !TRADE_MUTATION_EVENT_KINDS.contains(&draft.kind_u32()) {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch { field: "kind" });
+    }
+    if canonical_payload_sha256.len() != 64
+        || !canonical_payload_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "canonical_payload_sha256",
+        });
+    }
+    let parsed = trade_mutation_from_canonical_content(draft.content())
+        .map_err(|_| RadrootsOutboxError::TradeMutationMetadataMismatch { field: "content" })?;
+    if parsed.contract_id != draft.contract_id() {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "contract_id",
+        });
+    }
+    if parsed.mutation_kind().nostr_kind() != draft.kind_u32() {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch { field: "kind" });
+    }
+    if parsed.author_pubkey.as_str() != draft.expected_pubkey_str() {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "author_pubkey",
+        });
+    }
+    if parsed.trade_id.as_str() != trade_id {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch { field: "trade_id" });
+    }
+    let Some(parsed_mutation_id) = parsed.mutation_id.as_ref() else {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "mutation_id",
+        });
+    };
+    if parsed_mutation_id.as_str() != mutation_id {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "mutation_id",
+        });
+    }
+    let payload_sha256 = sha256_hex(draft.content().as_bytes());
+    if canonical_payload_sha256 != payload_sha256 {
+        return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
+            field: "canonical_payload_sha256",
+        });
+    }
+    Ok(TradeMutationSemantic {
+        trade_id: trade_id.to_owned(),
+        mutation_id: mutation_id.to_owned(),
+        canonical_payload_sha256: canonical_payload_sha256.to_owned(),
+    })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn ensure_not_trade_mutation_draft(draft: &RadrootsEventDraft) -> Result<(), RadrootsOutboxError> {
+    if TRADE_MUTATION_EVENT_KINDS.contains(&draft.kind_u32()) {
+        return Err(RadrootsOutboxError::TradeMutationRequiresSemanticOutbox);
+    }
+    Ok(())
+}
+
+fn parse_optional_stored_trade_id(
+    field: &'static str,
+    value: Option<String>,
+) -> Result<Option<RadrootsTradeId>, RadrootsOutboxError> {
+    value
+        .map(|value| {
+            RadrootsTradeId::parse(value.as_str())
+                .map_err(|_| RadrootsOutboxError::InvalidStoredIdentifier { field, value })
+        })
+        .transpose()
+}
+
+fn parse_optional_stored_mutation_id(
+    field: &'static str,
+    value: Option<String>,
+) -> Result<Option<RadrootsTradeMutationId>, RadrootsOutboxError> {
+    value
+        .map(|value| {
+            RadrootsTradeMutationId::parse(value.as_str())
+                .map_err(|_| RadrootsOutboxError::InvalidStoredIdentifier { field, value })
+        })
+        .transpose()
 }
 
 fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolicy) -> String {
@@ -2753,7 +3283,19 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::kinds::KIND_POST;
+    use radroots_event::ids::{
+        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
+        RadrootsPublicKey, RadrootsTradeId,
+    };
+    use radroots_event::kinds::{KIND_LISTING, KIND_POST};
+    use radroots_event::trade::{
+        RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
+        RadrootsFulfillmentProfileV1, RadrootsTradeCancellationProfileV1,
+        RadrootsTradeCandidateLineV1, RadrootsTradeCandidateTermsV1,
+        RadrootsTradeCanonicalMutationV1, RadrootsTradeEconomicAdjustmentV1,
+        RadrootsTradeEconomicsProfileV1, RadrootsTradeMutationBodyV1,
+        RadrootsTradeMutationEnvelopeV1, canonical_trade_mutation_content,
+    };
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -2769,6 +3311,17 @@ mod tests {
         std::iter::repeat_n(character, 64).collect()
     }
 
+    fn hex_32(character: char) -> String {
+        std::iter::repeat_n(character, 32).collect()
+    }
+
+    fn public_key(character: char) -> RadrootsPublicKey {
+        if character == 'a' {
+            return RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("alice pubkey");
+        }
+        RadrootsPublicKey::parse(hex_64(character)).expect("pubkey")
+    }
+
     fn post_draft(expected_pubkey: &str, content: &str) -> RadrootsEventDraft {
         RadrootsEventDraft::new(
             "radroots.social.post.v1",
@@ -2779,6 +3332,128 @@ mod tests {
             expected_pubkey,
         )
         .expect("post draft")
+    }
+
+    fn candidate_terms() -> RadrootsTradeCandidateTermsV1 {
+        RadrootsTradeCandidateTermsV1 {
+            candidate_id: None,
+            schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+            base_candidate_id: None,
+            supersession_intent: None,
+            buyer_pubkey: public_key('a'),
+            seller_pubkey: public_key('a'),
+            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+            lines: vec![RadrootsTradeCandidateLineV1 {
+                line_id: RadrootsDTag::parse("line-1").expect("line id"),
+                listing_addr: RadrootsAddressableCoordinate::parse(format!(
+                    "{KIND_LISTING}:{}:listing-1",
+                    FIXTURE_ALICE_PUBLIC_KEY_HEX
+                ))
+                .expect("listing address"),
+                listing_event_id: RadrootsEventId::parse(hex_64('c')).expect("listing event id"),
+                listing_snapshot_sha256: hex_64('d'),
+                product_id: "carrots".to_owned(),
+                option_id: None,
+                bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+                quantity_mantissa: "2".to_owned(),
+                quantity_scale: 0,
+                unit_code: "count".to_owned(),
+                unit_profile: "mvp-count".to_owned(),
+                unit_price_mantissa: "300".to_owned(),
+                currency_code: "USD".to_owned(),
+                line_subtotal_mantissa: "600".to_owned(),
+                replaces_line_id: None,
+            }],
+            line_tombstones: Vec::new(),
+            economics: RadrootsTradeEconomicsProfileV1 {
+                profile_id: "mvp-no-payment".to_owned(),
+                currency_code: "USD".to_owned(),
+                currency_exponent: 2,
+                rounding_profile: "half-up".to_owned(),
+                subtotal_mantissa: "600".to_owned(),
+                discount_total_mantissa: "0".to_owned(),
+                adjustment_total_mantissa: "0".to_owned(),
+                total_mantissa: "600".to_owned(),
+                adjustments: Vec::<RadrootsTradeEconomicAdjustmentV1>::new(),
+            },
+            fulfillment: RadrootsFulfillmentProfileV1 {
+                profile_id: "market-pickup".to_owned(),
+                method: "pickup".to_owned(),
+                starts_at_unix_s: 1_800_000_000,
+                ends_at_unix_s: 1_800_003_600,
+                timezone: "America/New_York".to_owned(),
+                utc_offset_seconds: -18_000,
+                fold: 0,
+                location_class: "private_after_agreement".to_owned(),
+                requires_private_terms: false,
+            },
+            cancellation: RadrootsTradeCancellationProfileV1 {
+                profile_id: "mvp".to_owned(),
+                buyer_pre_agreement: true,
+                post_agreement_cutoff_unix_s: Some(1_799_999_000),
+            },
+            private_terms: None,
+            proposal_expires_at_unix_s: 1_799_999_000,
+        }
+    }
+
+    fn proposal_envelope() -> RadrootsTradeMutationEnvelopeV1 {
+        RadrootsTradeMutationEnvelopeV1 {
+            mutation_id: None,
+            contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_owned(),
+            schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+            trade_id: RadrootsTradeId::parse(hex_32('1')).expect("trade id"),
+            root_mutation_id: None,
+            buyer_pubkey: public_key('a'),
+            seller_pubkey: public_key('a'),
+            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+            parent_mutation_ids: Vec::new(),
+            author_pubkey: public_key('a'),
+            counterparty_pubkey: public_key('a'),
+            authored_at_unix_s: 1_799_000_000,
+            body: RadrootsTradeMutationBodyV1::Proposal {
+                candidate: candidate_terms(),
+            },
+        }
+    }
+
+    fn canonical_trade_proposal() -> RadrootsTradeCanonicalMutationV1 {
+        canonical_trade_mutation_content(proposal_envelope()).expect("canonical trade proposal")
+    }
+
+    fn trade_mutation_draft(canonical: &RadrootsTradeCanonicalMutationV1) -> RadrootsEventDraft {
+        let mut tags = vec![
+            vec![
+                "contract".to_owned(),
+                canonical.envelope.contract_id.clone(),
+            ],
+            vec!["d".to_owned(), canonical.mutation_id.to_string()],
+            vec![
+                "p".to_owned(),
+                canonical.envelope.counterparty_pubkey.to_string(),
+            ],
+        ];
+        for parent in &canonical.envelope.parent_mutation_ids {
+            tags.push(vec!["e".to_owned(), parent.to_string()]);
+        }
+        RadrootsEventDraft::new(
+            canonical.envelope.contract_id.clone(),
+            canonical.envelope.mutation_kind().nostr_kind(),
+            canonical.envelope.authored_at_unix_s,
+            tags,
+            canonical.content.clone(),
+            canonical.envelope.author_pubkey.as_str(),
+        )
+        .expect("trade mutation draft")
+    }
+
+    fn signed_trade_mutation(
+        canonical: &RadrootsTradeCanonicalMutationV1,
+    ) -> (RadrootsEventDraft, RadrootsSignedEvent) {
+        let draft = trade_mutation_draft(canonical);
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed trade event");
+        (draft, signed_event)
     }
 
     fn nostr_target(uri: &str) -> RadrootsTransportTarget {
@@ -2985,6 +3660,27 @@ mod tests {
         )
     }
 
+    fn signed_trade_mutation_input(
+        canonical: &RadrootsTradeCanonicalMutationV1,
+        draft: RadrootsEventDraft,
+        signed_event: RadrootsSignedEvent,
+        targets: Vec<RadrootsTransportTarget>,
+        created_at_ms: i64,
+    ) -> RadrootsOutboxSignedTradeMutationInput {
+        RadrootsOutboxSignedTradeMutationInput::new(
+            "publish_trade_mutation",
+            canonical.envelope.trade_id.clone(),
+            canonical.mutation_id.clone(),
+            sha256_hex(canonical.content.as_bytes()),
+            draft,
+            signed_event,
+            delivery_plan(targets),
+            true,
+            created_at_ms + 7,
+            created_at_ms,
+        )
+    }
+
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
@@ -3128,6 +3824,18 @@ mod tests {
         .await
         .expect("old table query");
         assert!(old.is_none());
+        let operation_columns = table_columns(&outbox, "outbox_operations").await;
+        for column in [
+            "semantic_scope",
+            "trade_id",
+            "mutation_id",
+            "canonical_payload_sha256",
+        ] {
+            assert!(
+                operation_columns.iter().any(|name| name == column),
+                "{column}"
+            );
+        }
         let target_columns = table_columns(&outbox, "outbox_delivery_target").await;
         for column in ["target_scope", "target_label", "last_outcome_kind"] {
             assert!(target_columns.iter().any(|name| name == column), "{column}");
@@ -3202,6 +3910,158 @@ mod tests {
             conflict,
             RadrootsOutboxError::IdempotencyConflict { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn generic_enqueue_rejects_trade_mutation_drafts_before_persistence() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let canonical = canonical_trade_proposal();
+        let (draft, signed_event) = signed_trade_mutation(&canonical);
+
+        let unsigned_err = outbox
+            .enqueue_operation(RadrootsOutboxOperationInput::new(
+                "publish_trade_mutation",
+                draft.clone(),
+                delivery_plan(vec![nostr_target(NOSTR_PRIMARY_WSS)]),
+                1_000,
+            ))
+            .await
+            .expect_err("generic unsigned trade rejection");
+        assert!(matches!(
+            unsigned_err,
+            RadrootsOutboxError::TradeMutationRequiresSemanticOutbox
+        ));
+
+        let signed_err = outbox
+            .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
+                "publish_trade_mutation",
+                draft,
+                signed_event,
+                delivery_plan(vec![nostr_target(NOSTR_PRIMARY_WSS)]),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect_err("generic signed trade rejection");
+        assert!(matches!(
+            signed_err,
+            RadrootsOutboxError::TradeMutationRequiresSemanticOutbox
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+    }
+
+    #[tokio::test]
+    async fn semantic_trade_mutation_enqueue_persists_metadata_and_deduplicates_by_mutation() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let canonical = canonical_trade_proposal();
+        let payload_sha256 = sha256_hex(canonical.content.as_bytes());
+        let (draft, signed_event) = signed_trade_mutation(&canonical);
+        let input = signed_trade_mutation_input(
+            &canonical,
+            draft.clone(),
+            signed_event.clone(),
+            vec![nostr_target(NOSTR_PRIMARY_WSS)],
+            1_000,
+        )
+        .with_idempotency_key("trade-first");
+
+        let preflight = outbox
+            .preflight_signed_trade_mutation_idempotency(&input)
+            .await
+            .expect("preflight");
+        let first = outbox
+            .enqueue_signed_trade_mutation_operation(input)
+            .await
+            .expect("first enqueue");
+        assert_eq!(first.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(
+            first.operation_idempotency_digest,
+            preflight.operation_idempotency_digest
+        );
+        assert_eq!(
+            first.delivery_plan_idempotency_digest,
+            preflight.delivery_plan_idempotency_digest
+        );
+
+        let operation = outbox
+            .get_operation(first.operation_id)
+            .await
+            .expect("operation")
+            .expect("operation");
+        assert_eq!(operation.semantic_scope, "trade_mutation");
+        assert_eq!(
+            operation.trade_id.as_ref(),
+            Some(&canonical.envelope.trade_id)
+        );
+        assert_eq!(operation.mutation_id.as_ref(), Some(&canonical.mutation_id));
+        assert_eq!(
+            operation.canonical_payload_sha256.as_deref(),
+            Some(payload_sha256.as_str())
+        );
+        assert_eq!(operation.status, RadrootsOutboxOperationStatus::Queued);
+
+        let event = outbox
+            .get_event(first.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.state, RadrootsOutboxEventState::Signed);
+        assert_eq!(event.signed_event, Some(signed_event));
+
+        let second = outbox
+            .enqueue_signed_trade_mutation_operation(
+                signed_trade_mutation_input(
+                    &canonical,
+                    draft,
+                    event.signed_event.expect("stored signed event"),
+                    vec![nostr_target("wss://relay-3.example.com")],
+                    1_100,
+                )
+                .with_idempotency_key("trade-second"),
+            )
+            .await
+            .expect("second enqueue");
+        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(second.operation_id, first.operation_id);
+        assert_eq!(second.outbox_event_id, first.outbox_event_id);
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 2);
+    }
+
+    #[tokio::test]
+    async fn semantic_trade_mutation_enqueue_rejects_payload_hash_mismatch() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let canonical = canonical_trade_proposal();
+        let (draft, signed_event) = signed_trade_mutation(&canonical);
+
+        let err = outbox
+            .enqueue_signed_trade_mutation_operation(RadrootsOutboxSignedTradeMutationInput::new(
+                "publish_trade_mutation",
+                canonical.envelope.trade_id,
+                canonical.mutation_id,
+                "0".repeat(64),
+                draft,
+                signed_event,
+                delivery_plan(vec![nostr_target(NOSTR_PRIMARY_WSS)]),
+                true,
+                1_007,
+                1_000,
+            ))
+            .await
+            .expect_err("hash mismatch");
+        match err {
+            RadrootsOutboxError::TradeMutationMetadataMismatch { field } => {
+                assert_eq!(field, "canonical_payload_sha256");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
     }
 
     #[tokio::test]
@@ -4417,17 +5277,14 @@ mod tests {
             .expect("plans");
         assert_eq!(
             plans[0].status,
-            RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
+            RadrootsOutboxDeliveryPlanStatus::FailedTerminal
         );
         let event = outbox
             .get_event(receipt.outbox_event_id)
             .await
             .expect("event")
             .expect("event");
-        assert_eq!(
-            event.state,
-            RadrootsOutboxEventState::DeferredUntilImplemented
-        );
+        assert_eq!(event.state, RadrootsOutboxEventState::FailedTerminal);
         let operation = outbox
             .get_operation(receipt.operation_id)
             .await
@@ -4435,10 +5292,12 @@ mod tests {
             .expect("operation");
         assert_eq!(
             operation.status,
-            RadrootsOutboxOperationStatus::DeferredUntilImplemented
+            RadrootsOutboxOperationStatus::FailedTerminal
         );
         let summary = outbox.status_summary(1_000).await.expect("summary");
         assert_eq!(summary.pending_events, 0);
+        assert_eq!(summary.terminal_events, 1);
+        assert_eq!(summary.failed_terminal_events, 1);
         assert_eq!(summary.ready_signed_events, 0);
         assert_eq!(summary.deferred_until_implemented_events, 1);
         assert!(
@@ -4489,17 +5348,14 @@ mod tests {
             .expect("plans");
         assert_eq!(
             plans[0].status,
-            RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented
+            RadrootsOutboxDeliveryPlanStatus::FailedTerminal
         );
         let event = outbox
             .get_event(receipt.outbox_event_id)
             .await
             .expect("event")
             .expect("event");
-        assert_eq!(
-            event.state,
-            RadrootsOutboxEventState::DeferredUntilImplemented
-        );
+        assert_eq!(event.state, RadrootsOutboxEventState::FailedTerminal);
         let operation = outbox
             .get_operation(receipt.operation_id)
             .await
@@ -4507,10 +5363,12 @@ mod tests {
             .expect("operation");
         assert_eq!(
             operation.status,
-            RadrootsOutboxOperationStatus::DeferredUntilImplemented
+            RadrootsOutboxOperationStatus::FailedTerminal
         );
         let summary = outbox.status_summary(1_000).await.expect("summary");
         assert_eq!(summary.pending_events, 0);
+        assert_eq!(summary.terminal_events, 1);
+        assert_eq!(summary.failed_terminal_events, 1);
         assert_eq!(summary.ready_signed_events, 0);
         assert_eq!(summary.deferred_until_implemented_events, 1);
         assert!(
@@ -4667,7 +5525,7 @@ mod tests {
         assert_eq!(records[0].event.outbox_event_id, reject.outbox_event_id);
         assert_eq!(
             records[0].event.state,
-            RadrootsOutboxEventState::DeferredUntilImplemented
+            RadrootsOutboxEventState::FailedTerminal
         );
         assert_eq!(records[0].targets.len(), 1);
         assert_eq!(
@@ -4696,7 +5554,7 @@ mod tests {
         assert_eq!(records[1].event.outbox_event_id, deferred.outbox_event_id);
         assert_eq!(
             records[1].event.state,
-            RadrootsOutboxEventState::DeferredUntilImplemented
+            RadrootsOutboxEventState::FailedTerminal
         );
         assert_eq!(records[1].targets.len(), 1);
         assert_eq!(
@@ -4750,7 +5608,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn complete_signing_sets_deferred_until_implemented_lifecycle_for_reticulum_only_plans() {
+    async fn complete_signing_sets_failed_terminal_lifecycle_for_reticulum_only_plans() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "reticulum after signing");
         let receipt = outbox
@@ -4786,10 +5644,7 @@ mod tests {
             .await
             .expect("event")
             .expect("event");
-        assert_eq!(
-            event.state,
-            RadrootsOutboxEventState::DeferredUntilImplemented
-        );
+        assert_eq!(event.state, RadrootsOutboxEventState::FailedTerminal);
         assert_eq!(event.claim_token, None);
         let operation = outbox
             .get_operation(receipt.operation_id)
@@ -4798,7 +5653,7 @@ mod tests {
             .expect("operation");
         assert_eq!(
             operation.status,
-            RadrootsOutboxOperationStatus::DeferredUntilImplemented
+            RadrootsOutboxOperationStatus::FailedTerminal
         );
         assert!(
             outbox
@@ -5002,7 +5857,7 @@ mod tests {
         );
         let summary = outbox.status_summary(1_000).await.expect("summary");
         assert_eq!(summary.pending_events, 1);
-        assert_eq!(summary.deferred_until_implemented_events, 0);
+        assert_eq!(summary.deferred_until_implemented_events, 1);
     }
 
     #[tokio::test]
@@ -5246,17 +6101,17 @@ mod tests {
                 "transport deferred",
                 "deferred",
                 RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
-                RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented,
-                RadrootsOutboxEventState::DeferredUntilImplemented,
-                RadrootsOutboxOperationStatus::DeferredUntilImplemented,
+                RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
+                RadrootsOutboxEventState::FailedTerminal,
+                RadrootsOutboxOperationStatus::FailedTerminal,
             ),
             (
                 "transport unavailable",
                 "unavailable",
                 RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
-                RadrootsOutboxDeliveryPlanStatus::DeferredUntilImplemented,
-                RadrootsOutboxEventState::DeferredUntilImplemented,
-                RadrootsOutboxOperationStatus::DeferredUntilImplemented,
+                RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
+                RadrootsOutboxEventState::FailedTerminal,
+                RadrootsOutboxOperationStatus::FailedTerminal,
             ),
         ] {
             let outbox = RadrootsOutbox::open_memory().await.expect("open");
@@ -5361,8 +6216,8 @@ mod tests {
                     total_events: 1,
                     pending_events: 0,
                     retryable_events: 0,
-                    terminal_events: 0,
-                    failed_terminal_events: 0,
+                    terminal_events: 1,
+                    failed_terminal_events: 1,
                     deferred_until_implemented_events: if expected_status
                         == RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
                     {
@@ -5373,7 +6228,7 @@ mod tests {
                     ready_signed_events: 0,
                     publishing_events: 0,
                     last_attempt_at_ms: Some(1_100),
-                    last_error: None,
+                    last_error: Some("terminal".to_owned()),
                 }
             );
         }
