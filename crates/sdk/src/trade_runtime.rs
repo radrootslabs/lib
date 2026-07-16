@@ -5,7 +5,8 @@ use crate::{
     RadrootsClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTradeErrorKind,
     SatisfactionPolicy, SdkIdempotencyKey, SdkMutationState, TargetPolicy, TradesClient,
     private_store::{
-        SdkPrivateTradeArtifactInput, SdkPrivateTradeArtifactKind, SdkPrivateTradeArtifactMetadata,
+        SDK_PRIVATE_STORE_SCHEMA_VERSION, SdkPrivateTradeArtifactInput,
+        SdkPrivateTradeArtifactKind, SdkPrivateTradeArtifactMetadata,
     },
     runtime::sdk_now_ms,
     workflow_runtime::{
@@ -20,9 +21,12 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 use radroots_event::{
     draft::RadrootsEventDraft,
     ids::{RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId},
+    kinds::TRADE_MUTATION_EVENT_KINDS,
     trade::{
-        RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,
-        RadrootsTradePrivateTermsRefV1, trade_mutation_from_canonical_content,
+        RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES, RADROOTS_TRADE_MUTATION_CONTRACT_IDS,
+        RADROOTS_TRADE_SCHEMA_VERSION, RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1,
+        RadrootsTradeMutationEnvelopeV1, RadrootsTradePrivateTermsRefV1,
+        trade_mutation_from_canonical_content,
     },
 };
 #[cfg(feature = "runtime")]
@@ -61,6 +65,17 @@ pub const TRADE_RESUME_OPERATION_KIND: &str = "trade.resume_operation.v1";
 pub const TRADE_QUERY_DEFAULT_LIMIT: u32 = 50;
 #[cfg(feature = "runtime")]
 pub const TRADE_QUERY_MAX_LIMIT: u32 = 100;
+#[cfg(feature = "runtime")]
+pub const TRADE_RUNTIME_CAPABILITY_API_VERSION: u16 = 1;
+#[cfg(feature = "runtime")]
+pub const TRADE_RUNTIME_PROTOCOL_PROFILE_ID: &str = "radroots.trade.protocol.v1";
+#[cfg(feature = "runtime")]
+pub const TRADE_RUNTIME_WIRE_PROFILE_ID: &str = "radroots.trade.nostr_regular_immutable_jcs.v1";
+#[cfg(feature = "runtime")]
+pub const TRADE_RUNTIME_STORAGE_PROFILE_ID: &str = "radroots.sdk.trade.sqlite.v1";
+#[cfg(feature = "runtime")]
+pub const TRADE_RUNTIME_PRIVATE_STORAGE_PROFILE_ID: &str =
+    "radroots.sdk.trade.private_artifacts.v1";
 #[cfg(feature = "runtime")]
 const TRADE_MUTATION_QUERY_LIMIT: u32 = 1_000;
 #[cfg(feature = "runtime")]
@@ -244,6 +259,10 @@ impl<'client> TradeQueryService<'client> {
 
 #[cfg(feature = "runtime")]
 impl<'client> TradesClient<'client> {
+    pub fn capabilities(&self) -> TradeRuntimeCapabilityReport {
+        trade_runtime_capabilities()
+    }
+
     pub fn commands(&self) -> TradeCommandService<'client> {
         TradeCommandService::new(self.sdk)
     }
@@ -663,6 +682,109 @@ pub struct TradePrivateArtifactDeleteReceipt {
     pub artifact_id: String,
     pub deleted: bool,
     pub deleted_at_ms: i64,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TradeRuntimeCapabilityReport {
+    pub api_version: u16,
+    pub protocol: TradeProtocolCapabilityReport,
+    pub storage: TradeStorageCapabilityReport,
+    pub core_mvp: TradeCoreMvpCapabilityReport,
+    pub optional_integrations: TradeOptionalIntegrationCapabilityReport,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TradeProtocolCapabilityReport {
+    pub protocol_profile_id: &'static str,
+    pub wire_profile_id: &'static str,
+    pub schema_version: u16,
+    pub mutation_contract_ids: Vec<&'static str>,
+    pub mutation_event_kinds: Vec<u32>,
+    pub reducer_contract_id: &'static str,
+    pub reducer_version: u16,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TradeStorageCapabilityReport {
+    pub storage_profile_id: &'static str,
+    pub private_storage_profile_id: &'static str,
+    pub private_store_schema_version: i64,
+    pub max_private_artifact_bytes: usize,
+    pub private_artifact_kinds: Vec<TradePrivateArtifactKind>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TradeCoreMvpCapabilityReport {
+    pub commands: bool,
+    pub queries: bool,
+    pub local_event_store: bool,
+    pub semantic_outbox: bool,
+    pub protected_private_artifacts: bool,
+    pub backup_restore: bool,
+    pub local_signer: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TradeOptionalIntegrationCapabilityReport {
+    pub myc_nip46_signer: bool,
+    pub radrootsd_execution: bool,
+    pub rhi_attestation: bool,
+    pub tangle_transport: bool,
+    pub reticulum_transport: bool,
+}
+
+#[cfg(feature = "runtime")]
+fn trade_runtime_capabilities() -> TradeRuntimeCapabilityReport {
+    TradeRuntimeCapabilityReport {
+        api_version: TRADE_RUNTIME_CAPABILITY_API_VERSION,
+        protocol: TradeProtocolCapabilityReport {
+            protocol_profile_id: TRADE_RUNTIME_PROTOCOL_PROFILE_ID,
+            wire_profile_id: TRADE_RUNTIME_WIRE_PROFILE_ID,
+            schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
+            mutation_contract_ids: RADROOTS_TRADE_MUTATION_CONTRACT_IDS.to_vec(),
+            mutation_event_kinds: TRADE_MUTATION_EVENT_KINDS.to_vec(),
+            reducer_contract_id: RADROOTS_TRADE_REDUCER_CONTRACT_ID,
+            reducer_version: RADROOTS_TRADE_REDUCER_VERSION,
+        },
+        storage: TradeStorageCapabilityReport {
+            storage_profile_id: TRADE_RUNTIME_STORAGE_PROFILE_ID,
+            private_storage_profile_id: TRADE_RUNTIME_PRIVATE_STORAGE_PROFILE_ID,
+            private_store_schema_version: SDK_PRIVATE_STORE_SCHEMA_VERSION,
+            max_private_artifact_bytes: RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES,
+            private_artifact_kinds: vec![
+                TradePrivateArtifactKind::BindingTerms,
+                TradePrivateArtifactKind::Message,
+                TradePrivateArtifactKind::ContactBundle,
+                TradePrivateArtifactKind::DeliveryInstruction,
+            ],
+        },
+        core_mvp: TradeCoreMvpCapabilityReport {
+            commands: true,
+            queries: true,
+            local_event_store: true,
+            semantic_outbox: true,
+            protected_private_artifacts: true,
+            backup_restore: true,
+            local_signer: cfg!(feature = "local-signer"),
+        },
+        optional_integrations: TradeOptionalIntegrationCapabilityReport {
+            myc_nip46_signer: cfg!(feature = "signer-adapters"),
+            radrootsd_execution: cfg!(feature = "radrootsd-execution"),
+            rhi_attestation: false,
+            tangle_transport: false,
+            reticulum_transport: false,
+        },
+    }
 }
 
 #[cfg(feature = "runtime")]

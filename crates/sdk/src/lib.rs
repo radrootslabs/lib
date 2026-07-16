@@ -60,8 +60,9 @@ pub use radroots_runtime_contract_v1 as runtime_contract_v1;
 
 #[cfg(feature = "runtime")]
 pub use crate::error::{
-    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind,
-    RadrootsSdkRecoveryAction, RadrootsSdkTradeErrorKind,
+    RADROOTS_SDK_ERROR_CATALOG, RadrootsSdkError, RadrootsSdkErrorCatalogEntry,
+    RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
+    RadrootsSdkTradeErrorKind, radroots_sdk_error_catalog,
 };
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{
@@ -178,12 +179,17 @@ pub use crate::trade_runtime::{
     RefreshTradeEvidenceRequest, ResumeOperationRequest, SubmitProposalRequest,
     TRADE_CANCEL_OPERATION_KIND, TRADE_DECIDE_CANDIDATE_OPERATION_KIND,
     TRADE_PROPOSE_REVISION_OPERATION_KIND, TRADE_QUERY_DEFAULT_LIMIT, TRADE_QUERY_MAX_LIMIT,
-    TRADE_RESUME_OPERATION_KIND, TRADE_SUBMIT_PROPOSAL_OPERATION_KIND, TradeCommandLifecycleState,
-    TradeCommandReceipt, TradeCommandService, TradeListAnyOf, TradeListFilter, TradeListSort,
-    TradePrivateArtifactDeleteReceipt, TradePrivateArtifactDeleteRequest, TradePrivateArtifactKind,
-    TradePrivateArtifactOpenReceipt, TradePrivateArtifactOpenRequest,
-    TradePrivateArtifactSealReceipt, TradePrivateArtifactSealRequest,
-    TradePrivateTermsAvailabilityView, TradeQueryService, TradeStatusView, TradeSummaryView,
+    TRADE_RESUME_OPERATION_KIND, TRADE_RUNTIME_CAPABILITY_API_VERSION,
+    TRADE_RUNTIME_PRIVATE_STORAGE_PROFILE_ID, TRADE_RUNTIME_PROTOCOL_PROFILE_ID,
+    TRADE_RUNTIME_STORAGE_PROFILE_ID, TRADE_RUNTIME_WIRE_PROFILE_ID,
+    TRADE_SUBMIT_PROPOSAL_OPERATION_KIND, TradeCommandLifecycleState, TradeCommandReceipt,
+    TradeCommandService, TradeCoreMvpCapabilityReport, TradeListAnyOf, TradeListFilter,
+    TradeListSort, TradeOptionalIntegrationCapabilityReport, TradePrivateArtifactDeleteReceipt,
+    TradePrivateArtifactDeleteRequest, TradePrivateArtifactKind, TradePrivateArtifactOpenReceipt,
+    TradePrivateArtifactOpenRequest, TradePrivateArtifactSealReceipt,
+    TradePrivateArtifactSealRequest, TradePrivateTermsAvailabilityView,
+    TradeProtocolCapabilityReport, TradeQueryService, TradeRuntimeCapabilityReport,
+    TradeStatusView, TradeStorageCapabilityReport, TradeSummaryView,
 };
 #[cfg(feature = "runtime")]
 pub use crate::transport::{

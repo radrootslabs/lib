@@ -41,18 +41,17 @@ and radrootsd execution consume signed outbox events; neither path owns signing.
 `push_outbox_with_transport(...)` remains available for tests and controlled transport-level
 substrate checks. `radrootsd-execution` adds daemon-resolved publishing through `publish.event`.
 
-`sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can ingest local trade
-evidence, read `sdk.trades().status(...)`, resync through `sdk.trades().resync()`, inspect
-validation receipts through `sdk.trades().validation_receipts()`, and read seller inbox projections
-through `sdk.trades().seller()`.
-`sdk.trades().status(...)` accepts `TradeStatusRequest` and reads local projections; it returns typed
-source, event count, limit state, event IDs, ambiguity candidates, eligibility, next-action, and
-reducer issue data. Status is not a network fetch.
+`sdk.trades()` exposes the local trade runtime surface. With `runtime`, callers can read
+`sdk.trades().capabilities()`, seal/open/delete protected private artifacts, issue semantic trade
+commands through `sdk.trades().commands()`, and read semantic projections through
+`sdk.trades().queries()`. Query methods read local projections and evidence; they are not network
+fetches.
 
-Configured-signer trade writes compile when both `runtime` and `signer-adapters` are enabled. Buyer
-write workflows use `sdk.trades().buyer()` for propose and cancel actions. Seller write workflows
-use `sdk.trades().seller()` for accept and decline actions. Runtime-only builds intentionally expose
-no buyer write handle and no trade mutation request DTOs.
+Configured-signer trade writes compile when both `runtime` and `signer-adapters` are enabled.
+Trade write workflows use `SubmitProposalRequest`, `ProposeRevisionRequest`,
+`DecideCandidateRequest`, `CancelTradeRequest`, and `ResumeOperationRequest` through the command
+service. Runtime-only builds keep explicit-signer methods available and do not expose a parallel
+buyer/seller workflow namespace.
 
 The `local-runtime` feature is the curated feature bundle for local product runtime consumers. It
 enables `std`, `serde`, `serde_json`, `runtime`, `signer-adapters`, `transport-nostr-runtime`, and
@@ -64,7 +63,7 @@ targets Nostr relay URLs. `local-runtime-radrootsd-execution` uses daemon-resolv
 `radroots_sdk_myc_nip46_product_permissions()` and
 `radroots_sdk_myc_nip46_product_permission_strings()` expose the SDK product NIP-46
 `sign_event:<kind>` permission set for Myc connection setup. The set is derived from the farm,
-listing, and trade event kinds the SDK can write.
+listing, and canonical trade mutation event kinds the SDK can write.
 
 Relay URL policy is explicit. Public relay URLs must use `wss://`. Local development `ws://` relay
 URLs are accepted only under `NostrRelayUrlPolicy::Localhost` and only for `localhost`, `127.0.0.1`,
@@ -92,7 +91,7 @@ preparation, signed-event verification, decoded event matching, and manifest has
 local runtime storage.
 `sdk_v1_local_enqueue_and_mock_sync` shows localhost Nostr target selection, configured local-key
 signing, prepared listing enqueue, `push_outbox_with_transport(...)` with a Nostr transport facade, and
-`TradeStatusRequest`. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
+queued outbox sync. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer provider setup and
 product permission derivation at the SDK boundary. The examples stay on product APIs and do not use
 wire-event internals.
 
@@ -118,7 +117,9 @@ stable method surface: `code`, `class`, `retryable`, `detail_json`, and `recover
 ## Runtime DTO Stability
 
 Runtime request DTOs are constructor-led and marked non-exhaustive where they carry public fields:
-`ListingPreparePublishRequest`, `ListingEnqueuePublishRequest`, `TradeStatusRequest`,
+`ListingPreparePublishRequest`, `ListingEnqueuePublishRequest`, `SubmitProposalRequest`,
+`ProposeRevisionRequest`, `DecideCandidateRequest`, `CancelTradeRequest`, `ResumeOperationRequest`,
+`GetTradeRequest`, `ListTradesRequest`, `RefreshTradeEvidenceRequest`, `InspectEvidenceRequest`,
 `StorageStatusRequest`, `BackupRequest`, `IntegrityRequest`, `SyncStatusRequest`, and
 `PushOutboxRequest`. Restore uses the same request posture through `RestoreRequest`. Use `new`,
 `parse`, `default`, and `with_*` methods rather than struct literals.

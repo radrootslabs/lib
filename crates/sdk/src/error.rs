@@ -88,6 +88,353 @@ impl RadrootsSdkTradeErrorKind {
 }
 
 #[cfg(feature = "runtime")]
+const RECOVERY_INSPECT_LOCAL_STORES: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::InspectLocalStores];
+#[cfg(feature = "runtime")]
+const RECOVERY_INSPECT_GEONAMES_ASSET: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::InspectGeoNamesAsset];
+#[cfg(feature = "runtime")]
+const RECOVERY_RETRY_OPERATION_WITH_SAME_IDEMPOTENCY_KEY: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey];
+#[cfg(feature = "runtime")]
+const RECOVERY_CONFIGURE_TRANSPORT_TARGETS: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::ConfigureTransportTargets];
+#[cfg(feature = "runtime")]
+const RECOVERY_CONFIGURE_GEONAMES_CACHE: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::ConfigureGeoNamesCache];
+#[cfg(feature = "runtime")]
+const RECOVERY_CONFIGURE_SIGNER: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::ConfigureSigner];
+#[cfg(feature = "runtime")]
+const RECOVERY_FIX_REQUEST: &[RadrootsSdkRecoveryAction] = &[RadrootsSdkRecoveryAction::FixRequest];
+#[cfg(feature = "runtime")]
+const RECOVERY_SELECT_AUTHORIZED_ACTOR: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::SelectAuthorizedActor];
+#[cfg(feature = "runtime")]
+const RECOVERY_COMPLETE_SIGNER_AUTHENTICATION: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::CompleteSignerAuthentication];
+#[cfg(feature = "runtime")]
+const RECOVERY_RETRY_AFTER_TRANSPORT_FAILURE: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::RetryAfterTransportFailure];
+#[cfg(feature = "runtime")]
+const RECOVERY_RETRY_GEONAMES_DOWNLOAD: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::RetryGeoNamesDownload];
+#[cfg(feature = "runtime")]
+const RECOVERY_ENABLE_REQUIRED_FEATURE: &[RadrootsSdkRecoveryAction] =
+    &[RadrootsSdkRecoveryAction::EnableRequiredFeature];
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct RadrootsSdkErrorCatalogEntry {
+    pub code: &'static str,
+    pub class: RadrootsSdkErrorClass,
+    pub retryable: bool,
+    pub recovery_actions: &'static [RadrootsSdkRecoveryAction],
+}
+
+#[cfg(feature = "runtime")]
+impl RadrootsSdkErrorCatalogEntry {
+    const fn new(
+        code: &'static str,
+        class: RadrootsSdkErrorClass,
+        retryable: bool,
+        recovery_actions: &'static [RadrootsSdkRecoveryAction],
+    ) -> Self {
+        Self {
+            code,
+            class,
+            retryable,
+            recovery_actions,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+pub const RADROOTS_SDK_ERROR_CATALOG: &[RadrootsSdkErrorCatalogEntry] = &[
+    RadrootsSdkErrorCatalogEntry::new(
+        "io",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "clock_before_unix_epoch",
+        RadrootsSdkErrorClass::Clock,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "timestamp_out_of_range",
+        RadrootsSdkErrorClass::Clock,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "unauthorized_actor",
+        RadrootsSdkErrorClass::Authorization,
+        false,
+        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_pubkey_mismatch",
+        RadrootsSdkErrorClass::Authorization,
+        false,
+        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_unavailable",
+        RadrootsSdkErrorClass::Configuration,
+        false,
+        RECOVERY_CONFIGURE_SIGNER,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_request_rejected",
+        RadrootsSdkErrorClass::Authorization,
+        false,
+        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_request_timed_out",
+        RadrootsSdkErrorClass::Transport,
+        true,
+        RECOVERY_RETRY_AFTER_TRANSPORT_FAILURE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_auth_challenge_pending",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_COMPLETE_SIGNER_AUTHENTICATION,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_transport",
+        RadrootsSdkErrorClass::Transport,
+        true,
+        RECOVERY_RETRY_AFTER_TRANSPORT_FAILURE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_protocol",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "signer_returned_event_drift",
+        RadrootsSdkErrorClass::Authorization,
+        false,
+        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "empty_transport_targets",
+        RadrootsSdkErrorClass::Configuration,
+        false,
+        RECOVERY_CONFIGURE_TRANSPORT_TARGETS,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "transport_target_limit_exceeded",
+        RadrootsSdkErrorClass::Configuration,
+        false,
+        RECOVERY_CONFIGURE_TRANSPORT_TARGETS,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "invalid_relay_url",
+        RadrootsSdkErrorClass::Configuration,
+        false,
+        RECOVERY_CONFIGURE_TRANSPORT_TARGETS,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "idempotency_conflict",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_RETRY_OPERATION_WITH_SAME_IDEMPOTENCY_KEY,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_invalid_envelope",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_invalid_command_body",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_private_artifact_missing",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_private_artifact_commitment_mismatch",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_private_artifact_acknowledgement_missing",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_not_found",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_query_limit_invalid",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "trade_cursor_invalid",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "privacy_preflight",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "product_sync_unsupported",
+        RadrootsSdkErrorClass::Unsupported,
+        false,
+        RECOVERY_ENABLE_REQUIRED_FEATURE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "reticulum_transport_unavailable",
+        RadrootsSdkErrorClass::Unsupported,
+        false,
+        RECOVERY_CONFIGURE_TRANSPORT_TARGETS,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "reticulum_transport_deferred",
+        RadrootsSdkErrorClass::Unsupported,
+        false,
+        RECOVERY_CONFIGURE_TRANSPORT_TARGETS,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "product_sync_transport_setup_failure",
+        RadrootsSdkErrorClass::Transport,
+        true,
+        RECOVERY_RETRY_AFTER_TRANSPORT_FAILURE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "authority",
+        RadrootsSdkErrorClass::Authorization,
+        false,
+        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "event_store",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "invalid_request",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "unsupported_profile_schema",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "listing_edit",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "listing_mutation",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "outbox",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "private_store",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "studio_store",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_configuration",
+        RadrootsSdkErrorClass::Configuration,
+        false,
+        RECOVERY_CONFIGURE_GEONAMES_CACHE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_download",
+        RadrootsSdkErrorClass::Transport,
+        true,
+        RECOVERY_RETRY_GEONAMES_DOWNLOAD,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_cache",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_GEONAMES_ASSET,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_integrity",
+        RadrootsSdkErrorClass::Storage,
+        false,
+        RECOVERY_INSPECT_GEONAMES_ASSET,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_schema",
+        RadrootsSdkErrorClass::Storage,
+        false,
+        RECOVERY_INSPECT_GEONAMES_ASSET,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "geonames_lookup",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "transport",
+        RadrootsSdkErrorClass::Transport,
+        true,
+        RECOVERY_RETRY_AFTER_TRANSPORT_FAILURE,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "projection",
+        RadrootsSdkErrorClass::Storage,
+        true,
+        RECOVERY_INSPECT_LOCAL_STORES,
+    ),
+];
+
+#[cfg(feature = "runtime")]
+pub fn radroots_sdk_error_catalog() -> &'static [RadrootsSdkErrorCatalogEntry] {
+    RADROOTS_SDK_ERROR_CATALOG
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum RadrootsSdkError {

@@ -149,6 +149,23 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
     &[CORE_BINDINGS_PACKAGE_NAME, EVENT_BINDINGS_PACKAGE_NAME];
+const RETIRED_ORDER_EVENT_DTO_ROOTS: &[&str] = &[
+    "RadrootsOrderCancellation",
+    "RadrootsOrderDecision",
+    "RadrootsOrderDecisionOutcome",
+    "RadrootsOrderEconomicActor",
+    "RadrootsOrderEconomicEffect",
+    "RadrootsOrderEconomicItem",
+    "RadrootsOrderEconomicLine",
+    "RadrootsOrderEconomicLineKind",
+    "RadrootsOrderEconomicTotals",
+    "RadrootsOrderEconomics",
+    "RadrootsOrderEventType",
+    "RadrootsOrderInventoryCommitment",
+    "RadrootsOrderItem",
+    "RadrootsOrderPricingBasis",
+    "RadrootsOrderRequest",
+];
 
 pub fn package_root_set(package_key: &str) -> Option<&'static DtoPackageRootSet> {
     DTO_PACKAGE_ROOTS
@@ -206,7 +223,10 @@ fn core_roots() -> Vec<RootDescriptor> {
 }
 
 fn event_roots() -> Vec<RootDescriptor> {
-    radroots_event::dto::dto_roots().into_iter().collect()
+    radroots_event::dto::dto_roots()
+        .into_iter()
+        .filter(|root| !retired_order_event_dto_root(root))
+        .collect()
 }
 
 fn event_index_roots() -> Vec<RootDescriptor> {
@@ -215,6 +235,15 @@ fn event_index_roots() -> Vec<RootDescriptor> {
 
 fn trade_roots() -> Vec<RootDescriptor> {
     radroots_trade_bindings::dto_roots()
+}
+
+fn retired_order_event_dto_root(root: &RootDescriptor) -> bool {
+    let type_name = root
+        .rust_type_name
+        .rsplit("::")
+        .next()
+        .unwrap_or(root.rust_type_name);
+    RETIRED_ORDER_EVENT_DTO_ROOTS.contains(&type_name)
 }
 
 fn core_import_options(
@@ -617,21 +646,6 @@ mod tests {
         "RadrootsMessageFileDimensions",
         "RadrootsMessageRecipient",
         "RadrootsNip01EventWireDto",
-        "RadrootsOrderCancellation",
-        "RadrootsOrderDecision",
-        "RadrootsOrderDecisionOutcome",
-        "RadrootsOrderEconomicActor",
-        "RadrootsOrderEconomicEffect",
-        "RadrootsOrderEconomicItem",
-        "RadrootsOrderEconomicLine",
-        "RadrootsOrderEconomicLineKind",
-        "RadrootsOrderEconomicTotals",
-        "RadrootsOrderEconomics",
-        "RadrootsOrderEventType",
-        "RadrootsOrderInventoryCommitment",
-        "RadrootsOrderItem",
-        "RadrootsOrderPricingBasis",
-        "RadrootsOrderRequest",
         "RadrootsPlot",
         "RadrootsPlotLocation",
         "RadrootsPlotRef",
@@ -885,6 +899,7 @@ mod tests {
         let actual = type_inventory(EVENT_BINDINGS_TYPES_TS);
 
         assert_eq!(actual, EVENT_TYPE_INVENTORY);
+        assert!(!EVENT_BINDINGS_TYPES_TS.contains("RadrootsOrder"));
     }
 
     #[test]

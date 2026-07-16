@@ -1,3 +1,4 @@
+use radroots_event::kinds::KIND_TRADE_PROPOSAL;
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
@@ -50,6 +51,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(status.mode, RadrootsSdkSignerMode::MycNip46);
     assert!(permissions.iter().any(|value| value == "sign_event:30340"));
+    assert!(
+        permissions
+            .iter()
+            .any(|value| value == &format!("sign_event:{KIND_TRADE_PROPOSAL}"))
+    );
+    assert!(!permissions.iter().any(|value| value == "sign_event:3422"));
     println!("configured signer mode: {}", status.mode.as_str());
     println!("requested permissions: {}", permissions.join(","));
     Ok(())

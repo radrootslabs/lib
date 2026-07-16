@@ -4,7 +4,7 @@ use nostr::{EventBuilder, JsonUtil, Kind, Tag};
 use radroots_authority::RadrootsLocalEventSigner;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::draft::RadrootsEventDraft;
-use radroots_event::kinds::{KIND_COOP, KIND_FARM};
+use radroots_event::kinds::{KIND_COOP, KIND_FARM, KIND_LISTING, TRADE_MUTATION_EVENT_KINDS};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
@@ -516,14 +516,20 @@ async fn nip46_transport_adapter_delegates_publish_and_response_poll() {
 fn myc_nip46_product_permissions_cover_sdk_write_event_kinds() {
     let permissions = radroots_sdk_myc_nip46_product_permissions();
     let rendered = radroots_sdk_myc_nip46_product_permission_strings();
+    let mut expected_kinds = vec![KIND_FARM, KIND_LISTING];
+    expected_kinds.extend_from_slice(&TRADE_MUTATION_EVENT_KINDS);
 
+    assert_eq!(permissions.as_slice().len(), expected_kinds.len());
     assert_eq!(
-        permissions.as_slice().len(),
-        RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS.len()
+        RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS.as_slice(),
+        expected_kinds.as_slice()
     );
     assert_eq!(rendered.len(), permissions.as_slice().len());
     for kind in RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS {
         assert!(rendered.contains(&format!("sign_event:{kind}")));
+    }
+    for old_trade_write_kind in [3422, 3423, 3432] {
+        assert!(!rendered.contains(&format!("sign_event:{old_trade_write_kind}")));
     }
     assert!(!rendered.contains(&"sign_event:1".to_owned()));
 }

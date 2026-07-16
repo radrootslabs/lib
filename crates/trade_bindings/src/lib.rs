@@ -78,14 +78,14 @@ pub const TRADE_LARGE_INTEGER_POLICIES: &[TradeLargeIntegerPolicyEntry] = &[
         "RadrootsTradeListingBackofficeView",
         "open_moderation_flag_count",
     ),
-    json_number_safe_count("RadrootsTradeListingProjection", "order_count"),
-    json_number_safe_count("RadrootsTradeListingProjection", "open_order_count"),
-    json_number_safe_count("RadrootsTradeListingProjection", "terminal_order_count"),
-    json_number_safe_count("RadrootsTradeMarketplaceListingSummary", "order_count"),
-    json_number_safe_count("RadrootsTradeMarketplaceListingSummary", "open_order_count"),
+    json_number_safe_count("RadrootsTradeListingProjection", "trade_count"),
+    json_number_safe_count("RadrootsTradeListingProjection", "open_trade_count"),
+    json_number_safe_count("RadrootsTradeListingProjection", "terminal_trade_count"),
+    json_number_safe_count("RadrootsTradeMarketplaceListingSummary", "trade_count"),
+    json_number_safe_count("RadrootsTradeMarketplaceListingSummary", "open_trade_count"),
     json_number_safe_count(
         "RadrootsTradeMarketplaceListingSummary",
-        "terminal_order_count",
+        "terminal_trade_count",
     ),
 ];
 
@@ -268,32 +268,32 @@ mod tests {
                 ),
                 (
                     "RadrootsTradeListingProjection",
-                    "order_count",
+                    "trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (
                     "RadrootsTradeListingProjection",
-                    "open_order_count",
+                    "open_trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (
                     "RadrootsTradeListingProjection",
-                    "terminal_order_count",
+                    "terminal_trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (
                     "RadrootsTradeMarketplaceListingSummary",
-                    "order_count",
+                    "trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (
                     "RadrootsTradeMarketplaceListingSummary",
-                    "open_order_count",
+                    "open_trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
                 (
                     "RadrootsTradeMarketplaceListingSummary",
-                    "terminal_order_count",
+                    "terminal_trade_count",
                     super::TradeLargeIntegerPolicy::JsonNumberSafeCount
                 ),
             ]

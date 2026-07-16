@@ -189,9 +189,9 @@ pub struct RadrootsTradeListingProjection {
     pub delivery_method: Option<RadrootsListingDeliveryMethodImport>,
     pub location: Option<RadrootsListingPublicLocationImport>,
     pub images: Option<Vec<RadrootsListingImageImport>>,
-    pub order_count: u32,
-    pub open_order_count: u32,
-    pub terminal_order_count: u32,
+    pub trade_count: u32,
+    pub open_trade_count: u32,
+    pub terminal_trade_count: u32,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -222,10 +222,10 @@ pub enum RadrootsTradeListingSortField {
     SellerPubkey,
     #[serde(rename = "inventory_available")]
     InventoryAvailable,
-    #[serde(rename = "open_order_count")]
-    OpenOrderCount,
-    #[serde(rename = "total_order_count")]
-    TotalOrderCount,
+    #[serde(rename = "open_trade_count")]
+    OpenTradeCount,
+    #[serde(rename = "total_trade_count")]
+    TotalTradeCount,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -244,9 +244,9 @@ pub struct RadrootsTradeMarketplaceListingSummary {
     pub primary_bin_id: String,
     pub primary_bin_label: Option<String>,
     pub primary_bin_total: RadrootsTradeListingTotal,
-    pub order_count: u32,
-    pub open_order_count: u32,
-    pub terminal_order_count: u32,
+    pub trade_count: u32,
+    pub open_trade_count: u32,
+    pub terminal_trade_count: u32,
 }
 
 #[derive(dto_bindgen::Dto)]

@@ -10,8 +10,10 @@ use radroots_event::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsPublicKey, RadrootsTradeId,
     },
+    kinds::TRADE_MUTATION_EVENT_KINDS,
     trade::{
-        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
+        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES,
+        RADROOTS_TRADE_MUTATION_CONTRACT_IDS, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
         RADROOTS_TRADE_SCHEMA_VERSION, RadrootsFulfillmentProfileV1,
         RadrootsSellerReservationAssertionV1, RadrootsSellerReservationLineV1,
         RadrootsTradeCancellationProfileV1, RadrootsTradeCandidateLineV1,
@@ -21,7 +23,10 @@ use radroots_event::{
     },
 };
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
-use radroots_trade::workflow::RadrootsTradePrivateTermsStateV1;
+use radroots_trade::workflow::{
+    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
+    RadrootsTradePrivateTermsStateV1,
+};
 
 const BUYER_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -48,6 +53,67 @@ fn local_signer(secret_key_hex: &str) -> (String, RadrootsLocalEventSigner) {
         pubkey,
         RadrootsLocalEventSigner::new(keys).expect("local event signer"),
     )
+}
+
+#[tokio::test]
+async fn trade_capabilities_report_canonical_release_product_surface() {
+    let sdk = RadrootsClient::builder().build().await.expect("sdk");
+    let capabilities = sdk.trades().capabilities();
+
+    assert_eq!(
+        capabilities.api_version,
+        TRADE_RUNTIME_CAPABILITY_API_VERSION
+    );
+    assert_eq!(
+        capabilities.protocol.protocol_profile_id,
+        TRADE_RUNTIME_PROTOCOL_PROFILE_ID
+    );
+    assert_eq!(
+        capabilities.protocol.wire_profile_id,
+        TRADE_RUNTIME_WIRE_PROFILE_ID
+    );
+    assert_eq!(
+        capabilities.protocol.schema_version,
+        RADROOTS_TRADE_SCHEMA_VERSION
+    );
+    assert_eq!(
+        capabilities.protocol.mutation_contract_ids,
+        RADROOTS_TRADE_MUTATION_CONTRACT_IDS.to_vec()
+    );
+    assert_eq!(
+        capabilities.protocol.mutation_event_kinds,
+        TRADE_MUTATION_EVENT_KINDS.to_vec()
+    );
+    assert!(!capabilities.protocol.mutation_event_kinds.contains(&3422));
+    assert_eq!(
+        capabilities.protocol.reducer_contract_id,
+        RADROOTS_TRADE_REDUCER_CONTRACT_ID
+    );
+    assert_eq!(
+        capabilities.protocol.reducer_version,
+        RADROOTS_TRADE_REDUCER_VERSION
+    );
+    assert_eq!(
+        capabilities.storage.storage_profile_id,
+        TRADE_RUNTIME_STORAGE_PROFILE_ID
+    );
+    assert_eq!(
+        capabilities.storage.private_storage_profile_id,
+        TRADE_RUNTIME_PRIVATE_STORAGE_PROFILE_ID
+    );
+    assert_eq!(
+        capabilities.storage.max_private_artifact_bytes,
+        RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES
+    );
+    assert!(capabilities.core_mvp.commands);
+    assert!(capabilities.core_mvp.queries);
+    assert!(capabilities.core_mvp.local_event_store);
+    assert!(capabilities.core_mvp.semantic_outbox);
+    assert!(capabilities.core_mvp.protected_private_artifacts);
+    assert!(capabilities.core_mvp.backup_restore);
+    assert!(!capabilities.optional_integrations.rhi_attestation);
+    assert!(!capabilities.optional_integrations.tangle_transport);
+    assert!(!capabilities.optional_integrations.reticulum_transport);
 }
 
 fn buyer_actor(buyer_pubkey: &str) -> RadrootsActorContext {

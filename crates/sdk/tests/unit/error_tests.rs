@@ -1,11 +1,13 @@
 use super::{
-    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkTradeErrorKind, redacted_relay_url,
+    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkTradeErrorKind,
+    radroots_sdk_error_catalog, redacted_relay_url,
 };
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
 use radroots_authority::RadrootsAuthorityError;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
+use std::collections::BTreeSet;
 
 #[test]
 fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
@@ -396,6 +398,73 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         );
         assert!(error.to_string().starts_with("sdk "));
     }
+}
+
+#[test]
+fn sdk_error_catalog_exposes_stable_codes_and_metadata() {
+    let catalog = radroots_sdk_error_catalog();
+    let codes = catalog
+        .iter()
+        .map(|entry| entry.code)
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(codes.len(), catalog.len());
+    assert!(codes.contains("io"));
+    assert!(codes.contains("signer_auth_challenge_pending"));
+    assert!(codes.contains("product_sync_unsupported"));
+    assert!(codes.contains("reticulum_transport_deferred"));
+    assert!(codes.contains("unsupported_profile_schema"));
+    assert!(codes.contains("geonames_lookup"));
+
+    for trade_kind in [
+        RadrootsSdkTradeErrorKind::InvalidEnvelope,
+        RadrootsSdkTradeErrorKind::InvalidCommandBody,
+        RadrootsSdkTradeErrorKind::PrivateArtifactMissing,
+        RadrootsSdkTradeErrorKind::PrivateArtifactCommitmentMismatch,
+        RadrootsSdkTradeErrorKind::PrivateArtifactAcknowledgementMissing,
+        RadrootsSdkTradeErrorKind::TradeNotFound,
+        RadrootsSdkTradeErrorKind::QueryLimitInvalid,
+        RadrootsSdkTradeErrorKind::CursorInvalid,
+    ] {
+        assert!(codes.contains(trade_kind.code()));
+    }
+
+    for entry in catalog {
+        assert!(!entry.code.is_empty());
+        assert!(!entry.recovery_actions.is_empty());
+    }
+
+    let timeout = RadrootsSdkError::SignerRequestTimedOut {
+        mode: "myc_nip46".to_owned(),
+    };
+    let timeout_entry = catalog
+        .iter()
+        .find(|entry| entry.code == timeout.code())
+        .expect("timeout catalog entry");
+    assert_eq!(timeout_entry.class, timeout.class());
+    assert_eq!(timeout_entry.retryable, timeout.retryable());
+    let timeout_recovery_actions = timeout.recovery_actions();
+    assert_eq!(
+        timeout_entry.recovery_actions,
+        timeout_recovery_actions.as_slice()
+    );
+
+    let trade = RadrootsSdkError::Trade {
+        kind: RadrootsSdkTradeErrorKind::PrivateArtifactCommitmentMismatch,
+        operation: "trade.decide_candidate".to_owned(),
+        message: "private artifact commitment mismatch".to_owned(),
+    };
+    let trade_entry = catalog
+        .iter()
+        .find(|entry| entry.code == trade.code())
+        .expect("trade catalog entry");
+    assert_eq!(trade_entry.class, trade.class());
+    assert_eq!(trade_entry.retryable, trade.retryable());
+    let trade_recovery_actions = trade.recovery_actions();
+    assert_eq!(
+        trade_entry.recovery_actions,
+        trade_recovery_actions.as_slice()
+    );
 }
 
 #[test]

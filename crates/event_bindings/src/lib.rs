@@ -18,7 +18,8 @@ mod tests {
         assert!(constants.contains(RADROOTS_LISTING_PRODUCT_TAG_KEYS[0]));
         assert!(kinds_ts.contains("KIND_LISTING"));
         assert!(kinds_ts.contains(&kinds::KIND_LISTING.to_string()));
-        assert!(kinds_ts.contains("KIND_ORDER_REQUEST"));
-        assert!(kinds_ts.contains(&kinds::KIND_ORDER_REQUEST.to_string()));
+        assert!(kinds_ts.contains("KIND_TRADE_PROPOSAL"));
+        assert!(kinds_ts.contains(&kinds::KIND_TRADE_PROPOSAL.to_string()));
+        assert!(!kinds_ts.contains("KIND_ORDER_REQUEST"));
     }
 }
