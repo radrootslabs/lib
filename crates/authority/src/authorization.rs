@@ -157,7 +157,7 @@ mod tests {
     use crate::RadrootsSignerError;
     use radroots_event::contract::{RadrootsActorRole, event_contract};
     use radroots_event::ids::RadrootsPublicKey;
-    use radroots_event::kinds::{KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST};
+    use radroots_event::kinds::{KIND_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()
@@ -325,9 +325,10 @@ mod tests {
     #[test]
     fn buyer_and_seller_contract_roles_match_current_contracts() {
         let listing = event_contract("radroots.listing.published.v1").expect("listing contract");
-        let order_request = event_contract("radroots.order.request.v1").expect("order contract");
-        let order_decision =
-            event_contract("radroots.order.decision.v1").expect("decision contract");
+        let trade_proposal =
+            event_contract("radroots.trade.proposal.v1").expect("trade proposal contract");
+        let trade_decision =
+            event_contract("radroots.trade.decision.v1").expect("trade decision contract");
         let seller = seller_actor(hex_64('a').as_str());
         let buyer = buyer_actor(hex_64('b').as_str());
 
@@ -337,15 +338,15 @@ mod tests {
             authorize_actor_for_contract(&buyer, listing),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
-        assert!(authorize_actor_for_contract(&buyer, order_request).is_ok());
+        assert!(authorize_actor_for_contract(&buyer, trade_proposal).is_ok());
         assert!(matches!(
-            authorize_actor_for_contract(&seller, order_request),
+            authorize_actor_for_contract(&seller, trade_proposal),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
-        assert_eq!(order_decision.author_role, RadrootsActorRole::Seller);
-        assert!(authorize_actor_for_contract(&seller, order_decision).is_ok());
+        assert_eq!(trade_decision.author_role, RadrootsActorRole::Seller);
+        assert!(authorize_actor_for_contract(&seller, trade_decision).is_ok());
         assert!(matches!(
-            authorize_actor_for_contract(&buyer, order_decision),
+            authorize_actor_for_contract(&buyer, trade_decision),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
     }
@@ -546,25 +547,27 @@ mod tests {
     }
 
     #[test]
-    fn order_request_draft_requires_buyer_role() {
+    fn trade_proposal_draft_requires_buyer_role() {
         let pubkey = hex_64('a');
         let draft = RadrootsEventDraft::new(
-            "radroots.order.request.v1",
-            KIND_ORDER_REQUEST,
+            "radroots.trade.proposal.v1",
+            KIND_TRADE_PROPOSAL,
             1_700_000_000,
             vec![
-                vec!["d".to_owned(), "order-1".to_owned()],
-                vec!["p".to_owned(), pubkey.clone()],
                 vec![
-                    "a".to_owned(),
-                    format!("30402:{}:listing-a", pubkey.as_str()),
+                    "contract".to_owned(),
+                    "radroots.trade.proposal.v1".to_owned(),
                 ],
-                vec!["listing_event".to_owned(), hex_64('b')],
+                vec![
+                    "d".to_owned(),
+                    "11111111111111111111111111111111".to_owned(),
+                ],
+                vec!["p".to_owned(), pubkey.clone()],
             ],
-            "{}",
+            r#"{"contract_id":"radroots.trade.proposal.v1"}"#,
             pubkey.as_str(),
         )
-        .expect("order draft");
+        .expect("trade proposal draft");
         let buyer = buyer_actor(pubkey.as_str());
         let seller = seller_actor(pubkey.as_str());
 

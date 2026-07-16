@@ -1,0 +1,28 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_canonicalize_proposal_minimal_001",
+      "kind": "trade.canonicalize_mutation",
+      "input": {
+        "contract_id": "radroots.trade.proposal.v1",
+        "schema_version": 1,
+        "trade_id": "11111111111111111111111111111111",
+        "root_mutation_id": null,
+        "buyer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seller_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "farm_id": "farm-1",
+        "parent_mutation_ids": [],
+        "author_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "counterparty_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "body_shape": "proposal_complete_candidate"
+      },
+      "expected": {
+        "candidate_id": "domain_separated_sha256_candidate_terms",
+        "mutation_id": "domain_separated_sha256_mutation_envelope",
+        "canonical_content": "rfc8785_jcs_without_duplicate_keys_or_float_fields"
+      }
+    }
+  ]
+}

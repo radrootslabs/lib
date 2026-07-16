@@ -176,6 +176,9 @@ macro_rules! validated_string_id {
 validated_string_id!(RadrootsPublicKey, validate_hex_64);
 validated_string_id!(RadrootsEventId, validate_hex_64);
 validated_string_id!(RadrootsEventSignature, validate_hex_128);
+validated_string_id!(RadrootsTradeId, validate_hex_32);
+validated_string_id!(RadrootsTradeCandidateId, validate_hex_64);
+validated_string_id!(RadrootsTradeMutationId, validate_hex_64);
 validated_string_id!(RadrootsDTag, validate_d_tag);
 validated_string_id!(
     RadrootsAddressableCoordinate,
@@ -229,6 +232,10 @@ impl RadrootsEventEnvelopePointer {
 
 fn validate_hex_64(value: &str) -> Result<String, RadrootsIdParseError> {
     validate_hex(value, 64)
+}
+
+fn validate_hex_32(value: &str) -> Result<String, RadrootsIdParseError> {
+    validate_hex(value, 32)
 }
 
 fn validate_hex_128(value: &str) -> Result<String, RadrootsIdParseError> {
@@ -391,6 +398,10 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
+    fn hex_32(character: char) -> String {
+        core::iter::repeat_n(character, 32).collect()
+    }
+
     fn hex_128(character: char) -> String {
         core::iter::repeat_n(character, 128).collect()
     }
@@ -448,6 +459,21 @@ mod tests {
                 actual: 64
             }
         );
+    }
+
+    #[test]
+    fn trade_semantic_ids_use_protocol_sized_hex() {
+        let trade_id = RadrootsTradeId::parse(hex_32('A')).expect("trade id");
+        assert_eq!(trade_id.as_str(), hex_32('a'));
+        assert_eq!(
+            RadrootsTradeId::parse(hex_64('a')).unwrap_err(),
+            RadrootsIdParseError::InvalidLength {
+                expected: 32,
+                actual: 64
+            }
+        );
+        assert_identifier_impls!(RadrootsTradeCandidateId, &hex_64('b'));
+        assert_identifier_impls!(RadrootsTradeMutationId, &hex_64('c'));
     }
 
     #[test]

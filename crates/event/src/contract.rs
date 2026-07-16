@@ -87,6 +87,7 @@ pub enum RadrootsReducer {
     ProfileProjection,
     NostrRelayPolicyProjection,
     SocialProjection,
+    TradeProjection,
     TradeValidation,
 }
 
@@ -426,13 +427,6 @@ const TAG_P_MANY: RadrootsTagContract = tag(
     RadrootsTagValueType::PublicKey,
     true,
 );
-const TAG_A_REQUIRED: RadrootsTagContract = tag(
-    "a",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ListingAddress,
-    RadrootsTagValueType::AddressableCoordinate,
-    true,
-);
 const TAG_A_ADDRESS_REQUIRED: RadrootsTagContract = tag(
     "a",
     RadrootsTagCardinality::RequiredOne,
@@ -458,13 +452,6 @@ const TAG_E_ROOT: RadrootsTagContract = tag(
     "e",
     RadrootsTagCardinality::RequiredOne,
     RadrootsTagSemantic::RootEvent,
-    RadrootsTagValueType::EventId,
-    true,
-);
-const TAG_E_PREVIOUS: RadrootsTagContract = tag(
-    "e",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::PreviousEvent,
     RadrootsTagValueType::EventId,
     true,
 );
@@ -564,13 +551,6 @@ const TAG_IMAGE: RadrootsTagContract = tag(
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::Image,
     RadrootsTagValueType::Url,
-    false,
-);
-const TAG_LISTING_EVENT: RadrootsTagContract = tag(
-    "listing_event",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ListingSnapshot,
-    RadrootsTagValueType::EventId,
     false,
 );
 const TAG_SERVICE_OUTPUT: RadrootsTagContract = tag(
@@ -679,15 +659,8 @@ const LISTING_TAGS: &[RadrootsTagContract] = &[
     TAG_CATEGORY,
     TAG_IMAGE,
 ];
-const ORDER_REQUEST_TAGS: &[RadrootsTagContract] =
-    &[TAG_D, TAG_P_REQUIRED, TAG_A_REQUIRED, TAG_LISTING_EVENT];
-const CHAINED_ORDER_TAGS: &[RadrootsTagContract] = &[
-    TAG_D,
-    TAG_P_REQUIRED,
-    TAG_A_REQUIRED,
-    TAG_E_ROOT,
-    TAG_E_PREVIOUS,
-];
+const TRADE_MUTATION_TAGS: &[RadrootsTagContract] =
+    &[TAG_CONTRACT_REQUIRED, TAG_D, TAG_P_REQUIRED, TAG_E_MANY];
 const TRADE_VALIDATION_RECEIPT_TAGS: &[RadrootsTagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
 const KNOWLEDGE_SOURCE_TAGS: &[RadrootsTagContract] = &[
@@ -736,8 +709,8 @@ const LISTING_REDUCERS: &[RadrootsReducer] = &[
     RadrootsReducer::MarketProjection,
     RadrootsReducer::ListingInventoryAccounting,
 ];
-const ORDER_REDUCERS: &[RadrootsReducer] = &[
-    RadrootsReducer::OrderProjection,
+const TRADE_MUTATION_REDUCERS: &[RadrootsReducer] = &[
+    RadrootsReducer::TradeProjection,
     RadrootsReducer::ListingInventoryAccounting,
 ];
 const TRADE_VALIDATION_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::TradeValidation];
@@ -1569,28 +1542,44 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.group.roles.v1"]
     ),
     kind_contract!(
-        KIND_ORDER_REQUEST,
-        "KIND_ORDER_REQUEST",
-        "Order Request",
+        KIND_TRADE_PROPOSAL,
+        "KIND_TRADE_PROPOSAL",
+        "Trade Proposal",
         RadrootsEventClass::Regular,
         RadrootsNostrStandard::Radroots,
-        ["radroots.order.request.v1"]
+        ["radroots.trade.proposal.v1"]
     ),
     kind_contract!(
-        KIND_ORDER_DECISION,
-        "KIND_ORDER_DECISION",
-        "Order Decision",
+        KIND_TRADE_DECISION,
+        "KIND_TRADE_DECISION",
+        "Trade Decision",
         RadrootsEventClass::Regular,
         RadrootsNostrStandard::Radroots,
-        ["radroots.order.decision.v1"]
+        ["radroots.trade.decision.v1"]
     ),
     kind_contract!(
-        KIND_ORDER_CANCELLATION,
-        "KIND_ORDER_CANCELLATION",
-        "Order Cancellation",
+        KIND_TRADE_REVISION_PROPOSAL,
+        "KIND_TRADE_REVISION_PROPOSAL",
+        "Trade Revision Proposal",
         RadrootsEventClass::Regular,
         RadrootsNostrStandard::Radroots,
-        ["radroots.order.cancellation.v1"]
+        ["radroots.trade.revision_proposal.v1"]
+    ),
+    kind_contract!(
+        KIND_TRADE_REVISION_DECISION,
+        "KIND_TRADE_REVISION_DECISION",
+        "Trade Revision Decision",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.trade.revision_decision.v1"]
+    ),
+    kind_contract!(
+        KIND_TRADE_CANCELLATION,
+        "KIND_TRADE_CANCELLATION",
+        "Trade Cancellation",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Radroots,
+        ["radroots.trade.cancellation.v1"]
     ),
     kind_contract!(
         KIND_TRADE_VALIDATION_RECEIPT,
@@ -2811,43 +2800,84 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         GROUP_REDUCERS
     ),
     event_contract!(
-        "radroots.order.request.v1",
-        KIND_ORDER_REQUEST,
-        "Order Request",
-        "RadrootsOrderRequest",
+        "radroots.trade.proposal.v1",
+        KIND_TRADE_PROPOSAL,
+        "Trade Proposal",
+        "RadrootsTradeMutationEnvelopeV1",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Buyer,
         RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        ORDER_REQUEST_TAGS,
-        ORDER_REDUCERS
+        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+            field: "contract_id",
+            value: "radroots.trade.proposal.v1",
+        },
+        TRADE_MUTATION_TAGS,
+        TRADE_MUTATION_REDUCERS
     ),
     event_contract!(
-        "radroots.order.decision.v1",
-        KIND_ORDER_DECISION,
-        "Order Decision",
-        "RadrootsOrderDecision",
+        "radroots.trade.decision.v1",
+        KIND_TRADE_DECISION,
+        "Trade Decision",
+        "RadrootsTradeMutationEnvelopeV1",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Seller,
         RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
+        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+            field: "contract_id",
+            value: "radroots.trade.decision.v1",
+        },
+        TRADE_MUTATION_TAGS,
+        TRADE_MUTATION_REDUCERS
     ),
     event_contract!(
-        "radroots.order.cancellation.v1",
-        KIND_ORDER_CANCELLATION,
-        "Order Cancellation",
-        "RadrootsOrderCancellation",
+        "radroots.trade.revision_proposal.v1",
+        KIND_TRADE_REVISION_PROPOSAL,
+        "Trade Revision Proposal",
+        "RadrootsTradeMutationEnvelopeV1",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+            field: "contract_id",
+            value: "radroots.trade.revision_proposal.v1",
+        },
+        TRADE_MUTATION_TAGS,
+        TRADE_MUTATION_REDUCERS
+    ),
+    event_contract!(
+        "radroots.trade.revision_decision.v1",
+        KIND_TRADE_REVISION_DECISION,
+        "Trade Revision Decision",
+        "RadrootsTradeMutationEnvelopeV1",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::JsonObject,
+        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+            field: "contract_id",
+            value: "radroots.trade.revision_decision.v1",
+        },
+        TRADE_MUTATION_TAGS,
+        TRADE_MUTATION_REDUCERS
+    ),
+    event_contract!(
+        "radroots.trade.cancellation.v1",
+        KIND_TRADE_CANCELLATION,
+        "Trade Cancellation",
+        "RadrootsTradeMutationEnvelopeV1",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Buyer,
         RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
+        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+            field: "contract_id",
+            value: "radroots.trade.cancellation.v1",
+        },
+        TRADE_MUTATION_TAGS,
+        TRADE_MUTATION_REDUCERS
     ),
     event_contract!(
         "radroots.trade.validation_receipt.v1",
@@ -2946,9 +2976,11 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_FARM_CRDT_CHANGE => RadrootsContractFamily::Farm,
         KIND_LISTING => RadrootsContractFamily::Market,
         KIND_TRADE_VALIDATION_RECEIPT
-        | KIND_ORDER_REQUEST
-        | KIND_ORDER_DECISION
-        | KIND_ORDER_CANCELLATION => RadrootsContractFamily::Trade,
+        | KIND_TRADE_PROPOSAL
+        | KIND_TRADE_DECISION
+        | KIND_TRADE_REVISION_PROPOSAL
+        | KIND_TRADE_REVISION_DECISION
+        | KIND_TRADE_CANCELLATION => RadrootsContractFamily::Trade,
         KIND_WIKI_MERGE_REQUEST
         | KIND_WIKI_ARTICLE
         | KIND_WIKI_REDIRECT
@@ -3037,6 +3069,7 @@ pub fn validate_event_contract_parts(
     }
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts(tags, contract)?;
+    validate_discriminator_parts(content, contract)?;
     validate_custom_knowledge_contract_parts(content, contract)?;
     Ok(())
 }
@@ -3094,7 +3127,7 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
         Some(RadrootsContractFamily::Profile)
     } else if id.starts_with("radroots.relay.") {
         Some(RadrootsContractFamily::Relay)
-    } else if id.starts_with("radroots.trade.") || id.starts_with("radroots.order.") {
+    } else if id.starts_with("radroots.trade.") {
         Some(RadrootsContractFamily::Trade)
     } else {
         None
@@ -3336,6 +3369,30 @@ fn validate_custom_knowledge_contract_parts(
         None => Err(RadrootsContractValidationError::MissingContentField {
             contract_id: contract.id,
             field: "schema_version",
+        }),
+    }
+}
+
+fn validate_discriminator_parts(
+    content: &str,
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    let (field, value) = match &contract.discriminator {
+        RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => (*field, *value),
+        RadrootsEventDiscriminator::EnvelopeType(value) => ("type", *value),
+        _ => return Ok(()),
+    };
+    let object = parse_content_object(content, contract.id)?;
+    match object.get(field).and_then(|actual| actual.as_str()) {
+        Some(actual) if actual == value => Ok(()),
+        Some(_) => Err(RadrootsContractValidationError::ContentFieldMismatch {
+            contract_id: contract.id,
+            field,
+            expected: value.to_owned(),
+        }),
+        None => Err(RadrootsContractValidationError::MissingContentField {
+            contract_id: contract.id,
+            field,
         }),
     }
 }
@@ -3668,16 +3725,16 @@ mod tests {
     }
 
     #[test]
-    fn order_request_listing_event_contract_is_event_id() {
-        let contract = event_contract("radroots.order.request.v1").expect("order request");
+    fn trade_mutation_contract_requires_exact_contract_tag() {
+        let contract = event_contract("radroots.trade.proposal.v1").expect("trade proposal");
         let tag = contract
             .tags
             .iter()
-            .find(|tag| tag.name == "listing_event")
-            .expect("listing event tag");
+            .find(|tag| tag.name == "contract")
+            .expect("contract tag");
 
-        assert_eq!(tag.semantic, RadrootsTagSemantic::ListingSnapshot);
-        assert_eq!(tag.value_type, RadrootsTagValueType::EventId);
+        assert_eq!(tag.semantic, RadrootsTagSemantic::Contract);
+        assert_eq!(tag.value_type, RadrootsTagValueType::ContractId);
         assert!(!tag.relay_indexed);
     }
 
@@ -3800,10 +3857,7 @@ mod tests {
                 "radroots.trade.test.v1",
                 Some(RadrootsContractFamily::Trade),
             ),
-            (
-                "radroots.order.test.v1",
-                Some(RadrootsContractFamily::Trade),
-            ),
+            ("radroots.order.test.v1", None),
             ("radroots.test.unknown.v1", None),
         ] {
             assert_eq!(contract_family_for_id(id), family, "{id}");
@@ -3819,7 +3873,7 @@ mod tests {
             (KIND_CALENDAR_EVENT_RSVP, RadrootsContractFamily::Calendar),
             (KIND_FARM_CRDT_CHANGE, RadrootsContractFamily::Farm),
             (KIND_LISTING, RadrootsContractFamily::Market),
-            (KIND_ORDER_CANCELLATION, RadrootsContractFamily::Trade),
+            (KIND_TRADE_CANCELLATION, RadrootsContractFamily::Trade),
             (KIND_KNOWLEDGE_CLAIM, RadrootsContractFamily::Knowledge),
             (KIND_JOB_FEEDBACK, RadrootsContractFamily::Job),
             (KIND_JOB_REQUEST_MIN, RadrootsContractFamily::Job),
@@ -3965,17 +4019,17 @@ mod tests {
     #[test]
     fn supports_content_field_discriminators() {
         assert!(discriminator_matches(
-            &RadrootsEventDiscriminator::EnvelopeType("order_request"),
+            &RadrootsEventDiscriminator::EnvelopeType("proposal"),
             &[],
-            r#"{"domain":"radroots.order","type":"order_request"}"#
+            r#"{"domain":"radroots.trade","type":"proposal"}"#
         ));
         assert!(discriminator_matches(
             &RadrootsEventDiscriminator::ContentJsonFieldEquals {
                 field: "domain",
-                value: "radroots.order"
+                value: "radroots.trade"
             },
             &[],
-            r#"{"domain": "radroots.order", "type": "order_request"}"#
+            r#"{"domain": "radroots.trade", "type": "proposal"}"#
         ));
     }
 

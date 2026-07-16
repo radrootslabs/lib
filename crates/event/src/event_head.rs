@@ -170,7 +170,7 @@ mod tests {
     use crate::RadrootsEventEnvelopeParts;
     use crate::contract::RadrootsContractMatchError;
     use crate::kinds::{
-        KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE,
+        KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_POST, KIND_PROFILE, KIND_TRADE_PROPOSAL,
     };
 
     fn hex_64(character: char) -> String {
@@ -413,21 +413,27 @@ mod tests {
     }
 
     #[test]
-    fn contract_bridge_keeps_order_events_out_of_head_selection() {
-        let order = event_with_content(
-            KIND_ORDER_REQUEST,
+    fn contract_bridge_keeps_trade_mutations_out_of_head_selection() {
+        let trade = event_with_content(
+            KIND_TRADE_PROPOSAL,
             &hex_64('4'),
             &hex_64('d'),
             1,
             vec![
+                vec![
+                    "contract".to_string(),
+                    "radroots.trade.proposal.v1".to_string(),
+                ],
                 vec!["p".to_string(), hex_64('e')],
-                vec!["a".to_string(), format!("30402:{}:listing-1", hex_64('f'))],
-                vec![TAG_D.to_string(), "order-1".to_string()],
+                vec![
+                    TAG_D.to_string(),
+                    "11111111111111111111111111111111".to_string(),
+                ],
             ],
-            "{}",
+            r#"{"contract_id":"radroots.trade.proposal.v1"}"#,
         );
         assert_eq!(
-            event_head_candidate_for_event(&order).expect("order contract"),
+            event_head_candidate_for_event(&trade).expect("trade contract"),
             RadrootsEventHeadCandidateResult::NotHeadSelected
         );
     }

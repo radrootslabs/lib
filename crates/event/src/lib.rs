@@ -61,6 +61,7 @@ pub mod resource_cap;
 pub mod seal;
 pub mod social;
 pub mod tags;
+pub mod trade;
 pub mod trade_validation;
 pub mod wire;
 

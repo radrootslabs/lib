@@ -94,6 +94,12 @@ pub const KIND_KNOWLEDGE_REVIEW: u32 = 3462;
 pub const KIND_KNOWLEDGE_FIELD_REPORT: u32 = 3463;
 pub const KIND_KNOWLEDGE_CHANGE_PROPOSAL: u32 = 3464;
 pub const KIND_CONTRIBUTION_ATTESTATION: u32 = 3465;
+pub const KIND_TRADE_PROPOSAL: u32 = 3470;
+pub const KIND_TRADE_DECISION: u32 = 3471;
+pub const KIND_TRADE_REVISION_PROPOSAL: u32 = 3472;
+pub const KIND_TRADE_REVISION_DECISION: u32 = 3473;
+pub const KIND_TRADE_CANCELLATION: u32 = 3474;
+pub const KIND_TRADE_SELLER_RESERVATION_ASSERTION: u32 = 3475;
 pub const KIND_KNOWLEDGE_SOURCE: u32 = 30450;
 pub const KIND_EVIDENCE_BOUNTY: u32 = 30451;
 
@@ -159,13 +165,23 @@ pub const ORDER_EVENT_KINDS: [u32; 3] = [
     KIND_ORDER_CANCELLATION,
 ];
 
+pub const TRADE_MUTATION_EVENT_KINDS: [u32; 5] = [
+    KIND_TRADE_PROPOSAL,
+    KIND_TRADE_DECISION,
+    KIND_TRADE_REVISION_PROPOSAL,
+    KIND_TRADE_REVISION_DECISION,
+    KIND_TRADE_CANCELLATION,
+];
+
 pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 1] = [KIND_TRADE_VALIDATION_RECEIPT];
 
-pub const COMMERCIAL_EVENT_KINDS: [u32; 5] = [
+pub const COMMERCIAL_EVENT_KINDS: [u32; 7] = [
     KIND_LISTING,
-    KIND_ORDER_REQUEST,
-    KIND_ORDER_DECISION,
-    KIND_ORDER_CANCELLATION,
+    KIND_TRADE_PROPOSAL,
+    KIND_TRADE_DECISION,
+    KIND_TRADE_REVISION_PROPOSAL,
+    KIND_TRADE_REVISION_DECISION,
+    KIND_TRADE_CANCELLATION,
     KIND_TRADE_VALIDATION_RECEIPT,
 ];
 
@@ -536,6 +552,18 @@ pub const fn is_order_event_kind(kind: u32) -> bool {
 }
 
 #[inline]
+pub const fn is_trade_mutation_event_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_TRADE_PROPOSAL
+            | KIND_TRADE_DECISION
+            | KIND_TRADE_REVISION_PROPOSAL
+            | KIND_TRADE_REVISION_DECISION
+            | KIND_TRADE_CANCELLATION
+    )
+}
+
+#[inline]
 pub const fn is_trade_validation_receipt_kind(kind: u32) -> bool {
     kind == KIND_TRADE_VALIDATION_RECEIPT
 }
@@ -547,7 +575,9 @@ pub const fn is_trade_validation_event_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_commercial_event_kind(kind: u32) -> bool {
-    is_listing_event_kind(kind) || is_order_event_kind(kind) || is_trade_validation_event_kind(kind)
+    is_listing_event_kind(kind)
+        || is_trade_mutation_event_kind(kind)
+        || is_trade_validation_event_kind(kind)
 }
 
 #[inline]
@@ -891,6 +921,16 @@ mod tests {
             ]
         );
         assert_eq!(
+            TRADE_MUTATION_EVENT_KINDS,
+            [
+                KIND_TRADE_PROPOSAL,
+                KIND_TRADE_DECISION,
+                KIND_TRADE_REVISION_PROPOSAL,
+                KIND_TRADE_REVISION_DECISION,
+                KIND_TRADE_CANCELLATION,
+            ]
+        );
+        assert_eq!(
             TRADE_VALIDATION_EVENT_KINDS,
             [KIND_TRADE_VALIDATION_RECEIPT]
         );
@@ -898,9 +938,11 @@ mod tests {
             COMMERCIAL_EVENT_KINDS,
             [
                 KIND_LISTING,
-                KIND_ORDER_REQUEST,
-                KIND_ORDER_DECISION,
-                KIND_ORDER_CANCELLATION,
+                KIND_TRADE_PROPOSAL,
+                KIND_TRADE_DECISION,
+                KIND_TRADE_REVISION_PROPOSAL,
+                KIND_TRADE_REVISION_DECISION,
+                KIND_TRADE_CANCELLATION,
                 KIND_TRADE_VALIDATION_RECEIPT,
             ]
         );
@@ -919,6 +961,14 @@ mod tests {
         assert!(!is_order_event_kind(3436));
         assert!(!is_order_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
         assert!(!is_order_event_kind(3431));
+
+        assert!(is_trade_mutation_event_kind(KIND_TRADE_PROPOSAL));
+        assert!(is_trade_mutation_event_kind(KIND_TRADE_DECISION));
+        assert!(is_trade_mutation_event_kind(KIND_TRADE_REVISION_PROPOSAL));
+        assert!(is_trade_mutation_event_kind(KIND_TRADE_REVISION_DECISION));
+        assert!(is_trade_mutation_event_kind(KIND_TRADE_CANCELLATION));
+        assert!(!is_trade_mutation_event_kind(KIND_ORDER_REQUEST));
+        assert!(!is_trade_mutation_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
 
         assert!(!is_trade_validation_service_request_kind(5321));
         assert!(!is_trade_validation_service_request_kind(5322));
@@ -940,8 +990,9 @@ mod tests {
         assert!(!is_trade_validation_event_kind(3434));
 
         assert!(is_commercial_event_kind(KIND_LISTING));
-        assert!(is_commercial_event_kind(KIND_ORDER_REQUEST));
+        assert!(is_commercial_event_kind(KIND_TRADE_PROPOSAL));
         assert!(is_commercial_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_commercial_event_kind(KIND_ORDER_REQUEST));
         assert!(!is_commercial_event_kind(KIND_PROFILE));
         assert!(!is_commercial_event_kind(30403));
         assert!(!is_commercial_event_kind(5321));

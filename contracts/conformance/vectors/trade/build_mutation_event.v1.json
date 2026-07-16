@@ -1,0 +1,36 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_build_mutation_event_proposal_001",
+      "kind": "trade.build_mutation_event",
+      "input": {
+        "mutation_type": "proposal",
+        "contract_id": "radroots.trade.proposal.v1",
+        "trade_id": "11111111111111111111111111111111",
+        "parent_mutation_ids": []
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 3470,
+          "tags": [
+            [
+              "contract",
+              "radroots.trade.proposal.v1"
+            ],
+            [
+              "d",
+              "11111111111111111111111111111111"
+            ],
+            [
+              "p",
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ]
+          ],
+          "content_shape": "RadrootsTradeMutationEnvelopeV1"
+        }
+      }
+    }
+  ]
+}

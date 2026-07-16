@@ -393,6 +393,7 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
         RadrootsReducer::ProfileProjection => "profile_projection",
         RadrootsReducer::NostrRelayPolicyProjection => "nostr_relay_policy_projection",
         RadrootsReducer::SocialProjection => "social_projection",
+        RadrootsReducer::TradeProjection => "trade_projection",
         RadrootsReducer::TradeValidation => "trade_validation",
     }
 }

@@ -8,7 +8,7 @@ domains = [
   "profile",
   "farm",
   "listing",
-  "order",
+  "trade",
   "trade_validation",
   "social",
   "knowledge",
@@ -33,21 +33,24 @@ public = [
   "RadrootsFileMetadata",
   "RadrootsCalendarDateEvent",
   "RadrootsCalendarTimeEvent",
-  "RadrootsOrderEnvelope",
-  "RadrootsOrderEventType",
-  "RadrootsOrderItem",
-  "RadrootsOrderPricingBasis",
-  "RadrootsOrderEconomicLineKind",
-  "RadrootsOrderEconomicActor",
-  "RadrootsOrderEconomicEffect",
-  "RadrootsOrderEconomicItem",
-  "RadrootsOrderEconomicLine",
-  "RadrootsOrderEconomicTotals",
-  "RadrootsOrderEconomics",
-  "RadrootsOrderRequest",
-  "RadrootsOrderInventoryCommitment",
-  "RadrootsOrderDecisionOutcome",
-  "RadrootsOrderDecision",
+  "RadrootsTradeId",
+  "RadrootsTradeCandidateId",
+  "RadrootsTradeMutationId",
+  "RadrootsTradeMutationKindV1",
+  "RadrootsTradeMutationEnvelopeV1",
+  "RadrootsTradeMutationBodyV1",
+  "RadrootsTradeCandidateTermsV1",
+  "RadrootsTradeCandidateLineV1",
+  "RadrootsTradeLineTombstoneV1",
+  "RadrootsTradeEconomicsProfileV1",
+  "RadrootsTradeEconomicAdjustmentV1",
+  "RadrootsFulfillmentProfileV1",
+  "RadrootsTradeCancellationProfileV1",
+  "RadrootsTradePrivateTermsRefV1",
+  "RadrootsSellerReservationAssertionV1",
+  "RadrootsSellerReservationLineV1",
+  "RadrootsTradeDecisionV1",
+  "RadrootsTradeCanonicalMutationV1",
   "RadrootsWikiArticle",
   "RadrootsWikiRedirect",
   "RadrootsWikiMergeRequest",
@@ -307,92 +310,69 @@ rust_types = ["radroots_event::calendar::RadrootsCalendarTimeEvent"]
 [operations.social_calendar_time_event_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
-[operations.order_build_order_request_draft]
-domain = "order"
-id = "order.build_order_request_draft"
+[operations.trade_canonicalize_mutation]
+domain = "trade"
+id = "trade.canonicalize_mutation"
 stability = "beta"
-inputs = ["RadrootsOrderRequest", "RadrootsEventPtr"]
+inputs = ["RadrootsTradeMutationEnvelopeV1"]
+outputs = ["RadrootsTradeCanonicalMutationV1"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_canonicalize_mutation.implementation]
+rust_modules = ["crates/event/src/trade.rs"]
+rust_types = [
+  "radroots_event::trade::RadrootsTradeCanonicalMutationV1",
+  "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
+]
+
+[operations.trade_canonicalize_mutation.conformance]
+vector = "contracts/conformance/vectors/trade/canonicalize_mutation.v1.json"
+
+[operations.trade_build_mutation_event]
+domain = "trade"
+id = "trade.build_mutation_event"
+stability = "beta"
+inputs = ["RadrootsTradeMutationEnvelopeV1"]
 outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.order_build_order_request_draft.implementation]
-rust_modules = ["crates/event_codec/src/order/encode.rs"]
-rust_types = [
-  "radroots_event::RadrootsEventPtr",
-  "radroots_event::order::RadrootsOrderRequest",
-]
+[operations.trade_build_mutation_event.implementation]
+rust_modules = ["crates/event_codec/src/trade/mod.rs"]
+rust_types = ["radroots_event::trade::RadrootsTradeMutationEnvelopeV1"]
 
-[operations.order_build_order_request_draft.conformance]
-vector = "contracts/conformance/vectors/order/build_order_request_draft.v1.json"
+[operations.trade_build_mutation_event.conformance]
+vector = "contracts/conformance/vectors/trade/build_mutation_event.v1.json"
 
-[operations.order_build_order_decision_draft]
-domain = "order"
-id = "order.build_order_decision_draft"
-stability = "beta"
-inputs = ["root_event_id", "prev_event_id", "RadrootsOrderDecision"]
-outputs = ["RadrootsNip01EventWireParts"]
-error_class = "encode_error"
-deterministic = true
-signing = "native"
-transport = "native"
-
-[operations.order_build_order_decision_draft.implementation]
-rust_modules = ["crates/event_codec/src/order/encode.rs"]
-rust_types = ["radroots_event::order::RadrootsOrderDecision"]
-
-[operations.order_build_order_decision_draft.conformance]
-vector = "contracts/conformance/vectors/order/build_order_decision_draft.v1.json"
-
-[operations.order_parse_order_request]
-domain = "order"
-id = "order.parse_order_request"
+[operations.trade_parse_mutation_event]
+domain = "trade"
+id = "trade.parse_mutation_event"
 stability = "beta"
 inputs = ["RadrootsEventEnvelope"]
-outputs = ["RadrootsOrderEnvelope", "RadrootsOrderRequest"]
+outputs = ["RadrootsTradeMutationEnvelopeV1"]
 error_class = "parse_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.order_parse_order_request.implementation]
-rust_modules = ["crates/event_codec/src/order/decode.rs"]
+[operations.trade_parse_mutation_event.implementation]
+rust_modules = ["crates/event_codec/src/trade/mod.rs"]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
-  "radroots_event::order::RadrootsOrderEnvelope",
-  "radroots_event::order::RadrootsOrderRequest",
+  "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
 ]
 
-[operations.order_parse_order_request.conformance]
-vector = "contracts/conformance/vectors/order/parse_order_request.v1.json"
+[operations.trade_parse_mutation_event.conformance]
+vector = "contracts/conformance/vectors/trade/parse_mutation_event.v1.json"
 
-[operations.order_parse_order_decision]
-domain = "order"
-id = "order.parse_order_decision"
-stability = "beta"
-inputs = ["RadrootsEventEnvelope"]
-outputs = ["RadrootsOrderEnvelope", "RadrootsOrderDecision"]
-error_class = "parse_error"
-deterministic = true
-signing = "native"
-transport = "native"
-
-[operations.order_parse_order_decision.implementation]
-rust_modules = ["crates/event_codec/src/order/decode.rs"]
-rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
-  "radroots_event::order::RadrootsOrderEnvelope",
-  "radroots_event::order::RadrootsOrderDecision",
-]
-
-[operations.order_parse_order_decision.conformance]
-vector = "contracts/conformance/vectors/order/parse_order_decision.v1.json"
-
-[operations.order_parse_listing_address]
-domain = "order"
-id = "order.parse_listing_address"
+[operations.trade_parse_listing_address]
+domain = "trade"
+id = "trade.parse_listing_address"
 stability = "beta"
 inputs = ["listing_addr"]
 outputs = ["RadrootsListingAddress"]
@@ -401,12 +381,12 @@ deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.order_parse_listing_address.implementation]
+[operations.trade_parse_listing_address.implementation]
 rust_modules = ["crates/event/src/ids.rs"]
 rust_types = ["radroots_event::ids::RadrootsListingAddress"]
 
-[operations.order_parse_listing_address.conformance]
-vector = "contracts/conformance/vectors/order/parse_listing_address.v1.json"
+[operations.trade_parse_listing_address.conformance]
+vector = "contracts/conformance/vectors/trade/parse_listing_address.v1.json"
 
 [operations.trade_validation_validate_listing_event]
 domain = "trade_validation"
