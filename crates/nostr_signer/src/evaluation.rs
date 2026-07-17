@@ -7,8 +7,9 @@ use crate::model::{
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
-    RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
+    RadrootsNostrConnectPermissions, RadrootsNostrConnectRemoteSessionCapability,
+    RadrootsNostrConnectRequest,
 };
 
 #[derive(Debug, Clone)]
@@ -22,6 +23,7 @@ pub enum RadrootsNostrSignerSessionLookup {
 pub struct RadrootsNostrSignerConnectProposal {
     pub client_public_key: PublicKey,
     pub connect_secret: Option<String>,
+    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
     pub requested_permissions: RadrootsNostrConnectPermissions,
 }
 
@@ -74,6 +76,9 @@ impl RadrootsNostrSignerConnectProposal {
                 .with_requested_permissions(self.requested_permissions);
         if let Some(connect_secret) = self.connect_secret {
             draft = draft.with_connect_secret(connect_secret);
+        }
+        if let Some(client_metadata) = self.client_metadata {
+            draft = draft.with_client_metadata(client_metadata);
         }
         draft
     }
@@ -317,6 +322,12 @@ mod tests {
         let proposal = RadrootsNostrSignerConnectProposal {
             client_public_key: public_key(5),
             connect_secret: Some("secret".into()),
+            client_metadata: Some(RadrootsNostrConnectClientMetadata {
+                requested_permissions: RadrootsNostrConnectPermissions::default(),
+                name: Some("Example Client".into()),
+                url: Some("https://client.example.com/".into()),
+                image: None,
+            }),
             requested_permissions: requested_permissions.clone(),
         };
 
@@ -324,10 +335,18 @@ mod tests {
 
         assert_eq!(draft.connect_secret.as_deref(), Some("secret"));
         assert_eq!(draft.requested_permissions, requested_permissions);
+        assert_eq!(
+            draft
+                .client_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.name.as_deref()),
+            Some("Example Client")
+        );
 
         let no_secret = RadrootsNostrSignerConnectProposal {
             client_public_key: public_key(7),
             connect_secret: None,
+            client_metadata: None,
             requested_permissions: RadrootsNostrConnectPermissions::default(),
         }
         .into_connection_draft(fixture_bob_identity());

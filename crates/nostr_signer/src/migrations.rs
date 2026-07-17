@@ -17,6 +17,11 @@ pub static MIGRATIONS: &[Migration] = &[
         up_sql: include_str!("../migrations/0001_publish_workflows.up.sql"),
         down_sql: include_str!("../migrations/0001_publish_workflows.down.sql"),
     },
+    Migration {
+        name: "0002_client_metadata",
+        up_sql: include_str!("../migrations/0002_client_metadata.up.sql"),
+        down_sql: include_str!("../migrations/0002_client_metadata.down.sql"),
+    },
 ];
 
 #[cfg(feature = "native")]

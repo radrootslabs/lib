@@ -3,8 +3,8 @@ use hex::encode as hex_encode;
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
-    RadrootsNostrConnectRequestMessage,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
+    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequestMessage,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
@@ -122,6 +122,7 @@ pub struct RadrootsNostrSignerConnectionDraft {
     pub client_public_key: PublicKey,
     pub user_identity: RadrootsIdentityPublic,
     pub connect_secret: Option<String>,
+    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
     pub requested_permissions: RadrootsNostrConnectPermissions,
     pub relays: Vec<RelayUrl>,
     pub approval_requirement: RadrootsNostrSignerApprovalRequirement,
@@ -142,6 +143,8 @@ pub struct RadrootsNostrSignerConnectionRecord {
     pub connect_secret_hash: Option<RadrootsNostrSignerConnectSecretHash>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connect_secret_consumed_at_unix: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
     pub requested_permissions: RadrootsNostrConnectPermissions,
     #[serde(default)]
     pub granted_permissions: Vec<RadrootsNostrSignerPermissionGrant>,
@@ -458,6 +461,7 @@ impl RadrootsNostrSignerConnectionDraft {
             client_public_key,
             user_identity,
             connect_secret: None,
+            client_metadata: None,
             requested_permissions: RadrootsNostrConnectPermissions::default(),
             relays: Vec::new(),
             approval_requirement: RadrootsNostrSignerApprovalRequirement::NotRequired,
@@ -474,6 +478,14 @@ impl RadrootsNostrSignerConnectionDraft {
         requested_permissions: RadrootsNostrConnectPermissions,
     ) -> Self {
         self.requested_permissions = requested_permissions;
+        self
+    }
+
+    pub fn with_client_metadata(
+        mut self,
+        client_metadata: RadrootsNostrConnectClientMetadata,
+    ) -> Self {
+        self.client_metadata = Some(client_metadata);
         self
     }
 
@@ -519,6 +531,7 @@ impl RadrootsNostrSignerConnectionRecord {
                 .as_deref()
                 .and_then(RadrootsNostrSignerConnectSecretHash::from_secret),
             connect_secret_consumed_at_unix: None,
+            client_metadata: draft.client_metadata,
             requested_permissions: draft.requested_permissions,
             granted_permissions: Vec::new(),
             relays: draft.relays,
@@ -838,16 +851,24 @@ mod tests {
             "kind:1",
         );
         let relay = primary_relay();
+        let metadata = RadrootsNostrConnectClientMetadata {
+            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            name: Some("Example Client".into()),
+            url: None,
+            image: None,
+        };
         let draft = RadrootsNostrSignerConnectionDraft::new(
             fixture_carol_public_key(),
             fixture_bob_identity(),
         )
         .with_connect_secret(" secret ")
+        .with_client_metadata(metadata.clone())
         .with_requested_permissions(vec![permission.clone()].into())
         .with_relays(vec![relay.clone()])
         .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser);
 
         assert_eq!(draft.connect_secret.as_deref(), Some(" secret "));
+        assert_eq!(draft.client_metadata.as_ref(), Some(&metadata));
         assert_eq!(draft.requested_permissions.as_slice(), &[permission]);
         assert_eq!(draft.relays, vec![relay]);
         assert_eq!(
@@ -1328,6 +1349,7 @@ mod tests {
             }))
             .expect("deserialize record without secret");
         assert!(decoded_without_secret.connect_secret_hash.is_none());
+        assert!(decoded_without_secret.client_metadata.is_none());
         assert!(
             decoded_without_secret
                 .connect_secret_consumed_at_unix

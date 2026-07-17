@@ -169,7 +169,12 @@ mod tests {
             "SELECT COUNT(*) AS applied_count FROM __migrations",
             "applied_count",
         );
-        assert_eq!(migration_count, 2);
+        assert_eq!(migration_count, 3);
+
+        let connection_columns = query_values(&db, "PRAGMA table_info(signer_connection)");
+        assert!(connection_columns.iter().any(|row| {
+            row.get("name").and_then(Value::as_str) == Some("client_metadata_json")
+        }));
 
         let store_version = query_single_i64(
             &db,
@@ -220,6 +225,6 @@ mod tests {
             "SELECT COUNT(*) AS applied_count FROM __migrations",
             "applied_count",
         );
-        assert_eq!(migration_count, 2);
+        assert_eq!(migration_count, 3);
     }
 }

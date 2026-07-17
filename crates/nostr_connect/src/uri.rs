@@ -20,7 +20,7 @@ pub struct RadrootsNostrConnectBunkerUri {
     pub secret: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct RadrootsNostrConnectClientMetadata {
     #[serde(
         default,
@@ -33,6 +33,18 @@ pub struct RadrootsNostrConnectClientMetadata {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RadrootsNostrConnectClientMetadataSerde {
+    #[serde(default)]
+    requested_permissions: RadrootsNostrConnectPermissions,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    image: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +108,23 @@ impl RadrootsNostrConnectClientMetadata {
 
     pub fn is_display_empty(&self) -> bool {
         self.name.is_none() && self.url.is_none() && self.image.is_none()
+    }
+}
+
+impl<'de> Deserialize<'de> for RadrootsNostrConnectClientMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let metadata = RadrootsNostrConnectClientMetadataSerde::deserialize(deserializer)?;
+        Self {
+            requested_permissions: metadata.requested_permissions,
+            name: metadata.name,
+            url: metadata.url,
+            image: metadata.image,
+        }
+        .normalized()
+        .map_err(serde::de::Error::custom)
     }
 }
 

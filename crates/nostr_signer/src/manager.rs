@@ -21,7 +21,8 @@ use crate::store::{RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore};
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod,
+    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage,
 };
 use std::sync::{Arc, RwLock};
@@ -203,7 +204,7 @@ impl RadrootsNostrSignerManager {
             remote_signer_public_key,
             secret,
             requested_permissions,
-            client_metadata: _,
+            client_metadata,
         } = request
         else {
             return Err(RadrootsNostrSignerError::InvalidState(
@@ -228,6 +229,7 @@ impl RadrootsNostrSignerManager {
             RadrootsNostrSignerConnectProposal {
                 client_public_key,
                 connect_secret,
+                client_metadata: client_metadata.map(normalize_client_metadata).transpose()?,
                 requested_permissions: normalize_permissions(requested_permissions),
             },
         ))
@@ -303,6 +305,10 @@ impl RadrootsNostrSignerManager {
                     client_public_key: draft.client_public_key,
                     user_identity: draft.user_identity,
                     connect_secret: draft.connect_secret,
+                    client_metadata: draft
+                        .client_metadata
+                        .map(normalize_client_metadata)
+                        .transpose()?,
                     requested_permissions: normalize_permissions(draft.requested_permissions),
                     relays: normalize_relays(draft.relays),
                     approval_requirement: draft.approval_requirement,
@@ -414,9 +420,7 @@ impl RadrootsNostrSignerManager {
             let updated_at_unix = now_unix_secs();
             let record = find_connection_mut(state, connection_id)?;
             if record.status == RadrootsNostrSignerConnectionStatus::Revoked {
-                return Err(RadrootsNostrSignerError::InvalidState(
-                    "connection already revoked".into(),
-                ));
+                return Ok(record.clone());
             }
 
             record.status = RadrootsNostrSignerConnectionStatus::Revoked;
@@ -1108,6 +1112,13 @@ fn normalize_permissions(
     permissions.into()
 }
 
+fn normalize_client_metadata(
+    mut metadata: RadrootsNostrConnectClientMetadata,
+) -> Result<RadrootsNostrConnectClientMetadata, RadrootsNostrSignerError> {
+    metadata.requested_permissions = RadrootsNostrConnectPermissions::default();
+    Ok(metadata.normalized()?)
+}
+
 fn normalize_relays(relays: Vec<RelayUrl>) -> Vec<RelayUrl> {
     let mut relays = relays;
     relays.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -1526,6 +1537,40 @@ mod tests {
     }
 
     #[test]
+    fn register_connection_normalizes_display_only_client_metadata() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(fixture_alice_identity())
+            .expect("set signer identity");
+        let requested_permissions = vec![permission(RadrootsNostrConnectMethod::Ping, None)].into();
+        let record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x90), public_identity(0x91))
+                    .with_requested_permissions(requested_permissions)
+                    .with_client_metadata(RadrootsNostrConnectClientMetadata {
+                        requested_permissions: vec![permission(
+                            RadrootsNostrConnectMethod::Nip44Encrypt,
+                            None,
+                        )]
+                        .into(),
+                        name: Some(" Example Client ".into()),
+                        url: Some("https://client.example.com".into()),
+                        image: None,
+                    }),
+            )
+            .expect("register metadata connection");
+
+        let metadata = record.client_metadata.expect("stored client metadata");
+        assert_eq!(metadata.name.as_deref(), Some("Example Client"));
+        assert_eq!(metadata.url.as_deref(), Some("https://client.example.com/"));
+        assert!(metadata.requested_permissions.is_empty());
+        assert_eq!(
+            record.requested_permissions.as_slice(),
+            &[permission(RadrootsNostrConnectMethod::Ping, None)]
+        );
+    }
+
+    #[test]
     fn register_connection_enforces_identity_and_uniqueness_rules() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
@@ -1805,12 +1850,13 @@ mod tests {
 
         let revoke_again = manager
             .revoke_connection(&active.connection_id, None)
-            .expect_err("revoke twice");
-        assert!(
-            revoke_again
-                .to_string()
-                .contains("connection already revoked")
+            .expect("revoke twice idempotently");
+        assert_eq!(
+            revoke_again.status,
+            RadrootsNostrSignerConnectionStatus::Revoked
         );
+        assert_eq!(revoke_again.status_reason.as_deref(), Some("manual"));
+        assert_eq!(revoke_again.updated_at_unix, revoked.updated_at_unix);
 
         let grants_err = manager
             .set_granted_permissions(
@@ -3766,13 +3812,26 @@ mod tests {
                         permission(RadrootsNostrConnectMethod::Ping, None),
                     ]
                     .into(),
-                    client_metadata: None,
+                    client_metadata: Some(RadrootsNostrConnectClientMetadata {
+                        requested_permissions: vec![permission(
+                            RadrootsNostrConnectMethod::Nip44Encrypt,
+                            None,
+                        )]
+                        .into(),
+                        name: Some(" Example Client ".into()),
+                        url: Some("https://client.example.com".into()),
+                        image: None,
+                    }),
                 },
             )
             .expect("registration connect request");
         let proposal = expect_registration_connect(registration_connect);
         assert_eq!(proposal.client_public_key, public_key(0x67));
         assert_eq!(proposal.connect_secret.as_deref(), Some("fresh-secret"));
+        let metadata = proposal.client_metadata.as_ref().expect("client metadata");
+        assert_eq!(metadata.name.as_deref(), Some("Example Client"));
+        assert_eq!(metadata.url.as_deref(), Some("https://client.example.com/"));
+        assert!(metadata.requested_permissions.is_empty());
         assert_eq!(
             proposal.requested_permissions.as_slice(),
             &[

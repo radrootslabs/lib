@@ -26,7 +26,8 @@ use nostr::RelayUrl;
 use radroots_identity::RadrootsIdentityPublic;
 #[cfg(feature = "native")]
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequestMessage,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
+    RadrootsNostrConnectRequestMessage,
 };
 #[cfg(feature = "native")]
 use radroots_sql_core::SqlExecutor;
@@ -167,7 +168,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
 
         let connection_rows: Vec<SignerConnectionRow> = query_rows(
             self.db.as_ref(),
-            "SELECT connection_id, client_public_key_hex, signer_identity_json, user_identity_json, connect_secret_hash_algorithm, connect_secret_hash_digest_hex, connect_secret_consumed_at_unix, requested_permissions_json, approval_requirement, approval_state, auth_state, status, status_reason, created_at_unix, updated_at_unix, last_authenticated_at_unix, last_request_at_unix FROM signer_connection ORDER BY created_at_unix, connection_id",
+            "SELECT connection_id, client_public_key_hex, signer_identity_json, user_identity_json, connect_secret_hash_algorithm, connect_secret_hash_digest_hex, connect_secret_consumed_at_unix, requested_permissions_json, client_metadata_json, approval_requirement, approval_state, auth_state, status, status_reason, created_at_unix, updated_at_unix, last_authenticated_at_unix, last_request_at_unix FROM signer_connection ORDER BY created_at_unix, connection_id",
         )?;
         let mut connection_indexes = BTreeMap::new();
         for row in connection_rows {
@@ -312,7 +313,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
             for connection in &state.connections {
                 exec_json(
                     executor,
-                    "INSERT INTO signer_connection(connection_id, client_public_key_hex, signer_identity_id, signer_identity_public_key_hex, signer_identity_json, user_identity_id, user_identity_public_key_hex, user_identity_json, connect_secret_hash_algorithm, connect_secret_hash_digest_hex, connect_secret_consumed_at_unix, requested_permissions_json, approval_requirement, approval_state, auth_state, status, status_reason, created_at_unix, updated_at_unix, last_authenticated_at_unix, last_request_at_unix) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO signer_connection(connection_id, client_public_key_hex, signer_identity_id, signer_identity_public_key_hex, signer_identity_json, user_identity_id, user_identity_public_key_hex, user_identity_json, connect_secret_hash_algorithm, connect_secret_hash_digest_hex, connect_secret_consumed_at_unix, requested_permissions_json, client_metadata_json, approval_requirement, approval_state, auth_state, status, status_reason, created_at_unix, updated_at_unix, last_authenticated_at_unix, last_request_at_unix) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     json!([
                         connection.connection_id.as_str(),
                         connection.client_public_key.to_hex(),
@@ -332,6 +333,11 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                             .map(|hash| hash.digest_hex.clone()),
                         connection.connect_secret_consumed_at_unix,
                         serde_json::to_string(&connection.requested_permissions)?,
+                        connection
+                            .client_metadata
+                            .as_ref()
+                            .map(serde_json::to_string)
+                            .transpose()?,
                         approval_requirement_label(connection.approval_requirement),
                         approval_state_label(connection.approval_state),
                         auth_state_label(connection.auth_state),
@@ -469,6 +475,7 @@ struct SignerConnectionRow {
     connect_secret_hash_digest_hex: Option<String>,
     connect_secret_consumed_at_unix: Option<u64>,
     requested_permissions_json: String,
+    client_metadata_json: Option<String>,
     approval_requirement: String,
     approval_state: String,
     auth_state: String,
@@ -505,6 +512,11 @@ impl SignerConnectionRow {
             },
             connect_secret_consumed_at_unix: self.connect_secret_consumed_at_unix,
             requested_permissions: parse_json_field(self.requested_permissions_json.as_str())?,
+            client_metadata: self
+                .client_metadata_json
+                .as_deref()
+                .map(parse_json_field::<RadrootsNostrConnectClientMetadata>)
+                .transpose()?,
             granted_permissions: Vec::new(),
             relays: Vec::new(),
             approval_requirement: parse_approval_requirement(self.approval_requirement.as_str())?,
@@ -870,8 +882,9 @@ mod tests {
     };
     #[cfg(feature = "native")]
     use radroots_nostr_connect::prelude::{
-        RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
-        RadrootsNostrConnectRequestMessage,
+        RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod,
+        RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
+        RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage,
     };
     use std::thread;
 
@@ -991,6 +1004,12 @@ mod tests {
             signer_identity.clone(),
             RadrootsNostrSignerConnectionDraft::new(fixture_carol_public_key(), user_identity)
                 .with_connect_secret("sqlite-secret")
+                .with_client_metadata(RadrootsNostrConnectClientMetadata {
+                    requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    name: Some("Example Client".to_owned()),
+                    url: Some("https://client.example.com/".to_owned()),
+                    image: Some("https://client.example.com/icon.png".to_owned()),
+                })
                 .with_relays(vec![primary_relay(), secondary_relay()])
                 .with_requested_permissions(
                     vec![
