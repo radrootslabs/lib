@@ -1064,6 +1064,7 @@ mod tests {
                 remote_signer_public_key: signer_public_key,
                 secret: secret.map(ToOwned::to_owned),
                 requested_permissions: permissions.into(),
+                client_metadata: None,
             },
         )
     }
@@ -2064,6 +2065,7 @@ mod tests {
                     RadrootsNostrConnectMethod::Nip04Encrypt,
                 )]
                 .into(),
+                client_metadata: None,
             }
         );
     }

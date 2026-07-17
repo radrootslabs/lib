@@ -22,6 +22,10 @@ pub enum RadrootsNostrConnectError {
     InvalidRelayUrl { value: String, reason: String },
     #[error("invalid url `{value}`: {reason}")]
     InvalidUrl { value: String, reason: String },
+    #[error("invalid NIP-46 client metadata field `{field}`: {reason}")]
+    InvalidClientMetadata { field: &'static str, reason: String },
+    #[error("NIP-46 client metadata exceeds {max} bytes (received {received})")]
+    ClientMetadataTooLarge { max: usize, received: usize },
     #[error("invalid URI scheme `{0}`")]
     InvalidUriScheme(String),
     #[error("invalid NIP-46 uri")]

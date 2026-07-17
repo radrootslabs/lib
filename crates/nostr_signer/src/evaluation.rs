@@ -105,7 +105,8 @@ pub(crate) fn required_permission_for_request(
         RadrootsNostrConnectRequest::Connect { .. }
         | RadrootsNostrConnectRequest::GetPublicKey
         | RadrootsNostrConnectRequest::GetSessionCapability
-        | RadrootsNostrConnectRequest::Ping => None,
+        | RadrootsNostrConnectRequest::Ping
+        | RadrootsNostrConnectRequest::Logout => None,
         RadrootsNostrConnectRequest::SignEvent(unsigned_event) => {
             Some(RadrootsNostrConnectPermission::with_parameter(
                 RadrootsNostrConnectMethod::SignEvent,
@@ -453,6 +454,7 @@ mod tests {
             remote_signer_public_key: public_key,
             secret: Some("secret".into()),
             requested_permissions: RadrootsNostrConnectPermissions::default(),
+            client_metadata: None,
         };
         let ping = RadrootsNostrConnectRequest::Ping;
         let get_public_key = RadrootsNostrConnectRequest::GetPublicKey;

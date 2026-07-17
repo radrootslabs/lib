@@ -26,6 +26,8 @@ pub mod prelude {
     pub use crate::method::RadrootsNostrConnectMethod;
     pub use crate::permission::{RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions};
     pub use crate::uri::{
+        RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES,
+        RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES, RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES,
         RadrootsNostrConnectBunkerUri, RadrootsNostrConnectClientMetadata,
         RadrootsNostrConnectClientUri, RadrootsNostrConnectUri,
     };

@@ -1,6 +1,7 @@
 use crate::error::RadrootsNostrConnectError;
 use crate::method::RadrootsNostrConnectMethod;
 use crate::permission::RadrootsNostrConnectPermissions;
+use crate::uri::RadrootsNostrConnectClientMetadata;
 use nostr::{Event, JsonUtil, PublicKey, RelayUrl, UnsignedEvent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value, json};
@@ -22,6 +23,7 @@ pub enum RadrootsNostrConnectRequest {
         remote_signer_public_key: PublicKey,
         secret: Option<String>,
         requested_permissions: RadrootsNostrConnectPermissions,
+        client_metadata: Option<RadrootsNostrConnectClientMetadata>,
     },
     GetPublicKey,
     GetSessionCapability,
@@ -44,6 +46,7 @@ pub enum RadrootsNostrConnectRequest {
     },
     Ping,
     SwitchRelays,
+    Logout,
     Custom {
         method: RadrootsNostrConnectMethod,
         params: Vec<String>,
@@ -63,30 +66,40 @@ impl RadrootsNostrConnectRequest {
             Self::Nip44Decrypt { .. } => RadrootsNostrConnectMethod::Nip44Decrypt,
             Self::Ping => RadrootsNostrConnectMethod::Ping,
             Self::SwitchRelays => RadrootsNostrConnectMethod::SwitchRelays,
+            Self::Logout => RadrootsNostrConnectMethod::Logout,
             Self::Custom { method, .. } => method.clone(),
         }
     }
 
-    pub fn to_params(&self) -> Vec<String> {
-        match self {
+    pub fn to_params(&self) -> Result<Vec<String>, RadrootsNostrConnectError> {
+        let params = match self {
             Self::Connect {
                 remote_signer_public_key,
                 secret,
                 requested_permissions,
+                client_metadata,
             } => {
                 let mut params = vec![remote_signer_public_key.to_hex()];
                 let normalized_secret = secret.as_ref().filter(|value| !value.is_empty()).cloned();
-                if normalized_secret.is_some() || !requested_permissions.is_empty() {
+                if normalized_secret.is_some()
+                    || !requested_permissions.is_empty()
+                    || client_metadata.is_some()
+                {
                     params.push(normalized_secret.unwrap_or_default());
                 }
-                if !requested_permissions.is_empty() {
+                if !requested_permissions.is_empty() || client_metadata.is_some() {
                     params.push(requested_permissions.to_string());
+                }
+                if let Some(client_metadata) = client_metadata {
+                    params.push(client_metadata.to_connect_param()?);
                 }
                 params
             }
-            Self::GetPublicKey | Self::GetSessionCapability | Self::Ping | Self::SwitchRelays => {
-                Vec::new()
-            }
+            Self::GetPublicKey
+            | Self::GetSessionCapability
+            | Self::Ping
+            | Self::SwitchRelays
+            | Self::Logout => Vec::new(),
             Self::SignEvent(unsigned_event) => vec![unsigned_event.as_json()],
             Self::Nip04Encrypt {
                 public_key,
@@ -105,7 +118,8 @@ impl RadrootsNostrConnectRequest {
                 ciphertext,
             } => vec![public_key.to_hex(), ciphertext.clone()],
             Self::Custom { params, .. } => params.clone(),
-        }
+        };
+        Ok(params)
     }
 
     pub fn from_parts(
@@ -114,10 +128,10 @@ impl RadrootsNostrConnectRequest {
     ) -> Result<Self, RadrootsNostrConnectError> {
         match method {
             RadrootsNostrConnectMethod::Connect => {
-                if params.is_empty() || params.len() > 3 {
+                if params.is_empty() || params.len() > 4 {
                     return Err(RadrootsNostrConnectError::InvalidParams {
                         method: method.to_string(),
-                        expected: "1 to 3 params",
+                        expected: "1 to 4 params",
                         received: params.len(),
                     });
                 }
@@ -127,10 +141,15 @@ impl RadrootsNostrConnectRequest {
                     Some(value) => RadrootsNostrConnectPermissions::from_str(value)?,
                     None => RadrootsNostrConnectPermissions::default(),
                 };
+                let client_metadata = params
+                    .get(3)
+                    .map(|value| RadrootsNostrConnectClientMetadata::from_connect_param(value))
+                    .transpose()?;
                 Ok(Self::Connect {
                     remote_signer_public_key,
                     secret,
                     requested_permissions,
+                    client_metadata,
                 })
             }
             RadrootsNostrConnectMethod::GetPublicKey => {
@@ -187,6 +206,10 @@ impl RadrootsNostrConnectRequest {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::SwitchRelays)
             }
+            RadrootsNostrConnectMethod::Logout => {
+                expect_param_count(&method, &params, 0)?;
+                Ok(Self::Logout)
+            }
             custom => Ok(Self::Custom {
                 method: custom,
                 params,
@@ -209,12 +232,12 @@ impl RadrootsNostrConnectRequestMessage {
         }
     }
 
-    fn into_raw(self) -> RawRequestMessage {
-        RawRequestMessage {
+    fn into_raw(self) -> Result<RawRequestMessage, RadrootsNostrConnectError> {
+        Ok(RawRequestMessage {
             id: self.id,
             method: self.request.method(),
-            params: self.request.to_params(),
-        }
+            params: self.request.to_params()?,
+        })
     }
 
     fn from_raw(raw: RawRequestMessage) -> Result<Self, RadrootsNostrConnectError> {
@@ -230,7 +253,10 @@ impl Serialize for RadrootsNostrConnectRequestMessage {
     where
         S: Serializer,
     {
-        self.clone().into_raw().serialize(serializer)
+        self.clone()
+            .into_raw()
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
     }
 }
 
@@ -269,6 +295,7 @@ pub enum RadrootsNostrConnectPendingConnectionPollOutcome {
 pub enum RadrootsNostrConnectResponse {
     ConnectAcknowledged,
     ConnectSecretEcho(String),
+    LogoutAcknowledged,
     PendingConnection,
     UserPublicKey(PublicKey),
     RemoteSessionCapability(RadrootsNostrConnectRemoteSessionCapability),
@@ -328,11 +355,13 @@ impl RadrootsNostrConnectResponse {
     ) -> Result<RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectError> {
         let id = id.into();
         let envelope = match self {
-            Self::ConnectAcknowledged => RadrootsNostrConnectResponseEnvelope {
-                id,
-                result: Some(Value::String("ack".to_owned())),
-                error: None,
-            },
+            Self::ConnectAcknowledged | Self::LogoutAcknowledged => {
+                RadrootsNostrConnectResponseEnvelope {
+                    id,
+                    result: Some(Value::String("ack".to_owned())),
+                    error: None,
+                }
+            }
             Self::ConnectSecretEcho(secret) => RadrootsNostrConnectResponseEnvelope {
                 id,
                 result: Some(Value::String(secret)),
@@ -486,6 +515,16 @@ impl RadrootsNostrConnectResponse {
             )),
             RadrootsNostrConnectMethod::SwitchRelays => {
                 parse_switch_relays_response(envelope.result)
+            }
+            RadrootsNostrConnectMethod::Logout => {
+                let result = expect_string_result(method, envelope.result)?;
+                if result != "ack" {
+                    return Err(RadrootsNostrConnectError::InvalidResponsePayload {
+                        method: method.to_string(),
+                        reason: format!("expected `ack`, got `{result}`"),
+                    });
+                }
+                Ok(Self::LogoutAcknowledged)
             }
             RadrootsNostrConnectMethod::Custom(_) => Ok(Self::Custom {
                 result: envelope.result,

@@ -162,6 +162,7 @@ async fn executes_connect_request_and_secret_echo_response() {
                 remote_signer_public_key: remote_keys.public_key(),
                 secret: Some("connect-secret".to_owned()),
                 requested_permissions: Vec::new().into(),
+                client_metadata: None,
             },
         ),
         &mut transport,

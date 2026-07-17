@@ -3,7 +3,9 @@ mod test_fixtures;
 
 use nostr::{EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectMethod,
+    RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES,
+    RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectError, RadrootsNostrConnectMethod,
     RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
@@ -135,6 +137,7 @@ fn connect_request_roundtrips_requested_permissions() {
                 "1059",
             ),
         ]),
+        client_metadata: None,
     };
     let message = RadrootsNostrConnectRequestMessage::new("req-1", request);
     let encoded = serde_json::to_value(&message).expect("serialize request");
@@ -154,6 +157,132 @@ fn connect_request_roundtrips_requested_permissions() {
     let decoded: RadrootsNostrConnectRequestMessage =
         serde_json::from_value(encoded).expect("deserialize request");
     assert_eq!(decoded, message);
+}
+
+#[test]
+fn connect_request_roundtrips_client_metadata_in_fourth_parameter() {
+    let request = RadrootsNostrConnectRequest::Connect {
+        remote_signer_public_key: test_public_key(),
+        secret: None,
+        requested_permissions: RadrootsNostrConnectPermissions::default(),
+        client_metadata: Some(RadrootsNostrConnectClientMetadata {
+            requested_permissions: RadrootsNostrConnectPermissions::default(),
+            name: Some(" My Client ".to_owned()),
+            url: Some(APP_PRIMARY_HTTPS.to_owned()),
+            image: Some(logo_url()),
+        }),
+    };
+    let message = RadrootsNostrConnectRequestMessage::new("req-metadata", request);
+    let encoded = serde_json::to_value(&message).expect("serialize metadata request");
+    assert_eq!(encoded["params"][1], "");
+    assert_eq!(encoded["params"][2], "");
+    let encoded_metadata: Value = serde_json::from_str(
+        encoded["params"][3]
+            .as_str()
+            .expect("metadata parameter string"),
+    )
+    .expect("metadata parameter json");
+    assert_eq!(
+        encoded_metadata,
+        json!({
+            "name": "My Client",
+            "url": format!("{APP_PRIMARY_HTTPS}/"),
+            "image": logo_url(),
+        })
+    );
+
+    let decoded: RadrootsNostrConnectRequestMessage =
+        serde_json::from_value(encoded.clone()).expect("deserialize metadata request");
+    match &decoded.request {
+        RadrootsNostrConnectRequest::Connect {
+            client_metadata: Some(metadata),
+            ..
+        } => {
+            assert_eq!(metadata.name.as_deref(), Some("My Client"));
+            assert!(metadata.requested_permissions.is_empty());
+        }
+        other => panic!("expected connect metadata, got {other:?}"),
+    }
+    assert_eq!(
+        serde_json::to_value(&decoded).expect("re-encode normalized metadata"),
+        encoded
+    );
+}
+
+#[test]
+fn logout_request_and_acknowledgement_roundtrip() {
+    let message =
+        RadrootsNostrConnectRequestMessage::new("req-logout", RadrootsNostrConnectRequest::Logout);
+    assert_eq!(
+        serde_json::to_value(&message).expect("serialize logout"),
+        json!({"id": "req-logout", "method": "logout", "params": []})
+    );
+
+    let response = RadrootsNostrConnectResponse::from_envelope(
+        &RadrootsNostrConnectMethod::Logout,
+        RadrootsNostrConnectResponseEnvelope {
+            id: "req-logout".to_owned(),
+            result: Some(Value::String("ack".to_owned())),
+            error: None,
+        },
+    )
+    .expect("parse logout acknowledgement");
+    assert_eq!(response, RadrootsNostrConnectResponse::LogoutAcknowledged);
+    assert_eq!(
+        response
+            .into_envelope("req-logout")
+            .expect("encode logout acknowledgement")
+            .result,
+        Some(Value::String("ack".to_owned()))
+    );
+}
+
+#[test]
+fn rejects_invalid_client_metadata() {
+    let invalid_name = json!({
+        "id": "req-invalid-name",
+        "method": "connect",
+        "params": [
+            FIXTURE_ALICE.public_key_hex,
+            "",
+            "",
+            serde_json::to_string(&json!({"name": "line\nbreak"})).expect("metadata")
+        ]
+    });
+    assert!(serde_json::from_value::<RadrootsNostrConnectRequestMessage>(invalid_name).is_err());
+
+    let invalid_scheme = format!(
+        "nostrconnect://{}?relay={}&secret=secret&url={}",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+        encode_uri_component("file:///tmp/client"),
+    );
+    assert!(RadrootsNostrConnectUri::parse(&invalid_scheme).is_err());
+
+    let oversized_name = RadrootsNostrConnectClientMetadata {
+        requested_permissions: RadrootsNostrConnectPermissions::default(),
+        name: Some("a".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_NAME_MAX_BYTES + 1)),
+        url: None,
+        image: None,
+    };
+    assert!(matches!(
+        oversized_name.to_connect_param(),
+        Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "name", .. })
+    ));
+
+    let oversized_payload = "x".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_METADATA_JSON_MAX_BYTES + 1);
+    assert!(matches!(
+        RadrootsNostrConnectRequest::from_parts(
+            RadrootsNostrConnectMethod::Connect,
+            vec![
+                test_public_key().to_hex(),
+                String::new(),
+                String::new(),
+                oversized_payload,
+            ],
+        ),
+        Err(RadrootsNostrConnectError::ClientMetadataTooLarge { .. })
+    ));
 }
 
 #[test]

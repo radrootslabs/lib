@@ -1333,6 +1333,7 @@ mod tests {
                         RadrootsNostrConnectMethod::Ping,
                     )]
                     .into(),
+                    client_metadata: None,
                 },
             )
             .expect("connect evaluation");
@@ -1401,6 +1402,7 @@ mod tests {
                         RadrootsNostrConnectMethod::Ping,
                     )]
                     .into(),
+                    client_metadata: None,
                 },
             )
             .expect("connect evaluation");

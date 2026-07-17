@@ -332,7 +332,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
         )),
-        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
+        Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "url", .. })
     ));
     assert!(matches!(
         RadrootsNostrConnectUri::parse("bunker://bad-key?relay=wss%3A%2F%2Frelay.example.com"),
@@ -359,7 +359,7 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
             FIXTURE_ALICE.public_key_hex,
             encode_uri_component(RELAY_PRIMARY_WSS),
         )),
-        Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
+        Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "image", .. })
     ));
 }
 
@@ -376,6 +376,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 remote_signer_public_key: test_public_key(),
                 secret: None,
                 requested_permissions: RadrootsNostrConnectPermissions::default(),
+                client_metadata: None,
             },
             RadrootsNostrConnectMethod::Connect,
             vec![test_public_key().to_hex()],
@@ -385,6 +386,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 remote_signer_public_key: test_public_key(),
                 secret: None,
                 requested_permissions: ping_permission.clone(),
+                client_metadata: None,
             },
             RadrootsNostrConnectMethod::Connect,
             vec![test_public_key().to_hex(), String::new(), "ping".to_owned()],
@@ -447,6 +449,11 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             Vec::new(),
         ),
         (
+            RadrootsNostrConnectRequest::Logout,
+            RadrootsNostrConnectMethod::Logout,
+            Vec::new(),
+        ),
+        (
             RadrootsNostrConnectRequest::Custom {
                 method: RadrootsNostrConnectMethod::Custom("publish_note".to_owned()),
                 params: vec!["one".to_owned(), "two".to_owned()],
@@ -457,7 +464,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     ];
     for (request, method, params) in requests {
         assert_eq!(request.method(), method);
-        assert_eq!(request.to_params(), params);
+        assert_eq!(request.to_params().expect("request params"), params);
     }
 
     assert_eq!(
@@ -470,6 +477,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             remote_signer_public_key: test_public_key(),
             secret: None,
             requested_permissions: RadrootsNostrConnectPermissions::default(),
+            client_metadata: None,
         }
     );
     assert_eq!(
@@ -484,6 +492,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             requested_permissions: RadrootsNostrConnectPermissions::from(vec![
                 RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
             ]),
+            client_metadata: None,
         }
     );
     assert_eq!(
@@ -606,6 +615,11 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             vec!["oops".to_owned()],
             "no params",
         ),
+        (
+            RadrootsNostrConnectMethod::Logout,
+            vec!["oops".to_owned()],
+            "no params",
+        ),
     ] {
         assert!(matches!(
             RadrootsNostrConnectRequest::from_parts(method, params),
@@ -615,7 +629,7 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(RadrootsNostrConnectMethod::Connect, Vec::new()),
         Err(RadrootsNostrConnectError::InvalidParams { expected, received, .. })
-            if expected == "1 to 3 params" && received == 0
+            if expected == "1 to 4 params" && received == 0
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(
@@ -639,10 +653,11 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
                 "secret".to_owned(),
                 "ping".to_owned(),
                 "extra".to_owned(),
+                "too-many".to_owned(),
             ],
         ),
         Err(RadrootsNostrConnectError::InvalidParams { expected, received, .. })
-            if expected == "1 to 3 params" && received == 4
+            if expected == "1 to 4 params" && received == 5
     ));
     assert!(matches!(
         RadrootsNostrConnectRequest::from_parts(

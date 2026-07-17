@@ -203,6 +203,7 @@ impl RadrootsNostrSignerManager {
             remote_signer_public_key,
             secret,
             requested_permissions,
+            client_metadata: _,
         } = request
         else {
             return Err(RadrootsNostrSignerError::InvalidState(
@@ -3440,6 +3441,7 @@ mod tests {
                     .expect("signer public key"),
                     secret: Some("secret".into()),
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    client_metadata: None,
                 },
             )
             .expect_err("poisoned connect evaluation");
@@ -3712,6 +3714,7 @@ mod tests {
                     remote_signer_public_key: signer_public_key,
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    client_metadata: None,
                 },
             )
             .expect_err("missing signer");
@@ -3724,6 +3727,7 @@ mod tests {
                     remote_signer_public_key: public_key(0x66),
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    client_metadata: None,
                 },
             )
             .expect_err("signer mismatch");
@@ -3744,6 +3748,7 @@ mod tests {
                         permission(RadrootsNostrConnectMethod::Ping, None),
                     ]
                     .into(),
+                    client_metadata: None,
                 },
             )
             .expect("existing connect request");
@@ -3761,6 +3766,7 @@ mod tests {
                         permission(RadrootsNostrConnectMethod::Ping, None),
                     ]
                     .into(),
+                    client_metadata: None,
                 },
             )
             .expect("registration connect request");
@@ -3782,6 +3788,7 @@ mod tests {
                     remote_signer_public_key: signer_public_key,
                     secret: Some("connect-secret".into()),
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    client_metadata: None,
                 },
             )
             .expect_err("existing secret mismatch");
@@ -3809,6 +3816,7 @@ mod tests {
                     remote_signer_public_key: signer_public_key,
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
+                    client_metadata: None,
                 },
             )
             .expect_err("invalid signer public key");
@@ -3939,6 +3947,7 @@ mod tests {
                         remote_signer_public_key: active.client_public_key,
                         secret: None,
                         requested_permissions: RadrootsNostrConnectPermissions::default(),
+                        client_metadata: None,
                     },
                 ),
             )

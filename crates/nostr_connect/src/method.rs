@@ -15,6 +15,7 @@ pub enum RadrootsNostrConnectMethod {
     Nip44Decrypt,
     Ping,
     SwitchRelays,
+    Logout,
     Custom(String),
 }
 
@@ -31,6 +32,7 @@ impl RadrootsNostrConnectMethod {
             Self::Nip44Decrypt => "nip44_decrypt",
             Self::Ping => "ping",
             Self::SwitchRelays => "switch_relays",
+            Self::Logout => "logout",
             Self::Custom(value) => value.as_str(),
         }
     }
@@ -57,6 +59,7 @@ impl FromStr for RadrootsNostrConnectMethod {
             "nip44_decrypt" => Ok(Self::Nip44Decrypt),
             "ping" => Ok(Self::Ping),
             "switch_relays" => Ok(Self::SwitchRelays),
+            "logout" => Ok(Self::Logout),
             other if !other.trim().is_empty() => Ok(Self::Custom(other.to_owned())),
             _ => Err(RadrootsNostrConnectError::InvalidMethod(value.to_owned())),
         }
