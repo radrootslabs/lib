@@ -44,7 +44,7 @@ Before editing code:
 
 ## 5. Rust engineering rules
 
-- Use Rust `1.92.0`, edition `2024`, and workspace dependency versions from the root `Cargo.toml`.
+- Use Rust `1.97.0`, edition `2024`, and workspace dependency versions from the root `Cargo.toml`.
 - Preserve intended `no_std` portability; gate `std`, wasm, and runtime-specific behavior explicitly.
 - Keep core logic functional and composable: prefer pure transformations, explicit state, and narrow side-effect boundaries.
 - Prefer enums, newtypes, and typed domain models over stringly APIs, boolean mode switches, or loosely typed maps.
