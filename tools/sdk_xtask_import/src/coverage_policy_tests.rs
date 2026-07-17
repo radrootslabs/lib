@@ -17,7 +17,7 @@ require_functions = true
 require_lines = true
 
 [toolchain]
-rust = "1.92.0"
+rust = "1.97.0"
 wasm_target = "wasm32-unknown-unknown"
 
 [report]
@@ -117,7 +117,7 @@ fn validates_contract_shape() {
 #[test]
 fn rejects_blank_contract_fields() {
     let cases = [
-        ("rust = \"1.92.0\"", "rust = \" \"", "toolchain.rust"),
+        ("rust = \"1.97.0\"", "rust = \" \"", "toolchain.rust"),
         (
             "wasm_target = \"wasm32-unknown-unknown\"",
             "wasm_target = \" \"",
