@@ -40,7 +40,8 @@ pub fn init_with_logs_dir(
         file_name: env_file.unwrap_or_else(default_log_file_name),
         stdout: true,
         default_level: resolve_default_level(env_level, default_level),
-        file_layout: LogFileLayout::PrefixedDate,
+        file_layout: LogFileLayout::StableFileName,
+        ..LoggingOptions::default()
     };
     radroots_log::init_logging(opts)?;
     Ok(())

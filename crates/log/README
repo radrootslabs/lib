@@ -8,9 +8,13 @@ primitives for the `radroots` core libraries.
  * basic `log_info`, `log_error`, and `log_debug` helpers available across
    builds;
  * typed error and result definitions for logging initialization paths;
- * `std` initializers for default, stdout, and file-backed tracing setups;
- * optional chrono- and tracing-subscriber-based formatting and rotation
-   support through feature gates.
+ * `std` initializers for default, structured stdout, and file-backed tracing;
+ * service, run, and environment identity on every structured JSON event;
+ * fail-closed initialization when a different global configuration is active;
+ * size-bounded files with deterministic retention and private file modes;
+ * explicit shutdown flushing for non-blocking file output;
+ * optional chrono-, serde-, and tracing-subscriber support through feature
+   gates.
 
 ## Copyright
 

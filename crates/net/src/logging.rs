@@ -25,7 +25,8 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
         file_name: opts.file_name.clone(),
         stdout: opts.also_stdout,
         default_level: None,
-        file_layout: radroots_log::LogFileLayout::PrefixedDate,
+        file_layout: radroots_log::LogFileLayout::StableFileName,
+        ..radroots_log::LoggingOptions::default()
     };
     match radroots_log::init_logging(log_opts) {
         Ok(()) => {}
@@ -73,11 +74,11 @@ mod tests {
         });
         assert!(valid_with_dir.is_ok());
 
-        let valid_without_dir = init_logging(LoggingOptions {
+        let conflicting = init_logging(LoggingOptions {
             dir: None,
             file_name: "ok2.log".to_string(),
             also_stdout: true,
         });
-        assert!(valid_without_dir.is_ok());
+        assert!(matches!(conflicting, Err(NetError::LoggingInit("init"))));
     }
 }

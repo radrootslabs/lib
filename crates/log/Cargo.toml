@@ -15,8 +15,10 @@ readme = "README"
 [features]
 default = ["std"]
 std = [
+  "tracing/std",
   "dep:chrono",
   "dep:thiserror",
+  "dep:serde_json",
   "dep:tracing-subscriber",
   "dep:tracing-appender",
 ]
@@ -30,3 +32,4 @@ tracing-subscriber = { workspace = true, optional = true, features = [
   "env-filter",
 ] }
 tracing-appender = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true, features = ["std"] }

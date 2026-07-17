@@ -5,16 +5,20 @@ extern crate alloc;
 mod error;
 
 #[cfg(feature = "std")]
+mod format;
+#[cfg(feature = "std")]
 mod init;
 #[cfg(feature = "std")]
 mod options;
+#[cfg(feature = "std")]
+mod writer;
 
 pub use error::{Error, Result};
 
 #[cfg(feature = "std")]
-pub use init::{init_logging, init_stdout};
+pub use init::{flush_and_shutdown, init_logging, init_stdout};
 #[cfg(feature = "std")]
-pub use options::{LogFileLayout, LoggingOptions};
+pub use options::{LogFileLayout, LogFormat, LogIdentity, LogRotation, LoggingOptions};
 
 use tracing::{debug, error, info};
 
