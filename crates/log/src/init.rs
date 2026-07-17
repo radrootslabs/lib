@@ -51,10 +51,14 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
             let stdout_layer = opts
                 .also_stdout()
                 .then(|| fmt::layer().with_writer(std::io::stdout).with_target(false));
+            let stderr_layer = opts
+                .stderr
+                .then(|| fmt::layer().with_writer(std::io::stderr).with_target(false));
             tracing_subscriber::registry()
                 .with(filter)
                 .with(file_layer)
                 .with(stdout_layer)
+                .with(stderr_layer)
                 .try_init()?;
         }
         LogFormat::Json => {
@@ -71,14 +75,21 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
             });
             let stdout_layer = opts.also_stdout().then(|| {
                 fmt::layer()
-                    .event_format(JsonEventFormatter::new(identity))
+                    .event_format(JsonEventFormatter::new(identity.clone()))
                     .with_writer(std::io::stdout)
+                    .with_ansi(false)
+            });
+            let stderr_layer = opts.stderr.then(|| {
+                fmt::layer()
+                    .event_format(JsonEventFormatter::new(identity))
+                    .with_writer(std::io::stderr)
                     .with_ansi(false)
             });
             tracing_subscriber::registry()
                 .with(filter)
                 .with(file_layer)
                 .with(stdout_layer)
+                .with(stderr_layer)
                 .try_init()?;
         }
     }
@@ -90,6 +101,7 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
     info!(
         file_enabled = file_path.is_some(),
         stdout_enabled = opts.also_stdout(),
+        stderr_enabled = opts.stderr,
         "logging initialized"
     );
     Ok(())
@@ -153,7 +165,7 @@ fn build_file_writer(
 }
 
 fn validate_options(opts: &LoggingOptions) -> Result<()> {
-    if opts.dir.is_none() && !opts.stdout {
+    if opts.dir.is_none() && !opts.stdout && !opts.stderr {
         return Err(Error::Msg(
             "logging requires at least one configured output".to_owned(),
         ));
@@ -265,6 +277,14 @@ mod tests {
     fn compact_stdout_defaults_remain_valid() {
         let options = LoggingOptions::default();
         assert_eq!(options.format, LogFormat::Compact);
+        assert!(validate_options(&options).is_ok());
+    }
+
+    #[test]
+    fn stderr_is_a_valid_standalone_sink() {
+        let mut options = LoggingOptions::json_service("service", "run-1", "production");
+        options.stdout = false;
+        options.stderr = true;
         assert!(validate_options(&options).is_ok());
     }
 
