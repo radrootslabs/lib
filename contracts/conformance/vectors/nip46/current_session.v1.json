@@ -1,0 +1,350 @@
+{
+  "suite": "nip46_current_session",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "nip46_connect_legacy_one_parameter_001",
+      "kind": "nip46.request.valid",
+      "input": {
+        "message": {
+          "id": "connect-legacy-1",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+          ]
+        }
+      },
+      "expected": {
+        "normalized_message": {
+          "id": "connect-legacy-1",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nip46_connect_legacy_two_parameters_002",
+      "kind": "nip46.request.valid",
+      "input": {
+        "message": {
+          "id": "connect-legacy-2",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret"
+          ]
+        }
+      },
+      "expected": {
+        "normalized_message": {
+          "id": "connect-legacy-2",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nip46_connect_legacy_three_parameters_003",
+      "kind": "nip46.request.valid",
+      "input": {
+        "message": {
+          "id": "connect-legacy-3",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret",
+            "nip44_encrypt,sign_event:1"
+          ]
+        }
+      },
+      "expected": {
+        "normalized_message": {
+          "id": "connect-legacy-3",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret",
+            "nip44_encrypt,sign_event:1"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nip46_connect_current_metadata_004",
+      "kind": "nip46.request.valid",
+      "input": {
+        "message": {
+          "id": "connect-current",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret",
+            "nip44_encrypt,sign_event:1",
+            "{\"name\":\" Example Client \",\"url\":\"https://app.example.com\",\"image\":\"https://cdn.example.com/logo.png\"}"
+          ]
+        }
+      },
+      "expected": {
+        "normalized_message": {
+          "id": "connect-current",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "fixture-client-secret",
+            "nip44_encrypt,sign_event:1",
+            "{\"name\":\"Example Client\",\"url\":\"https://app.example.com/\",\"image\":\"https://cdn.example.com/logo.png\"}"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nip46_metadata_name_bound_005",
+      "kind": "nip46.metadata.invalid",
+      "input": {
+        "field": "name",
+        "repeat": "a",
+        "count": 129
+      },
+      "expected": {
+        "error": "invalid_client_metadata"
+      }
+    },
+    {
+      "id": "nip46_connect_malformed_metadata_006",
+      "kind": "nip46.request.invalid",
+      "input": {
+        "message": {
+          "id": "connect-invalid-metadata",
+          "method": "connect",
+          "params": [
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "",
+            "",
+            "{\"name\":\"\"}"
+          ]
+        }
+      },
+      "expected": {
+        "error": "invalid_client_metadata"
+      }
+    },
+    {
+      "id": "nip46_nostrconnect_ordered_relays_007",
+      "kind": "nip46.uri.valid",
+      "input": {
+        "uri": "nostrconnect://585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df?relay=wss%3A%2F%2Frelay.example.com&relay=wss%3A%2F%2Frelay-2.example.com&secret=fixture-client-secret&perms=nip44_encrypt%2Csign_event%3A1&name=+Example+Client+&url=https%3A%2F%2Fapp.example.com&image=https%3A%2F%2Fcdn.example.com%2Flogo.png"
+      },
+      "expected": {
+        "variant": "nostrconnect",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://relay-2.example.com"
+        ],
+        "secret": "fixture-client-secret",
+        "metadata": {
+          "name": "Example Client",
+          "url": "https://app.example.com/",
+          "image": "https://cdn.example.com/logo.png",
+          "permissions": "nip44_encrypt,sign_event:1"
+        }
+      }
+    },
+    {
+      "id": "nip46_nostrconnect_secret_required_008",
+      "kind": "nip46.uri.invalid",
+      "input": {
+        "uri": "nostrconnect://585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df?relay=wss%3A%2F%2Frelay.example.com"
+      },
+      "expected": {
+        "error": "missing_secret"
+      }
+    },
+    {
+      "id": "nip46_bunker_secret_optional_009",
+      "kind": "nip46.uri.valid",
+      "input": {
+        "uri": "bunker://585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df?relay=wss%3A%2F%2Frelay.example.com"
+      },
+      "expected": {
+        "variant": "bunker",
+        "relays": [
+          "wss://relay.example.com"
+        ],
+        "secret": null
+      }
+    },
+    {
+      "id": "nip46_bunker_secret_present_010",
+      "kind": "nip46.uri.valid",
+      "input": {
+        "uri": "bunker://585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df?relay=wss%3A%2F%2Frelay.example.com&secret=fixture-bunker-secret"
+      },
+      "expected": {
+        "variant": "bunker",
+        "relays": [
+          "wss://relay.example.com"
+        ],
+        "secret": "fixture-bunker-secret"
+      }
+    },
+    {
+      "id": "nip46_connect_secret_echo_011",
+      "kind": "nip46.response.valid",
+      "input": {
+        "method": "connect",
+        "envelope": {
+          "id": "connect-current",
+          "result": "fixture-client-secret"
+        }
+      },
+      "expected": {
+        "normalized_envelope": {
+          "id": "connect-current",
+          "result": "fixture-client-secret"
+        }
+      }
+    },
+    {
+      "id": "nip46_switch_relays_ordered_012",
+      "kind": "nip46.response.valid",
+      "input": {
+        "method": "switch_relays",
+        "envelope": {
+          "id": "switch-relays",
+          "result": [
+            "wss://relay-2.example.com",
+            "wss://relay-3.example.com"
+          ]
+        }
+      },
+      "expected": {
+        "normalized_envelope": {
+          "id": "switch-relays",
+          "result": [
+            "wss://relay-2.example.com",
+            "wss://relay-3.example.com"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nip46_switch_relays_unchanged_013",
+      "kind": "nip46.response.valid",
+      "input": {
+        "method": "switch_relays",
+        "envelope": {
+          "id": "switch-relays-unchanged",
+          "result": null
+        }
+      },
+      "expected": {
+        "normalized_envelope": {
+          "id": "switch-relays-unchanged",
+          "result": null
+        }
+      }
+    },
+    {
+      "id": "nip46_auth_url_continuation_014",
+      "kind": "nip46.response.valid",
+      "input": {
+        "method": "sign_event",
+        "envelope": {
+          "id": "sign-with-auth",
+          "result": "auth_url",
+          "error": "https://auth.example.com/challenge"
+        }
+      },
+      "expected": {
+        "normalized_envelope": {
+          "id": "sign-with-auth",
+          "result": "auth_url",
+          "error": "https://auth.example.com/challenge"
+        }
+      }
+    },
+    {
+      "id": "nip46_logout_request_015",
+      "kind": "nip46.request.valid",
+      "input": {
+        "message": {
+          "id": "logout-current",
+          "method": "logout",
+          "params": []
+        }
+      },
+      "expected": {
+        "normalized_message": {
+          "id": "logout-current",
+          "method": "logout",
+          "params": []
+        }
+      }
+    },
+    {
+      "id": "nip46_logout_acknowledgement_016",
+      "kind": "nip46.response.valid",
+      "input": {
+        "method": "logout",
+        "envelope": {
+          "id": "logout-current",
+          "result": "ack"
+        }
+      },
+      "expected": {
+        "normalized_envelope": {
+          "id": "logout-current",
+          "result": "ack"
+        }
+      }
+    },
+    {
+      "id": "nip46_logout_rejects_parameters_017",
+      "kind": "nip46.request.invalid",
+      "input": {
+        "message": {
+          "id": "logout-invalid",
+          "method": "logout",
+          "params": [
+            "unexpected"
+          ]
+        }
+      },
+      "expected": {
+        "error": "invalid_params"
+      }
+    },
+    {
+      "id": "nip46_malformed_response_result_018",
+      "kind": "nip46.response.invalid",
+      "input": {
+        "method": "ping",
+        "envelope": {
+          "id": "ping-invalid",
+          "result": 7
+        }
+      },
+      "expected": {
+        "error": "invalid_response_payload"
+      }
+    },
+    {
+      "id": "nip46_malformed_response_missing_result_019",
+      "kind": "nip46.response.invalid",
+      "input": {
+        "method": "logout",
+        "envelope": {
+          "id": "logout-missing-result"
+        }
+      },
+      "expected": {
+        "error": "missing_result"
+      }
+    }
+  ]
+}

@@ -15,6 +15,17 @@ libraries.
  * file, memory, and native SQLite stores for persisted signer state;
  * optional native SQLite support for persistent signer services.
 
+## Current NIP-46 behavior
+
+Connection proposals, drafts, and records preserve optional validated client
+display metadata without treating it as an authorization input. JSON written
+before metadata support remains readable, and the native SQLite migration
+adds the same optional state without replacing existing connections.
+
+Connection revocation is explicit and idempotent. A transport service handling
+`logout` is responsible for publishing the typed `ack` before it revokes the
+session; storage transitions do not hide or reorder transport publication.
+
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_nostr_signer`

@@ -423,3 +423,163 @@ fn sign_event_response_roundtrips_signed_event_json_string() {
 
     assert_eq!(parsed, RadrootsNostrConnectResponse::SignedEvent(event));
 }
+
+#[test]
+fn checked_in_current_session_vectors_match_protocol_behavior() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/nip46/current_session.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("NIP-46 vector JSON");
+    assert_eq!(document["suite"], "nip46_current_session");
+    assert_eq!(document["contract_version"], "0.1.0");
+    let entries = document["vectors"].as_array().expect("NIP-46 vectors");
+
+    for entry in entries {
+        let id = entry["id"].as_str().expect("vector id");
+        let kind = entry["kind"].as_str().expect("vector kind");
+        let input = &entry["input"];
+        let expected = &entry["expected"];
+
+        match kind {
+            "nip46.request.valid" => {
+                let message: RadrootsNostrConnectRequestMessage =
+                    serde_json::from_value(input["message"].clone())
+                        .unwrap_or_else(|error| panic!("{id}: parse request: {error}"));
+                let normalized = serde_json::to_value(message)
+                    .unwrap_or_else(|error| panic!("{id}: serialize request: {error}"));
+                assert_eq!(normalized, expected["normalized_message"], "{id}");
+            }
+            "nip46.request.invalid" => {
+                let error = serde_json::from_value::<RadrootsNostrConnectRequestMessage>(
+                    input["message"].clone(),
+                )
+                .expect_err("invalid request vector");
+                assert_vector_error(id, expected, error);
+            }
+            "nip46.metadata.invalid" => {
+                let count = input["count"].as_u64().expect("metadata repeat count") as usize;
+                let repeat = input["repeat"].as_str().expect("metadata repeat value");
+                let metadata = RadrootsNostrConnectClientMetadata {
+                    name: Some(repeat.repeat(count)),
+                    ..RadrootsNostrConnectClientMetadata::default()
+                };
+                let error = metadata.normalized().expect_err("invalid metadata vector");
+                assert_vector_error(id, expected, error);
+            }
+            "nip46.uri.valid" => {
+                let uri = input["uri"].as_str().expect("NIP-46 URI");
+                let parsed = RadrootsNostrConnectUri::parse(uri)
+                    .unwrap_or_else(|error| panic!("{id}: parse URI: {error}"));
+                assert_uri_vector(id, parsed, expected);
+            }
+            "nip46.uri.invalid" => {
+                let uri = input["uri"].as_str().expect("NIP-46 URI");
+                let error = RadrootsNostrConnectUri::parse(uri).expect_err("invalid URI vector");
+                assert_vector_error(id, expected, error);
+            }
+            "nip46.response.valid" => {
+                let method = input["method"]
+                    .as_str()
+                    .expect("response method")
+                    .parse::<RadrootsNostrConnectMethod>()
+                    .expect("typed response method");
+                let envelope: RadrootsNostrConnectResponseEnvelope =
+                    serde_json::from_value(input["envelope"].clone())
+                        .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
+                let request_id = envelope.id.clone();
+                let response = RadrootsNostrConnectResponse::from_envelope(&method, envelope)
+                    .unwrap_or_else(|error| panic!("{id}: parse response: {error}"));
+                let normalized = response
+                    .into_envelope(request_id)
+                    .unwrap_or_else(|error| panic!("{id}: serialize response: {error}"));
+                let normalized = serde_json::to_value(normalized)
+                    .unwrap_or_else(|error| panic!("{id}: serialize envelope: {error}"));
+                assert_eq!(normalized, expected["normalized_envelope"], "{id}");
+            }
+            "nip46.response.invalid" => {
+                let method = input["method"]
+                    .as_str()
+                    .expect("response method")
+                    .parse::<RadrootsNostrConnectMethod>()
+                    .expect("typed response method");
+                let envelope: RadrootsNostrConnectResponseEnvelope =
+                    serde_json::from_value(input["envelope"].clone())
+                        .unwrap_or_else(|error| panic!("{id}: parse envelope: {error}"));
+                let error = RadrootsNostrConnectResponse::from_envelope(&method, envelope)
+                    .expect_err("invalid response vector");
+                assert_vector_error(id, expected, error);
+            }
+            other => panic!("{id}: unknown NIP-46 vector kind {other}"),
+        }
+    }
+}
+
+fn assert_uri_vector(id: &str, parsed: RadrootsNostrConnectUri, expected: &Value) {
+    let expected_relays = expected["relays"]
+        .as_array()
+        .expect("expected relays")
+        .iter()
+        .map(|relay| relay.as_str().expect("expected relay"))
+        .collect::<Vec<_>>();
+
+    match parsed {
+        RadrootsNostrConnectUri::Bunker(uri) => {
+            assert_eq!(expected["variant"], "bunker", "{id}");
+            let relays = uri
+                .relays
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            assert_eq!(relays, expected_relays, "{id}");
+            assert_eq!(uri.secret.as_deref(), expected["secret"].as_str(), "{id}");
+        }
+        RadrootsNostrConnectUri::Client(uri) => {
+            assert_eq!(expected["variant"], "nostrconnect", "{id}");
+            let relays = uri
+                .relays
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            assert_eq!(relays, expected_relays, "{id}");
+            assert_eq!(uri.secret, expected["secret"].as_str().expect("secret"));
+            assert_eq!(
+                uri.metadata.name.as_deref(),
+                expected["metadata"]["name"].as_str(),
+                "{id}"
+            );
+            assert_eq!(
+                uri.metadata.url.as_deref(),
+                expected["metadata"]["url"].as_str(),
+                "{id}"
+            );
+            assert_eq!(
+                uri.metadata.image.as_deref(),
+                expected["metadata"]["image"].as_str(),
+                "{id}"
+            );
+            assert_eq!(
+                uri.metadata.requested_permissions.to_string(),
+                expected["metadata"]["permissions"]
+                    .as_str()
+                    .expect("permissions"),
+                "{id}"
+            );
+        }
+    }
+}
+
+fn assert_vector_error(id: &str, expected: &Value, error: impl ToString) {
+    let class = expected["error"].as_str().expect("expected error class");
+    let needle = match class {
+        "invalid_client_metadata" => "invalid NIP-46 client metadata",
+        "invalid_params" => "invalid parameter count",
+        "invalid_response_payload" => "invalid response payload",
+        "missing_result" => "missing response result",
+        "missing_secret" => "missing secret",
+        other => panic!("{id}: unknown expected error class {other}"),
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains(needle),
+        "{id}: expected {class}, got {message}"
+    );
+}
