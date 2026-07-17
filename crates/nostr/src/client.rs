@@ -184,6 +184,22 @@ impl RadrootsNostrClient {
         Ok(self.inner.subscribe(filter, opts).await?)
     }
 
+    pub async fn subscribe_to_relays(
+        &self,
+        relays: &[RadrootsNostrRelayUrl],
+        filter: RadrootsNostrFilter,
+        opts: Option<RadrootsNostrSubscribeAutoCloseOptions>,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrSubscriptionId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .subscribe_to(relays.iter().cloned(), filter, opts)
+            .await?)
+    }
+
+    pub async fn unsubscribe(&self, subscription_id: &RadrootsNostrSubscriptionId) {
+        self.inner.unsubscribe(subscription_id).await;
+    }
+
     pub async fn send_event_builder(
         &self,
         event: RadrootsNostrEventBuilder,
@@ -196,6 +212,17 @@ impl RadrootsNostrClient {
         event: &RadrootsNostrEvent,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
         Ok(self.inner.send_event(event).await?)
+    }
+
+    pub async fn send_event_to_relays(
+        &self,
+        relays: &[RadrootsNostrRelayUrl],
+        event: &RadrootsNostrEvent,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_to(relays.iter().cloned(), event)
+            .await?)
     }
 
     pub async fn set_metadata(
@@ -237,6 +264,10 @@ pub async fn radroots_nostr_fetch_event_by_id(
 #[cfg(test)]
 mod tests {
     use super::{RadrootsNostrClient, RadrootsNostrClientOptions};
+    use crate::types::{
+        RadrootsNostrEventBuilder, RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind,
+        RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
+    };
 
     #[tokio::test]
     async fn signerless_client_has_no_signer() {
@@ -255,5 +286,27 @@ mod tests {
         .expect("signerless client");
 
         assert!(!client.has_signer().await);
+    }
+
+    #[tokio::test]
+    async fn targeted_operations_require_relays_and_cleanup_is_explicit() {
+        let keys = RadrootsNostrKeys::new(
+            RadrootsNostrSecretKey::from_slice(&[1_u8; 32]).expect("test secret key"),
+        );
+        let client = RadrootsNostrClient::new(keys.clone());
+        let subscription = client
+            .subscribe_to_relays(&[], RadrootsNostrFilter::new(), None)
+            .await;
+        assert!(subscription.is_err());
+
+        let event = RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "test")
+            .sign_with_keys(&keys)
+            .expect("test event");
+        let published = client.send_event_to_relays(&[], &event).await;
+        assert!(published.is_err());
+
+        client
+            .unsubscribe(&RadrootsNostrSubscriptionId::new("missing"))
+            .await;
     }
 }

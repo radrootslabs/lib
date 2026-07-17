@@ -34,7 +34,9 @@ nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
 [dependencies]
 radroots_event = { workspace = true, optional = true, default-features = false }
 radroots_event_codec = { workspace = true, optional = true, default-features = false }
-radroots_identity = { workspace = true, optional = true, default-features = true }
+radroots_identity = { workspace = true, optional = true, default-features = false, features = [
+  "std",
+] }
 nostr = { workspace = true, features = ["nip04"] }
 nostr-sdk = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, default-features = false, features = [
