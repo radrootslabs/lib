@@ -12,6 +12,10 @@ const LOWER_HEX: &[u8; 16] = b"0123456789abcdef";
 pub struct RadrootsBlossomSha256([u8; SHA256_BYTES]);
 
 impl RadrootsBlossomSha256 {
+    pub const fn from_bytes(bytes: [u8; SHA256_BYTES]) -> Self {
+        Self(bytes)
+    }
+
     pub fn digest(bytes: &[u8]) -> Self {
         let digest = Sha256::digest(bytes);
         let mut value = [0_u8; SHA256_BYTES];
@@ -269,6 +273,15 @@ mod tests {
             serde_json::from_str::<RadrootsBlossomSha256>(&json).unwrap(),
             hash
         );
+    }
+
+    #[test]
+    fn hash_preserves_verified_digest_bytes() {
+        let bytes = [0xabu8; SHA256_BYTES];
+        let hash = RadrootsBlossomSha256::from_bytes(bytes);
+
+        assert_eq!(hash.as_bytes(), &bytes);
+        assert_eq!(hash.to_hex(), "ab".repeat(SHA256_BYTES));
     }
 
     #[test]
