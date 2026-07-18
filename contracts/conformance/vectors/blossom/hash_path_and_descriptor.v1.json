@@ -1,0 +1,1273 @@
+{
+  "suite": "blossom_hash_path_and_descriptor",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "blossom_sha256_digest_empty_001",
+      "kind": "blossom.sha256.digest",
+      "input": {
+        "bytes_hex": ""
+      },
+      "expected": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "id": "blossom_sha256_digest_abc_002",
+      "kind": "blossom.sha256.digest",
+      "input": {
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      }
+    },
+    {
+      "id": "blossom_sha256_digest_binary_003",
+      "kind": "blossom.sha256.digest",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a726164726f6f7473"
+      },
+      "expected": {
+        "sha256": "a829dda89323e71a4575c1c45c52d65c3a0c87dd8ffcdab9ad12bbee57c00861"
+      }
+    },
+    {
+      "id": "blossom_sha256_parse_valid_004",
+      "kind": "blossom.sha256.parse.valid",
+      "input": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      },
+      "expected": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      }
+    },
+    {
+      "id": "blossom_sha256_parse_zero_valid_005",
+      "kind": "blossom.sha256.parse.valid",
+      "input": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "id": "blossom_sha256_parse_short_invalid_006",
+      "kind": "blossom.sha256.parse.invalid",
+      "input": {
+        "sha256": "ba7816bf8f01cfea"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_sha256_parse_uppercase_invalid_007",
+      "kind": "blossom.sha256.parse.invalid",
+      "input": {
+        "sha256": "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_sha256_parse_non_hex_invalid_008",
+      "kind": "blossom.sha256.parse.invalid",
+      "input": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ag"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_hash_path_without_extension_009",
+      "kind": "blossom.hash_path.parse.valid",
+      "input": {
+        "path": "/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "expected": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "extension": null
+      }
+    },
+    {
+      "id": "blossom_hash_path_png_extension_010",
+      "kind": "blossom.hash_path.parse.valid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "png"
+      }
+    },
+    {
+      "id": "blossom_hash_path_multi_extension_011",
+      "kind": "blossom.hash_path.parse.valid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.tar.gz"
+      },
+      "expected": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "tar.gz"
+      }
+    },
+    {
+      "id": "blossom_hash_path_extension_case_preserved_012",
+      "kind": "blossom.hash_path.parse.valid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.Photo_JPG-2"
+      },
+      "expected": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "Photo_JPG-2"
+      }
+    },
+    {
+      "id": "blossom_hash_path_missing_root_slash_013",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_hash_path_empty_014",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_hash_path_extra_segment_015",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad/png"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_hash_path_uppercase_hash_016",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD.png"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_hash_path_empty_extension_017",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad."
+      },
+      "expected": {
+        "error": "invalid_file_extension"
+      }
+    },
+    {
+      "id": "blossom_hash_path_empty_extension_component_018",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.tar..gz"
+      },
+      "expected": {
+        "error": "invalid_file_extension"
+      }
+    },
+    {
+      "id": "blossom_hash_path_whitespace_extension_019",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.p ng"
+      },
+      "expected": {
+        "error": "invalid_file_extension"
+      }
+    },
+    {
+      "id": "blossom_hash_path_percent_encoded_extension_020",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.%70ng"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_hash_path_query_forbidden_021",
+      "kind": "blossom.hash_path.parse.invalid",
+      "input": {
+        "path": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png?download=1"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_blob_url_https_canonical_authority_022",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "HTTPS://MEDIA.EXAMPLE/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.PNG"
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "media.example",
+        "port": null,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "PNG"
+      }
+    },
+    {
+      "id": "blossom_blob_url_public_http_structural_023",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "http://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "scheme": "http",
+        "host": "media.example",
+        "port": null,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "png"
+      }
+    },
+    {
+      "id": "blossom_blob_url_https_port_without_extension_024",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "https://media.example:8443/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "media.example",
+        "port": 8443,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "extension": null
+      }
+    },
+    {
+      "id": "blossom_blob_url_bracketed_ipv6_025",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "http://[::1]:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.bin"
+      },
+      "expected": {
+        "scheme": "http",
+        "host": "[::1]",
+        "port": 21100,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "bin"
+      }
+    },
+    {
+      "id": "blossom_blob_url_relative_invalid_026",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_unsupported_scheme_027",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "ftp://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "unsupported_blob_url_scheme"
+      }
+    },
+    {
+      "id": "blossom_blob_url_missing_authority_028",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_credentials_forbidden_029",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://user:password@media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "blob_url_credentials_forbidden"
+      }
+    },
+    {
+      "id": "blossom_blob_url_empty_userinfo_forbidden_029b",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://@media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "blob_url_credentials_forbidden"
+      }
+    },
+    {
+      "id": "blossom_blob_url_empty_userinfo_separator_forbidden_029c",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://:@media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "blob_url_credentials_forbidden"
+      }
+    },
+    {
+      "id": "blossom_blob_url_query_forbidden_030",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png?download=1"
+      },
+      "expected": {
+        "error": "blob_url_query_forbidden"
+      }
+    },
+    {
+      "id": "blossom_blob_url_fragment_forbidden_031",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png#preview"
+      },
+      "expected": {
+        "error": "blob_url_fragment_forbidden"
+      }
+    },
+    {
+      "id": "blossom_blob_url_extra_path_segment_032",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/blobs/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_hash_path"
+      }
+    },
+    {
+      "id": "blossom_blob_url_port_out_of_range_033",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example:65536/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_uppercase_hash_034",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD.png"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_blob_url_percent_encoded_extension_035",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.%70ng"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_unbracketed_ipv6_036",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "http://::1/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.bin"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_leading_whitespace_rejected_036b",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": " https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_embedded_newline_rejected_036c",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_trailing_tab_rejected_036d",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png\t"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_https_public_approved_037",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "https"
+      }
+    },
+    {
+      "id": "blossom_reference_https_private_address_approved_038",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "https://10.0.0.4/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "https"
+      }
+    },
+    {
+      "id": "blossom_reference_http_localhost_approved_039",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://LOCALHOST:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_localhost_subdomain_approved_040",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://media.localhost/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_nested_localhost_subdomain_approved_041",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://blossom.dev.localhost/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_ipv4_loopback_approved_042",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://127.0.0.1:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_ipv4_loopback_range_approved_043",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://127.255.255.254/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_ipv6_loopback_approved_044",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://[::1]:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_expanded_ipv6_loopback_approved_045",
+      "kind": "blossom.reference_policy.valid",
+      "input": {
+        "url": "http://[0:0:0:0:0:0:0:1]/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "approved": true,
+        "transport": "loopback_http"
+      }
+    },
+    {
+      "id": "blossom_reference_http_public_rejected_046",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_false_localhost_suffix_rejected_047",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://localhost.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_absolute_localhost_name_rejected_048",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://localhost./ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_before_ipv4_loopback_range_rejected_049",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://126.255.255.255/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_after_ipv4_loopback_range_rejected_050",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://128.0.0.0/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_private_ipv4_rejected_051",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://10.0.0.4/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_unspecified_ipv4_rejected_052",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://0.0.0.0/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_ipv6_link_local_rejected_053",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://[fe80::1]/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_ipv4_mapped_ipv6_rejected_054",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://[::ffff:127.0.0.1]/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_short_ipv4_spelling_rejected_055",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "http://127.1/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_reference_http_private_ipv4_second_range_rejected_056",
+      "kind": "blossom.reference_policy.invalid",
+      "input": {
+        "url": "http://192.168.1.4/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_media_type_image_png_057",
+      "kind": "blossom.media_type.parse.valid",
+      "input": {
+        "media_type": "image/png"
+      },
+      "expected": {
+        "media_type": "image/png"
+      }
+    },
+    {
+      "id": "blossom_media_type_case_canonicalized_058",
+      "kind": "blossom.media_type.parse.valid",
+      "input": {
+        "media_type": "IMAGE/PNG"
+      },
+      "expected": {
+        "media_type": "image/png"
+      }
+    },
+    {
+      "id": "blossom_media_type_vendor_token_059",
+      "kind": "blossom.media_type.parse.valid",
+      "input": {
+        "media_type": "application/vnd.radroots.fixture+json"
+      },
+      "expected": {
+        "media_type": "application/vnd.radroots.fixture+json"
+      }
+    },
+    {
+      "id": "blossom_media_type_empty_060",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": ""
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_parameters_sorted_and_canonicalized_061",
+      "kind": "blossom.media_type.parse.valid",
+      "input": {
+        "media_type": "TEXT/PLAIN; PROFILE=web; CHARSET=UTF-8"
+      },
+      "expected": {
+        "media_type": "text/plain; charset=UTF-8; profile=web"
+      }
+    },
+    {
+      "id": "blossom_media_type_duplicate_parameter_rejected_061b",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "image/png; profile=a; PROFILE=b"
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_missing_separator_062",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "imagepng"
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_empty_subtype_063",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "image/"
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_wildcard_forbidden_064",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "image/*"
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_parser_truncated_whitespace_forbidden_065",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "image/png "
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_media_type_non_ascii_forbidden_066",
+      "kind": "blossom.media_type.parse.invalid",
+      "input": {
+        "media_type": "image/p\u00f1g"
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_descriptor_https_valid_067",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_empty_blob_extra_fields_valid_068",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0,
+          "type": "application/octet-stream",
+          "uploaded": 0,
+          "blurhash": "fixture-only-extra-field",
+          "custom": {
+            "version": 1
+          }
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "https://media.example/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0,
+          "type": "application/octet-stream",
+          "uploaded": 0
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_extension_does_not_define_mime_069",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.jpg",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/png",
+          "uploaded": 1700000001
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.jpg",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/png",
+          "uploaded": 1700000001
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_public_http_structurally_valid_070",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "http://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000002
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "http://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000002
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_media_type_canonicalized_071",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "http://127.0.0.1:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.PNG",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "IMAGE/PNG",
+          "uploaded": 0
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "http://127.0.0.1:21100/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.PNG",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/png",
+          "uploaded": 0
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_missing_url_072",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "missing_descriptor_field",
+        "field": "url"
+      }
+    },
+    {
+      "id": "blossom_descriptor_missing_sha256_073",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "missing_descriptor_field",
+        "field": "sha256"
+      }
+    },
+    {
+      "id": "blossom_descriptor_missing_size_074",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "missing_descriptor_field",
+        "field": "size"
+      }
+    },
+    {
+      "id": "blossom_descriptor_missing_type_075",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "missing_descriptor_field",
+        "field": "type"
+      }
+    },
+    {
+      "id": "blossom_descriptor_missing_uploaded_076",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain"
+        }
+      },
+      "expected": {
+        "error": "missing_descriptor_field",
+        "field": "uploaded"
+      }
+    },
+    {
+      "id": "blossom_descriptor_url_extension_required_077",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "descriptor_extension_required"
+      }
+    },
+    {
+      "id": "blossom_descriptor_url_hash_mismatch_078",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "descriptor_hash_mismatch"
+      }
+    },
+    {
+      "id": "blossom_descriptor_negative_size_079",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": -1,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "invalid_descriptor_size"
+      }
+    },
+    {
+      "id": "blossom_descriptor_fractional_size_080",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3.5,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "invalid_descriptor_size"
+      }
+    },
+    {
+      "id": "blossom_descriptor_negative_uploaded_081",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": -1
+        }
+      },
+      "expected": {
+        "error": "invalid_descriptor_uploaded"
+      }
+    },
+    {
+      "id": "blossom_descriptor_parameterized_media_type_valid_082",
+      "kind": "blossom.descriptor.parse.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "TEXT/PLAIN; PROFILE=mobile; CHARSET=UTF-8",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain; charset=UTF-8; profile=mobile",
+          "uploaded": 1700000000
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_invalid_media_type_082b",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "invalid_media_type"
+      }
+    },
+    {
+      "id": "blossom_descriptor_uppercase_sha256_083",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
+      "id": "blossom_descriptor_url_query_forbidden_084",
+      "kind": "blossom.descriptor.parse.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt?download=1",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "blob_url_query_forbidden"
+      }
+    },
+    {
+      "id": "blossom_descriptor_approved_https_reference_084b",
+      "kind": "blossom.descriptor.approve_reference.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "approved_url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt"
+      }
+    },
+    {
+      "id": "blossom_descriptor_public_http_reference_rejected_084c",
+      "kind": "blossom.descriptor.approve_reference.invalid",
+      "input": {
+        "descriptor": {
+          "url": "http://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        }
+      },
+      "expected": {
+        "error": "insecure_blob_url"
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_abc_valid_085",
+      "kind": "blossom.descriptor.verify_bytes.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "text/plain",
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "verified": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "media_type": "text/plain"
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_empty_valid_086",
+      "kind": "blossom.descriptor.verify_bytes.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0,
+          "type": "application/octet-stream",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "application/octet-stream",
+        "bytes_hex": ""
+      },
+      "expected": {
+        "verified": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0,
+          "media_type": "application/octet-stream"
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_no_sniff_or_extension_inference_087",
+      "kind": "blossom.descriptor.verify_bytes.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.jpg",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/png",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "image/png",
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "verified": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "media_type": "image/png"
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_approved_media_type_canonicalized_088",
+      "kind": "blossom.descriptor.verify_bytes.valid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "image/png",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "IMAGE/PNG",
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "verified": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "media_type": "image/png"
+        }
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_hash_mismatch_089",
+      "kind": "blossom.descriptor.verify_bytes.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 7,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "text/plain",
+        "bytes_hex": "6368616e676564"
+      },
+      "expected": {
+        "error": "blob_hash_mismatch"
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_size_mismatch_090",
+      "kind": "blossom.descriptor.verify_bytes.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 4,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "text/plain",
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "error": "blob_size_mismatch"
+      }
+    },
+    {
+      "id": "blossom_descriptor_verify_media_type_mismatch_091",
+      "kind": "blossom.descriptor.verify_bytes.invalid",
+      "input": {
+        "descriptor": {
+          "url": "https://media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.txt",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size": 3,
+          "type": "text/plain",
+          "uploaded": 1700000000
+        },
+        "approved_media_type": "application/octet-stream",
+        "bytes_hex": "616263"
+      },
+      "expected": {
+        "error": "blob_media_type_mismatch"
+      }
+    }
+  ]
+}

@@ -32,6 +32,7 @@ reason = "branch coverage is not applicable while the crate has no measured bran
 [required]
 crates = [
   "radroots_authority",
+  "radroots_blossom",
   "radroots_core",
   "radroots_event_store",
   "radroots_event",

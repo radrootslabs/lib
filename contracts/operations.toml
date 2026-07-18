@@ -5,6 +5,7 @@ source = "rust"
 
 [public]
 domains = [
+  "blossom",
   "profile",
   "farm",
   "listing",
@@ -16,6 +17,16 @@ domains = [
 
 [shared_types]
 public = [
+  "RadrootsBlossomSha256",
+  "RadrootsBlossomFileExtension",
+  "RadrootsBlossomHashPath",
+  "RadrootsBlossomBlobUrl",
+  "RadrootsBlossomApprovedBlobUrl",
+  "RadrootsBlossomMediaType",
+  "RadrootsBlossomBlobDescriptor",
+  "RadrootsBlossomApprovedDescriptor",
+  "RadrootsBlossomByteCommitment",
+  "RadrootsBlossomByteVerifiedDescriptor",
   "RadrootsNip01EventWireParts",
   "RadrootsEventDraft",
   "RadrootsSignedEvent",
@@ -94,12 +105,86 @@ classes = [
 [implementation_provenance]
 model_crates = [
   "radroots_protocol_contract_v1",
+  "radroots_blossom",
   "radroots_core",
   "radroots_event",
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_event_codec"]
+algorithm_crates = ["radroots_blossom", "radroots_event_codec"]
+
+[operations.blossom_parse_hash_path]
+domain = "blossom"
+id = "blossom.parse_hash_path"
+stability = "beta"
+inputs = ["String"]
+outputs = ["RadrootsBlossomHashPath"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_parse_hash_path.implementation]
+rust_modules = ["crates/blossom/src/hash.rs"]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomFileExtension",
+  "radroots_blossom::RadrootsBlossomHashPath",
+  "radroots_blossom::RadrootsBlossomSha256",
+]
+
+[operations.blossom_parse_hash_path.conformance]
+vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json"
+
+[operations.blossom_approve_descriptor_reference]
+domain = "blossom"
+id = "blossom.approve_descriptor_reference"
+stability = "beta"
+inputs = ["RadrootsBlossomBlobDescriptor"]
+outputs = ["RadrootsBlossomApprovedDescriptor"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_approve_descriptor_reference.implementation]
+rust_modules = ["crates/blossom/src/descriptor.rs", "crates/blossom/src/url.rs"]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomApprovedDescriptor",
+  "radroots_blossom::RadrootsBlossomBlobDescriptor",
+]
+
+[operations.blossom_approve_descriptor_reference.conformance]
+vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json"
+
+[operations.blossom_verify_descriptor_bytes]
+domain = "blossom"
+id = "blossom.verify_descriptor_bytes"
+stability = "beta"
+inputs = [
+  "RadrootsBlossomApprovedDescriptor",
+  "Bytes",
+  "RadrootsBlossomMediaType",
+]
+outputs = ["RadrootsBlossomByteVerifiedDescriptor"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_verify_descriptor_bytes.implementation]
+rust_modules = [
+  "crates/blossom/src/descriptor.rs",
+  "crates/blossom/src/hash.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomApprovedDescriptor",
+  "radroots_blossom::RadrootsBlossomByteCommitment",
+  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_blossom::RadrootsBlossomMediaType",
+]
+
+[operations.blossom_verify_descriptor_bytes.conformance]
+vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json"
 
 [operations.profile_build_draft]
 domain = "profile"

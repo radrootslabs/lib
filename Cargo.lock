@@ -3031,6 +3031,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mediatype"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "120fa187be19d9962f0926633453784691731018a2bf936ddb4e29101b79c4a7"
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4272,6 +4278,18 @@ dependencies = [
  "radroots_event",
  "radroots_nostr",
  "serde_json",
+]
+
+[[package]]
+name = "radroots_blossom"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "hex",
+ "mediatype",
+ "serde",
+ "serde_json",
+ "sha2",
+ "url",
 ]
 
 [[package]]

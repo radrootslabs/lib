@@ -1,0 +1,19 @@
+# radroots_blossom
+
+`radroots_blossom` provides portable, runtime-independent primitives for
+Blossom blob hashes, root hash paths, blob URLs, BUD-02 descriptors, and
+Radroots-approved byte verification.
+
+The crate is `no_std + alloc`, performs no HTTP requests, and does not depend on
+Nostr event types. Structural Blossom validity is kept separate from the
+stricter Radroots reference policy: public HTTP descriptors remain parseable,
+but only HTTPS and loopback HTTP references can advance to an approved state.
+The byte-verified descriptor state proves local descriptor-to-byte agreement;
+it is not an upload receipt, and HTTP-capable runtimes must gate successful
+BUD-02 upload completion separately.
+
+Protocol behavior is pinned to Blossom commit
+`b5bd2801d1763aa635fc8fea7a76597e0eb18990`:
+
+- BUD-01: <https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/01.md>
+- BUD-02: <https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/02.md>

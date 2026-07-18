@@ -1,0 +1,31 @@
+[package]
+name = "radroots_blossom"
+publish = ["crates-io"]
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Portable Blossom protocol primitives for Radroots"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/radroots_blossom"
+readme = "README"
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+std = ["serde?/std", "sha2/std", "url_nostd/std"]
+
+[dependencies]
+mediatype = { workspace = true }
+serde = { workspace = true, optional = true }
+sha2 = { workspace = true }
+url_nostd = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

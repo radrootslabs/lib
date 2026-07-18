@@ -6,6 +6,7 @@ members = [
   "crates/event_codec",
   "crates/event_index",
   "crates/authority",
+  "crates/blossom",
   "crates/libsqlite3_sys_3_53_3",
   "crates/geocoder",
   "crates/identity",
@@ -72,6 +73,7 @@ radroots_event_store = { path = "crates/event_store", version = "0.1.0-alpha.2",
 radroots_event_codec = { path = "crates/event_codec", version = "0.1.0-alpha.2", default-features = false }
 radroots_event_index = { path = "crates/event_index", version = "0.1.0-alpha.2", default-features = false }
 radroots_authority = { path = "crates/authority", version = "0.1.0-alpha.2", default-features = false }
+radroots_blossom = { path = "crates/blossom", version = "0.1.0-alpha.2", default-features = false }
 radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.2" }
 radroots_identity = { path = "crates/identity", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_store = { path = "crates/runtime_store", version = "0.1.0-alpha.2", default-features = false }
@@ -139,6 +141,7 @@ getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
+mediatype = { version = "0.21", default-features = false }
 keyring = { version = "3.6.3", default-features = false, features = [
   "apple-native",
   "windows-native",
@@ -194,6 +197,7 @@ tracing-appender = { version = "0.2" }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }
 url = { version = "2" }
+url_nostd = { package = "url", version = "2", default-features = false }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }

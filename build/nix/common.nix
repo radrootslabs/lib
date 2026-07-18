@@ -87,6 +87,7 @@ let
   releaseRuntimeInputs = coverageRuntimeInputs;
   coreContractCrates = [
     "xtask"
+    "radroots_blossom"
     "radroots_core"
     "radroots_event"
     "radroots_trade"

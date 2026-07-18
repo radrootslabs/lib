@@ -6,15 +6,17 @@ source = "rust"
 [surface]
 model_crates = [
   "radroots_protocol_contract_v1",
+  "radroots_blossom",
   "radroots_core",
   "radroots_event",
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_event_codec"]
+algorithm_crates = ["radroots_blossom", "radroots_event_codec"]
 
 [surface.rust_crate_tiers]
 advanced_substrate = [
+  "radroots_blossom",
   "radroots_core",
   "radroots_event",
   "radroots_event_codec",
