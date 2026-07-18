@@ -44,6 +44,10 @@ pub fn radroots_replica_sync_status<E: SqlExecutor>(
     })
 }
 
+/// Computes the replica drafts that have not reached their expected heads.
+///
+/// Profile entries originate from the compatibility-only legacy replica
+/// emitter and do not satisfy `profile.build_authored_draft`.
 pub fn radroots_replica_pending_publish_batch<E: SqlExecutor>(
     exec: &E,
 ) -> Result<RadrootsReplicaPendingPublishBatch, RadrootsReplicaEventsError> {

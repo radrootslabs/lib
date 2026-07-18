@@ -1,0 +1,518 @@
+{
+  "suite": "profile_metadata",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "profile_nip05_valid_root_identifier_001",
+      "kind": "profile.nip05.parse.valid",
+      "input": {
+        "identifier": "_@mossstreet.example"
+      },
+      "expected": {
+        "identifier": "_@mossstreet.example",
+        "local_part": "_",
+        "domain": "mossstreet.example",
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_nip05_valid_uppercase_domain_001",
+      "kind": "profile.nip05.parse.valid",
+      "input": {
+        "identifier": "alice@MossStreet.EXAMPLE"
+      },
+      "expected": {
+        "identifier": "alice@mossstreet.example",
+        "local_part": "alice",
+        "domain": "mossstreet.example",
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_nip05_invalid_upper_local_001",
+      "kind": "profile.nip05.parse.invalid",
+      "input": {
+        "identifier": "Alice@mossstreet.example"
+      },
+      "expected": {
+        "error": "invalid_local_part"
+      }
+    },
+    {
+      "id": "profile_nip05_invalid_multiple_separator_001",
+      "kind": "profile.nip05.parse.invalid",
+      "input": {
+        "identifier": "alice@mossstreet.example@other.example"
+      },
+      "expected": {
+        "error": "multiple_separators"
+      }
+    },
+    {
+      "id": "profile_authored_required_name_001",
+      "kind": "profile.build_authored_draft.valid",
+      "input": {
+        "profile": {
+          "name": "moss-street-farm"
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 0,
+          "content": "{\"name\":\"moss-street-farm\"}",
+          "tags": []
+        },
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_content_limit_exact_001",
+      "kind": "profile.build_authored_draft.limit.valid",
+      "input": {
+        "generated_name_bytes": 131061
+      },
+      "expected": {
+        "kind": 0,
+        "content_bytes": 131072,
+        "tags": [],
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_complete_blossom_metadata_001",
+      "kind": "profile.build_authored_draft.valid",
+      "input": {
+        "profile": {
+          "name": "moss-street-farm",
+          "display_name": "Moss Street Farm",
+          "about": "Small urban farm in Victoria, B.C.",
+          "picture": {
+            "bytes_utf8": "victoria-profile",
+            "descriptor": {
+              "url": "https://media.example/9c31d190b20b9ccf039ed13f758e976f13b716cd73dee6cb57a7b0550540d06d.webp",
+              "sha256": "9c31d190b20b9ccf039ed13f758e976f13b716cd73dee6cb57a7b0550540d06d",
+              "size": 16,
+              "type": "image/webp",
+              "uploaded": 1784347200
+            }
+          },
+          "banner": {
+            "bytes_utf8": "victoria-banner",
+            "descriptor": {
+              "url": "https://media.example/55384b73c8df8a842891346dcf614e46f9fedd6c15fde95a157f7172a113209a.webp",
+              "sha256": "55384b73c8df8a842891346dcf614e46f9fedd6c15fde95a157f7172a113209a",
+              "size": 15,
+              "type": "image/webp",
+              "uploaded": 1784347201
+            }
+          },
+          "nip05": "_@mossstreet.example",
+          "bot": false
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 0,
+          "content": "{\"name\":\"moss-street-farm\",\"display_name\":\"Moss Street Farm\",\"about\":\"Small urban farm in Victoria, B.C.\",\"picture\":\"https://media.example/9c31d190b20b9ccf039ed13f758e976f13b716cd73dee6cb57a7b0550540d06d.webp\",\"banner\":\"https://media.example/55384b73c8df8a842891346dcf614e46f9fedd6c15fde95a157f7172a113209a.webp\",\"nip05\":\"_@mossstreet.example\",\"bot\":false}",
+          "tags": []
+        },
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_boolean_true_001",
+      "kind": "profile.build_authored_draft.valid",
+      "input": {
+        "profile": {
+          "name": "harvest-bot",
+          "bot": true
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 0,
+          "content": "{\"name\":\"harvest-bot\",\"bot\":true}",
+          "tags": []
+        },
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_json_escaping_001",
+      "kind": "profile.build_authored_draft.valid",
+      "input": {
+        "profile": {
+          "name": "moss\"\\farm",
+          "about": "line\nfeed\t\u00e9"
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 0,
+          "content": "{\"name\":\"moss\\\"\\\\farm\",\"about\":\"line\\nfeed\\t\u00e9\"}",
+          "tags": []
+        },
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_empty_name_001",
+      "kind": "profile.authored.new.invalid",
+      "input": {
+        "name": ""
+      },
+      "expected": {
+        "error": "invalid_name"
+      }
+    },
+    {
+      "id": "profile_authored_whitespace_name_001",
+      "kind": "profile.authored.new.invalid",
+      "input": {
+        "name": " \t "
+      },
+      "expected": {
+        "error": "invalid_name"
+      }
+    },
+    {
+      "id": "profile_authored_control_name_001",
+      "kind": "profile.authored.new.invalid",
+      "input": {
+        "name": "moss\nstreet"
+      },
+      "expected": {
+        "error": "invalid_name"
+      }
+    },
+    {
+      "id": "profile_authored_non_image_descriptor_001",
+      "kind": "profile.image.from_verified_descriptor.invalid",
+      "input": {
+        "media": {
+          "bytes_utf8": "not-an-image",
+          "descriptor": {
+            "url": "https://media.example/f2e2c6db1745cc40df646dc40c385487c36e4ceb3f1d5c8d6ad1f7620af1ebae.txt",
+            "sha256": "f2e2c6db1745cc40df646dc40c385487c36e4ceb3f1d5c8d6ad1f7620af1ebae",
+            "size": 12,
+            "type": "text/plain",
+            "uploaded": 1784347202
+          }
+        }
+      },
+      "expected": {
+        "error": "media_type_not_image"
+      }
+    },
+    {
+      "id": "profile_authored_content_too_large_001",
+      "kind": "profile.build_authored_draft.invalid",
+      "input": {
+        "generated_name_bytes": 131062
+      },
+      "expected": {
+        "error": "content_too_large",
+        "max": 131072,
+        "actual": 131073
+      }
+    },
+    {
+      "id": "profile_inbound_missing_name_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{}"
+      },
+      "expected": {
+        "projected": {},
+        "residual_fields": {},
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_complete_boolean_true_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"name\":\"alice\",\"display_name\":\"Alice\",\"about\":\"Victoria gardener\",\"website\":\"https://alice.example\",\"nip05\":\"alice@example.com\",\"lud06\":\"lnurl1alice\",\"lud16\":\"alice@example.com\",\"bot\":true}"
+      },
+      "expected": {
+        "projected": {
+          "name": "alice",
+          "display_name": "Alice",
+          "about": "Victoria gardener",
+          "nip05": "alice@example.com",
+          "bot": true
+        },
+        "residual_fields": {
+          "website": "https://alice.example",
+          "lud06": "lnurl1alice",
+          "lud16": "alice@example.com"
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_uppercase_nip05_domain_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"nip05\":\"alice@MossStreet.EXAMPLE\"}"
+      },
+      "expected": {
+        "projected": {
+          "nip05": "alice@mossstreet.example"
+        },
+        "residual_fields": {},
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_boolean_false_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"bot\":false}"
+      },
+      "expected": {
+        "projected": {
+          "bot": false
+        },
+        "residual_fields": {},
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_arbitrary_media_unverified_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"picture\":\"https://legacy.example/avatar.jpg\",\"banner\":\"ipfs://legacy-banner\"}"
+      },
+      "expected": {
+        "projected": {
+          "picture": "https://legacy.example/avatar.jpg",
+          "banner": "ipfs://legacy-banner"
+        },
+        "residual_fields": {},
+        "media_verification": {
+          "picture": "unverified",
+          "banner": "unverified"
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_blossom_shape_still_unverified_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"picture\":\"https://media.example/9c31d190b20b9ccf039ed13f758e976f13b716cd73dee6cb57a7b0550540d06d.webp\"}"
+      },
+      "expected": {
+        "projected": {
+          "picture": "https://media.example/9c31d190b20b9ccf039ed13f758e976f13b716cd73dee6cb57a7b0550540d06d.webp"
+        },
+        "residual_fields": {},
+        "media_verification": {
+          "picture": "unverified"
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_wrong_types_and_unknown_fields_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"name\":42,\"display_name\":null,\"nip05\":\"Alice@example.com\",\"picture\":{\"url\":\"https://legacy.example/avatar.jpg\"},\"bot\":\"true\",\"birthday\":{\"year\":1988,\"month\":6},\"custom\":{\"nested\":[1,true]}}"
+      },
+      "expected": {
+        "projected": {},
+        "residual_fields": {
+          "name": 42,
+          "display_name": null,
+          "nip05": "Alice@example.com",
+          "picture": {
+            "url": "https://legacy.example/avatar.jpg"
+          },
+          "bot": "true",
+          "birthday": {
+            "year": 1988,
+            "month": 6
+          },
+          "custom": {
+            "nested": [
+              1,
+              true
+            ]
+          }
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_wrong_type_nip05_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"nip05\":42}"
+      },
+      "expected": {
+        "projected": {},
+        "residual_fields": {
+          "nip05": 42
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_deprecated_fields_retained_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": "{\"displayName\":\"Legacy Display\",\"username\":\"legacy-name\"}"
+      },
+      "expected": {
+        "projected": {},
+        "residual_fields": {
+          "displayName": "Legacy Display",
+          "username": "legacy-name"
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_raw_whitespace_escape_nested_duplicate_001",
+      "kind": "profile.parse_inbound_metadata.valid",
+      "input": {
+        "content": " { \"about\":\"line\\nfeed\", \"custom\":{\"key\":1,\"key\":2} } "
+      },
+      "expected": {
+        "projected": {
+          "about": "line\nfeed"
+        },
+        "residual_fields": {
+          "custom": {
+            "key": 2
+          }
+        },
+        "identity_verification": "not_performed"
+      }
+    },
+    {
+      "id": "profile_inbound_content_limit_exact_001",
+      "kind": "profile.parse_inbound_metadata.limit.valid",
+      "input": {
+        "generated_content_bytes": 131072
+      },
+      "expected": {
+        "content_bytes": 131072
+      }
+    },
+    {
+      "id": "profile_inbound_content_limit_exceeded_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "generated_content_bytes": 131073
+      },
+      "expected": {
+        "error": "content_too_large",
+        "max": 131072,
+        "actual": 131073
+      }
+    },
+    {
+      "id": "profile_inbound_malformed_json_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "{"
+      },
+      "expected": {
+        "error": "invalid_json"
+      }
+    },
+    {
+      "id": "profile_inbound_malformed_array_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "[1,"
+      },
+      "expected": {
+        "error": "invalid_json"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_array_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "[1]"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_null_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "null"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_boolean_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "true"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_negative_integer_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "-1"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_unsigned_integer_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "1"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_float_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "1.5"
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_non_object_string_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "\"profile\""
+      },
+      "expected": {
+        "error": "root_not_object"
+      }
+    },
+    {
+      "id": "profile_inbound_duplicate_field_001",
+      "kind": "profile.parse_inbound_metadata.invalid",
+      "input": {
+        "content": "{\"name\":\"first\",\"name\":\"second\",\"name\":\"third\"}"
+      },
+      "expected": {
+        "error": "duplicate_field",
+        "field": "name"
+      }
+    }
+  ]
+}

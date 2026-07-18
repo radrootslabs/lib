@@ -17,6 +17,10 @@ use radroots_event::profile::RadrootsProfileType;
 use radroots_event_codec::profile::encode::profile_build_tags;
 use radroots_identity::RadrootsIdentity;
 
+/// Publishes an identity Profile through the legacy compatibility model.
+///
+/// This API does not enforce the strict authored Profile media contract. New
+/// Profile product authoring must use `profile.build_authored_draft`.
 pub async fn radroots_nostr_publish_identity_profile(
     client: &RadrootsNostrClient,
     identity: &RadrootsIdentity,
@@ -24,6 +28,11 @@ pub async fn radroots_nostr_publish_identity_profile(
     radroots_nostr_publish_identity_profile_with_type(client, identity, None).await
 }
 
+/// Publishes a typed identity Profile through the legacy compatibility model.
+///
+/// This API can emit the legacy Radroots marker tag and does not enforce the
+/// strict authored Profile media contract. New Profile product authoring must
+/// use `profile.build_authored_draft`.
 pub async fn radroots_nostr_publish_identity_profile_with_type(
     client: &RadrootsNostrClient,
     identity: &RadrootsIdentity,
@@ -51,6 +60,11 @@ pub async fn radroots_nostr_publish_identity_profile_with_type(
 }
 
 #[cfg(feature = "events")]
+/// Bootstraps service presence through legacy Profile publication surfaces.
+///
+/// This compatibility API does not enforce the strict authored Profile media
+/// contract. New Profile product authoring must use
+/// `profile.build_authored_draft`.
 pub async fn radroots_nostr_bootstrap_service_presence(
     client: &RadrootsNostrClient,
     identity: &RadrootsIdentity,

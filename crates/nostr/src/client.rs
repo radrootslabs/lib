@@ -225,6 +225,10 @@ impl RadrootsNostrClient {
             .await?)
     }
 
+    /// Publishes through the legacy generic metadata compatibility surface.
+    ///
+    /// This API does not enforce the strict authored Profile media contract.
+    /// New strict Profile authoring must use `profile.build_authored_draft`.
     pub async fn set_metadata(
         &self,
         md: &RadrootsNostrMetadata,

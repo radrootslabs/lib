@@ -19,6 +19,10 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
+/// Builds the legacy Radroots Profile marker tag.
+///
+/// This compatibility helper is not part of the strict authored Profile
+/// operation.
 pub fn profile_type_tags(profile_type: RadrootsProfileType) -> Vec<Vec<String>> {
     let mut tags = Vec::with_capacity(1);
     push_tag(
@@ -29,6 +33,10 @@ pub fn profile_type_tags(profile_type: RadrootsProfileType) -> Vec<Vec<String>> 
     tags
 }
 
+/// Builds optional legacy Radroots Profile marker tags.
+///
+/// This compatibility helper is not part of the strict authored Profile
+/// operation.
 pub fn profile_build_tags(profile_type: Option<RadrootsProfileType>) -> Vec<Vec<String>> {
     match profile_type {
         Some(value) => profile_type_tags(value),
@@ -36,6 +44,10 @@ pub fn profile_build_tags(profile_type: Option<RadrootsProfileType>) -> Vec<Vec<
     }
 }
 
+/// Converts the legacy Profile model to generic Nostr metadata.
+///
+/// This compatibility API accepts arbitrary media strings and does not satisfy
+/// the strict authored Profile contract.
 pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> {
     let mut md = Metadata::new().name(p.name.clone());
 
@@ -71,6 +83,10 @@ pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> 
 }
 
 #[cfg(feature = "serde_json")]
+/// Encodes the legacy Profile model without a marker tag.
+///
+/// This compatibility API does not satisfy the strict authored Profile media
+/// contract. New authored callers must use `profile.build_authored_draft`.
 pub fn to_wire_parts(
     p: &RadrootsProfile,
 ) -> Result<RadrootsNip01EventWireParts, ProfileEncodeError> {
@@ -78,6 +94,10 @@ pub fn to_wire_parts(
 }
 
 #[cfg(feature = "serde_json")]
+/// Encodes the legacy Profile model with an optional marker tag.
+///
+/// This compatibility API does not satisfy the strict authored Profile media
+/// contract. New authored callers must use `profile.build_authored_draft`.
 pub fn to_wire_parts_with_profile_type(
     p: &RadrootsProfile,
     profile_type: Option<RadrootsProfileType>,

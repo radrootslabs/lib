@@ -40,6 +40,10 @@ impl NostrClientManager {
         rt.block_on(async move { this.fetch_profile_event(author).await })
     }
 
+    /// Publishes through the legacy generic metadata compatibility surface.
+    ///
+    /// This API does not enforce the strict authored Profile media contract.
+    /// New strict Profile authoring must use `profile.build_authored_draft`.
     pub fn publish_profile_event_blocking(
         &self,
         name: Option<String>,

@@ -100,7 +100,7 @@ let
   ];
   coreContractCargoArgs =
     lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)
-    + " --features radroots_nostr/blossom";
+    + " --features radroots_event_codec/serde_json,radroots_nostr/blossom";
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
   commonCraneArgs = {
     inherit version;

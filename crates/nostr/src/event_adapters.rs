@@ -32,6 +32,10 @@ pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<Radr
 }
 
 #[cfg(feature = "events")]
+/// Adapts an event through the compatibility-only legacy Profile decoder.
+///
+/// This helper does not establish kind, identifier, or signature verification
+/// and is outside `profile.parse_inbound_metadata`.
 pub fn to_profile_event_metadata(
     e: &RadrootsNostrEvent,
 ) -> Option<RadrootsParsedData<RadrootsProfileData>> {

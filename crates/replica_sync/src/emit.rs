@@ -101,6 +101,10 @@ pub(crate) mod failpoints {
     }
 }
 
+/// Builds the full replica transfer bundle.
+///
+/// When Profile inclusion is enabled, the bundle contains compatibility-only
+/// legacy Profile drafts that do not satisfy `profile.build_authored_draft`.
 pub fn radroots_replica_sync_all(
     exec: &dyn SqlExecutor,
     request: &RadrootsReplicaSyncRequest,
@@ -108,6 +112,10 @@ pub fn radroots_replica_sync_all(
     radroots_replica_sync_all_with_options(exec, &request.farm, request.options.as_ref())
 }
 
+/// Builds a replica transfer bundle using explicit inclusion options.
+///
+/// Included Profile drafts use the compatibility-only legacy Profile model and
+/// do not satisfy `profile.build_authored_draft`.
 pub fn radroots_replica_sync_all_with_options(
     exec: &dyn SqlExecutor,
     farm_selector: &RadrootsReplicaFarmSelector,
@@ -150,6 +158,9 @@ pub fn radroots_replica_sync_all_with_options(
     })
 }
 
+/// Builds compatibility-only legacy Profile drafts for replica transfer.
+///
+/// These drafts do not satisfy `profile.build_authored_draft`.
 pub fn radroots_replica_profile_events(
     exec: &dyn SqlExecutor,
     farm: &Farm,

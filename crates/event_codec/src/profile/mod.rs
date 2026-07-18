@@ -5,11 +5,17 @@ use radroots_event::profile::{RadrootsProfile, RadrootsProfileType};
 
 pub mod error;
 
+#[cfg(feature = "serde_json")]
+pub mod authored;
+
 #[cfg(feature = "nostr")]
 pub mod encode;
 
 #[cfg(feature = "serde_json")]
 pub mod decode;
+
+#[cfg(feature = "serde_json")]
+pub mod inbound;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]

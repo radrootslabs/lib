@@ -4309,6 +4309,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "dto_bindgen",
  "hex",
+ "radroots_blossom",
  "radroots_core",
  "secp256k1",
  "serde",
@@ -4322,6 +4323,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
  "nostr",
+ "radroots_blossom",
  "radroots_core",
  "radroots_event",
  "radroots_test_fixtures",

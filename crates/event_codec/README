@@ -13,6 +13,14 @@ codecs and tag builders for the `radroots` core libraries.
  * optional `serde_json` and `radroots_nostr` integration for JSON and wire
    interop.
 
+With the optional `serde_json` feature, the Profile codec exposes separate
+strict authored and tolerant inbound operations. Strict authoring emits
+bounded, deterministic kind-`0` metadata with empty tags and image-typed,
+byte-verified Blossom media references. Tolerant inbound parsing retains raw
+and residual fields and never upgrades observed media or NIP-05 syntax into
+network verification. Its content parser accepts only bounded kind-`0` content
+from an event whose identifier and signature the caller has already verified.
+
 ## Field Event Codecs
 
 The Field codec surface validates the public Nostr event substrate exposed by

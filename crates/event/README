@@ -14,6 +14,12 @@ models, kinds, and tag conventions for the `radroots` core libraries.
  * portable event model semantics for both `std` and `no_std` builds;
  * optional integration with `serde` for serialization.
 
+The Profile module also exposes an additive strict authored model. It requires
+a non-whitespace, control-free name; its media fields accept only image-typed,
+byte-verified Blossom descriptors; and its NIP-05 identifier type validates
+syntax without making a network identity claim. The legacy `RadrootsProfile`
+model remains available for compatibility.
+
 ## Field Event Boundary
 
 `radroots_event` includes the public event-layer models needed by Field-style

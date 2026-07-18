@@ -41,6 +41,11 @@ fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<RadrootsProfileType> {
         .find_map(|value| radroots_profile_type_from_tag_value(value))
 }
 
+/// Decodes content into the compatibility-only legacy Profile model.
+///
+/// This API requires `name`, coerces Boolean `bot` to a string, and discards
+/// unprojected fields. Use `profile.parse_inbound_metadata` for the tolerant
+/// inbound metadata contract.
 pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParseError> {
     let value: Value =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
@@ -66,6 +71,10 @@ pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParse
     })
 }
 
+/// Projects caller-supplied event fields through the legacy Profile decoder.
+///
+/// This compatibility API does not verify the event identifier or signature
+/// and is not the strict inbound event-admission boundary.
 pub fn data_from_event(
     id: String,
     author: String,
@@ -94,6 +103,10 @@ pub fn data_from_event(
     ))
 }
 
+/// Builds a legacy parsed Profile wrapper from caller-supplied event fields.
+///
+/// This compatibility API is outside `profile.parse_inbound_metadata` and does
+/// not establish strict event admission.
 pub fn parsed_from_event(
     id: String,
     author: String,

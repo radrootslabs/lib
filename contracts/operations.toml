@@ -48,6 +48,17 @@ public = [
   "RadrootsEventPtr",
   "RadrootsListingAddress",
   "RadrootsProfile",
+  "RadrootsNip05Identifier",
+  "RadrootsNip05IdentifierError",
+  "RadrootsAuthoredProfile",
+  "RadrootsAuthoredProfileError",
+  "RadrootsAuthoredProfileImage",
+  "RadrootsAuthoredProfileImageError",
+  "RadrootsAuthoredProfileEncodeError",
+  "RadrootsInboundProfileMetadata",
+  "RadrootsProfileMetadataParseError",
+  "RadrootsNip05IdentityVerification",
+  "RadrootsUnverifiedProfileMediaReference",
   "RadrootsFarm",
   "RadrootsListing",
   "RadrootsPost",
@@ -319,6 +330,63 @@ rust_types = ["radroots_event::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
 vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
+
+[operations.profile_build_authored_draft]
+domain = "profile"
+id = "profile.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredProfile"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.profile_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/profile.rs",
+  "crates/event_codec/src/profile/authored.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_event::profile::RadrootsAuthoredProfile",
+  "radroots_event::profile::RadrootsAuthoredProfileError",
+  "radroots_event::profile::RadrootsAuthoredProfileImage",
+  "radroots_event::profile::RadrootsAuthoredProfileImageError",
+  "radroots_event::profile::RadrootsNip05Identifier",
+  "radroots_event::profile::RadrootsNip05IdentifierError",
+  "radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError",
+]
+
+[operations.profile_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/profile/metadata.v1.json"
+
+[operations.profile_parse_inbound_metadata]
+domain = "profile"
+id = "profile.parse_inbound_metadata"
+stability = "beta"
+inputs = ["String"]
+outputs = ["RadrootsInboundProfileMetadata"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.profile_parse_inbound_metadata.implementation]
+rust_modules = [
+  "crates/event/src/profile.rs",
+  "crates/event_codec/src/profile/inbound.rs",
+]
+rust_types = [
+  "radroots_event::profile::RadrootsNip05Identifier",
+  "radroots_event_codec::profile::inbound::RadrootsInboundProfileMetadata",
+  "radroots_event_codec::profile::inbound::RadrootsNip05IdentityVerification",
+  "radroots_event_codec::profile::inbound::RadrootsProfileMetadataParseError",
+  "radroots_event_codec::profile::inbound::RadrootsUnverifiedProfileMediaReference",
+]
+
+[operations.profile_parse_inbound_metadata.conformance]
+vector = "contracts/conformance/vectors/profile/metadata.v1.json"
 
 [operations.farm_build_draft]
 domain = "farm"

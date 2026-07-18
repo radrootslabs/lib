@@ -155,6 +155,10 @@ impl RadrootsReplicaIdFactory for RadrootsReplicaDefaultIdFactory {
 }
 
 #[cfg(feature = "std")]
+/// Ingests an envelope through the legacy replica projection.
+///
+/// The Profile branch currently requires a legacy Profile marker tag and is
+/// not the strict Profile inbound-admission boundary.
 pub fn radroots_replica_ingest_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
@@ -162,6 +166,10 @@ pub fn radroots_replica_ingest_event(
     radroots_replica_ingest_event_with_factory(exec, event, &RadrootsReplicaDefaultIdFactory)
 }
 
+/// Ingests an envelope through the legacy replica projection with an ID source.
+///
+/// The Profile branch currently requires a legacy Profile marker tag and is
+/// not the strict Profile inbound-admission boundary.
 pub fn radroots_replica_ingest_event_with_factory(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
