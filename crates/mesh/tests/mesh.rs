@@ -131,6 +131,72 @@ fn reticulum_policy_denies_real_payload_admission_deterministically() {
 }
 
 #[test]
+fn enabled_policy_evaluates_all_admission_decisions() {
+    let mut policy = RadrootsMeshPayloadPolicy::reticulum_unavailable();
+    policy.max_payload_bytes = 10;
+    assert!(!policy.usable_for_delivery());
+    policy.max_frame_bytes = 20;
+    assert!(policy.usable_for_delivery());
+
+    let local = |payload_bytes, frame_bytes| {
+        RadrootsMeshAdmissionInput::new(
+            RadrootsMeshScope::Local,
+            RadrootsMeshPrivacyClass::PublicEvent,
+            payload_bytes,
+            frame_bytes,
+        )
+    };
+    let accepted = policy.evaluate(&local(10, 20));
+    assert_eq!(accepted, RadrootsMeshAdmissionDecision::Accepted);
+    assert_eq!(accepted.label(), "accepted");
+    assert_eq!(accepted.deny_reason(), None);
+    assert_eq!(accepted.message(), "mesh payload delivery is admitted");
+    assert!(accepted.usable_for_delivery());
+
+    for input in [local(11, 20), local(10, 21)] {
+        let denied = policy.evaluate(&input);
+        assert_eq!(
+            denied.deny_reason(),
+            Some(RadrootsMeshPolicyDenyReason::PayloadBudgetExceeded)
+        );
+    }
+    assert_eq!(
+        RadrootsMeshPolicyDenyReason::PayloadBudgetExceeded.label(),
+        "payload_budget_exceeded"
+    );
+    assert_eq!(
+        RadrootsMeshPolicyDenyReason::PayloadBudgetExceeded.message(),
+        "mesh payload exceeds the configured delivery budget"
+    );
+
+    let custom_input = RadrootsMeshAdmissionInput::new(
+        RadrootsMeshScope::custom("farm-north").unwrap(),
+        RadrootsMeshPrivacyClass::PrivateEvent,
+        1,
+        1,
+    );
+    let custom_denied = policy.evaluate(&custom_input);
+    assert_eq!(
+        custom_denied.deny_reason(),
+        Some(RadrootsMeshPolicyDenyReason::CustomScopeUnavailable)
+    );
+    assert_eq!(
+        RadrootsMeshPolicyDenyReason::CustomScopeUnavailable.label(),
+        "custom_scope_unavailable"
+    );
+    assert_eq!(
+        RadrootsMeshPolicyDenyReason::CustomScopeUnavailable.message(),
+        "mesh custom scopes are not enabled for the configured policy"
+    );
+
+    policy.custom_scopes_enabled = true;
+    assert_eq!(
+        policy.evaluate(&custom_input),
+        RadrootsMeshAdmissionDecision::Accepted
+    );
+}
+
+#[test]
 fn custom_scope_has_explicit_namespace() {
     let scope = RadrootsMeshScope::custom("farm-north.mesh_1").expect("custom scope");
     assert_eq!(scope.label(), "farm-north.mesh_1");
@@ -210,6 +276,15 @@ fn mesh_parsers_and_validation_reject_unknown_empty_or_invalid_values() {
         zero_ttl.validate().expect_err("zero ttl"),
         RadrootsMeshError::InvalidTtl
     );
+
+    let mut unsupported_version = default_frame();
+    unsupported_version.version += 1;
+    assert_eq!(
+        unsupported_version
+            .validate()
+            .expect_err("unsupported version"),
+        RadrootsMeshError::UnsupportedVersion
+    );
 }
 
 #[test]
@@ -286,6 +361,19 @@ fn cbor_codec_covers_extended_integer_widths() {
     let decoded = decode_mesh_frame_cbor(&encoded).expect("decode wide frame");
 
     assert_eq!(decoded, frame);
+
+    let frame_32 = RadrootsMeshFrame::new(
+        RadrootsMeshFrameType::EventAck,
+        RadrootsMeshScope::Community,
+        "32-bit-created-at",
+        0x1_0000,
+        0x1_0000,
+    );
+    let encoded_32 = encode_mesh_frame_cbor(&frame_32).expect("encode 32-bit frame");
+    assert_eq!(
+        decode_mesh_frame_cbor(&encoded_32).expect("decode 32-bit frame"),
+        frame_32
+    );
 }
 
 #[test]
@@ -425,6 +513,11 @@ fn decoder_rejects_malformed_cbor_shapes() {
             0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x69,
             b'm', b'e', b's', b's', b'a', b'g', b'e', b'-', b'1', 0x04, 0x18, 0x2a, 0x05, 0x19,
             0xea, 0x60, 0x06, 0xa1,
+        ],
+        vec![
+            0xa7, 0x00, 0x01, 0x01, 0x00, 0x02, 0x65, b'l', b'o', b'c', b'a', b'l', 0x03, 0x69,
+            b'm', b'e', b's', b's', b'a', b'g', b'e', b'-', b'1', 0x04, 0x18, 0x2a, 0x05, 0x19,
+            0xea, 0x60, 0x06, 0xf6,
         ],
     ];
 

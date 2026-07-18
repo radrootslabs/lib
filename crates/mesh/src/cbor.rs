@@ -65,12 +65,7 @@ fn encode_payload(
     payload: &RadrootsMeshPayload,
 ) -> Result<(), RadrootsMeshError> {
     payload.validate()?;
-    match payload {
-        RadrootsMeshPayload::EmptyMap => encode_map_len(output, 0),
-        RadrootsMeshPayload::Bytes(_) => {
-            return Err(RadrootsMeshError::PayloadTransmissionForbidden);
-        }
-    }
+    encode_map_len(output, 0);
     Ok(())
 }
 
