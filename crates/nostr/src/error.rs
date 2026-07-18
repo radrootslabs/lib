@@ -17,6 +17,9 @@ pub enum RadrootsNostrError {
     #[error("Client configuration error: {0}")]
     ClientConfigError(String),
 
+    #[error("Nostr event kind {kind} requires typed authoring")]
+    TypedAuthoringRequired { kind: u16 },
+
     #[error("Event error: {0}")]
     EventError(#[from] nostr::event::Error),
 

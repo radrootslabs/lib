@@ -15,7 +15,7 @@ use crate::model::{
     RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerRequestAuditRecord,
     RadrootsNostrSignerRequestDecision, RadrootsNostrSignerWorkflowId,
 };
-use nostr::{Event, EventBuilder, PublicKey, RelayUrl, UnsignedEvent};
+use nostr::{Event, PublicKey, RelayUrl, UnsignedEvent};
 use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
@@ -31,6 +31,10 @@ pub struct RadrootsNostrSignerBackendCapabilities {
     pub remote_sessions: Vec<RadrootsNostrRemoteSessionSignerCapability>,
 }
 
+/// Result of signing an externally supplied unsigned Nostr event.
+///
+/// This low-level protocol result does not establish Radroots typed-authoring
+/// validity for the event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrSignerSignOutput {
     pub signer: RadrootsNostrSignerCapability,
@@ -214,21 +218,15 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
         message: Option<String>,
     ) -> Result<RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError>;
 
+    /// Signs an externally supplied unsigned Nostr event.
+    ///
+    /// This is a low-level interoperability boundary used by generic signer
+    /// protocols. It does not validate or confer a Radroots product-authoring
+    /// contract; product events must use their typed authoring boundary.
     fn sign_unsigned_event(
         &self,
         unsigned_event: UnsignedEvent,
     ) -> Result<RadrootsNostrSignerSignOutput, RadrootsNostrSignerError>;
-
-    fn sign_event_builder(
-        &self,
-        builder: EventBuilder,
-    ) -> Result<RadrootsNostrSignerSignOutput, RadrootsNostrSignerError> {
-        let signer_identity = self
-            .signer_identity()?
-            .ok_or(RadrootsNostrSignerError::MissingSignerIdentity)?;
-        let public_key = parse_identity_public_key(&signer_identity)?;
-        self.sign_unsigned_event(builder.build(public_key))
-    }
 }
 
 #[derive(Clone)]
@@ -638,23 +636,13 @@ fn same_public_identity_key(left: &RadrootsIdentityPublic, right: &RadrootsIdent
         && left.public_key_npub == right.public_key_npub
 }
 
-fn parse_identity_public_key(
-    identity: &RadrootsIdentityPublic,
-) -> Result<PublicKey, RadrootsNostrSignerError> {
-    PublicKey::parse(identity.public_key_hex.as_str())
-        .or_else(|_| PublicKey::from_hex(identity.public_key_hex.as_str()))
-        .map_err(|_| {
-            RadrootsNostrSignerError::InvalidState("identity public key is invalid".into())
-        })
-}
-
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
         RadrootsNostrEmbeddedSignerBackend, RadrootsNostrSignerBackend,
         RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerPublishTransition,
-        parse_identity_public_key, same_public_identity_key,
+        same_public_identity_key,
     };
     use crate::error::RadrootsNostrSignerError;
     use crate::evaluation::{
@@ -679,7 +667,6 @@ mod tests {
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage,
     };
-    use serde_json::json;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::Arc;
     use std::sync::RwLock;
@@ -1112,51 +1099,30 @@ mod tests {
     }
 
     #[test]
-    fn sign_event_builder_propagates_identity_and_sign_errors() {
-        let missing_identity_backend = StubBackend {
+    fn backend_source_does_not_accept_raw_event_builders() {
+        let production_source = include_str!("backend.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("production backend source");
+
+        assert!(!production_source.contains(concat!("fn sign_event_", "builder")));
+    }
+
+    #[test]
+    fn external_unsigned_signing_propagates_backend_errors() {
+        let backend = StubBackend {
             signer_identity: None,
             signer_identity_error: None,
-            sign_error_message: Some("sign should not be called"),
+            sign_error_message: Some("stub interop signing failure"),
         };
-        let err = missing_identity_backend
-            .sign_event_builder(EventBuilder::new(Kind::TextNote, "missing"))
-            .expect_err("missing identity");
-        assert!(matches!(
-            err,
-            RadrootsNostrSignerError::MissingSignerIdentity
-        ));
+        let unsigned_event =
+            EventBuilder::new(Kind::TextNote, "external interop").build(synthetic_public_key(0xaa));
 
-        let identity_error_backend = StubBackend {
-            signer_identity: None,
-            signer_identity_error: Some("stub signer identity failure"),
-            sign_error_message: Some("sign should not be called"),
-        };
-        let err = identity_error_backend
-            .sign_event_builder(EventBuilder::new(Kind::TextNote, "identity-error"))
-            .expect_err("signer identity error");
-        assert!(err.to_string().contains("stub signer identity failure"));
+        let error = backend
+            .sign_unsigned_event(unsigned_event)
+            .expect_err("external unsigned signing failure");
 
-        let mut invalid_identity = synthetic_public_identity(0xaa);
-        invalid_identity.public_key_hex = "invalid".into();
-        let invalid_identity_backend = StubBackend {
-            signer_identity: Some(invalid_identity),
-            signer_identity_error: None,
-            sign_error_message: Some("sign should not be called"),
-        };
-        let err = invalid_identity_backend
-            .sign_event_builder(EventBuilder::new(Kind::TextNote, "invalid"))
-            .expect_err("invalid signer identity");
-        assert!(err.to_string().contains("identity public key is invalid"));
-
-        let signing_error_backend = StubBackend {
-            signer_identity: Some(synthetic_public_identity(0xab)),
-            signer_identity_error: None,
-            sign_error_message: Some("stub sign failure"),
-        };
-        let err = signing_error_backend
-            .sign_event_builder(EventBuilder::new(Kind::TextNote, "sign-failure"))
-            .expect_err("sign failure");
-        assert!(err.to_string().contains("stub sign failure"));
+        assert!(error.to_string().contains("stub interop signing failure"));
     }
 
     #[test]
@@ -1659,24 +1625,18 @@ mod tests {
     }
 
     #[test]
-    fn embedded_backend_signs_builder_with_local_capability() {
+    fn embedded_backend_signs_external_unsigned_event_with_local_capability() {
         let identity = embedded_identity(0x95);
         let backend = RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity.clone())
             .expect("embedded backend");
-        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
-
-        let output = backend_trait
-            .sign_event_builder(EventBuilder::new(Kind::TextNote, "hello"))
-            .expect("sign event builder");
-        let direct_output =
+        let output =
             <RadrootsNostrEmbeddedSignerBackend as RadrootsNostrSignerBackend>::sign_unsigned_event(
                 &backend,
-                EventBuilder::new(Kind::TextNote, "hello-direct").build(identity.public_key()),
+                EventBuilder::new(Kind::TextNote, "hello").build(identity.public_key()),
             )
-            .expect("sign unsigned event");
+            .expect("sign external unsigned event");
 
         assert_eq!(output.event.pubkey, identity.public_key());
-        assert_eq!(direct_output.event.pubkey, identity.public_key());
         let local = output.signer.local_account().expect("local signer");
         assert_eq!(local.public_identity.id, identity.to_public().id);
         assert!(local.is_secret_backed());
@@ -1735,7 +1695,7 @@ mod tests {
     }
 
     #[test]
-    fn backend_capabilities_all_signers_supports_remote_only_and_identity_helpers() {
+    fn backend_capabilities_all_signers_supports_remote_only_and_identity_comparison() {
         let remote = crate::capability::RadrootsNostrRemoteSessionSignerCapability::new(
             crate::model::RadrootsNostrSignerConnectionId::new_v7(),
             synthetic_public_identity(0xb0),
@@ -1752,10 +1712,6 @@ mod tests {
 
         let valid_identity = synthetic_public_identity(0xb2);
         assert!(same_public_identity_key(&valid_identity, &valid_identity));
-        assert_eq!(
-            parse_identity_public_key(&valid_identity).expect("valid public key"),
-            synthetic_public_key(0xb2)
-        );
         let mut valid_identity_with_different_hex = valid_identity.clone();
         valid_identity_with_different_hex.public_key_hex =
             synthetic_public_identity(0xb3).public_key_hex;
@@ -1763,16 +1719,6 @@ mod tests {
             &valid_identity,
             &valid_identity_with_different_hex
         ));
-
-        let invalid_identity: RadrootsIdentityPublic = serde_json::from_value(json!({
-            "id": "not-a-public-key",
-            "public_key_hex": "not-a-public-key",
-            "public_key_npub": "npub1invalid"
-        }))
-        .expect("invalid identity payload");
-        let error =
-            parse_identity_public_key(&invalid_identity).expect_err("invalid public identity");
-        assert!(error.to_string().contains("identity public key is invalid"));
     }
 
     #[test]

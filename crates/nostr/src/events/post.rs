@@ -1,6 +1,12 @@
+use alloc::{string::String, vec::Vec};
+
 use crate::error::RadrootsNostrError;
+#[cfg(feature = "events")]
+use crate::types::RadrootsNostrEventBuilderUnchecked;
+#[cfg(feature = "events")]
+use crate::types::{RadrootsNostrEvent, RadrootsNostrKeys};
 use crate::types::{
-    RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind,
+    RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
     RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 
@@ -20,24 +26,56 @@ use crate::client::RadrootsNostrClient;
 #[cfg(all(feature = "client", feature = "events"))]
 use core::time::Duration;
 
+/// A sealed builder for a validated Radroots root post profile.
+///
+/// The wrapper intentionally exposes no raw builder conversion or tag/content
+/// mutation. Construct it through one of the typed post authoring functions.
+#[cfg(feature = "events")]
+#[must_use = "post event builders must be signed or published"]
+pub struct RadrootsNostrPostEventBuilder {
+    inner: RadrootsNostrEventBuilderUnchecked,
+}
+
+#[cfg(feature = "events")]
+impl RadrootsNostrPostEventBuilder {
+    /// Sets the event timestamp without changing the validated post shape.
+    pub fn custom_created_at(mut self, created_at: RadrootsNostrTimestamp) -> Self {
+        self.inner = self.inner.custom_created_at(created_at);
+        self
+    }
+
+    /// Signs the validated post directly with local keys.
+    pub fn sign_with_keys(
+        self,
+        keys: &RadrootsNostrKeys,
+    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+        Ok(self.inner.sign_with_keys(keys)?)
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn into_event_builder(self) -> RadrootsNostrEventBuilderUnchecked {
+        self.inner
+    }
+}
+
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_update_event(
     update: &RadrootsAuthoredUpdate,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_update_to_wire_parts(update))
 }
 
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_photo_update_event(
     photo: &RadrootsAuthoredPhotoUpdate,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_photo_update_to_wire_parts(photo))
 }
 
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_ask_event(
     ask: &RadrootsAuthoredAsk,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_ask_to_wire_parts(ask))
 }
 
@@ -60,7 +98,7 @@ pub fn radroots_nostr_build_post_reply_event(
     parent_author_hex: &str,
     content: impl Into<String>,
     root_event_id_hex: Option<&str>,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
     let parent_id = RadrootsNostrEventId::from_hex(parent_event_id_hex)?;
     let parent_pubkey = RadrootsNostrPublicKey::from_hex(parent_author_hex)?;
     let mut tags: Vec<RadrootsNostrTag> = Vec::new();
@@ -75,14 +113,16 @@ pub fn radroots_nostr_build_post_reply_event(
     tags.push(RadrootsNostrTag::event(parent_id));
     tags.push(RadrootsNostrTag::public_key(parent_pubkey));
 
-    Ok(RadrootsNostrEventBuilder::text_note(content).tags(tags))
+    Ok(RadrootsNostrGenericEventBuilder::text_note(content).tags(tags))
 }
 
 #[cfg(feature = "events")]
 fn builder_from_wire_parts(
     parts: RadrootsNip01EventWireParts,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
-    crate::events::radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
+) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
+    let inner =
+        crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
+    Ok(RadrootsNostrPostEventBuilder { inner })
 }
 
 #[cfg(all(feature = "client", feature = "events"))]

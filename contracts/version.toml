@@ -11,7 +11,9 @@ major_on = [
   "remove_exported_constant",
   "remove_exported_trait_impl",
   "remove_public_cargo_feature",
+  "add_exported_field",
   "change_exported_field_type",
+  "change_exported_function_signature",
   "change_exported_enum_variant",
   "change_exported_constant_value",
   "change_exported_algorithm_behavior",
@@ -19,6 +21,7 @@ major_on = [
 ]
 minor_on = [
   "add_exported_type",
+  "add_exported_constant",
   "add_public_foundation_crate",
   "add_optional_field",
   "add_enum_variant",

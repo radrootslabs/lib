@@ -911,6 +911,7 @@ fn bool_i64(value: bool) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nostr::EventBuilder;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
@@ -937,8 +938,8 @@ mod tests {
         RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
     };
     use radroots_nostr::prelude::{
-        RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
-        radroots_nostr_build_event,
+        RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey, RadrootsNostrTag,
+        RadrootsNostrTagKind, RadrootsNostrTimestamp,
     };
     use radroots_transport::RadrootsTransportKind;
 
@@ -957,6 +958,27 @@ mod tests {
 
     fn keys(secret: &str) -> RadrootsNostrKeys {
         RadrootsNostrKeys::new(RadrootsNostrSecretKey::from_hex(secret).expect("secret"))
+    }
+
+    fn test_event_builder(
+        kind: u32,
+        content: impl Into<String>,
+        tags: Vec<Vec<String>>,
+    ) -> EventBuilder {
+        let tags = tags
+            .into_iter()
+            .filter(|tag| !tag.is_empty())
+            .map(|mut tag| {
+                let key = tag.remove(0);
+                RadrootsNostrTag::custom(RadrootsNostrTagKind::Custom(key.into()), tag)
+            })
+            .collect();
+        EventBuilder::new(
+            RadrootsNostrKind::Custom(u16::try_from(kind).expect("test kind must fit NIP-01")),
+            content.into(),
+        )
+        .tags(tags)
+        .allow_self_tagging()
     }
 
     fn decimal(raw: &str) -> RadrootsCoreDecimal {
@@ -1200,8 +1222,7 @@ mod tests {
         created_at: u32,
         keys: &RadrootsNostrKeys,
     ) -> RadrootsSignedEvent {
-        let raw_event = radroots_nostr_build_event(kind, content, tags)
-            .expect("builder")
+        let raw_event = test_event_builder(kind, content, tags)
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
             .sign_with_keys(keys)
             .expect("signed");

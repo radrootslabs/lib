@@ -87,8 +87,17 @@ PhotoUpdate and optional Ask media use between one and 64 NIP-92 `imeta` tags.
 Each image emits exactly `url`, `x`, `m`, `dim`, `size`, and `alt`, in that
 order, followed by ordered repeatable `fallback` fields. Primary URLs are
 unique and occur as exact substrings of content. MIME is parameter-free
-canonical lowercase `image/*`; dimensions are nonzero `u32` values; size is a
-nonzero `u64`; alt text is non-whitespace and at most 4092 UTF-8 bytes.
+canonical lowercase and matches `^image/[a-z0-9][a-z0-9.+-]*$` exactly;
+dimensions are nonzero `u32` values; size is a nonzero `u64`; alt text is
+non-whitespace and at most 4092 UTF-8 bytes. Authored events emit at most 4096
+tag elements; every element is at most 4096 bytes and all tag elements together
+are at most 131072 bytes, including the Ask marker. The strict image state
+retains the exact validated
+`imeta` representation that the codec emits, so limit validation and encoding
+cannot diverge. Authored posts also fit within the 262144-byte compact signed
+event limit after exact JSON escaping, tag-array punctuation, and a worst-case
+20-digit NIP-01 timestamp are counted; decoded content and tag limits do not
+operate as independent escape hatches around that wire budget.
 
 Every authored primary image is a `RadrootsAuthoredImage` backed by an approved,
 byte-verified Blossom descriptor. Every authored fallback is an approved
@@ -101,9 +110,15 @@ Ask is kind `1` and deterministically emits exactly
 this contract. Update emits neither the Ask marker nor `imeta`.
 
 Inbound projection accepts only a `RadrootsSignatureVerifiedEvent`. Any `e`
-tag selects the reply exclusion before Ask or media inspection; strict NIP-10
-reply parsing remains separately owned. For roots, exactly one two-element Ask
-marker after ASCII whitespace trim and ASCII case folding selects Ask. Multiple
+tag, including an empty or malformed one, selects `ThreadExcluded` before Ask
+or media inspection. This is an exclusion-only candidate classification and
+does not claim that the event is a valid NIP-10 reply; strict NIP-10 parsing and
+promotion remain separately owned. `verify_and_admit_post_event` returns
+`RadrootsPostAdmissionOutcome`: only `Root(RadrootsAdmittedRootPostEvent)`
+exposes an exact product contract, while
+`ThreadExcluded(RadrootsThreadExcludedPostCandidate)` preserves the verified
+event and exclusion projection. For roots, exactly one two-element Ask marker
+after ASCII whitespace trim and ASCII case folding selects Ask. Multiple
 normalized markers fail projection, while a malformed marker shape is retained
 as an ordered diagnostic. Ask precedes PhotoUpdate even when attached media is
 malformed. PhotoUpdate requires one through 64 wholly qualifying `imeta`
@@ -117,6 +132,39 @@ reachability, image-decoding, or safety claim. The registry therefore keeps
 ordinary unsigned kind-1 identification on `radroots.social.post.v1`; exact
 Update, PhotoUpdate, and Ask contracts use `AdmissionOnly` and are returned only
 by the verified projection/admission boundary.
+
+The event-contract registry assigns an explicit authoring policy to every
+contract. Strict Profile, Update, PhotoUpdate, and Ask contracts are
+`TypedOnly`; `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft
+contracts remain `GenericDraft`. `RadrootsEventDraft::new` therefore rejects
+the strict Profile contract and all four governed kind-1 post contracts with
+`contract_not_draft_authorable`. Serialized drafts record registry version `2`
+and are accepted only after deserialization revalidates the registry version,
+contract, kind, shape, policy, recomputed event id, and known fields. The
+frozen-draft signing boundary repeats that validation, so stale version-`1`
+drafts must be rebuilt. Typed root posts enter Nostr signing and client
+publication only through an opaque post builder that exposes timestamp
+selection and signing, but no raw tag/content mutation or public conversion to
+the upstream builder. The opaque generic builder rejects kind `0` and unmarked
+kind `1` at both direct signing and client publication before a signer is
+consulted; `e`-tagged kind-1 builders remain a thread-compatibility surface and
+cannot enter root-card admission.
+
+The signer backend's externally supplied unsigned-event operation and the
+standard NIP-46 `sign_event` method are explicit low-level interoperability
+boundaries. Their signed results prove Nostr cryptographic authorization only;
+they do not confer a Radroots typed product-authoring claim and are not product
+authoring entry points. Relaying an already signed event is likewise a generic
+transport operation with no Radroots authoring claim.
+
+Each post operation owns exact valid and invalid case kinds in
+`contracts/operations.toml`. The canonical and packaged conformance suites
+execute every public Update, PhotoUpdate, and Ask authoring function, verified
+projection, and admission function; they compare complete deterministic wire
+parts or projections and enforce stable negative error codes. Xtask validation
+pins the complete post-operation namespace, ownership metadata, public types,
+and exact case-id-to-kind corpus; it rejects missing, duplicate, unclaimed,
+mis-prefixed, or substituted cases.
 
 `RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,
 address, and external roots or parents through `E`/`e`, `A`/`a`, and `I`/`i` tags with matching

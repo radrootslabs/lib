@@ -17,19 +17,25 @@ use radroots_nostr::{
         radroots_nostr_build_ask_event, radroots_nostr_build_photo_update_event,
         radroots_nostr_build_update_event,
     },
-    types::RadrootsNostrPublicKey,
+    types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp},
 };
 
 #[test]
 fn typed_post_builders_preserve_strict_wire_profiles() {
-    let author =
-        RadrootsNostrPublicKey::from_hex(test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX).unwrap();
+    let keys = RadrootsNostrKeys::new(
+        RadrootsNostrSecretKey::from_hex(test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX).unwrap(),
+    );
+    let created_at = RadrootsNostrTimestamp::from_secs(1_784_347_200);
     let update = RadrootsAuthoredUpdate::new("Farm update").unwrap();
     let event = radroots_nostr_build_update_event(&update)
         .unwrap()
-        .build(author);
+        .custom_created_at(created_at)
+        .sign_with_keys(&keys)
+        .unwrap();
     assert_eq!(event.kind.as_u16(), 1);
     assert!(event.tags.is_empty());
+    assert_eq!(event.created_at, created_at);
+    assert!(event.verify().is_ok());
 
     let image = authored_image();
     let photo =
@@ -37,17 +43,25 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
             .unwrap();
     let event = radroots_nostr_build_photo_update_event(&photo)
         .unwrap()
-        .build(author);
+        .custom_created_at(created_at)
+        .sign_with_keys(&keys)
+        .unwrap();
     assert_eq!(event.tags.len(), 1);
     assert_eq!(event.tags.iter().next().unwrap().as_slice()[0], "imeta");
+    assert!(event.verify().is_ok());
 
     let ask =
         RadrootsAuthoredAsk::new(format!("Is this ready? {}", image.url()), vec![image]).unwrap();
-    let event = radroots_nostr_build_ask_event(&ask).unwrap().build(author);
+    let event = radroots_nostr_build_ask_event(&ask)
+        .unwrap()
+        .custom_created_at(created_at)
+        .sign_with_keys(&keys)
+        .unwrap();
     assert_eq!(event.tags.len(), 2);
     let tags = event.tags.iter().collect::<Vec<_>>();
     assert_eq!(tags[0].as_slice(), ["t", "radroots-ask"]);
     assert_eq!(tags[1].as_slice()[0], "imeta");
+    assert!(event.verify().is_ok());
 }
 
 fn authored_image() -> RadrootsAuthoredPostImage {

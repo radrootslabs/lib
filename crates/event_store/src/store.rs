@@ -1639,6 +1639,7 @@ fn validate_trade_query_limit(limit: u32) -> Result<(), RadrootsEventStoreError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nostr::EventBuilder;
     use radroots_event::draft::RadrootsSignedEvent;
     use radroots_event::event_head::event_head_candidate_for_event;
     use radroots_event::ids::{RadrootsAddressableCoordinate, RadrootsInventoryBinId};
@@ -1655,8 +1656,8 @@ mod tests {
     };
     use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
     use radroots_nostr::prelude::{
-        RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
-        radroots_nostr_build_event,
+        RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey, RadrootsNostrTag,
+        RadrootsNostrTagKind, RadrootsNostrTimestamp,
     };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -1676,6 +1677,27 @@ mod tests {
         )
         .expect("alternate secret key");
         RadrootsNostrKeys::new(secret_key)
+    }
+
+    fn test_event_builder(
+        kind: u32,
+        content: impl Into<String>,
+        tags: Vec<Vec<String>>,
+    ) -> EventBuilder {
+        let tags: Vec<_> = tags
+            .into_iter()
+            .filter(|tag| !tag.is_empty())
+            .map(|mut tag| {
+                let key = tag.remove(0);
+                RadrootsNostrTag::custom(RadrootsNostrTagKind::Custom(key.into()), tag)
+            })
+            .collect();
+        EventBuilder::new(
+            RadrootsNostrKind::Custom(u16::try_from(kind).expect("test kind must fit NIP-01")),
+            content.into(),
+        )
+        .tags(tags)
+        .allow_self_tagging()
     }
 
     fn event_id(character: char) -> String {
@@ -1843,12 +1865,11 @@ mod tests {
         for parent in &canonical.envelope.parent_mutation_ids {
             tags.push(vec!["e".to_owned(), parent.to_string()]);
         }
-        let raw_event = radroots_nostr_build_event(
+        let raw_event = test_event_builder(
             canonical.envelope.mutation_kind().nostr_kind(),
             content,
             tags,
         )
-        .expect("trade event builder")
         .custom_created_at(RadrootsNostrTimestamp::from_secs(
             canonical.envelope.authored_at_unix_s,
         ))
@@ -1863,8 +1884,7 @@ mod tests {
         tags: Vec<Vec<String>>,
         content: &str,
     ) -> RadrootsSignedEvent {
-        let raw_event = radroots_nostr_build_event(kind, content, tags)
-            .expect("builder")
+        let raw_event = test_event_builder(kind, content, tags)
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
             .sign_with_keys(&fixture_keys())
             .expect("signed event");

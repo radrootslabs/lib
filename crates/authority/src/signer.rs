@@ -35,7 +35,7 @@ pub trait RadrootsEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_GEOCHAT;
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()
@@ -47,8 +47,8 @@ mod tests {
 
     fn draft_for(pubkey: &str) -> RadrootsEventDraft {
         RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1_700_000_000,
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             "hello",
@@ -176,7 +176,7 @@ mod tests {
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
         assert_eq!(signed.pubkey_str(), pubkey);
-        assert_eq!(signed.kind(), KIND_POST);
+        assert_eq!(signed.kind(), KIND_GEOCHAT);
     }
 
     #[test]

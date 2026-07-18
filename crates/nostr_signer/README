@@ -22,6 +22,13 @@ display metadata without treating it as an authorization input. JSON written
 before metadata support remains readable, and the native SQLite migration
 adds the same optional state without replacing existing connections.
 
+The backend accepts externally supplied unsigned events and the NIP-46 codec
+implements the standard `sign_event` operation. These are low-level Nostr
+interoperability boundaries: a successful signature proves cryptographic
+authorization only and does not confer a Radroots typed product-authoring
+claim. The backend intentionally exposes no raw `nostr::EventBuilder`
+convenience.
+
 Connection revocation is explicit and idempotent. A transport service handling
 `logout` is responsible for publishing the typed `ack` before it revokes the
 session; storage transitions do not hide or reorder transport publication.

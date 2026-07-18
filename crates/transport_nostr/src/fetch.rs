@@ -824,7 +824,6 @@ mod tests {
     use nostr::JsonUtil;
     use radroots_nostr::prelude::{
         RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
-        radroots_nostr_build_event,
     };
     use std::collections::HashMap;
 
@@ -835,8 +834,7 @@ mod tests {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         let keys = RadrootsNostrKeys::new(secret_key);
-        let event = radroots_nostr_build_event(1, "hello", Vec::new())
-            .expect("event builder")
+        let event = nostr::EventBuilder::new(nostr::Kind::TextNote, "hello")
             .sign_with_keys(&keys)
             .expect("signed event");
         RadrootsNostrEvent::from_json(event.as_json().as_str()).expect("raw event")

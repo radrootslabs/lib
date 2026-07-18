@@ -6,9 +6,11 @@ use radroots_event::{
     RadrootsAuthoredImage,
     post::{
         RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
-        RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_IMETA_MAX_COUNT, RadrootsAuthoredAsk,
-        RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError, RadrootsAuthoredPostImage,
-        RadrootsAuthoredUpdate, RadrootsPostImageDimensions, post_image_media_type_is_valid,
+        RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
+        RADROOTS_POST_IMETA_MAX_COUNT, RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+        RADROOTS_POST_TAG_TOTAL_MAX_BYTES, RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate,
+        RadrootsAuthoredPostError, RadrootsAuthoredPostImage, RadrootsAuthoredUpdate,
+        RadrootsPostImageDimensions, post_image_media_type_is_valid,
     },
 };
 use radroots_event_codec::post::authored::{
@@ -58,6 +60,7 @@ fn authored_photo_emits_exact_nip92_order_and_repeatable_fallbacks() {
     assert_eq!(wire.kind, 1);
     assert_eq!(wire.content, content);
     assert_eq!(wire.tags.len(), 1);
+    assert_eq!(wire.tags[0].as_slice(), photo.images()[0].imeta_tag());
     assert_eq!(
         wire.tags[0]
             .iter()
@@ -226,6 +229,193 @@ fn authored_image_rejects_zero_size_and_invalid_alt_text() {
     );
 }
 
+#[test]
+fn authored_image_enforces_the_exact_tag_element_limit() {
+    let maximum = RadrootsAuthoredImage::try_from(verified_descriptor_with_url_element_bytes(
+        b"maximum-url",
+        RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+    ))
+    .unwrap();
+    let maximum = RadrootsAuthoredPostImage::new(
+        maximum,
+        RadrootsPostImageDimensions::new(1, 1).unwrap(),
+        "Maximum URL",
+    )
+    .unwrap();
+    assert_eq!(
+        maximum.imeta_tag()[1].len(),
+        RADROOTS_POST_TAG_ELEMENT_MAX_BYTES
+    );
+
+    let oversized = RadrootsAuthoredImage::try_from(verified_descriptor_with_url_element_bytes(
+        b"oversized-url",
+        RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1,
+    ))
+    .unwrap();
+    assert_eq!(
+        RadrootsAuthoredPostImage::new(
+            oversized,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            "Oversized URL",
+        )
+        .unwrap_err(),
+        RadrootsAuthoredPostError::TagElementTooLarge {
+            max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+            actual: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1,
+        }
+    );
+
+    let maximum_fallback = authored_image(b"maximum-fallback", "image/webp", "webp")
+        .try_with_fallback(fallback_url_with_element_bytes(
+            b"maximum-fallback",
+            RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+        ))
+        .unwrap();
+    assert_eq!(
+        maximum_fallback.imeta_tag().last().unwrap().len(),
+        RADROOTS_POST_TAG_ELEMENT_MAX_BYTES
+    );
+    assert_eq!(
+        authored_image(b"oversized-fallback", "image/webp", "webp")
+            .try_with_fallback(fallback_url_with_element_bytes(
+                b"oversized-fallback",
+                RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1,
+            ))
+            .unwrap_err(),
+        RadrootsAuthoredPostError::TagElementTooLarge {
+            max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+            actual: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1,
+        }
+    );
+}
+
+#[test]
+fn authored_posts_enforce_the_exact_aggregate_tag_byte_limit() {
+    let second = authored_image(b"second-image", "image/webp", "webp");
+    let second_tag_bytes = tag_bytes(second.imeta_tag());
+    let first_target = RADROOTS_POST_TAG_TOTAL_MAX_BYTES - second_tag_bytes;
+    let first = fill_image_tag_bytes(
+        authored_image(b"first-image", "image/webp", "webp"),
+        b"first-image",
+        first_target,
+    );
+    let content = format!("{} {}", first.url(), second.url());
+    let photo =
+        RadrootsAuthoredPhotoUpdate::new(content.clone(), vec![first.clone(), second.clone()])
+            .unwrap();
+    let wire = authored_photo_update_to_wire_parts(&photo);
+    assert_eq!(
+        wire.tags.iter().map(|tag| tag_bytes(tag)).sum::<usize>(),
+        RADROOTS_POST_TAG_TOTAL_MAX_BYTES
+    );
+
+    let first_over = fill_image_tag_bytes(
+        authored_image(b"first-over", "image/webp", "webp"),
+        b"first-over",
+        first_target + 1,
+    );
+    let over_content = format!("{} {}", first_over.url(), second.url());
+    assert_eq!(
+        RadrootsAuthoredPhotoUpdate::new(over_content, vec![first_over, second]).unwrap_err(),
+        RadrootsAuthoredPostError::TagBytesExceeded {
+            max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+            actual: RADROOTS_POST_TAG_TOTAL_MAX_BYTES + 1,
+        }
+    );
+
+    let full = fill_image_tag_bytes(
+        authored_image(b"full-image", "image/webp", "webp"),
+        b"full-image",
+        RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+    );
+    assert!(
+        RadrootsAuthoredPhotoUpdate::new(full.url(), vec![full.clone()]).is_ok(),
+        "PhotoUpdate must accept the exact aggregate maximum"
+    );
+    assert_eq!(
+        RadrootsAuthoredAsk::new(full.url(), vec![full.clone()]).unwrap_err(),
+        RadrootsAuthoredPostError::TagBytesExceeded {
+            max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+            actual: RADROOTS_POST_TAG_TOTAL_MAX_BYTES
+                + "t".len()
+                + RADROOTS_ASK_MARKER_TAG_VALUE.len(),
+        }
+    );
+
+    let minimum_fallback_bytes = fallback_element_prefix(b"full-image").len() + 1;
+    assert_eq!(
+        full.try_with_fallback(fallback_url_with_element_bytes(
+            b"full-image",
+            minimum_fallback_bytes,
+        ))
+        .unwrap_err(),
+        RadrootsAuthoredPostError::TagBytesExceeded {
+            max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+            actual: RADROOTS_POST_TAG_TOTAL_MAX_BYTES + minimum_fallback_bytes,
+        }
+    );
+}
+
+#[test]
+fn authored_posts_enforce_the_exact_canonical_signed_event_budget() {
+    let image = fill_image_tag_bytes(
+        authored_image(b"wire-budget", "image/webp", "webp"),
+        b"wire-budget",
+        RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+    );
+    let tags = vec![image.imeta_tag().to_vec()];
+    let minimum_content = image.url();
+    let minimum_wire_bytes = canonical_signed_post_json_bytes(minimum_content, &tags);
+    let padding_bytes = RADROOTS_POST_EVENT_WIRE_MAX_BYTES - minimum_wire_bytes;
+    let maximum_content = format!("{minimum_content}{}", "x".repeat(padding_bytes));
+
+    let maximum =
+        RadrootsAuthoredPhotoUpdate::new(maximum_content.clone(), vec![image.clone()]).unwrap();
+    let maximum_wire = authored_photo_update_to_wire_parts(&maximum);
+    assert_eq!(
+        canonical_signed_post_json_bytes(&maximum_wire.content, &maximum_wire.tags),
+        RADROOTS_POST_EVENT_WIRE_MAX_BYTES
+    );
+
+    let oversized_content = format!("{maximum_content}x");
+    assert_eq!(
+        RadrootsAuthoredPhotoUpdate::new(oversized_content, vec![image.clone()]).unwrap_err(),
+        RadrootsAuthoredPostError::EventWireTooLarge {
+            max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
+            actual: RADROOTS_POST_EVENT_WIRE_MAX_BYTES + 1,
+        }
+    );
+
+    let mut escaped_content = maximum_content;
+    escaped_content.pop();
+    escaped_content.push('"');
+    assert_eq!(
+        RadrootsAuthoredPhotoUpdate::new(escaped_content, vec![image]).unwrap_err(),
+        RadrootsAuthoredPostError::EventWireTooLarge {
+            max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
+            actual: RADROOTS_POST_EVENT_WIRE_MAX_BYTES + 1,
+        }
+    );
+}
+
+#[test]
+fn authored_update_counts_json_control_character_expansion() {
+    let content = format!(
+        "a{}",
+        "\u{0001}".repeat(RADROOTS_POST_CONTENT_MAX_BYTES - 1)
+    );
+    let actual = canonical_signed_post_json_bytes(&content, &[]);
+
+    assert_eq!(
+        RadrootsAuthoredUpdate::new(content).unwrap_err(),
+        RadrootsAuthoredPostError::EventWireTooLarge {
+            max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
+            actual,
+        }
+    );
+    assert!(actual > RADROOTS_POST_EVENT_WIRE_MAX_BYTES);
+}
+
 fn authored_image(bytes: &[u8], media_type: &str, extension: &str) -> RadrootsAuthoredPostImage {
     RadrootsAuthoredPostImage::new(
         RadrootsAuthoredImage::try_from(verified_descriptor(bytes, media_type, extension)).unwrap(),
@@ -257,6 +447,36 @@ fn verified_descriptor(
     .unwrap()
 }
 
+fn verified_descriptor_with_url_element_bytes(
+    bytes: &[u8],
+    element_bytes: usize,
+) -> RadrootsBlossomByteVerifiedDescriptor {
+    let hash = RadrootsBlossomSha256::digest(bytes);
+    let prefix = format!("https://media.example/{hash}.");
+    let extension_bytes = element_bytes
+        .checked_sub("url ".len() + prefix.len())
+        .expect("requested URL tag element is large enough");
+    assert!(extension_bytes > 0);
+    let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
+    let descriptor = RadrootsBlossomBlobDescriptor::new(
+        RadrootsBlossomBlobUrl::parse(&format!("{prefix}{}", "x".repeat(extension_bytes))).unwrap(),
+        hash,
+        bytes.len() as u64,
+        media_type.clone(),
+        1_784_347_200,
+    )
+    .unwrap()
+    .approve_reference()
+    .unwrap()
+    .verify_bytes(bytes, &media_type)
+    .unwrap();
+    assert_eq!(
+        "url ".len() + descriptor.url().as_str().len(),
+        element_bytes
+    );
+    descriptor
+}
+
 fn fallback_url(
     bytes: &[u8],
     host: &str,
@@ -267,4 +487,72 @@ fn fallback_url(
         .unwrap()
         .approve()
         .unwrap()
+}
+
+fn fallback_url_with_element_bytes(
+    bytes: &[u8],
+    element_bytes: usize,
+) -> radroots_blossom::RadrootsBlossomApprovedBlobUrl {
+    let prefix = fallback_element_prefix(bytes);
+    let extension_bytes = element_bytes
+        .checked_sub(prefix.len())
+        .expect("requested fallback tag element is large enough");
+    assert!(extension_bytes > 0);
+    let fallback = RadrootsBlossomBlobUrl::parse(&format!(
+        "{}{}",
+        prefix.strip_prefix("fallback ").unwrap(),
+        "x".repeat(extension_bytes)
+    ))
+    .unwrap()
+    .approve()
+    .unwrap();
+    assert_eq!(format!("fallback {fallback}").len(), element_bytes);
+    fallback
+}
+
+fn fallback_element_prefix(bytes: &[u8]) -> String {
+    let hash = RadrootsBlossomSha256::digest(bytes);
+    format!("fallback https://cache.example/{hash}.")
+}
+
+fn tag_bytes(tag: &[String]) -> usize {
+    tag.iter().map(String::len).sum()
+}
+
+fn canonical_signed_post_json_bytes(content: &str, tags: &[Vec<String>]) -> usize {
+    serde_json::json!({
+        "id": "0".repeat(64),
+        "pubkey": "0".repeat(64),
+        "created_at": u64::MAX,
+        "kind": 1,
+        "tags": tags,
+        "content": content,
+        "sig": "0".repeat(128),
+    })
+    .to_string()
+    .len()
+}
+
+fn fill_image_tag_bytes(
+    mut image: RadrootsAuthoredPostImage,
+    bytes: &[u8],
+    target: usize,
+) -> RadrootsAuthoredPostImage {
+    let minimum_fallback_bytes = fallback_element_prefix(bytes).len() + 1;
+    while tag_bytes(image.imeta_tag()) < target {
+        let remaining = target - tag_bytes(image.imeta_tag());
+        assert!(remaining >= minimum_fallback_bytes);
+        let mut next = remaining.min(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES);
+        if remaining > RADROOTS_POST_TAG_ELEMENT_MAX_BYTES
+            && remaining - RADROOTS_POST_TAG_ELEMENT_MAX_BYTES < minimum_fallback_bytes
+        {
+            next = remaining - minimum_fallback_bytes;
+        }
+        assert!((minimum_fallback_bytes..=RADROOTS_POST_TAG_ELEMENT_MAX_BYTES).contains(&next));
+        image = image
+            .try_with_fallback(fallback_url_with_element_bytes(bytes, next))
+            .unwrap();
+    }
+    assert_eq!(tag_bytes(image.imeta_tag()), target);
+    image
 }

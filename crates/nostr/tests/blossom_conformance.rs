@@ -13,8 +13,8 @@ use radroots_nostr::blossom::{
     radroots_nostr_encode_blossom_authorization_header, radroots_nostr_sign_blossom_authorization,
 };
 use radroots_nostr::types::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
-    RadrootsNostrTag, RadrootsNostrTimestamp,
+    RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrTag,
+    RadrootsNostrTimestamp,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -351,7 +351,7 @@ fn event_from_header(header: &str) -> RadrootsNostrEvent {
 }
 
 fn sign_raw(kind: u16, content: &str, tags: Vec<RadrootsNostrTag>) -> RadrootsNostrEvent {
-    RadrootsNostrEventBuilder::new(RadrootsNostrKind::Custom(kind), content)
+    nostr::EventBuilder::new(RadrootsNostrKind::Custom(kind), content)
         .tags(tags)
         .custom_created_at(RadrootsNostrTimestamp::from_secs(CREATED_AT))
         .sign_with_keys(&keys())

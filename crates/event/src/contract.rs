@@ -18,7 +18,7 @@ use crate::{
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 1;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -216,6 +216,17 @@ pub enum RadrootsEventDiscriminator {
     Composite(&'static [RadrootsEventDiscriminator]),
 }
 
+/// Governs whether a contract may enter the generic frozen-draft boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsEventAuthoringPolicy {
+    /// Generic contract validation is sufficient to construct a frozen draft.
+    GenericDraft,
+    /// Authoring requires a sealed typed API instead of generic draft parts.
+    TypedOnly,
+    /// The contract is an inbound/read boundary and cannot be authored.
+    ReadOnly,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsContractMatchError {
     UnsupportedKind(u32),
@@ -339,6 +350,7 @@ pub struct RadrootsEventContract {
     pub privacy: RadrootsEventPrivacy,
     pub author_role: RadrootsActorRole,
     pub content_schema: RadrootsContentSchema,
+    pub authoring_policy: RadrootsEventAuthoringPolicy,
     pub discriminator: RadrootsEventDiscriminator,
     pub tags: &'static [RadrootsTagContract],
     pub reducers: &'static [RadrootsReducer],
@@ -1031,9 +1043,44 @@ macro_rules! event_contract_with_stability {
             privacy: $standard_privacy,
             author_role: $author_role,
             content_schema: $content_schema,
+            authoring_policy: RadrootsEventAuthoringPolicy::GenericDraft,
             discriminator: $discriminator,
             tags: $tags,
             reducers: $reducers,
+        }
+    };
+}
+
+macro_rules! event_contract_with_authoring_policy {
+    (
+        $id:literal,
+        $kind:expr,
+        $name:literal,
+        $payload_type:literal,
+        $class:expr,
+        $standard_privacy:expr,
+        $author_role:expr,
+        $content_schema:expr,
+        $authoring_policy:expr,
+        $discriminator:expr,
+        $tags:expr,
+        $reducers:expr $(,)?
+    ) => {
+        RadrootsEventContract {
+            authoring_policy: $authoring_policy,
+            ..event_contract!(
+                $id,
+                $kind,
+                $name,
+                $payload_type,
+                $class,
+                $standard_privacy,
+                $author_role,
+                $content_schema,
+                $discriminator,
+                $tags,
+                $reducers
+            )
         }
     };
 }
@@ -1852,7 +1899,7 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
 ];
 
 static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.profile.metadata.v1",
         KIND_PROFILE,
         "Profile Metadata",
@@ -1861,11 +1908,12 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::JsonObject,
+        RadrootsEventAuthoringPolicy::TypedOnly,
         RadrootsEventDiscriminator::KindOnly,
         PROFILE_TAGS,
         PROFILE_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.social.post.v1",
         KIND_POST,
         "Short Text Note",
@@ -1874,11 +1922,12 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::ReadOnly,
         RadrootsEventDiscriminator::KindOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.social.update.v1",
         KIND_POST,
         "Root Text Update",
@@ -1887,11 +1936,12 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::TypedOnly,
         RadrootsEventDiscriminator::AdmissionOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.social.photo_update.v1",
         KIND_POST,
         "NIP-92 Photo Update",
@@ -1900,11 +1950,12 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::TypedOnly,
         RadrootsEventDiscriminator::AdmissionOnly,
         PHOTO_UPDATE_TAGS,
         SOCIAL_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.social.ask.v1",
         KIND_POST,
         "Root Ask",
@@ -1913,6 +1964,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::TypedOnly,
         RadrootsEventDiscriminator::AdmissionOnly,
         ASK_TAGS,
         SOCIAL_REDUCERS
@@ -4484,6 +4536,7 @@ mod tests {
             privacy: RadrootsEventPrivacy::Public,
             author_role: RadrootsActorRole::Any,
             content_schema: RadrootsContentSchema::PlainText,
+            authoring_policy: RadrootsEventAuthoringPolicy::GenericDraft,
             discriminator: RadrootsEventDiscriminator::KindOnly,
             tags,
             reducers: SOCIAL_REDUCERS,
@@ -5130,6 +5183,10 @@ mod tests {
         let generic = identify_event_contract(KIND_POST, &tags, "Question")
             .expect("unsigned kind-1 identification remains generic");
         assert_eq!(generic.id, "radroots.social.post.v1");
+        assert_eq!(
+            generic.authoring_policy,
+            RadrootsEventAuthoringPolicy::ReadOnly
+        );
 
         for id in [
             "radroots.social.update.v1",
@@ -5142,10 +5199,27 @@ mod tests {
                 Some(RadrootsContractFamily::Social)
             );
             assert_eq!(
+                contract.authoring_policy,
+                RadrootsEventAuthoringPolicy::TypedOnly
+            );
+            assert_eq!(
                 validate_event_contract_parts(KIND_POST, &tags, "Question", id),
                 Err(RadrootsContractValidationError::AdmissionRequired { contract_id: id })
             );
         }
+
+        assert_eq!(
+            event_contract("radroots.profile.metadata.v1")
+                .expect("strict authored profile contract")
+                .authoring_policy,
+            RadrootsEventAuthoringPolicy::TypedOnly
+        );
+        assert_eq!(
+            event_contract("radroots.social.geochat.v1")
+                .expect("generic-draft control contract")
+                .authoring_policy,
+            RadrootsEventAuthoringPolicy::GenericDraft
+        );
     }
 
     #[test]

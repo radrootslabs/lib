@@ -357,8 +357,9 @@ mod tests {
     use crate::query::RadrootsNostrdbQuerySpec;
     use crate::test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use futures::StreamExt;
+    use nostr::EventBuilder;
+    use radroots_nostr::prelude::RadrootsNostrKeys;
     use radroots_nostr::prelude::RadrootsNostrMetadata;
-    use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
@@ -471,7 +472,7 @@ mod tests {
         let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello from nostrdb")
+        let event = EventBuilder::text_note("hello from nostrdb")
             .sign_with_keys(&keys)
             .expect("event should sign");
 
@@ -488,7 +489,7 @@ mod tests {
         let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello from nostrdb json")
+        let event = EventBuilder::text_note("hello from nostrdb json")
             .sign_with_keys(&keys)
             .expect("event should sign");
         let json = serde_json::to_string(&event).expect("event json");
@@ -524,7 +525,7 @@ mod tests {
         let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("forced json error")
+        let event = EventBuilder::text_note("forced json error")
             .sign_with_keys(&keys)
             .expect("event should sign");
         test_hooks::FORCE_EVENT_JSON_ERROR.store(true, Ordering::SeqCst);
@@ -549,7 +550,7 @@ mod tests {
         let handle = nostrdb.subscribe(&spec).expect("subscribe should succeed");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("subscription test")
+        let event = EventBuilder::text_note("subscription test")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -619,7 +620,7 @@ mod tests {
         let handle = nostrdb.subscribe(&spec).expect("subscribe should succeed");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("wait test")
+        let event = EventBuilder::text_note("wait test")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -663,7 +664,7 @@ mod tests {
         let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("query note")
+        let event = EventBuilder::text_note("query note")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -764,7 +765,7 @@ mod tests {
         let nostrdb = RadrootsNostrdb::open(config).expect("database should open");
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("note json error")
+        let event = EventBuilder::text_note("note json error")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -805,7 +806,7 @@ mod tests {
             .display_name(FIXTURE_ALICE_USERNAME)
             .about("coffee operator")
             .lud16(FIXTURE_ALICE_EMAIL);
-        let metadata_event = RadrootsNostrEventBuilder::metadata(&metadata)
+        let metadata_event = EventBuilder::metadata(&metadata)
             .sign_with_keys(&keys)
             .expect("metadata event should sign");
         nostrdb
@@ -893,7 +894,7 @@ mod tests {
 
         let keys = RadrootsNostrKeys::generate();
         let pubkey_hex = keys.public_key().to_hex();
-        let event = RadrootsNostrEventBuilder::text_note("non profile event")
+        let event = EventBuilder::text_note("non profile event")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -917,7 +918,7 @@ mod tests {
 
         let keys = RadrootsNostrKeys::generate();
         let pubkey_hex = keys.public_key().to_hex();
-        let event = RadrootsNostrEventBuilder::new(
+        let event = EventBuilder::new(
             radroots_nostr::prelude::RadrootsNostrKind::Metadata,
             "not valid metadata json",
         )
@@ -974,7 +975,7 @@ mod tests {
         assert!(pending.is_err());
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("stream note")
+        let event = EventBuilder::text_note("stream note")
             .sign_with_keys(&keys)
             .expect("event should sign");
         nostrdb
@@ -1008,7 +1009,7 @@ mod tests {
                 let keys = RadrootsNostrKeys::generate();
                 for idx in 0..notes_per_worker {
                     let content = format!("parallel-{worker}-{idx}");
-                    let event = RadrootsNostrEventBuilder::text_note(content.as_str())
+                    let event = EventBuilder::text_note(content.as_str())
                         .sign_with_keys(&keys)
                         .expect("event should sign");
                     db.ingest_event(&event, RadrootsNostrdbIngestSource::client())

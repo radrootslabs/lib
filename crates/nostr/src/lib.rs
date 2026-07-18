@@ -44,7 +44,6 @@ pub mod event_convert;
 pub mod event_verify;
 
 pub mod prelude {
-    pub use crate::events::radroots_nostr_build_event;
 
     #[cfg(feature = "blossom")]
     pub use crate::blossom::{
@@ -61,6 +60,9 @@ pub mod prelude {
         radroots_nostr_send_event,
     };
 
+    #[cfg(all(feature = "client", feature = "events"))]
+    pub use crate::client::radroots_nostr_send_post_event;
+
     pub use crate::error::{RadrootsNostrError, RadrootsNostrTagsResolveError};
     pub use crate::filter::{
         radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
@@ -74,8 +76,8 @@ pub mod prelude {
 
     #[cfg(feature = "events")]
     pub use crate::events::post::{
-        radroots_nostr_build_ask_event, radroots_nostr_build_photo_update_event,
-        radroots_nostr_build_update_event,
+        RadrootsNostrPostEventBuilder, radroots_nostr_build_ask_event,
+        radroots_nostr_build_photo_update_event, radroots_nostr_build_update_event,
     };
 
     #[cfg(feature = "events")]
@@ -100,8 +102,8 @@ pub mod prelude {
     };
     pub use crate::tags::*;
     pub use crate::types::{
-        RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventBuilder,
-        RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrFromBech32, RadrootsNostrKeys,
+        RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrFilter,
+        RadrootsNostrFromBech32, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys,
         RadrootsNostrKind, RadrootsNostrMetadata, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
         RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
         RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,

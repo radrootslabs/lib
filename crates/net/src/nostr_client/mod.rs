@@ -2,7 +2,7 @@ mod connection;
 mod inner;
 mod manager;
 mod events {
-    mod custom;
+    mod fetch;
     mod post;
     mod profile;
 }

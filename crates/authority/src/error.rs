@@ -48,6 +48,8 @@ pub enum RadrootsAuthorityError {
         signer_pubkey: String,
     },
 
+    DraftValidation(radroots_event::draft::RadrootsDraftError),
+
     SignedEventPubkeyMismatch {
         expected_pubkey: String,
         actual_pubkey: String,
@@ -143,6 +145,7 @@ impl fmt::Display for RadrootsAuthorityError {
                 f,
                 "signer pubkey mismatch: expected {expected_pubkey}, got {signer_pubkey}"
             ),
+            Self::DraftValidation(error) => write!(f, "draft validation failed: {error}"),
             Self::SignedEventPubkeyMismatch {
                 expected_pubkey,
                 actual_pubkey,
@@ -207,6 +210,7 @@ impl fmt::Display for RadrootsAuthorityError {
 impl std::error::Error for RadrootsAuthorityError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::DraftValidation(error) => Some(error),
             Self::Signer(error) => Some(error),
             _ => None,
         }
@@ -399,6 +403,28 @@ mod tests {
         assert_eq!(
             authority_error.source().expect("signer source").to_string(),
             "signing failed: deterministic failure"
+        );
+    }
+
+    #[test]
+    fn draft_validation_error_preserves_typed_source() {
+        let authority_error = RadrootsAuthorityError::DraftValidation(
+            radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
+                expected: 2,
+                actual: 1,
+            },
+        );
+
+        assert_eq!(
+            authority_error.to_string(),
+            "draft validation failed: event contract registry version mismatch: expected 2, got 1"
+        );
+        assert_eq!(
+            authority_error
+                .source()
+                .expect("draft validation source")
+                .to_string(),
+            "event contract registry version mismatch: expected 2, got 1"
         );
     }
 }

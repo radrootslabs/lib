@@ -47,13 +47,14 @@ impl RadrootsNostrEventSink for RadrootsNostrInMemoryEventSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
+    use nostr::EventBuilder;
+    use radroots_nostr::prelude::RadrootsNostrKeys;
 
     #[test]
     fn in_memory_sink_tracks_events() {
         let sink = RadrootsNostrInMemoryEventSink::new();
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello")
+        let event = EventBuilder::text_note("hello")
             .sign_with_keys(&keys)
             .expect("event should sign");
 

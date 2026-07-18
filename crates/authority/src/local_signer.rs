@@ -39,7 +39,7 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 mod tests {
     use super::*;
     use radroots_event::RadrootsEventEnvelope;
-    use radroots_event::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_GEOCHAT;
     use radroots_nostr::prelude::{
         RadrootsNostrEventVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
     };
@@ -55,10 +55,10 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn post_draft() -> RadrootsEventDraft {
+    fn generic_draft() -> RadrootsEventDraft {
         RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1_700_000_000,
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             "hello",
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn local_signer_signs_and_verifies_frozen_drafts() {
         let signer = RadrootsLocalEventSigner::new(fixture_keys()).expect("signer");
-        let draft = post_draft();
+        let draft = generic_draft();
 
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 

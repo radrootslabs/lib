@@ -35,12 +35,16 @@ wire parts and require runtime signing and transport.
 
 Ordinary kind-1 events remain interoperable at the generic
 `radroots.social.post.v1` read boundary. Product projection first requires a
-`RadrootsSignatureVerifiedEvent`; any `e` tag excludes the event as a reply,
-then root-card precedence is Ask, PhotoUpdate, Update. Exact subtype registry
+`RadrootsSignatureVerifiedEvent`; any `e` tag excludes the event as a thread
+candidate without asserting NIP-10 Reply validity, then root-card precedence is
+Ask, PhotoUpdate, Update. The admission result keeps root product admission and
+thread-excluded candidates in distinct public variants. Exact subtype registry
 contracts are admission-only and cannot be selected by unsigned kind/tag
-matching. New publication uses the strict authored types and deterministic wire
-builders. The legacy mutable `RadrootsPost` decoder is compatibility-only and
-has no authored encoder or tag-builder implementation.
+matching. New root publication uses the strict authored types and a sealed
+Nostr builder with no raw tag/content mutation; generic builder publication
+rejects unmarked kind `1` before signing. The legacy mutable `RadrootsPost`
+decoder is compatibility-only and has no authored encoder or tag-builder
+implementation.
 
 ## Coverage matrix
 
@@ -48,7 +52,7 @@ has no authored encoder or tag-builder implementation.
 | --- | --- | --- | --- | --- |
 | profile | 0 | RadrootsAuthoredProfile / RadrootsInboundProfileMetadata | events.profile.publish, events.profile.list, events.profile.get | publish must use `profile.build_authored_draft`; inbound projection must use `profile.parse_inbound_metadata`; authored output is deterministic JSON with no marker tag |
 | follow | 3 | RadrootsFollow | events.follow.publish, events.follow.list, events.follow.get | replaceable event |
-| post | 1 | RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; replies are excluded before Ask/media projection |
+| post | 1 | RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; any `e` tag produces a thread-excluded candidate without a Reply claim |
 | comment | 1111 | RadrootsComment | events.comment.publish, events.comment.list, events.comment.get | requires root and parent tags |
 | reaction | 7 | RadrootsReaction | events.reaction.publish, events.reaction.list, events.reaction.get | requires event, pubkey, or address tags |
 | repost | 6 | RadrootsRepost | events.repost.publish, events.repost.list, events.repost.get | NIP-18 kind-1 repost surface |

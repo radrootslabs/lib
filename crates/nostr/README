@@ -12,7 +12,7 @@ primitives for the `radroots` core libraries.
    representations;
  * strict BUD-11 signed HTTP authorization adapters behind the `blossom`
    feature;
- * optional NIP-11 and NIP-17 support alongside `std` and `no_std` builds.
+ * optional NIP-11 and NIP-17 support across feature-gated builds.
 
 The `blossom` feature signs kind-24242 authorization events and encodes or
 verifies their `Authorization: Nostr` HTTP values. It does not publish these
@@ -24,9 +24,20 @@ typed Update, PhotoUpdate, and Ask builders backed by the strict
 `radroots_event_codec` wire operations. The former free-form text-note post
 builder is removed. Reply construction remains a separate compatibility
 surface pending the dedicated strict NIP-10 contract; it is not used to author
-root product cards. Media builders do not sign or publish and require the
-owning runtime to prove successful BUD-02 upload completion first; the generic
-net manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+root product cards. Generic protocol builders reject kind-0 Profile events and
+unmarked root kind-1 events at both direct signing and client-publication
+boundaries. Kind-1 builders carrying an `e` tag remain available for thread
+compatibility. Typed media builders can sign or publish only after the owning
+runtime separately proves successful BUD-02 upload completion; their
+byte-verified descriptors do not attest upload completion. The generic net
+manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+
+The opaque generic-builder policy governs Radroots builder signing and client
+publication. It does not redefine the standard NIP-46 `sign_event` method or a
+signer backend's externally supplied unsigned-event operation. Those are
+explicit low-level Nostr interoperability boundaries; their outputs carry no
+Radroots typed product-authoring claim and are not product authoring entry
+points.
 
 ## Portable relay-client lifecycle
 

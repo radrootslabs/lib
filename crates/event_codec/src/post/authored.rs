@@ -1,6 +1,5 @@
 #[cfg(not(feature = "std"))]
 use alloc::{
-    format,
     string::{String, ToString},
     vec,
     vec::Vec,
@@ -12,7 +11,6 @@ use radroots_event::{
         RADROOTS_ASK_MARKER_TAG_KEY, RADROOTS_ASK_MARKER_TAG_VALUE, RadrootsAuthoredAsk,
         RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostImage, RadrootsAuthoredUpdate,
     },
-    tags::TAG_IMETA,
     wire::RadrootsNip01EventWireParts,
 };
 
@@ -61,29 +59,8 @@ pub fn authored_ask_to_wire_parts(ask: &RadrootsAuthoredAsk) -> RadrootsNip01Eve
 }
 
 fn image_tags(images: &[RadrootsAuthoredPostImage]) -> Vec<Vec<String>> {
-    images.iter().map(image_tag).collect()
-}
-
-fn image_tag(image: &RadrootsAuthoredPostImage) -> Vec<String> {
-    let descriptor = image.image().descriptor();
-    let dimensions = image.dimensions();
-    let mut tag = Vec::with_capacity(7 + image.fallbacks().len());
-    tag.push(TAG_IMETA.to_string());
-    tag.push(format!("url {}", descriptor.url()));
-    tag.push(format!("x {}", descriptor.sha256()));
-    tag.push(format!("m {}", descriptor.media_type()));
-    tag.push(format!(
-        "dim {}x{}",
-        dimensions.width(),
-        dimensions.height()
-    ));
-    tag.push(format!("size {}", descriptor.size()));
-    tag.push(format!("alt {}", image.alt()));
-    tag.extend(
-        image
-            .fallbacks()
-            .iter()
-            .map(|fallback| format!("fallback {fallback}")),
-    );
-    tag
+    images
+        .iter()
+        .map(|image| image.imeta_tag().to_vec())
+        .collect()
 }

@@ -7,7 +7,8 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::contract::{
-    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError, event_contract,
+    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError,
+    RadrootsEventAuthoringPolicy, RadrootsEventContract, event_contract,
     validate_event_contract_parts,
 };
 use crate::ids::{
@@ -30,6 +31,17 @@ pub enum RadrootsDraftError {
         contract_id: String,
         expected_kind: u32,
         actual_kind: u32,
+    },
+    ContractNotDraftAuthorable {
+        contract_id: String,
+    },
+    ContractRegistryVersionMismatch {
+        expected: u32,
+        actual: u32,
+    },
+    DraftExpectedEventIdMismatch {
+        expected_event_id: String,
+        actual_event_id: String,
     },
     ContractShape {
         contract_id: String,
@@ -82,6 +94,21 @@ impl fmt::Display for RadrootsDraftError {
             } => write!(
                 f,
                 "event contract `{contract_id}` expects kind {expected_kind}, got {actual_kind}"
+            ),
+            Self::ContractNotDraftAuthorable { contract_id } => write!(
+                f,
+                "event contract `{contract_id}` is not authorable through generic frozen drafts"
+            ),
+            Self::ContractRegistryVersionMismatch { expected, actual } => write!(
+                f,
+                "event contract registry version mismatch: expected {expected}, got {actual}"
+            ),
+            Self::DraftExpectedEventIdMismatch {
+                expected_event_id,
+                actual_event_id,
+            } => write!(
+                f,
+                "frozen draft event ID mismatch: expected {expected_event_id}, got {actual_event_id}"
             ),
             Self::ContractShape { contract_id, error } => write!(
                 f,
@@ -175,10 +202,7 @@ impl From<RadrootsSignedEventError> for RadrootsDraftError {
     }
 }
 
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
+#[cfg_attr(any(feature = "serde", test), derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventDraft {
     contract_id: String,
@@ -212,6 +236,7 @@ impl RadrootsEventDraft {
                 actual_kind: kind,
             });
         }
+        ensure_generic_draft_authorable(contract)?;
         let expected_pubkey = RadrootsPublicKey::parse(expected_pubkey.as_ref())?;
         let content = content.into();
         validate_event_contract_parts(kind, &tags, content.as_str(), contract.id).map_err(
@@ -248,6 +273,53 @@ impl RadrootsEventDraft {
             &self.tags.to_vec(),
             self.content.as_str(),
         ))
+    }
+
+    /// Revalidates registry policy, contract shape, and the deterministic ID.
+    ///
+    /// Signing boundaries must call this even for a previously validated draft
+    /// so persisted data cannot bypass current registry authority.
+    pub fn validate_for_signing(&self) -> Result<(), RadrootsDraftError> {
+        if self.contract_registry_version != RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
+            return Err(RadrootsDraftError::ContractRegistryVersionMismatch {
+                expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+                actual: self.contract_registry_version,
+            });
+        }
+        let contract = event_contract(self.contract_id())
+            .ok_or_else(|| RadrootsDraftError::UnknownContract(self.contract_id().to_owned()))?;
+        if contract.kind != self.kind_u32() {
+            return Err(RadrootsDraftError::ContractKindMismatch {
+                contract_id: contract.id.to_owned(),
+                expected_kind: contract.kind,
+                actual_kind: self.kind_u32(),
+            });
+        }
+        ensure_generic_draft_authorable(contract)?;
+        validate_event_contract_parts(
+            self.kind_u32(),
+            &self.tags_as_vec(),
+            self.content(),
+            contract.id,
+        )
+        .map_err(|error| RadrootsDraftError::ContractShape {
+            contract_id: contract.id.to_owned(),
+            error,
+        })?;
+        let actual_event_id = compute_nip01_event_id_for_valid_pubkey(
+            self.expected_pubkey_str(),
+            self.created_at_u64(),
+            self.kind_u32(),
+            &self.tags_as_vec(),
+            self.content(),
+        );
+        if actual_event_id != self.expected_event_id {
+            return Err(RadrootsDraftError::DraftExpectedEventIdMismatch {
+                expected_event_id: actual_event_id.as_str().to_owned(),
+                actual_event_id: self.expected_event_id_str().to_owned(),
+            });
+        }
+        Ok(())
     }
 
     #[inline]
@@ -312,6 +384,66 @@ impl RadrootsEventDraft {
     #[inline]
     pub fn expected_event_id_str(&self) -> &str {
         self.expected_event_id.as_str()
+    }
+}
+
+fn ensure_generic_draft_authorable(
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsDraftError> {
+    if contract.authoring_policy != RadrootsEventAuthoringPolicy::GenericDraft {
+        return Err(RadrootsDraftError::ContractNotDraftAuthorable {
+            contract_id: contract.id.to_owned(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(any(feature = "serde", test))]
+impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct DraftSerde {
+            contract_id: String,
+            contract_registry_version: u32,
+            kind: RadrootsEventKind,
+            created_at: RadrootsEventTimestamp,
+            tags: RadrootsEventTags,
+            content: String,
+            expected_pubkey: RadrootsPublicKey,
+            expected_event_id: RadrootsEventId,
+        }
+
+        let value = DraftSerde::deserialize(deserializer)?;
+        if value.contract_registry_version != RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
+            return Err(serde::de::Error::custom(
+                RadrootsDraftError::ContractRegistryVersionMismatch {
+                    expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+                    actual: value.contract_registry_version,
+                },
+            ));
+        }
+        let draft = Self::new(
+            value.contract_id,
+            value.kind.as_u32(),
+            value.created_at.as_u64(),
+            value.tags.to_vec(),
+            value.content,
+            value.expected_pubkey.as_str(),
+        )
+        .map_err(serde::de::Error::custom)?;
+        if draft.expected_event_id != value.expected_event_id {
+            return Err(serde::de::Error::custom(
+                RadrootsDraftError::DraftExpectedEventIdMismatch {
+                    expected_event_id: draft.expected_event_id_str().to_owned(),
+                    actual_event_id: value.expected_event_id.as_str().to_owned(),
+                },
+            ));
+        }
+        Ok(draft)
     }
 }
 
@@ -595,6 +727,7 @@ pub fn validate_signed_nostr_event_matches_draft(
     signed_event: &RadrootsSignedEvent,
     draft: &RadrootsEventDraft,
 ) -> Result<(), RadrootsDraftError> {
+    draft.validate_for_signing()?;
     if signed_event.pubkey_str() != draft.expected_pubkey_str() {
         return Err(RadrootsDraftError::SignedEventPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey_str().to_owned(),
@@ -728,7 +861,10 @@ fn nip01_event_id_preimage_for_valid_pubkey(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinds::{KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE, KIND_POST, KIND_PROFILE};
+    use crate::kinds::{
+        KIND_FARM_CRDT_CHANGE, KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE,
+        KIND_POST, KIND_PROFILE,
+    };
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -814,12 +950,12 @@ mod tests {
         RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn post_draft() -> RadrootsEventDraft {
+    fn generic_draft() -> RadrootsEventDraft {
         RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1_700_000_000,
-            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            Vec::new(),
             "hello",
             "a".repeat(64),
         )
@@ -833,13 +969,10 @@ mod tests {
     #[test]
     fn draft_computes_expected_event_id() {
         let draft = RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1_700_000_000,
-            vec![
-                vec!["t".to_owned(), "soil".to_owned()],
-                vec!["p".to_owned(), hex_64('b')],
-            ],
+            Vec::new(),
             "hello",
             hex_64('a'),
         )
@@ -847,11 +980,11 @@ mod tests {
 
         assert_eq!(
             draft.nip01_preimage().expect("preimage"),
-            "[0,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",1700000000,1,[[\"t\",\"soil\"],[\"p\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]],\"hello\"]"
+            "[0,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",1700000000,20000,[],\"hello\"]"
         );
         assert_eq!(
             draft.expected_event_id_str(),
-            "59d2486ef5557e0e317127de55005f2863361ad4041277ae523a869f2294cf9c"
+            "07643222c33091b20114d5baf1a32288e808177eac7d87acb2c4f610363a2a7d"
         );
     }
 
@@ -923,8 +1056,8 @@ mod tests {
         ));
 
         let invalid_pubkey = RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1,
             Vec::new(),
             "",
@@ -932,6 +1065,88 @@ mod tests {
         )
         .expect_err("invalid pubkey");
         assert!(matches!(invalid_pubkey, RadrootsDraftError::IdParse(_)));
+    }
+
+    #[test]
+    fn draft_constructor_rejects_read_only_and_typed_only_contracts() {
+        for (contract_id, kind) in [
+            ("radroots.profile.metadata.v1", KIND_PROFILE),
+            ("radroots.social.post.v1", KIND_POST),
+            ("radroots.social.update.v1", KIND_POST),
+            ("radroots.social.photo_update.v1", KIND_POST),
+            ("radroots.social.ask.v1", KIND_POST),
+        ] {
+            let error =
+                RadrootsEventDraft::new(contract_id, kind, 1, Vec::new(), "hello", hex_64('a'))
+                    .expect_err("governed typed or read-only contract must reject generic drafts");
+            assert_eq!(
+                error,
+                RadrootsDraftError::ContractNotDraftAuthorable {
+                    contract_id: contract_id.to_owned(),
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn draft_deserialization_revalidates_registry_policy_shape_and_event_id() {
+        let draft = generic_draft();
+        let value = serde_json::to_value(&draft).expect("draft json");
+        let decoded: RadrootsEventDraft =
+            serde_json::from_value(value.clone()).expect("validated roundtrip");
+        assert_eq!(decoded, draft);
+
+        let mut tampered = value.clone();
+        tampered["contract_registry_version"] = serde_json::json!(1);
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("stale registry generation must fail");
+        assert!(error.to_string().contains("registry version mismatch"));
+
+        let mut tampered = value.clone();
+        tampered["expected_event_id"] = serde_json::Value::String(hex_64('f'));
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("tampered deterministic ID must fail");
+        assert!(error.to_string().contains("frozen draft event ID mismatch"));
+
+        let mut tampered = value.clone();
+        tampered["contract_id"] = serde_json::Value::String("missing".to_owned());
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("unknown persisted contract must fail");
+        assert!(error.to_string().contains("unknown event contract"));
+
+        let mut tampered = value.clone();
+        tampered["kind"] = serde_json::json!(KIND_PROFILE);
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("persisted contract kind mismatch must fail");
+        assert!(error.to_string().contains("expects kind"));
+
+        let mut tampered = value.clone();
+        tampered["contract_id"] = serde_json::Value::String("radroots.social.post.v1".to_owned());
+        tampered["kind"] = serde_json::json!(KIND_POST);
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("read-only persisted contract must fail");
+        assert!(error.to_string().contains("not authorable"));
+
+        let json_draft = RadrootsEventDraft::new(
+            "radroots.farm.crdt_change.v1",
+            KIND_FARM_CRDT_CHANGE,
+            1,
+            Vec::new(),
+            "{}",
+            hex_64('a'),
+        )
+        .expect("generic JSON draft");
+        let mut tampered = serde_json::to_value(json_draft).expect("JSON draft value");
+        tampered["content"] = serde_json::Value::String("not-json".to_owned());
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("persisted contract shape mismatch must fail");
+        assert!(error.to_string().contains("shape validation failed"));
+
+        let mut tampered = value;
+        tampered["unexpected"] = serde_json::json!(true);
+        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            .expect_err("unknown persisted draft field must fail");
+        assert!(error.to_string().contains("unknown field"));
     }
 
     #[test]
@@ -1152,7 +1367,7 @@ mod tests {
 
     #[test]
     fn signed_event_validation_accepts_exact_draft_match() {
-        let draft = post_draft();
+        let draft = generic_draft();
         let signed = signed_event_for_draft(&draft);
 
         validate_signed_nostr_event_matches_draft(&signed, &draft).expect("valid signed event");
@@ -1160,7 +1375,7 @@ mod tests {
 
     #[test]
     fn signed_event_validation_rejects_draft_mismatches() {
-        let draft = post_draft();
+        let draft = generic_draft();
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
@@ -1283,30 +1498,6 @@ mod tests {
             error,
             RadrootsDraftError::SignedEventContentMismatch { .. }
         ));
-
-        let mut draft_value = serde_json::to_value(post_draft()).expect("draft json");
-        draft_value["expected_event_id"] = serde_json::Value::String(hex_64('f'));
-        let draft: RadrootsEventDraft =
-            serde_json::from_value(draft_value).expect("tampered draft");
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
-            unchecked_wire(
-                draft.expected_event_id_str().to_string(),
-                draft.expected_pubkey_str().to_string(),
-                draft.created_at_u64(),
-                draft.kind_u32(),
-                draft.tags_as_vec(),
-                draft.content().to_string(),
-                hex_128('b'),
-            ),
-            "{}",
-        )
-        .expect("unchecked signed event");
-        let error =
-            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
-        assert!(matches!(
-            error,
-            RadrootsDraftError::SignedEventComputedIdMismatch { .. }
-        ));
     }
 
     #[test]
@@ -1317,6 +1508,17 @@ mod tests {
                 contract_id: "radroots.social.post.v1".to_owned(),
                 expected_kind: KIND_POST,
                 actual_kind: KIND_PROFILE,
+            },
+            RadrootsDraftError::ContractNotDraftAuthorable {
+                contract_id: "radroots.social.post.v1".to_owned(),
+            },
+            RadrootsDraftError::ContractRegistryVersionMismatch {
+                expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+                actual: 1,
+            },
+            RadrootsDraftError::DraftExpectedEventIdMismatch {
+                expected_event_id: hex_64('a'),
+                actual_event_id: hex_64('b'),
             },
             RadrootsDraftError::ContractShape {
                 contract_id: "radroots.knowledge.claim.v1".to_owned(),
@@ -1394,8 +1596,8 @@ mod tests {
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn draft_and_signed_event_accessors_expose_typed_state() {
-        let draft = post_draft();
-        assert_eq!(draft.contract_id(), "radroots.social.post.v1");
+        let draft = generic_draft();
+        assert_eq!(draft.contract_id(), "radroots.social.geochat.v1");
         assert_eq!(
             draft.contract_registry_version(),
             RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION

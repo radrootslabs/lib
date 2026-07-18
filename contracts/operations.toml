@@ -82,7 +82,9 @@ public = [
   "RadrootsInboundPostImeta",
   "RadrootsInboundPostProjection",
   "RadrootsPostProjectionError",
-  "RadrootsAdmittedPostEvent",
+  "RadrootsAdmittedRootPostEvent",
+  "RadrootsThreadExcludedPostCandidate",
+  "RadrootsPostAdmissionOutcome",
   "RadrootsPostAdmissionError",
   "RadrootsComment",
   "RadrootsReaction",
@@ -599,6 +601,10 @@ rust_types = [
 
 [operations.social_update_build_authored_draft.conformance]
 vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.update.build_authored_draft.valid",
+  "social.update.build_authored_draft.invalid",
+]
 
 [operations.social_photo_update_build_authored_draft]
 domain = "social"
@@ -628,6 +634,10 @@ rust_types = [
 
 [operations.social_photo_update_build_authored_draft.conformance]
 vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.photo_update.build_authored_draft.valid",
+  "social.photo_update.build_authored_draft.invalid",
+]
 
 [operations.social_ask_build_authored_draft]
 domain = "social"
@@ -653,6 +663,10 @@ rust_types = [
 
 [operations.social_ask_build_authored_draft.conformance]
 vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.ask.build_authored_draft.valid",
+  "social.ask.build_authored_draft.invalid",
+]
 
 [operations.social_post_project_verified_event]
 domain = "social"
@@ -678,13 +692,17 @@ rust_types = [
 
 [operations.social_post_project_verified_event.conformance]
 vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.post.project_verified_event.valid",
+  "social.post.project_verified_event.invalid",
+]
 
 [operations.social_post_verify_and_admit_event]
 domain = "social"
 id = "social.post.verify_and_admit_event"
 stability = "beta"
 inputs = ["RadrootsEventEnvelope"]
-outputs = ["RadrootsAdmittedPostEvent"]
+outputs = ["RadrootsPostAdmissionOutcome"]
 error_class = "admission_error"
 deterministic = true
 signing = "nip01"
@@ -698,14 +716,20 @@ rust_modules = [
 ]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
-  "radroots_event_codec::post::admission::RadrootsAdmittedPostEvent",
+  "radroots_event_codec::post::admission::RadrootsAdmittedRootPostEvent",
   "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
+  "radroots_event_codec::post::admission::RadrootsPostAdmissionOutcome",
+  "radroots_event_codec::post::admission::RadrootsThreadExcludedPostCandidate",
   "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
   "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
 ]
 
 [operations.social_post_verify_and_admit_event.conformance]
 vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.post.verify_and_admit_event.valid",
+  "social.post.verify_and_admit_event.invalid",
+]
 
 [operations.social_comment_build_tags]
 domain = "social"

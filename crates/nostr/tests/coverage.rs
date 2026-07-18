@@ -11,7 +11,6 @@ use radroots_nostr::events::jobs::{
 use radroots_nostr::events::post::{
     radroots_nostr_build_post_reply_event, radroots_nostr_post_events_filter,
 };
-use radroots_nostr::events::radroots_nostr_build_event;
 use radroots_nostr::filter::{
     radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
     radroots_nostr_kind,
@@ -25,8 +24,8 @@ use radroots_nostr::tags::{
     radroots_nostr_tags_resolve,
 };
 use radroots_nostr::types::{
-    RadrootsNostrEventBuilder, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrRelayUrl,
-    RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
+    RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrRelayUrl, RadrootsNostrTag,
+    RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
 };
 use radroots_nostr::util::{
     created_at_u32_saturating, event_created_at_u32_saturating, radroots_nostr_npub_string,
@@ -38,7 +37,7 @@ fn make_keys() -> RadrootsNostrKeys {
 }
 
 fn text_event_with_tags(keys: &RadrootsNostrKeys, tags: Vec<RadrootsNostrTag>) -> nostr::Event {
-    RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "content")
+    nostr::EventBuilder::new(RadrootsNostrKind::TextNote, "content")
         .tags(tags)
         .sign_with_keys(keys)
         .expect("sign event")
@@ -49,7 +48,7 @@ fn encrypted_event_with_p_tag(
     content: impl Into<String>,
     recipient_hex: &str,
 ) -> nostr::Event {
-    RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, content.into())
+    nostr::EventBuilder::new(RadrootsNostrKind::TextNote, content.into())
         .tags(vec![
             RadrootsNostrTag::custom(
                 RadrootsNostrTagKind::Encrypted,
@@ -62,38 +61,12 @@ fn encrypted_event_with_p_tag(
 }
 
 #[test]
-fn build_event_skips_empty_tag_slices() {
-    let keys = make_keys();
-    let pubkey_hex = keys.public_key().to_hex();
-    let builder = radroots_nostr_build_event(
-        1,
-        "test",
-        vec![vec![], vec!["p".to_string(), pubkey_hex.clone()]],
-    )
-    .expect("builder");
-    let event = builder.build(keys.public_key());
-    let has_self_p_tag = event.tags.iter().any(|tag| {
-        tag.kind() == RadrootsNostrTagKind::p() && tag.content() == Some(pubkey_hex.as_str())
-    });
-    assert!(has_self_p_tag);
-
-    let builder_string = radroots_nostr_build_event(
-        1,
-        String::from("test"),
-        vec![vec![], vec!["x".to_string(), "v".to_string()]],
-    )
-    .expect("builder string");
-    let event_string = builder_string.build(keys.public_key());
-    assert_eq!(event_string.tags.len(), 1);
-}
-
-#[test]
 fn job_event_builders_are_callable() {
     let keys = make_keys();
-    let job_request = RadrootsNostrEventBuilder::new(RadrootsNostrKind::Custom(5001), "job")
+    let job_request = nostr::EventBuilder::new(RadrootsNostrKind::Custom(5001), "job")
         .sign_with_keys(&keys)
         .expect("job request");
-    let non_job_request = RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "job")
+    let non_job_request = nostr::EventBuilder::new(RadrootsNostrKind::TextNote, "job")
         .sign_with_keys(&keys)
         .expect("non-job request");
 
@@ -105,7 +78,9 @@ fn job_event_builders_are_callable() {
         Some(Vec::new()),
     )
     .expect("job result builder");
-    let _ = job_result.build(keys.public_key());
+    let _ = job_result
+        .sign_with_keys(&keys)
+        .expect("job result signs through the generic boundary");
 
     let feedback_ok = radroots_nostr_build_event_job_feedback(
         &job_request,
@@ -114,12 +89,16 @@ fn job_event_builders_are_callable() {
         Some(Vec::new()),
     )
     .expect("job feedback builder");
-    let _ = feedback_ok.build(keys.public_key());
+    let _ = feedback_ok
+        .sign_with_keys(&keys)
+        .expect("job feedback signs through the generic boundary");
 
     let feedback_invalid =
         radroots_nostr_build_event_job_feedback(&job_request, "invalid-status", None, None)
             .expect("job feedback fallback builder");
-    let _ = feedback_invalid.build(keys.public_key());
+    let _ = feedback_invalid
+        .sign_with_keys(&keys)
+        .expect("fallback job feedback signs through the generic boundary");
 
     let invalid_job_result = radroots_nostr_build_event_job_result(
         &non_job_request,
@@ -149,7 +128,9 @@ fn post_helpers_cover_success_and_error_paths() {
         Some(root_id_hex.as_str()),
     )
     .expect("reply event builder");
-    let _ = reply_ok.build(keys.public_key());
+    let _ = reply_ok
+        .sign_with_keys(&keys)
+        .expect("reply signs through the generic boundary");
 
     let reply_invalid_root = radroots_nostr_build_post_reply_event(
         &parent_id_hex,
@@ -158,15 +139,21 @@ fn post_helpers_cover_success_and_error_paths() {
         Some("not-hex-root"),
     )
     .expect("reply builder with invalid optional root");
-    let _ = reply_invalid_root.build(keys.public_key());
+    let _ = reply_invalid_root
+        .sign_with_keys(&keys)
+        .expect("reply with invalid optional root signs");
     let reply_empty_root =
         radroots_nostr_build_post_reply_event(&parent_id_hex, &author_hex, "reply", Some(""))
             .expect("reply builder with empty optional root");
-    let _ = reply_empty_root.build(keys.public_key());
+    let _ = reply_empty_root
+        .sign_with_keys(&keys)
+        .expect("reply with empty optional root signs");
     let reply_none_root =
         radroots_nostr_build_post_reply_event(&parent_id_hex, &author_hex, "reply", None)
             .expect("reply builder without optional root");
-    let _ = reply_none_root.build(keys.public_key());
+    let _ = reply_none_root
+        .sign_with_keys(&keys)
+        .expect("reply without optional root signs");
 
     let invalid_parent = radroots_nostr_build_post_reply_event("bad", &author_hex, "reply", None);
     assert!(invalid_parent.is_err());
@@ -351,17 +338,16 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         Err(RadrootsNostrTagsResolveError::MissingPTag(_))
     ));
 
-    let encrypted_empty_p_content =
-        RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
-            .tags(vec![
-                RadrootsNostrTag::custom(
-                    RadrootsNostrTagKind::Encrypted,
-                    vec!["encrypted".to_string()],
-                ),
-                RadrootsNostrTag::custom(RadrootsNostrTagKind::p(), Vec::<String>::new()),
-            ])
-            .sign_with_keys(&sender)
-            .expect("sign encrypted event with empty p tag");
+    let encrypted_empty_p_content = nostr::EventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
+        .tags(vec![
+            RadrootsNostrTag::custom(
+                RadrootsNostrTagKind::Encrypted,
+                vec!["encrypted".to_string()],
+            ),
+            RadrootsNostrTag::custom(RadrootsNostrTagKind::p(), Vec::<String>::new()),
+        ])
+        .sign_with_keys(&sender)
+        .expect("sign encrypted event with empty p tag");
     let empty_p_content = radroots_nostr_tags_resolve(&encrypted_empty_p_content, &keys);
     assert!(matches!(
         empty_p_content,

@@ -71,7 +71,7 @@ fn raw_event_from_radroots(event: &RadrootsEventEnvelope) -> Option<RadrootsNost
 mod tests {
     use super::*;
     use crate::event_convert::radroots_event_from_nostr;
-    use crate::events::radroots_nostr_build_event;
+    use crate::events::radroots_nostr_build_event_unchecked;
     use crate::test_fixtures::FIXTURE_ALICE;
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
     use radroots_event::{RadrootsEventEnvelopeParts, kinds::KIND_POST};
@@ -83,7 +83,7 @@ mod tests {
     }
 
     fn signed_event() -> RadrootsEventEnvelope {
-        let raw_event = radroots_nostr_build_event(
+        let raw_event = radroots_nostr_build_event_unchecked(
             KIND_POST,
             "hello",
             vec![vec!["t".to_owned(), "soil".to_owned()]],
@@ -92,7 +92,7 @@ mod tests {
         .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
         .sign_with_keys(&fixture_keys())
         .expect("signed event");
-        radroots_event_from_nostr(&raw_event)
+        radroots_event_from_nostr(&raw_event).expect("Radroots event envelope")
     }
 
     fn envelope_with(

@@ -1,6 +1,6 @@
 use radroots_event::contract::RadrootsContractValidationError;
 use radroots_event::draft::{RadrootsDraftError, RadrootsEventDraft};
-use radroots_event::kinds::{KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE, KIND_POST};
+use radroots_event::kinds::{KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE};
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::wire::{canonicalize_tags, empty_content};
 
@@ -28,7 +28,7 @@ fn wire_canonicalize_tags_trims_sorts_and_dedups() {
 #[test]
 fn wire_parts_are_canonical_event_owned_payload_parts() {
     let parts = RadrootsNip01EventWireParts {
-        kind: KIND_POST,
+        kind: KIND_GEOCHAT,
         content: "hello".to_string(),
         tags: vec![vec!["t".to_string(), "a".to_string()]],
     };
@@ -41,13 +41,13 @@ fn wire_parts_are_canonical_event_owned_payload_parts() {
 #[test]
 fn draft_validation_accepts_wire_parts_without_signed_envelope() {
     let parts = RadrootsNip01EventWireParts {
-        kind: KIND_POST,
+        kind: KIND_GEOCHAT,
         content: "hello".to_string(),
         tags: vec![vec!["t".to_string(), "a".to_string()]],
     };
 
     let draft = RadrootsEventDraft::new(
-        "radroots.social.post.v1",
+        "radroots.social.geochat.v1",
         parts.kind,
         99,
         parts.tags,
@@ -56,7 +56,7 @@ fn draft_validation_accepts_wire_parts_without_signed_envelope() {
     )
     .expect("draft");
 
-    assert_eq!(draft.kind_u32(), KIND_POST);
+    assert_eq!(draft.kind_u32(), KIND_GEOCHAT);
     assert_eq!(draft.created_at_u64(), 99);
     assert_eq!(draft.expected_pubkey_str(), "a".repeat(64));
     assert_eq!(draft.content(), "hello");

@@ -74,12 +74,13 @@ impl fmt::Display for RadrootsPostDiagnostic {
 
 /// Product projection for a verified kind-1 event.
 ///
-/// Reply is an exclusion classification only; strict NIP-10 parsing remains a
-/// separate contract. Update, PhotoUpdate, and Ask are root-card profiles.
+/// ThreadExcluded is an exclusion classification only; strict NIP-10 parsing
+/// remains a separate contract. Update, PhotoUpdate, and Ask are root-card
+/// profiles.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsPostClassification {
-    Reply,
+    ThreadExcluded,
     Update,
     PhotoUpdate,
     Ask,
@@ -88,7 +89,7 @@ pub enum RadrootsPostClassification {
 impl RadrootsPostClassification {
     pub const fn contract_id(self) -> &'static str {
         match self {
-            Self::Reply => "radroots.social.post.v1",
+            Self::ThreadExcluded => "radroots.social.post.v1",
             Self::Update => "radroots.social.update.v1",
             Self::PhotoUpdate => "radroots.social.photo_update.v1",
             Self::Ask => "radroots.social.ask.v1",
@@ -96,7 +97,7 @@ impl RadrootsPostClassification {
     }
 
     pub const fn is_root_card(self) -> bool {
-        !matches!(self, Self::Reply)
+        !matches!(self, Self::ThreadExcluded)
     }
 }
 
@@ -235,9 +236,9 @@ impl std::error::Error for RadrootsPostProjectionError {}
 /// Projects a signature-and-id verified kind-1 event without admitting it to a
 /// relay or claiming media verification.
 ///
-/// Any `e` tag selects Reply before Ask or media inspection. This function does
-/// not implement strict NIP-10 reply validation; that belongs to the dedicated
-/// reply contract.
+/// Any `e` tag excludes the event before Ask or media inspection. This function
+/// does not claim that the event is a valid NIP-10 reply; that belongs to the
+/// dedicated reply contract.
 pub fn project_verified_post_event(
     verified_event: &RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsInboundPostProjection, RadrootsPostProjectionError> {
@@ -267,7 +268,7 @@ pub(crate) fn project_inbound_post_parts(
         .any(|tag| tag.first().is_some_and(|key| key == "e"))
     {
         return Ok(RadrootsInboundPostProjection {
-            classification: RadrootsPostClassification::Reply,
+            classification: RadrootsPostClassification::ThreadExcluded,
             ask_marker: None,
             imeta: Vec::new(),
             diagnostics: Vec::new(),
@@ -496,7 +497,7 @@ mod tests {
     use radroots_event::post::RadrootsAuthoredUpdate;
 
     #[test]
-    fn reply_exclusion_precedes_ask_and_media_projection() {
+    fn thread_exclusion_precedes_ask_and_media_projection() {
         let projection = project_inbound_post_parts(
             KIND_POST,
             &[
@@ -510,10 +511,28 @@ mod tests {
 
         assert_eq!(
             projection.classification(),
-            RadrootsPostClassification::Reply
+            RadrootsPostClassification::ThreadExcluded
         );
         assert!(projection.imeta().is_empty());
         assert!(projection.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn every_empty_or_malformed_event_reference_is_thread_excluded() {
+        for event_reference in [
+            vec!["e".to_string()],
+            vec!["e".to_string(), String::new()],
+            vec!["e".to_string(), "not-an-event-id".to_string()],
+        ] {
+            let projection =
+                project_inbound_post_parts(KIND_POST, &[event_reference], "candidate").unwrap();
+
+            assert_eq!(
+                projection.classification(),
+                RadrootsPostClassification::ThreadExcluded
+            );
+            assert!(!projection.classification().is_root_card());
+        }
     }
 
     #[test]

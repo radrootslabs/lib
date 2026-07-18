@@ -9,9 +9,11 @@ use nostr_sdk::{Client, ClientBuilder, ClientOptions};
 use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
+#[cfg(feature = "events")]
+use crate::events::post::RadrootsNostrPostEventBuilder;
 use crate::types::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrEventStream,
-    RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput,
+    RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrEventStream, RadrootsNostrFilter,
+    RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput,
     RadrootsNostrPublicKey, RadrootsNostrRelay, RadrootsNostrRelayUrl,
     RadrootsNostrSubscribeAutoCloseOptions, RadrootsNostrSubscriptionId,
 };
@@ -239,13 +241,35 @@ impl RadrootsNostrClient {
         self.inner.unsubscribe(subscription_id).await;
     }
 
+    /// Publishes a generic event builder.
+    ///
+    /// Kind 0 profiles and unmarked root kind 1 events are rejected because
+    /// their product shape must come from typed authoring. Kind 1 builders
+    /// with an `e` tag remain available for thread compatibility.
     pub async fn send_event_builder(
         &self,
-        event: RadrootsNostrEventBuilder,
+        event: RadrootsNostrGenericEventBuilder,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        let event = event.into_checked_event_builder()?;
         Ok(self.inner.send_event_builder(event).await?)
     }
 
+    /// Publishes a validated root post through the sealed typed boundary.
+    #[cfg(feature = "events")]
+    pub async fn send_post_event_builder(
+        &self,
+        event: RadrootsNostrPostEventBuilder,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_builder(event.into_event_builder())
+            .await?)
+    }
+
+    /// Relays a caller-supplied signed event.
+    ///
+    /// This is a transport boundary, not an authored-builder boundary. The
+    /// caller is responsible for the event's authoring policy and signature.
     pub async fn send_event(
         &self,
         event: &RadrootsNostrEvent,
@@ -273,11 +297,21 @@ impl RadrootsNostrClient {
     }
 }
 
+/// Publishes a generic builder subject to typed-authoring reservations.
 pub async fn radroots_nostr_send_event(
     client: &RadrootsNostrClient,
-    event: RadrootsNostrEventBuilder,
+    event: RadrootsNostrGenericEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_event_builder(event).await
+}
+
+/// Publishes a validated root post through the sealed typed boundary.
+#[cfg(feature = "events")]
+pub async fn radroots_nostr_send_post_event(
+    client: &RadrootsNostrClient,
+    event: RadrootsNostrPostEventBuilder,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    client.send_post_event_builder(event).await
 }
 
 pub async fn radroots_nostr_fetch_event_by_id(
@@ -296,9 +330,10 @@ pub async fn radroots_nostr_fetch_event_by_id(
 #[cfg(test)]
 mod tests {
     use super::{RadrootsNostrClient, RadrootsNostrClientOptions};
+    use crate::error::RadrootsNostrError;
     use crate::types::{
-        RadrootsNostrEventBuilder, RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind,
-        RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
+        RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys,
+        RadrootsNostrKind, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId, RadrootsNostrTag,
     };
 
     #[tokio::test]
@@ -331,7 +366,7 @@ mod tests {
             .await;
         assert!(subscription.is_err());
 
-        let event = RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "test")
+        let event = nostr::EventBuilder::new(RadrootsNostrKind::TextNote, "test")
             .sign_with_keys(&keys)
             .expect("test event");
         let published = client.send_event_to_relays(&[], &event).await;
@@ -340,5 +375,79 @@ mod tests {
         client
             .unsubscribe(&RadrootsNostrSubscriptionId::new("missing"))
             .await;
+    }
+
+    #[tokio::test]
+    async fn generic_builder_rejects_typed_only_profiles_and_root_kind_one() {
+        let client = RadrootsNostrClient::new_signerless();
+        let raw_kind_one = RadrootsNostrKind::Custom(RadrootsNostrKind::TextNote.as_u16());
+        let builders = [
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Metadata, "{}"),
+            RadrootsNostrGenericEventBuilder::new(raw_kind_one, "Unmarked root"),
+            RadrootsNostrGenericEventBuilder::new(raw_kind_one, "Is it ripe?").tags([
+                RadrootsNostrTag::parse(["t", "radroots-ask"]).expect("ask marker"),
+                RadrootsNostrTag::parse([
+                    "imeta",
+                    "url https://media.example/ask.webp",
+                    "m image/webp",
+                ])
+                .expect("image metadata"),
+            ]),
+        ];
+
+        for builder in builders {
+            let error = client
+                .send_event_builder(builder)
+                .await
+                .expect_err("raw root kind-1 builder must be rejected before signer access");
+
+            assert!(matches!(
+                error,
+                RadrootsNostrError::TypedAuthoringRequired { .. }
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn generic_builder_allows_e_tagged_thread_compatibility() {
+        let keys = RadrootsNostrKeys::new(
+            RadrootsNostrSecretKey::from_slice(&[3_u8; 32]).expect("test secret key"),
+        );
+        let parent_author = keys.public_key().to_hex();
+        let client = RadrootsNostrClient::new(keys);
+        let builder = crate::events::post::radroots_nostr_build_post_reply_event(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            &parent_author,
+            "Reply",
+            None,
+        )
+        .expect("reply builder");
+
+        let error = client
+            .send_event_builder(builder)
+            .await
+            .expect_err("no relay is configured");
+
+        assert!(matches!(error, RadrootsNostrError::ClientError(_)));
+    }
+
+    #[cfg(feature = "events")]
+    #[tokio::test]
+    async fn sealed_post_builder_reaches_typed_client_publication() {
+        let keys = RadrootsNostrKeys::new(
+            RadrootsNostrSecretKey::from_slice(&[4_u8; 32]).expect("test secret key"),
+        );
+        let client = RadrootsNostrClient::new(keys);
+        let update = radroots_event::post::RadrootsAuthoredUpdate::new("Farm update")
+            .expect("authored update");
+        let builder = crate::events::post::radroots_nostr_build_update_event(&update)
+            .expect("sealed post builder");
+
+        let error = client
+            .send_post_event_builder(builder)
+            .await
+            .expect_err("no relay is configured");
+
+        assert!(matches!(error, RadrootsNostrError::ClientError(_)));
     }
 }

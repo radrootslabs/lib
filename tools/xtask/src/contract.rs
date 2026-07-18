@@ -21,6 +21,8 @@ const KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json";
 const KNOWLEDGE_PUBLIC_SURFACE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/public_surface.v1.json";
+const POST_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/post/verified_profiles.v1.json";
 const RELEASES_ROOT_RELATIVE: &str = "contracts/releases";
 const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
 const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
@@ -138,6 +140,30 @@ const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsParsedNip52CalendarEventRsvpParts",
     "RadrootsParsedNip52CalendarEventRsvp",
     "RadrootsAdmittedCalendarEventRsvp",
+];
+const REQUIRED_POST_PUBLIC_TYPES: [&str; 22] = [
+    "RadrootsBlossomApprovedBlobUrl",
+    "RadrootsBlossomByteVerifiedDescriptor",
+    "RadrootsNip01EventWireParts",
+    "RadrootsEventEnvelope",
+    "RadrootsSignatureVerifiedEvent",
+    "RadrootsAuthoredImage",
+    "RadrootsPost",
+    "RadrootsAuthoredPostError",
+    "RadrootsPostImageDimensions",
+    "RadrootsAuthoredPostImage",
+    "RadrootsAuthoredUpdate",
+    "RadrootsAuthoredPhotoUpdate",
+    "RadrootsAuthoredAsk",
+    "RadrootsPostDiagnostic",
+    "RadrootsPostClassification",
+    "RadrootsInboundPostImeta",
+    "RadrootsInboundPostProjection",
+    "RadrootsPostProjectionError",
+    "RadrootsAdmittedRootPostEvent",
+    "RadrootsThreadExcludedPostCandidate",
+    "RadrootsPostAdmissionOutcome",
+    "RadrootsPostAdmissionError",
 ];
 const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
@@ -392,6 +418,240 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
 ];
+const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 5] = [
+    PostOperationExpectation {
+        key: "social_update_build_authored_draft",
+        id: "social.update.build_authored_draft",
+        inputs: &["RadrootsAuthoredUpdate"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/post.rs",
+            "crates/event_codec/src/post/authored.rs",
+        ],
+        rust_types: &[
+            "radroots_event::post::RadrootsAuthoredPostError",
+            "radroots_event::post::RadrootsAuthoredUpdate",
+        ],
+        case_kinds: &[
+            "social.update.build_authored_draft.valid",
+            "social.update.build_authored_draft.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_photo_update_build_authored_draft",
+        id: "social.photo_update.build_authored_draft",
+        inputs: &["RadrootsAuthoredPhotoUpdate"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/post.rs",
+            "crates/event_codec/src/post/authored.rs",
+        ],
+        rust_types: &[
+            "radroots_blossom::RadrootsBlossomApprovedBlobUrl",
+            "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+            "radroots_event::media::RadrootsAuthoredImage",
+            "radroots_event::post::RadrootsAuthoredPhotoUpdate",
+            "radroots_event::post::RadrootsAuthoredPostError",
+            "radroots_event::post::RadrootsAuthoredPostImage",
+            "radroots_event::post::RadrootsPostImageDimensions",
+        ],
+        case_kinds: &[
+            "social.photo_update.build_authored_draft.valid",
+            "social.photo_update.build_authored_draft.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_ask_build_authored_draft",
+        id: "social.ask.build_authored_draft",
+        inputs: &["RadrootsAuthoredAsk"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/post.rs",
+            "crates/event_codec/src/post/authored.rs",
+        ],
+        rust_types: &[
+            "radroots_event::post::RadrootsAuthoredAsk",
+            "radroots_event::post::RadrootsAuthoredPostError",
+            "radroots_event::post::RadrootsAuthoredPostImage",
+        ],
+        case_kinds: &[
+            "social.ask.build_authored_draft.valid",
+            "social.ask.build_authored_draft.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_post_project_verified_event",
+        id: "social.post.project_verified_event",
+        inputs: &["RadrootsSignatureVerifiedEvent"],
+        outputs: &["RadrootsInboundPostProjection"],
+        error_class: "parse_error",
+        signing: "none",
+        rust_modules: &["crates/event_codec/src/post/inbound.rs"],
+        rust_types: &[
+            "radroots_event_codec::post::inbound::RadrootsInboundPostImeta",
+            "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
+            "radroots_event_codec::post::inbound::RadrootsPostClassification",
+            "radroots_event_codec::post::inbound::RadrootsPostDiagnostic",
+            "radroots_event_codec::post::inbound::RadrootsPostProjectionError",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "social.post.project_verified_event.valid",
+            "social.post.project_verified_event.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_post_verify_and_admit_event",
+        id: "social.post.verify_and_admit_event",
+        inputs: &["RadrootsEventEnvelope"],
+        outputs: &["RadrootsPostAdmissionOutcome"],
+        error_class: "admission_error",
+        signing: "nip01",
+        rust_modules: &[
+            "crates/event_codec/src/post/admission.rs",
+            "crates/event_codec/src/post/inbound.rs",
+            "crates/event_codec/src/verification.rs",
+        ],
+        rust_types: &[
+            "radroots_event::RadrootsEventEnvelope",
+            "radroots_event_codec::post::admission::RadrootsAdmittedRootPostEvent",
+            "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
+            "radroots_event_codec::post::admission::RadrootsPostAdmissionOutcome",
+            "radroots_event_codec::post::admission::RadrootsThreadExcludedPostCandidate",
+            "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "social.post.verify_and_admit_event.valid",
+            "social.post.verify_and_admit_event.invalid",
+        ],
+    },
+];
+const POST_OPERATION_KEY_PREFIXES: [&str; 4] = [
+    "social_update_",
+    "social_photo_update_",
+    "social_ask_",
+    "social_post_",
+];
+const POST_OPERATION_ID_PREFIXES: [&str; 4] = [
+    "social.update.",
+    "social.photo_update.",
+    "social.ask.",
+    "social.post.",
+];
+const POST_VECTOR_EXPECTATIONS: [(&str, &str); 27] = [
+    (
+        "authored_update_wire",
+        "social.update.build_authored_draft.valid",
+    ),
+    (
+        "authored_update_blank",
+        "social.update.build_authored_draft.invalid",
+    ),
+    (
+        "authored_photo_update_wire",
+        "social.photo_update.build_authored_draft.valid",
+    ),
+    (
+        "authored_photo_update_mime_underscore",
+        "social.photo_update.build_authored_draft.invalid",
+    ),
+    ("authored_ask_wire", "social.ask.build_authored_draft.valid"),
+    (
+        "authored_ask_blank",
+        "social.ask.build_authored_draft.invalid",
+    ),
+    (
+        "project_signed_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_empty_inbound_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_structural_photo",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_photo_preserves_fallbacks_and_unknown_fields",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_normalized_ask_precedes_malformed_media",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_malformed_imeta_is_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_duplicate_singleton_is_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_mixed_imeta_is_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_thread_candidate_precedes_ask_and_media",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_malformed_ask_marker_is_update",
+        "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_duplicate_normalized_ask_marker",
+        "social.post.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_kind_20_is_not_photo_update",
+        "social.post.project_verified_event.invalid",
+    ),
+    (
+        "admit_signed_update",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_structural_photo",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_normalized_ask_precedes_malformed_media",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_thread_candidate_precedes_ask_and_media",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_empty_e_thread_candidate",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_empty_e_value_thread_candidate",
+        "social.post.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_duplicate_normalized_ask_marker",
+        "social.post.verify_and_admit_event.invalid",
+    ),
+    (
+        "admit_signed_kind_20_is_not_photo_update",
+        "social.post.verify_and_admit_event.invalid",
+    ),
+    (
+        "admit_signed_invalid_signature",
+        "social.post.verify_and_admit_event.invalid",
+    ),
+];
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
     "contracts/event_boundary_matrix.md",
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
@@ -563,6 +823,8 @@ pub struct PublicOperationImplementation {
 #[serde(deny_unknown_fields)]
 pub struct PublicOperationConformance {
     pub vector: String,
+    #[serde(default)]
+    pub case_kinds: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -575,6 +837,19 @@ struct CalendarOperationExpectation {
     rust_modules: &'static [&'static str],
     rust_types: &'static [&'static str],
     vector: &'static str,
+}
+
+#[derive(Clone, Copy)]
+struct PostOperationExpectation {
+    key: &'static str,
+    id: &'static str,
+    inputs: &'static [&'static str],
+    outputs: &'static [&'static str],
+    error_class: &'static str,
+    signing: &'static str,
+    rust_modules: &'static [&'static str],
+    rust_types: &'static [&'static str],
+    case_kinds: &'static [&'static str],
 }
 
 #[derive(Debug, Deserialize)]
@@ -810,10 +1085,39 @@ const FOLLOW_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const POST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/post.rs",
-        required_fragments: &["pub struct RadrootsPost"],
+        required_fragments: &[
+            "pub struct RadrootsPost",
+            "pub struct RadrootsAuthoredUpdate",
+            "pub struct RadrootsAuthoredPhotoUpdate",
+            "pub struct RadrootsAuthoredAsk",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/post/authored.rs",
+        required_fragments: &[
+            "pub fn authored_update_to_wire_parts",
+            "pub fn authored_photo_update_to_wire_parts",
+            "pub fn authored_ask_to_wire_parts",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/post/inbound.rs",
+        required_fragments: &[
+            "pub struct RadrootsInboundPostProjection",
+            "pub fn project_verified_post_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/post/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedRootPostEvent",
+            "pub struct RadrootsThreadExcludedPostCandidate",
+            "pub enum RadrootsPostAdmissionOutcome",
+            "pub fn verify_and_admit_post_event",
+        ],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -1438,7 +1742,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     EventBoundaryExpectation {
         domain: "post",
         kind: "1",
-        radroots_type: "RadrootsPost",
+        radroots_type: "RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection",
         rpc_methods: &["events.post.publish", "events.post.list", "events.post.get"],
         witnesses: &POST_WITNESSES,
     },
@@ -3038,14 +3342,74 @@ pub fn validate_knowledge_contract_manifest(workspace_root: &Path) -> Result<(),
     validate_knowledge_conformance_vector_inventory(workspace_root)?;
 
     let bundle = load_contract_bundle(workspace_root)?;
-    validate_conformance_vector_file(
+    let knowledge_manifest_vector = validate_conformance_vector_file(
         &workspace_root.join(KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE),
         &bundle.manifest.contract.version,
     )?;
+    validate_knowledge_manifest_vector_semantics(&actual_json, &knowledge_manifest_vector)?;
     validate_conformance_vector_file(
         &workspace_root.join(KNOWLEDGE_PUBLIC_SURFACE_RELATIVE),
         &bundle.manifest.contract.version,
     )?;
+    Ok(())
+}
+
+fn validate_knowledge_manifest_vector_semantics(
+    manifest_json: &str,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    let manifest = serde_json::from_str::<Value>(manifest_json)
+        .map_err(|error| format!("parse knowledge manifest JSON: {error}"))?;
+    let schema_version = manifest
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "knowledge manifest schema_version must be an unsigned integer".to_string()
+        })?;
+    let registry_version = manifest
+        .get("registry_version")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "knowledge manifest registry_version must be an unsigned integer".to_string()
+        })?;
+    let case = vector
+        .vectors
+        .iter()
+        .find(|entry| entry.id == "knowledge_manifest_fields_valid_001")
+        .ok_or_else(|| {
+            "knowledge manifest conformance must define knowledge_manifest_fields_valid_001"
+                .to_string()
+        })?;
+    if case.kind != "knowledge.contract_manifest_json.valid" {
+        return Err(format!(
+            "knowledge manifest conformance case kind drift: expected knowledge.contract_manifest_json.valid, got {}",
+            case.kind
+        ));
+    }
+
+    let expected_registry_marker = format!("radroots_event_contract_registry_v{registry_version}");
+    let actual_registry_marker = case.input.get("registry").and_then(Value::as_str);
+    if actual_registry_marker != Some(expected_registry_marker.as_str()) {
+        return Err(format!(
+            "knowledge manifest conformance registry marker drift: expected {expected_registry_marker}, got {}",
+            actual_registry_marker.unwrap_or("<missing-or-non-string>")
+        ));
+    }
+
+    for (field, expected) in [
+        ("schema_version", schema_version),
+        ("registry_version", registry_version),
+    ] {
+        let actual = case.expected.get(field).and_then(Value::as_u64);
+        if actual != Some(expected) {
+            return Err(format!(
+                "knowledge manifest conformance expected {field} drift: expected {expected}, got {}",
+                actual
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "<missing-or-non-integer>".to_string())
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -4113,13 +4477,262 @@ fn validate_operations_contract(
                 conformance_root.display()
             ));
         }
-        validate_conformance_vector_file(&vector_path, &operations_manifest.contract.version)?;
+        let vector =
+            validate_conformance_vector_file(&vector_path, &operations_manifest.contract.version)?;
+        validate_operation_case_kinds(operation, &vector)?;
     }
 
     if domains.contains("social") {
         validate_calendar_operation_authority(operations_manifest, &shared_types)?;
+        validate_post_operation_authority(operations_manifest, workspace_root)?;
     }
 
+    Ok(())
+}
+
+fn validate_operation_case_kinds(
+    operation: &PublicOperationContract,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    if operation.conformance.case_kinds.is_empty() {
+        return Ok(());
+    }
+    let case_kinds = collect_non_empty_set(
+        &operation.conformance.case_kinds,
+        &format!("operation {} conformance.case_kinds", operation.id),
+    )?;
+    if case_kinds.len() != operation.conformance.case_kinds.len() {
+        return Err(format!(
+            "operation {} conformance.case_kinds must not contain duplicates",
+            operation.id
+        ));
+    }
+    let prefix = format!("{}.", operation.id);
+    let vector_kinds = vector
+        .vectors
+        .iter()
+        .map(|entry| entry.kind.as_str())
+        .collect::<BTreeSet<_>>();
+    for case_kind in case_kinds {
+        if !case_kind.starts_with(&prefix) {
+            return Err(format!(
+                "operation {} conformance case kind {} must start with {}",
+                operation.id, case_kind, prefix
+            ));
+        }
+        if !vector_kinds.contains(case_kind.as_str()) {
+            return Err(format!(
+                "operation {} conformance case kind {} is absent from {}",
+                operation.id, case_kind, operation.conformance.vector
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_post_operation_authority(
+    manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let vector = validate_conformance_vector_file(
+        &workspace_root.join(POST_CONFORMANCE_VECTOR_RELATIVE),
+        &manifest.contract.version,
+    )?;
+    validate_post_operation_inventory(manifest, &vector)
+}
+
+fn validate_post_operation_inventory(
+    manifest: &OperationsContractManifest,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    let shared_types = collect_non_empty_set(
+        &manifest.shared_types.public,
+        "post operation shared_types.public",
+    )?;
+    for required in REQUIRED_POST_PUBLIC_TYPES {
+        if !shared_types.contains(required) {
+            return Err(format!(
+                "post operation authority requires shared public type {required}"
+            ));
+        }
+    }
+
+    let expected_keys = POST_OPERATION_EXPECTATIONS
+        .iter()
+        .map(|expectation| expectation.key.to_string())
+        .collect::<BTreeSet<_>>();
+    let actual_keys = manifest
+        .operations
+        .iter()
+        .filter(|(key, operation)| {
+            operation.conformance.vector == POST_CONFORMANCE_VECTOR_RELATIVE
+                || POST_OPERATION_KEY_PREFIXES
+                    .iter()
+                    .any(|prefix| key.starts_with(prefix))
+                || POST_OPERATION_ID_PREFIXES
+                    .iter()
+                    .any(|prefix| operation.id.starts_with(prefix))
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        let missing = expected_keys
+            .difference(&actual_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let unexpected = actual_keys
+            .difference(&expected_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "post operation authority drift: missing {}; unexpected {}",
+            join_set(&missing),
+            join_set(&unexpected)
+        ));
+    }
+
+    let mut owners = BTreeMap::new();
+    for expected in POST_OPERATION_EXPECTATIONS {
+        let operation = manifest
+            .operations
+            .get(expected.key)
+            .ok_or_else(|| format!("post operation {} is required", expected.key))?;
+        validate_post_operation_scalar(expected.key, "domain", &operation.domain, "social")?;
+        validate_post_operation_scalar(expected.key, "id", &operation.id, expected.id)?;
+        validate_post_operation_scalar(expected.key, "stability", &operation.stability, "beta")?;
+        validate_post_operation_scalar(
+            expected.key,
+            "error_class",
+            &operation.error_class,
+            expected.error_class,
+        )?;
+        validate_post_operation_scalar(
+            expected.key,
+            "signing",
+            &operation.signing,
+            expected.signing,
+        )?;
+        validate_post_operation_scalar(expected.key, "transport", &operation.transport, "none")?;
+        if !operation.deterministic {
+            return Err(format!(
+                "post operation {} deterministic drift: expected true, got false",
+                expected.key
+            ));
+        }
+        validate_post_operation_sequence(
+            expected.key,
+            "inputs",
+            &operation.inputs,
+            expected.inputs,
+        )?;
+        validate_post_operation_sequence(
+            expected.key,
+            "outputs",
+            &operation.outputs,
+            expected.outputs,
+        )?;
+        validate_post_operation_sequence(
+            expected.key,
+            "implementation.rust_modules",
+            &operation.implementation.rust_modules,
+            expected.rust_modules,
+        )?;
+        validate_post_operation_sequence(
+            expected.key,
+            "implementation.rust_types",
+            &operation.implementation.rust_types,
+            expected.rust_types,
+        )?;
+        validate_post_operation_scalar(
+            expected.key,
+            "conformance.vector",
+            &operation.conformance.vector,
+            POST_CONFORMANCE_VECTOR_RELATIVE,
+        )?;
+        validate_operation_case_kinds(operation, vector)?;
+        if !operation
+            .conformance
+            .case_kinds
+            .iter()
+            .map(String::as_str)
+            .eq(expected.case_kinds.iter().copied())
+        {
+            return Err(format!(
+                "post operation {} conformance.case_kinds drift: expected {:?}, got {:?}",
+                expected.key, expected.case_kinds, operation.conformance.case_kinds
+            ));
+        }
+        for case_kind in &operation.conformance.case_kinds {
+            if let Some(previous) = owners.insert(case_kind.as_str(), expected.key) {
+                return Err(format!(
+                    "post conformance case kind {case_kind} is multiply claimed by {previous} and {}",
+                    expected.key
+                ));
+            }
+        }
+    }
+
+    let mut actual_inventory = BTreeMap::new();
+    for entry in &vector.vectors {
+        if actual_inventory
+            .insert(entry.id.as_str(), entry.kind.as_str())
+            .is_some()
+        {
+            return Err(format!(
+                "post conformance vector inventory has duplicate id {}",
+                entry.id
+            ));
+        }
+    }
+    for kind in actual_inventory.values() {
+        if !owners.contains_key(kind) {
+            return Err(format!(
+                "post conformance vector kind {kind} is not claimed by exactly one operation"
+            ));
+        }
+    }
+    let expected_inventory = POST_VECTOR_EXPECTATIONS
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    if actual_inventory != expected_inventory {
+        return Err(format!(
+            "post conformance vector inventory drift: expected {:?}, got {:?}",
+            expected_inventory, actual_inventory
+        ));
+    }
+    Ok(())
+}
+
+fn validate_post_operation_scalar(
+    operation_key: &str,
+    field: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if actual != expected {
+        return Err(format!(
+            "post operation {operation_key} {field} drift: expected {expected}, got {actual}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_post_operation_sequence(
+    operation_key: &str,
+    field: &str,
+    actual: &[String],
+    expected: &[&str],
+) -> Result<(), String> {
+    if !actual
+        .iter()
+        .map(String::as_str)
+        .eq(expected.iter().copied())
+    {
+        return Err(format!(
+            "post operation {operation_key} {field} drift: expected {:?}, got {:?}",
+            expected, actual
+        ));
+    }
     Ok(())
 }
 
@@ -5450,6 +6063,27 @@ mod tests {
             .expect("canonical workspace root")
     }
 
+    fn current_post_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
+        let root = workspace_root();
+        let manifest =
+            parse_toml::<OperationsContractManifest>(&root.join("contracts/operations.toml"))
+                .expect("current operations manifest");
+        let vector =
+            parse_json::<ConformanceVectorFile>(&root.join(POST_CONFORMANCE_VECTOR_RELATIVE))
+                .expect("current post conformance vector");
+        (manifest, vector)
+    }
+
+    fn current_knowledge_manifest_authority() -> (String, ConformanceVectorFile) {
+        let root = workspace_root();
+        let manifest = fs::read_to_string(root.join(KNOWLEDGE_MANIFEST_RELATIVE))
+            .expect("current knowledge manifest");
+        let vector =
+            parse_json::<ConformanceVectorFile>(&root.join(KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE))
+                .expect("current knowledge manifest conformance vector");
+        (manifest, vector)
+    }
+
     fn temp_root(prefix: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -6055,6 +6689,281 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let root = workspace_root();
         let bundle = load_contract_bundle(&root).expect("load contract");
         validate_contract_bundle(&bundle).expect("validate contract");
+    }
+
+    #[test]
+    fn knowledge_manifest_vector_authority_rejects_registry_drift() {
+        let (manifest, vector) = current_knowledge_manifest_authority();
+        validate_knowledge_manifest_vector_semantics(&manifest, &vector)
+            .expect("current knowledge manifest vector authority");
+
+        let (manifest, mut vector) = current_knowledge_manifest_authority();
+        let case = vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "knowledge_manifest_fields_valid_001")
+            .expect("knowledge manifest case");
+        case.input
+            .as_object_mut()
+            .expect("knowledge manifest input")
+            .insert(
+                "registry".to_string(),
+                Value::String("radroots_event_contract_registry_v1".to_string()),
+            );
+        let error = validate_knowledge_manifest_vector_semantics(&manifest, &vector)
+            .expect_err("stale registry marker must fail");
+        assert!(error.contains("registry marker drift"), "{error}");
+
+        let (manifest, mut vector) = current_knowledge_manifest_authority();
+        let case = vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "knowledge_manifest_fields_valid_001")
+            .expect("knowledge manifest case");
+        case.expected
+            .as_object_mut()
+            .expect("knowledge manifest expected output")
+            .insert("registry_version".to_string(), Value::from(1_u64));
+        let error = validate_knowledge_manifest_vector_semantics(&manifest, &vector)
+            .expect_err("stale expected registry version must fail");
+        assert!(error.contains("expected registry_version drift"), "{error}");
+    }
+
+    #[test]
+    fn strict_post_release_record_governs_public_boundary_breaks() {
+        let root = workspace_root();
+        let bundle = load_contract_bundle(&root).expect("load current contract bundle");
+        let major_impacts = bundle
+            .version
+            .semver
+            .major_on
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        for impact in [
+            "add_exported_field",
+            "change_exported_function_signature",
+            "change_exported_constant_value",
+        ] {
+            assert!(
+                major_impacts.contains(impact),
+                "version policy must govern {impact} as a major impact"
+            );
+        }
+        assert!(
+            bundle
+                .version
+                .semver
+                .minor_on
+                .iter()
+                .any(|impact| impact == "add_exported_constant"),
+            "version policy must govern add_exported_constant as a minor impact"
+        );
+
+        let release =
+            parse_toml::<ReleaseRecord>(&root.join("contracts/releases/1.0.0-alpha.1.toml"))
+                .expect("current release record");
+        let change = release
+            .changes
+            .iter()
+            .find(|change| change.id == "strict-kind-one-product-profiles")
+            .expect("strict kind-one release change");
+        let impacts = change
+            .semver_impacts
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        for impact in [
+            "remove_exported_type",
+            "add_exported_constant",
+            "add_exported_field",
+            "change_exported_function_signature",
+            "change_exported_enum_variant",
+            "change_exported_constant_value",
+        ] {
+            assert!(
+                impacts.contains(impact),
+                "strict kind-one release change must declare {impact}"
+            );
+        }
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_manifest_and_inventory_drift() {
+        let (manifest, vector) = current_post_authority();
+        validate_post_operation_inventory(&manifest, &vector).expect("current post authority");
+
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .remove("social_update_build_authored_draft");
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("missing post operation must fail");
+        assert!(error.contains("post operation authority drift"));
+
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation")
+            .id = "social.update.wrong".to_string();
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("wrong post operation ID must fail");
+        assert!(error.contains("id drift"));
+
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation")
+            .conformance
+            .vector = "contracts/conformance/vectors/profile/metadata.v1.json".to_string();
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("wrong post vector path must fail");
+        assert!(error.contains("conformance.vector drift"));
+
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation")
+            .conformance
+            .case_kinds[0] = "social.ask.build_authored_draft.valid".to_string();
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("wrong post case prefix must fail");
+        assert!(error.contains("must start with social.update.build_authored_draft."));
+
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation")
+            .conformance
+            .case_kinds
+            .pop();
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("missing post case kind must fail");
+        assert!(error.contains("conformance.case_kinds drift"));
+
+        let (mut manifest, vector) = current_post_authority();
+        let operation = manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation");
+        operation.conformance.case_kinds[1] = operation.conformance.case_kinds[0].clone();
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("duplicate post case kind must fail");
+        assert!(error.contains("duplicate value"), "{error}");
+
+        let (manifest, mut vector) = current_post_authority();
+        vector.vectors.push(ConformanceVectorEntry {
+            id: "unclaimed_post_case".to_string(),
+            kind: "social.post.unclaimed.valid".to_string(),
+            input: Value::Object(Default::default()),
+            expected: Value::Object(Default::default()),
+        });
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("unclaimed post vector kind must fail");
+        assert!(error.contains("is not claimed by exactly one operation"));
+
+        let (manifest, mut vector) = current_post_authority();
+        vector.vectors.remove(
+            vector
+                .vectors
+                .iter()
+                .position(|entry| entry.kind == "social.post.project_verified_event.valid")
+                .expect("project valid case"),
+        );
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("post vector count drift must fail");
+        assert!(error.contains("post conformance vector inventory drift"));
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_another_vector_namespace_operation() {
+        let (mut manifest, vector) = current_post_authority();
+        let mut unexpected = manifest
+            .operations
+            .remove("social_comment_build_tags")
+            .expect("unrelated social operation");
+        unexpected.id = "social.update.shadow".to_string();
+        manifest
+            .operations
+            .insert("social_update_shadow".to_string(), unexpected);
+
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("another-vector post namespace operation must fail");
+        assert!(error.contains("post operation authority drift"), "{error}");
+        assert!(error.contains("social_update_shadow"), "{error}");
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_metadata_drift() {
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .operations
+            .get_mut("social_update_build_authored_draft")
+            .expect("Update operation")
+            .stability = "stable".to_string();
+
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("post operation metadata drift must fail");
+        assert!(error.contains("stability drift"), "{error}");
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_required_public_type_removal() {
+        let (mut manifest, vector) = current_post_authority();
+        manifest
+            .shared_types
+            .public
+            .retain(|value| value != "RadrootsPostAdmissionOutcome");
+
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("required post public type removal must fail");
+        assert!(
+            error.contains(
+                "post operation authority requires shared public type RadrootsPostAdmissionOutcome"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_same_count_vector_id_replacement() {
+        let (manifest, mut vector) = current_post_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "authored_update_wire")
+            .expect("authored Update case")
+            .id = "authored_update_wire_replacement".to_string();
+
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("same-count post vector ID replacement must fail");
+        assert!(error.contains("post conformance vector inventory drift"));
+    }
+
+    #[test]
+    fn post_operation_authority_rejects_vector_id_kind_drift() {
+        let (manifest, mut vector) = current_post_authority();
+        let update_position = vector
+            .vectors
+            .iter()
+            .position(|entry| entry.id == "authored_update_wire")
+            .expect("authored Update case");
+        let ask_position = vector
+            .vectors
+            .iter()
+            .position(|entry| entry.id == "authored_ask_wire")
+            .expect("authored Ask case");
+        let update_kind = vector.vectors[update_position].kind.clone();
+        vector.vectors[update_position].kind = vector.vectors[ask_position].kind.clone();
+        vector.vectors[ask_position].kind = update_kind;
+
+        let error = validate_post_operation_inventory(&manifest, &vector)
+            .expect_err("post vector ID-to-kind drift must fail");
+        assert!(error.contains("post conformance vector inventory drift"));
     }
 
     #[test]

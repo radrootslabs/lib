@@ -4355,6 +4355,7 @@ name = "radroots_event_store"
 version = "1.0.0-alpha.1"
 dependencies = [
  "hex",
+ "nostr",
  "radroots_event",
  "radroots_nostr",
  "radroots_transport",
@@ -4516,6 +4517,7 @@ name = "radroots_nostr_runtime"
 version = "1.0.0-alpha.1"
 dependencies = [
  "futures",
+ "nostr",
  "radroots_nostr",
  "thiserror 1.0.69",
  "tokio",
@@ -4547,6 +4549,7 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "futures",
  "hex",
+ "nostr",
  "nostrdb",
  "radroots_nostr",
  "radroots_nostr_runtime",
@@ -4848,6 +4851,7 @@ dependencies = [
  "dto_bindgen",
  "dto_bindgen_core",
  "hex",
+ "nostr",
  "radroots_authority",
  "radroots_core",
  "radroots_event",

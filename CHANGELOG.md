@@ -21,8 +21,25 @@ publish policy both pass for the same source revision.
 - Authored profile and calendar media now share the byte-verified Blossom image
   proof type; unverified URLs remain inbound data and cannot enter authoring APIs.
 - Root kind-`1` product admission now verifies NIP-01 identity and signatures,
-  excludes replies before product classification, and deterministically projects
-  Ask, PhotoUpdate, or Update while preserving malformed media diagnostics.
+  separates every `e`-tagged event as a thread-excluded candidate without a
+  Reply claim, and deterministically admits Ask, PhotoUpdate, or Update roots
+  while preserving malformed media diagnostics.
+- Typed root posts now enter signing and client publication through an opaque
+  builder with no raw tag/content mutation. Generic builder direct signing and
+  client publication reject kind `0` plus unmarked kind `1` before signer
+  access; externally supplied unsigned events, NIP-46 signing, and signed-event
+  relay remain explicit low-level Nostr interoperability with no typed product
+  authoring claim.
+- Frozen drafts now carry event-contract registry version `2`, revalidate all
+  persisted fields and the recomputed event id during deserialization and
+  signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
+  authoring policies.
+- Event wire and envelope admission now reject more than 4,096 aggregate tag
+  elements, and SDK-event conversion returns the typed envelope error instead
+  of panicking on relay-controlled oversized input.
+- Strict authored posts enforce the 256 KiB compact signed-event ceiling after
+  exact JSON escaping, in addition to per-element and aggregate decoded tag
+  limits.
 - Workspace packages declare one governed version explicitly so mounted path
   consumers preserve it, and every internal root dependency requires that exact
   pre-release version.
@@ -41,8 +58,10 @@ publish policy both pass for the same source revision.
   descriptors, exact ordered NIP-92 metadata, bounded nonzero fields, and
   same-digest approved fallback URLs.
 - Raw signed kind-`1` conformance vectors prove signature-gated profile
-  admission, reply exclusion, classifier precedence, tolerant metadata
-  retention, and stable rejection codes.
+  admission, thread-candidate exclusion, classifier precedence, tolerant
+  metadata retention, and stable rejection codes. Operation-owned vectors also
+  execute every typed post authoring, projection, and admission function and
+  compare complete deterministic outputs.
 
 ### Removed
 
@@ -57,9 +76,14 @@ publish policy both pass for the same source revision.
   containing the removed `include_profiles` option is rejected.
 - `RadrootsNostrClient` no longer implicitly dereferences to the upstream SDK
   client. Narrow client operations and the explicit ownership bridge remain.
+- `RadrootsNostrSignerBackend` no longer accepts a raw `nostr::EventBuilder`;
+  callers that implement standard external signer protocols must supply the
+  protocol's unsigned event explicitly.
 - Permissive `RadrootsPost` tag authoring, the free-form Nostr post builder, and
-  the generic net post publisher were removed. Publication now requires one of
-  the strict authored Update, PhotoUpdate, or Ask states.
+  the generic net custom publisher were removed. Product-root publication now
+  requires one of the strict authored Update, PhotoUpdate, or Ask states; the
+  generic protocol builder remains only behind a root-kind-`1` publication
+  guard and for non-product interoperability.
 
 ### Compatibility
 
@@ -74,3 +98,10 @@ publish policy both pass for the same source revision.
   compatibility version instead of package SemVer. Existing backups stamped by
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
+- Persisted frozen drafts with event-contract registry version `1` are rejected
+  and must be reconstructed against registry version `2`; strict Profile plus
+  typed and read-only post contracts can no longer be reconstructed as generic
+  drafts.
+- `radroots_event_from_nostr` now returns `Result<RadrootsEventEnvelope,
+  RadrootsEventEnvelopeError>`; callers must handle hostile or oversized SDK
+  events explicitly.

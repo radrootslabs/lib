@@ -780,7 +780,7 @@ mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
     use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-    use radroots_event::kinds::KIND_POST;
+    use radroots_event::kinds::KIND_GEOCHAT;
     use radroots_event::wire::RadrootsNip01EventWire;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
@@ -796,8 +796,8 @@ mod tests {
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         let keys = RadrootsNostrKeys::new(secret_key);
         let draft = RadrootsEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
+            "radroots.social.geochat.v1",
+            KIND_GEOCHAT,
             1_700_000_000,
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             content,

@@ -1,8 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
-use radroots_blossom::{RadrootsBlossomApprovedBlobUrl, RadrootsBlossomMediaType};
+use radroots_blossom::RadrootsBlossomApprovedBlobUrl;
 use url_nostd::Url;
 
 use crate::media::RadrootsAuthoredImage;
@@ -10,12 +10,30 @@ use crate::social::{
     RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaMetadata,
     RadrootsSocialTarget,
 };
+use crate::tags::TAG_IMETA;
 
 pub const RADROOTS_POST_CONTENT_MAX_BYTES: usize = crate::wire::DEFAULT_CONTENT_MAX_BYTES;
 pub const RADROOTS_POST_IMETA_MAX_COUNT: usize = 64;
-pub const RADROOTS_POST_ALT_MAX_BYTES: usize = (4 * 1024) - "alt ".len();
+pub const RADROOTS_POST_EVENT_WIRE_MAX_BYTES: usize = crate::wire::DEFAULT_RAW_JSON_MAX_BYTES;
+pub const RADROOTS_POST_TAG_ELEMENT_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES;
+pub const RADROOTS_POST_TAG_TOTAL_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_TOTAL_MAX_BYTES;
+pub const RADROOTS_POST_ALT_MAX_BYTES: usize = RADROOTS_POST_TAG_ELEMENT_MAX_BYTES - "alt ".len();
 pub const RADROOTS_ASK_MARKER_TAG_KEY: &str = "t";
 pub const RADROOTS_ASK_MARKER_TAG_VALUE: &str = "radroots-ask";
+
+const RADROOTS_ASK_MARKER_TAG_BYTES: usize =
+    RADROOTS_ASK_MARKER_TAG_KEY.len() + RADROOTS_ASK_MARKER_TAG_VALUE.len();
+const RADROOTS_POST_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".len()
+    + 64
+    + "\",\"pubkey\":\"".len()
+    + 64
+    + "\",\"created_at\":".len()
+    + 20
+    + ",\"kind\":1,\"tags\":".len()
+    + ",\"content\":".len()
+    + ",\"sig\":\"".len()
+    + 128
+    + "\"}".len();
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -78,6 +96,9 @@ pub enum RadrootsAuthoredPostError {
     ImageAltInvalid,
     ImageAltTooLarge { max: usize, actual: usize },
     ImageFallbackHashMismatch,
+    TagElementTooLarge { max: usize, actual: usize },
+    TagBytesExceeded { max: usize, actual: usize },
+    EventWireTooLarge { max: usize, actual: usize },
 }
 
 impl RadrootsAuthoredPostError {
@@ -95,6 +116,9 @@ impl RadrootsAuthoredPostError {
             Self::ImageAltInvalid => "imeta_alt_invalid",
             Self::ImageAltTooLarge { .. } => "imeta_alt_too_large",
             Self::ImageFallbackHashMismatch => "imeta_fallback_hash_mismatch",
+            Self::TagElementTooLarge { .. } => "post_tag_element_too_large",
+            Self::TagBytesExceeded { .. } => "post_tag_bytes_exceeded",
+            Self::EventWireTooLarge { .. } => "post_event_wire_too_large",
         }
     }
 }
@@ -144,6 +168,22 @@ impl fmt::Display for RadrootsAuthoredPostError {
             Self::ImageFallbackHashMismatch => formatter.write_str(
                 "authored post image fallback URL must contain the primary image digest",
             ),
+            Self::TagElementTooLarge { max, actual } => {
+                write!(
+                    formatter,
+                    "authored post tag element is {actual} bytes; max is {max}"
+                )
+            }
+            Self::TagBytesExceeded { max, actual } => {
+                write!(
+                    formatter,
+                    "authored post tag bytes are {actual}; max is {max}"
+                )
+            }
+            Self::EventWireTooLarge { max, actual } => write!(
+                formatter,
+                "authored post canonical signed event is at most {actual} bytes; max is {max}"
+            ),
         }
     }
 }
@@ -187,6 +227,7 @@ pub struct RadrootsAuthoredPostImage {
     dimensions: RadrootsPostImageDimensions,
     alt: String,
     fallbacks: Vec<RadrootsBlossomApprovedBlobUrl>,
+    imeta_tag: Vec<String>,
 }
 
 impl RadrootsAuthoredPostImage {
@@ -212,11 +253,14 @@ impl RadrootsAuthoredPostImage {
                 actual: alt.len(),
             });
         }
+        let fallbacks = Vec::new();
+        let imeta_tag = derive_imeta_tag(&image, dimensions, &alt, &fallbacks)?;
         Ok(Self {
             image,
             dimensions,
             alt,
-            fallbacks: Vec::new(),
+            fallbacks,
+            imeta_tag,
         })
     }
 
@@ -227,7 +271,13 @@ impl RadrootsAuthoredPostImage {
         if fallback.as_blob_url().hash_path().hash() != self.image.descriptor().sha256() {
             return Err(RadrootsAuthoredPostError::ImageFallbackHashMismatch);
         }
+        let fallback_element = format!("fallback {fallback}");
+        validate_tag_element(&fallback_element)?;
+        validate_tag_bytes(
+            imeta_tag_bytes(&self.imeta_tag).saturating_add(fallback_element.len()),
+        )?;
         self.fallbacks.push(fallback);
+        self.imeta_tag.push(fallback_element);
         Ok(self)
     }
 
@@ -245,6 +295,11 @@ impl RadrootsAuthoredPostImage {
 
     pub fn fallbacks(&self) -> &[RadrootsBlossomApprovedBlobUrl] {
         &self.fallbacks
+    }
+
+    /// Returns the exact validated NIP-92 `imeta` tag emitted for this image.
+    pub fn imeta_tag(&self) -> &[String] {
+        &self.imeta_tag
     }
 
     pub fn url(&self) -> &str {
@@ -267,6 +322,7 @@ impl RadrootsAuthoredUpdate {
     pub fn new(content: impl Into<String>) -> Result<Self, RadrootsAuthoredPostError> {
         let content = content.into();
         validate_authored_root_content(&content)?;
+        validate_post_event_wire_size(&content, false, &[])?;
         Ok(Self { content })
     }
 
@@ -289,7 +345,8 @@ impl RadrootsAuthoredPhotoUpdate {
     ) -> Result<Self, RadrootsAuthoredPostError> {
         let content = content.into();
         validate_content_size(&content)?;
-        validate_authored_images(&content, &images)?;
+        validate_authored_images(&content, &images, 0)?;
+        validate_post_event_wire_size(&content, false, &images)?;
         Ok(Self { content, images })
     }
 
@@ -323,8 +380,9 @@ impl RadrootsAuthoredAsk {
             });
         }
         if !images.is_empty() {
-            validate_authored_images(&content, &images)?;
+            validate_authored_images(&content, &images, RADROOTS_ASK_MARKER_TAG_BYTES)?;
         }
+        validate_post_event_wire_size(&content, true, &images)?;
         Ok(Self { content, images })
     }
 
@@ -358,6 +416,7 @@ fn validate_content_size(content: &str) -> Result<(), RadrootsAuthoredPostError>
 fn validate_authored_images(
     content: &str,
     images: &[RadrootsAuthoredPostImage],
+    initial_tag_bytes: usize,
 ) -> Result<(), RadrootsAuthoredPostError> {
     if images.is_empty() {
         return Err(RadrootsAuthoredPostError::ImageMissing);
@@ -379,14 +438,143 @@ fn validate_authored_images(
             return Err(RadrootsAuthoredPostError::DuplicateImageUrl);
         }
     }
+    let total_tag_bytes = images.iter().fold(initial_tag_bytes, |total, image| {
+        total.saturating_add(imeta_tag_bytes(image.imeta_tag()))
+    });
+    validate_tag_bytes(total_tag_bytes)?;
     Ok(())
 }
 
+fn derive_imeta_tag(
+    image: &RadrootsAuthoredImage,
+    dimensions: RadrootsPostImageDimensions,
+    alt: &str,
+    fallbacks: &[RadrootsBlossomApprovedBlobUrl],
+) -> Result<Vec<String>, RadrootsAuthoredPostError> {
+    let descriptor = image.descriptor();
+    let mut tag = Vec::with_capacity(7 + fallbacks.len());
+    tag.push(TAG_IMETA.into());
+    tag.push(format!("url {}", descriptor.url()));
+    tag.push(format!("x {}", descriptor.sha256()));
+    tag.push(format!("m {}", descriptor.media_type()));
+    tag.push(format!(
+        "dim {}x{}",
+        dimensions.width(),
+        dimensions.height()
+    ));
+    tag.push(format!("size {}", descriptor.size()));
+    tag.push(format!("alt {alt}"));
+    tag.extend(
+        fallbacks
+            .iter()
+            .map(|fallback| format!("fallback {fallback}")),
+    );
+    for element in &tag {
+        validate_tag_element(element)?;
+    }
+    validate_tag_bytes(imeta_tag_bytes(&tag))?;
+    Ok(tag)
+}
+
+fn validate_tag_element(element: &str) -> Result<(), RadrootsAuthoredPostError> {
+    if element.len() > RADROOTS_POST_TAG_ELEMENT_MAX_BYTES {
+        return Err(RadrootsAuthoredPostError::TagElementTooLarge {
+            max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+            actual: element.len(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_tag_bytes(actual: usize) -> Result<(), RadrootsAuthoredPostError> {
+    if actual > RADROOTS_POST_TAG_TOTAL_MAX_BYTES {
+        return Err(RadrootsAuthoredPostError::TagBytesExceeded {
+            max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn imeta_tag_bytes(tag: &[String]) -> usize {
+    tag.iter()
+        .fold(0, |total, element| total.saturating_add(element.len()))
+}
+
+fn validate_post_event_wire_size(
+    content: &str,
+    ask_marker: bool,
+    images: &[RadrootsAuthoredPostImage],
+) -> Result<(), RadrootsAuthoredPostError> {
+    let mut tags_json_bytes = 2usize;
+    let mut tag_count = 0usize;
+    if ask_marker {
+        add_tag_json_bytes(
+            &mut tags_json_bytes,
+            &mut tag_count,
+            [RADROOTS_ASK_MARKER_TAG_KEY, RADROOTS_ASK_MARKER_TAG_VALUE],
+        );
+    }
+    for image in images {
+        add_tag_json_bytes(
+            &mut tags_json_bytes,
+            &mut tag_count,
+            image.imeta_tag().iter().map(String::as_str),
+        );
+    }
+    let actual = RADROOTS_POST_SIGNED_EVENT_FIXED_MAX_BYTES
+        .saturating_add(tags_json_bytes)
+        .saturating_add(canonical_json_string_bytes(content));
+    if actual > RADROOTS_POST_EVENT_WIRE_MAX_BYTES {
+        return Err(RadrootsAuthoredPostError::EventWireTooLarge {
+            max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn add_tag_json_bytes<'a>(
+    total: &mut usize,
+    tag_count: &mut usize,
+    elements: impl IntoIterator<Item = &'a str>,
+) {
+    if *tag_count > 0 {
+        *total = total.saturating_add(1);
+    }
+    *total = total.saturating_add(2);
+    let mut element_count = 0usize;
+    for element in elements {
+        if element_count > 0 {
+            *total = total.saturating_add(1);
+        }
+        *total = total.saturating_add(canonical_json_string_bytes(element));
+        element_count = element_count.saturating_add(1);
+    }
+    *tag_count = tag_count.saturating_add(1);
+}
+
+fn canonical_json_string_bytes(value: &str) -> usize {
+    value.chars().fold(2usize, |total, character| {
+        total.saturating_add(match character {
+            '"' | '\\' | '\u{0008}' | '\t' | '\n' | '\u{000c}' | '\r' => 2,
+            '\u{0000}'..='\u{001f}' => 6,
+            _ => character.len_utf8(),
+        })
+    })
+}
+
 pub fn post_image_media_type_is_valid(value: &str) -> bool {
-    !value.contains(';')
-        && value.starts_with("image/")
-        && RadrootsBlossomMediaType::parse(value)
-            .is_ok_and(|media_type| media_type.as_str() == value)
+    let Some(subtype) = value.strip_prefix("image/") else {
+        return false;
+    };
+    let mut bytes = subtype.bytes();
+    bytes
+        .next()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && bytes.all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'+' | b'-')
+        })
 }
 
 /// Returns whether an inbound media reference is a structural HTTP(S) URL.
@@ -457,5 +645,37 @@ mod tests {
 
         let json = serde_json::to_string(&post).expect("json");
         assert_eq!(json, r#"{"content":"farm update"}"#);
+    }
+
+    #[test]
+    fn post_image_media_type_uses_exact_product_grammar() {
+        for valid in [
+            "image/png",
+            "image/1",
+            "image/vnd.radroots+png",
+            "image/x-radroots.photo",
+        ] {
+            assert!(post_image_media_type_is_valid(valid), "{valid}");
+        }
+
+        for invalid in [
+            "image/",
+            "image/PNG",
+            "IMAGE/png",
+            "image/_png",
+            "image/p_ng",
+            "image/p!ng",
+            "image/p#ng",
+            "image/p$ng",
+            "image/p&ng",
+            "image/p^ng",
+            "image/p%ng",
+            "image/p*ng",
+            "image/p'ng",
+            "image/png;quality=90",
+            "text/png",
+        ] {
+            assert!(!post_image_media_type_is_valid(invalid), "{invalid}");
+        }
     }
 }

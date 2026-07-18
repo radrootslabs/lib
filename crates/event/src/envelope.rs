@@ -11,7 +11,7 @@ use crate::ids::{
 };
 use crate::wire::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
-    DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
+    DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
 };
 use core::fmt;
 
@@ -156,6 +156,10 @@ pub enum RadrootsEventEnvelopeError {
         max: usize,
         actual: usize,
     },
+    TooManyTagElements {
+        max: usize,
+        actual: usize,
+    },
     TagElementTooLarge {
         tag_index: usize,
         element_index: usize,
@@ -203,6 +207,9 @@ impl fmt::Display for RadrootsEventEnvelopeError {
             Self::TooManyTags { max, actual } => {
                 write!(f, "event envelope tag count {actual} exceeds {max}")
             }
+            Self::TooManyTagElements { max, actual } => {
+                write!(f, "event envelope tag element count {actual} exceeds {max}")
+            }
             Self::TagElementTooLarge {
                 tag_index,
                 element_index,
@@ -226,6 +233,7 @@ impl std::error::Error for RadrootsEventEnvelopeError {}
 pub struct RadrootsEventEnvelopeLimits {
     pub max_content_bytes: usize,
     pub max_tag_count: usize,
+    pub max_total_tag_elements: usize,
     pub max_tag_element_bytes: usize,
     pub max_total_tag_bytes: usize,
 }
@@ -235,6 +243,7 @@ impl Default for RadrootsEventEnvelopeLimits {
         Self {
             max_content_bytes: DEFAULT_CONTENT_MAX_BYTES,
             max_tag_count: DEFAULT_TAG_MAX_COUNT,
+            max_total_tag_elements: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             max_tag_element_bytes: DEFAULT_TAG_ELEMENT_MAX_BYTES,
             max_total_tag_bytes: DEFAULT_TAG_TOTAL_MAX_BYTES,
         }
@@ -255,6 +264,13 @@ impl RadrootsEventTag {
         limits: RadrootsEventEnvelopeLimits,
     ) -> Result<Self, RadrootsEventEnvelopeError> {
         validate_tag(index, &values)?;
+        let total_tag_elements = values.len();
+        if total_tag_elements > limits.max_total_tag_elements {
+            return Err(RadrootsEventEnvelopeError::TooManyTagElements {
+                max: limits.max_total_tag_elements,
+                actual: total_tag_elements,
+            });
+        }
         let total_bytes = validate_tag_elements(index, &values, limits)?;
         if total_bytes > limits.max_total_tag_bytes {
             return Err(RadrootsEventEnvelopeError::TagsTooLarge {
@@ -314,6 +330,15 @@ impl RadrootsEventTags {
             return Err(RadrootsEventEnvelopeError::TooManyTags {
                 max: limits.max_tag_count,
                 actual: tag_count,
+            });
+        }
+        let total_tag_elements = values
+            .iter()
+            .fold(0usize, |total, tag| total.saturating_add(tag.len()));
+        if total_tag_elements > limits.max_total_tag_elements {
+            return Err(RadrootsEventEnvelopeError::TooManyTagElements {
+                max: limits.max_total_tag_elements,
+                actual: total_tag_elements,
             });
         }
         let mut tags = Vec::with_capacity(values.len());
@@ -718,6 +743,17 @@ mod tests {
             RadrootsEventEnvelope::new_with_limits(
                 parts.clone(),
                 RadrootsEventEnvelopeLimits {
+                    max_total_tag_elements: 1,
+                    ..RadrootsEventEnvelopeLimits::default()
+                }
+            ),
+            Err(RadrootsEventEnvelopeError::TooManyTagElements { max: 1, actual: 2 })
+        );
+
+        assert_eq!(
+            RadrootsEventEnvelope::new_with_limits(
+                parts.clone(),
+                RadrootsEventEnvelopeLimits {
                     max_tag_element_bytes: 3,
                     ..RadrootsEventEnvelopeLimits::default()
                 }
@@ -754,6 +790,7 @@ mod tests {
             RadrootsEventEnvelopeLimits {
                 max_content_bytes: 5,
                 max_tag_count: 1,
+                max_total_tag_elements: 2,
                 max_tag_element_bytes: 4,
                 max_total_tag_bytes: 5,
             },
@@ -853,6 +890,7 @@ mod tests {
             RadrootsEventEnvelopeError::ControlCharacterTagKey { index: 1 },
             RadrootsEventEnvelopeError::ContentTooLarge { max: 1, actual: 2 },
             RadrootsEventEnvelopeError::TooManyTags { max: 1, actual: 2 },
+            RadrootsEventEnvelopeError::TooManyTagElements { max: 1, actual: 2 },
             RadrootsEventEnvelopeError::TagElementTooLarge {
                 tag_index: 1,
                 element_index: 2,

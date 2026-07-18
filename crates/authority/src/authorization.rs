@@ -79,8 +79,22 @@ pub fn sign_authorized_draft<S>(
 where
     S: RadrootsEventSigner + ?Sized,
 {
+    sign_authorized_draft_with_validator(actor, signer, draft, |draft| draft.validate_for_signing())
+}
+
+fn sign_authorized_draft_with_validator<S, V>(
+    actor: &RadrootsActorContext,
+    signer: &S,
+    draft: &RadrootsEventDraft,
+    validate_draft: V,
+) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
+where
+    S: RadrootsEventSigner + ?Sized,
+    V: FnOnce(&RadrootsEventDraft) -> Result<(), RadrootsDraftError>,
+{
     authorize_actor_for_draft(actor, draft)?;
     authorize_signer_for_draft(signer, draft)?;
+    validate_draft(draft).map_err(RadrootsAuthorityError::DraftValidation)?;
     let signed_event = signer.sign_frozen_draft(draft)?;
     validate_signed_event_matches_draft(&signed_event, draft)?;
     Ok(signed_event)
@@ -155,6 +169,7 @@ fn authority_error_from_draft_validation(error: RadrootsDraftError) -> RadrootsA
 mod tests {
     use super::*;
     use crate::RadrootsSignerError;
+    use core::cell::Cell;
     use radroots_event::contract::{RadrootsActorRole, event_contract};
     use radroots_event::ids::RadrootsPublicKey;
     use radroots_event::kinds::{KIND_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
@@ -277,6 +292,35 @@ mod tests {
         }
     }
 
+    struct CountingSigner {
+        pubkey: RadrootsPublicKey,
+        sign_invocations: Cell<usize>,
+    }
+
+    impl CountingSigner {
+        fn new(pubkey: &str) -> Self {
+            Self {
+                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                sign_invocations: Cell::new(0),
+            }
+        }
+    }
+
+    impl RadrootsEventSigner for CountingSigner {
+        fn pubkey(&self) -> &RadrootsPublicKey {
+            &self.pubkey
+        }
+
+        fn sign_frozen_draft(
+            &self,
+            _draft: &RadrootsEventDraft,
+        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            self.sign_invocations
+                .set(self.sign_invocations.get().saturating_add(1));
+            Err(RadrootsSignerError::Rejected)
+        }
+    }
+
     fn signed_event_from_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
         signed_event_from_parts(
             draft.expected_pubkey_str().to_owned(),
@@ -371,6 +415,33 @@ mod tests {
             authorize_signer_for_draft(&signer, &draft),
             Err(RadrootsAuthorityError::SignerPubkeyMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn draft_validation_failure_does_not_invoke_custom_signer() {
+        let pubkey = hex_64('a');
+        let draft = listing_event_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = CountingSigner::new(pubkey.as_str());
+
+        let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
+            Err(RadrootsDraftError::ContractRegistryVersionMismatch {
+                expected: 2,
+                actual: 1,
+            })
+        })
+        .expect_err("stale draft validation must fail");
+
+        assert!(matches!(
+            error,
+            RadrootsAuthorityError::DraftValidation(
+                RadrootsDraftError::ContractRegistryVersionMismatch {
+                    expected: 2,
+                    actual: 1
+                }
+            )
+        ));
+        assert_eq!(signer.sign_invocations.get(), 0);
     }
 
     #[test]

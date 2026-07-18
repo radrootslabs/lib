@@ -5,14 +5,14 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 use crate::error::RadrootsNostrError;
-use crate::events::radroots_nostr_build_event;
+use crate::events::radroots_nostr_build_event_unchecked;
 #[cfg(feature = "client")]
 use crate::filter::radroots_nostr_filter_tag;
 #[cfg(feature = "client")]
 use crate::tags::radroots_nostr_tag_first_value;
 #[cfg(feature = "client")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrKind};
-use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
+use crate::types::{RadrootsNostrGenericEventBuilder, RadrootsNostrMetadata};
 #[cfg(feature = "client")]
 use core::time::Duration;
 use radroots_event::kinds::KIND_APPLICATION_HANDLER;
@@ -42,7 +42,7 @@ impl RadrootsNostrApplicationHandlerSpec {
 
 pub fn radroots_nostr_build_application_handler_event(
     spec: &RadrootsNostrApplicationHandlerSpec,
-) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
     if spec.kinds.is_empty() {
         return Err(RadrootsNostrError::FilterTagError(
             "application handler kinds are empty".to_string(),
@@ -86,7 +86,8 @@ pub fn radroots_nostr_build_application_handler_event(
         tags.push(tag.clone());
     }
 
-    radroots_nostr_build_event(KIND_APPLICATION_HANDLER, content, tags)
+    let builder = radroots_nostr_build_event_unchecked(KIND_APPLICATION_HANDLER, content, tags)?;
+    Ok(RadrootsNostrGenericEventBuilder::from_unchecked(builder))
 }
 
 pub fn radroots_nostr_metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {

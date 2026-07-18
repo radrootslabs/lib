@@ -51,7 +51,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-radroots_blossom = { workspace = true, default-features = false, features = ["std"] }
+radroots_blossom = { workspace = true, default-features = false, features = [
+  "std",
+] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[test]]

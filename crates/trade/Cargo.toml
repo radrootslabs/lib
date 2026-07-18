@@ -76,6 +76,7 @@ sqlx = { workspace = true, default-features = false, features = [
 thiserror = { workspace = true }
 
 [dev-dependencies]
+nostr = { workspace = true }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",

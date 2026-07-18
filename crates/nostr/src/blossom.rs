@@ -14,9 +14,9 @@ use radroots_blossom::{
 };
 
 use crate::types::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrKeys,
-    RadrootsNostrKind, RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTagKind,
-    RadrootsNostrTimestamp,
+    RadrootsNostrEvent, RadrootsNostrEventBuilderUnchecked, RadrootsNostrEventId,
+    RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrPublicKey, RadrootsNostrTag,
+    RadrootsNostrTagKind, RadrootsNostrTimestamp,
 };
 
 const AUTHORIZATION_SCHEME: &str = "Nostr ";
@@ -236,10 +236,13 @@ pub fn radroots_nostr_sign_blossom_authorization(
         })
         .collect::<Vec<_>>();
     finish_signed_event(
-        RadrootsNostrEventBuilder::new(RadrootsNostrKind::Custom(wire.kind()), wire.content())
-            .tags(tags)
-            .custom_created_at(RadrootsNostrTimestamp::from_secs(wire.created_at()))
-            .sign_with_keys(keys),
+        RadrootsNostrEventBuilderUnchecked::new(
+            RadrootsNostrKind::Custom(wire.kind()),
+            wire.content(),
+        )
+        .tags(tags)
+        .custom_created_at(RadrootsNostrTimestamp::from_secs(wire.created_at()))
+        .sign_with_keys(keys),
     )
 }
 

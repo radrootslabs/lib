@@ -21,6 +21,7 @@ use sha2::{Digest, Sha256};
 pub const DEFAULT_RAW_JSON_MAX_BYTES: usize = 256 * 1024;
 pub const DEFAULT_CONTENT_MAX_BYTES: usize = 128 * 1024;
 pub const DEFAULT_TAG_MAX_COUNT: usize = 1024;
+pub const DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT: usize = 4096;
 pub const DEFAULT_TAG_ELEMENT_MAX_BYTES: usize = 4 * 1024;
 pub const DEFAULT_TAG_TOTAL_MAX_BYTES: usize = 128 * 1024;
 pub const DEFAULT_EXTRA_MAX_FIELDS: usize = 64;
@@ -31,6 +32,7 @@ pub struct RadrootsEventWireLimits {
     pub max_raw_json_bytes: usize,
     pub max_content_bytes: usize,
     pub max_tag_count: usize,
+    pub max_total_tag_elements: usize,
     pub max_tag_element_bytes: usize,
     pub max_total_tag_bytes: usize,
     pub max_extra_fields: usize,
@@ -43,6 +45,7 @@ impl Default for RadrootsEventWireLimits {
             max_raw_json_bytes: DEFAULT_RAW_JSON_MAX_BYTES,
             max_content_bytes: DEFAULT_CONTENT_MAX_BYTES,
             max_tag_count: DEFAULT_TAG_MAX_COUNT,
+            max_total_tag_elements: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             max_tag_element_bytes: DEFAULT_TAG_ELEMENT_MAX_BYTES,
             max_total_tag_bytes: DEFAULT_TAG_TOTAL_MAX_BYTES,
             max_extra_fields: DEFAULT_EXTRA_MAX_FIELDS,
@@ -95,6 +98,10 @@ pub enum RadrootsEventWireError {
         actual: usize,
     },
     TooManyTags {
+        max: usize,
+        actual: usize,
+    },
+    TooManyTagElements {
         max: usize,
         actual: usize,
     },
@@ -157,6 +164,9 @@ impl fmt::Display for RadrootsEventWireError {
             }
             Self::TooManyTags { max, actual } => {
                 write!(f, "event wire tag count {actual} exceeds {max}")
+            }
+            Self::TooManyTagElements { max, actual } => {
+                write!(f, "event wire tag element count {actual} exceeds {max}")
             }
             Self::EmptyTag { index } => write!(f, "event wire tag {index} is empty"),
             Self::EmptyTagKey { index } => write!(f, "event wire tag {index} key is empty"),
@@ -487,6 +497,18 @@ fn take_tags(
             actual: tag_count,
         });
     }
+    let total_tag_elements = raw_tags.iter().try_fold(0usize, |total, raw_tag| {
+        let Value::Array(values) = raw_tag else {
+            return Err(RadrootsEventWireError::InvalidField("tags"));
+        };
+        Ok(total.saturating_add(values.len()))
+    })?;
+    if total_tag_elements > limits.max_total_tag_elements {
+        return Err(RadrootsEventWireError::TooManyTagElements {
+            max: limits.max_total_tag_elements,
+            actual: total_tag_elements,
+        });
+    }
     let mut total_tag_bytes = 0usize;
     let mut tags = Vec::with_capacity(tag_count);
     for (tag_index, raw_tag) in raw_tags.into_iter().enumerate() {
@@ -650,6 +672,31 @@ mod tests {
 
     fn default_tags() -> Vec<Vec<String>> {
         vec![vec!["t".to_owned(), "soil".to_owned()]]
+    }
+
+    fn tag_with_total_elements(element_count: usize) -> Vec<Vec<String>> {
+        assert!(element_count > 0);
+        let mut tag = Vec::with_capacity(element_count);
+        tag.push("t".to_owned());
+        tag.resize(element_count, String::new());
+        vec![tag]
+    }
+
+    fn valid_envelope_parts(content: &str, tags: Vec<Vec<String>>) -> RadrootsEventEnvelopeParts {
+        let pubkey = hex_64('a');
+        let id =
+            compute_canonical_nip01_event_id(pubkey.as_str(), 1_700_000_000, 1, &tags, content)
+                .expect("event id")
+                .into_string();
+        RadrootsEventEnvelopeParts {
+            id,
+            author: pubkey,
+            created_at: 1_700_000_000,
+            kind: 1,
+            tags,
+            content: content.to_owned(),
+            sig: hex_128('b'),
+        }
     }
 
     #[test]
@@ -900,6 +947,18 @@ mod tests {
             Err(RadrootsEventWireError::TooManyTags { .. })
         ));
 
+        let raw = valid_event_json("hello", default_tags());
+        assert_eq!(
+            RadrootsNip01EventWire::parse_json_with_limits(
+                raw.as_str(),
+                RadrootsEventWireLimits {
+                    max_total_tag_elements: 1,
+                    ..RadrootsEventWireLimits::default()
+                }
+            ),
+            Err(RadrootsEventWireError::TooManyTagElements { max: 1, actual: 2 })
+        );
+
         let raw = valid_event_json("hello", vec![vec!["t".to_owned(), "soil".to_owned()]]);
         assert!(matches!(
             RadrootsNip01EventWire::parse_json_with_limits(
@@ -954,6 +1013,49 @@ mod tests {
     }
 
     #[test]
+    fn wire_accepts_exact_total_tag_element_boundary() {
+        let raw = valid_event_json("hello", default_tags());
+        let wire = RadrootsNip01EventWire::parse_json_with_limits(
+            raw.as_str(),
+            RadrootsEventWireLimits {
+                max_total_tag_elements: 2,
+                ..RadrootsEventWireLimits::default()
+            },
+        )
+        .expect("wire at exact tag element boundary");
+
+        assert_eq!(wire.tags, default_tags());
+    }
+
+    #[test]
+    fn wire_and_envelope_share_default_total_tag_element_boundary() {
+        let exact_tags = tag_with_total_elements(DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT);
+        RadrootsNip01EventWire::parse_json(valid_event_json("", exact_tags.clone()).as_str())
+            .expect("wire at default tag element boundary");
+        RadrootsEventEnvelope::new(valid_envelope_parts("", exact_tags))
+            .expect("envelope at default tag element boundary");
+
+        let overflow_elements = DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT + 1;
+        let overflow_tags = tag_with_total_elements(overflow_elements);
+        assert_eq!(
+            RadrootsNip01EventWire::parse_json(
+                valid_event_json("", overflow_tags.clone()).as_str()
+            ),
+            Err(RadrootsEventWireError::TooManyTagElements {
+                max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
+                actual: overflow_elements,
+            })
+        );
+        assert_eq!(
+            RadrootsEventEnvelope::new(valid_envelope_parts("", overflow_tags)),
+            Err(RadrootsEventEnvelopeError::TooManyTagElements {
+                max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
+                actual: overflow_elements,
+            })
+        );
+    }
+
+    #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn wire_parser_and_error_contracts_cover_all_typed_failures() {
         let parse_error = RadrootsEventId::parse("bad").expect_err("invalid id");
@@ -970,6 +1072,7 @@ mod tests {
             RadrootsEventWireError::RawJsonTooLarge { max: 1, actual: 2 },
             RadrootsEventWireError::ContentTooLarge { max: 1, actual: 2 },
             RadrootsEventWireError::TooManyTags { max: 1, actual: 2 },
+            RadrootsEventWireError::TooManyTagElements { max: 1, actual: 2 },
             RadrootsEventWireError::EmptyTag { index: 1 },
             RadrootsEventWireError::EmptyTagKey { index: 1 },
             RadrootsEventWireError::ControlCharacterTagKey { index: 1 },

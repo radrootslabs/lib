@@ -51,7 +51,8 @@ impl RadrootsNostrEventSink for RadrootsNostrdbEventSinkAdapter {
 mod tests {
     use super::*;
     use crate::config::RadrootsNostrdbConfig;
-    use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
+    use nostr::EventBuilder;
+    use radroots_nostr::prelude::RadrootsNostrKeys;
     use tempfile::TempDir;
 
     #[test]
@@ -63,7 +64,7 @@ mod tests {
         let adapter = RadrootsNostrdbEventSinkAdapter::new(nostrdb);
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello from runtime adapter")
+        let event = EventBuilder::text_note("hello from runtime adapter")
             .sign_with_keys(&keys)
             .expect("event should sign");
 
@@ -83,7 +84,7 @@ mod tests {
             .into_event_sink();
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello trait object")
+        let event = EventBuilder::text_note("hello trait object")
             .sign_with_keys(&keys)
             .expect("event should sign");
 
@@ -100,7 +101,7 @@ mod tests {
         let sink: Arc<dyn RadrootsNostrEventSink> = Arc::new(nostrdb.clone());
 
         let keys = RadrootsNostrKeys::generate();
-        let event = RadrootsNostrEventBuilder::text_note("hello nostrdb trait object")
+        let event = EventBuilder::text_note("hello nostrdb trait object")
             .sign_with_keys(&keys)
             .expect("event should sign");
 

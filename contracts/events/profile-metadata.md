@@ -38,15 +38,18 @@ The direct legacy `RadrootsProfile` codec, Profile-specific Nostr/network
 publish helpers, and replica Profile draft emission were removed in the
 `1.0.0-alpha.1` breaking contract. A replica Profile row is a lossy inbound
 projection and cannot prove author intent for a complete kind-`0` replacement.
-New authored callers must use `profile.build_authored_draft`. Generic raw event
-builders and send APIs remain protocol escape hatches; their ability to emit
-kind `0` does not make them Profile operation authority.
+New authored callers must use `profile.build_authored_draft`. The opaque
+Radroots generic builder rejects kind `0` at direct-signing and client
+publication boundaries, so it cannot substitute for Profile operation
+authority.
 
 `RadrootsNostrClient` no longer dereferences implicitly to the upstream SDK
 client, so upstream Profile conveniences are not exposed through ordinary
-method resolution. `from_inner` and `into_inner` remain explicit low-level
-interoperability boundaries; once a caller takes that boundary, upstream APIs
-are outside the Radroots authored-operation contract.
+method resolution. `from_inner` and `into_inner`, externally supplied unsigned
+events and NIP-46 signing, and already-signed event relay remain explicit
+low-level interoperability boundaries. Their results carry no Radroots typed
+product-authoring claim; once a caller takes one of those boundaries, upstream
+protocol behavior is outside the Radroots authored-operation contract.
 
 Legacy `profile::decode`, Nostr Profile adapters/fetchers, the network Profile
 fetch methods, and replica Profile ingest remain read-side compatibility paths.

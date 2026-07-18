@@ -4,7 +4,7 @@ use nostr::{
 };
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr::prelude::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrFilter, RadrootsNostrKind,
+    RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
     RadrootsNostrPublicKey, RadrootsNostrRelayUrl, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 use radroots_nostr_connect::prelude::{
@@ -25,6 +25,11 @@ use crate::model::{
     RadrootsNostrSignerRequestDecision,
 };
 
+/// Cryptographic operations required by the external NIP-46 protocol.
+///
+/// NIP-46 `sign_event` accepts caller-supplied unsigned Nostr events. Signing
+/// one is protocol interoperability only and does not establish a Radroots
+/// typed product-authoring contract.
 pub trait RadrootsNostrSignerNip46Signer: Clone + Send + Sync {
     fn signer_public_key_hex(&self) -> String;
     fn decrypt_request(
@@ -38,6 +43,8 @@ pub trait RadrootsNostrSignerNip46Signer: Clone + Send + Sync {
         payload: &str,
     ) -> Result<String, RadrootsNostrSignerError>;
     fn user_identity(&self) -> RadrootsIdentityPublic;
+    /// Signs a caller-supplied NIP-46 unsigned event without claiming typed
+    /// Radroots product authoring.
     fn sign_user_event(
         &self,
         unsigned_event: UnsignedEvent,
@@ -172,18 +179,22 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         client_public_key: RadrootsNostrPublicKey,
         request_id: impl Into<String>,
         response: RadrootsNostrConnectResponse,
-    ) -> Result<RadrootsNostrEventBuilder, RadrootsNostrSignerError> {
+    ) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrSignerError> {
         let envelope = response.into_envelope(request_id.into())?;
         let payload = serde_json::to_string(&envelope).map_err(RadrootsNostrConnectError::from)?;
         let ciphertext = self.signer.encrypt_response(&client_public_key, &payload)?;
 
-        Ok(RadrootsNostrEventBuilder::new(
+        Ok(RadrootsNostrGenericEventBuilder::new(
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND),
             ciphertext,
         )
         .tags(vec![RadrootsNostrTag::public_key(client_public_key)]))
     }
 
+    /// Produces a NIP-46 response for an externally supplied unsigned event.
+    ///
+    /// A successful response proves only protocol signing. It does not confer
+    /// a Radroots typed-authoring or product-admission claim.
     pub fn sign_event_response(
         &self,
         unsigned_event: UnsignedEvent,
@@ -303,7 +314,7 @@ where
         client_public_key: RadrootsNostrPublicKey,
         request_id: impl Into<String>,
         response: RadrootsNostrConnectResponse,
-    ) -> Result<RadrootsNostrEventBuilder, RadrootsNostrSignerError> {
+    ) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrSignerError> {
         self.codec
             .build_response_event(client_public_key, request_id, response)
     }
@@ -845,8 +856,8 @@ mod tests {
     use nostr::{Keys, Timestamp, UnsignedEvent};
     use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
     use radroots_nostr::prelude::{
-        RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrKind, RadrootsNostrPublicKey,
-        RadrootsNostrTagKind,
+        RadrootsNostrEvent, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
+        RadrootsNostrPublicKey, RadrootsNostrTagKind,
     };
     use radroots_nostr_connect::prelude::{
         RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectMethod,
@@ -1199,7 +1210,7 @@ mod tests {
         let client_public_key = fixture_carol_public_key();
         let request = request_message("req-parse", RadrootsNostrConnectRequest::Ping);
         let raw = serde_json::to_string(&request).expect("serialize request");
-        let event = RadrootsNostrEventBuilder::new(
+        let event = RadrootsNostrGenericEventBuilder::new(
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND),
             raw,
         )
@@ -1216,7 +1227,9 @@ mod tests {
                 RadrootsNostrConnectResponse::Pong,
             )
             .expect("response builder");
-        let response_event = response_builder.build(test_signer().signer_identity.public_key());
+        let response_event = response_builder
+            .sign_with_keys(&Keys::generate())
+            .expect("sign response event");
         assert_eq!(
             response_event.kind,
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND)
@@ -1239,7 +1252,8 @@ mod tests {
                 RadrootsNostrConnectResponse::ConnectAcknowledged,
             )
             .expect("handler response")
-            .build(test_signer().signer_identity.public_key());
+            .sign_with_keys(&Keys::generate())
+            .expect("sign handler response event");
         assert_eq!(
             handler_event.kind,
             RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND)
