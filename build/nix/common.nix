@@ -20,6 +20,7 @@ let
         ../../Cargo.lock
         ../../CHANGELOG.md
         ../../README
+        ../../dto_bindgen.toml
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates

@@ -161,6 +161,8 @@ Targeted iteration inside the Nix shell:
 - `cargo check -p <crate>`
 - `cargo test -p <crate>`
 - `cargo xtask contract validate`
+- `cargo xtask dto-roots --check`
+- `cargo xtask dto-roots --write` after changing configured DTO exports
 - `cargo xtask release preflight`
 - `cargo xtask hygiene forbidden-identifiers`
 

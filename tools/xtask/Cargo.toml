@@ -10,6 +10,7 @@ publish = false
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 
 [dependencies]
+dto_bindgen_core = { workspace = true }
 radroots_event_codec = { workspace = true, features = [
   "contract-manifest",
 ], default-features = false }
@@ -18,6 +19,7 @@ semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+tempfile = { workspace = true }
 hex = { workspace = true }
 toml = { workspace = true }
 

@@ -7,8 +7,10 @@ tasks for the `radroots` core libraries.
 
  * an internal `cargo xtask` runner for workspace-oriented development and
    release workflows;
- * `contract`, `coverage`, `release`, and `hygiene` command families for
-   core-library governance;
+ * `contract`, `coverage`, `dto-roots`, `release`, and `hygiene` command
+   families for core-library governance;
+ * deterministic `dto-roots --write|--check` generation for every
+   source-manifest package in the workspace DTO authority;
  * command-dispatch code used for contract, coverage, hygiene, and release
    paths inside the workspace;
  * a non-published binary crate used as tooling rather than as a library

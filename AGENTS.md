@@ -39,6 +39,8 @@ Before editing code:
 - `nix run .#contract`
 - `nix run .#release-preflight`
 - targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
+- `cargo xtask dto-roots --write` after changing configured DTO exports and
+  `cargo xtask dto-roots --check` for exact generated-root freshness
 - targeted `cargo xtask contract ...`, `cargo xtask coverage ...`, `cargo xtask release ...`, or `cargo xtask hygiene ...` only when narrowing a repo-owned workflow
 - if Beads is active, read `.beads/PRIME.md`
 

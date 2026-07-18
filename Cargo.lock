@@ -8670,6 +8670,7 @@ dependencies = [
 name = "xtask"
 version = "1.0.0-alpha.1"
 dependencies = [
+ "dto_bindgen_core",
  "hex",
  "radroots_event_codec",
  "radroots_protocol_contract_v1",
@@ -8677,6 +8678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "toml",
 ]
 

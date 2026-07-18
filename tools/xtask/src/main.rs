@@ -5,6 +5,8 @@
 mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod dto_roots;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod hygiene;
 
 use std::env;
@@ -15,6 +17,7 @@ fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
+    eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
@@ -53,6 +56,7 @@ fn validate_contract() -> Result<(), String> {
     radroots_protocol_contract_v1::validate_protocol_contract_v1()
         .map_err(|error| error.to_string())?;
     let root = workspace_root();
+    dto_roots::check(&root)?;
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
@@ -61,7 +65,13 @@ fn validate_contract() -> Result<(), String> {
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn release_preflight() -> Result<(), String> {
-    contract::validate_release_preflight(&workspace_root())
+    let root = workspace_root();
+    release_preflight_at(&root)
+}
+
+fn release_preflight_at(root: &Path) -> Result<(), String> {
+    dto_roots::check(root)?;
+    contract::validate_release_preflight(root)
 }
 
 fn run_release(args: &[String]) -> Result<(), String> {
@@ -90,6 +100,7 @@ fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("contract") => run_contract(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
+        Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
         Some("hygiene") => hygiene::run(&args[1..], &workspace_root()),
         Some("release") => run_release(&args[1..]),
         _ => Err("unknown command".to_string()),
@@ -174,9 +185,21 @@ mod tests {
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
 
+        let invalid_dto_roots =
+            run(&["dto-roots".to_string()]).expect_err("dto-roots requires an explicit mode");
+        assert!(invalid_dto_roots.contains("--check|--write"));
+
         let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
             .expect_err("removed sdk command namespace");
         assert!(removed_sdk.contains("unknown command"));
+    }
+
+    #[test]
+    fn release_preflight_checks_dto_root_authority_first() {
+        let workspace = tempfile::TempDir::new().expect("create empty workspace");
+        let error = release_preflight_at(workspace.path())
+            .expect_err("missing DTO root authority must fail first");
+        assert!(error.contains("DTO root authority"));
     }
 
     #[test]
@@ -197,6 +220,8 @@ mod tests {
         fs::create_dir_all(&out_dir).expect("create out dir");
 
         run_contract(&["validate".to_string()]).expect("validate contract");
+        run(&["dto-roots".to_string(), "--check".to_string()])
+            .expect("validate DTO root freshness");
         coverage::run(&["help".to_string()]).expect("coverage help");
         coverage::run(&["required-crates".to_string()]).expect("coverage required crates");
         coverage::run(&["workspace-crates".to_string()]).expect("coverage workspace crates");
