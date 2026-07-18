@@ -20,6 +20,11 @@ impl Default for LoggingOptions {
 }
 
 pub fn init_logging(opts: LoggingOptions) -> Result<()> {
+    let file_path = opts
+        .dir
+        .as_ref()
+        .map(|d| d.join(&opts.file_name).display().to_string())
+        .unwrap_or_else(|| "<disabled>".into());
     let log_opts = radroots_log::LoggingOptions {
         dir: opts.dir.clone(),
         file_name: opts.file_name.clone(),
@@ -32,11 +37,6 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
         Ok(()) => {}
         Err(_) => return Err(NetError::LoggingInit("init")),
     }
-    let file_path = opts
-        .dir
-        .as_ref()
-        .map(|d| d.join(&opts.file_name).display().to_string())
-        .unwrap_or_else(|| "<disabled>".into());
     info!(
         "logging initialized (file: {}, stdout: {})",
         file_path, opts.also_stdout

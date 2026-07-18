@@ -47,7 +47,7 @@ impl NostrClientManager {
         let mut connected = 0usize;
         let mut connecting = 0usize;
 
-        for (_url, st) in map.iter() {
+        for st in map.values() {
             match st {
                 RadrootsNostrRelayStatus::Connected => connected += 1,
                 RadrootsNostrRelayStatus::Connecting => connecting += 1,
