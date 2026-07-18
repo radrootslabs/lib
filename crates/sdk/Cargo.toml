@@ -42,7 +42,6 @@ knowledge = [
 ]
 identity-models = [
   "dep:radroots_identity",
-  "radroots_identity/profile",
   "radroots_identity/std",
 ]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]

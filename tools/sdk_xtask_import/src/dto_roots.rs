@@ -650,7 +650,6 @@ mod tests {
         "RadrootsPlotLocation",
         "RadrootsPlotRef",
         "RadrootsPost",
-        "RadrootsProfile",
         "RadrootsProfileType",
         "RadrootsReaction",
         "RadrootsRelayDocument",

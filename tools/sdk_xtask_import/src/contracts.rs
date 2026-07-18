@@ -683,7 +683,7 @@ stage = "active"
 order = 1
 
 [operations]
-"profile.build_draft" = "profile.buildDraft"
+"farm.build_draft" = "farm.buildDraft"
 
 [shared_types]
 "RadrootsNip01EventWireParts" = "RadrootsNip01EventWireParts"

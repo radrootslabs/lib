@@ -1,10 +1,6 @@
 #![forbid(unsafe_code)]
 
 use radroots_event::article::RadrootsArticle;
-use radroots_event::calendar::{
-    RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
-    RadrootsCalendarTimeEvent,
-};
 use radroots_event::comment::RadrootsComment;
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::RadrootsDocument;
@@ -43,10 +39,6 @@ use radroots_event::report::RadrootsReport;
 use radroots_event::repost::{RadrootsGenericRepost, RadrootsRepost};
 use radroots_event::seal::RadrootsSeal;
 use radroots_event_codec::article::encode::article_build_tags;
-use radroots_event_codec::calendar::encode::{
-    calendar_collection_build_tags, calendar_date_event_build_tags, calendar_time_event_build_tags,
-    rsvp_build_tags,
-};
 use radroots_event_codec::comment::encode::comment_build_tags;
 use radroots_event_codec::coop::encode::coop_build_tags;
 use radroots_event_codec::document::encode::document_build_tags;
@@ -337,35 +329,6 @@ pub fn file_metadata_tags(metadata_json: &str) -> Result<String, RadrootsJsValue
     build_tags_json::<RadrootsFileMetadata, _, _>(metadata_json, file_metadata_build_tags)
 }
 
-#[cfg_attr(
-    target_arch = "wasm32",
-    wasm_bindgen(js_name = calendar_date_event_tags)
-)]
-pub fn calendar_date_event_tags(event_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsCalendarDateEvent, _, _>(event_json, calendar_date_event_build_tags)
-}
-
-#[cfg_attr(
-    target_arch = "wasm32",
-    wasm_bindgen(js_name = calendar_time_event_tags)
-)]
-pub fn calendar_time_event_tags(event_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsCalendarTimeEvent, _, _>(event_json, calendar_time_event_build_tags)
-}
-
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = calendar_tags))]
-pub fn calendar_tags(calendar_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsCalendar, _, _>(calendar_json, calendar_collection_build_tags)
-}
-
-#[cfg_attr(
-    target_arch = "wasm32",
-    wasm_bindgen(js_name = calendar_event_rsvp_tags)
-)]
-pub fn calendar_event_rsvp_tags(rsvp_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsCalendarEventRsvp, _, _>(rsvp_json, rsvp_build_tags)
-}
-
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = repost_tags))]
 pub fn repost_tags(repost_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsRepost, _, _>(repost_json, repost_build_tags)
@@ -602,10 +565,9 @@ mod tests {
     use radroots_event::listing::{RadrootsListingBin, RadrootsListingProduct};
     use radroots_event::relay_auth::RadrootsRelayAuth;
     use radroots_event::social::{
-        RadrootsCalendarDateValue, RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus,
-        RadrootsCalendarParticipant, RadrootsReportFileTarget, RadrootsReportType,
-        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
-        RadrootsSocialMediaMetadata, RadrootsSocialTarget,
+        RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialFarmAnchor,
+        RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialMediaMetadata,
+        RadrootsSocialTarget,
     };
     use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 
@@ -987,69 +949,6 @@ mod tests {
         }
     }
 
-    fn sample_calendar_date_event() -> RadrootsCalendarDateEvent {
-        RadrootsCalendarDateEvent {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
-            title: "market day".to_string(),
-            start: "2026-06-20".to_string(),
-            description: Some("Farm stand pickup window.".to_string()),
-            end: Some("2026-06-21".to_string()),
-            days: Some(vec![RadrootsCalendarDateValue {
-                value: "2026-06-20".to_string(),
-            }]),
-            location: Some(social_location()),
-            summary: Some("weekly pickup".to_string()),
-            image: None,
-            participants: Some(vec![RadrootsCalendarParticipant {
-                pubkey: synthetic_pubkey('e'),
-                relay: Some("wss://relay.example.test".to_string()),
-                role: Some("host".to_string()),
-            }]),
-        }
-    }
-
-    fn sample_calendar_time_event() -> RadrootsCalendarTimeEvent {
-        RadrootsCalendarTimeEvent {
-            d_tag: "AAAAAAAAAAAAAAAAAAAA-A".to_string(),
-            title: "wash pack shift".to_string(),
-            start: 1_781_895_600,
-            dates: vec![RadrootsCalendarDateValue {
-                value: "2026-06-20".to_string(),
-            }],
-            description: Some("Prepare CSA bins before pickup.".to_string()),
-            end: Some(1_781_899_200),
-            start_tzid: Some("America/Vancouver".to_string()),
-            end_tzid: Some("America/Vancouver".to_string()),
-            location: Some(social_location()),
-            summary: Some("field crew".to_string()),
-            image: None,
-            participants: None,
-        }
-    }
-
-    fn sample_calendar() -> RadrootsCalendar {
-        RadrootsCalendar {
-            d_tag: "AAAAAAAAAAAAAAAAAAAA_A".to_string(),
-            title: "farm calendar".to_string(),
-            events: vec![address_target(31923, "AAAAAAAAAAAAAAAAAAAA-A")],
-            description: Some("Shared schedule for farm operations.".to_string()),
-            summary: Some("field schedule".to_string()),
-            image: None,
-        }
-    }
-
-    fn sample_calendar_rsvp() -> RadrootsCalendarEventRsvp {
-        RadrootsCalendarEventRsvp {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            event: address_target(31923, "AAAAAAAAAAAAAAAAAAAA-A"),
-            event_id: Some(synthetic_event_id('f')),
-            status: RadrootsCalendarEventRsvpStatus::Tentative,
-            free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
-            note: Some("depends on harvest".to_string()),
-            participants: None,
-        }
-    }
-
     fn sample_comment() -> RadrootsComment {
         RadrootsComment {
             root: event_target(30023, 'a'),
@@ -1253,17 +1152,13 @@ mod tests {
 
     #[test]
     fn bindings_reject_invalid_json() {
-        let bindings: [BindingEncoder; 46] = [
+        let bindings: [BindingEncoder; 42] = [
             listing_tags,
             listing_tags_full,
             post_tags,
             comment_tags,
             article_tags,
             file_metadata_tags,
-            calendar_date_event_tags,
-            calendar_time_event_tags,
-            calendar_tags,
-            calendar_event_rsvp_tags,
             repost_tags,
             generic_repost_tags,
             report_tags,
@@ -1337,19 +1232,6 @@ mod tests {
         assert_tags_json(file_metadata_tags(
             &serde_json::to_string(&sample_public_file_metadata()).expect("file json"),
         ));
-        assert_tags_json(calendar_date_event_tags(
-            &serde_json::to_string(&sample_calendar_date_event()).expect("date json"),
-        ));
-        let time_tags = tags_json(calendar_time_event_tags(
-            &serde_json::to_string(&sample_calendar_time_event()).expect("time json"),
-        ));
-        assert!(has_tag(&time_tags, "D", "2026-06-20"));
-        assert_tags_json(calendar_tags(
-            &serde_json::to_string(&sample_calendar()).expect("calendar json"),
-        ));
-        assert_tags_json(calendar_event_rsvp_tags(
-            &serde_json::to_string(&sample_calendar_rsvp()).expect("rsvp json"),
-        ));
         assert_tags_json(reaction_tags(
             &serde_json::to_string(&sample_reaction()).expect("reaction json"),
         ));
@@ -1381,12 +1263,6 @@ mod tests {
             hint: None,
         };
         assert!(reaction_tags(&serde_json::to_string(&reaction).expect("reaction json")).is_err());
-
-        let mut rsvp = sample_calendar_rsvp();
-        rsvp.event = event_target(31923, 'f');
-        assert!(
-            calendar_event_rsvp_tags(&serde_json::to_string(&rsvp).expect("rsvp json")).is_err()
-        );
 
         let mut report = sample_report();
         report.reported_pubkey.clear();

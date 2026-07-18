@@ -355,10 +355,6 @@ fn promise_of(type_expr: TypeScriptType) -> TypeScriptType {
 
 const EVENT_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("article_tags", Some("article_json"), String, 2, 4),
-    public_function!("calendar_date_event_tags", Some("event_json"), String, 2, 4),
-    public_function!("calendar_event_rsvp_tags", Some("rsvp_json"), String, 2, 4),
-    public_function!("calendar_tags", Some("calendar_json"), String, 2, 4),
-    public_function!("calendar_time_event_tags", Some("event_json"), String, 2, 4),
     public_function!("comment_tags", Some("comment_json"), String, 2, 4),
     public_function!("coop_tags", Some("coop_json"), String, 2, 4),
     public_function!("document_tags", Some("document_json"), String, 2, 4),
@@ -1023,6 +1019,15 @@ mod tests {
                 .contents
                 .contains("export declare const listing_tags")
         );
+        for retired in [
+            "calendar_date_event_tags",
+            "calendar_event_rsvp_tags",
+            "calendar_tags",
+            "calendar_time_event_tags",
+        ] {
+            assert!(!events[0].contents.contains(retired));
+            assert!(!events[1].contents.contains(retired));
+        }
 
         let replica_store = declaration_files(specs[1]).expect("replica store declarations");
         assert!(
