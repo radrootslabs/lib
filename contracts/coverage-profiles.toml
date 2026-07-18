@@ -10,7 +10,7 @@ test_threads = 1
 
 [profiles.crates."radroots_event_codec"]
 no_default_features = false
-features = ["serde_json"]
+features = ["serde_json", "nostr"]
 test_threads = 1
 
 [profiles.crates."radroots_nostr_runtime"]

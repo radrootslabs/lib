@@ -12,7 +12,7 @@ use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
 fn sample_request() -> RadrootsJobRequest {
     RadrootsJobRequest {
-        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
         inputs: vec![RadrootsJobInput {
             data: APP_PRIMARY_HTTPS.to_string(),
             input_type: JobInputType::Url,
@@ -42,9 +42,18 @@ fn job_request_roundtrip_from_tags() {
 }
 
 #[test]
+fn job_request_from_tags_rejects_kind_overflow() {
+    let kind = u32::from(u16::MAX) + 1;
+    assert!(matches!(
+        job_request_from_tags(kind, &[]),
+        Err(JobParseError::KindOutOfRange(actual)) if actual == kind
+    ));
+}
+
+#[test]
 fn job_request_requires_valid_kind() {
     let mut req = sample_request();
-    req.kind = KIND_JOB_FEEDBACK as u16;
+    req.kind = u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01");
 
     let err = to_wire_parts(&req, "payload").unwrap_err();
     assert!(matches!(

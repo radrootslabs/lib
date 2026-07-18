@@ -16,6 +16,7 @@ pub fn job_request_from_tags(
     kind: u32,
     tags: &[Vec<String>],
 ) -> Result<RadrootsJobRequest, JobParseError> {
+    let kind = u16::try_from(kind).map_err(|_| JobParseError::KindOutOfRange(kind))?;
     let inputs: Vec<RadrootsJobInput> = parse_i_tags(tags);
 
     let output = tags
@@ -52,7 +53,7 @@ pub fn job_request_from_tags(
     }
 
     Ok(RadrootsJobRequest {
-        kind: kind as u16,
+        kind,
         inputs,
         output,
         params,

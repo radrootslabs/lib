@@ -289,7 +289,9 @@ fn unsupported_raw_event() -> String {
 fn post_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
     radroots_nostr_filter_tag(
         RadrootsNostrFilter::new()
-            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .kind(RadrootsNostrKind::Custom(
+                u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),
+            ))
             .limit(limit),
         "t",
         vec!["soil".to_owned()],
@@ -1253,7 +1255,9 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     ]);
     let filter = radroots_nostr_filter_tag(
         RadrootsNostrFilter::new()
-            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .kind(RadrootsNostrKind::Custom(
+                u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),
+            ))
             .limit(10),
         "t",
         vec!["soil".to_owned()],
@@ -1409,7 +1413,9 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
         signed_event_with_kind_and_hashtag("shared fetch wrong tag", KIND_POST, "compost");
     let filter = radroots_nostr_filter_tag(
         RadrootsNostrFilter::new()
-            .kind(RadrootsNostrKind::Custom(KIND_POST as u16))
+            .kind(RadrootsNostrKind::Custom(
+                u16::try_from(KIND_POST).expect("post kind must fit NIP-01"),
+            ))
             .limit(10),
         "t",
         vec!["soil".to_owned()],

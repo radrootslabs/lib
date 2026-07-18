@@ -79,21 +79,17 @@ fn rumor_from_parts(
     parts: RadrootsNip01EventWireParts,
     author: PublicKey,
     created_at: Option<u64>,
-) -> UnsignedEvent {
+) -> Result<UnsignedEvent, RadrootsNip17Error> {
+    let kind = u16::try_from(parts.kind)
+        .map_err(|_| RadrootsNip17Error::UnsupportedRumorKind(parts.kind))?;
     let tags = tags_from_slices(&parts.tags);
     let timestamp = match created_at {
         Some(ts) => Timestamp::from_secs(ts),
         None => Timestamp::now(),
     };
-    let mut rumor = UnsignedEvent::new(
-        author,
-        timestamp,
-        Kind::Custom(parts.kind as u16),
-        tags,
-        parts.content,
-    );
+    let mut rumor = UnsignedEvent::new(author, timestamp, Kind::Custom(kind), tags, parts.content);
     rumor.ensure_id();
-    rumor
+    Ok(rumor)
 }
 
 fn parse_recipients(
@@ -147,7 +143,7 @@ where
 {
     let parts = message_encode::to_wire_parts(message)?;
     let author = signer.get_public_key().await?;
-    let rumor = rumor_from_parts(parts, author, options.rumor_created_at);
+    let rumor = rumor_from_parts(parts, author, options.rumor_created_at)?;
     let recipients = parse_recipients(&message.recipients)?;
     wrap_rumor(signer, rumor, recipients, &options).await
 }
@@ -162,7 +158,7 @@ where
 {
     let parts = message_file_encode::to_wire_parts(message)?;
     let author = signer.get_public_key().await?;
-    let rumor = rumor_from_parts(parts, author, options.rumor_created_at);
+    let rumor = rumor_from_parts(parts, author, options.rumor_created_at)?;
     let recipients = parse_recipients(&message.recipients)?;
     wrap_rumor(signer, rumor, recipients, &options).await
 }
@@ -223,6 +219,36 @@ mod tests {
 
     fn receiver_keys() -> Keys {
         Keys::new(SecretKey::from_hex(FIXTURE_BOB.secret_key_hex).unwrap())
+    }
+
+    #[test]
+    fn rumor_kind_conversion_is_range_checked() {
+        let author = sender_keys().public_key();
+        let max = rumor_from_parts(
+            RadrootsNip01EventWireParts {
+                kind: u32::from(u16::MAX),
+                content: String::new(),
+                tags: Vec::new(),
+            },
+            author,
+            Some(1_700_000_000),
+        )
+        .expect("maximum NIP-01 kind");
+        assert_eq!(max.kind.as_u16(), u16::MAX);
+
+        let overflow = u32::from(u16::MAX) + 1;
+        assert!(matches!(
+            rumor_from_parts(
+                RadrootsNip01EventWireParts {
+                    kind: overflow,
+                    content: String::new(),
+                    tags: Vec::new(),
+                },
+                author,
+                Some(1_700_000_000),
+            ),
+            Err(RadrootsNip17Error::UnsupportedRumorKind(kind)) if kind == overflow
+        ));
     }
 
     #[tokio::test]

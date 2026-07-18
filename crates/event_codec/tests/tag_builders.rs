@@ -357,7 +357,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     assert!(!plot.build_tags().unwrap().is_empty());
 
     let job_request = RadrootsJobRequest {
-        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
         inputs: vec![RadrootsJobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
@@ -378,7 +378,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     assert!(!job_request.build_tags().unwrap().is_empty());
 
     let job_result = RadrootsJobResult {
-        kind: (KIND_JOB_RESULT_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
         request_event: RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
@@ -401,7 +401,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     assert!(!job_result.build_tags().unwrap().is_empty());
 
     let job_feedback = RadrootsJobFeedback {
-        kind: KIND_JOB_FEEDBACK as u16,
+        kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("queued".to_string()),
         request_event: RadrootsEventPtr {
@@ -674,7 +674,7 @@ fn listing_builder_rejects_required_field_errors() {
 #[test]
 fn job_request_tag_builder_rejects_encrypted_without_provider() {
     let request = RadrootsJobRequest {
-        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
         inputs: vec![RadrootsJobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
@@ -696,7 +696,7 @@ fn job_request_tag_builder_rejects_encrypted_without_provider() {
 #[test]
 fn job_request_tag_builder_accepts_encrypted_with_provider() {
     let request = RadrootsJobRequest {
-        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
         inputs: vec![RadrootsJobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,

@@ -77,3 +77,14 @@ id = "workspace-version-lockstep"
 classification = "fix"
 semver_impacts = ["fix_packaging_metadata"]
 summary = "Move the workspace and event contract to the 1.0.0-alpha.1 version cohort with exact internal requirements."
+
+[[changes]]
+id = "general-verified-event-boundary"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_algorithm_behavior",
+]
+summary = "Expose knowledge-independent NIP-01 verification and verified Profile admission while rejecting every out-of-range Nostr kind conversion."

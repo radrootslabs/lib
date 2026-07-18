@@ -28,7 +28,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 6] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 7] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -52,6 +52,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 6] = [
     (
         "contracts/conformance/vectors/profile/metadata.v1.json",
         "crates/event_codec/tests/fixtures/profile_metadata.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/profile/verified_event.v1.json",
+        "crates/event_codec/tests/fixtures/profile_verified_event.v1.json",
     ),
 ];
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
@@ -762,7 +766,7 @@ struct EventBoundaryExpectation {
     witnesses: &'static [EventBoundarySourceWitness],
 }
 
-const PROFILE_WITNESSES: [EventBoundarySourceWitness; 3] = [
+const PROFILE_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/profile.rs",
         required_fragments: &["pub struct RadrootsAuthoredProfile"],
@@ -770,6 +774,20 @@ const PROFILE_WITNESSES: [EventBoundarySourceWitness; 3] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event_codec/src/profile/inbound.rs",
         required_fragments: &["pub struct RadrootsInboundProfileMetadata"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/profile/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedProfileEvent",
+            "pub fn verify_and_admit_profile_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/verification.rs",
+        required_fragments: &[
+            "pub struct RadrootsSignatureVerifiedEvent",
+            "pub fn verify_nip01_event",
+        ],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",

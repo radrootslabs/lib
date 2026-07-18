@@ -2,6 +2,7 @@ use core::fmt;
 
 #[derive(Debug)]
 pub enum JobParseError {
+    KindOutOfRange(u32),
     MissingTag(&'static str),
     InvalidTag(&'static str),
     InvalidNumber(&'static str, core::num::ParseIntError),
@@ -13,6 +14,9 @@ pub enum JobParseError {
 impl fmt::Display for JobParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            JobParseError::KindOutOfRange(kind) => {
+                write!(f, "Nostr event kind {kind} exceeds {}", u16::MAX)
+            }
             JobParseError::MissingTag(t) => write!(f, "missing tag: {}", t),
             JobParseError::InvalidTag(t) => write!(f, "invalid tag structure for '{}'", t),
             JobParseError::InvalidNumber(t, e) => write!(f, "invalid number in '{}': {}", t, e),

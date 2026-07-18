@@ -1,5 +1,6 @@
 pub mod decode;
 pub mod encode;
+pub mod verification;
 
 pub use decode::{
     contribution_attestation_from_event, evidence_bounty_from_event,

@@ -20,6 +20,7 @@ pub fn job_result_from_tags(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<RadrootsJobResult, JobParseError> {
+    let kind = u16::try_from(kind).map_err(|_| JobParseError::KindOutOfRange(kind))?;
     let etag = tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some("e"))
@@ -52,7 +53,7 @@ pub fn job_result_from_tags(
         .and_then(|t| t.get(1).cloned());
 
     Ok(RadrootsJobResult {
-        kind: kind as u16,
+        kind,
         request_event: RadrootsEventPtr {
             id: req_id,
             relays: relay_hint,

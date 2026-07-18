@@ -14,7 +14,7 @@ use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {
-        kind: (KIND_JOB_RESULT_MIN + 1) as u16,
+        kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
         request_event: common::event_ptr("req", Some(RELAY_PRIMARY_WSS)),
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
         inputs: vec![RadrootsJobInput {
@@ -44,6 +44,15 @@ fn job_result_roundtrip_from_tags() {
 }
 
 #[test]
+fn job_result_from_tags_rejects_kind_overflow() {
+    let kind = u32::from(u16::MAX) + 1;
+    assert!(matches!(
+        job_result_from_tags(kind, &[], ""),
+        Err(JobParseError::KindOutOfRange(actual)) if actual == kind
+    ));
+}
+
+#[test]
 fn job_result_roundtrip_with_empty_content_sets_none() {
     let res = sample_result();
     let parts = to_wire_parts(&res, "").unwrap();
@@ -69,7 +78,7 @@ fn job_result_roundtrip_preserves_input_relay_and_marker() {
 #[test]
 fn job_result_requires_valid_kind() {
     let mut res = sample_result();
-    res.kind = KIND_JOB_REQUEST_MIN as u16;
+    res.kind = u16::try_from(KIND_JOB_REQUEST_MIN).expect("request kind must fit NIP-01");
 
     let err = to_wire_parts(&res, "payload").unwrap_err();
     assert!(matches!(

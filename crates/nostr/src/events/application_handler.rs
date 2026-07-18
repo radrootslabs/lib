@@ -127,10 +127,16 @@ async fn fetch_existing_identifier(
         .kinds
         .first()
         .ok_or_else(|| RadrootsNostrError::FilterTagError("kinds are empty".to_string()))?;
+    let application_handler_kind = u16::try_from(KIND_APPLICATION_HANDLER).map_err(|_| {
+        RadrootsNostrError::KindOutOfRange {
+            kind: KIND_APPLICATION_HANDLER,
+            max: u16::MAX,
+        }
+    })?;
     let author = client.public_key().await?;
     let filter = RadrootsNostrFilter::new()
         .author(author)
-        .kind(RadrootsNostrKind::Custom(KIND_APPLICATION_HANDLER as u16));
+        .kind(RadrootsNostrKind::Custom(application_handler_kind));
     let filter = radroots_nostr_filter_tag(filter, "k", vec![first_kind.to_string()])?;
     let mut events = client.fetch_events(filter, Duration::from_secs(5)).await?;
     events.sort_by_key(|event| event.created_at.as_secs());

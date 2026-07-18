@@ -17,6 +17,10 @@ pub fn radroots_nostr_build_event(
     content: impl Into<String>,
     tag_slices: Vec<Vec<String>>,
 ) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    let kind = u16::try_from(kind_u32).map_err(|_| RadrootsNostrError::KindOutOfRange {
+        kind: kind_u32,
+        max: u16::MAX,
+    })?;
     let mut tags: Vec<RadrootsNostrTag> = Vec::new();
     for mut s in tag_slices {
         if s.is_empty() {
@@ -29,16 +33,16 @@ pub fn radroots_nostr_build_event(
             values,
         ));
     }
-    let builder =
-        RadrootsNostrEventBuilder::new(RadrootsNostrKind::Custom(kind_u32 as u16), content.into())
-            .tags(tags)
-            .allow_self_tagging();
+    let builder = RadrootsNostrEventBuilder::new(RadrootsNostrKind::Custom(kind), content.into())
+        .tags(tags)
+        .allow_self_tagging();
     Ok(builder)
 }
 
 #[cfg(test)]
 mod tests {
     use super::radroots_nostr_build_event;
+    use crate::error::RadrootsNostrError;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use crate::types::{RadrootsNostrPublicKey, RadrootsNostrTagKind};
 
@@ -64,5 +68,26 @@ mod tests {
                     == Some("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
         });
         assert!(!has_other_self_tag);
+    }
+
+    #[test]
+    fn build_event_accepts_maximum_nip01_kind() {
+        let builder = radroots_nostr_build_event(u32::from(u16::MAX), "test", Vec::new())
+            .expect("maximum NIP-01 kind");
+        let event = builder
+            .build(RadrootsNostrPublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"));
+        assert_eq!(event.kind.as_u16(), u16::MAX);
+    }
+
+    #[test]
+    fn build_event_rejects_kind_overflow() {
+        let kind = u32::from(u16::MAX) + 1;
+        assert!(matches!(
+            radroots_nostr_build_event(kind, "test", Vec::new()),
+            Err(RadrootsNostrError::KindOutOfRange {
+                kind: actual,
+                max: u16::MAX
+            }) if actual == kind
+        ));
     }
 }

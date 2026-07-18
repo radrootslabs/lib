@@ -6,28 +6,14 @@ use core::fmt;
 use core::str::FromStr;
 
 use radroots_event::RadrootsEventEnvelope;
-use radroots_event::contract::{
-    RadrootsContractValidationError, RadrootsEventContract,
-    validate_event_contract as validate_radroots_event_contract,
-};
 use radroots_event::ids::RadrootsEventId;
-use radroots_event::knowledge::{
-    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
-};
 use radroots_event::wire::compute_canonical_nip01_event_id;
 
-use crate::error::EventParseError;
-use crate::knowledge::decode::{
-    contribution_attestation_from_event, evidence_bounty_from_event,
-    knowledge_change_proposal_from_event, knowledge_claim_from_event,
-    knowledge_field_report_from_event, knowledge_relation_from_event, knowledge_review_from_event,
-    knowledge_source_from_event, wiki_article_from_event, wiki_merge_request_from_event,
-    wiki_redirect_from_event,
+#[cfg(feature = "knowledge")]
+pub use crate::knowledge::verification::{
+    RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
+    decode_validated_event, validate_event_contract, verify_and_decode_radroots_event,
 };
-use crate::parsed::RadrootsParsedEvent;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsIdVerifiedEvent {
@@ -59,39 +45,11 @@ impl RadrootsSignatureVerifiedEvent {
     }
 }
 
-/// A NIP-01 verified event whose Radroots contract shape has been validated.
-///
-/// This stage has checked contract-level kind, discriminator, content schema,
-/// schema/schema_version markers where required, and tag cardinality/value
-/// shape. It has not yet returned the typed payload semantics; those are
-/// checked by `decode_validated_event`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsContractValidatedEvent {
-    event: RadrootsEventEnvelope,
-    contract: &'static RadrootsEventContract,
-}
-
-impl RadrootsContractValidatedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
-        &self.event
-    }
-
-    pub fn contract(&self) -> &'static RadrootsEventContract {
-        self.contract
-    }
-
-    pub fn contract_id(&self) -> &'static str {
-        self.contract.id
-    }
-
-    pub fn into_event(self) -> RadrootsEventEnvelope {
-        self.event
-    }
-}
-
+#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsNip01VerificationError {
     MalformedEnvelope,
+    KindOutOfRange { kind: u32 },
     IdMismatch { expected: String, actual: String },
     SignatureInvalid,
     SignatureVerificationUnavailable,
@@ -101,6 +59,7 @@ impl RadrootsNip01VerificationError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::MalformedEnvelope => "malformed_envelope",
+            Self::KindOutOfRange { .. } => "kind_out_of_range",
             Self::IdMismatch { .. } => "id_mismatch",
             Self::SignatureInvalid => "signature_invalid",
             Self::SignatureVerificationUnavailable => "signature_verification_unavailable",
@@ -112,6 +71,9 @@ impl fmt::Display for RadrootsNip01VerificationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MalformedEnvelope => formatter.write_str("malformed NIP-01 event envelope"),
+            Self::KindOutOfRange { kind } => {
+                write!(formatter, "NIP-01 event kind {kind} exceeds {}", u16::MAX)
+            }
             Self::IdMismatch { expected, actual } => {
                 write!(
                     formatter,
@@ -128,99 +90,6 @@ impl fmt::Display for RadrootsNip01VerificationError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsNip01VerificationError {}
-
-#[derive(Debug)]
-pub enum RadrootsDecodeError {
-    Nip01Verification(RadrootsNip01VerificationError),
-    ContractValidation(RadrootsContractValidationError),
-    EventParse(EventParseError),
-    UnsupportedContract { contract_id: String },
-}
-
-impl RadrootsDecodeError {
-    pub const fn code(&self) -> &'static str {
-        match self {
-            Self::Nip01Verification(_) => "nip01_verification",
-            Self::ContractValidation(_) => "contract_validation",
-            Self::EventParse(_) => "event_parse",
-            Self::UnsupportedContract { .. } => "unsupported_contract",
-        }
-    }
-}
-
-impl fmt::Display for RadrootsDecodeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Nip01Verification(error) => write!(formatter, "{error}"),
-            Self::ContractValidation(error) => {
-                write!(
-                    formatter,
-                    "contract validation failed with code {}",
-                    error.code()
-                )
-            }
-            Self::EventParse(error) => write!(formatter, "{error}"),
-            Self::UnsupportedContract { contract_id } => {
-                write!(formatter, "unsupported event contract `{contract_id}`")
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for RadrootsDecodeError {}
-
-impl From<EventParseError> for RadrootsDecodeError {
-    fn from(value: EventParseError) -> Self {
-        Self::EventParse(value)
-    }
-}
-
-impl From<RadrootsNip01VerificationError> for RadrootsDecodeError {
-    fn from(value: RadrootsNip01VerificationError) -> Self {
-        Self::Nip01Verification(value)
-    }
-}
-
-impl From<RadrootsContractValidationError> for RadrootsDecodeError {
-    fn from(value: RadrootsContractValidationError) -> Self {
-        Self::ContractValidation(value)
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub enum RadrootsDecodedEvent {
-    WikiArticle(RadrootsParsedEvent<RadrootsWikiArticle>),
-    WikiRedirect(RadrootsParsedEvent<RadrootsWikiRedirect>),
-    WikiMergeRequest(RadrootsParsedEvent<RadrootsWikiMergeRequest>),
-    KnowledgeSource(RadrootsParsedEvent<RadrootsKnowledgeSource>),
-    KnowledgeClaim(RadrootsParsedEvent<RadrootsKnowledgeClaim>),
-    KnowledgeRelation(RadrootsParsedEvent<RadrootsKnowledgeRelation>),
-    KnowledgeReview(RadrootsParsedEvent<RadrootsKnowledgeReview>),
-    KnowledgeFieldReport(RadrootsParsedEvent<RadrootsKnowledgeFieldReport>),
-    EvidenceBounty(RadrootsParsedEvent<RadrootsEvidenceBounty>),
-    KnowledgeChangeProposal(RadrootsParsedEvent<RadrootsKnowledgeChangeProposal>),
-    ContributionAttestation(RadrootsParsedEvent<RadrootsContributionAttestation>),
-}
-
-impl RadrootsDecodedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
-        match self {
-            Self::WikiArticle(parsed) => &parsed.event,
-            Self::WikiRedirect(parsed) => &parsed.event,
-            Self::WikiMergeRequest(parsed) => &parsed.event,
-            Self::KnowledgeSource(parsed) => &parsed.event,
-            Self::KnowledgeClaim(parsed) => &parsed.event,
-            Self::KnowledgeRelation(parsed) => &parsed.event,
-            Self::KnowledgeReview(parsed) => &parsed.event,
-            Self::KnowledgeFieldReport(parsed) => &parsed.event,
-            Self::EvidenceBounty(parsed) => &parsed.event,
-            Self::KnowledgeChangeProposal(parsed) => &parsed.event,
-            Self::ContributionAttestation(parsed) => &parsed.event,
-        }
-    }
-}
 
 pub fn verify_event_id(
     event: RadrootsEventEnvelope,
@@ -249,7 +118,6 @@ pub fn verify_event_id(
 pub fn verify_event_signature(
     event: RadrootsIdVerifiedEvent,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
-    verify_event_id(event.event.clone())?;
     let raw_event = raw_event_from_radroots(&event.event)?;
     if raw_event.verify_signature() {
         Ok(RadrootsSignatureVerifiedEvent { event: event.event })
@@ -265,89 +133,11 @@ pub fn verify_event_signature(
     Err(RadrootsNip01VerificationError::SignatureVerificationUnavailable)
 }
 
-/// Validate the Radroots event contract after NIP-01 id and signature checks.
-///
-/// The successful result is `RadrootsContractValidatedEvent`, which preserves
-/// the raw event plus the matched contract metadata. It means the event matched
-/// a known Radroots contract shape, not that a typed domain payload has already
-/// been returned.
-pub fn validate_event_contract(
-    event: RadrootsSignatureVerifiedEvent,
-) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
-    let contract = validate_radroots_event_contract(&event.event)?;
-    Ok(RadrootsContractValidatedEvent {
-        event: event.event,
-        contract,
-    })
-}
-
-/// Decode a contract-validated event into its typed Radroots event variant.
-///
-/// This is the stage that turns `RadrootsContractValidatedEvent` into
-/// `RadrootsDecodedEvent` and runs the typed decoder/semantic validation for
-/// the matched contract. Unsupported contract ids still fail here, even after
-/// the generic contract shape was valid.
-pub fn decode_validated_event(
-    event: RadrootsContractValidatedEvent,
-) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
-    match event.contract.id {
-        "radroots.wiki.article.v1" => Ok(RadrootsDecodedEvent::WikiArticle(
-            wiki_article_from_event(event.event)?,
-        )),
-        "radroots.wiki.redirect.v1" => Ok(RadrootsDecodedEvent::WikiRedirect(
-            wiki_redirect_from_event(event.event)?,
-        )),
-        "radroots.wiki.merge_request.v1" => Ok(RadrootsDecodedEvent::WikiMergeRequest(
-            wiki_merge_request_from_event(event.event)?,
-        )),
-        "radroots.knowledge.source.v1" => Ok(RadrootsDecodedEvent::KnowledgeSource(
-            knowledge_source_from_event(event.event)?,
-        )),
-        "radroots.knowledge.claim.v1" => Ok(RadrootsDecodedEvent::KnowledgeClaim(
-            knowledge_claim_from_event(event.event)?,
-        )),
-        "radroots.knowledge.relation.v1" => Ok(RadrootsDecodedEvent::KnowledgeRelation(
-            knowledge_relation_from_event(event.event)?,
-        )),
-        "radroots.knowledge.review.v1" => Ok(RadrootsDecodedEvent::KnowledgeReview(
-            knowledge_review_from_event(event.event)?,
-        )),
-        "radroots.knowledge.field_report.v1" => Ok(RadrootsDecodedEvent::KnowledgeFieldReport(
-            knowledge_field_report_from_event(event.event)?,
-        )),
-        "radroots.knowledge.evidence_bounty.v1" => Ok(RadrootsDecodedEvent::EvidenceBounty(
-            evidence_bounty_from_event(event.event)?,
-        )),
-        "radroots.knowledge.change_proposal.v1" => {
-            Ok(RadrootsDecodedEvent::KnowledgeChangeProposal(
-                knowledge_change_proposal_from_event(event.event)?,
-            ))
-        }
-        "radroots.knowledge.contribution_attestation.v1" => {
-            Ok(RadrootsDecodedEvent::ContributionAttestation(
-                contribution_attestation_from_event(event.event)?,
-            ))
-        }
-        contract_id => Err(RadrootsDecodeError::UnsupportedContract {
-            contract_id: contract_id.to_string(),
-        }),
-    }
-}
-
-/// Verify NIP-01 identity, validate the Radroots contract, and decode the event.
-///
-/// The pipeline is:
-/// `RadrootsEventEnvelope -> verify_event_id -> RadrootsIdVerifiedEvent ->
-/// verify_event_signature -> RadrootsSignatureVerifiedEvent ->
-/// validate_event_contract -> RadrootsContractValidatedEvent ->
-/// decode_validated_event -> RadrootsDecodedEvent`.
-pub fn verify_and_decode_radroots_event(
+/// Verifies the canonical NIP-01 identifier and Schnorr signature in order.
+pub fn verify_nip01_event(
     event: RadrootsEventEnvelope,
-) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
-    let id_verified = verify_event_id(event)?;
-    let signature_verified = verify_event_signature(id_verified)?;
-    let contract_validated = validate_event_contract(signature_verified)?;
-    decode_validated_event(contract_validated)
+) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
+    verify_event_signature(verify_event_id(event)?)
 }
 
 #[cfg(feature = "nostr")]
@@ -358,8 +148,11 @@ fn raw_event_from_radroots(
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     let public_key = nostr::PublicKey::from_hex(event.author_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let kind_u16 = u16::try_from(event.kind_u32())
-        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
+    let kind = u16::try_from(event.kind_u32()).map_err(|_| {
+        RadrootsNip01VerificationError::KindOutOfRange {
+            kind: event.kind_u32(),
+        }
+    })?;
     let tags_vec = event.tags_as_vec();
     let mut tags = Vec::with_capacity(tags_vec.len());
     for tag in tags_vec {
@@ -374,9 +167,95 @@ fn raw_event_from_radroots(
         id,
         public_key,
         nostr::Timestamp::from_secs(event.created_at_u64()),
-        nostr::Kind::Custom(kind_u16),
+        nostr::Kind::Custom(kind),
         tags,
         event.content().to_string(),
         sig,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_event::RadrootsEventEnvelopeParts;
+
+    #[test]
+    fn id_verification_returns_the_exact_envelope() {
+        let event = signed_max_kind_event();
+        let verified = verify_event_id(event.clone()).expect("canonical event id");
+
+        assert_eq!(verified.event(), &event);
+        assert_eq!(verified.into_event(), event);
+    }
+
+    #[cfg(feature = "nostr")]
+    #[test]
+    fn signature_verification_returns_the_exact_envelope() {
+        let event = signed_max_kind_event();
+        let verified = verify_nip01_event(event.clone()).expect("valid Schnorr signature");
+
+        assert_eq!(verified.event(), &event);
+        assert_eq!(verified.into_event(), event);
+    }
+
+    #[cfg(not(feature = "nostr"))]
+    #[test]
+    fn signature_verification_reports_unavailable_without_nostr() {
+        let event = verify_event_id(signed_max_kind_event()).expect("canonical event id");
+
+        assert_eq!(
+            verify_event_signature(event),
+            Err(RadrootsNip01VerificationError::SignatureVerificationUnavailable)
+        );
+    }
+
+    #[test]
+    fn verification_error_codes_are_stable() {
+        let errors = [
+            (
+                RadrootsNip01VerificationError::MalformedEnvelope,
+                "malformed_envelope",
+            ),
+            (
+                RadrootsNip01VerificationError::KindOutOfRange { kind: 65_536 },
+                "kind_out_of_range",
+            ),
+            (
+                RadrootsNip01VerificationError::IdMismatch {
+                    expected: "expected".to_string(),
+                    actual: "actual".to_string(),
+                },
+                "id_mismatch",
+            ),
+            (
+                RadrootsNip01VerificationError::SignatureInvalid,
+                "signature_invalid",
+            ),
+            (
+                RadrootsNip01VerificationError::SignatureVerificationUnavailable,
+                "signature_verification_unavailable",
+            ),
+        ];
+
+        for (error, expected) in errors {
+            assert_eq!(error.code(), expected);
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    fn signed_max_kind_event() -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958"
+                .to_string(),
+            author: "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"
+                .to_string(),
+            created_at: 1_800_000_104,
+            kind: u32::from(u16::MAX),
+            tags: Vec::new(),
+            content: "maximum-kind".to_string(),
+            sig: "d79b19843a0bfd769c02c73866d44a3a06f7b11e107a5257971b60e700aa25565802fd3a7eed4042fe8db7d709a465e5f61478eb8291178831bf48f6b0980671"
+                .to_string(),
+        })
+        .expect("valid event envelope")
+    }
 }

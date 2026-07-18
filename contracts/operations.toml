@@ -6,6 +6,7 @@ source = "rust"
 [public]
 domains = [
   "blossom",
+  "event",
   "profile",
   "farm",
   "listing",
@@ -44,6 +45,13 @@ public = [
   "RadrootsEventDraft",
   "RadrootsSignedEvent",
   "RadrootsEventEnvelope",
+  "RadrootsIdVerifiedEvent",
+  "RadrootsSignatureVerifiedEvent",
+  "RadrootsNip01VerificationError",
+  "RadrootsEventHeadCoordinate",
+  "RadrootsEventHeadCandidate",
+  "RadrootsCurrentEventHead",
+  "RadrootsEventHeadDecision",
   "RadrootsEventRef",
   "RadrootsEventPtr",
   "RadrootsListingAddress",
@@ -56,6 +64,8 @@ public = [
   "RadrootsAuthoredProfileEncodeError",
   "RadrootsInboundProfileMetadata",
   "RadrootsProfileMetadataParseError",
+  "RadrootsAdmittedProfileEvent",
+  "RadrootsProfileAdmissionError",
   "RadrootsNip05IdentityVerification",
   "RadrootsUnverifiedProfileMediaReference",
   "RadrootsFarm",
@@ -152,6 +162,7 @@ classes = [
   "address_error",
   "decode_error",
   "admission_error",
+  "verification_error",
 ]
 
 [implementation_provenance]
@@ -341,6 +352,54 @@ rust_types = [
 [operations.blossom_decode_verify_authorization_header.conformance]
 vector = "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json"
 
+[operations.event_verify_nip01]
+domain = "event"
+id = "event.verify_nip01"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsSignatureVerifiedEvent"]
+error_class = "verification_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.event_verify_nip01.implementation]
+rust_modules = [
+  "crates/event/src/wire.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::verification::RadrootsIdVerifiedEvent",
+  "radroots_event_codec::verification::RadrootsNip01VerificationError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.event_verify_nip01.conformance]
+vector = "contracts/conformance/vectors/profile/verified_event.v1.json"
+
+[operations.event_select_head]
+domain = "event"
+id = "event.select_head"
+stability = "beta"
+inputs = ["RadrootsEventHeadCandidate", "RadrootsCurrentEventHead?"]
+outputs = ["RadrootsEventHeadDecision"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.event_select_head.implementation]
+rust_modules = ["crates/event/src/event_head.rs"]
+rust_types = [
+  "radroots_event::event_head::RadrootsCurrentEventHead",
+  "radroots_event::event_head::RadrootsEventHeadCandidate",
+  "radroots_event::event_head::RadrootsEventHeadDecision",
+]
+
+[operations.event_select_head.conformance]
+vector = "contracts/conformance/vectors/profile/verified_event.v1.json"
+
 [operations.profile_build_authored_draft]
 domain = "profile"
 id = "profile.build_authored_draft"
@@ -397,6 +456,34 @@ rust_types = [
 
 [operations.profile_parse_inbound_metadata.conformance]
 vector = "contracts/conformance/vectors/profile/metadata.v1.json"
+
+[operations.profile_verify_and_admit_event]
+domain = "profile"
+id = "profile.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsAdmittedProfileEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.profile_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/profile/admission.rs",
+  "crates/event_codec/src/profile/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::profile::admission::RadrootsAdmittedProfileEvent",
+  "radroots_event_codec::profile::admission::RadrootsProfileAdmissionError",
+  "radroots_event_codec::profile::inbound::RadrootsInboundProfileMetadata",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.profile_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/profile/verified_event.v1.json"
 
 [operations.farm_build_draft]
 domain = "farm"
@@ -1070,6 +1157,7 @@ transport = "native"
 [operations.knowledge_verify_and_decode_event.implementation]
 rust_modules = [
   "crates/event_codec/src/verification.rs",
+  "crates/event_codec/src/knowledge/verification.rs",
   "crates/event_codec/src/knowledge/decode.rs",
 ]
 rust_types = [

@@ -1,0 +1,100 @@
+{
+  "contract_version": "1.0.0",
+  "suite": "verified_profile_event",
+  "vectors": [
+    {
+      "expected": {
+        "event_id": "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958",
+        "kind": 65535
+      },
+      "id": "event_verify_max_kind_001",
+      "input": {
+        "event_json": "{\"id\":\"a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000104,\"kind\":65535,\"tags\":[],\"content\":\"maximum-kind\",\"sig\":\"d79b19843a0bfd769c02c73866d44a3a06f7b11e107a5257971b60e700aa25565802fd3a7eed4042fe8db7d709a465e5f61478eb8291178831bf48f6b0980671\"}"
+      },
+      "kind": "event.verify_nip01.valid"
+    },
+    {
+      "expected": {
+        "error": "id_mismatch"
+      },
+      "id": "event_verify_id_mismatch_001",
+      "input": {
+        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"fdcebf1cbdcddea8027b5e214cb7b223fa662d8b85f5d68acf2e8849be0d71c4\",\"kind\":0,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"e5448d11671bcf73aa8d56941aff9df46d4e9fb250596671950e5f3c9d747440523efd33d8b9ff4f2a2ef1bd4b79e0a7cf5850132172b1db4b642ef2b348f721\",\"tags\":[]}"
+      },
+      "kind": "event.verify_nip01.invalid_id"
+    },
+    {
+      "expected": {
+        "error": "signature_invalid"
+      },
+      "id": "event_verify_signature_invalid_001",
+      "input": {
+        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f\",\"kind\":0,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"d015e365c530c44fbc33e970af13616e482fafe65d0947edcdaa1e7b3038e9285b4b6826bdf454e8381d66e9dc6978d9974358572d97850ebc726fcc539e2b88\",\"tags\":[]}"
+      },
+      "kind": "event.verify_nip01.invalid_signature"
+    },
+    {
+      "expected": {
+        "error": "kind_out_of_range",
+        "kind": 65536
+      },
+      "id": "event_verify_kind_overflow_001",
+      "input": {
+        "event_json": "{\"content\":\"overflow-kind\",\"created_at\":1800000106,\"id\":\"82dff74958bd7e1e52ad98add08bbb70d4ce9cf9d90e4741c64c212df0804ccb\",\"kind\":65536,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"tags\":[]}"
+      },
+      "kind": "event.verify_nip01.kind_overflow"
+    },
+    {
+      "expected": {
+        "event_id": "b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f",
+        "projected": {
+          "bot": false,
+          "display_name": "Moss Street Farm"
+        },
+        "residual_fields": {
+          "picture": 42,
+          "website": "https://mossstreet.example"
+        },
+        "tags": []
+      },
+      "id": "profile_admit_tagless_tolerant_001",
+      "input": {
+        "event_json": "{\"id\":\"b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000100,\"kind\":0,\"tags\":[],\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"sig\":\"e5448d11671bcf73aa8d56941aff9df46d4e9fb250596671950e5f3c9d747440523efd33d8b9ff4f2a2ef1bd4b79e0a7cf5850132172b1db4b642ef2b348f721\"}"
+      },
+      "kind": "profile.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "actual": 1,
+        "error": "invalid_kind"
+      },
+      "id": "profile_admit_wrong_kind_001",
+      "input": {
+        "event_json": "{\"id\":\"05b2ebdf444f09330198f8c07ea3e3c7d8ac97d94c41e957b74bce921f611080\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000102,\"kind\":1,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"not-a-profile\\\"}\",\"sig\":\"3d12c2dfea5cff7e9993166d20b9092f4a6a9dd7e9f4af26355d2f4c4fa0e1ba7a0e5fe6e4b90c93ae57d52cc71b38b409051702200868dfd601dbdd74b89710\"}"
+      },
+      "kind": "profile.verify_and_admit.invalid_kind"
+    },
+    {
+      "expected": {
+        "error": "root_not_object"
+      },
+      "id": "profile_admit_non_object_001",
+      "input": {
+        "event_json": "{\"id\":\"671f2d9f80a2fa2759c9514ae36fd18296cee71417fc86995525f2c659a5f781\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000103,\"kind\":0,\"tags\":[],\"content\":\"[]\",\"sig\":\"67d0420384e366407499ce4ab501cd87a02bea0d4221007b7a3ff01d9b68a0b9d372882184ab48775a8516f6a6554b506fc3e7652162a53e08a43e63daeacac7\"}"
+      },
+      "kind": "profile.verify_and_admit.invalid_metadata"
+    },
+    {
+      "expected": {
+        "created_at": 1800000105,
+        "event_id": "ad00fc208cc7036b95fadb7a4660bc600aa007502430250630d70d15b50695b3"
+      },
+      "id": "profile_equal_time_lowest_id_001",
+      "input": {
+        "first_event_json": "{\"id\":\"fdcebf1cbdcddea8027b5e214cb7b223fa662d8b85f5d68acf2e8849be0d71c4\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-a\\\"}\",\"sig\":\"445a4a08bd365acbe3d68b1433cd8952f8974cb1f454c7d6790881b123c1e7a6449662f78e3044436c7cda8745ae74aa8ee382e292160a3a3f420dd3bb4f275c\"}",
+        "second_event_json": "{\"id\":\"ad00fc208cc7036b95fadb7a4660bc600aa007502430250630d70d15b50695b3\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-b\\\"}\",\"sig\":\"6b52cb1cbcf2639104b564144517d8479833272690514af9e9d45b170a1c88320ac3425b9339aa525e591584f97666b1c556b4709fb6ef27959775e70c8caabe\"}"
+      },
+      "kind": "profile.select_equal_time_head"
+    }
+  ]
+}

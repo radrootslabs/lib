@@ -18,7 +18,6 @@ pub mod report;
 pub mod repost;
 mod social_helpers;
 pub mod tag_builders;
-#[cfg(feature = "knowledge")]
 pub mod verification;
 pub mod wire;
 
@@ -69,7 +68,9 @@ pub use tag_builders::RadrootsEventTagBuilder;
 #[cfg(feature = "knowledge")]
 pub use verification::{
     RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
-    RadrootsIdVerifiedEvent, RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent,
     decode_validated_event, validate_event_contract, verify_and_decode_radroots_event,
-    verify_event_id, verify_event_signature,
+};
+pub use verification::{
+    RadrootsIdVerifiedEvent, RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent,
+    verify_event_id, verify_event_signature, verify_nip01_event,
 };

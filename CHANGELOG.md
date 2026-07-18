@@ -9,6 +9,9 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Generic NIP-01 identifier and signature verification is now independent of
+  knowledge decoding, and every dynamic Nostr kind conversion rejects values
+  above `65535` instead of truncating them.
 - Calendar authoring and admission now use explicit NIP-52 authored, parsed, and
   admitted states for date events, time events, calendars, and RSVPs. Kind
   `31922` no longer emits uppercase `D`; kind `31923` derives integer UTC-day
@@ -22,6 +25,12 @@ publish policy both pass for the same source revision.
 - Release metadata records exact governed impacts for removed public types,
   fields, functions, modules, constants, Cargo features, and trait
   implementations, plus changed field types, constant values, and algorithms.
+
+### Added
+
+- Verified Profile admission binds a signed exact kind-`0` envelope to the
+  tolerant metadata projection, accepts standard tagless events, and exposes
+  deterministic equal-time lowest-id replacement vectors.
 
 ### Removed
 
@@ -39,6 +48,8 @@ publish policy both pass for the same source revision.
 
 ### Compatibility
 
+- Callers that previously passed out-of-range `u32` kinds to Nostr builders or
+  job decoders now receive typed range errors instead of truncated kinds.
 - Identity JSON containing the removed embedded `profile` projection is now
   rejected, including the nested public-profile form, instead of being loaded
   and later rewritten without that field.

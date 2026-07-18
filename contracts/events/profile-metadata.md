@@ -12,12 +12,24 @@ pinned NIP-01, NIP-05, and NIP-24 documents at NIPs commit
 
 | Operation | Boundary | Signing | Transport |
 | --- | --- | --- | --- |
+| `event.verify_nip01` | exact identifier and Schnorr verification to a non-forgeable wrapper | NIP-01 | none |
+| `event.select_head` | NIP-01 replaceable/addressable timestamp and lowest-id selection | none | none |
 | `profile.build_authored_draft` | strict authored metadata to kind-`0` wire parts | none | none |
 | `profile.parse_inbound_metadata` | JSON object to tolerant inbound metadata | none | none |
+| `profile.verify_and_admit_event` | verified exact kind-`0` envelope to tolerant metadata bound to that envelope | NIP-01 | none |
 
 `profile.parse_inbound_metadata` is a content parser, not an event-acceptance
 boundary. A caller must supply content from a kind-`0` event only after the
-event identifier and signature have been verified.
+event identifier and signature have been verified. The authoritative combined
+boundary is `profile.verify_and_admit_event`: it recomputes the identifier,
+verifies the Schnorr signature, requires exact kind `0`, and only then invokes
+the same tolerant parser. It accepts standard tagless Profile events and does
+not require a Radroots marker tag.
+
+`event.verify_nip01` and its `RadrootsSignatureVerifiedEvent` result are
+available through the codec's `nostr` feature without enabling `knowledge`.
+Knowledge contract validation and decoding are a later optional stage and
+cannot be substituted for general event verification.
 
 The direct legacy `RadrootsProfile` codec, Profile-specific Nostr/network
 publish helpers, and replica Profile draft emission were removed in the
@@ -77,6 +89,10 @@ format. A publication runtime must require successful BUD-02 completion before
 signing media-bearing output. A consuming media runtime remains responsible for
 decode and format-safety policy.
 
+For two verified kind-`0` events from the same author, the head is the event
+with the greater `created_at`. Equal timestamps select the lexicographically
+lowest canonical event id, independent of relay or ingestion arrival order.
+
 ## Tolerant inbound boundary
 
 `profile.parse_inbound_metadata` accepts a JSON object of at most 131072 UTF-8
@@ -126,6 +142,8 @@ making downstream matches exhaustive. Current stable codes are:
 | shared authored image construction | `media_type_not_image` |
 | strict Profile encoding | `content_too_large` |
 | tolerant inbound parsing | `content_too_large`, `invalid_json`, `root_not_object`, `duplicate_field` |
+| NIP-01 event verification | `malformed_envelope`, `kind_out_of_range`, `id_mismatch`, `signature_invalid`, `signature_verification_unavailable` |
+| verified Profile admission | NIP-01 codes plus `invalid_kind`, `content_too_large`, `invalid_json`, `root_not_object`, `duplicate_field` |
 
 Inbound size validation occurs before JSON parsing. For content within the
 limit, malformed JSON returns `invalid_json`; a well-formed non-object returns
@@ -136,9 +154,11 @@ parse errors.
 ## Conformance
 
 The canonical suite is
-`contracts/conformance/vectors/profile/metadata.v1.json`. It is mirrored under
-`crates/event_codec/tests/fixtures/` for published-package tests. The dispatcher
-executes every vector against the public strict authored or tolerant inbound
-API and requires the canonical and packaged copies to be byte-for-byte equal
-when the workspace contract is present. Consumers must enable the codec's
-optional `serde_json` feature to use these operations.
+`contracts/conformance/vectors/profile/metadata.v1.json`. Verified event
+admission and replacement use
+`contracts/conformance/vectors/profile/verified_event.v1.json`. Both are
+mirrored under `crates/event_codec/tests/fixtures/` for published-package
+tests. The dispatchers execute every vector against the public APIs and require
+canonical and packaged copies to be byte-for-byte equal when the workspace
+contract is present. Consumers enable `serde_json` for metadata operations and
+both `serde_json` and `nostr` for cryptographic Profile admission.

@@ -10,7 +10,7 @@ use radroots_event_codec::job::feedback::encode::to_wire_parts;
 
 fn sample_feedback() -> RadrootsJobFeedback {
     RadrootsJobFeedback {
-        kind: KIND_JOB_FEEDBACK as u16,
+        kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("queued".to_string()),
         request_event: common::event_ptr("req", Some("wss://relay")),
@@ -35,6 +35,15 @@ fn job_feedback_roundtrip_from_tags() {
 }
 
 #[test]
+fn job_feedback_from_tags_rejects_kind_overflow() {
+    let kind = u32::from(u16::MAX) + 1;
+    assert!(matches!(
+        job_feedback_from_tags(kind, &[], ""),
+        Err(JobParseError::KindOutOfRange(actual)) if actual == kind
+    ));
+}
+
+#[test]
 fn job_feedback_from_tags_accepts_e_ref_and_empty_content() {
     let tags = vec![
         vec![
@@ -53,7 +62,7 @@ fn job_feedback_from_tags_accepts_e_ref_and_empty_content() {
 #[test]
 fn job_feedback_requires_valid_kind() {
     let mut fb = sample_feedback();
-    fb.kind = KIND_JOB_RESULT_MIN as u16;
+    fb.kind = u16::try_from(KIND_JOB_RESULT_MIN).expect("result kind must fit NIP-01");
 
     let err = to_wire_parts(&fb, "payload").unwrap_err();
     assert!(matches!(

@@ -59,7 +59,8 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
     let keys =
         nostr::Keys::parse("0101010101010101010101010101010101010101010101010101010101010101")
             .expect("keys");
-    let event = nostr::EventBuilder::new(nostr::Kind::Custom(parts.kind as u16), parts.content)
+    let kind = u16::try_from(parts.kind).expect("knowledge event kind must fit NIP-01");
+    let event = nostr::EventBuilder::new(nostr::Kind::Custom(kind), parts.content)
         .tags(tags)
         .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
         .sign_with_keys(&keys)

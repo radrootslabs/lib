@@ -4,6 +4,9 @@ extern crate alloc;
 use radroots_event::profile::{RadrootsProfile, RadrootsProfileType};
 
 #[cfg(feature = "serde_json")]
+pub mod admission;
+
+#[cfg(feature = "serde_json")]
 pub mod authored;
 
 #[cfg(feature = "serde_json")]

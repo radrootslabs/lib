@@ -146,6 +146,10 @@ fn job_encode_error_display_covers_variants() {
 
 #[test]
 fn job_parse_error_display_and_source_covers_variants() {
+    let kind = JobParseError::KindOutOfRange(u32::from(u16::MAX) + 1);
+    assert!(kind.to_string().contains("Nostr event kind"));
+    assert!(kind.source().is_none());
+
     let missing = JobParseError::MissingTag("e");
     assert_eq!(missing.to_string(), "missing tag: e");
     assert!(missing.source().is_none());

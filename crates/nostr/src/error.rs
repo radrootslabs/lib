@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RadrootsNostrError {
+    #[error("Nostr event kind {kind} exceeds {max}")]
+    KindOutOfRange { kind: u32, max: u16 },
+
     #[cfg(feature = "client")]
     #[error("Client error: {0}")]
     ClientError(#[from] nostr_sdk::client::Error),
