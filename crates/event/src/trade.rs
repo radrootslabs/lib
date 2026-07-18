@@ -5,12 +5,9 @@ use alloc::{collections::BTreeMap, format, string::ToString};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 #[cfg(all(feature = "std", feature = "serde"))]
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, string::ToString};
 #[cfg(feature = "std")]
-use std::{
-    string::{String, ToString},
-    vec::Vec,
-};
+use std::{string::String, vec::Vec};
 
 use core::fmt;
 
@@ -1076,7 +1073,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
 
