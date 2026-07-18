@@ -11,7 +11,7 @@ use radroots_event::{
         RadrootsAddressableCoordinateParts, RadrootsDTag, RadrootsIdParseError,
         RadrootsListingAddress, RadrootsPublicKey,
     },
-    kinds::{KIND_LISTING, is_listing_kind},
+    kinds::is_listing_kind,
     listing::RadrootsListing,
 };
 use thiserror::Error;
@@ -80,7 +80,7 @@ pub fn parse_listing_address(
     let address = RadrootsListingAddress::parse(value)
         .map_err(RadrootsListingAddressError::InvalidAddress)?;
     let parts = RadrootsAddressableCoordinateParts::parse(address.as_str())
-        .map_err(RadrootsListingAddressError::InvalidAddress)?;
+        .expect("typed listing address must contain valid coordinate parts");
     ensure_listing_kind(parts.kind)?;
     Ok(RadrootsListingAddressParts {
         address,
@@ -101,7 +101,6 @@ pub fn parse_public_listing_address(
             RadrootsPublicListingAddressError::InvalidListingKind { actual }
         }
     })?;
-    ensure_public_listing_kind(parts.kind)?;
     Ok(RadrootsPublicListingAddress {
         address: parts.address,
         kind: parts.kind,
@@ -114,14 +113,6 @@ pub fn parse_public_listing_address(
 fn ensure_listing_kind(kind: u32) -> Result<(), RadrootsListingAddressError> {
     if !is_listing_kind(kind) {
         return Err(RadrootsListingAddressError::InvalidKind { actual: kind });
-    }
-    Ok(())
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn ensure_public_listing_kind(kind: u32) -> Result<(), RadrootsPublicListingAddressError> {
-    if kind != KIND_LISTING {
-        return Err(RadrootsPublicListingAddressError::InvalidKind { actual: kind });
     }
     Ok(())
 }

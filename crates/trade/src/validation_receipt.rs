@@ -449,7 +449,8 @@ pub fn validator_set_canonical_content(
     validator_set: &RadrootsValidatorSetV1,
 ) -> Result<String, RadrootsValidationReceiptError> {
     validator_set.validate()?;
-    serde_json::to_string(validator_set).map_err(|_| RadrootsValidationReceiptError::InvalidJson)
+    Ok(serde_json::to_string(validator_set)
+        .expect("validated validator sets contain only serializable contract values"))
 }
 
 pub fn validator_set_content_from_str(
@@ -507,13 +508,6 @@ pub fn verify_validator_set_event(
         ));
     }
     let address = validator_set_address(event.author(), &validator_set.set_id)?;
-    let parts = RadrootsAddressableCoordinateParts::parse(address.as_str())
-        .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))?;
-    if parts.kind != KIND_VALIDATOR_SET || parts.pubkey != *event.author() {
-        return Err(RadrootsValidationReceiptError::InvalidField(
-            "validator_set.address",
-        ));
-    }
     Ok(RadrootsVerifiedValidatorSetV1 {
         set: validator_set,
         event_id: event.id_str().to_owned(),
@@ -1049,7 +1043,7 @@ fn validate_validator_set_address(
     field: &'static str,
 ) -> Result<(), RadrootsValidationReceiptError> {
     let parts = RadrootsAddressableCoordinateParts::parse(value.as_str())
-        .map_err(|_| RadrootsValidationReceiptError::InvalidField(field))?;
+        .expect("typed addressable coordinates must contain valid coordinate parts");
     if parts.kind != KIND_VALIDATOR_SET {
         return Err(RadrootsValidationReceiptError::InvalidField(field));
     }
@@ -1147,12 +1141,12 @@ mod tests {
         validation_receipt_event_build, validation_receipt_from_event,
         validation_receipt_public_values_hash_hex, validation_receipt_tags,
         validation_receipt_tags_from_tags, validator_set_address, validator_set_canonical_content,
-        validator_set_event_build, validator_set_from_event, verify_validation_receipt_event,
-        verify_validator_set_event,
+        validator_set_content_from_str, validator_set_event_build, validator_set_from_event,
+        verify_validation_receipt_event, verify_validator_set_event,
     };
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
-        ids::RadrootsPublicKey,
+        ids::{RadrootsAddressableCoordinate, RadrootsPublicKey},
         kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
         tags::TAG_D,
     };
@@ -1268,6 +1262,23 @@ mod tests {
         let receipt = sample_validation_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
         validation_receipt_event_with_parts(parts.kind, tags, parts.content)
+    }
+
+    fn validator_set_event_with_parts(
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: event_id('7'),
+            author: validator_set_author().as_str().to_string(),
+            created_at: 1_700_000_001,
+            kind,
+            tags,
+            content,
+            sig: "f".repeat(128),
+        })
+        .expect("validator set event")
     }
 
     #[test]
@@ -1436,6 +1447,55 @@ mod tests {
     }
 
     #[test]
+    fn validator_set_parsing_and_event_verification_reject_each_boundary() {
+        let validator_set = sample_validator_set();
+        let canonical = validator_set_canonical_content(&validator_set).expect("canonical content");
+        let pretty = serde_json::to_string_pretty(&validator_set).expect("pretty content");
+        assert_eq!(
+            validator_set_content_from_str(&pretty),
+            Err(RadrootsValidationReceiptError::NonCanonicalJson)
+        );
+        assert_eq!(
+            validator_set_content_from_str("{"),
+            Err(RadrootsValidationReceiptError::InvalidJson)
+        );
+
+        let parts = validator_set_event_build(&validator_set).expect("validator set parts");
+        let wrong_kind = validator_set_event_with_parts(
+            KIND_TRADE_VALIDATION_RECEIPT,
+            parts.tags.clone(),
+            canonical.clone(),
+        );
+        assert_eq!(
+            verify_validator_set_event(&wrong_kind, None),
+            Err(RadrootsValidationReceiptError::InvalidKind {
+                expected: KIND_VALIDATOR_SET,
+                got: KIND_TRADE_VALIDATION_RECEIPT,
+            })
+        );
+
+        let mut mismatched_tags = parts.tags;
+        mismatched_tags[0][1] = "018f3d99-7d35-7c0c-8a0f-7f3b645abcdf".to_string();
+        let mismatched =
+            validator_set_event_with_parts(KIND_VALIDATOR_SET, mismatched_tags, canonical);
+        assert_eq!(
+            verify_validator_set_event(&mismatched, None),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "validator_set.set_id"
+            ))
+        );
+
+        let mut invalid = sample_validator_set();
+        invalid.threshold = 2;
+        assert_eq!(
+            validator_set_event_build(&invalid),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.threshold"
+            ))
+        );
+    }
+
+    #[test]
     fn validation_receipt_validate_rejects_core_field_errors() {
         let mut receipt = sample_validation_receipt();
         receipt.version = 2;
@@ -1550,6 +1610,29 @@ mod tests {
             receipt.validate(),
             Err(RadrootsValidationReceiptError::InvalidField(
                 "statement.target_event_id"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.validator_set_event_id = "bad".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.validator_set_event_id"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.validator_set_addr = RadrootsAddressableCoordinate::parse(format!(
+            "1:{}:{}",
+            validator_set_author(),
+            validator_set_id()
+        ))
+        .expect("typed non-validator address");
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.validator_set_addr"
             ))
         );
 
@@ -1739,6 +1822,15 @@ mod tests {
         invalid_validator_set_addr[4][1] = "bad".to_string();
         assert_eq!(
             validation_receipt_tags_from_tags(&invalid_validator_set_addr),
+            Err(RadrootsValidationReceiptError::InvalidTag(
+                TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER
+            ))
+        );
+
+        let mut duplicate_validator_set_addr = tags.clone();
+        duplicate_validator_set_addr.push(tags[4].clone());
+        assert_eq!(
+            validation_receipt_tags_from_tags(&duplicate_validator_set_addr),
             Err(RadrootsValidationReceiptError::InvalidTag(
                 TAG_VALIDATION_RECEIPT_VALIDATOR_SET_MARKER
             ))
@@ -2610,5 +2702,126 @@ mod tests {
             validation_receipt_tags("", &sample_validation_receipt()),
             Err(RadrootsValidationReceiptError::EmptyField("order_id"))
         );
+    }
+
+    #[test]
+    fn validator_set_validation_covers_every_boundary() {
+        let valid_id = validator_set_id();
+        for variant in ["8", "9", "a", "b"] {
+            let mut value = valid_id.clone();
+            value.replace_range(19..20, variant);
+            assert_eq!(super::validate_uuidv7(&value, "uuid"), Ok(()));
+        }
+        let mut invalid_ids = vec![String::new(), "bad".to_string()];
+        for (range, replacement) in [
+            (8..9, "0"),
+            (13..14, "0"),
+            (18..19, "0"),
+            (23..24, "0"),
+            (14..15, "6"),
+            (19..20, "7"),
+            (0..1, "g"),
+        ] {
+            let mut value = valid_id.clone();
+            value.replace_range(range, replacement);
+            invalid_ids.push(value);
+        }
+        for invalid in invalid_ids {
+            assert!(matches!(
+                super::validate_uuidv7(&invalid, "uuid"),
+                Err(RadrootsValidationReceiptError::EmptyField("uuid"))
+                    | Err(RadrootsValidationReceiptError::InvalidField("uuid"))
+            ));
+        }
+
+        let mut validator_set = sample_validator_set();
+        validator_set.threshold = 2;
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.threshold"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.valid_until = validator_set.valid_from;
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.valid_until"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.protocol_contract_hash = "bad".to_string();
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.protocol_contract_hash"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.operator_name = " ".to_string();
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::EmptyField(
+                "validator_set.operator_name"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.operator_name = "x".repeat(121);
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.operator_name"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.operator_contact = Some(" ".to_string());
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::EmptyField(
+                "validator_set.operator_contact"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.operator_contact = Some("x".repeat(241));
+        assert_eq!(
+            validator_set.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.operator_contact"
+            ))
+        );
+        let mut validator_set = sample_validator_set();
+        validator_set.operator_contact = None;
+        validator_set.validate().expect("contact is optional");
+
+        let address = super::validator_set_address_from_str(validator_set_addr().as_str())
+            .expect("validator set address");
+        assert_eq!(address, validator_set_addr());
+        assert_eq!(
+            super::validator_set_address_from_str("bad"),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.address"
+            ))
+        );
+        let wrong_kind = format!("1:{}:{}", validator_set_author(), validator_set_id());
+        assert_eq!(
+            super::validator_set_address_from_str(wrong_kind),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "validator_set.address"
+            ))
+        );
+
+        let empty = RadrootsTradeValidationTrustPolicy::production();
+        assert!(!empty.has_validator_set());
+        assert!(!empty.trusts_validator_pubkey(&validator_set_pubkey()));
+        assert_eq!(empty.validator_count(), 0);
+
+        let partial = RadrootsTradeValidationTrustPolicy {
+            validator_set: Some(sample_validator_set()),
+            validator_set_addr: None,
+            validator_set_event_id: Some(event_id('8')),
+            require_cryptographic_proof: false,
+        };
+        assert!(!partial.has_validator_set());
     }
 }
