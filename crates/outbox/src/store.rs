@@ -4295,7 +4295,7 @@ mod tests {
             ))
             .await
             .expect("signed trade insert without idempotency key");
-        let trade_receipt = outbox
+        let trade_operation = outbox
             .enqueue_trade_mutation_operation(trade_mutation_input(
                 &canonical,
                 trade_draft,
@@ -4393,31 +4393,31 @@ mod tests {
             .expect("disable check constraints for defensive decoding");
 
         sqlx::query("UPDATE outbox_operations SET trade_id = 'invalid' WHERE operation_id = ?")
-            .bind(trade_receipt.operation_id)
+            .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
             .expect("corrupt trade id");
         assert!(
             outbox
-                .get_operation(trade_receipt.operation_id)
+                .get_operation(trade_operation.operation_id)
                 .await
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET trade_id = ?, mutation_id = 'invalid' WHERE operation_id = ?")
             .bind(canonical.envelope.trade_id.as_str())
-            .bind(trade_receipt.operation_id)
+            .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
             .expect("restore trade id and corrupt mutation id");
         assert!(
             outbox
-                .get_operation(trade_receipt.operation_id)
+                .get_operation(trade_operation.operation_id)
                 .await
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET mutation_id = ? WHERE operation_id = ?")
             .bind(canonical.mutation_id.as_str())
-            .bind(trade_receipt.operation_id)
+            .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
             .expect("restore mutation id");
