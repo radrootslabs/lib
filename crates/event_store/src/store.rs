@@ -728,10 +728,7 @@ async fn insert_trade_mutation_parents(
         )
         .bind(mutation_id.as_str())
         .bind(parent.as_str())
-        .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
-            field: "parent_index",
-            value: i64::MAX,
-        })?)
+        .bind(i64_from_usize("parent_index", index)?)
         .execute(&mut **tx)
         .await?;
     }
@@ -840,10 +837,7 @@ async fn insert_seller_reservation(
         .bind(line.quantity_mantissa.as_str())
         .bind(i64::from(line.quantity_scale))
         .bind(line.unit_code.as_str())
-        .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
-            field: "reservation.line_index",
-            value: i64::MAX,
-        })?)
+        .bind(i64_from_usize("reservation.line_index", index)?)
         .execute(&mut **tx)
         .await?;
     }
@@ -1572,6 +1566,13 @@ fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventSto
     i64::try_from(value).map_err(|_| RadrootsEventStoreError::UnsignedIntegerRange { field, value })
 }
 
+fn i64_from_usize(field: &'static str, value: usize) -> Result<i64, RadrootsEventStoreError> {
+    i64::try_from(value).map_err(|_| RadrootsEventStoreError::UnsignedIntegerRange {
+        field,
+        value: value as u64,
+    })
+}
+
 fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
@@ -1649,7 +1650,7 @@ mod tests {
         RadrootsTradeCancellationProfileV1, RadrootsTradeCandidateLineV1,
         RadrootsTradeCandidateTermsV1, RadrootsTradeCanonicalMutationV1, RadrootsTradeDecisionV1,
         RadrootsTradeEconomicAdjustmentV1, RadrootsTradeEconomicsProfileV1,
-        RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,
+        RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1, canonical_jcs_value,
         canonical_trade_mutation_content,
     };
     use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
@@ -1666,6 +1667,14 @@ mod tests {
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
+        RadrootsNostrKeys::new(secret_key)
+    }
+
+    fn alternate_keys() -> RadrootsNostrKeys {
+        let secret_key = RadrootsNostrSecretKey::from_hex(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .expect("alternate secret key");
         RadrootsNostrKeys::new(secret_key)
     }
 
@@ -1814,6 +1823,14 @@ mod tests {
     }
 
     fn signed_trade_mutation(canonical: &RadrootsTradeCanonicalMutationV1) -> RadrootsSignedEvent {
+        signed_trade_content_with_keys(canonical, canonical.content.clone(), &fixture_keys())
+    }
+
+    fn signed_trade_content_with_keys(
+        canonical: &RadrootsTradeCanonicalMutationV1,
+        content: String,
+        keys: &RadrootsNostrKeys,
+    ) -> RadrootsSignedEvent {
         let counterparty = canonical.envelope.counterparty_pubkey.as_str().to_owned();
         let mut tags = vec![
             vec![
@@ -1826,17 +1843,18 @@ mod tests {
         for parent in &canonical.envelope.parent_mutation_ids {
             tags.push(vec!["e".to_owned(), parent.to_string()]);
         }
-        let draft = radroots_event::draft::RadrootsEventDraft::new(
-            canonical.envelope.contract_id.clone(),
+        let raw_event = radroots_nostr_build_event(
             canonical.envelope.mutation_kind().nostr_kind(),
-            canonical.envelope.authored_at_unix_s,
+            content,
             tags,
-            canonical.content.clone(),
-            FIXTURE_ALICE_PUBLIC_KEY_HEX,
         )
-        .expect("trade draft");
-        radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft)
-            .expect("signed trade mutation")
+        .expect("trade event builder")
+        .custom_created_at(RadrootsNostrTimestamp::from_secs(
+            canonical.envelope.authored_at_unix_s,
+        ))
+        .sign_with_keys(keys)
+        .expect("signed trade event");
+        signed_event_from_raw_json(serde_json::to_string(&raw_event).expect("trade raw json"))
     }
 
     fn signed_event(
@@ -2261,6 +2279,271 @@ mod tests {
             .expect("transport envelopes");
         assert_eq!(transport_envelopes.len(), 1);
         assert_eq!(transport_envelopes[0].transport_kind, "nostr");
+    }
+
+    #[tokio::test]
+    async fn public_pool_transaction_and_trade_query_apis_roundtrip() {
+        let options = SqliteConnectOptions::from_str("sqlite::memory:").expect("options");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("pool");
+        let store = RadrootsEventStore::open_pool(pool, false)
+            .await
+            .expect("store");
+        let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
+        let proposal_event = signed_trade_mutation(&proposal);
+        let ingest =
+            RadrootsEventIngest::from_raw_json(proposal_event.raw_json().to_owned(), 2_200)
+                .expect("raw ingest");
+        let mut tx = store.pool().begin().await.expect("transaction");
+        let receipt = store
+            .ingest_event_in_transaction(&mut tx, ingest)
+            .await
+            .expect("transactional ingest");
+        tx.commit().await.expect("commit");
+        assert!(receipt.projection_eligible);
+
+        assert!(matches!(
+            store.trade_mutations_for_trade(&trade_id(), 0).await,
+            Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+        ));
+        assert!(matches!(
+            store
+                .trade_mutations_for_trade(&trade_id(), RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX + 1,)
+                .await,
+            Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+        ));
+        let mutations = store
+            .trade_mutations_for_trade(&trade_id(), 10)
+            .await
+            .expect("mutations");
+        assert_eq!(mutations.len(), 1);
+        assert_eq!(mutations[0].mutation_id, proposal.mutation_id);
+
+        let decision =
+            canonical_trade_mutation_content(decision_envelope(&proposal)).expect("decision");
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                signed_trade_mutation(&decision),
+                2_300,
+            ))
+            .await
+            .expect("decision ingest");
+        assert!(
+            store
+                .missing_trade_parents(&trade_id())
+                .await
+                .expect("missing parents")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_trade_mutations_are_quarantined_and_not_projected() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
+
+        let malformed = signed_trade_content_with_keys(
+            &proposal,
+            format!("{} ", proposal.content),
+            &fixture_keys(),
+        );
+        let malformed_receipt = store
+            .ingest_event(RadrootsEventIngest::new(malformed, 2_400))
+            .await
+            .expect("malformed ingest");
+        assert!(!malformed_receipt.projection_eligible);
+        assert_eq!(
+            malformed_receipt.head_decision,
+            RadrootsEventHeadStoreDecision::Malformed
+        );
+
+        let mut missing_id_value: serde_json::Value =
+            serde_json::from_str(&proposal.content).expect("proposal json");
+        missing_id_value
+            .as_object_mut()
+            .expect("proposal object")
+            .remove("mutation_id");
+        let missing_id_content = canonical_jcs_value(&missing_id_value).expect("canonical json");
+        let missing_id =
+            signed_trade_content_with_keys(&proposal, missing_id_content, &fixture_keys());
+        let missing_id_receipt = store
+            .ingest_event(RadrootsEventIngest::new(missing_id, 2_500))
+            .await
+            .expect("missing id ingest");
+        assert!(!missing_id_receipt.projection_eligible);
+
+        let mismatched_author =
+            signed_trade_content_with_keys(&proposal, proposal.content.clone(), &alternate_keys());
+        let mismatched_author_receipt = store
+            .ingest_event(RadrootsEventIngest::new(mismatched_author, 2_600))
+            .await
+            .expect("mismatched author ingest");
+        assert!(!mismatched_author_receipt.projection_eligible);
+
+        let quarantined: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM trade_projection_quarantine")
+                .fetch_one(store.pool())
+                .await
+                .expect("quarantine count");
+        assert_eq!(quarantined, 3);
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_storage_helpers_cover_every_mutation_variant() {
+        let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
+        let decision =
+            canonical_trade_mutation_content(decision_envelope(&proposal)).expect("decision");
+        let RadrootsTradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
+            unreachable!("proposal fixture");
+        };
+        let RadrootsTradeMutationBodyV1::Decision {
+            proposal_mutation_id,
+            candidate_id,
+            decision: decision_value,
+        } = &decision.envelope.body
+        else {
+            unreachable!("decision fixture");
+        };
+
+        let mut revision_proposal = proposal.envelope.clone();
+        revision_proposal.body = RadrootsTradeMutationBodyV1::RevisionProposal {
+            candidate: candidate.clone(),
+        };
+        let mut revision_decision = decision.envelope.clone();
+        revision_decision.body = RadrootsTradeMutationBodyV1::RevisionDecision {
+            proposal_mutation_id: proposal_mutation_id.clone(),
+            candidate_id: candidate_id.clone(),
+            decision: decision_value.clone(),
+        };
+        let mut cancellation = proposal.envelope.clone();
+        cancellation.body = RadrootsTradeMutationBodyV1::Cancellation {
+            target_candidate_id: Some(candidate_id.clone()),
+            target_claim_mutation_id: Some(decision.mutation_id.clone()),
+            reason: "fixture".to_owned(),
+        };
+        let mut claim_only_cancellation = cancellation.clone();
+        claim_only_cancellation.body = RadrootsTradeMutationBodyV1::Cancellation {
+            target_candidate_id: None,
+            target_claim_mutation_id: Some(decision.mutation_id.clone()),
+            reason: "fixture".to_owned(),
+        };
+
+        assert_eq!(
+            candidate_id_for_mutation(&revision_proposal),
+            Some(candidate_id.clone())
+        );
+        assert_eq!(
+            candidate_id_for_mutation(&revision_decision),
+            Some(candidate_id.clone())
+        );
+        assert_eq!(
+            candidate_id_for_mutation(&cancellation),
+            Some(candidate_id.clone())
+        );
+        assert_eq!(candidate_id_for_mutation(&claim_only_cancellation), None);
+        assert_eq!(
+            proposal_mutation_id_for_mutation(&revision_decision),
+            Some(proposal_mutation_id.clone())
+        );
+        assert_eq!(
+            target_claim_mutation_id_for_mutation(&cancellation),
+            Some(decision.mutation_id.clone())
+        );
+        assert!(seller_reservation_for_mutation(&revision_decision).is_some());
+        assert!(seller_reservation_for_mutation(&cancellation).is_none());
+        assert_eq!(public_key('b').as_str(), event_id('b'));
+
+        for kind in [
+            RadrootsTradeMutationKindV1::Proposal,
+            RadrootsTradeMutationKindV1::Decision,
+            RadrootsTradeMutationKindV1::RevisionProposal,
+            RadrootsTradeMutationKindV1::RevisionDecision,
+            RadrootsTradeMutationKindV1::Cancellation,
+        ] {
+            let stored = trade_mutation_kind_storage_value(kind);
+            assert_eq!(
+                parse_trade_mutation_kind(stored).expect("stored kind"),
+                kind
+            );
+        }
+        assert!(parse_trade_mutation_kind("bad").is_err());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    async fn seller_reservation_rejects_unrepresentable_storage_times() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
+        let decision =
+            canonical_trade_mutation_content(decision_envelope(&proposal)).expect("decision");
+        let RadrootsTradeMutationBodyV1::Decision {
+            decision:
+                RadrootsTradeDecisionV1::Accepted {
+                    reservation_assertion: Some(reservation),
+                },
+            ..
+        } = &decision.envelope.body
+        else {
+            unreachable!("accepted decision fixture");
+        };
+        let mut tx = store.pool().begin().await.expect("transaction");
+
+        let mut invalid_epoch = reservation.clone();
+        invalid_epoch.inventory_epoch = u64::MAX;
+        assert!(matches!(
+            insert_seller_reservation(
+                &mut tx,
+                &decision.envelope,
+                &decision.mutation_id,
+                &invalid_epoch,
+                1,
+            )
+            .await,
+            Err(RadrootsEventStoreError::UnsignedIntegerRange {
+                field: "inventory_epoch",
+                ..
+            })
+        ));
+
+        let mut invalid_expiry = reservation.clone();
+        invalid_expiry.reservation_expires_at_unix_s = u64::MAX;
+        assert!(matches!(
+            insert_seller_reservation(
+                &mut tx,
+                &decision.envelope,
+                &decision.mutation_id,
+                &invalid_expiry,
+                1,
+            )
+            .await,
+            Err(RadrootsEventStoreError::UnsignedIntegerRange {
+                field: "reservation_expires_at_unix_s",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn usize_storage_conversion_covers_success_and_overflow() {
+        assert_eq!(i64_from_usize("index", 1).expect("index"), 1);
+        assert!(matches!(
+            i64_from_usize("index", usize::MAX),
+            Err(RadrootsEventStoreError::UnsignedIntegerRange { field: "index", .. })
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal")]
+    fn decision_fixture_rejects_a_non_proposal() {
+        let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
+        let decision =
+            canonical_trade_mutation_content(decision_envelope(&proposal)).expect("decision");
+        let _ = decision_envelope(&decision);
     }
 
     #[tokio::test]

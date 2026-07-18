@@ -623,6 +623,7 @@ mod tests {
                 observation_type
             );
         }
+        assert!(RadrootsTransportObservationType::parse("bad").is_err());
         let observation = RadrootsTransportObservation::new(
             RadrootsTransportKind::Nostr,
             "wss://relay.example.test",
@@ -635,6 +636,15 @@ mod tests {
         assert_eq!(
             observation.endpoint_uri.as_str(),
             "wss://relay.example.test"
+        );
+        assert!(
+            RadrootsTransportObservation::new(
+                RadrootsTransportKind::Nostr,
+                "not a URI",
+                RadrootsTransportObservationType::Fetch,
+                1,
+            )
+            .is_err()
         );
     }
 

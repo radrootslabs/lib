@@ -55,3 +55,19 @@ impl From<RadrootsTransportError> for RadrootsEventStoreError {
         Self::Transport(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn transport_errors_preserve_their_typed_source() {
+        let error = RadrootsEventStoreError::from(RadrootsTransportError::InvalidTargetUri);
+
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::Transport(RadrootsTransportError::InvalidTargetUri)
+        ));
+    }
+}
