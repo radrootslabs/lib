@@ -56,10 +56,11 @@ does not authorize arbitrary endpoints and does not perform HTTP parsing.
 
 ## Human-Readable Content
 
-`RadrootsBlossomAuthorizationContent` is nonempty, contains no Unicode control character, and is
-already equal to its Unicode-whitespace-trimmed form. This rejects empty and whitespace-only input,
-leading or trailing whitespace, line breaks, tabs, and embedded controls. Interior ordinary spaces
-and non-ASCII human-readable text are retained. Parsing does not silently trim or rewrite signed
+`RadrootsBlossomAuthorizationContent` is from 1 through 4,096 UTF-8 bytes and is already equal to
+its Unicode-whitespace-trimmed form. It rejects empty and whitespace-only input, leading or
+trailing whitespace, NUL, and non-whitespace controls. Horizontal tab, newline, and carriage return
+are allowed only inside otherwise human-readable content. Interior ordinary whitespace and
+non-ASCII human-readable text are retained. Parsing does not silently trim or rewrite signed
 content.
 
 This requirement is structural and deterministic. It cannot prove that wording accurately
@@ -124,22 +125,22 @@ or target scope. Those checks belong to the appropriate outward adapter or valid
 
 ## Time Validation
 
-Endpoint validation receives an explicit `now` and maximum creation age so it is deterministic and
-does not read a wall clock. Radroots uses
-`RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS = 300`.
+Endpoint validation receives an explicit `now` so it is deterministic and does not read a wall
+clock. `RadrootsBlossomAuthorizationValidation::bud11` applies only the pinned BUD time and optional
+server semantics. The existing bounded constructor applies the Radroots replay profile with
+`RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS = 300` and
+`RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS = 300`.
 
 The requested maximum creation age may be from 0 through 300 seconds inclusive. A value above the
 public cap is rejected when the validation policy is constructed rather than weakening the replay
 window by accident.
 
-- `created_at == now` is accepted to tolerate integer-second signing and validation in the same
-  second
-- `created_at > now` is rejected as future-dated
+- `created_at >= now` is rejected because BUD-11 requires creation in the past
 - `now - created_at <= max_created_age` is accepted
 - an older value is rejected as stale, using checked comparisons without unsigned wraparound
 - `expiration > now` is required; `expiration == now` is expired
-- `expiration - created_at` must be from 1 through
-  `RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS = 300` seconds inclusive
+- BUD-only validation imposes no additional age or lifetime ceiling
+- bounded Radroots validation requires `expiration - created_at` from 1 through 300 seconds
 
 The 300-second horizon is the Radroots replay-limiting application profile layered on BUD-11.
 Strict authored upload construction applies the same bound: lifetime must be from 1 through 300

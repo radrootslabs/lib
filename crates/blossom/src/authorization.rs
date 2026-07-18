@@ -8,6 +8,7 @@ use core::{fmt, str::FromStr};
 use crate::{RadrootsBlossomError, RadrootsBlossomSha256};
 
 pub const RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND: u16 = 24_242;
+pub const RADROOTS_BLOSSOM_AUTH_CONTENT_MAX_BYTES: usize = 4_096;
 pub const RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS: u64 = 300;
 pub const RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS: u64 = 300;
 
@@ -122,7 +123,13 @@ pub struct RadrootsBlossomAuthorizationContent(String);
 
 impl RadrootsBlossomAuthorizationContent {
     pub fn parse(value: &str) -> Result<Self, RadrootsBlossomError> {
-        if value.is_empty() || value.trim() != value || value.chars().any(char::is_control) {
+        if value.is_empty()
+            || value.len() > RADROOTS_BLOSSOM_AUTH_CONTENT_MAX_BYTES
+            || value.trim() != value
+            || value
+                .chars()
+                .any(|character| character.is_control() && !matches!(character, '\t' | '\n' | '\r'))
+        {
             return Err(RadrootsBlossomError::InvalidAuthorizationContent);
         }
         Ok(Self(value.to_string()))
@@ -199,10 +206,26 @@ pub struct RadrootsBlossomAuthorizationValidation {
     target_server: RadrootsBlossomServerDomain,
     server_scope_requirement: RadrootsBlossomServerScopeRequirement,
     now: u64,
-    max_created_age_seconds: u64,
+    max_created_age_seconds: Option<u64>,
+    max_lifetime_seconds: Option<u64>,
 }
 
 impl RadrootsBlossomAuthorizationValidation {
+    pub fn bud11(
+        target: RadrootsBlossomAuthorizationTarget,
+        target_server: RadrootsBlossomServerDomain,
+        now: u64,
+    ) -> Self {
+        Self {
+            target,
+            target_server,
+            server_scope_requirement: RadrootsBlossomServerScopeRequirement::OptionalAnyMatch,
+            now,
+            max_created_age_seconds: None,
+            max_lifetime_seconds: None,
+        }
+    }
+
     pub fn new(
         target: RadrootsBlossomAuthorizationTarget,
         target_server: RadrootsBlossomServerDomain,
@@ -218,7 +241,8 @@ impl RadrootsBlossomAuthorizationValidation {
             target_server,
             server_scope_requirement,
             now,
-            max_created_age_seconds,
+            max_created_age_seconds: Some(max_created_age_seconds),
+            max_lifetime_seconds: Some(RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS),
         })
     }
 
@@ -238,8 +262,12 @@ impl RadrootsBlossomAuthorizationValidation {
         self.now
     }
 
-    pub const fn max_created_age_seconds(&self) -> u64 {
+    pub const fn max_created_age_seconds(&self) -> Option<u64> {
         self.max_created_age_seconds
+    }
+
+    pub const fn max_lifetime_seconds(&self) -> Option<u64> {
+        self.max_lifetime_seconds
     }
 }
 
@@ -325,19 +353,25 @@ impl RadrootsBlossomParsedAuthorizationClaim {
         &self,
         validation: &RadrootsBlossomAuthorizationValidation,
     ) -> Result<RadrootsBlossomValidatedAuthorizationClaim, RadrootsBlossomError> {
-        if self.created_at > validation.now {
+        if self.created_at >= validation.now {
             return Err(RadrootsBlossomError::AuthorizationCreatedInFuture);
         }
-        if validation.now.saturating_sub(self.created_at) > validation.max_created_age_seconds {
+        if let Some(max_created_age_seconds) = validation.max_created_age_seconds
+            && validation.now.saturating_sub(self.created_at) > max_created_age_seconds
+        {
             return Err(RadrootsBlossomError::AuthorizationStale);
         }
 
         let lifetime = self
             .expiration
             .checked_sub(self.created_at)
-            .filter(|lifetime| (1..=RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS).contains(lifetime))
+            .filter(|lifetime| *lifetime > 0)
             .ok_or(RadrootsBlossomError::InvalidAuthorizationLifetime)?;
-        debug_assert!(lifetime <= RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS);
+        if let Some(max_lifetime_seconds) = validation.max_lifetime_seconds
+            && lifetime > max_lifetime_seconds
+        {
+            return Err(RadrootsBlossomError::InvalidAuthorizationLifetime);
+        }
 
         if self.expiration <= validation.now {
             return Err(RadrootsBlossomError::AuthorizationExpired);
@@ -717,11 +751,23 @@ mod tests {
     }
 
     #[test]
-    fn content_requires_trimmed_nonempty_control_free_text() {
-        for value in ["", " Upload Blob", "Upload Blob ", "Upload\nBlob", "\u{7f}"] {
+    fn content_requires_bounded_trimmed_human_readable_text() {
+        for value in ["", " Upload Blob", "Upload Blob ", "Upload\0Blob", "\u{7f}"] {
             assert_eq!(
                 RadrootsBlossomAuthorizationContent::parse(value),
                 Err(RadrootsBlossomError::InvalidAuthorizationContent)
+            );
+        }
+        assert_eq!(
+            RadrootsBlossomAuthorizationContent::parse(&"a".repeat(4_097)),
+            Err(RadrootsBlossomError::InvalidAuthorizationContent)
+        );
+        for value in ["Upload\nBlob", "Upload\tBlob", "Upload\rBlob"] {
+            assert_eq!(
+                RadrootsBlossomAuthorizationContent::parse(value)
+                    .unwrap()
+                    .as_str(),
+                value
             );
         }
         let value = RadrootsBlossomAuthorizationContent::parse("Téléverser l'image").unwrap();
@@ -797,7 +843,8 @@ mod tests {
             RadrootsBlossomServerScopeRequirement::RequiredAnyMatch
         );
         assert_eq!(policy.now(), NOW);
-        assert_eq!(policy.max_created_age_seconds(), 300);
+        assert_eq!(policy.max_created_age_seconds(), Some(300));
+        assert_eq!(policy.max_lifetime_seconds(), Some(300));
         assert!(
             RadrootsBlossomAuthorizationValidation::new(
                 target,
@@ -963,6 +1010,11 @@ mod tests {
 
         let time_cases = [
             (
+                NOW,
+                NOW + 60,
+                RadrootsBlossomError::AuthorizationCreatedInFuture,
+            ),
+            (
                 NOW + 1,
                 NOW + 60,
                 RadrootsBlossomError::AuthorizationCreatedInFuture,
@@ -1000,6 +1052,29 @@ mod tests {
             wrong_action.validate(&required),
             Err(RadrootsBlossomError::AuthorizationActionMismatch)
         );
+    }
+
+    #[test]
+    fn bud11_validation_keeps_radroots_replay_limits_out_of_protocol_semantics() {
+        let target = RadrootsBlossomAuthorizationTarget::List;
+        let policy = RadrootsBlossomAuthorizationValidation::bud11(target, server(), NOW);
+        assert_eq!(policy.max_created_age_seconds(), None);
+        assert_eq!(policy.max_lifetime_seconds(), None);
+        assert_eq!(
+            policy.server_scope_requirement(),
+            RadrootsBlossomServerScopeRequirement::OptionalAnyMatch
+        );
+
+        let claim = RadrootsBlossomParsedAuthorizationClaim::parse(
+            "List archived blobs",
+            NOW - 1_000,
+            &[
+                vec!["t".to_string(), "list".to_string()],
+                vec!["expiration".to_string(), (NOW + 1_000).to_string()],
+            ],
+        )
+        .unwrap();
+        assert!(claim.validate(&policy).is_ok());
     }
 
     #[test]
@@ -1191,7 +1266,7 @@ mod tests {
     }
 
     #[test]
-    fn validation_accepts_exact_time_boundaries() {
+    fn validation_enforces_exact_time_boundaries() {
         let boundary_tags = tags("upload", NOW + 1);
         let parsed = RadrootsBlossomParsedAuthorizationClaim::parse(
             "Upload Blob",
@@ -1222,6 +1297,9 @@ mod tests {
             &tags("upload", NOW + RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS),
         )
         .unwrap();
-        assert!(created_now.validate(&zero_age).is_ok());
+        assert_eq!(
+            created_now.validate(&zero_age),
+            Err(RadrootsBlossomError::AuthorizationCreatedInFuture)
+        );
     }
 }

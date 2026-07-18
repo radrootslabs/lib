@@ -121,7 +121,7 @@ impl fmt::Display for RadrootsBlossomError {
                 f.write_str("descriptor media type does not match the approved media type")
             }
             Self::InvalidAuthorizationContent => {
-                f.write_str("Blossom authorization content must be trimmed human-readable text")
+                f.write_str("Blossom authorization content must be bounded human-readable text")
             }
             Self::InvalidAuthorizationAction => f.write_str("invalid Blossom authorization action"),
             Self::InvalidAuthorizationServerDomain => {
@@ -161,7 +161,7 @@ impl fmt::Display for RadrootsBlossomError {
                 f.write_str("Blossom authorization expiration timestamp overflows u64")
             }
             Self::AuthorizationCreatedInFuture => {
-                f.write_str("Blossom authorization was created in the future")
+                f.write_str("Blossom authorization must be created in the past")
             }
             Self::AuthorizationStale => {
                 f.write_str("Blossom authorization is outside the accepted creation-age window")
@@ -250,7 +250,7 @@ mod tests {
             (
                 RadrootsBlossomError::InvalidAuthorizationContent,
                 "invalid_authorization_content",
-                "Blossom authorization content must be trimmed human-readable text",
+                "Blossom authorization content must be bounded human-readable text",
             ),
             (
                 RadrootsBlossomError::InvalidAuthorizationAction,
@@ -320,7 +320,7 @@ mod tests {
             (
                 RadrootsBlossomError::AuthorizationCreatedInFuture,
                 "authorization_created_in_future",
-                "Blossom authorization was created in the future",
+                "Blossom authorization must be created in the past",
             ),
             (
                 RadrootsBlossomError::AuthorizationStale,

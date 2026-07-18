@@ -226,15 +226,15 @@
     },
     {
       "id": "content-newline",
-      "kind": "blossom.bud11.content.parse.invalid",
+      "kind": "blossom.bud11.content.parse.valid",
       "input": { "content": "Upload\nphoto" },
-      "expected": { "error": "invalid_authorization_content" }
+      "expected": { "content": "Upload\nphoto" }
     },
     {
       "id": "content-tab",
-      "kind": "blossom.bud11.content.parse.invalid",
+      "kind": "blossom.bud11.content.parse.valid",
       "input": { "content": "Upload\tphoto" },
-      "expected": { "error": "invalid_authorization_content" }
+      "expected": { "content": "Upload\tphoto" }
     },
     {
       "id": "content-control",
@@ -570,7 +570,7 @@
       "id": "validate-get-no-hash-scope",
       "kind": "blossom.bud11.claim.validate.valid",
       "input": {
-        "claim": { "content": "Get farm photo", "created_at": 2000000000, "tags": [["t", "get"], ["expiration", "2000000001"]] },
+        "claim": { "content": "Get farm photo", "created_at": 1999999999, "tags": [["t", "get"], ["expiration", "2000000001"]] },
         "target": { "type": "get_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
         "server_domain": "blossom.radroots.test",
         "server_scope": "optional_any_match",
@@ -711,7 +711,7 @@
     },
     {
       "id": "validate-created-at-now",
-      "kind": "blossom.bud11.claim.validate.valid",
+      "kind": "blossom.bud11.claim.validate.invalid",
       "input": {
         "claim": { "content": "List farm photos", "created_at": 2000000000, "tags": [["t", "list"], ["expiration", "2000000001"]] },
         "target": { "type": "list" },
@@ -720,7 +720,7 @@
         "now": 2000000000,
         "max_created_age": 0
       },
-      "expected": { "action": "list" }
+      "expected": { "error": "authorization_created_in_future" }
     },
     {
       "id": "validate-horizon-300",
@@ -869,7 +869,7 @@
       "id": "validate-horizon-301",
       "kind": "blossom.bud11.claim.validate.invalid",
       "input": {
-        "claim": { "content": "List farm photos", "created_at": 2000000000, "tags": [["t", "list"], ["expiration", "2000000301"]] },
+        "claim": { "content": "List farm photos", "created_at": 1999999999, "tags": [["t", "list"], ["expiration", "2000000300"]] },
         "target": { "type": "list" },
         "server_domain": "blossom.radroots.test",
         "server_scope": "optional_any_match",

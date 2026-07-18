@@ -170,7 +170,7 @@ fn validation_new_valid(vector: &Vector) {
         build_validation(vector).unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         validation.max_created_age_seconds(),
-        expected_u64(vector, "max_created_age"),
+        Some(expected_u64(vector, "max_created_age")),
         "{}",
         vector.id
     );
