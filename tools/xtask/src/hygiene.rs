@@ -40,7 +40,7 @@ const RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS: &[&str] = &[
     "TransitionProof",
     "TradeQuestion",
     "TradeAnswer",
-    "TradeFulfillment",
+    "TradeFulfillmentUpdated",
     "TradeReceipt",
     "canonicalize_listing_draft",
     "listing_draft",
@@ -485,7 +485,7 @@ mod tests {
         write_file(
             &root,
             "crates/trade/src/order.rs",
-            "pub struct RadrootsOrderProjection { pub order_id: RadrootsOrderId, }\n",
+            "pub struct RadrootsOrderProjection { pub order_id: RadrootsOrderId, }\npub enum RadrootsTradeFulfillmentStateV1 { NotStarted }\n",
         );
         write_file(
             &root,
@@ -533,7 +533,7 @@ mod tests {
         write_file(
             &root,
             "contracts/conformance/retired.json",
-            "{\"name\":\"trade_order_revision_proposal\"}\n",
+            "{\"name\":\"trade_order_revision_proposal\",\"type\":\"TradeFulfillmentUpdated\"}\n",
         );
         write_file(
             &root,

@@ -53,7 +53,8 @@ const RETIRED_OPERATION_EVENT_NAMES: [&str; 5] = [
     "RadrootsNostrEventRef",
     "RadrootsNostrEventPtr",
 ];
-const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
+const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
+    "contracts/event_boundary_matrix.md",
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
 ];
 
