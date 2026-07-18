@@ -140,6 +140,7 @@ flate2 = { version = "1" }
 getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
+jiff-tzdb = { version = "=0.1.8", default-features = false }
 js-sys = { version = "0.3" }
 mediatype = { version = "0.21", default-features = false }
 keyring = { version = "3.6.3", default-features = false, features = [

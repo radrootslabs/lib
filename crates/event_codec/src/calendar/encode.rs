@@ -8,8 +8,8 @@ use alloc::{
 
 use radroots_event::{
     calendar::{
-        RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
-        RadrootsCalendarTimeEvent,
+        RadrootsAuthoredCalendarDateEvent, RadrootsAuthoredCalendarTimeEvent, RadrootsCalendar,
+        RadrootsCalendarEventRsvp, RadrootsCalendarRequest, RadrootsCalendarUri, covered_utc_days,
     },
     kinds::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP, KIND_CALENDAR_TIME_EVENT,
@@ -18,8 +18,8 @@ use radroots_event::{
         RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus, RadrootsSocialTarget,
     },
     tags::{
-        TAG_A, TAG_D, TAG_D_DAY, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY, TAG_IMAGE, TAG_START,
-        TAG_START_TZID, TAG_STATUS, TAG_SUMMARY, TAG_TITLE,
+        TAG_A, TAG_D, TAG_D_DAY, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY, TAG_G, TAG_IMAGE,
+        TAG_LOCATION, TAG_R, TAG_START, TAG_START_TZID, TAG_STATUS, TAG_SUMMARY, TAG_T, TAG_TITLE,
     },
 };
 
@@ -29,59 +29,69 @@ use crate::field_helpers::{
     parse_address_tag, push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
     validate_non_empty_field,
 };
-use crate::social_helpers::{
-    push_location_tags, push_participants, validate_date, validate_date_end_after_start,
-    validate_end_after_start,
-};
+use crate::social_helpers::push_participants;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
 pub fn calendar_date_event_build_tags(
-    event: &RadrootsCalendarDateEvent,
+    event: &RadrootsAuthoredCalendarDateEvent,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_date_event(event)?;
+    validate_authored_date_event(event)?;
     let mut tags = Vec::new();
-    push_tag(&mut tags, TAG_D, event.d_tag.as_str());
-    push_tag(&mut tags, TAG_TITLE, event.title.as_str());
-    push_tag(&mut tags, TAG_START, event.start.as_str());
-    push_optional_tag(&mut tags, TAG_END, event.end.as_deref());
-    if let Some(days) = event.days.as_ref() {
-        for day in days {
-            validate_date(&day.value, "days")?;
-            push_tag(&mut tags, TAG_D_DAY, day.value.as_str());
-        }
-    }
-    if let Some(location) = event.location.as_ref() {
-        push_location_tags(&mut tags, location);
-    }
-    push_optional_tag(&mut tags, TAG_SUMMARY, event.summary.as_deref());
-    push_optional_tag(&mut tags, TAG_IMAGE, event.image.as_deref());
-    push_participants(&mut tags, event.participants.as_ref());
+    push_tag(&mut tags, TAG_D, event.d_tag().as_str());
+    push_tag(&mut tags, TAG_TITLE, event.title());
+    push_tag(&mut tags, TAG_START, event.start().as_str());
+    push_optional_tag(&mut tags, TAG_END, event.end().map(|end| end.as_str()));
+    push_authored_calendar_common_tags(
+        &mut tags,
+        event.locations(),
+        event.geohash(),
+        event.summary(),
+        event.image().map(|image| image.descriptor().url().as_str()),
+        event.participants(),
+        event.categories(),
+        event.references(),
+        event.calendar_requests(),
+    );
     Ok(tags)
 }
 
 pub fn calendar_time_event_build_tags(
-    event: &RadrootsCalendarTimeEvent,
+    event: &RadrootsAuthoredCalendarTimeEvent,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_time_event(event)?;
+    validate_authored_time_event(event)?;
     let mut tags = Vec::new();
-    push_tag(&mut tags, TAG_D, event.d_tag.as_str());
-    push_tag(&mut tags, TAG_TITLE, event.title.as_str());
-    push_tag(&mut tags, TAG_START, event.start.to_string());
-    for date in &event.dates {
-        validate_date(&date.value, "dates")?;
-        push_tag(&mut tags, TAG_D_DAY, date.value.as_str());
-    }
-    if let Some(end) = event.end {
+    push_tag(&mut tags, TAG_D, event.d_tag().as_str());
+    push_tag(&mut tags, TAG_TITLE, event.title());
+    push_tag(&mut tags, TAG_START, event.start().to_string());
+    if let Some(end) = event.end() {
         push_tag(&mut tags, TAG_END, end.to_string());
     }
-    push_optional_tag(&mut tags, TAG_START_TZID, event.start_tzid.as_deref());
-    push_optional_tag(&mut tags, TAG_END_TZID, event.end_tzid.as_deref());
-    if let Some(location) = event.location.as_ref() {
-        push_location_tags(&mut tags, location);
+    for day in covered_utc_days(event.start(), event.end())
+        .map_err(|_| EventEncodeError::InvalidField("end"))?
+    {
+        push_tag(&mut tags, TAG_D_DAY, day.to_string());
     }
-    push_optional_tag(&mut tags, TAG_SUMMARY, event.summary.as_deref());
-    push_optional_tag(&mut tags, TAG_IMAGE, event.image.as_deref());
-    push_participants(&mut tags, event.participants.as_ref());
+    push_optional_tag(
+        &mut tags,
+        TAG_START_TZID,
+        event.start_tzid().map(|tzid| tzid.as_str()),
+    );
+    push_optional_tag(
+        &mut tags,
+        TAG_END_TZID,
+        event.end_tzid().map(|tzid| tzid.as_str()),
+    );
+    push_authored_calendar_common_tags(
+        &mut tags,
+        event.locations(),
+        event.geohash(),
+        event.summary(),
+        event.image().map(|image| image.descriptor().url().as_str()),
+        event.participants(),
+        event.categories(),
+        event.references(),
+        event.calendar_requests(),
+    );
     Ok(tags)
 }
 
@@ -128,13 +138,13 @@ pub fn rsvp_build_tags(
 }
 
 pub fn date_to_wire_parts(
-    event: &RadrootsCalendarDateEvent,
+    event: &RadrootsAuthoredCalendarDateEvent,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     date_to_wire_parts_with_kind(event, KIND_CALENDAR_DATE_EVENT)
 }
 
 pub fn time_to_wire_parts(
-    event: &RadrootsCalendarTimeEvent,
+    event: &RadrootsAuthoredCalendarTimeEvent,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     time_to_wire_parts_with_kind(event, KIND_CALENDAR_TIME_EVENT)
 }
@@ -152,7 +162,7 @@ pub fn rsvp_to_wire_parts(
 }
 
 pub fn date_to_wire_parts_with_kind(
-    event: &RadrootsCalendarDateEvent,
+    event: &RadrootsAuthoredCalendarDateEvent,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_DATE_EVENT {
@@ -160,13 +170,13 @@ pub fn date_to_wire_parts_with_kind(
     }
     Ok(RadrootsNip01EventWireParts {
         kind,
-        content: event.description.clone().unwrap_or_default(),
+        content: event.description().unwrap_or_default().to_string(),
         tags: calendar_date_event_build_tags(event)?,
     })
 }
 
 pub fn time_to_wire_parts_with_kind(
-    event: &RadrootsCalendarTimeEvent,
+    event: &RadrootsAuthoredCalendarTimeEvent,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_TIME_EVENT {
@@ -174,7 +184,7 @@ pub fn time_to_wire_parts_with_kind(
     }
     Ok(RadrootsNip01EventWireParts {
         kind,
-        content: event.description.clone().unwrap_or_default(),
+        content: event.description().unwrap_or_default().to_string(),
         tags: calendar_time_event_build_tags(event)?,
     })
 }
@@ -207,28 +217,52 @@ pub fn rsvp_to_wire_parts_with_kind(
     })
 }
 
-fn validate_date_event(event: &RadrootsCalendarDateEvent) -> Result<(), EventEncodeError> {
-    validate_d_tag(&event.d_tag, "d_tag")?;
-    validate_non_empty_field(&event.title, "title")?;
-    validate_date(&event.start, "start")?;
-    if let Some(end) = event.end.as_deref() {
-        validate_date(end, "end")?;
-    }
-    validate_date_end_after_start(&event.start, event.end.as_deref(), "end")?;
+fn validate_authored_date_event(
+    _event: &RadrootsAuthoredCalendarDateEvent,
+) -> Result<(), EventEncodeError> {
     Ok(())
 }
 
-fn validate_time_event(event: &RadrootsCalendarTimeEvent) -> Result<(), EventEncodeError> {
-    validate_d_tag(&event.d_tag, "d_tag")?;
-    validate_non_empty_field(&event.title, "title")?;
-    validate_end_after_start(event.start, event.end, "end")?;
-    if event.dates.is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("dates"));
-    }
-    for date in &event.dates {
-        validate_date(&date.value, "dates")?;
-    }
+fn validate_authored_time_event(
+    event: &RadrootsAuthoredCalendarTimeEvent,
+) -> Result<(), EventEncodeError> {
+    covered_utc_days(event.start(), event.end())
+        .map_err(|_| EventEncodeError::InvalidField("end"))?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_authored_calendar_common_tags(
+    tags: &mut Vec<Vec<String>>,
+    locations: &[String],
+    geohash: Option<&str>,
+    summary: Option<&str>,
+    image: Option<&str>,
+    participants: Option<&Vec<radroots_event::social::RadrootsCalendarParticipant>>,
+    categories: &[String],
+    references: &[RadrootsCalendarUri],
+    calendar_requests: &[RadrootsCalendarRequest],
+) {
+    for location in locations {
+        push_tag(tags, TAG_LOCATION, location);
+    }
+    push_optional_tag(tags, TAG_G, geohash);
+    push_optional_tag(tags, TAG_SUMMARY, summary);
+    push_optional_tag(tags, TAG_IMAGE, image);
+    push_participants(tags, participants);
+    for category in categories {
+        push_tag(tags, TAG_T, category);
+    }
+    for reference in references {
+        push_tag(tags, TAG_R, reference.as_str());
+    }
+    for request in calendar_requests {
+        let mut tag = vec![TAG_A.to_string(), request.calendar().as_str().to_string()];
+        if let Some(relay) = request.relay() {
+            tag.push(relay.to_string());
+        }
+        tags.push(tag);
+    }
 }
 
 fn validate_calendar_collection(calendar: &RadrootsCalendar) -> Result<(), EventEncodeError> {

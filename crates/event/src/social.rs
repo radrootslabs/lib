@@ -118,15 +118,6 @@ pub struct RadrootsCalendarParticipant {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsCalendarDateValue {
-    pub value: String,
-}
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsCalendarEventRsvpStatus {

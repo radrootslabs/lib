@@ -44,6 +44,7 @@ pub mod list;
 pub mod list_set;
 pub mod listing;
 pub mod location;
+pub mod media;
 pub mod message;
 pub mod message_file;
 pub mod order;
@@ -70,6 +71,7 @@ pub use envelope::{
     RadrootsEventEnvelopeParts, RadrootsEventKind, RadrootsEventKindClass, RadrootsEventTag,
     RadrootsEventTags, RadrootsEventTimestamp,
 };
+pub use media::{RadrootsAuthoredImage, RadrootsAuthoredImageError};
 pub use wire::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsEventWireLimits,
     RadrootsNip01EventWire, canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,

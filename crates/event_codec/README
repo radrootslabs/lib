@@ -21,6 +21,50 @@ and residual fields and never upgrades observed media or NIP-05 syntax into
 network verification. Its content parser accepts only bounded kind-`0` content
 from an event whose identifier and signature the caller has already verified.
 
+The NIP-52 calendar codecs expose a deliberate three-stage boundary for kinds
+`31922` and `31923`:
+
+1. bounded structural wire or envelope parsing preserves the complete event;
+2. `parse_nip52_calendar_date_event` or
+   `parse_nip52_calendar_time_event` produces a tolerant baseline NIP-52
+   projection and rejects a mismatched kind;
+3. `admit_radroots_calendar_date_event` or
+   `admit_radroots_calendar_time_event` applies the stricter Radroots profile.
+
+Structural envelope construction, the baseline parsers, and the admission
+functions do not verify a Schnorr signature. Before treating inbound data as
+accepted, callers must recompute and compare its NIP-01 id, verify its
+signature against the author, use the parser for its expected kind, and keep
+the typed result bound to that verified envelope. The calendar
+`*_parsed_from_event` convenience functions remain structural wrappers; their
+names do not imply cryptographic verification.
+
+The baseline parser projects repeated NIP-52 `location`, participant `p`,
+category `t`, absolute-URI reference `r`, and kind-`31924` inclusion-request
+`a` tags, plus deprecated `name` compatibility data. It accepts arbitrary
+absolute image URIs. Kind `31922` requires semantic Gregorian dates and retains
+uppercase-`D` tags as uninterpreted extensions. Kind `31923` requires at least
+one in-range `D` day and exact IANA time-zone identifiers. NIP-52 makes
+multi-day coverage a `SHOULD`, so the baseline requires neither the start-day
+index nor complete coverage; duplicate, unordered, and leading-zero numeric
+observations are additionally preserved as parser tolerance and are never
+canonical authored output. An omitted
+`end_tzid` uses `start_tzid` when present.
+
+Strict date admission rejects every uppercase-`D` extension. Strict time
+admission requires canonical decimal timestamps and the exact ascending
+uppercase-`D` sequence for the exclusive interval, bounded to 366 covered
+days. Authored codecs derive that sequence and emit unsigned
+`RadrootsNip01EventWireParts`; signing and transport stay at the owning runtime
+boundary.
+
+Strict inbound admission upgrades an image only to a structural Blossom
+hash-path URL. It does not prove reference approval, bytes, upload completion,
+or retrievability. Strict authored image inputs are approved, byte-verified
+Blossom `image/*` descriptors, but are still not upload receipts. A publishing
+runtime must require successful BUD-02 completion and a bounded retrievability
+check before signing or publishing media-bearing wire parts.
+
 ## Field Event Codecs
 
 The Field codec surface validates the public Nostr event substrate exposed by

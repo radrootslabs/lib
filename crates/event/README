@@ -20,6 +20,38 @@ byte-verified Blossom descriptors; and its NIP-05 identifier type validates
 syntax without making a network identity claim. The legacy `RadrootsProfile`
 model remains available for compatibility.
 
+The calendar module keeps three different states explicit for NIP-52 kinds
+`31922` and `31923`: the complete structural event envelope, a tolerant
+baseline NIP-52 projection, and a strict Radroots-admitted projection. Envelope
+construction validates structure, not a matching event id or Schnorr
+signature. Callers must perform those cryptographic checks independently and
+keep any parsed or admitted value bound to the verified envelope and expected
+kind.
+
+Baseline projections retain the pinned NIP-52 common fields: repeated
+locations, participants, categories, absolute-URI references, kind-`31924`
+calendar-inclusion requests, and deprecated `name` compatibility data in
+addition to `d`, `title`, description, summary, image, and geohash. Date
+events use semantic Gregorian dates and retain observed uppercase-`D` tags as
+uninterpreted extensions. Time events validate unsigned timestamps, exact IANA
+time-zone identifiers, and at least one in-range `D` day while tolerating the
+NIP's non-mandatory start-day and complete-coverage forms. An absent `end_tzid`
+falls back to `start_tzid` when one is present.
+
+Strict authoring and admission add canonical metadata and bounded resource
+rules. Authored common fields include repeated locations, participants,
+categories, references, and calendar-inclusion requests; deprecated `name` is
+not authored. Strict date events reject uppercase `D`, while strict time
+events derive or admit only the complete, ascending sequence of UTC-day
+indices and cover at most 366 days.
+
+Inbound images begin as unverified absolute URIs. Strict admission requires a
+structural Blossom hash-path URL but makes no byte or network claim. Authored
+calendar images require the shared `image/*`, byte-verified Blossom descriptor.
+That state is not an upload receipt: a runtime must require successful BUD-02
+upload completion and a bounded retrievability check before signing or
+publishing a media-bearing event.
+
 ## Field Event Boundary
 
 `radroots_event` includes the public event-layer models needed by Field-style

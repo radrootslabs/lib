@@ -24,7 +24,7 @@ dto-bindgen = [
 knowledge = []
 knowledge-nip54 = ["knowledge"]
 signature = ["dep:secp256k1"]
-std = ["radroots_blossom/std", "radroots_core/std"]
+std = ["radroots_blossom/std", "radroots_core/std", "url_nostd/std"]
 serde = ["dep:serde", "radroots_core/serde"]
 
 [dependencies]
@@ -32,6 +32,7 @@ dto_bindgen = { workspace = true, optional = true }
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
+jiff-tzdb = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
@@ -41,6 +42,7 @@ serde_json = { workspace = true, default-features = false, features = [
 ] }
 secp256k1 = { workspace = true, optional = true }
 sha2 = { workspace = true, default-features = false }
+url_nostd = { workspace = true }
 
 [dev-dependencies]
 radroots_core = { workspace = true, default-features = false, features = [

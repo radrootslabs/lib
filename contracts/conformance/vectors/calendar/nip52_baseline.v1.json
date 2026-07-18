@@ -1,0 +1,333 @@
+{
+  "suite": "calendar_nip52_baseline",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "baseline_date_minimal_001",
+      "kind": "calendar.baseline.date.valid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [
+          ["d", "moss-street-market"],
+          ["title", "Moss Street Market"],
+          ["start", "2026-06-20"]
+        ]
+      },
+      "expected": {
+        "d": "moss-street-market",
+        "title": "Moss Street Market",
+        "start": "2026-06-20",
+        "locations": [],
+        "participants": 0,
+        "categories": [],
+        "references": [],
+        "calendar_requests": 0,
+        "date_day_extensions": []
+      }
+    },
+    {
+      "id": "baseline_date_complete_nip52_metadata_001",
+      "kind": "calendar.baseline.date.valid",
+      "input": {
+        "kind": 31922,
+        "content": "Bring reusable bags.",
+        "tags": [
+          ["d", "fernwood-csa-pickup"],
+          ["title", " CSA pickup "],
+          ["start", "2026-06-20"],
+          ["end", "2026-06-22"],
+          ["location", "Farm stand"],
+          ["location", "Moss Street Market"],
+          ["g", "C23NB62W20ST"],
+          ["summary", " Weekly pickup "],
+          ["image", "https://ordinary.example.test/images/market.jpg?size=large"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+          ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://relay.example.test/events"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "", " host "],
+          ["t", "vegetables"],
+          ["t", "CSA"],
+          ["r", "ipfs://bafybeigdyrzt/reference"],
+          ["a", "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "wss://relay.example.test"],
+          ["name", "Deprecated display name"],
+          ["D", "extension", "preserved"]
+        ]
+      },
+      "expected": {
+        "d": "fernwood-csa-pickup",
+        "title": " CSA pickup ",
+        "description": "Bring reusable bags.",
+        "start": "2026-06-20",
+        "end": "2026-06-22",
+        "locations": ["Farm stand", "Moss Street Market"],
+        "geohash": "C23NB62W20ST",
+        "summary": " Weekly pickup ",
+        "image": "https://ordinary.example.test/images/market.jpg?size=large",
+        "participants": [
+          {"pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "relay": null, "role": null},
+          {"pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "relay": "wss://relay.example.test/events", "role": null},
+          {"pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "relay": null, "role": " host "}
+        ],
+        "categories": ["vegetables", "CSA"],
+        "references": ["ipfs://bafybeigdyrzt/reference"],
+        "calendar_requests": [
+          {"calendar": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "relay": "wss://relay.example.test"}
+        ],
+        "legacy_name": "Deprecated display name",
+        "date_day_extensions": [["D", "extension", "preserved"]]
+      }
+    },
+    {
+      "id": "baseline_date_exclusive_end_001",
+      "kind": "calendar.baseline.date.valid",
+      "input": {
+        "kind": 31922,
+        "content": "Two all-day sale dates.",
+        "tags": [
+          ["d", "seedling-sale"],
+          ["title", "Victoria Seedling Sale"],
+          ["start", "2024-02-29"],
+          ["end", "2024-03-02"]
+        ]
+      },
+      "expected": {
+        "d": "seedling-sale",
+        "title": "Victoria Seedling Sale",
+        "description": "Two all-day sale dates.",
+        "start": "2024-02-29",
+        "end": "2024-03-02",
+        "locations": [],
+        "participants": 0,
+        "categories": [],
+        "references": [],
+        "calendar_requests": 0,
+        "date_day_extensions": []
+      }
+    },
+    {
+      "id": "baseline_date_impossible_start_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "bad-date"], ["title", "Bad date"], ["start", "2026-02-30"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "start" }
+    },
+    {
+      "id": "baseline_date_equal_end_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "equal-date"], ["title", "Equal date"], ["start", "2026-06-20"], ["end", "2026-06-20"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "end" }
+    },
+    {
+      "id": "baseline_date_duplicate_title_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "duplicate"], ["title", "First"], ["title", "Second"], ["start", "2026-06-20"]]
+      },
+      "expected": { "error": "duplicate_tag", "tag": "title" }
+    },
+    {
+      "id": "baseline_date_relative_image_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "relative-image"], ["title", "Relative image"], ["start", "2026-06-20"], ["image", "/market.jpg"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "image" }
+    },
+    {
+      "id": "baseline_date_participant_empty_relay_without_role_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "bad-participant"], ["title", "Bad participant"], ["start", "2026-06-20"], ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ""]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "p" }
+    },
+    {
+      "id": "baseline_date_calendar_request_wrong_kind_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "bad-request"], ["title", "Bad request"], ["start", "2026-06-20"], ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:not-a-calendar"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "a" }
+    },
+    {
+      "id": "baseline_time_should_level_day_variance_001",
+      "kind": "calendar.baseline.time.valid",
+      "input": {
+        "kind": 31923,
+        "content": "Harvest across UTC day boundaries.",
+        "tags": [
+          ["d", "harvest-window"],
+          ["title", "Harvest window"],
+          ["start", "086399"],
+          ["end", "172801"],
+          ["D", "000"],
+          ["D", "2"],
+          ["start_tzid", "America/Vancouver"],
+          ["t", "harvest"]
+        ]
+      },
+      "expected": {
+        "d": "harvest-window",
+        "title": "Harvest window",
+        "description": "Harvest across UTC day boundaries.",
+        "start_wire": "086399",
+        "start": 86399,
+        "end_wire": "172801",
+        "end": 172801,
+        "observed_days": [
+          {"wire": "000", "index": 0, "canonical": false},
+          {"wire": "2", "index": 2, "canonical": true}
+        ],
+        "start_tzid": "America/Vancouver",
+        "effective_end_tzid": "America/Vancouver",
+        "locations": [],
+        "participants": 0,
+        "categories": ["harvest"],
+        "references": [],
+        "calendar_requests": 0
+      }
+    },
+    {
+      "id": "baseline_time_single_start_day_001",
+      "kind": "calendar.baseline.time.valid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "instant"], ["title", "Instant"], ["start", "86400"], ["D", "1"]]
+      },
+      "expected": {
+        "d": "instant",
+        "title": "Instant",
+        "start_wire": "86400",
+        "start": 86400,
+        "observed_days": [{"wire": "1", "index": 1, "canonical": true}],
+        "locations": [],
+        "participants": 0,
+        "categories": [],
+        "references": [],
+        "calendar_requests": 0
+      }
+    },
+    {
+      "id": "baseline_time_over_366_days_001",
+      "kind": "calendar.baseline.time.valid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "long-range"], ["title", "Long range"], ["start", "0"], ["end", "31708800"], ["D", "0"]]
+      },
+      "expected": {
+        "d": "long-range",
+        "title": "Long range",
+        "start_wire": "0",
+        "start": 0,
+        "end_wire": "31708800",
+        "end": 31708800,
+        "observed_days": [{"wire": "0", "index": 0, "canonical": true}],
+        "locations": [],
+        "participants": 0,
+        "categories": [],
+        "references": [],
+        "calendar_requests": 0
+      }
+    },
+    {
+      "id": "baseline_time_non_start_in_range_day_001",
+      "kind": "calendar.baseline.time.valid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "non-start-day"], ["title", "Non-start in-range day"], ["start", "86399"], ["end", "172801"], ["D", "1"]]
+      },
+      "expected": {
+        "d": "non-start-day",
+        "title": "Non-start in-range day",
+        "start_wire": "86399",
+        "start": 86399,
+        "end_wire": "172801",
+        "end": 172801,
+        "observed_days": [{"wire": "1", "index": 1, "canonical": true}],
+        "locations": [],
+        "participants": 0,
+        "categories": [],
+        "references": [],
+        "calendar_requests": 0
+      }
+    },
+    {
+      "id": "baseline_time_invalid_day_decimal_001",
+      "kind": "calendar.baseline.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "bad-day"], ["title", "Bad day"], ["start", "0"], ["D", "+0"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "D" }
+    },
+    {
+      "id": "baseline_time_missing_day_001",
+      "kind": "calendar.baseline.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "missing-day"], ["title", "Missing day"], ["start", "0"]]
+      },
+      "expected": { "error": "missing_tag", "tag": "D" }
+    },
+    {
+      "id": "baseline_time_out_of_range_day_001",
+      "kind": "calendar.baseline.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "out-of-range-day"], ["title", "Out-of-range day"], ["start", "0"], ["D", "1"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "D" }
+    },
+    {
+      "id": "baseline_time_invalid_iana_timezone_001",
+      "kind": "calendar.baseline.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "bad-zone"], ["title", "Bad zone"], ["start", "0"], ["D", "0"], ["start_tzid", "america/vancouver"]]
+      },
+      "expected": { "error": "invalid_tag", "tag": "start_tzid" }
+    },
+    {
+      "id": "baseline_date_duplicate_legacy_name_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "duplicate-name"], ["title", "Canonical title"], ["name", "Legacy one"], ["name", "Legacy two"], ["start", "2026-06-20"]]
+      },
+      "expected": { "error": "duplicate_tag", "tag": "name" }
+    },
+    {
+      "id": "baseline_wrong_event_kind_001",
+      "kind": "calendar.baseline.date.invalid",
+      "input": {
+        "kind": 1,
+        "content": "",
+        "tags": [["d", "wrong-kind"], ["title", "Wrong kind"], ["start", "2026-06-20"]]
+      },
+      "expected": { "error": "invalid_kind" }
+    }
+  ]
+}

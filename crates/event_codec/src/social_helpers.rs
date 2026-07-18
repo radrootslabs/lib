@@ -22,61 +22,6 @@ pub(crate) fn validate_http_url(value: &str, field: &'static str) -> Result<(), 
     }
 }
 
-pub(crate) fn validate_date(value: &str, field: &'static str) -> Result<(), EventEncodeError> {
-    if is_date(value) {
-        Ok(())
-    } else {
-        Err(EventEncodeError::InvalidField(field))
-    }
-}
-
-pub(crate) fn validate_date_tag(value: &str, tag: &'static str) -> Result<(), EventParseError> {
-    if is_date(value) {
-        Ok(())
-    } else {
-        Err(EventParseError::InvalidTag(tag))
-    }
-}
-
-pub(crate) fn is_date(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    bytes.len() == 10
-        && bytes[0].is_ascii_digit()
-        && bytes[1].is_ascii_digit()
-        && bytes[2].is_ascii_digit()
-        && bytes[3].is_ascii_digit()
-        && bytes[4] == b'-'
-        && bytes[5].is_ascii_digit()
-        && bytes[6].is_ascii_digit()
-        && bytes[7] == b'-'
-        && bytes[8].is_ascii_digit()
-        && bytes[9].is_ascii_digit()
-}
-
-pub(crate) fn validate_end_after_start(
-    start: u64,
-    end: Option<u64>,
-    field: &'static str,
-) -> Result<(), EventEncodeError> {
-    if end.is_some_and(|end| end < start) {
-        Err(EventEncodeError::InvalidField(field))
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn validate_date_end_after_start(
-    start: &str,
-    end: Option<&str>,
-    field: &'static str,
-) -> Result<(), EventEncodeError> {
-    if end.is_some_and(|end| end < start) {
-        Err(EventEncodeError::InvalidField(field))
-    } else {
-        Ok(())
-    }
-}
-
 pub(crate) fn push_location_tags(tags: &mut Vec<Vec<String>>, location: &RadrootsSocialLocation) {
     if let Some(name) = location
         .name
@@ -216,50 +161,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validates_dates_and_ordered_time_ranges() {
-        assert!(is_date("2026-06-20"));
-        assert!(!is_date("2026-6-20"));
-        for invalid in [
-            "x026-06-20",
-            "2x26-06-20",
-            "20x6-06-20",
-            "202x-06-20",
-            "2026/06-20",
-            "2026-x6-20",
-            "2026-0x-20",
-            "2026-06/20",
-            "2026-06-x0",
-            "2026-06-2x",
-        ] {
-            assert!(!is_date(invalid));
-        }
+    fn validates_http_urls() {
         assert!(validate_http_url("https://example.test/file", "url").is_ok());
         assert!(validate_http_url("http://example.test/file", "url").is_ok());
         assert!(matches!(
             validate_http_url("ftp://example.test/file", "url"),
             Err(EventEncodeError::InvalidField("url"))
-        ));
-        assert!(validate_date("2026-06-20", "date").is_ok());
-        assert!(matches!(
-            validate_date("bad", "date"),
-            Err(EventEncodeError::InvalidField("date"))
-        ));
-        assert!(validate_date_tag("2026-06-20", "start").is_ok());
-        assert!(validate_end_after_start(10, Some(10), "end").is_ok());
-        assert!(validate_end_after_start(10, None, "end").is_ok());
-        assert!(matches!(
-            validate_end_after_start(10, Some(9), "end"),
-            Err(EventEncodeError::InvalidField("end"))
-        ));
-        assert!(validate_date_end_after_start("2026-06-20", None, "end").is_ok());
-        assert!(validate_date_end_after_start("2026-06-20", Some("2026-06-20"), "end").is_ok());
-        assert!(matches!(
-            validate_date_end_after_start("2026-06-20", Some("2026-06-19"), "end"),
-            Err(EventEncodeError::InvalidField("end"))
-        ));
-        assert!(matches!(
-            validate_date_tag("bad", "start"),
-            Err(EventParseError::InvalidTag("start"))
         ));
     }
 

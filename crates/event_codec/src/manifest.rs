@@ -330,6 +330,9 @@ fn tag_cardinality_label(value: RadrootsTagCardinality) -> &'static str {
 fn tag_semantic_label(value: RadrootsTagSemantic) -> &'static str {
     match value {
         RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
+        RadrootsTagSemantic::CalendarEnd => "calendar_end",
+        RadrootsTagSemantic::CalendarStart => "calendar_start",
         RadrootsTagSemantic::Category => "category",
         RadrootsTagSemantic::Citation => "citation",
         RadrootsTagSemantic::Contract => "contract",
@@ -344,10 +347,12 @@ fn tag_semantic_label(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::ListingAddress => "listing_address",
         RadrootsTagSemantic::ListingSnapshot => "listing_snapshot",
         RadrootsTagSemantic::Location => "location",
+        RadrootsTagSemantic::Participant => "participant",
         RadrootsTagSemantic::PreviousEvent => "previous_event",
         RadrootsTagSemantic::Price => "price",
         RadrootsTagSemantic::PublishedAt => "published_at",
         RadrootsTagSemantic::Relay => "relay",
+        RadrootsTagSemantic::Reference => "reference",
         RadrootsTagSemantic::ReviewTarget => "review_target",
         RadrootsTagSemantic::RootEvent => "root_event",
         RadrootsTagSemantic::ServiceInput => "service_input",
@@ -357,25 +362,31 @@ fn tag_semantic_label(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::Summary => "summary",
         RadrootsTagSemantic::Title => "title",
         RadrootsTagSemantic::Topic => "topic",
+        RadrootsTagSemantic::TimeZone => "time_zone",
         RadrootsTagSemantic::Url => "url",
+        RadrootsTagSemantic::UtcDayCoverage => "utc_day_coverage",
     }
 }
 
 fn tag_value_type_label(value: RadrootsTagValueType) -> &'static str {
     match value {
         RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagValueType::CalendarDate => "calendar_date",
         RadrootsTagValueType::ContractId => "contract_id",
         RadrootsTagValueType::DTag => "d_tag",
         RadrootsTagValueType::EventId => "event_id",
         RadrootsTagValueType::EventPointer => "event_pointer",
         RadrootsTagValueType::Geohash => "geohash",
+        RadrootsTagValueType::IanaTimeZoneId => "iana_time_zone_id",
         RadrootsTagValueType::Kind => "kind",
         RadrootsTagValueType::PublicKey => "public_key",
         RadrootsTagValueType::RelayUrl => "relay_url",
         RadrootsTagValueType::Sha256 => "sha256",
         RadrootsTagValueType::Text => "text",
         RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
+        RadrootsTagValueType::Uri => "uri",
         RadrootsTagValueType::Url => "url",
+        RadrootsTagValueType::UtcDayIndex => "utc_day_index",
         RadrootsTagValueType::Uuid => "uuid",
     }
 }

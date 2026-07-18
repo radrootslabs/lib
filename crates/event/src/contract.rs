@@ -5,12 +5,18 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::{
     RadrootsEventEnvelope,
+    calendar::{
+        RADROOTS_CALENDAR_MAX_PARTICIPANTS, RadrootsCalendarDate, RadrootsCalendarUri,
+        RadrootsIanaTimeZoneId, canonical_calendar_geohash_is_valid,
+        canonical_calendar_tag_text_is_valid, covered_utc_days,
+    },
     ids::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
         relay_url_is_valid,
     },
     kinds::*,
 };
+use radroots_blossom::RadrootsBlossomBlobUrl;
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 1;
 
@@ -113,6 +119,9 @@ pub enum RadrootsTagCardinality {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTagSemantic {
     AddressableCoordinate,
+    CalendarInclusionRequest,
+    CalendarEnd,
+    CalendarStart,
     Category,
     Citation,
     Contract,
@@ -127,10 +136,12 @@ pub enum RadrootsTagSemantic {
     ListingAddress,
     ListingSnapshot,
     Location,
+    Participant,
     PreviousEvent,
     Price,
     PublishedAt,
     Relay,
+    Reference,
     ReviewTarget,
     RootEvent,
     ServiceInput,
@@ -140,24 +151,30 @@ pub enum RadrootsTagSemantic {
     Summary,
     Title,
     Topic,
+    TimeZone,
     Url,
+    UtcDayCoverage,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTagValueType {
     AddressableCoordinate,
+    CalendarDate,
     ContractId,
     DTag,
     EventId,
     EventPointer,
     Geohash,
+    IanaTimeZoneId,
     Kind,
     PublicKey,
     RelayUrl,
     Sha256,
     Text,
     UnixTimestamp,
+    Uri,
     Url,
+    UtcDayIndex,
     Uuid,
 }
 
@@ -427,6 +444,13 @@ const TAG_P_MANY: RadrootsTagContract = tag(
     RadrootsTagValueType::PublicKey,
     true,
 );
+const TAG_CALENDAR_PARTICIPANT: RadrootsTagContract = tag(
+    "p",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Participant,
+    RadrootsTagValueType::PublicKey,
+    true,
+);
 const TAG_A_ADDRESS_REQUIRED: RadrootsTagContract = tag(
     "a",
     RadrootsTagCardinality::RequiredOne,
@@ -445,6 +469,13 @@ const TAG_A_MANY: RadrootsTagContract = tag(
     "a",
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
+const TAG_CALENDAR_INCLUSION_REQUEST: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::CalendarInclusionRequest,
     RadrootsTagValueType::AddressableCoordinate,
     true,
 );
@@ -504,6 +535,69 @@ const TAG_TITLE: RadrootsTagContract = tag(
     RadrootsTagValueType::Text,
     false,
 );
+const TAG_CALENDAR_TITLE: RadrootsTagContract = tag(
+    "title",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Title,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_CALENDAR_LEGACY_NAME: RadrootsTagContract = tag(
+    "name",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Title,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_CALENDAR_DATE_START: RadrootsTagContract = tag(
+    "start",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::CalendarStart,
+    RadrootsTagValueType::CalendarDate,
+    false,
+);
+const TAG_CALENDAR_DATE_END: RadrootsTagContract = tag(
+    "end",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::CalendarEnd,
+    RadrootsTagValueType::CalendarDate,
+    false,
+);
+const TAG_CALENDAR_TIME_START: RadrootsTagContract = tag(
+    "start",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::CalendarStart,
+    RadrootsTagValueType::UnixTimestamp,
+    false,
+);
+const TAG_CALENDAR_TIME_END: RadrootsTagContract = tag(
+    "end",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::CalendarEnd,
+    RadrootsTagValueType::UnixTimestamp,
+    false,
+);
+const TAG_CALENDAR_COVERED_UTC_DAY: RadrootsTagContract = tag(
+    "D",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::UtcDayCoverage,
+    RadrootsTagValueType::UtcDayIndex,
+    true,
+);
+const TAG_CALENDAR_START_TZID: RadrootsTagContract = tag(
+    "start_tzid",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::TimeZone,
+    RadrootsTagValueType::IanaTimeZoneId,
+    false,
+);
+const TAG_CALENDAR_END_TZID: RadrootsTagContract = tag(
+    "end_tzid",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::TimeZone,
+    RadrootsTagValueType::IanaTimeZoneId,
+    false,
+);
 const TAG_SUMMARY: RadrootsTagContract = tag(
     "summary",
     RadrootsTagCardinality::OptionalOne,
@@ -519,6 +613,13 @@ const TAG_PUBLISHED_AT: RadrootsTagContract = tag(
     false,
 );
 const TAG_LOCATION: RadrootsTagContract = tag(
+    "location",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Location,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_CALENDAR_LOCATION: RadrootsTagContract = tag(
     "location",
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::Location,
@@ -553,6 +654,13 @@ const TAG_IMAGE: RadrootsTagContract = tag(
     RadrootsTagValueType::Url,
     false,
 );
+const TAG_CALENDAR_IMAGE: RadrootsTagContract = tag(
+    "image",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Image,
+    RadrootsTagValueType::Url,
+    false,
+);
 const TAG_SERVICE_OUTPUT: RadrootsTagContract = tag(
     "output",
     RadrootsTagCardinality::RequiredOne,
@@ -579,6 +687,13 @@ const TAG_TOPIC_MANY: RadrootsTagContract = tag(
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::Topic,
     RadrootsTagValueType::Text,
+    true,
+);
+const TAG_CALENDAR_REFERENCE: RadrootsTagContract = tag(
+    "r",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Reference,
+    RadrootsTagValueType::Uri,
     true,
 );
 const TAG_GEOHASH_OPTIONAL: RadrootsTagContract = tag(
@@ -644,6 +759,39 @@ const WIKI_MERGE_REQUEST_TAGS: &[RadrootsTagContract] = &[
     TAG_P_REQUIRED,
     TAG_E_SOURCE_VERSION,
     TAG_E_BASE_VERSION,
+];
+const CALENDAR_DATE_EVENT_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_CALENDAR_TITLE,
+    TAG_CALENDAR_LEGACY_NAME,
+    TAG_CALENDAR_DATE_START,
+    TAG_CALENDAR_DATE_END,
+    TAG_CALENDAR_LOCATION,
+    TAG_GEOHASH_OPTIONAL,
+    TAG_SUMMARY,
+    TAG_CALENDAR_IMAGE,
+    TAG_CALENDAR_PARTICIPANT,
+    TAG_TOPIC_MANY,
+    TAG_CALENDAR_REFERENCE,
+    TAG_CALENDAR_INCLUSION_REQUEST,
+];
+const CALENDAR_TIME_EVENT_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_CALENDAR_TITLE,
+    TAG_CALENDAR_LEGACY_NAME,
+    TAG_CALENDAR_TIME_START,
+    TAG_CALENDAR_TIME_END,
+    TAG_CALENDAR_COVERED_UTC_DAY,
+    TAG_CALENDAR_START_TZID,
+    TAG_CALENDAR_END_TZID,
+    TAG_CALENDAR_LOCATION,
+    TAG_GEOHASH_OPTIONAL,
+    TAG_SUMMARY,
+    TAG_CALENDAR_IMAGE,
+    TAG_CALENDAR_PARTICIPANT,
+    TAG_TOPIC_MANY,
+    TAG_CALENDAR_REFERENCE,
+    TAG_CALENDAR_INCLUSION_REQUEST,
 ];
 const CALENDAR_EVENT_TAGS: &[RadrootsTagContract] =
     &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_PUBLISHED_AT];
@@ -2415,26 +2563,26 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         "radroots.calendar.date_event.v1",
         KIND_CALENDAR_DATE_EVENT,
         "Calendar Date Event",
-        "RadrootsCalendarDateEvent",
+        "RadrootsAdmittedCalendarDateEvent",
         RadrootsEventClass::Addressable,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
-        RadrootsContentSchema::JsonObject,
+        RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
-        CALENDAR_EVENT_TAGS,
+        CALENDAR_DATE_EVENT_TAGS,
         CALENDAR_REDUCERS
     ),
     event_contract!(
         "radroots.calendar.time_event.v1",
         KIND_CALENDAR_TIME_EVENT,
         "Calendar Time Event",
-        "RadrootsCalendarTimeEvent",
+        "RadrootsAdmittedCalendarTimeEvent",
         RadrootsEventClass::Addressable,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
-        RadrootsContentSchema::JsonObject,
+        RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
-        CALENDAR_EVENT_TAGS,
+        CALENDAR_TIME_EVENT_TAGS,
         CALENDAR_REDUCERS
     ),
     event_contract!(
@@ -3070,6 +3218,7 @@ pub fn validate_event_contract_parts(
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts(tags, contract)?;
     validate_discriminator_parts(content, contract)?;
+    validate_custom_calendar_contract_parts(tags, contract)?;
     validate_custom_knowledge_contract_parts(content, contract)?;
     Ok(())
 }
@@ -3243,6 +3392,7 @@ fn tag_value_is_valid(tag: &[String], value_type: RadrootsTagValueType) -> bool 
         RadrootsTagValueType::AddressableCoordinate => {
             RadrootsAddressableCoordinate::parse(value).is_ok()
         }
+        RadrootsTagValueType::CalendarDate => RadrootsCalendarDate::parse(value).is_ok(),
         RadrootsTagValueType::ContractId => all_event_contracts()
             .iter()
             .any(|contract| contract.id == value),
@@ -3252,12 +3402,15 @@ fn tag_value_is_valid(tag: &[String], value_type: RadrootsTagValueType) -> bool 
         }
         RadrootsTagValueType::EventPointer => event_pointer_tag_is_valid(tag),
         RadrootsTagValueType::Geohash => geohash_is_valid(value),
+        RadrootsTagValueType::IanaTimeZoneId => RadrootsIanaTimeZoneId::parse(value).is_ok(),
         RadrootsTagValueType::Kind => value.parse::<u32>().is_ok(),
         RadrootsTagValueType::PublicKey => RadrootsPublicKey::parse(value).is_ok(),
         RadrootsTagValueType::RelayUrl => relay_url_is_valid(value),
         RadrootsTagValueType::Text => visible_text_is_valid(value),
         RadrootsTagValueType::UnixTimestamp => value.parse::<u64>().is_ok(),
+        RadrootsTagValueType::Uri => RadrootsCalendarUri::parse(value).is_ok(),
         RadrootsTagValueType::Url => url_is_valid(value),
+        RadrootsTagValueType::UtcDayIndex => canonical_u64(value).is_some(),
         RadrootsTagValueType::Uuid => uuid_is_valid(value),
     }
 }
@@ -3285,8 +3438,10 @@ fn visible_text_is_valid(value: &str) -> bool {
 }
 
 fn url_is_valid(value: &str) -> bool {
-    (value.starts_with("http://") || value.starts_with("https://"))
-        && value.len() > "http://".len()
+    value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+        .is_some_and(|remainder| !remainder.is_empty())
         && value.trim() == value
         && !value.chars().any(char::is_control)
 }
@@ -3313,19 +3468,378 @@ fn uuid_is_valid(value: &str) -> bool {
 fn tag_value_type_expectation(value_type: RadrootsTagValueType) -> &'static str {
     match value_type {
         RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagValueType::CalendarDate => "calendar_date_yyyy_mm_dd",
         RadrootsTagValueType::ContractId => "contract_id",
         RadrootsTagValueType::DTag => "d_tag",
         RadrootsTagValueType::EventId => "event_id",
         RadrootsTagValueType::EventPointer => "event_pointer",
         RadrootsTagValueType::Geohash => "geohash",
+        RadrootsTagValueType::IanaTimeZoneId => "canonical_iana_time_zone_id",
         RadrootsTagValueType::Kind => "kind",
         RadrootsTagValueType::PublicKey => "public_key",
         RadrootsTagValueType::RelayUrl => "relay_url",
         RadrootsTagValueType::Sha256 => "sha256",
         RadrootsTagValueType::Text => "text",
         RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
+        RadrootsTagValueType::Uri => "absolute_uri",
         RadrootsTagValueType::Url => "url",
+        RadrootsTagValueType::UtcDayIndex => "canonical_decimal_utc_day_index",
         RadrootsTagValueType::Uuid => "uuid",
+    }
+}
+
+fn canonical_u64(value: &str) -> Option<u64> {
+    if value.is_empty()
+        || (value.len() > 1 && value.starts_with('0'))
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    value.parse().ok()
+}
+
+fn validate_custom_calendar_contract_parts(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    match contract.id {
+        "radroots.calendar.date_event.v1" => validate_calendar_date_contract(tags, contract),
+        "radroots.calendar.time_event.v1" => validate_calendar_time_contract(tags, contract),
+        _ => Ok(()),
+    }
+}
+
+fn validate_calendar_date_contract(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    validate_exact_calendar_tags(
+        tags,
+        contract,
+        &[
+            "d", "title", "start", "end", "location", "g", "summary", "image", "t", "r", "name",
+        ],
+    )?;
+    validate_calendar_participant_tags(tags, contract)?;
+    validate_calendar_inclusion_request_tags(tags, contract)?;
+    validate_canonical_calendar_common_tags(tags, contract)?;
+
+    if let Some(tag) = tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some("D"))
+    {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "D",
+            "forbidden_on_calendar_date_event",
+            tag.get(1).cloned(),
+        ));
+    }
+
+    let start = calendar_date_tag(tags, contract, "start")?;
+    if let Some(end) = optional_calendar_date_tag(tags, contract, "end")?
+        && end <= start
+    {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "end",
+            "gregorian_date_later_than_start",
+            Some(end.as_str().to_owned()),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_calendar_time_contract(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    validate_exact_calendar_tags(
+        tags,
+        contract,
+        &[
+            "d",
+            "title",
+            "start",
+            "end",
+            "start_tzid",
+            "end_tzid",
+            "location",
+            "g",
+            "summary",
+            "image",
+            "D",
+            "t",
+            "r",
+            "name",
+        ],
+    )?;
+    validate_calendar_participant_tags(tags, contract)?;
+    validate_calendar_inclusion_request_tags(tags, contract)?;
+    validate_canonical_calendar_common_tags(tags, contract)?;
+
+    let start = canonical_calendar_u64_tag(tags, contract, "start")?;
+    let end = optional_canonical_calendar_u64_tag(tags, contract, "end")?;
+    if end.is_some_and(|end| end <= start) {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "end",
+            "canonical_unix_seconds_later_than_start",
+            tag_value(tags, "end").map(ToOwned::to_owned),
+        ));
+    }
+
+    let expected_days = covered_utc_days(start, end).map_err(|_| {
+        calendar_tag_mismatch(
+            contract,
+            "D",
+            "complete_ascending_utc_day_coverage_with_maximum_366_days",
+            None,
+        )
+    })?;
+    let mut expected_days = expected_days.into_iter();
+    let mut actual_days = tags
+        .iter()
+        .filter(|tag| tag.first().map(String::as_str) == Some("D"));
+    loop {
+        match (expected_days.next(), actual_days.next()) {
+            (Some(expected), Some(actual))
+                if actual.get(1).and_then(|value| canonical_u64(value)) == Some(expected) => {}
+            (None, None) => break,
+            (_, actual) => {
+                return Err(calendar_tag_mismatch(
+                    contract,
+                    "D",
+                    "complete_ascending_utc_day_coverage",
+                    actual.and_then(|tag| tag.get(1)).cloned(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_exact_calendar_tags(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+    names: &[&'static str],
+) -> Result<(), RadrootsContractValidationError> {
+    for name in names {
+        for tag in tags
+            .iter()
+            .filter(|tag| tag.first().map(String::as_str) == Some(*name))
+        {
+            if tag.len() != 2 {
+                return Err(calendar_tag_mismatch(
+                    contract,
+                    name,
+                    "exact_two_element_tag",
+                    tag.get(1).cloned(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_calendar_participant_tags(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    if tag_count(tags, "p") > RADROOTS_CALENDAR_MAX_PARTICIPANTS {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "p",
+            "bounded_participant_count",
+            None,
+        ));
+    }
+    for tag in tags
+        .iter()
+        .filter(|tag| tag.first().map(String::as_str) == Some("p"))
+    {
+        let pubkey_is_canonical = tag.get(1).is_some_and(|value| {
+            RadrootsPublicKey::parse(value).is_ok_and(|pubkey| pubkey.as_str() == value.as_str())
+        });
+        let relay_is_valid = tag
+            .get(2)
+            .map(|relay| relay.is_empty() || relay_url_is_valid(relay))
+            .unwrap_or(true);
+        let role_is_valid = tag
+            .get(3)
+            .map(|role| canonical_calendar_tag_text_is_valid(role))
+            .unwrap_or(true);
+        let placeholder_is_canonical = !(tag.len() == 3 && tag[2].is_empty());
+        if !(2..=4).contains(&tag.len())
+            || !pubkey_is_canonical
+            || !relay_is_valid
+            || !role_is_valid
+            || !placeholder_is_canonical
+        {
+            return Err(calendar_tag_mismatch(
+                contract,
+                "p",
+                "participant_pubkey_with_optional_relay_and_role",
+                tag.get(1).cloned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_calendar_inclusion_request_tags(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    for tag in tags
+        .iter()
+        .filter(|tag| tag.first().map(String::as_str) == Some("a"))
+    {
+        let coordinate_is_calendar = tag
+            .get(1)
+            .is_some_and(|value| canonical_calendar_coordinate_is_valid(value));
+        let relay_is_valid = tag
+            .get(2)
+            .is_none_or(|relay| !relay.is_empty() && relay_url_is_valid(relay));
+        if !(2..=3).contains(&tag.len()) || !coordinate_is_calendar || !relay_is_valid {
+            return Err(calendar_tag_mismatch(
+                contract,
+                "a",
+                "kind_31924_coordinate_with_optional_relay",
+                tag.get(1).cloned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn canonical_calendar_coordinate_is_valid(value: &str) -> bool {
+    let Some((kind, remainder)) = value.split_once(':') else {
+        return false;
+    };
+    let Some((pubkey, d_tag)) = remainder.split_once(':') else {
+        return false;
+    };
+    let Ok(parts) = crate::ids::RadrootsAddressableCoordinateParts::parse(value) else {
+        return false;
+    };
+    kind == "31924" && pubkey == parts.pubkey.as_str() && d_tag == parts.d_tag.as_str()
+}
+
+fn validate_canonical_calendar_common_tags(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    for name in ["title", "location", "summary", "t", "name"] {
+        for tag in tags
+            .iter()
+            .filter(|tag| tag.first().map(String::as_str) == Some(name))
+        {
+            if !tag
+                .get(1)
+                .is_some_and(|value| canonical_calendar_tag_text_is_valid(value))
+            {
+                return Err(calendar_tag_mismatch(
+                    contract,
+                    name,
+                    "canonical_visible_calendar_text",
+                    tag.get(1).cloned(),
+                ));
+            }
+        }
+    }
+    if let Some(geohash) = tag_value(tags, "g")
+        && !canonical_calendar_geohash_is_valid(geohash)
+    {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "g",
+            "canonical_lowercase_geohash",
+            Some(geohash.to_owned()),
+        ));
+    }
+    if let Some(image) = tag_value(tags, "image")
+        && RadrootsBlossomBlobUrl::parse(image).is_err()
+    {
+        return Err(calendar_tag_mismatch(
+            contract,
+            "image",
+            "structural_blossom_hash_path_url",
+            Some(image.to_owned()),
+        ));
+    }
+    Ok(())
+}
+
+fn calendar_date_tag(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+    name: &'static str,
+) -> Result<RadrootsCalendarDate, RadrootsContractValidationError> {
+    let value = tag_value(tags, name).ok_or(RadrootsContractValidationError::MissingTag {
+        contract_id: contract.id,
+        name,
+    })?;
+    RadrootsCalendarDate::parse(value).map_err(|_| {
+        calendar_tag_mismatch(
+            contract,
+            name,
+            "calendar_date_yyyy_mm_dd",
+            Some(value.to_owned()),
+        )
+    })
+}
+
+fn optional_calendar_date_tag(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+    name: &'static str,
+) -> Result<Option<RadrootsCalendarDate>, RadrootsContractValidationError> {
+    tag_value(tags, name)
+        .map(|_| calendar_date_tag(tags, contract, name))
+        .transpose()
+}
+
+fn canonical_calendar_u64_tag(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+    name: &'static str,
+) -> Result<u64, RadrootsContractValidationError> {
+    let value = tag_value(tags, name).ok_or(RadrootsContractValidationError::MissingTag {
+        contract_id: contract.id,
+        name,
+    })?;
+    canonical_u64(value).ok_or_else(|| {
+        calendar_tag_mismatch(
+            contract,
+            name,
+            "canonical_decimal_u64",
+            Some(value.to_owned()),
+        )
+    })
+}
+
+fn optional_canonical_calendar_u64_tag(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+    name: &'static str,
+) -> Result<Option<u64>, RadrootsContractValidationError> {
+    tag_value(tags, name)
+        .map(|_| canonical_calendar_u64_tag(tags, contract, name))
+        .transpose()
+}
+
+fn calendar_tag_mismatch(
+    contract: &RadrootsEventContract,
+    name: &'static str,
+    expected: &'static str,
+    actual: Option<String>,
+) -> RadrootsContractValidationError {
+    RadrootsContractValidationError::TagValueMismatch {
+        contract_id: contract.id,
+        name,
+        expected: expected.to_owned(),
+        actual,
     }
 }
 
@@ -3721,6 +4235,161 @@ mod tests {
                 "{}",
                 contract.id
             );
+        }
+    }
+
+    #[test]
+    fn calendar_contracts_expose_current_nip52_types_content_and_tags() {
+        let date = event_contract("radroots.calendar.date_event.v1").expect("calendar date");
+        assert_eq!(date.payload_type, "RadrootsAdmittedCalendarDateEvent");
+        assert_eq!(date.content_schema, RadrootsContentSchema::PlainText);
+        assert!(date.tags.iter().any(|tag| {
+            tag.name == "title" && tag.cardinality == RadrootsTagCardinality::RequiredOne
+        }));
+        assert!(date.tags.iter().any(|tag| {
+            tag.name == "name" && tag.cardinality == RadrootsTagCardinality::OptionalOne
+        }));
+        assert!(
+            date.tags
+                .iter()
+                .any(|tag| tag.name == "start"
+                    && tag.value_type == RadrootsTagValueType::CalendarDate)
+        );
+        assert!(!date.tags.iter().any(|tag| tag.name == "D"));
+
+        let time = event_contract("radroots.calendar.time_event.v1").expect("calendar time");
+        assert_eq!(time.payload_type, "RadrootsAdmittedCalendarTimeEvent");
+        assert_eq!(time.content_schema, RadrootsContentSchema::PlainText);
+        assert!(time.tags.iter().any(|tag| {
+            tag.name == "D"
+                && tag.cardinality == RadrootsTagCardinality::RequiredMany
+                && tag.value_type == RadrootsTagValueType::UtcDayIndex
+        }));
+        assert!(time.tags.iter().any(|tag| {
+            tag.name == "name" && tag.cardinality == RadrootsTagCardinality::OptionalOne
+        }));
+    }
+
+    #[test]
+    fn calendar_date_contract_validates_gregorian_exclusive_ranges_without_day_tags() {
+        let valid = vec![
+            owned_tag(&["d", "market-day"]),
+            owned_tag(&["title", "Market day"]),
+            owned_tag(&["start", "2026-06-20"]),
+            owned_tag(&["end", "2026-06-21"]),
+            owned_tag(&["location", "Moss Street Market"]),
+            owned_tag(&["location", "Victoria, BC"]),
+        ];
+        assert_eq!(
+            validate_event_contract_parts(
+                KIND_CALENDAR_DATE_EVENT,
+                &valid,
+                "Farm stand pickup window.",
+                "radroots.calendar.date_event.v1",
+            ),
+            Ok(())
+        );
+
+        let duplicate_legacy_name = vec![
+            owned_tag(&["d", "market-day"]),
+            owned_tag(&["title", "Market day"]),
+            owned_tag(&["name", "Market day"]),
+            owned_tag(&["name", "Deprecated duplicate"]),
+            owned_tag(&["start", "2026-06-20"]),
+        ];
+        assert!(matches!(
+            validate_event_contract_parts(
+                KIND_CALENDAR_DATE_EVENT,
+                &duplicate_legacy_name,
+                "description",
+                "radroots.calendar.date_event.v1",
+            ),
+            Err(RadrootsContractValidationError::TagCardinalityMismatch { name: "name", .. })
+        ));
+
+        for invalid in [
+            vec![
+                owned_tag(&["d", "market-day"]),
+                owned_tag(&["title", "Market day"]),
+                owned_tag(&["start", "2026-02-29"]),
+            ],
+            vec![
+                owned_tag(&["d", "market-day"]),
+                owned_tag(&["title", "Market day"]),
+                owned_tag(&["start", "2026-06-20"]),
+                owned_tag(&["end", "2026-06-20"]),
+            ],
+            vec![
+                owned_tag(&["d", "market-day"]),
+                owned_tag(&["title", "Market day"]),
+                owned_tag(&["start", "2026-06-20"]),
+                owned_tag(&["D", "20624"]),
+            ],
+        ] {
+            assert!(matches!(
+                validate_event_contract_parts(
+                    KIND_CALENDAR_DATE_EVENT,
+                    &invalid,
+                    "description",
+                    "radroots.calendar.date_event.v1",
+                ),
+                Err(RadrootsContractValidationError::TagValueMismatch { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn calendar_time_contract_requires_exact_derived_bounded_day_coverage() {
+        let valid = vec![
+            owned_tag(&["d", "wash-pack"]),
+            owned_tag(&["title", "Wash and pack"]),
+            owned_tag(&["start", "86399"]),
+            owned_tag(&["end", "86401"]),
+            owned_tag(&["D", "0"]),
+            owned_tag(&["D", "1"]),
+        ];
+        assert_eq!(
+            validate_event_contract_parts(
+                KIND_CALENDAR_TIME_EVENT,
+                &valid,
+                "Pack CSA shares.",
+                "radroots.calendar.time_event.v1",
+            ),
+            Ok(())
+        );
+
+        for invalid in [
+            vec![
+                owned_tag(&["d", "wash-pack"]),
+                owned_tag(&["title", "Wash and pack"]),
+                owned_tag(&["start", "086399"]),
+                owned_tag(&["D", "0"]),
+            ],
+            vec![
+                owned_tag(&["d", "wash-pack"]),
+                owned_tag(&["title", "Wash and pack"]),
+                owned_tag(&["start", "86399"]),
+                owned_tag(&["end", "86401"]),
+                owned_tag(&["D", "1"]),
+                owned_tag(&["D", "0"]),
+            ],
+            vec![
+                owned_tag(&["d", "wash-pack"]),
+                owned_tag(&["title", "Wash and pack"]),
+                owned_tag(&["start", "0"]),
+                owned_tag(&["end", "31708800"]),
+                owned_tag(&["D", "0"]),
+            ],
+        ] {
+            assert!(matches!(
+                validate_event_contract_parts(
+                    KIND_CALENDAR_TIME_EVENT,
+                    &invalid,
+                    "description",
+                    "radroots.calendar.time_event.v1",
+                ),
+                Err(RadrootsContractValidationError::TagValueMismatch { .. })
+            ));
         }
     }
 

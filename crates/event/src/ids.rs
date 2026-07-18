@@ -7,6 +7,7 @@ use alloc::{string::String, string::ToString, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::{borrow::Borrow, fmt, ops::Deref, str::FromStr};
+use url_nostd::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsIdParseError {
@@ -332,18 +333,36 @@ fn validate_relay_url(value: &str) -> Result<String, RadrootsIdParseError> {
     if value.is_empty() {
         return Err(RadrootsIdParseError::Empty);
     }
-    if value.trim() != value || value.chars().any(char::is_control) {
+    if value
+        .chars()
+        .any(|character| character.is_control() || character.is_whitespace())
+    {
         return Err(RadrootsIdParseError::InvalidCharacter);
     }
     if !(value.starts_with("ws://") || value.starts_with("wss://")) {
         return Err(RadrootsIdParseError::InvalidFormat);
     }
-    if value.len() <= "ws://".len() {
-        return Err(RadrootsIdParseError::InvalidLength {
-            expected: "ws://".len() + 1,
-            actual: value.len(),
-        });
+
+    let parsed = Url::parse(value).map_err(|_| RadrootsIdParseError::InvalidFormat)?;
+    if !matches!(parsed.scheme(), "ws" | "wss")
+        || parsed.host_str().is_none_or(str::is_empty)
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.fragment().is_some()
+        || parsed.port() == Some(0)
+    {
+        return Err(RadrootsIdParseError::InvalidFormat);
     }
+
+    // `Url::username` cannot distinguish absent userinfo from an empty userinfo field.
+    let authority = value
+        .split_once("://")
+        .map(|(_, remainder)| remainder.split(['/', '?', '#']).next().unwrap_or(remainder))
+        .ok_or(RadrootsIdParseError::InvalidFormat)?;
+    if authority.contains('@') {
+        return Err(RadrootsIdParseError::InvalidFormat);
+    }
+
     Ok(value.to_string())
 }
 
@@ -607,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn relay_urls_require_websocket_scheme_and_visible_boundaries() {
+    fn relay_urls_require_valid_websocket_urls() {
         assert_eq!(
             RadrootsRelayUrl::parse("ws://relay.example.com")
                 .expect("relay url")
@@ -630,11 +649,16 @@ mod tests {
             RadrootsIdParseError::InvalidFormat
         );
         assert_eq!(
+            RadrootsRelayUrl::parse("WSS://relay.example.com").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
             RadrootsRelayUrl::parse("ws://").unwrap_err(),
-            RadrootsIdParseError::InvalidLength {
-                expected: 6,
-                actual: 5
-            }
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
         );
         assert_eq!(
             RadrootsRelayUrl::parse(" wss://relay.example.com").unwrap_err(),
@@ -643,6 +667,28 @@ mod tests {
         assert_eq!(
             RadrootsRelayUrl::parse("wss://relay.example.com\nmiddle").unwrap_err(),
             RadrootsIdParseError::InvalidCharacter
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://user@relay.example.com").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://user:secret@relay.example.com").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://relay.example.com#read").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://relay.example.com:0").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsRelayUrl::parse("wss://relay.example.com/nostr/v1?region=ca-bc")
+                .expect("relay URL with path and query")
+                .as_str(),
+            "wss://relay.example.com/nostr/v1?region=ca-bc"
         );
     }
 

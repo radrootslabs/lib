@@ -1,0 +1,256 @@
+{
+  "suite": "calendar_radroots_profile",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "profile_date_parse_minimum_gregorian_001",
+      "kind": "calendar.profile.date.parse.valid",
+      "input": { "value": "0001-01-01" },
+      "expected": { "value": "0001-01-01" }
+    },
+    {
+      "id": "profile_date_parse_leap_day_001",
+      "kind": "calendar.profile.date.parse.valid",
+      "input": { "value": "2000-02-29" },
+      "expected": { "value": "2000-02-29" }
+    },
+    {
+      "id": "profile_date_parse_year_zero_001",
+      "kind": "calendar.profile.date.parse.invalid",
+      "input": { "value": "0000-01-01" },
+      "expected": { "error": "invalid_date" }
+    },
+    {
+      "id": "profile_date_parse_noncanonical_width_001",
+      "kind": "calendar.profile.date.parse.invalid",
+      "input": { "value": "2026-6-20" },
+      "expected": { "error": "invalid_date" }
+    },
+    {
+      "id": "profile_authored_date_complete_001",
+      "kind": "calendar.profile.authored.date.valid",
+      "input": {
+        "d": "fernwood-csa-pickup",
+        "title": "CSA pickup",
+        "start": "2026-06-20",
+        "end": "2026-06-21",
+        "description": "Bring clean bins to the farm stand.",
+        "locations": ["Farm stand", "Moss Street Market"],
+        "geohash": "c23nb62w20st",
+        "summary": "Weekly pickup",
+        "image": {
+          "bytes_utf8": "victoria-calendar",
+          "descriptor": {
+            "url": "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp",
+            "sha256": "aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84",
+            "size": 17,
+            "type": "image/webp",
+            "uploaded": 1784347200
+          }
+        },
+        "participants": [
+          {"pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "relay": "wss://relay.example.test", "role": "host"}
+        ],
+        "categories": ["csa", "vegetables"],
+        "references": ["https://example.test/pickup-details"],
+        "calendar_requests": [
+          {"calendar": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "relay": "wss://relay.example.test"}
+        ]
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31922,
+          "content": "Bring clean bins to the farm stand.",
+          "tags": [
+            ["d", "fernwood-csa-pickup"],
+            ["title", "CSA pickup"],
+            ["start", "2026-06-20"],
+            ["end", "2026-06-21"],
+            ["location", "Farm stand"],
+            ["location", "Moss Street Market"],
+            ["g", "c23nb62w20st"],
+            ["summary", "Weekly pickup"],
+            ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"],
+            ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://relay.example.test", "host"],
+            ["t", "csa"],
+            ["t", "vegetables"],
+            ["r", "https://example.test/pickup-details"],
+            ["a", "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "wss://relay.example.test"]
+          ]
+        },
+        "media_verification": "byte_verified",
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_date_equal_end_001",
+      "kind": "calendar.profile.authored.date.invalid",
+      "input": {"d": "equal-date", "title": "Equal date", "start": "2026-06-20", "end": "2026-06-20"},
+      "expected": { "error": "invalid_range" }
+    },
+    {
+      "id": "profile_authored_date_noncanonical_title_001",
+      "kind": "calendar.profile.authored.date.invalid",
+      "input": {"d": "bad-title", "title": " Bad title ", "start": "2026-06-20"},
+      "expected": { "error": "invalid_title" }
+    },
+    {
+      "id": "profile_authored_date_uppercase_geohash_001",
+      "kind": "calendar.profile.authored.date.invalid",
+      "input": {"d": "bad-geohash", "title": "Bad geohash", "start": "2026-06-20", "geohash": "C23NB62W20ST"},
+      "expected": { "error": "invalid_geohash" }
+    },
+    {
+      "id": "profile_authored_time_canonical_001",
+      "kind": "calendar.profile.authored.time.valid",
+      "input": {
+        "d": "wash-pack-shift",
+        "title": "Wash pack shift",
+        "start": 86399,
+        "end": 172801,
+        "start_tzid": "America/Vancouver",
+        "locations": ["Pack shed"],
+        "geohash": "c23nb62w20st",
+        "categories": ["farm-work"]
+      },
+      "expected": {
+        "effective_end_tzid": "America/Vancouver",
+        "wire_parts": {
+          "kind": 31923,
+          "content": "",
+          "tags": [
+            ["d", "wash-pack-shift"],
+            ["title", "Wash pack shift"],
+            ["start", "86399"],
+            ["end", "172801"],
+            ["D", "0"],
+            ["D", "1"],
+            ["D", "2"],
+            ["start_tzid", "America/Vancouver"],
+            ["location", "Pack shed"],
+            ["g", "c23nb62w20st"],
+            ["t", "farm-work"]
+          ]
+        }
+      }
+    },
+    {
+      "id": "profile_authored_time_maximum_coverage_001",
+      "kind": "calendar.profile.authored.time.coverage.valid",
+      "input": {"d": "annual-farm-plan", "title": "Annual farm plan", "start": 0, "end": 31622400},
+      "expected": {"count": 366, "first": "0", "last": "365"}
+    },
+    {
+      "id": "profile_authored_time_over_coverage_limit_001",
+      "kind": "calendar.profile.authored.time.invalid",
+      "input": {"d": "overlong-plan", "title": "Overlong plan", "start": 0, "end": 31708800},
+      "expected": {"error": "covered_day_limit_exceeded", "max": 366, "actual": 367}
+    },
+    {
+      "id": "profile_authored_time_invalid_iana_timezone_001",
+      "kind": "calendar.profile.authored.time.invalid",
+      "input": {"d": "bad-zone", "title": "Bad zone", "start": 0, "start_tzid": "america/vancouver"},
+      "expected": {"error": "invalid_time_zone"}
+    },
+    {
+      "id": "profile_admit_date_canonical_001",
+      "kind": "calendar.profile.admit.date.valid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"]]
+      },
+      "expected": {"d": "farm-tour", "blossom_image": true}
+    },
+    {
+      "id": "profile_admit_date_forbidden_day_extension_001",
+      "kind": "calendar.profile.admit.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["D", "20620"]]
+      },
+      "expected": {"error": "forbidden_date_day_index"}
+    },
+    {
+      "id": "profile_admit_date_noncanonical_metadata_001",
+      "kind": "calendar.profile.admit.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "farm-tour"], ["title", " Urban farm tour "], ["start", "2026-07-18"]]
+      },
+      "expected": {"error": "non_canonical_field"}
+    },
+    {
+      "id": "profile_admit_date_uppercase_relay_hint_001",
+      "kind": "calendar.profile.admit.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "WSS://relay.example.test"]]
+      },
+      "expected": {"error": "non_canonical_field"}
+    },
+    {
+      "id": "profile_admit_date_non_blossom_image_001",
+      "kind": "calendar.profile.admit.date.invalid",
+      "input": {
+        "kind": 31922,
+        "content": "",
+        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["image", "https://ordinary.example.test/farm-tour.jpg"]]
+      },
+      "expected": {"error": "non_blossom_image"}
+    },
+    {
+      "id": "profile_admit_time_canonical_001",
+      "kind": "calendar.profile.admit.time.valid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "harvest-window"], ["title", "Harvest window"], ["start", "86399"], ["end", "172801"], ["D", "0"], ["D", "1"], ["D", "2"]]
+      },
+      "expected": {"d": "harvest-window", "covered_days": [0, 1, 2], "blossom_image": false}
+    },
+    {
+      "id": "profile_admit_time_incomplete_coverage_001",
+      "kind": "calendar.profile.admit.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "harvest-window"], ["title", "Harvest window"], ["start", "86399"], ["end", "172801"], ["D", "0"], ["D", "2"]]
+      },
+      "expected": {"error": "incomplete_day_coverage"}
+    },
+    {
+      "id": "profile_admit_time_noncanonical_timestamp_001",
+      "kind": "calendar.profile.admit.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "harvest-window"], ["title", "Harvest window"], ["start", "086399"], ["end", "172801"], ["D", "0"], ["D", "1"], ["D", "2"]]
+      },
+      "expected": {"error": "non_canonical_field"}
+    },
+    {
+      "id": "profile_admit_time_noncanonical_day_001",
+      "kind": "calendar.profile.admit.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "harvest-window"], ["title", "Harvest window"], ["start", "86399"], ["end", "172801"], ["D", "00"], ["D", "1"], ["D", "2"]]
+      },
+      "expected": {"error": "incomplete_day_coverage"}
+    },
+    {
+      "id": "profile_admit_time_over_coverage_limit_001",
+      "kind": "calendar.profile.admit.time.invalid",
+      "input": {
+        "kind": 31923,
+        "content": "",
+        "tags": [["d", "long-range"], ["title", "Long range"], ["start", "0"], ["end", "31708800"], ["D", "0"]]
+      },
+      "expected": {"error": "covered_day_limit_exceeded", "max": 366, "actual": 367}
+    }
+  ]
+}
