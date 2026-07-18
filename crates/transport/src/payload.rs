@@ -28,8 +28,12 @@ impl RadrootsTransportPayload {
         event_id: impl AsRef<str>,
         raw_json: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let event_id = validate_hex_id(event_id.as_ref())?;
-        let raw_json = validate_raw_json(raw_json.as_ref())?;
+        Self::signed_event_json(event_id.as_ref(), raw_json.as_ref())
+    }
+
+    fn signed_event_json(event_id: &str, raw_json: &str) -> Result<Self, RadrootsTransportError> {
+        let event_id = validate_hex_id(event_id)?;
+        let raw_json = validate_raw_json(raw_json)?;
         let digest = sha256_hex(raw_json.as_bytes());
         Ok(Self::SignedEventJson {
             event_id,
@@ -43,8 +47,16 @@ impl RadrootsTransportPayload {
         raw_json: impl AsRef<str>,
         digest: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let payload = Self::unchecked_signed_event_json(event_id, raw_json)?;
-        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Self::signed_event_json_with_digest(event_id.as_ref(), raw_json.as_ref(), digest.as_ref())
+    }
+
+    fn signed_event_json_with_digest(
+        event_id: &str,
+        raw_json: &str,
+        digest: &str,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::signed_event_json(event_id, raw_json)?;
+        validate_supplied_digest(payload.digest(), digest)?;
         Ok(payload)
     }
 
@@ -52,8 +64,15 @@ impl RadrootsTransportPayload {
         message_id: impl AsRef<str>,
         bytes: impl AsRef<[u8]>,
     ) -> Result<Self, RadrootsTransportError> {
-        let message_id = validate_token_id(message_id.as_ref())?;
-        let bytes = validate_bytes(bytes.as_ref())?;
+        Self::validated_mesh_frame_cbor(message_id.as_ref(), bytes.as_ref())
+    }
+
+    fn validated_mesh_frame_cbor(
+        message_id: &str,
+        bytes: &[u8],
+    ) -> Result<Self, RadrootsTransportError> {
+        let message_id = validate_token_id(message_id)?;
+        let bytes = validate_bytes(bytes)?;
         let digest = sha256_hex(bytes.as_slice());
         Ok(Self::MeshFrameCbor {
             message_id,
@@ -67,8 +86,20 @@ impl RadrootsTransportPayload {
         bytes: impl AsRef<[u8]>,
         digest: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let payload = Self::mesh_frame_cbor(message_id, bytes)?;
-        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Self::validated_mesh_frame_cbor_with_digest(
+            message_id.as_ref(),
+            bytes.as_ref(),
+            digest.as_ref(),
+        )
+    }
+
+    fn validated_mesh_frame_cbor_with_digest(
+        message_id: &str,
+        bytes: &[u8],
+        digest: &str,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::validated_mesh_frame_cbor(message_id, bytes)?;
+        validate_supplied_digest(payload.digest(), digest)?;
         Ok(payload)
     }
 
@@ -76,8 +107,12 @@ impl RadrootsTransportPayload {
         label: impl AsRef<str>,
         bytes: impl AsRef<[u8]>,
     ) -> Result<Self, RadrootsTransportError> {
-        let label = validate_label(label.as_ref())?;
-        let bytes = validate_bytes(bytes.as_ref())?;
+        Self::validated_opaque_bytes(label.as_ref(), bytes.as_ref())
+    }
+
+    fn validated_opaque_bytes(label: &str, bytes: &[u8]) -> Result<Self, RadrootsTransportError> {
+        let label = validate_label(label)?;
+        let bytes = validate_bytes(bytes)?;
         let digest = sha256_hex(bytes.as_slice());
         Ok(Self::OpaqueBytes {
             label,
@@ -91,8 +126,16 @@ impl RadrootsTransportPayload {
         bytes: impl AsRef<[u8]>,
         digest: impl AsRef<str>,
     ) -> Result<Self, RadrootsTransportError> {
-        let payload = Self::opaque_bytes(label, bytes)?;
-        validate_supplied_digest(payload.digest(), digest.as_ref())?;
+        Self::validated_opaque_bytes_with_digest(label.as_ref(), bytes.as_ref(), digest.as_ref())
+    }
+
+    fn validated_opaque_bytes_with_digest(
+        label: &str,
+        bytes: &[u8],
+        digest: &str,
+    ) -> Result<Self, RadrootsTransportError> {
+        let payload = Self::validated_opaque_bytes(label, bytes)?;
+        validate_supplied_digest(payload.digest(), digest)?;
         Ok(payload)
     }
 

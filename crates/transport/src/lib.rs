@@ -1,5 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 extern crate alloc;
 
@@ -46,3 +47,14 @@ pub use transport::{
     RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
     RadrootsTransportFuture,
 };
+
+#[cfg(test)]
+extern crate self as radroots_transport;
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "../tests/transport.rs"]
+mod tests;

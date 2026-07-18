@@ -187,10 +187,7 @@ impl RadrootsTransportSatisfactionPolicy {
         &self,
         total_targets: usize,
     ) -> Result<usize, RadrootsTransportError> {
-        if matches!(self, Self::NoWait) {
-            return Ok(0);
-        }
-        if total_targets == 0 {
+        if total_targets == 0 && !matches!(self, Self::NoWait) {
             return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
         }
         match self {

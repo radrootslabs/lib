@@ -212,10 +212,7 @@ impl RadrootsTransportTarget {
             RadrootsTransportKind::Nostr => RadrootsTransportTargetUri::parse_nostr_relay(raw_uri)?,
             _ => RadrootsTransportTargetUri::parse(raw_uri)?,
         };
-        if kind == RadrootsTransportKind::Reticulum
-            && (raw_uri != RADROOTS_RETICULUM_ENDPOINT_URI
-                || uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI)
-        {
+        if kind == RadrootsTransportKind::Reticulum && raw_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         let scope = scope.or_else(|| default_scope_for_kind(&kind));
@@ -381,7 +378,7 @@ fn canonicalize_nostr_relay_authority(
             .next()
             .map(parse_nostr_relay_port_with_prefix)
             .transpose()?;
-        if host.is_empty() || !is_valid_nostr_relay_host(host) {
+        if !is_valid_nostr_relay_host(host) {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         (host.to_ascii_lowercase(), port)
