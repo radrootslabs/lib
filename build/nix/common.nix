@@ -18,12 +18,19 @@ let
       lib.fileset.unions [
         ../../Cargo.toml
         ../../Cargo.lock
+        ../../CHANGELOG.md
         ../../README
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
         ../../tools
       ]
+    );
+  };
+  sqlitePatchSource = lib.fileset.toSource {
+    root = root;
+    fileset = lib.fileset.intersection (lib.fileset.fromSource repoSource) (
+      lib.fileset.unions [ ../../crates/libsqlite3_sys_3_53_3 ]
     );
   };
   baseEnv = {
@@ -123,7 +130,18 @@ let
       PKG_CONFIG_PATH
       ;
   };
-  cargoArtifacts = craneLib.buildDepsOnly commonCraneArgs;
+  cargoArtifacts = craneLib.buildDepsOnly (
+    commonCraneArgs
+    // {
+      dummySrc = craneLib.mkDummySrc {
+        src = cargoSource;
+        extraDummyScript = ''
+          rm -rf "$out/crates/libsqlite3_sys_3_53_3"
+          cp -R ${sqlitePatchSource}/crates/libsqlite3_sys_3_53_3 "$out/crates/"
+        '';
+      };
+    }
+  );
   xtaskPackage = craneLib.buildPackage (
     commonCraneArgs
     // {

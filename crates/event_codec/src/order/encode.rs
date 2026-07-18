@@ -366,6 +366,7 @@ mod tests {
         assert_empty_required(invalid_listing_event, "listing_event.id");
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_empty_required(error: EventEncodeError, field: &'static str) {
         match error {
             EventEncodeError::EmptyRequiredField(found) => assert_eq!(found, field),
@@ -373,6 +374,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_invalid_field(error: EventEncodeError, field: &'static str) {
         match error {
             EventEncodeError::InvalidField(found) => assert_eq!(found, field),

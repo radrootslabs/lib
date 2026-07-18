@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_event::farm_crdt::KIND_FARM_CRDT_CHANGE;
@@ -12,8 +12,7 @@ use radroots_event::{
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{
-    address_string, push_optional_tag, push_tag, validate_non_empty_base64url,
-    validate_non_empty_field,
+    push_optional_tag, push_tag, validate_non_empty_base64url, validate_non_empty_field,
 };
 #[cfg(feature = "serde_json")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
@@ -32,12 +31,10 @@ pub fn farm_crdt_change_build_tags_with_author(
     if let Some(author_pubkey) = author_pubkey {
         validate_non_empty_field(author_pubkey, "author_pubkey")?;
     }
-    let workspace = address_string(
-        KIND_FARM_WORKSPACE_MANIFEST,
-        &change.workspace.pubkey,
-        &change.workspace.d_tag,
-        "workspace",
-    )?;
+    let workspace = format!(
+        "{KIND_FARM_WORKSPACE_MANIFEST}:{}:{}",
+        change.workspace.pubkey, change.workspace.d_tag
+    );
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_H, change.farm_group_id.as_str());
     push_tag(&mut tags, TAG_D, change.document_id.as_str());

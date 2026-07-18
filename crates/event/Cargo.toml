@@ -53,3 +53,6 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

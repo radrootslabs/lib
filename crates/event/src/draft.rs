@@ -221,13 +221,13 @@ impl RadrootsEventDraft {
             },
         )?;
         let typed_tags = RadrootsEventTags::new(tags)?;
-        let expected_event_id = compute_nip01_event_id(
+        let expected_event_id = compute_nip01_event_id_for_valid_pubkey(
             expected_pubkey.as_str(),
             created_at,
             kind,
             &typed_tags.to_vec(),
             &content,
-        )?;
+        );
         Ok(Self {
             contract_id: contract.id.to_owned(),
             contract_registry_version: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
@@ -241,13 +241,13 @@ impl RadrootsEventDraft {
     }
 
     pub fn nip01_preimage(&self) -> Result<String, RadrootsDraftError> {
-        nip01_event_id_preimage(
+        Ok(nip01_event_id_preimage_for_valid_pubkey(
             self.expected_pubkey.as_str(),
             self.created_at.as_u64(),
             self.kind.as_u32(),
             &self.tags.to_vec(),
             self.content.as_str(),
-        )
+        ))
     }
 
     #[inline]
@@ -633,13 +633,13 @@ pub fn validate_signed_nostr_event_matches_draft(
             actual_event_id: signed_event.id_str().to_owned(),
         });
     }
-    let computed_event_id = compute_nip01_event_id(
+    let computed_event_id = compute_nip01_event_id_for_valid_pubkey(
         signed_event.pubkey_str(),
         draft.created_at_u64(),
         signed_event.kind(),
         &signed_tags,
         signed_event.content(),
-    )?
+    )
     .into_string();
     if computed_event_id.as_str() != signed_event.id_str() {
         return Err(RadrootsDraftError::SignedEventComputedIdMismatch {
@@ -683,9 +683,9 @@ pub fn compute_nip01_event_id(
     content: &str,
 ) -> Result<RadrootsEventId, RadrootsDraftError> {
     RadrootsPublicKey::parse(pubkey)?;
-    Ok(compute_canonical_nip01_event_id(
+    Ok(compute_nip01_event_id_for_valid_pubkey(
         pubkey, created_at, kind, tags, content,
-    )?)
+    ))
 }
 
 pub fn nip01_event_id_preimage(
@@ -695,9 +695,34 @@ pub fn nip01_event_id_preimage(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String, RadrootsDraftError> {
-    Ok(canonical_nip01_event_id_preimage(
+    RadrootsPublicKey::parse(pubkey)?;
+    Ok(nip01_event_id_preimage_for_valid_pubkey(
         pubkey, created_at, kind, tags, content,
-    )?)
+    ))
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn compute_nip01_event_id_for_valid_pubkey(
+    pubkey: &str,
+    created_at: u64,
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+) -> RadrootsEventId {
+    compute_canonical_nip01_event_id(pubkey, created_at, kind, tags, content)
+        .expect("a validated public key always produces a canonical event id")
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn nip01_event_id_preimage_for_valid_pubkey(
+    pubkey: &str,
+    created_at: u64,
+    kind: u32,
+    tags: &[Vec<String>],
+    content: &str,
+) -> String {
+    canonical_nip01_event_id_preimage(pubkey, created_at, kind, tags, content)
+        .expect("a validated public key always produces a canonical preimage")
 }
 
 #[cfg(test)]
@@ -1037,7 +1062,16 @@ mod tests {
         let decoded: RadrootsSignedEvent = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(decoded, signed);
+        assert_eq!(decoded.envelope().id_str(), decoded.id_str());
+        assert_eq!(decoded.wire().id, decoded.id_str());
+        assert_eq!(decoded.id().as_str(), decoded.id_str());
+        assert_eq!(decoded.pubkey().as_str(), decoded.pubkey_str());
         assert_eq!(decoded.pubkey_str(), hex_64('e'));
+        assert_eq!(decoded.created_at(), 10);
+        assert_eq!(decoded.kind(), KIND_POST);
+        assert_eq!(decoded.tags_as_vec(), wire.tags);
+        assert_eq!(decoded.content(), "hello");
+        assert_eq!(decoded.sig().as_str(), decoded.sig_str());
         assert_eq!(decoded.raw_json(), raw_json);
     }
 
@@ -1325,6 +1359,8 @@ mod tests {
                     RadrootsIdParseError::InvalidFormat,
                 ),
             ),
+            RadrootsDraftError::from(RadrootsEventEnvelopeError::NonCanonicalId),
+            RadrootsDraftError::from(RadrootsSignedEventError::RawJsonMismatch),
         ];
 
         for error in errors {
@@ -1340,12 +1376,87 @@ mod tests {
             .to_string()
             .contains("canonical event id digest")
         );
+
+        assert!(matches!(
+            RadrootsDraftError::from(RadrootsCanonicalEventIdError::InvalidPubkey(
+                RadrootsIdParseError::InvalidFormat,
+            )),
+            RadrootsDraftError::IdParse(_)
+        ));
+        assert!(matches!(
+            RadrootsDraftError::from(RadrootsCanonicalEventIdError::InvalidComputedEventId(
+                RadrootsIdParseError::InvalidFormat,
+            )),
+            RadrootsDraftError::CanonicalEventId(_)
+        ));
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn draft_and_signed_event_accessors_expose_typed_state() {
+        let draft = post_draft();
+        assert_eq!(draft.contract_id(), "radroots.social.post.v1");
+        assert_eq!(
+            draft.contract_registry_version(),
+            RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION
+        );
+        assert_eq!(draft.kind().as_u32(), draft.kind_u32());
+        assert_eq!(draft.created_at().as_u64(), draft.created_at_u64());
+        assert_eq!(draft.tags().to_vec(), draft.tags_as_vec());
+        assert_eq!(
+            draft.expected_pubkey().as_str(),
+            draft.expected_pubkey_str()
+        );
+        assert_eq!(
+            draft.expected_event_id().as_str(),
+            draft.expected_event_id_str()
+        );
+
+        let signed = signed_event_for_draft(&draft);
+        assert_eq!(signed.envelope().id_str(), signed.id_str());
+        assert_eq!(signed.wire().id, signed.id_str());
+        assert_eq!(signed.id().as_str(), signed.id_str());
+        assert_eq!(signed.pubkey().as_str(), signed.pubkey_str());
+        assert_eq!(signed.sig().as_str(), signed.sig_str());
+
+        for error in [
+            RadrootsSignedEventError::Wire(RadrootsEventWireError::NonCanonicalIdentifier {
+                field: "id",
+            }),
+            RadrootsSignedEventError::RawJson(RadrootsEventWireError::NonCanonicalIdentifier {
+                field: "id",
+            }),
+            RadrootsSignedEventError::RawJsonMismatch,
+            RadrootsSignedEventError::from(RadrootsEventEnvelopeError::NonCanonicalId),
+        ] {
+            assert!(!error.to_string().is_empty());
+        }
+
+        let wire = signed.wire().clone();
+        let mut different_wire = wire.clone();
+        different_wire.content = "different".to_owned();
+        different_wire.id = compute_canonical_nip01_event_id(
+            different_wire.pubkey.as_str(),
+            different_wire.created_at,
+            different_wire.kind,
+            &different_wire.tags,
+            different_wire.content.as_str(),
+        )
+        .expect("different id")
+        .into_string();
+        let error =
+            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json_for_wire(&different_wire))
+                .expect_err("raw JSON mismatch");
+        assert_eq!(error, RadrootsSignedEventError::RawJsonMismatch);
     }
 
     #[test]
     fn event_id_computation_rejects_invalid_pubkeys() {
         let error =
             compute_nip01_event_id("not-hex", 1, KIND_POST, &[], "").expect_err("invalid pubkey");
+        assert!(matches!(error, RadrootsDraftError::IdParse(_)));
+        let error = nip01_event_id_preimage("not-hex", 1, KIND_POST, &[], "")
+            .expect_err("invalid preimage pubkey");
         assert!(matches!(error, RadrootsDraftError::IdParse(_)));
     }
 

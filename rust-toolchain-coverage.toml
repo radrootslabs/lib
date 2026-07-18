@@ -1,10 +1,4 @@
 [toolchain]
 channel = "nightly-2026-07-15"
-components = [
-  "clippy",
-  "rust-analyzer",
-  "rust-src",
-  "rustfmt",
-  "llvm-tools-preview",
-]
-targets = ["wasm32-unknown-unknown"]
+components = ["llvm-tools-preview"]
+profile = "minimal"

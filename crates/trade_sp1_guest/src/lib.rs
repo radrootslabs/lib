@@ -768,17 +768,13 @@ fn validate_addressable_coordinate(
     field: &'static str,
 ) -> Result<(), RadrootsSp1TradeGuestError> {
     validate_required_str(value, field)?;
-    let mut parts = value.split(':');
-    let Some(kind) = parts.next() else {
+    let Some((kind, remainder)) = value.split_once(':') else {
         return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
     };
-    let Some(pubkey) = parts.next() else {
+    let Some((pubkey, d_tag)) = remainder.split_once(':') else {
         return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
     };
-    let Some(d_tag) = parts.next() else {
-        return Err(RadrootsSp1TradeGuestError::InvalidEventEvidence(field));
-    };
-    if parts.next().is_some()
+    if d_tag.contains(':')
         || kind.parse::<u32>().is_err()
         || pubkey.len() != 64
         || !is_lower_hex(pubkey)
@@ -1641,6 +1637,20 @@ mod tests {
         }
 
         let mut public_values = execution.public_values.clone();
+        public_values.validator_set_addr = None;
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("validator set address"),
+            RadrootsSp1TradeGuestError::EmptyField("validator_set_addr")
+        );
+
+        let mut public_values = execution.public_values.clone();
+        public_values.validator_set_event_id = None;
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("validator set event id"),
+            RadrootsSp1TradeGuestError::EmptyField("validator_set_event_id")
+        );
+
+        let mut public_values = execution.public_values.clone();
         public_values.error_bitmap = "0x1".to_string();
         assert_eq!(
             canonical_public_values_bytes(&public_values).expect_err("error bitmap"),
@@ -1698,6 +1708,22 @@ mod tests {
             .expect_err("upper hex64"),
             RadrootsSp1TradeGuestError::InvalidEventEvidence("upper_hex64")
         );
+        let pubkey = "a".repeat(64);
+        for coordinate in [
+            "not-a-coordinate".to_string(),
+            "1:missing-d-tag".to_string(),
+            format!("not-a-kind:{pubkey}:d"),
+            "1:short:d".to_string(),
+            format!("1:{}:d", "A".repeat(64)),
+            format!("1:{pubkey}: "),
+            format!("1:{pubkey}:d:extra"),
+        ] {
+            assert_eq!(
+                super::validate_addressable_coordinate(&coordinate, "coordinate")
+                    .expect_err("invalid coordinate"),
+                RadrootsSp1TradeGuestError::InvalidEventEvidence("coordinate")
+            );
+        }
         assert_eq!(
             RadrootsSp1TradeEventWorkflowPosition::Listing.as_str(),
             "listing"

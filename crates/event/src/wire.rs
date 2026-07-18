@@ -553,12 +553,8 @@ fn validate_extra(
     let mut total_json_bytes = 0usize;
     let mut extra = BTreeMap::new();
     for (key, value) in object {
-        let key_json_len = serde_json::to_vec(&key)
-            .map_err(|error| RadrootsEventWireError::Json(error.to_string()))?
-            .len();
-        let value_json_len = serde_json::to_vec(&value)
-            .map_err(|error| RadrootsEventWireError::Json(error.to_string()))?
-            .len();
+        let key_json_len = serialized_json_string_len(&key);
+        let value_json_len = serialized_json_value_len(&value);
         total_json_bytes = total_json_bytes
             .saturating_add(key_json_len)
             .saturating_add(1)
@@ -572,6 +568,20 @@ fn validate_extra(
         extra.insert(key, value);
     }
     Ok(extra)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn serialized_json_string_len(value: &String) -> usize {
+    serde_json::to_vec(value)
+        .expect("JSON strings always serialize")
+        .len()
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn serialized_json_value_len(value: &Value) -> usize {
+    serde_json::to_vec(value)
+        .expect("JSON values always serialize")
+        .len()
 }
 
 fn push_canonical_json_string(target: &mut String, value: &str) {
@@ -944,6 +954,84 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn wire_parser_and_error_contracts_cover_all_typed_failures() {
+        let parse_error = RadrootsEventId::parse("bad").expect_err("invalid id");
+        for error in [
+            RadrootsEventWireError::Json("bad json".to_owned()),
+            RadrootsEventWireError::RootNotObject,
+            RadrootsEventWireError::MissingField("id"),
+            RadrootsEventWireError::InvalidField("kind"),
+            RadrootsEventWireError::InvalidIdentifier {
+                field: "id",
+                error: parse_error.clone(),
+            },
+            RadrootsEventWireError::NonCanonicalIdentifier { field: "id" },
+            RadrootsEventWireError::RawJsonTooLarge { max: 1, actual: 2 },
+            RadrootsEventWireError::ContentTooLarge { max: 1, actual: 2 },
+            RadrootsEventWireError::TooManyTags { max: 1, actual: 2 },
+            RadrootsEventWireError::EmptyTag { index: 1 },
+            RadrootsEventWireError::EmptyTagKey { index: 1 },
+            RadrootsEventWireError::ControlCharacterTagKey { index: 1 },
+            RadrootsEventWireError::TagElementTooLarge {
+                tag_index: 1,
+                element_index: 2,
+                max: 3,
+                actual: 4,
+            },
+            RadrootsEventWireError::TagsTooLarge { max: 1, actual: 2 },
+            RadrootsEventWireError::TooManyExtraFields { max: 1, actual: 2 },
+            RadrootsEventWireError::ExtraJsonTooLarge { max: 1, actual: 2 },
+            RadrootsEventWireError::from(RadrootsCanonicalEventIdError::InvalidPubkey(
+                parse_error.clone(),
+            )),
+            RadrootsEventWireError::from(RadrootsEventEnvelopeError::NonCanonicalId),
+            RadrootsEventWireError::EventIdMismatch {
+                declared: "a".to_owned(),
+                computed: "b".to_owned(),
+            },
+        ] {
+            assert!(!error.to_string().is_empty());
+        }
+
+        for raw in ["{", "[]", "null"] {
+            assert!(RadrootsNip01EventWire::parse_json(raw).is_err());
+        }
+
+        for (field, replacement) in [
+            ("id", json!(7)),
+            ("id", json!("bad")),
+            ("pubkey", json!(7)),
+            ("pubkey", json!(hex_64('A'))),
+            ("created_at", json!("bad")),
+            ("created_at", json!(-1)),
+            ("kind", json!("bad")),
+            ("kind", json!(u64::from(u32::MAX) + 1)),
+            ("tags", json!("bad")),
+            ("tags", json!(["bad"])),
+            ("tags", json!([["t", 7]])),
+            ("content", json!(7)),
+            ("sig", json!(7)),
+            ("sig", json!("bad")),
+            ("sig", json!(hex_128('B'))),
+        ] {
+            let mut value = valid_event_value("hello", default_tags());
+            value
+                .as_object_mut()
+                .expect("object")
+                .insert(field.to_owned(), replacement);
+            assert!(RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
+        }
+
+        for field in ["pubkey", "created_at", "kind", "tags", "content", "sig"] {
+            let mut value = valid_event_value("hello", default_tags());
+            value.as_object_mut().expect("object").remove(field);
+            assert!(RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
+        }
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn checked_in_conformance_vectors_match_wire_behavior() {
         let vectors =
             include_str!("../../../contracts/conformance/vectors/event/nip01_wire.v1.json");

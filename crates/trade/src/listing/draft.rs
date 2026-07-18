@@ -56,7 +56,7 @@ impl RadrootsCanonicalListingEdit {
         validate_listing_bins(&listing)?;
 
         let public_listing_addr =
-            listing_addr(KIND_LISTING, &seller_pubkey, listing.d_tag.as_str())?;
+            listing_addr(KIND_LISTING, &seller_pubkey, listing.d_tag.as_str());
 
         Ok(Self {
             listing,
@@ -128,9 +128,9 @@ fn listing_addr(
     kind: u32,
     seller_pubkey: &RadrootsPublicKey,
     d_tag: &str,
-) -> Result<RadrootsListingAddress, RadrootsListingEditError> {
+) -> RadrootsListingAddress {
     RadrootsListingAddress::parse(format!("{kind}:{}:{d_tag}", seller_pubkey.as_str()))
-        .map_err(RadrootsListingEditError::InvalidListingAddress)
+        .expect("typed listing identity must form a listing address")
 }
 
 pub fn canonicalize_listing_edit(

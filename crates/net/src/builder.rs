@@ -35,13 +35,9 @@ impl NetBuilder {
     }
 }
 
-pub fn coverage_branch_probe(input: bool) -> bool {
-    input
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{NetBuilder, coverage_branch_probe};
+    use super::NetBuilder;
 
     #[test]
     fn manage_runtime_path_is_callable() {
@@ -53,11 +49,5 @@ mod tests {
             .expect("build net handle");
         let guard = handle.lock();
         assert!(guard.is_ok());
-    }
-
-    #[test]
-    fn coverage_branch_probe_hits_both_paths() {
-        assert!(coverage_branch_probe(true));
-        assert!(!coverage_branch_probe(false));
     }
 }

@@ -149,6 +149,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn http_auth_rejects_duplicate_security_tags() {
         let auth = RadrootsHttpAuth {
             url: "https://media.example.invalid/upload".to_string(),

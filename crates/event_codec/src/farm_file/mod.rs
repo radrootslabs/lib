@@ -236,6 +236,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn farm_file_metadata_rejects_malformed_decode_tags() {
         let parts = to_wire_parts(&sample_metadata()).expect("file metadata wire parts");
 
@@ -467,6 +468,7 @@ mod tests {
             .collect()
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_same_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
         match (actual, expected) {
             (

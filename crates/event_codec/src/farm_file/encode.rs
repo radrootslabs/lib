@@ -19,7 +19,7 @@ use radroots_event::{
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{
-    address_string, push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
+    push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
     validate_non_empty_field,
 };
 use radroots_event::wire::RadrootsNip01EventWireParts;
@@ -37,12 +37,10 @@ pub fn farm_file_metadata_build_tags(
     metadata: &RadrootsFarmFileMetadata,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_metadata(metadata)?;
-    let workspace = address_string(
-        KIND_FARM_WORKSPACE_MANIFEST,
-        &metadata.workspace.pubkey,
-        &metadata.workspace.d_tag,
-        "workspace",
-    )?;
+    let workspace = format!(
+        "{KIND_FARM_WORKSPACE_MANIFEST}:{}:{}",
+        metadata.workspace.pubkey, metadata.workspace.d_tag
+    );
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_D, metadata.d_tag.as_str());
     push_tag(&mut tags, TAG_H, metadata.farm_group_id.as_str());

@@ -491,6 +491,7 @@ mod tests {
                 actual: 64
             }
         );
+        assert_identifier_impls!(RadrootsTradeId, &hex_32('a'));
         assert_identifier_impls!(RadrootsTradeCandidateId, &hex_64('b'));
         assert_identifier_impls!(RadrootsTradeMutationId, &hex_64('c'));
     }
@@ -774,6 +775,26 @@ mod tests {
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
+        struct MissingEventSignature {
+            value: RadrootsEventSignature,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingTradeId {
+            value: RadrootsTradeId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingTradeCandidateId {
+            value: RadrootsTradeCandidateId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingTradeMutationId {
+            value: RadrootsTradeMutationId,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
         struct MissingDTag {
             value: RadrootsDTag,
         }
@@ -781,6 +802,11 @@ mod tests {
         #[derive(Debug, serde::Deserialize)]
         struct MissingListingAddress {
             value: RadrootsListingAddress,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingAddressableCoordinate {
+            value: RadrootsAddressableCoordinate,
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
@@ -810,10 +836,31 @@ mod tests {
         let missing = "missing field `value` at line 1 column 2";
         assert_eq!(missing_field_message::<MissingPublicKey>(), missing);
         assert_eq!(missing_field_message::<MissingEventId>(), missing);
+        assert_eq!(missing_field_message::<MissingEventSignature>(), missing);
+        assert_eq!(missing_field_message::<MissingTradeId>(), missing);
+        assert_eq!(missing_field_message::<MissingTradeCandidateId>(), missing);
+        assert_eq!(missing_field_message::<MissingTradeMutationId>(), missing);
         assert_eq!(missing_field_message::<MissingDTag>(), missing);
         assert_eq!(missing_field_message::<MissingListingAddress>(), missing);
+        assert_eq!(
+            missing_field_message::<MissingAddressableCoordinate>(),
+            missing
+        );
         assert_eq!(missing_field_message::<MissingOrderId>(), missing);
         assert_eq!(missing_field_message::<MissingOrderQuoteId>(), missing);
         assert_eq!(missing_field_message::<MissingInventoryBinId>(), missing);
+
+        let order: RadrootsOrderId =
+            serde_json::from_value(serde_json::json!("order-1")).expect("order from value");
+        let listing: RadrootsListingAddress = serde_json::from_value(serde_json::json!(format!(
+            "30402:{}:listing-1",
+            hex_64('a')
+        )))
+        .expect("listing from value");
+        let quote: RadrootsOrderQuoteId =
+            serde_json::from_value(serde_json::json!("quote-1")).expect("quote from value");
+        assert_eq!(order.as_str(), "order-1");
+        assert_eq!(listing.as_str().split(':').next(), Some("30402"));
+        assert_eq!(quote.as_str(), "quote-1");
     }
 }

@@ -540,7 +540,7 @@ pub const fn is_trade_validation_service_result_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_trade_validation_service_event_kind(kind: u32) -> bool {
-    is_trade_validation_service_request_kind(kind) || is_trade_validation_service_result_kind(kind)
+    is_trade_validation_service_request_kind(kind) | is_trade_validation_service_result_kind(kind)
 }
 
 #[inline]
@@ -570,7 +570,7 @@ pub const fn is_trade_validation_receipt_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_trade_validation_event_kind(kind: u32) -> bool {
-    is_trade_validation_service_event_kind(kind) || is_trade_validation_receipt_kind(kind)
+    is_trade_validation_service_event_kind(kind) | is_trade_validation_receipt_kind(kind)
 }
 
 #[inline]

@@ -299,6 +299,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn encode_error_mapper_covers_invalid_field_tags() {
         for (field, expected_tag) in [
             ("d_tag", TAG_D),

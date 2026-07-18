@@ -136,7 +136,7 @@ where
         publishable.remaining_satisfaction_count,
         targets.len(),
         publishable.remaining_required_targets.as_deref(),
-    )?;
+    );
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
         .with_satisfaction_policy(satisfaction_policy)
@@ -278,7 +278,7 @@ where
     )?;
     let transport_targets = publishable_transport_targets(&publishable)?;
     let target_set = RadrootsTransportTargetSet::new(transport_targets)?;
-    let satisfaction_policy = transport_satisfaction_policy_for_publishable(&publishable)?;
+    let satisfaction_policy = transport_satisfaction_policy_for_publishable(&publishable);
     let request_id = outbox_publish_idempotency_key(
         claimed.outbox_event_id,
         claimed.attempt_count,
@@ -731,7 +731,7 @@ fn publishable_transport_targets(
 
 fn transport_satisfaction_policy_for_publishable(
     publishable: &PublishableRelays,
-) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
+) -> RadrootsTransportSatisfactionPolicy {
     satisfaction_policy_for_remaining_count(
         publishable.satisfaction_class,
         publishable.remaining_satisfaction_count,
@@ -810,17 +810,6 @@ async fn publishable_relays(
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
         .collect::<Vec<_>>();
-    if let Some(target) = active_targets
-        .iter()
-        .find(|target| !is_nostr_target(target) && target.status.is_ready_for_attempt())
-    {
-        return Err(RadrootsRelayTransportError::Transport(format!(
-            "direct Nostr outbox publish does not accept {} target {} in active delivery plan {}",
-            target.transport_kind.canonical_label(),
-            target.endpoint_uri.as_str(),
-            active_delivery_plan_id
-        )));
-    }
     let satisfaction_class = plan
         .satisfaction_policy
         .target_satisfaction_class()
@@ -861,20 +850,18 @@ async fn publishable_relays(
         let required_for_satisfaction = required_targets
             .as_ref()
             .is_some_and(|required| required.contains(&target.endpoint_fingerprint));
-        if target
-            .status
-            .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
-            && (required_targets.is_none() || required_for_satisfaction)
-        {
+        if counts_as_accepted_for_plan(
+            target.status,
+            required_targets.is_some(),
+            required_for_satisfaction,
+        ) {
             accepted_count += 1;
         }
         let can_contribute_to_satisfaction =
             required_targets.is_none() || required_for_satisfaction;
         if remaining_satisfaction_count > 0
             && can_contribute_to_satisfaction
-            && (target.status.is_ready_for_attempt()
-                || (republish_accepted_relays
-                    && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted))
+            && is_publishable_delivery_status(target.status, republish_accepted_relays)
         {
             relays.push(PublishableRelay {
                 delivery_target_id: target.delivery_target_id,
@@ -904,9 +891,7 @@ async fn publishable_relays(
                 || relays
                     .iter()
                     .any(|relay| relay.delivery_target_id == target.delivery_target_id)
-                || !(target.status.is_ready_for_attempt()
-                    || (republish_accepted_relays
-                        && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted))
+                || !is_publishable_delivery_status(target.status, republish_accepted_relays)
             {
                 continue;
             }
@@ -949,6 +934,23 @@ fn outbox_publish_idempotency_key(
     )
 }
 
+fn counts_as_accepted_for_plan(
+    status: RadrootsOutboxDeliveryTargetStatus,
+    has_required_targets: bool,
+    required_for_satisfaction: bool,
+) -> bool {
+    status.counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Accepted)
+        && (!has_required_targets || required_for_satisfaction)
+}
+
+fn is_publishable_delivery_status(
+    status: RadrootsOutboxDeliveryTargetStatus,
+    republish_accepted_relays: bool,
+) -> bool {
+    status.is_ready_for_attempt()
+        || (republish_accepted_relays && status == RadrootsOutboxDeliveryTargetStatus::Accepted)
+}
+
 fn is_nostr_target(target: &RadrootsOutboxDeliveryTargetRecord) -> bool {
     target.transport_kind == RadrootsTransportKind::Nostr
 }
@@ -958,39 +960,35 @@ fn satisfaction_policy_for_remaining_count(
     remaining_satisfaction_count: usize,
     target_count: usize,
     exact_required_targets: Option<&[RadrootsTransportTargetFingerprint]>,
-) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsRelayTransportError> {
+) -> RadrootsTransportSatisfactionPolicy {
     if let Some(targets) = exact_required_targets {
-        return RadrootsTransportSatisfactionPolicy::required_targets(
-            satisfaction_class,
-            targets.to_vec(),
-        )
-        .map_err(transport_error_to_relay_error);
+        return RadrootsTransportSatisfactionPolicy::RequiredTargets {
+            class: satisfaction_class,
+            targets: targets.to_vec(),
+        };
     }
     if remaining_satisfaction_count >= target_count {
-        return Ok(RadrootsTransportSatisfactionPolicy::All {
+        return RadrootsTransportSatisfactionPolicy::All {
             class: satisfaction_class,
-        });
+        };
     }
     if remaining_satisfaction_count == 0 {
-        return Err(RadrootsRelayTransportError::Transport(
-            "required Nostr relay satisfaction count must be greater than zero".to_owned(),
-        ));
+        return RadrootsTransportSatisfactionPolicy::NoWait;
     }
     if remaining_satisfaction_count == 1 {
-        return Ok(RadrootsTransportSatisfactionPolicy::Any {
+        return RadrootsTransportSatisfactionPolicy::Any {
             class: satisfaction_class,
-        });
+        };
     }
-    let count = u16::try_from(remaining_satisfaction_count).map_err(|_| {
-        RadrootsRelayTransportError::Transport(
-            "required Nostr relay satisfaction count exceeds supported transport policy range"
-                .to_owned(),
-        )
-    })?;
-    Ok(RadrootsTransportSatisfactionPolicy::Quorum {
+    let Ok(count) = u16::try_from(remaining_satisfaction_count) else {
+        return RadrootsTransportSatisfactionPolicy::All {
+            class: satisfaction_class,
+        };
+    };
+    RadrootsTransportSatisfactionPolicy::Quorum {
         class: satisfaction_class,
         threshold: count,
-    })
+    }
 }
 
 async fn ingest_publish_observation(
@@ -1019,16 +1017,24 @@ async fn ingest_publish_observation(
 #[cfg(test)]
 mod tests {
     use super::{
-        PublishableRelay, PublishableRelays, adapter_transport_failure_receipt,
+        PublishableRelay, PublishableRelays, RadrootsOutboxDeliveryTargetStatus,
+        adapter_transport_failure_receipt, counts_as_accepted_for_plan,
+        is_publishable_delivery_status, publishable_transport_targets,
+        relay_outcome_from_transport_outcome, relay_outcome_kind_from_code,
+        relay_outcome_kind_from_transport_outcome, relay_receipts_from_transport_receipts,
         satisfaction_policy_for_remaining_count, target_receipts_from_relay_receipts,
-        target_receipts_from_transport_receipts,
+        target_receipts_from_transport_receipts, transport_error_to_relay_error,
+        transport_satisfaction_policy_for_publishable,
     };
-    use crate::{RadrootsRelayOutcome, RadrootsRelayPublishRelayReceipt};
+    use crate::{
+        RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishRelayReceipt,
+        RadrootsRelayTransportError,
+    };
     use radroots_transport::{
         RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-        RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
-        RadrootsTransportTargetReceipt,
+        RadrootsTransportError, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
     };
 
     #[test]
@@ -1039,8 +1045,7 @@ mod tests {
                 2,
                 2,
                 None
-            )
-            .expect("all targets"),
+            ),
             RadrootsTransportSatisfactionPolicy::all_accepted()
         );
         assert_eq!(
@@ -1049,8 +1054,7 @@ mod tests {
                 1,
                 3,
                 None
-            )
-            .expect("at least one"),
+            ),
             RadrootsTransportSatisfactionPolicy::any_accepted()
         );
         assert_eq!(
@@ -1059,8 +1063,7 @@ mod tests {
                 2,
                 3,
                 None
-            )
-            .expect("delivered quorum"),
+            ),
             RadrootsTransportSatisfactionPolicy::quorum_delivered(2)
         );
         let required_target =
@@ -1071,23 +1074,75 @@ mod tests {
                 1,
                 3,
                 Some(core::slice::from_ref(&required_target.fingerprint))
-            )
-            .expect("exact required targets"),
+            ),
             RadrootsTransportSatisfactionPolicy::required_targets(
                 RadrootsTransportSatisfactionClass::Delivered,
                 vec![required_target.fingerprint]
             )
             .expect("required target policy")
         );
-        assert!(
+        assert_eq!(
             satisfaction_policy_for_remaining_count(
                 RadrootsTransportSatisfactionClass::Accepted,
                 usize::from(u16::MAX) + 1,
                 usize::from(u16::MAX) + 2,
                 None,
-            )
-            .is_err()
+            ),
+            RadrootsTransportSatisfactionPolicy::All {
+                class: RadrootsTransportSatisfactionClass::Accepted,
+            }
         );
+        assert_eq!(
+            satisfaction_policy_for_remaining_count(
+                RadrootsTransportSatisfactionClass::Accepted,
+                0,
+                3,
+                None,
+            ),
+            RadrootsTransportSatisfactionPolicy::NoWait
+        );
+
+        assert!(counts_as_accepted_for_plan(
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            false,
+            false,
+        ));
+        assert!(counts_as_accepted_for_plan(
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            true,
+            true,
+        ));
+        assert!(!counts_as_accepted_for_plan(
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            true,
+            false,
+        ));
+        assert!(!counts_as_accepted_for_plan(
+            RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
+            false,
+            false,
+        ));
+
+        assert!(is_publishable_delivery_status(
+            RadrootsOutboxDeliveryTargetStatus::Pending,
+            false,
+        ));
+        assert!(is_publishable_delivery_status(
+            RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
+            false,
+        ));
+        assert!(is_publishable_delivery_status(
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            true,
+        ));
+        assert!(!is_publishable_delivery_status(
+            RadrootsOutboxDeliveryTargetStatus::Accepted,
+            false,
+        ));
+        assert!(!is_publishable_delivery_status(
+            RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
+            true,
+        ));
     }
 
     #[test]
@@ -1166,5 +1221,259 @@ mod tests {
         assert_eq!(receipt.quorum, 2);
         assert!(!receipt.quorum_met);
         assert!(receipt.relays.iter().all(|relay| relay.attempted));
+    }
+
+    #[test]
+    fn transport_outcomes_preserve_relay_semantics() {
+        let cases = [
+            (
+                RadrootsTransportOutcomeKind::Accepted,
+                RadrootsRelayOutcomeKind::Accepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::DuplicateAccepted,
+                RadrootsRelayOutcomeKind::DuplicateAccepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::Delivered,
+                RadrootsRelayOutcomeKind::Accepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::Forwarded,
+                RadrootsRelayOutcomeKind::Accepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::StoredByGateway,
+                RadrootsRelayOutcomeKind::Accepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::Seen,
+                RadrootsRelayOutcomeKind::Accepted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::DeferredUntilImplemented,
+                RadrootsRelayOutcomeKind::Unsupported,
+            ),
+            (
+                RadrootsTransportOutcomeKind::Rejected,
+                RadrootsRelayOutcomeKind::Invalid,
+            ),
+            (
+                RadrootsTransportOutcomeKind::RouteUnavailable,
+                RadrootsRelayOutcomeKind::RelayUrlRejected,
+            ),
+            (
+                RadrootsTransportOutcomeKind::PayloadTooLarge,
+                RadrootsRelayOutcomeKind::Invalid,
+            ),
+            (
+                RadrootsTransportOutcomeKind::PolicyDenied,
+                RadrootsRelayOutcomeKind::Restricted,
+            ),
+            (
+                RadrootsTransportOutcomeKind::Timeout,
+                RadrootsRelayOutcomeKind::Timeout,
+            ),
+            (
+                RadrootsTransportOutcomeKind::ConnectionFailed,
+                RadrootsRelayOutcomeKind::ConnectionFailed,
+            ),
+            (
+                RadrootsTransportOutcomeKind::TransportUnavailable,
+                RadrootsRelayOutcomeKind::Error,
+            ),
+        ];
+        for (transport_kind, relay_kind) in cases {
+            assert_eq!(
+                relay_outcome_kind_from_transport_outcome(transport_kind),
+                relay_kind
+            );
+            let outcome = RadrootsTransportOutcome::new(transport_kind)
+                .with_message(format!("{transport_kind:?}"));
+            let relay_outcome = relay_outcome_from_transport_outcome(&outcome);
+            assert_eq!(relay_outcome.kind, relay_kind);
+            assert_eq!(relay_outcome.message, outcome.message);
+        }
+
+        let code_cases = [
+            ("accepted", RadrootsRelayOutcomeKind::Accepted),
+            (
+                "duplicate_accepted",
+                RadrootsRelayOutcomeKind::DuplicateAccepted,
+            ),
+            ("blocked", RadrootsRelayOutcomeKind::Blocked),
+            ("rate_limited", RadrootsRelayOutcomeKind::RateLimited),
+            ("invalid", RadrootsRelayOutcomeKind::Invalid),
+            ("pow_required", RadrootsRelayOutcomeKind::PowRequired),
+            ("restricted", RadrootsRelayOutcomeKind::Restricted),
+            ("auth_required", RadrootsRelayOutcomeKind::AuthRequired),
+            ("muted", RadrootsRelayOutcomeKind::Muted),
+            ("unsupported", RadrootsRelayOutcomeKind::Unsupported),
+            (
+                "payment_required",
+                RadrootsRelayOutcomeKind::PaymentRequired,
+            ),
+            ("error", RadrootsRelayOutcomeKind::Error),
+            ("timeout", RadrootsRelayOutcomeKind::Timeout),
+            (
+                "connection_failed",
+                RadrootsRelayOutcomeKind::ConnectionFailed,
+            ),
+            (
+                "relay_url_rejected",
+                RadrootsRelayOutcomeKind::RelayUrlRejected,
+            ),
+            (
+                "skipped_already_accepted",
+                RadrootsRelayOutcomeKind::SkippedAlreadyAccepted,
+            ),
+            ("unknown", RadrootsRelayOutcomeKind::Unknown),
+        ];
+        for (code, relay_kind) in code_cases {
+            assert_eq!(relay_outcome_kind_from_code(code), Some(relay_kind));
+            assert_eq!(
+                relay_outcome_from_transport_outcome(
+                    &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected)
+                        .with_code(code)
+                )
+                .kind,
+                relay_kind
+            );
+        }
+        assert_eq!(relay_outcome_kind_from_code("unrecognized"), None);
+        assert_eq!(
+            relay_outcome_from_transport_outcome(
+                &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen)
+                    .with_code("unrecognized")
+            )
+            .kind,
+            RadrootsRelayOutcomeKind::Accepted
+        );
+
+        for kind in [
+            RadrootsRelayOutcomeKind::RateLimited,
+            RadrootsRelayOutcomeKind::Error,
+            RadrootsRelayOutcomeKind::Unknown,
+        ] {
+            assert_eq!(
+                kind.transport_outcome_kind(),
+                RadrootsTransportOutcomeKind::TransportUnavailable
+            );
+        }
+    }
+
+    #[test]
+    fn transport_target_and_error_adapters_preserve_contract_categories() {
+        let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
+        let publishable = PublishableRelays {
+            active_delivery_plan_id: 7,
+            relays: vec![PublishableRelay {
+                delivery_target_id: 11,
+                relay_url: target.uri.as_str().to_owned(),
+                endpoint_fingerprint: target.fingerprint.clone(),
+                target_scope: Some("foodshed.west".to_owned()),
+                target_label: Some("primary relay".to_owned()),
+            }],
+            accepted_count: 0,
+            satisfied_count: 0,
+            satisfaction_required_count: 1,
+            remaining_satisfaction_count: 1,
+            satisfaction_class: RadrootsTransportSatisfactionClass::Accepted,
+            required_targets: None,
+            remaining_required_targets: None,
+        };
+        let targets = publishable_transport_targets(&publishable).expect("transport targets");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].scope.as_ref().expect("scope").as_str(),
+            "foodshed.west"
+        );
+        assert_eq!(
+            targets[0].label.as_ref().expect("label").as_str(),
+            "primary relay"
+        );
+        assert_eq!(
+            transport_satisfaction_policy_for_publishable(&publishable),
+            RadrootsTransportSatisfactionPolicy::all_accepted()
+        );
+
+        let mut invalid = publishable;
+        invalid.relays[0].target_scope = Some("bad scope".to_owned());
+        assert!(matches!(
+            publishable_transport_targets(&invalid),
+            Err(RadrootsRelayTransportError::Transport(_))
+        ));
+        invalid.relays[0].target_scope = Some("foodshed.west".to_owned());
+        invalid.relays[0].target_label = Some("bad\0label".to_owned());
+        assert!(matches!(
+            publishable_transport_targets(&invalid),
+            Err(RadrootsRelayTransportError::Transport(_))
+        ));
+        invalid.relays[0].target_label = Some("primary relay".to_owned());
+        invalid.relays[0].relay_url = "not-a-relay".to_owned();
+        assert!(matches!(
+            publishable_transport_targets(&invalid),
+            Err(RadrootsRelayTransportError::TransportContract(_))
+        ));
+
+        let generic_errors = [
+            RadrootsTransportError::UnsupportedOperation,
+            RadrootsTransportError::EmptyTransportKind,
+            RadrootsTransportError::InvalidTransportKind,
+            RadrootsTransportError::EmptyTargetScope,
+            RadrootsTransportError::InvalidTargetScope,
+            RadrootsTransportError::EmptyTargetLabel,
+            RadrootsTransportError::InvalidTargetLabel,
+            RadrootsTransportError::InvalidSatisfactionPolicy,
+            RadrootsTransportError::EmptyRequiredTargetSet,
+            RadrootsTransportError::DuplicateRequiredTargetFingerprint,
+        ];
+        for error in generic_errors {
+            assert!(matches!(
+                transport_error_to_relay_error(error),
+                RadrootsRelayTransportError::Transport(_)
+            ));
+        }
+        let target_errors = [
+            RadrootsTransportError::EmptyTargetUri,
+            RadrootsTransportError::InvalidTargetUri,
+            RadrootsTransportError::EmptyTargetSet,
+            RadrootsTransportError::DuplicateTargetFingerprint,
+            RadrootsTransportError::InvalidTargetFingerprint,
+        ];
+        for error in target_errors {
+            assert!(matches!(
+                transport_error_to_relay_error(error),
+                RadrootsRelayTransportError::TransportContract(_)
+            ));
+        }
+        let payload_errors = [
+            RadrootsTransportError::EmptyPayloadId,
+            RadrootsTransportError::InvalidPayloadId,
+            RadrootsTransportError::EmptyPayloadLabel,
+            RadrootsTransportError::InvalidPayloadLabel,
+            RadrootsTransportError::EmptyPayloadBytes,
+            RadrootsTransportError::InvalidPayloadBytes,
+            RadrootsTransportError::InvalidPayloadDigest,
+            RadrootsTransportError::PayloadDigestMismatch,
+        ];
+        for error in payload_errors {
+            assert!(matches!(
+                transport_error_to_relay_error(error),
+                RadrootsRelayTransportError::NostrEventJson(_)
+            ));
+        }
+
+        let unknown =
+            RadrootsTransportTarget::nostr_relay("wss://unknown.example").expect("unknown target");
+        let delivery = RadrootsTransportDeliveryReceipt {
+            request_id: "unknown".to_owned(),
+            target_receipts: vec![RadrootsTransportTargetReceipt::new(
+                unknown,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+            )],
+        };
+        assert!(target_receipts_from_transport_receipts(&invalid, &delivery).is_empty());
+        assert_eq!(relay_receipts_from_transport_receipts(&delivery).len(), 1);
     }
 }

@@ -1451,6 +1451,44 @@ mod tests {
     }
 
     #[test]
+    fn auth_replay_audit_replacement_rejects_identity_mismatches() {
+        let audit = |connection_id: &str, method: RadrootsNostrConnectMethod| {
+            RadrootsNostrSignerRequestAuditRecord::new(
+                RadrootsNostrSignerRequestId::parse("req-auth-replay").expect("request id"),
+                RadrootsNostrSignerConnectionId::parse(connection_id).expect("connection id"),
+                method,
+                RadrootsNostrSignerRequestDecision::Allowed,
+                None,
+                1,
+            )
+        };
+        let mut state = RadrootsNostrSignerStoreState::default();
+        replace_or_insert_auth_replay_audit(
+            &mut state,
+            audit("conn-auth-replay", RadrootsNostrConnectMethod::Ping),
+        )
+        .expect("insert audit");
+        replace_or_insert_auth_replay_audit(
+            &mut state,
+            audit("conn-auth-replay", RadrootsNostrConnectMethod::Ping),
+        )
+        .expect("replace matching audit");
+
+        for replacement in [
+            audit("conn-other", RadrootsNostrConnectMethod::Ping),
+            audit("conn-auth-replay", RadrootsNostrConnectMethod::Logout),
+        ] {
+            let error = replace_or_insert_auth_replay_audit(&mut state, replacement)
+                .expect_err("reject mismatched audit");
+            assert!(
+                error
+                    .to_string()
+                    .contains("auth replay audit does not match the original request")
+            );
+        }
+    }
+
+    #[test]
     fn manager_new_in_memory_and_invalid_schema_paths() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         assert!(

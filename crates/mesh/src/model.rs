@@ -68,7 +68,6 @@ impl RadrootsMeshScope {
         let scope =
             RadrootsTransportMeshScopeId::parse(value.as_ref()).map_err(|err| match err {
                 RadrootsTransportError::EmptyTargetScope => RadrootsMeshError::EmptyCustomScope,
-                RadrootsTransportError::InvalidTargetScope => RadrootsMeshError::InvalidCustomScope,
                 _ => RadrootsMeshError::InvalidCustomScope,
             })?;
         Ok(Self::Custom(scope.as_str().to_string()))

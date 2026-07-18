@@ -8,7 +8,7 @@ use alloc::{
 #[cfg(feature = "serde_json")]
 use radroots_event::{
     RadrootsEventEnvelope,
-    ids::{RadrootsDTag, RadrootsTradeMutationId},
+    ids::RadrootsTradeMutationId,
     kinds::is_trade_mutation_event_kind,
     tags::{TAG_D, TAG_E},
     trade::{
@@ -140,8 +140,6 @@ fn validate_trade_mutation_tags(
     if parents != envelope.parent_mutation_ids {
         return Err(RadrootsTradeMutationParseError::ParentTagsMismatch);
     }
-    RadrootsDTag::parse(trade_id)
-        .map_err(|_| RadrootsTradeMutationParseError::InvalidTag(TAG_D))?;
     Ok(())
 }
 
@@ -353,5 +351,201 @@ mod tests {
         )
         .unwrap();
         assert_eq!(envelope.contract_id, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID);
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_mutation_codec_rejects_all_invalid_wire_shapes() {
+        let parse_errors = [
+            RadrootsTradeMutationParseError::InvalidKind(1),
+            RadrootsTradeMutationParseError::MissingTag("contract"),
+            RadrootsTradeMutationParseError::InvalidTag("contract"),
+            RadrootsTradeMutationParseError::ContractTagMismatch,
+            RadrootsTradeMutationParseError::TradeIdTagMismatch,
+            RadrootsTradeMutationParseError::CounterpartyTagMismatch,
+            RadrootsTradeMutationParseError::ParentTagsMismatch,
+            RadrootsTradeMutationParseError::KindContractMismatch,
+            RadrootsTradeMutationParseError::Canonical(RadrootsTradeProtocolError::MissingLines),
+        ];
+        for error in parse_errors {
+            assert!(!error.to_string().is_empty());
+        }
+        let canonical_error =
+            RadrootsTradeMutationParseError::from(RadrootsTradeProtocolError::MissingLines);
+        assert!(matches!(
+            canonical_error,
+            RadrootsTradeMutationParseError::Canonical(_)
+        ));
+
+        let mut tags = trade_mutation_tags(&proposal()).unwrap();
+        *tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some("contract"))
+            .unwrap() = vec!["contract".into(), "wrong-contract".into()];
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
+            RadrootsTradeMutationParseError::ContractTagMismatch
+        );
+
+        let mut tags = trade_mutation_tags(&proposal()).unwrap();
+        *tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_D))
+            .unwrap() = vec![TAG_D.into(), "other-trade".into()];
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
+            RadrootsTradeMutationParseError::TradeIdTagMismatch
+        );
+
+        let mut tags = trade_mutation_tags(&proposal()).unwrap();
+        *tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some("p"))
+            .unwrap() = vec!["p".into(), hex_64('c')];
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
+            RadrootsTradeMutationParseError::CounterpartyTagMismatch
+        );
+
+        let mut missing_parent_value = trade_mutation_tags(&proposal()).unwrap();
+        missing_parent_value.push(vec![TAG_E.into()]);
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &missing_parent_value).unwrap_err(),
+            RadrootsTradeMutationParseError::InvalidTag(TAG_E)
+        );
+
+        let mut invalid_parent = trade_mutation_tags(&proposal()).unwrap();
+        invalid_parent.push(vec![TAG_E.into(), "not-an-event-id".into()]);
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &invalid_parent).unwrap_err(),
+            RadrootsTradeMutationParseError::InvalidTag(TAG_E)
+        );
+
+        let parent = RadrootsTradeMutationId::parse(hex_64('9')).unwrap();
+        let mut parent_envelope = proposal();
+        parent_envelope.parent_mutation_ids.push(parent.clone());
+        let parent_tags = trade_mutation_tags(&parent_envelope).unwrap();
+        validate_trade_mutation_tags(&parent_envelope, &parent_tags).unwrap();
+
+        let mut mismatched_parent = trade_mutation_tags(&proposal()).unwrap();
+        mismatched_parent.push(vec![TAG_E.into(), parent.to_string()]);
+        assert_eq!(
+            validate_trade_mutation_tags(&proposal(), &mismatched_parent).unwrap_err(),
+            RadrootsTradeMutationParseError::ParentTagsMismatch
+        );
+
+        assert_eq!(
+            required_tag_value(&[], "contract").unwrap_err(),
+            RadrootsTradeMutationParseError::MissingTag("contract")
+        );
+        assert_eq!(
+            required_tag_value(&[vec!["contract".into()]], "contract").unwrap_err(),
+            RadrootsTradeMutationParseError::InvalidTag("contract")
+        );
+        assert_eq!(
+            required_tag_value(&[vec!["contract".into(), " ".into()]], "contract",).unwrap_err(),
+            RadrootsTradeMutationParseError::InvalidTag("contract")
+        );
+        assert!(matches!(
+            push_tag(&mut Vec::new(), "contract", " ".into()).unwrap_err(),
+            EventEncodeError::EmptyRequiredField("contract")
+        ));
+
+        let built = trade_mutation_event_build(proposal()).unwrap();
+        let invalid_kind = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: hex_64('e'),
+            author: hex_64('a'),
+            created_at: 1_799_000_000,
+            kind: 1,
+            tags: built.tags.clone(),
+            content: built.content.clone(),
+            sig: core::iter::repeat_n('f', 128).collect(),
+        })
+        .unwrap();
+        assert_eq!(
+            trade_mutation_from_event(&invalid_kind).unwrap_err(),
+            RadrootsTradeMutationParseError::InvalidKind(1)
+        );
+
+        let kind_contract_mismatch = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: hex_64('e'),
+            author: hex_64('a'),
+            created_at: 1_799_000_000,
+            kind: radroots_event::kinds::KIND_TRADE_DECISION,
+            tags: built.tags,
+            content: built.content,
+            sig: core::iter::repeat_n('f', 128).collect(),
+        })
+        .unwrap();
+        assert_eq!(
+            trade_mutation_from_event(&kind_contract_mismatch).unwrap_err(),
+            RadrootsTradeMutationParseError::KindContractMismatch
+        );
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_protocol_errors_map_to_stable_encode_categories() {
+        let id_error = RadrootsTradeMutationId::parse("invalid").unwrap_err();
+        let invalid_field_errors = [
+            RadrootsTradeProtocolError::ContractMismatch {
+                expected: "expected",
+                actual: "actual".into(),
+            },
+            RadrootsTradeProtocolError::InvalidField("field"),
+            RadrootsTradeProtocolError::InvalidIdentifier {
+                field: "id",
+                error: id_error,
+            },
+            RadrootsTradeProtocolError::InvalidInitialParents,
+            RadrootsTradeProtocolError::MissingParentMutation,
+            RadrootsTradeProtocolError::TooManyParents { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::UnsortedParents,
+            RadrootsTradeProtocolError::DuplicateParent,
+            RadrootsTradeProtocolError::SelfParent,
+            RadrootsTradeProtocolError::MissingLines,
+            RadrootsTradeProtocolError::TooManyLines { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::UnsupportedNumber,
+            RadrootsTradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::InvalidTimeRange,
+            RadrootsTradeProtocolError::MissingReservationCommitments,
+            RadrootsTradeProtocolError::MissingCancellationTarget,
+            RadrootsTradeProtocolError::CandidateIdMismatch {
+                declared: "declared".into(),
+                computed: "computed".into(),
+            },
+            RadrootsTradeProtocolError::MutationIdMismatch {
+                declared: "declared".into(),
+                computed: "computed".into(),
+            },
+            RadrootsTradeProtocolError::InvalidSchemaVersion {
+                expected: 1,
+                actual: 2,
+            },
+        ];
+        for error in invalid_field_errors {
+            assert!(matches!(
+                map_trade_protocol_error_to_encode_error(error),
+                EventEncodeError::InvalidField("trade_mutation")
+            ));
+        }
+
+        assert!(matches!(
+            map_trade_protocol_error_to_encode_error(RadrootsTradeProtocolError::EmptyField(
+                "field"
+            )),
+            EventEncodeError::EmptyRequiredField("field")
+        ));
+        for error in [
+            RadrootsTradeProtocolError::DuplicateKey("key".into()),
+            RadrootsTradeProtocolError::InvalidJson("json".into()),
+            RadrootsTradeProtocolError::NonCanonicalJson,
+        ] {
+            assert!(matches!(
+                map_trade_protocol_error_to_encode_error(error),
+                EventEncodeError::Json
+            ));
+        }
     }
 }

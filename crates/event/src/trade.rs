@@ -1,15 +1,11 @@
 #![forbid(unsafe_code)]
 
 #[cfg(all(not(feature = "std"), feature = "serde"))]
-use alloc::collections::BTreeMap;
-#[cfg(all(not(feature = "std"), any(feature = "serde", test)))]
-use alloc::{format, string::ToString};
+use alloc::{collections::BTreeMap, format, string::ToString};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 #[cfg(all(feature = "std", feature = "serde"))]
-use std::collections::BTreeMap;
-#[cfg(all(feature = "std", feature = "serde"))]
-use std::string::ToString;
+use std::{collections::BTreeMap, string::ToString};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
@@ -655,32 +651,20 @@ impl std::error::Error for RadrootsTradeProtocolError {}
 pub fn canonical_trade_candidate_id(
     candidate: &RadrootsTradeCandidateTermsV1,
 ) -> Result<RadrootsTradeCandidateId, RadrootsTradeProtocolError> {
-    let mut value = serde_json::to_value(candidate)
-        .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
+    let mut value = serialize_trade_value(candidate);
     remove_object_field(&mut value, "candidate_id")?;
     let canonical = canonical_jcs_value(&value)?;
-    digest_prefixed(RADROOTS_TRADE_CANDIDATE_DOMAIN, canonical.as_bytes())
-        .parse()
-        .map_err(|error| RadrootsTradeProtocolError::InvalidIdentifier {
-            field: "candidate_id",
-            error,
-        })
+    Ok(trade_candidate_id_from_canonical(canonical.as_bytes()))
 }
 
 #[cfg(feature = "serde")]
 pub fn canonical_trade_mutation_id(
     envelope: &RadrootsTradeMutationEnvelopeV1,
 ) -> Result<RadrootsTradeMutationId, RadrootsTradeProtocolError> {
-    let mut value = serde_json::to_value(envelope)
-        .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
+    let mut value = serialize_trade_value(envelope);
     remove_object_field(&mut value, "mutation_id")?;
     let canonical = canonical_jcs_value(&value)?;
-    digest_prefixed(RADROOTS_TRADE_MUTATION_DOMAIN, canonical.as_bytes())
-        .parse()
-        .map_err(|error| RadrootsTradeProtocolError::InvalidIdentifier {
-            field: "mutation_id",
-            error,
-        })
+    Ok(trade_mutation_id_from_canonical(canonical.as_bytes()))
 }
 
 #[cfg(feature = "serde")]
@@ -691,8 +675,7 @@ pub fn canonical_trade_mutation_content(
     envelope.validate()?;
     let mutation_id = canonical_trade_mutation_id(&envelope)?;
     envelope.mutation_id = Some(mutation_id.clone());
-    let value = serde_json::to_value(&envelope)
-        .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
+    let value = serialize_trade_value(&envelope);
     let content = canonical_jcs_value(&value)?;
     if content.len() > RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES {
         return Err(RadrootsTradeProtocolError::ContentTooLarge {
@@ -778,9 +761,7 @@ fn write_canonical_jcs(
         Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
         Value::Number(number) => output.push_str(&canonical_number(number)?),
         Value::String(value) => {
-            let encoded = serde_json::to_string(value)
-                .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
-            output.push_str(&encoded);
+            output.push_str(canonical_json_string(value).as_str());
         }
         Value::Array(values) => {
             output.push('[');
@@ -800,15 +781,9 @@ fn write_canonical_jcs(
                 if index > 0 {
                     output.push(',');
                 }
-                let encoded = serde_json::to_string(key.as_str())
-                    .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
-                output.push_str(&encoded);
+                output.push_str(canonical_json_string(key.as_str()).as_str());
                 output.push(':');
-                let value =
-                    map.get(key.as_str())
-                        .ok_or(RadrootsTradeProtocolError::InvalidJson(
-                            "missing key".to_string(),
-                        ))?;
+                let value = &map[key.as_str()];
                 write_canonical_jcs(value, output)?;
             }
             output.push('}');
@@ -832,6 +807,32 @@ fn digest_prefixed(domain: &[u8], bytes: &[u8]) -> String {
     hasher.update(domain);
     hasher.update(bytes);
     hex::encode(hasher.finalize())
+}
+
+#[cfg(feature = "serde")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn serialize_trade_value(value: &impl Serialize) -> Value {
+    serde_json::to_value(value).expect("closed trade models always serialize to JSON values")
+}
+
+#[cfg(feature = "serde")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn canonical_json_string(value: &str) -> String {
+    serde_json::to_string(value).expect("JSON strings always serialize")
+}
+
+#[cfg(feature = "serde")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn trade_candidate_id_from_canonical(canonical: &[u8]) -> RadrootsTradeCandidateId {
+    RadrootsTradeCandidateId::parse(digest_prefixed(RADROOTS_TRADE_CANDIDATE_DOMAIN, canonical))
+        .expect("SHA-256 always produces a canonical 64-character identifier")
+}
+
+#[cfg(feature = "serde")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn trade_mutation_id_from_canonical(canonical: &[u8]) -> RadrootsTradeMutationId {
+    RadrootsTradeMutationId::parse(digest_prefixed(RADROOTS_TRADE_MUTATION_DOMAIN, canonical))
+        .expect("SHA-256 always produces a canonical 64-character identifier")
 }
 
 #[cfg(feature = "serde")]
@@ -1072,7 +1073,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
 
@@ -1094,6 +1095,14 @@ mod tests {
 
     fn trade_id() -> RadrootsTradeId {
         RadrootsTradeId::parse(hex_32('1')).unwrap()
+    }
+
+    fn mutation_id(character: char) -> RadrootsTradeMutationId {
+        RadrootsTradeMutationId::parse(hex_64(character)).unwrap()
+    }
+
+    fn candidate_id(character: char) -> RadrootsTradeCandidateId {
+        RadrootsTradeCandidateId::parse(hex_64(character)).unwrap()
     }
 
     fn candidate() -> RadrootsTradeCandidateTermsV1 {
@@ -1179,6 +1188,43 @@ mod tests {
         }
     }
 
+    fn adjustment(id: &str) -> RadrootsTradeEconomicAdjustmentV1 {
+        RadrootsTradeEconomicAdjustmentV1 {
+            adjustment_id: RadrootsDTag::parse(id).unwrap(),
+            actor: "seller".to_owned(),
+            effect: "charge".to_owned(),
+            amount_mantissa: "10".to_owned(),
+            reason: "packing".to_owned(),
+        }
+    }
+
+    fn reservation_assertion() -> RadrootsSellerReservationAssertionV1 {
+        RadrootsSellerReservationAssertionV1 {
+            reservation_id: RadrootsDTag::parse("reservation-1").unwrap(),
+            inventory_authority_id: pubkey('c'),
+            inventory_epoch: 1,
+            candidate_id: candidate_id('d'),
+            commitments: vec![RadrootsSellerReservationLineV1 {
+                line_id: RadrootsDTag::parse("line-1").unwrap(),
+                bin_id: RadrootsInventoryBinId::parse("bin-1").unwrap(),
+                quantity_mantissa: "2".to_owned(),
+                quantity_scale: 0,
+                unit_code: "count".to_owned(),
+            }],
+            reservation_expires_at_unix_s: 1_800_000_000,
+            assertion_commitment: hex_64('e'),
+        }
+    }
+
+    fn child_envelope(body: RadrootsTradeMutationBodyV1) -> RadrootsTradeMutationEnvelopeV1 {
+        let mut envelope = proposal();
+        envelope.contract_id = body.mutation_kind().contract_id().to_owned();
+        envelope.root_mutation_id = Some(mutation_id('a'));
+        envelope.parent_mutation_ids = vec![mutation_id('a')];
+        envelope.body = body;
+        envelope
+    }
+
     #[test]
     fn canonical_json_sorts_keys_and_rejects_duplicate_keys() {
         assert_eq!(
@@ -1219,5 +1265,518 @@ mod tests {
             canonical_trade_mutation_content(envelope),
             Err(RadrootsTradeProtocolError::UnsortedParents)
         ));
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_validation_contract_covers_every_mutation_and_parent_rule() {
+        let kinds = [
+            RadrootsTradeMutationKindV1::Proposal,
+            RadrootsTradeMutationKindV1::Decision,
+            RadrootsTradeMutationKindV1::RevisionProposal,
+            RadrootsTradeMutationKindV1::RevisionDecision,
+            RadrootsTradeMutationKindV1::Cancellation,
+        ];
+        for kind in kinds {
+            assert!(!kind.contract_id().is_empty());
+            assert_ne!(kind.nostr_kind(), 0);
+        }
+
+        let mut envelope = proposal();
+        envelope.schema_version += 1;
+        assert!(matches!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::InvalidSchemaVersion { .. })
+        ));
+        let mut envelope = proposal();
+        envelope.contract_id = "wrong".to_owned();
+        assert!(matches!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::ContractMismatch { .. })
+        ));
+        let mut envelope = proposal();
+        envelope.root_mutation_id = Some(mutation_id('a'));
+        assert_eq!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::InvalidInitialParents)
+        );
+        let mut envelope = proposal();
+        envelope.parent_mutation_ids = vec![mutation_id('a')];
+        assert_eq!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::InvalidInitialParents)
+        );
+
+        let mut envelope = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+            proposal_mutation_id: mutation_id('a'),
+            candidate_id: candidate_id('a'),
+            decision: RadrootsTradeDecisionV1::Accepted {
+                reservation_assertion: None,
+            },
+        });
+        assert!(envelope.validate().is_ok());
+        envelope.root_mutation_id = None;
+        assert_eq!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::MissingParentMutation)
+        );
+        let mut envelope = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+            proposal_mutation_id: mutation_id('a'),
+            candidate_id: candidate_id('a'),
+            decision: RadrootsTradeDecisionV1::Accepted {
+                reservation_assertion: None,
+            },
+        });
+        envelope.parent_mutation_ids.clear();
+        assert_eq!(
+            envelope.validate(),
+            Err(RadrootsTradeProtocolError::MissingParentMutation)
+        );
+
+        let revision_decision = child_envelope(RadrootsTradeMutationBodyV1::RevisionDecision {
+            proposal_mutation_id: mutation_id('a'),
+            candidate_id: candidate_id('a'),
+            decision: RadrootsTradeDecisionV1::Declined {
+                reason: "inventory unavailable".to_owned(),
+            },
+        });
+        assert!(revision_decision.validate().is_ok());
+        let revision = child_envelope(RadrootsTradeMutationBodyV1::RevisionProposal {
+            candidate: candidate(),
+        });
+        assert!(revision.validate().is_ok());
+
+        for body in [
+            RadrootsTradeMutationBodyV1::Cancellation {
+                target_candidate_id: Some(candidate_id('a')),
+                target_claim_mutation_id: None,
+                reason: "cancelled".to_owned(),
+            },
+            RadrootsTradeMutationBodyV1::Cancellation {
+                target_candidate_id: None,
+                target_claim_mutation_id: Some(mutation_id('a')),
+                reason: "cancelled".to_owned(),
+            },
+        ] {
+            assert!(child_envelope(body).validate().is_ok());
+        }
+        assert_eq!(
+            RadrootsTradeMutationBodyV1::Cancellation {
+                target_candidate_id: None,
+                target_claim_mutation_id: None,
+                reason: "cancelled".to_owned(),
+            }
+            .validate(),
+            Err(RadrootsTradeProtocolError::MissingCancellationTarget)
+        );
+        assert!(
+            RadrootsTradeMutationBodyV1::Cancellation {
+                target_candidate_id: Some(candidate_id('a')),
+                target_claim_mutation_id: None,
+                reason: " ".to_owned(),
+            }
+            .validate()
+            .is_err()
+        );
+
+        assert_eq!(
+            validate_parent_mutation_ids(
+                None,
+                &[
+                    mutation_id('a'),
+                    mutation_id('b'),
+                    mutation_id('c'),
+                    mutation_id('d'),
+                    mutation_id('e'),
+                ],
+            ),
+            Err(RadrootsTradeProtocolError::TooManyParents {
+                max: RADROOTS_TRADE_MAX_PARENT_MUTATIONS,
+                actual: 5,
+            })
+        );
+        assert_eq!(
+            validate_parent_mutation_ids(None, &[mutation_id('a'), mutation_id('a')]),
+            Err(RadrootsTradeProtocolError::DuplicateParent)
+        );
+        assert_eq!(
+            validate_parent_mutation_ids(Some(&mutation_id('a')), &[mutation_id('a')]),
+            Err(RadrootsTradeProtocolError::SelfParent)
+        );
+        assert!(validate_parent_mutation_ids(None, &[mutation_id('a'), mutation_id('b')]).is_ok());
+        assert!(validate_sorted_unique_by(&["a", "b"], |value| *value, "values").is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_candidate_validation_covers_every_nested_profile() {
+        let base = candidate();
+        assert!(base.validate().is_ok());
+
+        let mut invalid = base.clone();
+        invalid.schema_version += 1;
+        assert!(invalid.validate().is_err());
+        let mut invalid = base.clone();
+        invalid.lines.clear();
+        assert_eq!(
+            invalid.validate(),
+            Err(RadrootsTradeProtocolError::MissingLines)
+        );
+        let mut invalid = base.clone();
+        invalid.lines = vec![base.lines[0].clone(); RADROOTS_TRADE_MAX_ACTIVE_LINES + 1];
+        assert!(matches!(
+            invalid.validate(),
+            Err(RadrootsTradeProtocolError::TooManyLines { .. })
+        ));
+        let mut invalid = base.clone();
+        invalid.lines.push(base.lines[0].clone());
+        assert!(matches!(
+            invalid.validate(),
+            Err(RadrootsTradeProtocolError::InvalidField("lines"))
+        ));
+
+        let tombstone = RadrootsTradeLineTombstoneV1 {
+            line_id: RadrootsDTag::parse("line-2").unwrap(),
+            reason: "removed".to_owned(),
+        };
+        let mut with_tombstone = base.clone();
+        with_tombstone.line_tombstones.push(tombstone.clone());
+        assert!(with_tombstone.validate().is_ok());
+        let mut invalid = with_tombstone.clone();
+        invalid.line_tombstones.push(tombstone);
+        assert!(invalid.validate().is_err());
+        let mut invalid = with_tombstone;
+        invalid.line_tombstones[0].reason = " ".to_owned();
+        assert!(invalid.validate().is_err());
+
+        let mut line = base.lines[0].clone();
+        line.option_id = Some("option-1".to_owned());
+        assert!(line.validate().is_ok());
+        for mutate in [
+            |line: &mut RadrootsTradeCandidateLineV1| {
+                line.listing_snapshot_sha256 = "bad".to_owned()
+            },
+            |line: &mut RadrootsTradeCandidateLineV1| line.product_id = " ".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.option_id = Some(" ".to_owned()),
+            |line: &mut RadrootsTradeCandidateLineV1| line.quantity_mantissa = "1.5".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.unit_code = " ".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.unit_profile = " ".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.unit_price_mantissa = "-".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.currency_code = " ".to_owned(),
+            |line: &mut RadrootsTradeCandidateLineV1| line.line_subtotal_mantissa = "x".to_owned(),
+        ] {
+            let mut line = base.lines[0].clone();
+            mutate(&mut line);
+            assert!(line.validate().is_err());
+        }
+        let mut line = base.lines[0].clone();
+        line.quantity_mantissa = "-2".to_owned();
+        assert!(line.validate().is_ok());
+
+        let economics = base.economics.clone();
+        for mutate in [
+            |value: &mut RadrootsTradeEconomicsProfileV1| value.profile_id = " ".to_owned(),
+            |value: &mut RadrootsTradeEconomicsProfileV1| value.currency_code = " ".to_owned(),
+            |value: &mut RadrootsTradeEconomicsProfileV1| value.rounding_profile = " ".to_owned(),
+            |value: &mut RadrootsTradeEconomicsProfileV1| value.subtotal_mantissa = "x".to_owned(),
+            |value: &mut RadrootsTradeEconomicsProfileV1| {
+                value.discount_total_mantissa = "x".to_owned()
+            },
+            |value: &mut RadrootsTradeEconomicsProfileV1| {
+                value.adjustment_total_mantissa = "x".to_owned()
+            },
+            |value: &mut RadrootsTradeEconomicsProfileV1| value.total_mantissa = "x".to_owned(),
+        ] {
+            let mut value = economics.clone();
+            mutate(&mut value);
+            assert!(value.validate().is_err());
+        }
+        let mut value = economics.clone();
+        value.adjustments = vec![adjustment("adjustment-1"); RADROOTS_TRADE_MAX_ADJUSTMENTS + 1];
+        assert!(matches!(
+            value.validate(),
+            Err(RadrootsTradeProtocolError::TooManyAdjustments { .. })
+        ));
+        let mut value = economics.clone();
+        value.adjustments = vec![adjustment("adjustment-1"), adjustment("adjustment-1")];
+        assert!(value.validate().is_err());
+        let mut value = economics.clone();
+        value.adjustments = vec![adjustment("adjustment-1")];
+        assert!(value.validate().is_ok());
+        for mutate in [
+            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.actor = " ".to_owned(),
+            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.effect = " ".to_owned(),
+            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.amount_mantissa = "x".to_owned(),
+            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.reason = " ".to_owned(),
+        ] {
+            let mut value = adjustment("adjustment-1");
+            mutate(&mut value);
+            assert!(value.validate().is_err());
+        }
+
+        let fulfillment = base.fulfillment.clone();
+        for mutate in [
+            |value: &mut RadrootsFulfillmentProfileV1| value.profile_id = " ".to_owned(),
+            |value: &mut RadrootsFulfillmentProfileV1| value.method = " ".to_owned(),
+            |value: &mut RadrootsFulfillmentProfileV1| value.timezone = " ".to_owned(),
+            |value: &mut RadrootsFulfillmentProfileV1| value.location_class = " ".to_owned(),
+            |value: &mut RadrootsFulfillmentProfileV1| {
+                value.ends_at_unix_s = value.starts_at_unix_s
+            },
+            |value: &mut RadrootsFulfillmentProfileV1| value.fold = 2,
+        ] {
+            let mut value = fulfillment.clone();
+            mutate(&mut value);
+            assert!(value.validate().is_err());
+        }
+        let mut cancellation = base.cancellation.clone();
+        cancellation.profile_id = " ".to_owned();
+        assert!(cancellation.validate().is_err());
+
+        let private_terms = RadrootsTradePrivateTermsRefV1 {
+            artifact_id: "artifact-1".to_owned(),
+            schema_id: "schema-1".to_owned(),
+            ciphertext_commitment: hex_64('a'),
+            required_acknowledgement: true,
+        };
+        let mut with_private = base.clone();
+        with_private.private_terms = Some(private_terms.clone());
+        assert!(with_private.validate().is_ok());
+        for mutate in [
+            |value: &mut RadrootsTradePrivateTermsRefV1| value.artifact_id = " ".to_owned(),
+            |value: &mut RadrootsTradePrivateTermsRefV1| value.schema_id = " ".to_owned(),
+            |value: &mut RadrootsTradePrivateTermsRefV1| {
+                value.ciphertext_commitment = "bad".to_owned()
+            },
+        ] {
+            let mut value = private_terms.clone();
+            mutate(&mut value);
+            assert!(value.validate().is_err());
+        }
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_decision_and_reservation_contracts_cover_all_paths() {
+        let assertion = reservation_assertion();
+        assert!(assertion.validate().is_ok());
+        assert!(
+            RadrootsTradeDecisionV1::Accepted {
+                reservation_assertion: None,
+            }
+            .validate()
+            .is_ok()
+        );
+        assert!(
+            RadrootsTradeDecisionV1::Accepted {
+                reservation_assertion: Some(assertion.clone()),
+            }
+            .validate()
+            .is_ok()
+        );
+        assert!(
+            RadrootsTradeDecisionV1::Declined {
+                reason: "declined".to_owned(),
+            }
+            .validate()
+            .is_ok()
+        );
+        assert!(
+            RadrootsTradeDecisionV1::Declined {
+                reason: " ".to_owned(),
+            }
+            .validate()
+            .is_err()
+        );
+
+        let mut invalid = assertion.clone();
+        invalid.commitments.clear();
+        assert_eq!(
+            invalid.validate(),
+            Err(RadrootsTradeProtocolError::MissingReservationCommitments)
+        );
+        let mut invalid = assertion.clone();
+        invalid.commitments.push(invalid.commitments[0].clone());
+        assert!(invalid.validate().is_err());
+        let mut invalid = assertion.clone();
+        invalid.commitments[0].quantity_mantissa = "x".to_owned();
+        assert!(invalid.validate().is_err());
+        let mut invalid = assertion.clone();
+        invalid.commitments[0].unit_code = " ".to_owned();
+        assert!(invalid.validate().is_err());
+        let mut invalid = assertion;
+        invalid.assertion_commitment = "bad".to_owned();
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn trade_canonicalization_and_error_contracts_cover_all_paths() {
+        use serde::de::{Unexpected, value::StrDeserializer};
+
+        let canonical = canonical_trade_mutation_content(proposal()).expect("canonical proposal");
+        assert_eq!(
+            canonical_trade_candidate_id(match &canonical.envelope.body {
+                RadrootsTradeMutationBodyV1::Proposal { candidate } => candidate,
+                _ => unreachable!("proposal"),
+            })
+            .expect("candidate id"),
+            match &canonical.envelope.body {
+                RadrootsTradeMutationBodyV1::Proposal { candidate } => {
+                    candidate.candidate_id.clone().expect("candidate id")
+                }
+                _ => unreachable!("proposal"),
+            }
+        );
+        assert_eq!(
+            canonical_trade_mutation_id(&canonical.envelope).expect("mutation id"),
+            canonical.mutation_id
+        );
+
+        assert!(matches!(
+            trade_mutation_from_canonical_content(
+                &"x".repeat(RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES + 1)
+            ),
+            Err(RadrootsTradeProtocolError::ContentTooLarge { .. })
+        ));
+        assert_eq!(
+            trade_mutation_from_canonical_content(" {} "),
+            Err(RadrootsTradeProtocolError::NonCanonicalJson)
+        );
+        assert!(matches!(
+            trade_mutation_from_canonical_content("{}"),
+            Err(RadrootsTradeProtocolError::InvalidJson(_))
+        ));
+        assert!(matches!(
+            canonical_jcs_from_str("{"),
+            Err(RadrootsTradeProtocolError::InvalidJson(_))
+        ));
+        assert!(matches!(
+            canonical_jcs_from_str("1.5"),
+            Err(RadrootsTradeProtocolError::InvalidJson(_))
+        ));
+        assert_eq!(
+            canonical_jcs_value(&serde_json::json!(1.5)),
+            Err(RadrootsTradeProtocolError::UnsupportedNumber)
+        );
+        assert_eq!(
+            canonical_jcs_value(&Value::Number(Number::from(u64::MAX))).expect("large integer"),
+            u64::MAX.to_string()
+        );
+        assert!(remove_object_field(&mut Value::Null, "id").is_err());
+
+        let mut value: Value = serde_json::from_str(&canonical.content).expect("canonical json");
+        value["body"]["candidate"]["candidate_id"] = Value::String(hex_64('f'));
+        let wrong_candidate = canonical_jcs_value(&value).expect("wrong candidate json");
+        assert!(matches!(
+            trade_mutation_from_canonical_content(&wrong_candidate),
+            Err(RadrootsTradeProtocolError::CandidateIdMismatch { .. })
+        ));
+
+        let mut value: Value = serde_json::from_str(&canonical.content).expect("canonical json");
+        value["mutation_id"] = Value::String(hex_64('f'));
+        let wrong_mutation = canonical_jcs_value(&value).expect("wrong mutation json");
+        assert!(matches!(
+            trade_mutation_from_canonical_content(&wrong_mutation),
+            Err(RadrootsTradeProtocolError::MutationIdMismatch { .. })
+        ));
+
+        let mut value: Value = serde_json::from_str(&canonical.content).expect("canonical json");
+        value["mutation_id"] = Value::Null;
+        value["body"]["candidate"]["candidate_id"] = Value::Null;
+        let undeclared_ids = canonical_jcs_value(&value).expect("undeclared ids json");
+        assert!(trade_mutation_from_canonical_content(&undeclared_ids).is_ok());
+
+        let decision = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+            proposal_mutation_id: mutation_id('a'),
+            candidate_id: candidate_id('a'),
+            decision: RadrootsTradeDecisionV1::Accepted {
+                reservation_assertion: None,
+            },
+        });
+        let decision = canonical_trade_mutation_content(decision).expect("canonical decision");
+        assert!(trade_mutation_from_canonical_content(&decision.content).is_ok());
+
+        let revision = child_envelope(RadrootsTradeMutationBodyV1::RevisionProposal {
+            candidate: candidate(),
+        });
+        let revision = canonical_trade_mutation_content(revision).expect("canonical revision");
+        assert!(trade_mutation_from_canonical_content(&revision.content).is_ok());
+
+        let mut oversized = proposal();
+        if let RadrootsTradeMutationBodyV1::Proposal { candidate } = &mut oversized.body {
+            candidate.lines[0].product_id = "x".repeat(RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES + 1);
+        }
+        assert!(matches!(
+            canonical_trade_mutation_content(oversized),
+            Err(RadrootsTradeProtocolError::ContentTooLarge { .. })
+        ));
+
+        let string_value: Result<NoDuplicateJsonValue, serde_json::Error> =
+            NoDuplicateJsonValueVisitor.visit_string("value".to_owned());
+        assert_eq!(
+            string_value.expect("string").0,
+            Value::String("value".to_owned())
+        );
+        let none_value: Result<NoDuplicateJsonValue, serde_json::Error> =
+            NoDuplicateJsonValueVisitor.visit_none();
+        assert_eq!(none_value.expect("none").0, Value::Null);
+        let some_value: Result<NoDuplicateJsonValue, serde_json::Error> =
+            NoDuplicateJsonValueVisitor.visit_some(StrDeserializer::new("value"));
+        assert_eq!(
+            some_value.expect("some").0,
+            Value::String("value".to_owned())
+        );
+        let expected = <serde_json::Error as serde::de::Error>::invalid_type(
+            Unexpected::Bool(true),
+            &NoDuplicateJsonValueVisitor,
+        );
+        assert!(expected.to_string().contains("JSON value"));
+
+        let parse_error = RadrootsTradeMutationId::parse("bad").expect_err("invalid id");
+        let errors = [
+            RadrootsTradeProtocolError::InvalidSchemaVersion {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsTradeProtocolError::ContractMismatch {
+                expected: "expected",
+                actual: "actual".to_owned(),
+            },
+            RadrootsTradeProtocolError::InvalidInitialParents,
+            RadrootsTradeProtocolError::MissingParentMutation,
+            RadrootsTradeProtocolError::TooManyParents { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::UnsortedParents,
+            RadrootsTradeProtocolError::DuplicateParent,
+            RadrootsTradeProtocolError::SelfParent,
+            RadrootsTradeProtocolError::MissingLines,
+            RadrootsTradeProtocolError::TooManyLines { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::DuplicateKey("key".to_owned()),
+            RadrootsTradeProtocolError::InvalidJson("json".to_owned()),
+            RadrootsTradeProtocolError::NonCanonicalJson,
+            RadrootsTradeProtocolError::UnsupportedNumber,
+            RadrootsTradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
+            RadrootsTradeProtocolError::EmptyField("field"),
+            RadrootsTradeProtocolError::InvalidField("field"),
+            RadrootsTradeProtocolError::InvalidIdentifier {
+                field: "field",
+                error: parse_error,
+            },
+            RadrootsTradeProtocolError::InvalidTimeRange,
+            RadrootsTradeProtocolError::MissingReservationCommitments,
+            RadrootsTradeProtocolError::MissingCancellationTarget,
+            RadrootsTradeProtocolError::CandidateIdMismatch {
+                declared: "a".to_owned(),
+                computed: "b".to_owned(),
+            },
+            RadrootsTradeProtocolError::MutationIdMismatch {
+                declared: "a".to_owned(),
+                computed: "b".to_owned(),
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
     }
 }

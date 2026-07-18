@@ -3,9 +3,10 @@ mod test_fixtures;
 
 use nostr::{Event, EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
-    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPendingConnectionPollOutcome,
-    RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
+    RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES, RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
+    RadrootsNostrConnectClientMetadata, RadrootsNostrConnectError, RadrootsNostrConnectMethod,
+    RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectPermission,
+    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
 };
@@ -361,6 +362,85 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         )),
         Err(RadrootsNostrConnectError::InvalidClientMetadata { field: "image", .. })
     ));
+    assert!(matches!(
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay={}&secret=",
+            FIXTURE_ALICE.public_key_hex,
+            encode_uri_component(RELAY_PRIMARY_WSS),
+        )),
+        Err(RadrootsNostrConnectError::MissingSecret)
+    ));
+}
+
+#[test]
+fn client_metadata_rejects_malformed_and_unsafe_display_fields() {
+    let empty = RadrootsNostrConnectClientMetadata::default();
+    assert!(empty.is_display_empty());
+    let decoded: RadrootsNostrConnectClientMetadata = serde_json::from_value(json!({
+        "requested_permissions": "ping",
+        "name": " client ",
+        "url": APP_PRIMARY_HTTPS,
+        "image": logo_url(),
+    }))
+    .expect("deserialize and normalize client metadata");
+    assert_eq!(decoded.name.as_deref(), Some("client"));
+    assert_eq!(
+        decoded.url.as_deref(),
+        Some(format!("{APP_PRIMARY_HTTPS}/").as_str())
+    );
+    assert!(
+        serde_json::from_value::<RadrootsNostrConnectClientMetadata>(json!({
+            "name": "line\nbreak"
+        }))
+        .is_err()
+    );
+    for metadata in [
+        RadrootsNostrConnectClientMetadata {
+            name: Some("client".to_owned()),
+            ..empty.clone()
+        },
+        RadrootsNostrConnectClientMetadata {
+            url: Some(APP_PRIMARY_HTTPS.to_owned()),
+            ..empty.clone()
+        },
+        RadrootsNostrConnectClientMetadata {
+            image: Some(logo_url()),
+            ..empty.clone()
+        },
+    ] {
+        assert!(!metadata.is_display_empty());
+    }
+
+    assert!(matches!(
+        RadrootsNostrConnectClientMetadata::from_connect_param("{"),
+        Err(RadrootsNostrConnectError::InvalidClientMetadata {
+            field: "payload",
+            ..
+        })
+    ));
+
+    for (value, field) in [
+        (
+            "x".repeat(RADROOTS_NOSTR_CONNECT_CLIENT_URL_MAX_BYTES + 1),
+            "url",
+        ),
+        ("https://example.com/\n".to_owned(), "url"),
+        ("https://user@example.com".to_owned(), "url"),
+        ("https://:secret@example.com".to_owned(), "image"),
+    ] {
+        let metadata = RadrootsNostrConnectClientMetadata {
+            url: (field == "url").then_some(value.clone()),
+            image: (field == "image").then_some(value),
+            ..empty.clone()
+        };
+        assert!(matches!(
+            metadata.normalized(),
+            Err(RadrootsNostrConnectError::InvalidClientMetadata {
+                field: actual,
+                ..
+            }) if actual == field
+        ));
+    }
 }
 
 #[test]
@@ -1226,6 +1306,18 @@ fn response_surface_covers_success_and_error_paths() {
             },
         ),
         Err(RadrootsNostrConnectError::InvalidResponsePayload { .. })
+    ));
+    assert!(matches!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::Logout,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-logout".to_owned(),
+                result: Some(json!("not-ack")),
+                error: None,
+            },
+        ),
+        Err(RadrootsNostrConnectError::InvalidResponsePayload { method, .. })
+            if method == "logout"
     ));
 }
 

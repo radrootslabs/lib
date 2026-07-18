@@ -93,3 +93,18 @@ impl fmt::Display for EventEncodeError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for EventEncodeError {}
+
+#[cfg(test)]
+mod tests {
+    use super::EventParseError;
+    use radroots_event::RadrootsEventEnvelopeError;
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn invalid_envelope_conversion_preserves_public_error_contract() {
+        let error = EventParseError::from(RadrootsEventEnvelopeError::NonCanonicalId);
+
+        assert_eq!(error.code(), "invalid_envelope");
+        assert_eq!(error.to_string(), "invalid event envelope");
+    }
+}

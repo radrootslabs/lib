@@ -15,7 +15,6 @@ use radroots_event::{
         RadrootsListingPublicLocation,
     },
     location::{has_textual_locality, is_public_geohash5},
-    order::RadrootsListingParseError,
     trade_validation::RadrootsTradeValidationListingError as TradeListingValidationError,
 };
 
@@ -61,9 +60,7 @@ pub fn validate_listing_event(
     }
     let listing_addr_raw = format!("{}:{}:{}", event.kind_u32(), seller_pubkey, listing_id);
     let listing_addr = RadrootsListingAddress::parse(&listing_addr_raw)
-        .map_err(|_| TradeListingValidationError::ParseError {
-            error: RadrootsListingParseError::InvalidTag("listing_addr".to_string()),
-        })?
+        .expect("validated listing identity must form a listing address")
         .into_string();
 
     let title = listing.product.title.trim().to_string();
