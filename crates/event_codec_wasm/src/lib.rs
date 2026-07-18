@@ -38,6 +38,9 @@ use radroots_event::relay_auth::RadrootsRelayAuth;
 use radroots_event::report::RadrootsReport;
 use radroots_event::repost::{RadrootsGenericRepost, RadrootsRepost};
 use radroots_event::seal::RadrootsSeal;
+use radroots_event::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
+};
 use radroots_event_codec::article::encode::article_build_tags;
 use radroots_event_codec::comment::encode::comment_build_tags;
 use radroots_event_codec::coop::encode::coop_build_tags;
@@ -80,8 +83,8 @@ use radroots_event_codec::report::encode::report_build_tags;
 use radroots_event_codec::repost::encode::{generic_repost_build_tags, repost_build_tags};
 use radroots_event_codec::seal::encode::seal_build_tags;
 use radroots_event_codec::verification::{RadrootsDecodeError, RadrootsDecodedEvent};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 #[cfg(target_arch = "wasm32")]
@@ -124,8 +127,49 @@ fn tags_to_json(tags: Vec<Vec<String>>) -> Result<String, RadrootsJsValue> {
     serde_json::to_string(&tags).map_err(err_js)
 }
 
-fn parse_event_json(input: &str) -> Result<radroots_event::RadrootsEventEnvelope, RadrootsJsValue> {
-    serde_json::from_str(input).map_err(|_| error_json("invalid_json", Some("event_json")))
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EventEnvelopeInput {
+    id: String,
+    author: String,
+    created_at: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
+fn envelope_error_code(error: &RadrootsEventEnvelopeError) -> &'static str {
+    match error {
+        RadrootsEventEnvelopeError::InvalidId(_) => "id_invalid",
+        RadrootsEventEnvelopeError::InvalidAuthor(_) => "author_invalid",
+        RadrootsEventEnvelopeError::InvalidSignature(_) => "signature_invalid",
+        RadrootsEventEnvelopeError::NonCanonicalId => "id_non_canonical",
+        RadrootsEventEnvelopeError::NonCanonicalAuthor => "author_non_canonical",
+        RadrootsEventEnvelopeError::NonCanonicalSignature => "signature_non_canonical",
+        RadrootsEventEnvelopeError::EmptyTag { .. } => "tag_empty",
+        RadrootsEventEnvelopeError::EmptyTagKey { .. } => "tag_key_empty",
+        RadrootsEventEnvelopeError::ControlCharacterTagKey { .. } => "tag_key_control_character",
+        RadrootsEventEnvelopeError::ContentTooLarge { .. } => "content_too_large",
+        RadrootsEventEnvelopeError::TooManyTags { .. } => "too_many_tags",
+        RadrootsEventEnvelopeError::TagElementTooLarge { .. } => "tag_element_too_large",
+        RadrootsEventEnvelopeError::TagsTooLarge { .. } => "tags_too_large",
+    }
+}
+
+fn parse_event_json(input: &str) -> Result<RadrootsEventEnvelope, RadrootsJsValue> {
+    let envelope: EventEnvelopeInput =
+        serde_json::from_str(input).map_err(|_| error_json("invalid_json", Some("event_json")))?;
+    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        id: envelope.id,
+        author: envelope.author,
+        created_at: envelope.created_at,
+        kind: envelope.kind,
+        tags: envelope.tags,
+        content: envelope.content,
+        sig: envelope.sig,
+    })
+    .map_err(|error| error_json("invalid_event", Some(envelope_error_code(&error))))
 }
 
 fn build_tags_json<T, E, F>(input: &str, build: F) -> Result<String, RadrootsJsValue>
@@ -569,7 +613,9 @@ mod tests {
         RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialMediaMetadata,
         RadrootsSocialTarget,
     };
-    use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+    use radroots_event::{
+        RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
+    };
 
     fn sample_listing() -> RadrootsListing {
         let quantity =
@@ -1438,6 +1484,41 @@ mod tests {
             serde_json::from_str(&signature_error).expect("signature error json");
         assert_eq!(signature_error["code"], "nip01_verification");
         assert_eq!(signature_error["inner_code"], "signature_invalid");
+    }
+
+    #[test]
+    fn knowledge_bindings_reject_unchecked_event_envelope_input() {
+        let mut oversized: serde_json::Value =
+            serde_json::from_str(&signed_claim_event_json()).expect("event json");
+        oversized["content"] = serde_json::Value::String(
+            "x".repeat(RadrootsEventEnvelopeLimits::default().max_content_bytes + 1),
+        );
+        let oversized_error =
+            verify_and_decode_event_json(&oversized.to_string()).expect_err("oversized content");
+        let oversized_error: serde_json::Value =
+            serde_json::from_str(&oversized_error).expect("oversized error json");
+        assert_eq!(oversized_error["code"], "invalid_event");
+        assert_eq!(oversized_error["inner_code"], "content_too_large");
+
+        let mut non_canonical: serde_json::Value =
+            serde_json::from_str(&signed_claim_event_json()).expect("event json");
+        non_canonical["id"] = serde_json::Value::String("A".repeat(64));
+        let canonical_error =
+            verify_and_decode_event_json(&non_canonical.to_string()).expect_err("non-canonical id");
+        let canonical_error: serde_json::Value =
+            serde_json::from_str(&canonical_error).expect("canonical error json");
+        assert_eq!(canonical_error["code"], "invalid_event");
+        assert_eq!(canonical_error["inner_code"], "id_non_canonical");
+
+        let mut unknown_field: serde_json::Value =
+            serde_json::from_str(&signed_claim_event_json()).expect("event json");
+        unknown_field["verified"] = serde_json::Value::Bool(true);
+        let unknown_error = verify_and_decode_event_json(&unknown_field.to_string())
+            .expect_err("unknown event field");
+        let unknown_error: serde_json::Value =
+            serde_json::from_str(&unknown_error).expect("unknown-field error json");
+        assert_eq!(unknown_error["code"], "invalid_json");
+        assert_eq!(unknown_error["inner_code"], "event_json");
     }
 
     #[test]
