@@ -88,3 +88,17 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Expose knowledge-independent NIP-01 verification and verified Profile admission while rejecting out-of-range Nostr kinds and malformed secp256k1 author keys."
+
+[[changes]]
+id = "strict-kind-one-product-profiles"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_function",
+  "remove_exported_module",
+  "remove_exported_trait_impl",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace permissive kind-1 post authoring with strict Update, PhotoUpdate, and Ask states plus signature-gated tolerant product admission."

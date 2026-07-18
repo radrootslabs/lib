@@ -71,6 +71,19 @@ public = [
   "RadrootsFarm",
   "RadrootsListing",
   "RadrootsPost",
+  "RadrootsAuthoredPostError",
+  "RadrootsPostImageDimensions",
+  "RadrootsAuthoredPostImage",
+  "RadrootsAuthoredUpdate",
+  "RadrootsAuthoredPhotoUpdate",
+  "RadrootsAuthoredAsk",
+  "RadrootsPostDiagnostic",
+  "RadrootsPostClassification",
+  "RadrootsInboundPostImeta",
+  "RadrootsInboundPostProjection",
+  "RadrootsPostProjectionError",
+  "RadrootsAdmittedPostEvent",
+  "RadrootsPostAdmissionError",
   "RadrootsComment",
   "RadrootsReaction",
   "RadrootsArticle",
@@ -563,23 +576,136 @@ rust_types = [
 [operations.listing_parse_event.conformance]
 vector = "contracts/conformance/vectors/listing/parse_event.v1.json"
 
-[operations.social_post_build_tags]
+[operations.social_update_build_authored_draft]
 domain = "social"
-id = "social.post.build_tags"
+id = "social.update.build_authored_draft"
 stability = "beta"
-inputs = ["RadrootsPost"]
-outputs = ["NostrTags"]
+inputs = ["RadrootsAuthoredUpdate"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
-signing = "native"
-transport = "native"
+signing = "none"
+transport = "none"
 
-[operations.social_post_build_tags.implementation]
-rust_modules = ["crates/event_codec/src/post/encode.rs"]
-rust_types = ["radroots_event::post::RadrootsPost"]
+[operations.social_update_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
+]
+rust_types = [
+  "radroots_event::post::RadrootsAuthoredPostError",
+  "radroots_event::post::RadrootsAuthoredUpdate",
+]
 
-[operations.social_post_build_tags.conformance]
-vector = "contracts/conformance/vectors/social/mvp.v1.json"
+[operations.social_update_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+
+[operations.social_photo_update_build_authored_draft]
+domain = "social"
+id = "social.photo_update.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredPhotoUpdate"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_photo_update_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomApprovedBlobUrl",
+  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_event::media::RadrootsAuthoredImage",
+  "radroots_event::post::RadrootsAuthoredPhotoUpdate",
+  "radroots_event::post::RadrootsAuthoredPostError",
+  "radroots_event::post::RadrootsAuthoredPostImage",
+  "radroots_event::post::RadrootsPostImageDimensions",
+]
+
+[operations.social_photo_update_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+
+[operations.social_ask_build_authored_draft]
+domain = "social"
+id = "social.ask.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredAsk"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_ask_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
+]
+rust_types = [
+  "radroots_event::post::RadrootsAuthoredAsk",
+  "radroots_event::post::RadrootsAuthoredPostError",
+  "radroots_event::post::RadrootsAuthoredPostImage",
+]
+
+[operations.social_ask_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+
+[operations.social_post_project_verified_event]
+domain = "social"
+id = "social.post.project_verified_event"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsInboundPostProjection"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_post_project_verified_event.implementation]
+rust_modules = ["crates/event_codec/src/post/inbound.rs"]
+rust_types = [
+  "radroots_event_codec::post::inbound::RadrootsInboundPostImeta",
+  "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
+  "radroots_event_codec::post::inbound::RadrootsPostClassification",
+  "radroots_event_codec::post::inbound::RadrootsPostDiagnostic",
+  "radroots_event_codec::post::inbound::RadrootsPostProjectionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_post_project_verified_event.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+
+[operations.social_post_verify_and_admit_event]
+domain = "social"
+id = "social.post.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsAdmittedPostEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.social_post_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/post/admission.rs",
+  "crates/event_codec/src/post/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::post::admission::RadrootsAdmittedPostEvent",
+  "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
+  "radroots_event_codec::post::inbound::RadrootsInboundPostProjection",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_post_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
 
 [operations.social_comment_build_tags]
 domain = "social"

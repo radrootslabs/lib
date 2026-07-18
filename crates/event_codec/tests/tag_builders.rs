@@ -34,7 +34,6 @@ use radroots_event::listing::{
 use radroots_event::message::{RadrootsMessage, RadrootsMessageRecipient};
 use radroots_event::message_file::RadrootsMessageFile;
 use radroots_event::plot::{RadrootsPlot, RadrootsPlotRef};
-use radroots_event::post::RadrootsPost;
 use radroots_event::reaction::RadrootsReaction;
 use radroots_event::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
@@ -432,17 +431,6 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         expiration: Some(1700000000),
     };
     assert!(!gift_wrap.build_tags().unwrap().is_empty());
-
-    let post = RadrootsPost {
-        content: "hello".to_string(),
-        farm: None,
-        address_refs: None,
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    };
-    assert!(post.build_tags().unwrap().is_empty());
 }
 
 #[test]

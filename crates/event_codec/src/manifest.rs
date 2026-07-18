@@ -73,6 +73,7 @@ pub struct RadrootsKnowledgeContractManifestEntry {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RadrootsKnowledgeManifestDiscriminator {
     KindOnly,
+    AdmissionOnly,
     DTagExact {
         value: String,
     },
@@ -215,6 +216,9 @@ fn discriminator_manifest(
 ) -> RadrootsKnowledgeManifestDiscriminator {
     match discriminator {
         RadrootsEventDiscriminator::KindOnly => RadrootsKnowledgeManifestDiscriminator::KindOnly,
+        RadrootsEventDiscriminator::AdmissionOnly => {
+            RadrootsKnowledgeManifestDiscriminator::AdmissionOnly
+        }
         RadrootsEventDiscriminator::DTagExact(value) => {
             RadrootsKnowledgeManifestDiscriminator::DTagExact {
                 value: (*value).to_string(),

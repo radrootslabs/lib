@@ -16,9 +16,9 @@ use radroots_event::{
     geochat::RadrootsGeoChat, gift_wrap::RadrootsGiftWrap, job_feedback::RadrootsJobFeedback,
     job_request::RadrootsJobRequest, job_result::RadrootsJobResult, list::RadrootsList,
     list_set::RadrootsListSet, listing::RadrootsListing, message::RadrootsMessage,
-    message_file::RadrootsMessageFile, plot::RadrootsPlot, post::RadrootsPost,
-    reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
-    resource_cap::RadrootsResourceHarvestCap, seal::RadrootsSeal,
+    message_file::RadrootsMessageFile, plot::RadrootsPlot, reaction::RadrootsReaction,
+    resource_area::RadrootsResourceArea, resource_cap::RadrootsResourceHarvestCap,
+    seal::RadrootsSeal,
 };
 
 use crate::app_data::encode::app_data_build_tags;
@@ -48,7 +48,6 @@ use crate::listing::tags::listing_tags;
 use crate::message::encode::message_build_tags;
 use crate::message_file::encode::message_file_build_tags;
 use crate::plot::encode::plot_build_tags;
-use crate::post::encode::post_build_tags;
 use crate::reaction::encode::reaction_build_tags;
 use crate::resource_area::encode::resource_area_build_tags;
 use crate::resource_cap::encode::resource_harvest_cap_build_tags;
@@ -227,14 +226,6 @@ impl RadrootsEventTagBuilder for RadrootsGiftWrap {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         gift_wrap_build_tags(self)
-    }
-}
-
-impl RadrootsEventTagBuilder for RadrootsPost {
-    type Error = EventEncodeError;
-
-    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
-        post_build_tags(self)
     }
 }
 

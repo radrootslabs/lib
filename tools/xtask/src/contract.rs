@@ -28,7 +28,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 7] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 8] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -56,6 +56,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 7] = [
     (
         "contracts/conformance/vectors/profile/verified_event.v1.json",
         "crates/event_codec/tests/fixtures/profile_verified_event.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/post/verified_profiles.v1.json",
+        "crates/event_codec/tests/fixtures/post_verified_profiles.v1.json",
     ),
 ];
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [

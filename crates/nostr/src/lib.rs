@@ -69,10 +69,13 @@ pub mod prelude {
 
     pub use crate::events::{
         jobs::{radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result},
-        post::{
-            radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
-            radroots_nostr_post_events_filter,
-        },
+        post::{radroots_nostr_build_post_reply_event, radroots_nostr_post_events_filter},
+    };
+
+    #[cfg(feature = "events")]
+    pub use crate::events::post::{
+        radroots_nostr_build_ask_event, radroots_nostr_build_photo_update_event,
+        radroots_nostr_build_update_event,
     };
 
     #[cfg(feature = "events")]

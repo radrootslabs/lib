@@ -26,7 +26,7 @@ authoring and admission profile are separate contract layers.
 
 ## Implementation Inventory
 
-The repository implements public social support for kind `1` `RadrootsPost`, kind `1111`
+The repository implements strict authored and verified-projected kind `1` post profiles, kind `1111`
 `RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, stable listing
 records through `RadrootsListing`, articles, generic public file metadata, calendar date events,
 calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
@@ -35,7 +35,7 @@ The closeout contract requires:
 
 - complete model and codec coverage for the approved public social event families
 - kind and tag constants for the approved NIP surface
-- `RadrootsPost` preservation for optional social metadata
+- ordinary kind-1 compatibility reads plus strict Update, PhotoUpdate, and Ask authoring
 - strict NIP-22 `RadrootsComment` behavior without legacy `e_root` or `e_prev` fallback tags
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 listing parity
@@ -46,7 +46,9 @@ The closeout contract requires:
 
 The MVP public social substrate includes:
 
-- `RadrootsPost` for ordinary NIP-01 kind `1` notes plus optional Radroots social metadata
+- strict `RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, and
+  `RadrootsAuthoredAsk` publication types plus verified tolerant projection for
+  ordinary NIP-01 kind `1` events
 - `RadrootsArticle` for NIP-23 kind `30023` long-form content
 - generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
 - strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
@@ -72,10 +74,49 @@ The production-v1 public social substrate includes:
 
 ## Contract Decisions
 
-`RadrootsPost` remains compatible with ordinary kind `1` text notes. Content-only notes must remain
-valid. Optional farm or address references, media metadata, geohash, topics, and quote references
-must be preserved when present and must use serde defaults so existing simple JSON fixtures remain
-valid.
+`RadrootsPost` remains a compatibility read projection for ordinary kind `1`
+text notes and older optional social metadata. It is not an authored boundary.
+The public raw `imeta` encoder and its generic tag-builder implementation are
+removed so callers cannot turn mutable strings into purported strict media.
+
+### Kind-1 Post Trust Layers
+
+Strict authored root posts are private-field typestates. Update and Ask content
+must be non-whitespace and every profile is bounded to 131072 UTF-8 bytes.
+PhotoUpdate and optional Ask media use between one and 64 NIP-92 `imeta` tags.
+Each image emits exactly `url`, `x`, `m`, `dim`, `size`, and `alt`, in that
+order, followed by ordered repeatable `fallback` fields. Primary URLs are
+unique and occur as exact substrings of content. MIME is parameter-free
+canonical lowercase `image/*`; dimensions are nonzero `u32` values; size is a
+nonzero `u64`; alt text is non-whitespace and at most 4092 UTF-8 bytes.
+
+Every authored primary image is a `RadrootsAuthoredImage` backed by an approved,
+byte-verified Blossom descriptor. Every authored fallback is an approved
+Blossom hash-path URL with the same digest. This typestate proves local
+descriptor-to-byte agreement only. Successful BUD-02 upload completion remains
+a separate runtime precondition before signing.
+
+Ask is kind `1` and deterministically emits exactly
+`["t","radroots-ask"]`. PhotoUpdate is also kind `1`; kind `20` is outside
+this contract. Update emits neither the Ask marker nor `imeta`.
+
+Inbound projection accepts only a `RadrootsSignatureVerifiedEvent`. Any `e`
+tag selects the reply exclusion before Ask or media inspection; strict NIP-10
+reply parsing remains separately owned. For roots, exactly one two-element Ask
+marker after ASCII whitespace trim and ASCII case folding selects Ask. Multiple
+normalized markers fail projection, while a malformed marker shape is retained
+as an ordered diagnostic. Ask precedes PhotoUpdate even when attached media is
+malformed. PhotoUpdate requires one through 64 wholly qualifying `imeta`
+entries; a malformed or mixed set becomes Update with ordered diagnostics.
+Unknown fields and repeatable fallbacks preserve wire order, while duplicate
+known singletons disqualify media.
+
+Inbound HTTP(S) media references remain unverified structural strings. The
+projection performs no retrieval and makes no Blossom, byte, upload,
+reachability, image-decoding, or safety claim. The registry therefore keeps
+ordinary unsigned kind-1 identification on `radroots.social.post.v1`; exact
+Update, PhotoUpdate, and Ask contracts use `AdmissionOnly` and are returned only
+by the verified projection/admission boundary.
 
 `RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,
 address, and external roots or parents through `E`/`e`, `A`/`a`, and `I`/`i` tags with matching

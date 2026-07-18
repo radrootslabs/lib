@@ -30,6 +30,17 @@ is independent of the optional `knowledge` decoder. The `nostr` feature exposes
 `RadrootsSignatureVerifiedEvent` and rejects event kinds above `u16::MAX`
 instead of truncating them.
 
+The post codec exposes deterministic authored wire builders and a separate
+verified-event projection. Update emits no profile tags, PhotoUpdate emits
+strict ordered NIP-92 `imeta`, and Ask emits one exact `t=radroots-ask` marker
+before optional strict media. The former mutable post encoder and generic tag
+builder are removed. Inbound projection preserves ordinary kind-1 reads,
+excludes any `e`-tagged reply before product classification, and applies Ask,
+PhotoUpdate, Update precedence. Unknown media fields and repeatable fallbacks
+remain ordered; malformed media becomes diagnostic Update unless a valid Ask
+marker takes precedence. Structural inbound URLs remain unverified and no
+network retrieval occurs.
+
 The NIP-52 calendar codecs expose a deliberate three-stage boundary for kinds
 `31922`, `31923`, `31924`, and `31925`:
 

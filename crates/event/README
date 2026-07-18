@@ -21,6 +21,15 @@ syntax without making a network identity claim. The legacy read projection is
 not serializable or exported as a DTO. Tolerant reads use
 `RadrootsInboundProfileMetadata` from `radroots_event_codec`.
 
+The post module keeps the legacy mutable `RadrootsPost` model as a compatibility
+read projection only. New root kind-1 publication uses private-field
+`RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, and
+`RadrootsAuthoredAsk` types. Photo and optional Ask media require nonzero
+dimensions, bounded alt text, approved same-digest fallbacks, and an
+image-typed byte-verified Blossom descriptor. That descriptor state is not an
+upload receipt; BUD-02 completion remains a runtime prerequisite before
+signing.
+
 The calendar module keeps three different states explicit for NIP-52 kinds
 `31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,
 a tolerant baseline NIP-52 projection, and a strict Radroots-admitted

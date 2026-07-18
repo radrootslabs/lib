@@ -16,7 +16,7 @@ default = ["std"]
 std = ["serde/std"]
 rt = ["std", "dep:tokio"]
 nostr-client = [
-  "std",
+  "rt",
   "dep:radroots_event",
   "dep:radroots_event_codec",
   "radroots_event/serde",

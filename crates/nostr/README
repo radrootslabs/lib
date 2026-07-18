@@ -19,6 +19,15 @@ verifies their `Authorization: Nostr` HTTP values. It does not publish these
 ephemeral authorization events to relays. Pure BUD-11 claim parsing and policy
 validation remain in `radroots_blossom`.
 
+With the `events` feature, kind-1 root publication is available only through
+typed Update, PhotoUpdate, and Ask builders backed by the strict
+`radroots_event_codec` wire operations. The former free-form text-note post
+builder is removed. Reply construction remains a separate compatibility
+surface pending the dedicated strict NIP-10 contract; it is not used to author
+root product cards. Media builders do not sign or publish and require the
+owning runtime to prove successful BUD-02 upload completion first; the generic
+net manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+
 ## Portable relay-client lifecycle
 
 With the `client` feature, callers can subscribe and publish to selected relay

@@ -1,0 +1,306 @@
+{
+  "contract_version": "1.0.0",
+  "suite": "post_profiles",
+  "vectors": [
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [],
+        "imeta": []
+      },
+      "id": "signed_update",
+      "input": {
+        "event_json": "{\"id\":\"fb3f42caf9db337a7f1c0d49cd8ba5191f08dc1c419ed0640f7ea48a924e3bf3\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781632860,\"kind\":1,\"tags\":[],\"content\":\"The first strawberries are ready.\",\"sig\":\"dba0a86fee54304c2b419742f186e74d7edca5fc7234c8aa294651de9bc2f16bf829d46f36ec759a767c4ccd1841a73243eae89afd5f6c89b2243491bfbb5f50\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [],
+        "imeta": []
+      },
+      "id": "signed_empty_inbound_update",
+      "input": {
+        "event_json": "{\"id\":\"769b1b4e4428b1ffc57121e673c4b1131134c71ccb70120f382a76503e3c8634\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781632861,\"kind\":1,\"tags\":[],\"content\":\"\\t\",\"sig\":\"ae96f0c6cbbfe83b80bb92684f9f2a9930ee556f379bc03c77e61149b42441fca670251c17aacbfb9e38f159d08707999e4ffc6bfd0c38b7fa213f5053acd308\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "photo_update",
+        "contract_id": "radroots.social.photo_update.v1",
+        "diagnostics": [],
+        "imeta": [
+          {
+            "diagnostics": [],
+            "fallbacks": [],
+            "qualifies_photo": true,
+            "raw_fields": [
+              "url https://cdn.example/harvest.webp",
+              "x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "m image/webp",
+              "dim 1200x900",
+              "size 12345",
+              "alt Harvest"
+            ],
+            "unknown_fields": []
+          }
+        ]
+      },
+      "id": "signed_structural_photo",
+      "input": {
+        "event_json": "{\"id\":\"f06df29688089218b10424a85a070ecd9fe0e7143bf24622fdd5f031fbe00029\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635400,\"kind\":1,\"tags\":[[\"imeta\",\"url https://cdn.example/harvest.webp\",\"x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"m image/webp\",\"dim 1200x900\",\"size 12345\",\"alt Harvest\"]],\"content\":\"Harvest https://cdn.example/harvest.webp\",\"sig\":\"2f0863959b972f639d028c65d9ca0c2b62d5ad57530ad4c810e67941d1d50ab249488f570b9905095db2df18440aac399907dda5ca0e8289c49e625ce8b0b28b\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "photo_update",
+        "contract_id": "radroots.social.photo_update.v1",
+        "diagnostics": [],
+        "imeta": [
+          {
+            "diagnostics": [],
+            "fallbacks": [
+              "https://cache-one.example/harvest.webp",
+              "https://cache-two.example/harvest.webp"
+            ],
+            "qualifies_photo": true,
+            "raw_fields": [
+              "url https://cdn.example/harvest.webp",
+              "x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "m image/webp",
+              "dim 1200x900",
+              "size 12345",
+              "alt Harvest",
+              "fallback https://cache-one.example/harvest.webp",
+              "x-farm cultivar-strawberry",
+              "fallback https://cache-two.example/harvest.webp",
+              "future-field retained value"
+            ],
+            "unknown_fields": [
+              "x-farm cultivar-strawberry",
+              "future-field retained value"
+            ]
+          }
+        ]
+      },
+      "id": "signed_photo_preserves_fallbacks_and_unknown_fields",
+      "input": {
+        "event_json": "{\"id\":\"c0b5925be0ec524708ab73002b7c1c8aa4269cf1aa63fc7ca96f86d2b458e12b\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635402,\"kind\":1,\"tags\":[[\"imeta\",\"url https://cdn.example/harvest.webp\",\"x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"m image/webp\",\"dim 1200x900\",\"size 12345\",\"alt Harvest\",\"fallback https://cache-one.example/harvest.webp\",\"x-farm cultivar-strawberry\",\"fallback https://cache-two.example/harvest.webp\",\"future-field retained value\"]],\"content\":\"Harvest https://cdn.example/harvest.webp\",\"sig\":\"fb20b6c59a7e0fd41d2ffd5c238d580d1d4d0a1d44db0a44efa1a82eb9497b963ef1bef3dcdbb1463f6229db60ccfd3fd915ae098c14261d4b33e2478a93e451\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": [
+          "t",
+          " RADROOTS-ASK "
+        ],
+        "classification": "ask",
+        "contract_id": "radroots.social.ask.v1",
+        "diagnostics": [
+          "imeta_metadata_missing",
+          "imeta_hash_invalid"
+        ],
+        "imeta": [
+          {
+            "diagnostics": [
+              "imeta_metadata_missing",
+              "imeta_hash_invalid"
+            ],
+            "fallbacks": [],
+            "qualifies_photo": false,
+            "raw_fields": [
+              "url https://cdn.example/leaf.webp",
+              "x malformed"
+            ],
+            "unknown_fields": []
+          }
+        ]
+      },
+      "id": "signed_normalized_ask_precedes_malformed_media",
+      "input": {
+        "event_json": "{\"id\":\"5d15a6d516260b6d6cf4a7f2a22fcd349c2bee302fda2c92fa1679996290a1ac\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635220,\"kind\":1,\"tags\":[[\"t\",\" RADROOTS-ASK \"],[\"imeta\",\"url https://cdn.example/leaf.webp\",\"x malformed\"]],\"content\":\"Question https://cdn.example/leaf.webp\",\"sig\":\"538636b2d163d1a392f4c3fced234ba6af5c9b3f1fc66e3bdbbe374287cf4e62adec6369056a3f096be1b268451c2fb25040ae8e0d67188284c2da18832c20d1\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [
+          "imeta_metadata_missing",
+          "imeta_hash_invalid"
+        ],
+        "imeta": [
+          {
+            "diagnostics": [
+              "imeta_metadata_missing",
+              "imeta_hash_invalid"
+            ],
+            "fallbacks": [],
+            "qualifies_photo": false,
+            "raw_fields": [
+              "url https://cdn.example/leaf.webp",
+              "x malformed"
+            ],
+            "unknown_fields": []
+          }
+        ]
+      },
+      "id": "signed_malformed_imeta_is_update",
+      "input": {
+        "event_json": "{\"id\":\"522177f3d46d3cefb674037b50a7512338ed8a5170154dcc5bf2576a36179bcd\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635401,\"kind\":1,\"tags\":[[\"imeta\",\"url https://cdn.example/leaf.webp\",\"x malformed\"]],\"content\":\"Leaf https://cdn.example/leaf.webp\",\"sig\":\"4b60c2bc2019797978bdb77ad1534a253e829eb1b0baff9be4f4e482ed771ba146b2a4885366163760fe44a6840c6ab31b777deffb9c5306a974a25cd7e5aefa\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [
+          "imeta_singleton_duplicate"
+        ],
+        "imeta": [
+          {
+            "diagnostics": [
+              "imeta_singleton_duplicate"
+            ],
+            "fallbacks": [],
+            "qualifies_photo": false,
+            "raw_fields": [
+              "url https://cdn.example/harvest.webp",
+              "x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "x bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "m image/webp",
+              "dim 1200x900",
+              "size 12345",
+              "alt Harvest"
+            ],
+            "unknown_fields": []
+          }
+        ]
+      },
+      "id": "signed_duplicate_singleton_is_update",
+      "input": {
+        "event_json": "{\"id\":\"62e2fa87b57ed7ed453ffb28a72ea9ae73c7473561c4ec35504b9576e52da8cb\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635403,\"kind\":1,\"tags\":[[\"imeta\",\"url https://cdn.example/harvest.webp\",\"x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"x bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"m image/webp\",\"dim 1200x900\",\"size 12345\",\"alt Harvest\"]],\"content\":\"Harvest https://cdn.example/harvest.webp\",\"sig\":\"07e94ffa547a84aa3fc07649d45020e8e2057fb7b65783e87a62c04cb04a3a5a873cce66f019e18610e28f6393b4f5fcfcb378bc823063d6d3fffd06e40a4ad1\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [
+          "imeta_metadata_missing",
+          "imeta_hash_invalid"
+        ],
+        "imeta": [
+          {
+            "diagnostics": [],
+            "fallbacks": [],
+            "qualifies_photo": true,
+            "raw_fields": [
+              "url https://cdn.example/harvest.webp",
+              "x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "m image/webp",
+              "dim 1200x900",
+              "size 12345",
+              "alt Harvest"
+            ],
+            "unknown_fields": []
+          },
+          {
+            "diagnostics": [
+              "imeta_metadata_missing",
+              "imeta_hash_invalid"
+            ],
+            "fallbacks": [],
+            "qualifies_photo": false,
+            "raw_fields": [
+              "url https://cdn.example/leaf.webp",
+              "x malformed"
+            ],
+            "unknown_fields": []
+          }
+        ]
+      },
+      "id": "signed_mixed_imeta_is_update",
+      "input": {
+        "event_json": "{\"id\":\"9316dda070247a72979c3146845ff0e8e5309505c8e922276552546d65d420d8\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635404,\"kind\":1,\"tags\":[[\"imeta\",\"url https://cdn.example/harvest.webp\",\"x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"m image/webp\",\"dim 1200x900\",\"size 12345\",\"alt Harvest\"],[\"imeta\",\"url https://cdn.example/leaf.webp\",\"x malformed\"]],\"content\":\"Harvest https://cdn.example/harvest.webp and https://cdn.example/leaf.webp\",\"sig\":\"e6fe6f76ad608d82da58b0f5ea4bb43676a11b3785789aea52c5041b6c72a732330a0883f9e3f384862758809cf5150b8ebd9392ff1907869daa9081e01791bb\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "reply",
+        "contract_id": "radroots.social.post.v1",
+        "diagnostics": [],
+        "imeta": []
+      },
+      "id": "signed_reply_precedes_ask_and_media",
+      "input": {
+        "event_json": "{\"id\":\"b3c2d97629ba09946a241cf44702e5fafd98c059ab7fccfd654db0fb642c3b40\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635405,\"kind\":1,\"tags\":[[\"e\",\"ask-event-id\"],[\"p\",\"bob\"],[\"t\",\"radroots-ask\"],[\"imeta\",\"url https://cdn.example/leaf.webp\",\"x malformed\"]],\"content\":\"Reply https://cdn.example/leaf.webp\",\"sig\":\"cfdb2b7e04f49c1c5794d81bdffc38f6393ae85b3432c1737545b5fd83f76748d5a82514736f550624e569c7a5f1ef2e6ec759396668222f3204554bb5cbc042\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "ask_marker": null,
+        "classification": "update",
+        "contract_id": "radroots.social.update.v1",
+        "diagnostics": [
+          "ask_marker_shape"
+        ],
+        "imeta": []
+      },
+      "id": "signed_malformed_ask_marker_is_update",
+      "input": {
+        "event_json": "{\"id\":\"8f003700904a568e00c603605545f455766033fdabeaf76d7762c54c52a568ca\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635406,\"kind\":1,\"tags\":[[\"t\",\"RADROOTS-ASK\",\"extra\"]],\"content\":\"Question\",\"sig\":\"74716474d09a6aaf9b0301af77602567b87ab0761f753d4225e2f72ee671d58f69b5dbba3cfe7be44a15e98768674224bf9a03423c4e47f1ee88d3b9d8a63329\"}"
+      },
+      "kind": "post.verify_and_admit.valid"
+    },
+    {
+      "expected": {
+        "error": "ask_marker_count"
+      },
+      "id": "signed_duplicate_normalized_ask_marker",
+      "input": {
+        "event_json": "{\"id\":\"076e0147f35e244daf5578b67a6cf0747d09ddaa7563fb3d195cf06be3057b86\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635460,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"],[\"t\",\" RADROOTS-ASK \"]],\"content\":\"Question\",\"sig\":\"873e2e9f6aa4443c83e51866bc87f0ed4a0388a37187a155c03104d6ad551a2f2017cd841855796a73f89cdf7ed0910946f8a7fa8fa1e678ced8b3865b95d55d\"}"
+      },
+      "kind": "post.verify_and_admit.invalid"
+    },
+    {
+      "expected": {
+        "error": "invalid_kind"
+      },
+      "id": "signed_kind_20_is_not_photo_update",
+      "input": {
+        "event_json": "{\"id\":\"09e20ba068fcbfb682ba0a496c5bfaade0f2240cf2874f23af51125bb701f5b1\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781635580,\"kind\":20,\"tags\":[],\"content\":\"photo\",\"sig\":\"0aab6b82c08fa75db4b729b76a5fd2d1e726d103c436939a67888fe81bc21f93c875beedcf521e99a6cb0323382fb277be20e8982641f49dfa053ea54d165bb1\"}"
+      },
+      "kind": "post.verify_and_admit.invalid"
+    },
+    {
+      "expected": {
+        "error": "signature_invalid"
+      },
+      "id": "signed_invalid_signature",
+      "input": {
+        "event_json": "{\"content\":\"Tamper signature\",\"created_at\":1781635600,\"id\":\"1b921b22caf6f648e9992773e1f680ffcb5b3e12d61cc33bc74a3d329dfdfa10\",\"kind\":1,\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"sig\":\"051c75db06b0a8b2383b947408b3f704990a74a1ccf0d7c35b438c88bb9ffda97604be8df3c677468814abb516b0a0d5e0dfbdb010d00fb2efb1d91c694a5b7f\",\"tags\":[]}"
+      },
+      "kind": "post.verify_and_admit.invalid"
+    }
+  ]
+}

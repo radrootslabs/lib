@@ -1,745 +1,270 @@
-mod common;
-
-use common::{AUTHOR, EVENT_ID, EVENT_SIG};
+use radroots_blossom::{
+    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomByteVerifiedDescriptor,
+    RadrootsBlossomMediaType, RadrootsBlossomSha256,
+};
 use radroots_event::{
-    farm::RadrootsFarmRef,
-    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_FARM, KIND_POST},
-    post::RadrootsPost,
-    social::{
-        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
-        RadrootsSocialMediaMetadata, RadrootsSocialMediaThumbnail, RadrootsSocialTarget,
+    RadrootsAuthoredImage,
+    post::{
+        RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
+        RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_IMETA_MAX_COUNT, RadrootsAuthoredAsk,
+        RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError, RadrootsAuthoredPostImage,
+        RadrootsAuthoredUpdate, RadrootsPostImageDimensions, post_image_media_type_is_valid,
     },
-    tags::{TAG_A, TAG_G, TAG_IMETA, TAG_LOCATION, TAG_Q, TAG_T},
 };
-use radroots_event_codec::error::{EventEncodeError, EventParseError};
-use radroots_event_codec::post::decode::{
-    data_from_event, parsed_from_event, post_from_content, post_from_event,
+use radroots_event_codec::post::authored::{
+    authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
 };
-use radroots_event_codec::post::encode::{post_build_tags, to_wire_parts, to_wire_parts_with_kind};
-
-const QUOTE_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
-const ARTICLE_D_TAG: &str = "BBBBBBBBBBBBBBBBBBBBBA";
-
-fn content_post() -> RadrootsPost {
-    RadrootsPost {
-        content: "field update".to_string(),
-        farm: None,
-        address_refs: None,
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    }
-}
 
 #[test]
-fn post_to_wire_parts_requires_content() {
-    let post = RadrootsPost {
-        content: "   ".to_string(),
-        farm: None,
-        address_refs: None,
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    };
+fn authored_update_emits_only_bounded_nonblank_content() {
+    let update = RadrootsAuthoredUpdate::new("The first strawberries are ready.").unwrap();
+    let wire = authored_update_to_wire_parts(&update);
 
-    let err = to_wire_parts(&post).unwrap_err();
-    assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("content")
-    ));
-}
-
-#[test]
-fn post_to_wire_parts_sets_kind_and_content() {
-    let post = RadrootsPost {
-        content: "hello".to_string(),
-        farm: None,
-        address_refs: None,
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    };
-
-    let parts = to_wire_parts(&post).unwrap();
-    assert_eq!(parts.kind, KIND_POST);
-    assert_eq!(parts.content, "hello");
-    assert!(parts.tags.is_empty());
-}
-
-#[test]
-fn post_to_wire_parts_with_kind_rejects_non_post_kind() {
-    let post = RadrootsPost {
-        content: "hello".to_string(),
-        farm: None,
-        address_refs: None,
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    };
-
-    assert!(matches!(
-        to_wire_parts_with_kind(&post, KIND_ARTICLE),
-        Err(EventEncodeError::InvalidKind(KIND_ARTICLE))
-    ));
-}
-
-#[test]
-fn post_to_wire_parts_roundtrips_optional_social_tags() {
-    let post = RadrootsPost {
-        content: "field update".to_string(),
-        farm: Some(RadrootsSocialFarmAnchor {
-            farm: RadrootsFarmRef {
-                pubkey: "farm_pubkey".to_string(),
-                d_tag: FARM_D_TAG.to_string(),
-            },
-            relays: Some(vec!["wss://farm-relay.example.test".to_string()]),
-        }),
-        address_refs: Some(vec![RadrootsSocialTarget::Address {
-            address: format!("30023:article_author:{ARTICLE_D_TAG}"),
-            author: Some("article_author".to_string()),
-            event_kind: Some(30023),
-            relays: Some(vec!["wss://article-relay.example.test".to_string()]),
-        }]),
-        location: Some(RadrootsSocialLocation {
-            name: Some("North field".to_string()),
-            geohash: Some("c23nb62w20st".to_string()),
-        }),
-        topics: Some(vec!["soil".to_string(), "cover-crops".to_string()]),
-        quote_refs: Some(vec![
-            RadrootsSocialTarget::Event {
-                id: QUOTE_ID.to_string(),
-                author: None,
-                event_kind: None,
-                relays: Some(vec!["wss://quote-relay.example.test".to_string()]),
-            },
-            RadrootsSocialTarget::Address {
-                address: format!("30023:quote_author:{ARTICLE_D_TAG}"),
-                author: Some("quote_author".to_string()),
-                event_kind: Some(30023),
-                relays: None,
-            },
-        ]),
-        media: Some(vec![RadrootsSocialMediaMetadata {
-            imeta: Some(vec![vec![
-                "url https://media.example.test/field.jpg".to_string(),
-                "m image/jpeg".to_string(),
-                format!("x {QUOTE_ID}"),
-                "dim 1200x800".to_string(),
-                "alt Field rows".to_string(),
-                "service https://media.example.test".to_string(),
-            ]]),
-            ..RadrootsSocialMediaMetadata::default()
-        }]),
-    };
-
-    let parts = to_wire_parts(&post).unwrap();
-    assert_eq!(parts.kind, KIND_POST);
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_A)
-            && tag.get(1).map(|value| value.as_str())
-                == Some("30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA")
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_A)
-            && tag.get(1).map(|value| value.as_str())
-                == Some("30023:article_author:BBBBBBBBBBBBBBBBBBBBBA")
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_LOCATION)
-            && tag.get(1).map(|value| value.as_str()) == Some("North field")
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_G)
-            && tag.get(1).map(|value| value.as_str()) == Some("c23nb62w20st")
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_T)
-            && tag.get(1).map(|value| value.as_str()) == Some("soil")
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_Q)
-            && tag.get(1).map(|value| value.as_str()) == Some(QUOTE_ID)
-    }));
-    assert!(parts.tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_IMETA)
-            && tag
-                .iter()
-                .any(|value| value == "url https://media.example.test/field.jpg")
-    }));
-
-    let decoded = post_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
-    assert_eq!(decoded.content, "field update");
+    assert_eq!(wire.kind, 1);
+    assert_eq!(wire.content, update.content());
+    assert!(wire.tags.is_empty());
     assert_eq!(
-        decoded.farm.as_ref().map(|farm| farm.farm.pubkey.as_str()),
-        Some("farm_pubkey")
+        RadrootsAuthoredUpdate::new(" \t").unwrap_err().code(),
+        "post_content_missing"
     );
-    assert_eq!(decoded.address_refs.as_ref().map(Vec::len), Some(1));
-    assert_eq!(
-        decoded
-            .location
-            .as_ref()
-            .and_then(|location| location.name.as_deref()),
-        Some("North field")
-    );
-    assert_eq!(decoded.topics.as_ref().map(Vec::len), Some(2));
-    assert_eq!(decoded.quote_refs.as_ref().map(Vec::len), Some(2));
-    let media = decoded.media.as_ref().expect("media");
-    assert_eq!(
-        media[0].url.as_deref(),
-        Some("https://media.example.test/field.jpg")
-    );
-    assert_eq!(media[0].mime_type.as_deref(), Some("image/jpeg"));
-    assert_eq!(
-        media[0].dimensions.as_ref().map(|value| value.width),
-        Some(1200)
-    );
-    assert_eq!(media[0].alt.as_deref(), Some("Field rows"));
-    assert_eq!(media[0].services.as_ref().map(Vec::len), Some(1));
 }
 
 #[test]
-fn post_build_tags_covers_optional_social_encode_branches() {
-    let mut post = content_post();
-    post.farm = Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
-            pubkey: "farm_pubkey".to_string(),
-            d_tag: FARM_D_TAG.to_string(),
-        },
-        relays: Some(vec!["wss://farm-relay.example.test".to_string()]),
-    });
-    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
-        author: None,
-        event_kind: None,
-        relays: Some(vec!["wss://article-relay.example.test".to_string()]),
-    }]);
-    post.quote_refs = Some(vec![
-        RadrootsSocialTarget::Event {
-            id: QUOTE_ID.to_string(),
-            author: None,
-            event_kind: None,
-            relays: Some(vec!["wss://quote-relay.example.test".to_string()]),
-        },
-        RadrootsSocialTarget::Address {
-            address: format!("30023:quote_author:{ARTICLE_D_TAG}"),
-            author: None,
-            event_kind: None,
-            relays: Some(vec!["wss://quote-address-relay.example.test".to_string()]),
-        },
-    ]);
-    post.media = Some(vec![RadrootsSocialMediaMetadata {
-        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
-            url: "https://media.example.test/thumb.jpg".to_string(),
-            dimensions: Some(RadrootsSocialMediaDimensions {
-                width: 120,
-                height: 80,
-            }),
-        }]),
-        ..RadrootsSocialMediaMetadata::default()
-    }]);
+fn authored_update_enforces_the_utf8_byte_limit() {
+    let maximum = "x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES);
+    assert!(RadrootsAuthoredUpdate::new(maximum).is_ok());
 
-    let tags = post_build_tags(&post).unwrap();
-    assert!(tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_A)
-            && tag
-                .iter()
-                .any(|value| value == "wss://farm-relay.example.test")
-    }));
-    assert!(tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_A)
-            && tag
-                .iter()
-                .any(|value| value == "wss://article-relay.example.test")
-    }));
-    assert!(tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_Q)
-            && tag
-                .iter()
-                .any(|value| value == "wss://quote-relay.example.test")
-    }));
-    assert!(tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_Q)
-            && tag
-                .iter()
-                .any(|value| value == "wss://quote-address-relay.example.test")
-    }));
-    assert!(tags.iter().any(|tag| {
-        tag.first().map(|value| value.as_str()) == Some(TAG_IMETA)
-            && tag.iter().any(|value| value == "dim 120x80")
-    }));
+    let over = "x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES + 1);
+    assert_eq!(
+        RadrootsAuthoredUpdate::new(over).unwrap_err(),
+        RadrootsAuthoredPostError::ContentTooLarge {
+            max: RADROOTS_POST_CONTENT_MAX_BYTES,
+            actual: RADROOTS_POST_CONTENT_MAX_BYTES + 1,
+        }
+    );
+}
 
-    let mut no_relay_post = content_post();
-    no_relay_post.farm = Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
-            pubkey: "farm_pubkey".to_string(),
-            d_tag: FARM_D_TAG.to_string(),
-        },
-        relays: None,
-    });
-    no_relay_post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    no_relay_post.quote_refs = Some(vec![RadrootsSocialTarget::Event {
-        id: QUOTE_ID.to_string(),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    no_relay_post.media = Some(vec![RadrootsSocialMediaMetadata {
-        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
-            url: "https://media.example.test/thumb-no-dim.jpg".to_string(),
-            dimensions: None,
-        }]),
-        ..RadrootsSocialMediaMetadata::default()
-    }]);
+#[test]
+fn authored_photo_emits_exact_nip92_order_and_repeatable_fallbacks() {
+    let image = authored_image(b"strawberries", "image/webp", "webp")
+        .try_with_fallback(fallback_url(b"strawberries", "cache-one.example", "webp"))
+        .unwrap()
+        .try_with_fallback(fallback_url(b"strawberries", "cache-two.example", "webp"))
+        .unwrap();
+    let content = format!("Today's harvest {}", image.url());
+    let photo = RadrootsAuthoredPhotoUpdate::new(content.clone(), vec![image]).unwrap();
+    let wire = authored_photo_update_to_wire_parts(&photo);
 
-    let tags = post_build_tags(&no_relay_post).unwrap();
-    let farm_tag = tags
-        .iter()
-        .find(|tag| {
-            tag.first().map(String::as_str) == Some(TAG_A)
-                && tag.get(1).map(String::as_str)
-                    == Some("30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA")
-        })
-        .expect("farm tag");
-    assert_eq!(farm_tag.len(), 2);
-    let address_tag = tags
-        .iter()
-        .find(|tag| {
-            tag.first().map(String::as_str) == Some(TAG_A)
-                && tag.get(1).map(String::as_str)
-                    == Some("30023:article_author:BBBBBBBBBBBBBBBBBBBBBA")
-        })
-        .expect("address tag");
-    assert_eq!(address_tag.len(), 2);
-    let quote_tag = tags
-        .iter()
-        .find(|tag| tag.first().map(String::as_str) == Some(TAG_Q))
-        .expect("quote tag");
-    assert_eq!(quote_tag.len(), 2);
-    let imeta = tags
-        .iter()
-        .find(|tag| tag.first().map(String::as_str) == Some(TAG_IMETA))
-        .expect("imeta tag");
-    assert!(
-        imeta
+    assert_eq!(wire.kind, 1);
+    assert_eq!(wire.content, content);
+    assert_eq!(wire.tags.len(), 1);
+    assert_eq!(
+        wire.tags[0]
             .iter()
-            .any(|value| value == "thumb https://media.example.test/thumb-no-dim.jpg")
+            .map(|field| field.split_once(' ').map_or(field.as_str(), |part| part.0))
+            .collect::<Vec<_>>(),
+        [
+            "imeta", "url", "x", "m", "dim", "size", "alt", "fallback", "fallback"
+        ]
     );
-    assert!(!imeta.iter().any(|value| value.starts_with("dim ")));
 }
 
 #[test]
-fn post_social_tags_reject_malformed_supported_structures() {
-    let mut post = content_post();
-    post.address_refs = Some(vec![RadrootsSocialTarget::Event {
-        id: QUOTE_ID.to_string(),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("address_refs"))
-    ));
-
-    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: "not-an-address".to_string(),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("address_refs"))
-    ));
-
-    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30340:farm_pubkey:{FARM_D_TAG}"),
-        author: Some("farm_pubkey".to_string()),
-        event_kind: Some(30340),
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("address_refs"))
-    ));
-
-    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
-        author: Some("other_author".to_string()),
-        event_kind: Some(30023),
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("address_refs"))
-    ));
-
-    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
-        author: Some("article_author".to_string()),
-        event_kind: Some(30024),
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("address_refs"))
-    ));
-
-    post.address_refs = None;
-    post.farm = Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
-            pubkey: String::new(),
-            d_tag: FARM_D_TAG.to_string(),
-        },
-        relays: None,
-    });
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::EmptyRequiredField("farm.pubkey"))
-    ));
-
-    post.farm = Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
-            pubkey: "farm_pubkey".to_string(),
-            d_tag: String::new(),
-        },
-        relays: None,
-    });
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::EmptyRequiredField("farm.d_tag"))
-    ));
-
-    post.farm = Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
-            pubkey: "farm_pubkey".to_string(),
-            d_tag: "bad d".to_string(),
-        },
-        relays: None,
-    });
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("farm"))
-    ));
-
-    post.farm = None;
-    post.quote_refs = Some(vec![RadrootsSocialTarget::Event {
-        id: "not-hex".to_string(),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("quote_refs"))
-    ));
-
-    post.quote_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: "not-an-address".to_string(),
-        author: None,
-        event_kind: None,
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("quote_refs"))
-    ));
-
-    post.quote_refs = Some(vec![RadrootsSocialTarget::Address {
-        address: format!("30023:quote_author:{ARTICLE_D_TAG}"),
-        author: None,
-        event_kind: Some(30024),
-        relays: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("quote_refs"))
-    ));
-
-    post.quote_refs = Some(vec![RadrootsSocialTarget::External {
-        id: "https://example.test/object".to_string(),
-        external_kind: "web".to_string(),
-        hint: None,
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("quote_refs"))
-    ));
-
-    post.quote_refs = None;
-    post.media = Some(vec![RadrootsSocialMediaMetadata {
-        imeta: Some(vec![Vec::new()]),
-        ..RadrootsSocialMediaMetadata::default()
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("imeta"))
-    ));
-
-    post.media = Some(vec![RadrootsSocialMediaMetadata {
-        imeta: Some(vec![vec![" ".to_string()]]),
-        ..RadrootsSocialMediaMetadata::default()
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("imeta"))
-    ));
-
-    post.media = Some(vec![RadrootsSocialMediaMetadata {
-        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
-            url: " ".to_string(),
-            dimensions: None,
-        }]),
-        ..RadrootsSocialMediaMetadata::default()
-    }]);
-    assert!(matches!(
-        post_build_tags(&post),
-        Err(EventEncodeError::InvalidField("imeta"))
-    ));
-
-    let err = post_from_event(
-        KIND_POST,
-        &[vec![TAG_IMETA.to_string(), "bad-imeta-entry".to_string()]],
-        "hello",
+fn authored_ask_precedes_optional_media_with_one_exact_marker() {
+    let image = authored_image(b"leaf", "image/jpeg", "jpg");
+    let ask = RadrootsAuthoredAsk::new(
+        format!("Is this leaf healthy? {}", image.url()),
+        vec![image],
     )
-    .unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag(TAG_IMETA)));
+    .unwrap();
+    let wire = authored_ask_to_wire_parts(&ask);
+
+    assert_eq!(
+        wire.tags[0],
+        ["t".to_string(), RADROOTS_ASK_MARKER_TAG_VALUE.to_string()]
+    );
+    assert_eq!(wire.tags[1][0], "imeta");
 }
 
 #[test]
-fn post_media_structured_fields_encode_and_decode_imeta() {
-    let mut post = content_post();
-    post.topics = Some(vec![
-        "soil".to_string(),
-        " ".to_string(),
-        "market".to_string(),
-    ]);
-    post.media = Some(vec![
-        RadrootsSocialMediaMetadata::default(),
-        RadrootsSocialMediaMetadata {
-            url: Some("https://media.example.test/field.jpg".to_string()),
-            mime_type: Some("image/jpeg".to_string()),
-            sha256: Some(QUOTE_ID.to_string()),
-            original_sha256: Some(QUOTE_ID.to_string()),
-            size: Some(42),
-            dimensions: Some(RadrootsSocialMediaDimensions {
-                width: 1200,
-                height: 800,
-            }),
-            blurhash: Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj".to_string()),
-            thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
-                url: "https://media.example.test/thumb.jpg".to_string(),
-                dimensions: Some(RadrootsSocialMediaDimensions {
-                    width: 120,
-                    height: 80,
-                }),
-            }]),
-            image: Some("https://media.example.test/poster.jpg".to_string()),
-            summary: Some("Field row image".to_string()),
-            alt: Some("rows in field".to_string()),
-            fallback: Some("https://media.example.test/fallback.jpg".to_string()),
-            magnet: Some("magnet:?xt=urn:btih:fixture".to_string()),
-            content_hashes: Some(vec!["hash-a".to_string(), "hash-b".to_string()]),
-            services: Some(vec!["https://media.example.test".to_string()]),
-            imeta: None,
-        },
-    ]);
-
-    let parts = to_wire_parts(&post).unwrap();
-    let topic_tags = parts
-        .tags
-        .iter()
-        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_T))
-        .count();
-    assert_eq!(topic_tags, 2);
-
-    let imeta = parts
-        .tags
-        .iter()
-        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_IMETA))
-        .expect("imeta tag");
-    for expected in [
-        "url https://media.example.test/field.jpg",
-        "m image/jpeg",
-        "size 42",
-        "dim 1200x800",
-        "blurhash LEHV6nWB2yk8pyo0adR*.7kCMdnj",
-        "thumb https://media.example.test/thumb.jpg",
-        "dim 120x80",
-        "image https://media.example.test/poster.jpg",
-        "summary Field row image",
-        "alt rows in field",
-        "fallback https://media.example.test/fallback.jpg",
-        "magnet magnet:?xt=urn:btih:fixture",
-        "i hash-a",
-        "i hash-b",
-        "service https://media.example.test",
-    ] {
-        assert!(imeta.iter().any(|value| value == expected), "{expected}");
-    }
-
-    let decoded = post_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
-    let media = decoded.media.expect("media");
-    assert_eq!(media.len(), 1);
-    assert_eq!(media[0].original_sha256.as_deref(), Some(QUOTE_ID));
-    assert_eq!(media[0].size, Some(42));
+fn authored_photo_rejects_missing_and_duplicate_content_urls() {
+    let image = authored_image(b"leaf", "image/jpeg", "jpg");
     assert_eq!(
-        media[0].blurhash.as_deref(),
-        Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj")
+        RadrootsAuthoredPhotoUpdate::new("photo", Vec::new()).unwrap_err(),
+        RadrootsAuthoredPostError::ImageMissing
     );
     assert_eq!(
-        media[0].image.as_deref(),
-        Some("https://media.example.test/poster.jpg")
+        RadrootsAuthoredPhotoUpdate::new("photo", vec![image.clone()])
+            .unwrap_err()
+            .code(),
+        "imeta_url_missing_from_content"
     );
-    assert_eq!(media[0].summary.as_deref(), Some("Field row image"));
+    let content = image.url().to_string();
     assert_eq!(
-        media[0].fallback.as_deref(),
-        Some("https://media.example.test/fallback.jpg")
+        RadrootsAuthoredPhotoUpdate::new(content, vec![image.clone(), image]).unwrap_err(),
+        RadrootsAuthoredPostError::DuplicateImageUrl
     );
-    assert_eq!(
-        media[0].magnet.as_deref(),
-        Some("magnet:?xt=urn:btih:fixture")
-    );
-    assert_eq!(media[0].content_hashes.as_ref().map(Vec::len), Some(2));
 }
 
 #[test]
-fn post_decode_rejects_more_invalid_imeta_shapes() {
-    for tags in [
-        vec![TAG_IMETA.to_string()],
-        vec![TAG_IMETA.to_string(), " ".to_string()],
-    ] {
-        let err = post_from_event(KIND_POST, &[tags], "hello").unwrap_err();
-        assert!(matches!(err, EventParseError::InvalidTag(TAG_IMETA)));
-    }
+fn authored_photo_and_ask_enforce_the_imeta_count_limit() {
+    let image = authored_image(b"leaf", "image/jpeg", "jpg");
+    let images = vec![image.clone(); RADROOTS_POST_IMETA_MAX_COUNT + 1];
+    let expected = RadrootsAuthoredPostError::ImageCountExceeded {
+        max: RADROOTS_POST_IMETA_MAX_COUNT,
+        actual: RADROOTS_POST_IMETA_MAX_COUNT + 1,
+    };
 
-    for entry in ["url ", "size not-a-number", "dim bad", "dim 0x10"] {
-        let err = post_from_event(
-            KIND_POST,
-            &[vec![TAG_IMETA.to_string(), entry.to_string()]],
-            "hello",
+    assert_eq!(
+        RadrootsAuthoredPhotoUpdate::new(image.url(), images.clone()).unwrap_err(),
+        expected
+    );
+    assert_eq!(
+        RadrootsAuthoredAsk::new("Question", images).unwrap_err(),
+        expected
+    );
+}
+
+#[test]
+fn authored_image_rejects_parameterized_mime_zero_dimensions_and_wrong_fallback_hash() {
+    let parameterized = RadrootsAuthoredImage::try_from(verified_descriptor(
+        b"leaf",
+        "image/webp; charset=binary",
+        "webp",
+    ))
+    .unwrap();
+    assert_eq!(
+        RadrootsAuthoredPostImage::new(
+            parameterized,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            "Leaf",
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            EventParseError::InvalidTag(TAG_IMETA) | EventParseError::InvalidNumber(TAG_IMETA, _)
-        ));
-    }
+        .unwrap_err()
+        .code(),
+        "imeta_mime_invalid"
+    );
+    assert_eq!(
+        RadrootsPostImageDimensions::new(0, 1).unwrap_err().code(),
+        "imeta_dimensions_invalid"
+    );
+
+    let image = authored_image(b"leaf", "image/webp", "webp");
+    assert_eq!(
+        image
+            .try_with_fallback(fallback_url(b"other", "cache.example", "webp"))
+            .unwrap_err()
+            .code(),
+        "imeta_fallback_hash_mismatch"
+    );
 }
 
 #[test]
-fn post_decode_handles_non_farm_address_refs_without_relays() {
-    let article = format!("30023:article_author:{ARTICLE_D_TAG}");
-    let farm = format!("{KIND_FARM}:farm_pubkey:{FARM_D_TAG}");
-    let decoded = post_from_event(
-        KIND_POST,
-        &[
-            vec![TAG_A.to_string(), farm.clone()],
-            vec![TAG_A.to_string(), article.clone()],
-        ],
-        "address only",
-    )
-    .unwrap();
+fn post_image_mime_profile_uses_canonical_parameter_free_media_types() {
+    assert!(post_image_media_type_is_valid("image/webp"));
+    assert!(post_image_media_type_is_valid("image/svg+xml"));
+    assert!(post_image_media_type_is_valid("image/vnd.microsoft.icon"));
+    assert!(!post_image_media_type_is_valid("IMAGE/WEBP"));
+    assert!(!post_image_media_type_is_valid("image/webp;quality=90"));
+    assert!(!post_image_media_type_is_valid("text/plain"));
+}
 
-    let anchor = decoded.farm.expect("farm anchor");
-    assert_eq!(anchor.farm.d_tag, FARM_D_TAG);
-    assert_eq!(anchor.relays, None);
-    let refs = decoded.address_refs.expect("address refs");
-    assert_eq!(refs.len(), 1);
-    match &refs[0] {
-        RadrootsSocialTarget::Address {
-            address,
-            author,
-            event_kind,
-            relays,
-        } => {
-            assert_eq!(address, &article);
-            assert_eq!(author.as_deref(), Some("article_author"));
-            assert_eq!(*event_kind, Some(30023));
-            assert_eq!(relays, &None);
+#[test]
+fn authored_image_rejects_zero_size_and_invalid_alt_text() {
+    let empty =
+        RadrootsAuthoredImage::try_from(verified_descriptor(b"", "image/webp", "webp")).unwrap();
+    assert_eq!(
+        RadrootsAuthoredPostImage::new(
+            empty,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            "Empty image",
+        )
+        .unwrap_err(),
+        RadrootsAuthoredPostError::ImageSizeInvalid
+    );
+
+    let blank_alt =
+        RadrootsAuthoredImage::try_from(verified_descriptor(b"leaf", "image/webp", "webp"))
+            .unwrap();
+    assert_eq!(
+        RadrootsAuthoredPostImage::new(
+            blank_alt,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            " \t",
+        )
+        .unwrap_err(),
+        RadrootsAuthoredPostError::ImageAltInvalid
+    );
+
+    let maximum_alt = "a".repeat(RADROOTS_POST_ALT_MAX_BYTES);
+    let maximum =
+        RadrootsAuthoredImage::try_from(verified_descriptor(b"maximum", "image/webp", "webp"))
+            .unwrap();
+    assert!(
+        RadrootsAuthoredPostImage::new(
+            maximum,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            maximum_alt,
+        )
+        .is_ok()
+    );
+
+    let oversized_alt = "a".repeat(RADROOTS_POST_ALT_MAX_BYTES + 1);
+    let oversized =
+        RadrootsAuthoredImage::try_from(verified_descriptor(b"oversized", "image/webp", "webp"))
+            .unwrap();
+    assert_eq!(
+        RadrootsAuthoredPostImage::new(
+            oversized,
+            RadrootsPostImageDimensions::new(1, 1).unwrap(),
+            oversized_alt,
+        )
+        .unwrap_err(),
+        RadrootsAuthoredPostError::ImageAltTooLarge {
+            max: RADROOTS_POST_ALT_MAX_BYTES,
+            actual: RADROOTS_POST_ALT_MAX_BYTES + 1,
         }
-        _ => panic!("expected address target"),
-    }
+    );
 }
 
-#[test]
-fn post_from_content_requires_kind_and_content() {
-    let err = post_from_content(KIND_COMMENT, "hello").unwrap_err();
-    assert!(matches!(
-        err,
-        EventParseError::InvalidKind {
-            expected: "1",
-            got: KIND_COMMENT
-        }
-    ));
-
-    let err = post_from_content(KIND_POST, "   ").unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("content")));
+fn authored_image(bytes: &[u8], media_type: &str, extension: &str) -> RadrootsAuthoredPostImage {
+    RadrootsAuthoredPostImage::new(
+        RadrootsAuthoredImage::try_from(verified_descriptor(bytes, media_type, extension)).unwrap(),
+        RadrootsPostImageDimensions::new(1200, 900).unwrap(),
+        "Harvest",
+    )
+    .unwrap()
 }
 
-#[test]
-fn post_metadata_and_index_from_event_roundtrip() {
-    let metadata = data_from_event(
-        "id".to_string(),
-        "author".to_string(),
-        77,
-        KIND_POST,
-        "hello".to_string(),
-        Vec::new(),
+fn verified_descriptor(
+    bytes: &[u8],
+    media_type: &str,
+    extension: &str,
+) -> RadrootsBlossomByteVerifiedDescriptor {
+    let hash = RadrootsBlossomSha256::digest(bytes);
+    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
+    RadrootsBlossomBlobDescriptor::new(
+        RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.{extension}"))
+            .unwrap(),
+        hash,
+        bytes.len() as u64,
+        media_type.clone(),
+        1_784_347_200,
     )
-    .unwrap();
-    assert_eq!(metadata.id, "id");
-    assert_eq!(metadata.author, "author");
-    assert_eq!(metadata.published_at, 77);
-    assert_eq!(metadata.kind, KIND_POST);
-    assert_eq!(metadata.data.content, "hello");
-
-    let index = parsed_from_event(
-        EVENT_ID.to_string(),
-        AUTHOR.to_string(),
-        77,
-        KIND_POST,
-        "hello".to_string(),
-        Vec::new(),
-        EVENT_SIG.to_string(),
-    )
-    .unwrap();
-    assert_eq!(index.event.id_str(), EVENT_ID);
-    assert_eq!(index.event.author_str(), AUTHOR);
-    assert_eq!(index.event.created_at_u64(), 77);
-    assert_eq!(index.event.kind_u32(), KIND_POST);
-    assert_eq!(index.event.content(), "hello");
-    assert_eq!(index.event.sig_str(), EVENT_SIG);
-    assert_eq!(index.data.data.content, "hello");
+    .unwrap()
+    .approve_reference()
+    .unwrap()
+    .verify_bytes(bytes, &media_type)
+    .unwrap()
 }
 
-#[test]
-fn post_index_from_event_propagates_parse_errors() {
-    let err = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
-        77,
-        KIND_COMMENT,
-        "hello".to_string(),
-        Vec::new(),
-        "sig".to_string(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        err,
-        EventParseError::InvalidKind {
-            expected: "1",
-            got: KIND_COMMENT
-        }
-    ));
+fn fallback_url(
+    bytes: &[u8],
+    host: &str,
+    extension: &str,
+) -> radroots_blossom::RadrootsBlossomApprovedBlobUrl {
+    let hash = RadrootsBlossomSha256::digest(bytes);
+    RadrootsBlossomBlobUrl::parse(&format!("https://{host}/{hash}.{extension}"))
+        .unwrap()
+        .approve()
+        .unwrap()
 }

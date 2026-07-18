@@ -13,6 +13,11 @@ use radroots_event_codec::profile::RadrootsProfileData;
 use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
 
 #[cfg(feature = "events")]
+/// Adapts an event through the compatibility-only legacy post projection.
+///
+/// This helper discards tags and does not establish product profile admission.
+/// Use `verify_and_admit_post_event` over `radroots_event_from_nostr` whenever
+/// the caller needs Reply, Update, PhotoUpdate, or Ask classification.
 pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<RadrootsPost> {
     RadrootsParsedData::new(
         e.id.to_string(),

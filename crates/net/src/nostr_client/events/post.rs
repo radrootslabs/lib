@@ -1,26 +1,27 @@
 use crate::error::{NetError, Result};
-use radroots_event::post::RadrootsPost;
+use radroots_event::post::{RadrootsAuthoredUpdate, RadrootsPost};
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
-    radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
+    radroots_nostr_build_post_reply_event, radroots_nostr_build_update_event,
     radroots_nostr_fetch_post_events, radroots_nostr_send_event,
 };
 
 use crate::nostr_client::manager::NostrClientManager;
 
 impl NostrClientManager {
-    pub async fn publish_post_event(&self, content: String) -> Result<String> {
-        let builder = radroots_nostr_build_post_event(content);
+    pub async fn publish_update_event(&self, update: &RadrootsAuthoredUpdate) -> Result<String> {
+        let builder =
+            radroots_nostr_build_update_event(update).map_err(|e| NetError::Msg(e.to_string()))?;
         let out = radroots_nostr_send_event(&self.inner.client, builder)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
         Ok(out.val.to_string())
     }
 
-    pub fn publish_post_event_blocking(&self, content: String) -> Result<String> {
+    pub fn publish_update_event_blocking(&self, update: RadrootsAuthoredUpdate) -> Result<String> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
-        rt.block_on(async move { this.publish_post_event(content).await })
+        rt.block_on(async move { this.publish_update_event(&update).await })
     }
 
     pub async fn publish_post_reply_event(
@@ -65,6 +66,8 @@ impl NostrClientManager {
         })
     }
 
+    /// Fetches generic kind-1 compatibility projections without claiming
+    /// Radroots product-profile admission.
     pub async fn fetch_post_events(
         &self,
         limit: u16,

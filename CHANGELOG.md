@@ -20,6 +20,9 @@ publish policy both pass for the same source revision.
   `D` values from its validated time range.
 - Authored profile and calendar media now share the byte-verified Blossom image
   proof type; unverified URLs remain inbound data and cannot enter authoring APIs.
+- Root kind-`1` product admission now verifies NIP-01 identity and signatures,
+  excludes replies before product classification, and deterministically projects
+  Ask, PhotoUpdate, or Update while preserving malformed media diagnostics.
 - Workspace packages declare one governed version explicitly so mounted path
   consumers preserve it, and every internal root dependency requires that exact
   pre-release version.
@@ -33,6 +36,13 @@ publish policy both pass for the same source revision.
 - Verified Profile admission binds a signed exact kind-`0` envelope to the
   tolerant metadata projection, accepts standard tagless events, and exposes
   deterministic equal-time lowest-id replacement vectors.
+- Strict authored Update, PhotoUpdate, and Ask types emit deterministic kind-`1`
+  wire parts. Photo and Ask media require byte-verified Blossom image
+  descriptors, exact ordered NIP-92 metadata, bounded nonzero fields, and
+  same-digest approved fallback URLs.
+- Raw signed kind-`1` conformance vectors prove signature-gated profile
+  admission, reply exclusion, classifier precedence, tolerant metadata
+  retention, and stable rejection codes.
 
 ### Removed
 
@@ -47,6 +57,9 @@ publish policy both pass for the same source revision.
   containing the removed `include_profiles` option is rejected.
 - `RadrootsNostrClient` no longer implicitly dereferences to the upstream SDK
   client. Narrow client operations and the explicit ownership bridge remain.
+- Permissive `RadrootsPost` tag authoring, the free-form Nostr post builder, and
+  the generic net post publisher were removed. Publication now requires one of
+  the strict authored Update, PhotoUpdate, or Ask states.
 
 ### Compatibility
 

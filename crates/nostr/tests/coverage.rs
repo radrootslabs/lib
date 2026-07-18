@@ -9,8 +9,7 @@ use radroots_nostr::events::jobs::{
     radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,
 };
 use radroots_nostr::events::post::{
-    radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
-    radroots_nostr_post_events_filter,
+    radroots_nostr_build_post_reply_event, radroots_nostr_post_events_filter,
 };
 use radroots_nostr::events::radroots_nostr_build_event;
 use radroots_nostr::filter::{
@@ -139,9 +138,6 @@ fn post_helpers_cover_success_and_error_paths() {
     let parent_id_hex = parent.id.to_hex();
     let author_hex = parent.pubkey.to_hex();
     let root_id_hex = parent.id.to_hex();
-
-    let post_builder = radroots_nostr_build_post_event("hello");
-    let _ = post_builder.build(keys.public_key());
 
     let _ = radroots_nostr_post_events_filter(None, None);
     let _ = radroots_nostr_post_events_filter(Some(10), Some(1_700_000_000));

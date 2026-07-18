@@ -4,13 +4,41 @@ use crate::types::{
     RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 
+#[cfg(feature = "events")]
+use radroots_event::post::{
+    RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredUpdate,
+};
+#[cfg(feature = "events")]
+use radroots_event::wire::RadrootsNip01EventWireParts;
+#[cfg(feature = "events")]
+use radroots_event_codec::post::authored::{
+    authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
+};
+
 #[cfg(all(feature = "client", feature = "events"))]
 use crate::client::RadrootsNostrClient;
 #[cfg(all(feature = "client", feature = "events"))]
 use core::time::Duration;
 
-pub fn radroots_nostr_build_post_event(content: impl Into<String>) -> RadrootsNostrEventBuilder {
-    RadrootsNostrEventBuilder::text_note(content)
+#[cfg(feature = "events")]
+pub fn radroots_nostr_build_update_event(
+    update: &RadrootsAuthoredUpdate,
+) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    builder_from_wire_parts(authored_update_to_wire_parts(update))
+}
+
+#[cfg(feature = "events")]
+pub fn radroots_nostr_build_photo_update_event(
+    photo: &RadrootsAuthoredPhotoUpdate,
+) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    builder_from_wire_parts(authored_photo_update_to_wire_parts(photo))
+}
+
+#[cfg(feature = "events")]
+pub fn radroots_nostr_build_ask_event(
+    ask: &RadrootsAuthoredAsk,
+) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    builder_from_wire_parts(authored_ask_to_wire_parts(ask))
 }
 
 pub fn radroots_nostr_post_events_filter(
@@ -50,7 +78,19 @@ pub fn radroots_nostr_build_post_reply_event(
     Ok(RadrootsNostrEventBuilder::text_note(content).tags(tags))
 }
 
+#[cfg(feature = "events")]
+fn builder_from_wire_parts(
+    parts: RadrootsNip01EventWireParts,
+) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    crate::events::radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
+}
+
 #[cfg(all(feature = "client", feature = "events"))]
+/// Fetches generic kind-1 events through the compatibility post projection.
+///
+/// The unmarked filter intentionally retains ordinary Nostr notes and replies.
+/// This compatibility read discards tags and does not establish Radroots
+/// product admission; product consumers must use the verified admission API.
 pub async fn radroots_nostr_fetch_post_events(
     client: &RadrootsNostrClient,
     limit: u16,

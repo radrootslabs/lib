@@ -199,6 +199,8 @@ pub struct RadrootsTagContract {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventDiscriminator {
     KindOnly,
+    /// Exact profile selection is owned by a verified admission algorithm.
+    AdmissionOnly,
     DTagExact(&'static str),
     DTagPrefix(&'static str),
     DTagSuffix(&'static str),
@@ -252,6 +254,9 @@ pub enum RadrootsContractValidationError {
     UnknownContract {
         contract_id: String,
     },
+    AdmissionRequired {
+        contract_id: &'static str,
+    },
     ContractMatch {
         error: RadrootsContractMatchError,
     },
@@ -298,6 +303,7 @@ impl RadrootsContractValidationError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::UnknownContract { .. } => "unknown_contract",
+            Self::AdmissionRequired { .. } => "admission_required",
             Self::ContractMatch { .. } => "contract_match",
             Self::KindMismatch { .. } => "kind_mismatch",
             Self::ContentMustBeEmpty { .. } => "content_must_be_empty",
@@ -754,6 +760,27 @@ const TAG_TOPIC_MANY: RadrootsTagContract = tag(
     RadrootsTagValueType::Text,
     true,
 );
+const TAG_ASK_MARKER: RadrootsTagContract = tag(
+    "t",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Topic,
+    RadrootsTagValueType::Text,
+    true,
+);
+const TAG_IMETA_REQUIRED_MANY: RadrootsTagContract = tag(
+    "imeta",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::Image,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_IMETA_OPTIONAL_MANY: RadrootsTagContract = tag(
+    "imeta",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Image,
+    RadrootsTagValueType::Text,
+    false,
+);
 const TAG_CALENDAR_REFERENCE: RadrootsTagContract = tag(
     "r",
     RadrootsTagCardinality::OptionalMany,
@@ -926,6 +953,8 @@ const EVIDENCE_BOUNTY_TAGS: &[RadrootsTagContract] = &[
 ];
 
 const SOCIAL_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::SocialProjection];
+const PHOTO_UPDATE_TAGS: &[RadrootsTagContract] = &[TAG_IMETA_REQUIRED_MANY];
+const ASK_TAGS: &[RadrootsTagContract] = &[TAG_ASK_MARKER, TAG_IMETA_OPTIONAL_MANY];
 const PROFILE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::ProfileProjection];
 const FARM_OPS_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::FarmOpsProjection];
 const GROUP_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::GroupProjection];
@@ -1086,7 +1115,12 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         "Short Text Note",
         RadrootsEventClass::Regular,
         RadrootsNostrStandard::Nip01,
-        ["radroots.social.post.v1"]
+        [
+            "radroots.social.post.v1",
+            "radroots.social.update.v1",
+            "radroots.social.photo_update.v1",
+            "radroots.social.ask.v1"
+        ]
     ),
     kind_contract!(
         KIND_FOLLOW,
@@ -1842,6 +1876,45 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
         NO_TAGS,
+        SOCIAL_REDUCERS
+    ),
+    event_contract!(
+        "radroots.social.update.v1",
+        KIND_POST,
+        "Root Text Update",
+        "RadrootsAuthoredUpdate / RadrootsInboundPostProjection",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::PlainText,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        NO_TAGS,
+        SOCIAL_REDUCERS
+    ),
+    event_contract!(
+        "radroots.social.photo_update.v1",
+        KIND_POST,
+        "NIP-92 Photo Update",
+        "RadrootsAuthoredPhotoUpdate / RadrootsInboundPostProjection",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::PlainText,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        PHOTO_UPDATE_TAGS,
+        SOCIAL_REDUCERS
+    ),
+    event_contract!(
+        "radroots.social.ask.v1",
+        KIND_POST,
+        "Root Ask",
+        "RadrootsAuthoredAsk / RadrootsInboundPostProjection",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::PlainText,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        ASK_TAGS,
         SOCIAL_REDUCERS
     ),
     event_contract!(
@@ -3293,6 +3366,14 @@ pub fn validate_event_contract_parts(
             actual: kind,
         });
     }
+    if matches!(
+        contract.discriminator,
+        RadrootsEventDiscriminator::AdmissionOnly
+    ) {
+        return Err(RadrootsContractValidationError::AdmissionRequired {
+            contract_id: contract.id,
+        });
+    }
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts(tags, contract)?;
     validate_discriminator_parts(content, contract)?;
@@ -3354,6 +3435,8 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
         Some(RadrootsContractFamily::Profile)
     } else if id.starts_with("radroots.relay.") {
         Some(RadrootsContractFamily::Relay)
+    } else if id.starts_with("radroots.social.") {
+        Some(RadrootsContractFamily::Social)
     } else if id.starts_with("radroots.trade.") {
         Some(RadrootsContractFamily::Trade)
     } else {
@@ -4169,6 +4252,14 @@ fn validate_discriminator_parts(
     content: &str,
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
+    if matches!(
+        contract.discriminator,
+        RadrootsEventDiscriminator::AdmissionOnly
+    ) {
+        return Err(RadrootsContractValidationError::AdmissionRequired {
+            contract_id: contract.id,
+        });
+    }
     let (field, value) = match &contract.discriminator {
         RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => (*field, *value),
         RadrootsEventDiscriminator::EnvelopeType(value) => ("type", *value),
@@ -4244,6 +4335,7 @@ fn discriminator_matches(
 ) -> bool {
     match discriminator {
         RadrootsEventDiscriminator::KindOnly => true,
+        RadrootsEventDiscriminator::AdmissionOnly => false,
         RadrootsEventDiscriminator::DTagExact(expected) => tag_value(tags, "d") == Some(*expected),
         RadrootsEventDiscriminator::DTagPrefix(prefix) => tag_value(tags, "d")
             .map(|value| value.starts_with(prefix))
@@ -5030,6 +5122,30 @@ mod tests {
             assert_eq!(custom_knowledge_schema(id), Some(id), "{id}");
         }
         assert_eq!(custom_knowledge_schema("radroots.wiki.article.v1"), None);
+    }
+
+    #[test]
+    fn post_subtype_contracts_require_verified_admission() {
+        let tags = vec![vec!["t".to_owned(), "radroots-ask".to_owned()]];
+        let generic = identify_event_contract(KIND_POST, &tags, "Question")
+            .expect("unsigned kind-1 identification remains generic");
+        assert_eq!(generic.id, "radroots.social.post.v1");
+
+        for id in [
+            "radroots.social.update.v1",
+            "radroots.social.photo_update.v1",
+            "radroots.social.ask.v1",
+        ] {
+            let contract = event_contract(id).expect(id);
+            assert_eq!(
+                event_contract_family(contract),
+                Some(RadrootsContractFamily::Social)
+            );
+            assert_eq!(
+                validate_event_contract_parts(KIND_POST, &tags, "Question", id),
+                Err(RadrootsContractValidationError::AdmissionRequired { contract_id: id })
+            );
+        }
     }
 
     #[test]
@@ -5836,6 +5952,12 @@ mod tests {
                     contract_id: "missing".to_owned(),
                 },
                 "unknown_contract",
+            ),
+            (
+                RadrootsContractValidationError::AdmissionRequired {
+                    contract_id: "radroots.social.ask.v1",
+                },
+                "admission_required",
             ),
             (
                 RadrootsContractValidationError::ContractMatch {
