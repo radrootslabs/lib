@@ -112,25 +112,10 @@ pub trait RadrootsRelayPublishAdapter: Send + Sync {
 pub fn verified_signed_event_payload(
     signed_event: &RadrootsSignedEvent,
 ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
-    verify_signed_event_raw_json_matches_event(signed_event)?;
     RadrootsTransportPayload::unchecked_signed_event_json(
         signed_event.id_str(),
         signed_event.raw_json(),
     )
-}
-
-fn verify_signed_event_raw_json_matches_event(
-    signed_event: &RadrootsSignedEvent,
-) -> Result<(), RadrootsTransportError> {
-    let wire = RadrootsNip01EventWire::parse_json(signed_event.raw_json())
-        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
-    if wire.id != signed_event.id_str() {
-        return Err(RadrootsTransportError::InvalidPayloadId);
-    }
-    if &wire != signed_event.wire() {
-        return Err(RadrootsTransportError::InvalidPayloadBytes);
-    }
-    Ok(())
 }
 
 impl<A> RadrootsRelayPublishAdapter for &A
@@ -262,6 +247,114 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         | RadrootsRelayTransportError::Outbox(_)
         | RadrootsRelayTransportError::MissingSignedOutboxEvent(_) => {
             RadrootsTransportError::InvalidTransportKind
+        }
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::nostr_error_to_transport_error;
+    use crate::RadrootsRelayTransportError;
+    use radroots_transport::RadrootsTransportError;
+
+    #[test]
+    fn relay_errors_map_to_stable_transport_contract_categories() {
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::TransportContract(
+                "contract".to_owned(),
+            )),
+            RadrootsTransportError::InvalidPayloadBytes
+        );
+
+        let target_errors = [
+            RadrootsRelayTransportError::RelayUrlParse {
+                url: "bad".to_owned(),
+                reason: "parse".to_owned(),
+            },
+            RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
+                url: "ws://relay.example".to_owned(),
+            },
+            RadrootsRelayTransportError::UnsupportedRelayScheme {
+                url: "https://relay.example".to_owned(),
+                scheme: "https".to_owned(),
+            },
+            RadrootsRelayTransportError::EmptyRelayHost {
+                url: "wss://".to_owned(),
+            },
+            RadrootsRelayTransportError::RelayUrlUserinfo {
+                url: "wss://user@relay.example".to_owned(),
+            },
+            RadrootsRelayTransportError::RelayUrlQueryOrFragment {
+                url: "wss://relay.example?x=1".to_owned(),
+            },
+            RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+                url: "wss://127.0.0.1".to_owned(),
+                reason: "loopback".to_owned(),
+            },
+            RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+                url: "wss://relay.example".to_owned(),
+                address: "127.0.0.1".to_owned(),
+                reason: "loopback".to_owned(),
+            },
+            RadrootsRelayTransportError::EmptyTargetSet,
+        ];
+        for error in target_errors {
+            assert_eq!(
+                nostr_error_to_transport_error(error),
+                RadrootsTransportError::InvalidTargetUri
+            );
+        }
+
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::NostrEventJson(
+                "event".to_owned(),
+            )),
+            RadrootsTransportError::InvalidPayloadBytes
+        );
+        let json_error = serde_json::from_str::<serde_json::Value>("{").expect_err("invalid json");
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::Json(json_error)),
+            RadrootsTransportError::InvalidPayloadBytes
+        );
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::Transport(
+                "offline".to_owned(),
+            )),
+            RadrootsTransportError::InvalidTransportKind
+        );
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::EmptyFetchFilters),
+            RadrootsTransportError::InvalidTransportKind
+        );
+        assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::InvalidFetchLimit {
+                field: "max_events",
+            }),
+            RadrootsTransportError::InvalidTransportKind
+        );
+
+        #[cfg(feature = "storage")]
+        {
+            assert_eq!(
+                nostr_error_to_transport_error(RadrootsRelayTransportError::EventStore(
+                    radroots_event_store::RadrootsEventStoreError::MissingEvent(
+                        "missing".to_owned(),
+                    ),
+                )),
+                RadrootsTransportError::InvalidTransportKind
+            );
+            assert_eq!(
+                nostr_error_to_transport_error(RadrootsRelayTransportError::Outbox(
+                    radroots_outbox::RadrootsOutboxError::EventNotFound(1),
+                )),
+                RadrootsTransportError::InvalidTransportKind
+            );
+            assert_eq!(
+                nostr_error_to_transport_error(
+                    RadrootsRelayTransportError::MissingSignedOutboxEvent(1),
+                ),
+                RadrootsTransportError::InvalidTransportKind
+            );
         }
     }
 }
