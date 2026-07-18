@@ -87,4 +87,4 @@ semver_impacts = [
   "add_conformance_vector",
   "change_exported_algorithm_behavior",
 ]
-summary = "Expose knowledge-independent NIP-01 verification and verified Profile admission while rejecting every out-of-range Nostr kind conversion."
+summary = "Expose knowledge-independent NIP-01 verification and verified Profile admission while rejecting out-of-range Nostr kinds and malformed secp256k1 author keys."

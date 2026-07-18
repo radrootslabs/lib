@@ -89,6 +89,7 @@ fn execute(vector: &Vector) {
         "event.verify_nip01.valid" => verify_valid(vector),
         "event.verify_nip01.invalid_id" => verify_invalid_id(vector),
         "event.verify_nip01.invalid_signature" => verify_invalid_signature(vector),
+        "event.verify_nip01.malformed_envelope" => verify_malformed_envelope(vector),
         "event.verify_nip01.kind_overflow" => verify_kind_overflow(vector),
         "profile.verify_and_admit.valid" => profile_admit_valid(vector),
         "profile.verify_and_admit.invalid_kind" => profile_admit_invalid_kind(vector),
@@ -130,6 +131,13 @@ fn verify_invalid_signature(vector: &Vector) {
         .expect_err("invalid event signature must fail");
     assert_eq!(error.code(), expected_str(vector, "error"));
     assert_eq!(error, RadrootsNip01VerificationError::SignatureInvalid);
+}
+
+fn verify_malformed_envelope(vector: &Vector) {
+    let error = verify_nip01_event(canonical_envelope(input_str(vector, "event_json")))
+        .expect_err("invalid secp256k1 public key must fail envelope conversion");
+    assert_eq!(error.code(), expected_str(vector, "error"));
+    assert_eq!(error, RadrootsNip01VerificationError::MalformedEnvelope);
 }
 
 fn verify_kind_overflow(vector: &Vector) {

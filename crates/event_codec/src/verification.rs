@@ -146,7 +146,8 @@ fn raw_event_from_radroots(
 ) -> Result<nostr::Event, RadrootsNip01VerificationError> {
     let id = nostr::EventId::from_hex(event.id_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let public_key = nostr::PublicKey::from_hex(event.author_str())
+    let public_key = nostr::secp256k1::XOnlyPublicKey::from_str(event.author_str())
+        .map(nostr::PublicKey::from)
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     let kind = u16::try_from(event.kind_u32()).map_err(|_| {
         RadrootsNip01VerificationError::KindOutOfRange {

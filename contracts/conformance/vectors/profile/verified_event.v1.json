@@ -35,6 +35,16 @@
     },
     {
       "expected": {
+        "error": "malformed_envelope"
+      },
+      "id": "event_verify_malformed_curve_pubkey_001",
+      "input": {
+        "event_json": "{\"id\":\"8d71bc1e4126e8b16c7e9229487d9028df9508c156d5e501d1487eda799af161\",\"pubkey\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"created_at\":1800000107,\"kind\":0,\"tags\":[],\"content\":\"malformed-curve-pubkey\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}"
+      },
+      "kind": "event.verify_nip01.malformed_envelope"
+    },
+    {
+      "expected": {
         "error": "kind_out_of_range",
         "kind": 65536
       },

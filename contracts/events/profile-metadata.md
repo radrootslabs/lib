@@ -28,8 +28,11 @@ not require a Radroots marker tag.
 
 `event.verify_nip01` and its `RadrootsSignatureVerifiedEvent` result are
 available through the codec's `nostr` feature without enabling `knowledge`.
-Knowledge contract validation and decoding are a later optional stage and
-cannot be substituted for general event verification.
+Envelope conversion requires the author to be a valid secp256k1 x-only public
+key; a canonical-length hex value that is not a curve point returns
+`malformed_envelope`, not `signature_invalid`. Knowledge contract validation and
+decoding are a later optional stage and cannot be substituted for general event
+verification.
 
 The direct legacy `RadrootsProfile` codec, Profile-specific Nostr/network
 publish helpers, and replica Profile draft emission were removed in the
@@ -160,5 +163,8 @@ admission and replacement use
 mirrored under `crates/event_codec/tests/fixtures/` for published-package
 tests. The dispatchers execute every vector against the public APIs and require
 canonical and packaged copies to be byte-for-byte equal when the workspace
-contract is present. Consumers enable `serde_json` for metadata operations and
-both `serde_json` and `nostr` for cryptographic Profile admission.
+contract is present. The verified-event suite includes a canonical-id raw event
+whose author is not a valid secp256k1 curve point, proving the stable
+`malformed_envelope` mapping. Consumers enable `serde_json` for metadata
+operations and both `serde_json` and `nostr` for cryptographic Profile
+admission.

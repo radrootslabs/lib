@@ -11,7 +11,9 @@ publish policy both pass for the same source revision.
 
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
-  above `65535` instead of truncating them.
+  above `65535` instead of truncating them. Canonical-length author keys that
+  are not valid secp256k1 curve points now return `malformed_envelope` instead
+  of `signature_invalid`.
 - Calendar authoring and admission now use explicit NIP-52 authored, parsed, and
   admitted states for date events, time events, calendars, and RSVPs. Kind
   `31922` no longer emits uppercase `D`; kind `31923` derives integer UTC-day
