@@ -401,6 +401,7 @@ pub struct RadrootsOutboxSignedTradeMutationInput {
 }
 
 impl RadrootsOutboxSignedTradeMutationInput {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         operation_kind: impl Into<String>,
         trade_id: RadrootsTradeId,
@@ -584,6 +585,7 @@ pub struct RadrootsOutboxStatusSummary {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -782,6 +784,90 @@ mod tests {
                 deferred_until_implemented
             );
             assert_eq!(status.is_terminal_failure(), terminal_failure);
+            assert_eq!(
+                status.is_retryable_failure(),
+                status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
+            );
         }
+
+        for (class, satisfying_statuses) in [
+            (
+                radroots_transport::RadrootsTransportSatisfactionClass::Forwarded,
+                vec![
+                    RadrootsOutboxDeliveryTargetStatus::Forwarded,
+                    RadrootsOutboxDeliveryTargetStatus::Delivered,
+                ],
+            ),
+            (
+                radroots_transport::RadrootsTransportSatisfactionClass::Stored,
+                vec![RadrootsOutboxDeliveryTargetStatus::StoredByGateway],
+            ),
+            (
+                radroots_transport::RadrootsTransportSatisfactionClass::Seen,
+                vec![
+                    RadrootsOutboxDeliveryTargetStatus::Seen,
+                    RadrootsOutboxDeliveryTargetStatus::Delivered,
+                ],
+            ),
+            (
+                radroots_transport::RadrootsTransportSatisfactionClass::DurableOrObserved,
+                vec![
+                    RadrootsOutboxDeliveryTargetStatus::StoredByGateway,
+                    RadrootsOutboxDeliveryTargetStatus::Seen,
+                    RadrootsOutboxDeliveryTargetStatus::Delivered,
+                ],
+            ),
+        ] {
+            for status in satisfying_statuses {
+                assert!(status.counts_as_transport_satisfaction(class));
+            }
+            assert!(
+                !RadrootsOutboxDeliveryTargetStatus::Pending
+                    .counts_as_transport_satisfaction(class)
+            );
+        }
+
+        for invalid in ["", "unknown"] {
+            assert!(RadrootsOutboxOperationStatus::parse(invalid).is_err());
+            assert!(RadrootsOutboxEventState::parse(invalid).is_err());
+            assert!(RadrootsOutboxDeliveryPlanStatus::parse(invalid).is_err());
+            assert!(RadrootsOutboxDeliveryTargetStatus::parse(invalid).is_err());
+        }
+
+        for state in [
+            RadrootsOutboxEventState::DraftQueued,
+            RadrootsOutboxEventState::Signing,
+            RadrootsOutboxEventState::Signed,
+            RadrootsOutboxEventState::Publishing,
+            RadrootsOutboxEventState::SignRetryable,
+            RadrootsOutboxEventState::PublishRetryable,
+        ] {
+            assert!(!state.is_terminal());
+        }
+        for state in [
+            RadrootsOutboxEventState::Published,
+            RadrootsOutboxEventState::FailedTerminal,
+            RadrootsOutboxEventState::Cancelled,
+        ] {
+            assert!(state.is_terminal());
+        }
+
+        assert!(
+            RadrootsOutboxDeliveryTargetStatus::Forwarded
+                .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Forwarded,)
+        );
+        assert!(
+            RadrootsOutboxDeliveryTargetStatus::StoredByGateway
+                .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Stored)
+        );
+        assert!(
+            RadrootsOutboxDeliveryTargetStatus::Seen
+                .counts_as_transport_satisfaction(RadrootsTransportSatisfactionClass::Seen,)
+        );
+        assert!(
+            RadrootsOutboxDeliveryTargetStatus::StoredByGateway.counts_as_transport_satisfaction(
+                RadrootsTransportSatisfactionClass::DurableOrObserved,
+            )
+        );
     }
 }
