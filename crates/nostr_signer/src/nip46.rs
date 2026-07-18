@@ -1,9 +1,11 @@
-use nostr::UnsignedEvent;
+use nostr::{
+    UnsignedEvent,
+    filter::{Alphabet, SingleLetterTag},
+};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr::prelude::{
     RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrFilter, RadrootsNostrKind,
     RadrootsNostrPublicKey, RadrootsNostrRelayUrl, RadrootsNostrTag, RadrootsNostrTimestamp,
-    radroots_nostr_filter_tag,
 };
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectError, RadrootsNostrConnectPermissions,
@@ -151,11 +153,10 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         let filter = RadrootsNostrFilter::new()
             .kind(RadrootsNostrKind::Custom(RADROOTS_NOSTR_CONNECT_RPC_KIND))
             .since(RadrootsNostrTimestamp::now());
-        Ok(radroots_nostr_filter_tag(
-            filter,
-            "p",
+        Ok(filter.custom_tags(
+            SingleLetterTag::lowercase(Alphabet::P),
             vec![self.signer.signer_public_key_hex()],
-        )?)
+        ))
     }
 
     pub fn parse_request_event(
@@ -187,20 +188,27 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         &self,
         unsigned_event: UnsignedEvent,
     ) -> Result<RadrootsNostrConnectResponse, RadrootsNostrSignerError> {
+        Ok(self.sign_event_response_value(unsigned_event))
+    }
+
+    fn sign_event_response_value(
+        &self,
+        unsigned_event: UnsignedEvent,
+    ) -> RadrootsNostrConnectResponse {
         let user_public_key = self.signer.user_identity().public_key_hex;
         if unsigned_event.pubkey.to_hex() != user_public_key {
-            return Ok(RadrootsNostrConnectResponse::Error {
+            return RadrootsNostrConnectResponse::Error {
                 result: None,
                 error: "sign_event pubkey does not match the managed user identity".to_owned(),
-            });
+            };
         }
 
         match self.signer.sign_user_event(unsigned_event) {
-            Ok(event) => Ok(RadrootsNostrConnectResponse::SignedEvent(event)),
-            Err(error) => Ok(RadrootsNostrConnectResponse::Error {
+            Ok(event) => RadrootsNostrConnectResponse::SignedEvent(event),
+            Err(error) => RadrootsNostrConnectResponse::Error {
                 result: None,
                 error: format!("failed to sign event: {error}"),
-            }),
+            },
         }
     }
 
@@ -208,7 +216,14 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         &self,
         request: RadrootsNostrConnectRequest,
     ) -> Result<RadrootsNostrConnectResponse, RadrootsNostrSignerError> {
-        Ok(match request {
+        Ok(self.crypto_response_value(request))
+    }
+
+    fn crypto_response_value(
+        &self,
+        request: RadrootsNostrConnectRequest,
+    ) -> RadrootsNostrConnectResponse {
+        match request {
             RadrootsNostrConnectRequest::Nip04Encrypt {
                 public_key,
                 plaintext,
@@ -253,7 +268,7 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
                 result: None,
                 error: format!("request `{}` is not a crypto method", other.method()),
             },
-        })
+        }
     }
 }
 
@@ -511,7 +526,7 @@ where
                     self.handled_request_for_authorized_action(
                         &evaluation.connection,
                         evaluation.action,
-                        || self.codec.sign_event_response(unsigned_event),
+                        || Ok(self.codec.sign_event_response_value(unsigned_event)),
                     )?,
                     Some(evaluation.audit),
                 ))
@@ -551,7 +566,7 @@ where
                     self.handled_request_for_authorized_action(
                         &evaluation.connection,
                         evaluation.action,
-                        || self.codec.crypto_response(request),
+                        || Ok(self.codec.crypto_response_value(request)),
                     )?,
                     Some(evaluation.audit),
                 ))
@@ -569,7 +584,7 @@ where
                 .handled_request_for_authorized_action(
                     &evaluation.connection,
                     evaluation.action,
-                    || self.codec.sign_event_response(unsigned_event),
+                    || Ok(self.codec.sign_event_response_value(unsigned_event)),
                 ),
             RadrootsNostrConnectRequest::Nip04Encrypt { .. }
             | RadrootsNostrConnectRequest::Nip04Decrypt { .. }
@@ -578,7 +593,7 @@ where
                 .handled_request_for_authorized_action(
                     &evaluation.connection,
                     evaluation.action,
-                    || self.codec.crypto_response(request_message.request),
+                    || Ok(self.codec.crypto_response_value(request_message.request)),
                 ),
             RadrootsNostrConnectRequest::GetPublicKey
             | RadrootsNostrConnectRequest::GetSessionCapability
@@ -818,11 +833,14 @@ mod tests {
     use crate::evaluation::{
         RadrootsNostrSignerRequestAction, RadrootsNostrSignerRequestResponseHint,
     };
+    use crate::manager::RadrootsNostrSignerManager;
     use crate::model::{
         RadrootsNostrSignerApprovalRequirement, RadrootsNostrSignerAuthChallenge,
         RadrootsNostrSignerAuthState, RadrootsNostrSignerConnectionDraft,
         RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerPendingRequest,
+        RadrootsNostrSignerStoreState,
     };
+    use crate::store::RadrootsNostrSignerStore;
     use crate::test_support::{fixture_alice_identity, fixture_carol_public_key, primary_relay};
     use nostr::{Keys, Timestamp, UnsignedEvent};
     use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
@@ -835,6 +853,10 @@ mod tests {
         RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
         RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
+    };
+    use std::sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering},
     };
 
     #[derive(Clone)]
@@ -851,6 +873,36 @@ mod tests {
         rate_limit_reason: Option<&'static str>,
         approval_requirement: Option<RadrootsNostrSignerApprovalRequirement>,
         prepare_denial: Option<&'static str>,
+    }
+
+    #[derive(Clone, Default)]
+    struct ToggleSaveStore {
+        state: Arc<RwLock<RadrootsNostrSignerStoreState>>,
+        fail_saves: Arc<AtomicBool>,
+    }
+
+    impl RadrootsNostrSignerStore for ToggleSaveStore {
+        fn load(&self) -> Result<RadrootsNostrSignerStoreState, RadrootsNostrSignerError> {
+            self.state
+                .read()
+                .map(|state| state.clone())
+                .map_err(|_| RadrootsNostrSignerError::Store("test store lock poisoned".into()))
+        }
+
+        fn save(
+            &self,
+            state: &RadrootsNostrSignerStoreState,
+        ) -> Result<(), RadrootsNostrSignerError> {
+            if self.fail_saves.load(Ordering::SeqCst) {
+                return Err(RadrootsNostrSignerError::Store(
+                    "test store save failure".into(),
+                ));
+            }
+            self.state
+                .write()
+                .map(|mut stored| *stored = state.clone())
+                .map_err(|_| RadrootsNostrSignerError::Store("test store lock poisoned".into()))
+        }
     }
 
     impl Default for TestPolicy {
@@ -1601,6 +1653,38 @@ mod tests {
             response_from_outcome(auth_url),
             RadrootsNostrConnectResponse::AuthUrl("https://example.test/auth".to_owned())
         );
+    }
+
+    #[test]
+    fn policy_denial_propagates_audit_persistence_failures() {
+        let store = ToggleSaveStore::default();
+        let manager = RadrootsNostrSignerManager::new(Arc::new(store.clone()))
+            .expect("manager with toggle store");
+        let backend =
+            RadrootsNostrEmbeddedSignerBackend::new(manager, test_signer().signer_identity.clone())
+                .expect("embedded backend");
+        let client_public_key = fixture_carol_public_key();
+        connect_with_permissions(
+            &handler_with_backend(backend.clone()),
+            client_public_key,
+            Vec::new(),
+        );
+        store.fail_saves.store(true, Ordering::SeqCst);
+
+        let handler = handler_with_policy(
+            backend,
+            TestPolicy {
+                prepare_denial: Some("policy blocked"),
+                ..TestPolicy::default()
+            },
+        );
+        let error = handler
+            .handle_request(
+                client_public_key,
+                request_message("req-audit-save", RadrootsNostrConnectRequest::Ping),
+            )
+            .expect_err("audit persistence failure");
+        assert!(error.to_string().contains("test store save failure"));
     }
 
     #[test]
