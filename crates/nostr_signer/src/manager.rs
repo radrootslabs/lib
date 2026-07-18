@@ -870,7 +870,7 @@ impl RadrootsNostrSignerManager {
                 action.audit_message(),
                 request_at_unix,
             );
-            state.audit_records.push(audit.clone());
+            replace_or_insert_auth_replay_audit(state, audit.clone())?;
 
             Ok(RadrootsNostrSignerRequestEvaluation {
                 request_id,
@@ -1188,6 +1188,28 @@ fn now_unix_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn replace_or_insert_auth_replay_audit(
+    state: &mut RadrootsNostrSignerStoreState,
+    replacement: RadrootsNostrSignerRequestAuditRecord,
+) -> Result<(), RadrootsNostrSignerError> {
+    let Some(existing) = state
+        .audit_records
+        .iter_mut()
+        .find(|record| record.request_id == replacement.request_id)
+    else {
+        state.audit_records.push(replacement);
+        return Ok(());
+    };
+    if existing.connection_id != replacement.connection_id || existing.method != replacement.method
+    {
+        return Err(RadrootsNostrSignerError::InvalidState(
+            "auth replay audit does not match the original request".into(),
+        ));
+    }
+    *existing = replacement;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2370,16 +2392,23 @@ mod tests {
                 format!("{}/flow", api_primary_https()).as_str(),
             )
             .expect("require auth");
-        let pending = manager
-            .set_pending_request(
+        let challenged = manager
+            .evaluate_request(
                 &record.connection_id,
                 RadrootsNostrConnectRequestMessage::new(
                     "req-auth-preview",
                     RadrootsNostrConnectRequest::GetPublicKey,
                 ),
             )
-            .expect("set pending");
-        let pending_request = pending.pending_request.expect("pending request");
+            .expect("evaluate challenged request");
+        assert_eq!(
+            challenged.audit.decision,
+            RadrootsNostrSignerRequestDecision::Challenged
+        );
+        let pending_request = challenged
+            .connection
+            .pending_request
+            .expect("pending request");
 
         let workflow = manager
             .begin_auth_replay_publish_finalization(&record.connection_id)
@@ -2408,6 +2437,13 @@ mod tests {
             .expect("stored");
         assert_eq!(stored.auth_state, RadrootsNostrSignerAuthState::Pending);
         assert_eq!(stored.pending_request.as_ref(), Some(&pending_request));
+        let audits = manager.list_audit_records().expect("list audits");
+        assert_eq!(audits.len(), 1);
+        assert_eq!(audits[0].request_id.as_str(), "req-auth-preview");
+        assert_eq!(
+            audits[0].decision,
+            RadrootsNostrSignerRequestDecision::Allowed
+        );
     }
 
     #[test]
