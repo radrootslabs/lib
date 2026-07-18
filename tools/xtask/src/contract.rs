@@ -46,7 +46,7 @@ const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
     "dto_bindgen_core",
     "dto_bindgen_macros",
 ];
-const RETIRED_OPERATION_EVENT_NAMES: [&str; 10] = [
+const RETIRED_OPERATION_EVENT_NAMES: [&str; 13] = [
     "WireEventParts",
     "RadrootsFrozenEventDraft",
     "RadrootsNostrEvent",
@@ -57,14 +57,19 @@ const RETIRED_OPERATION_EVENT_NAMES: [&str; 10] = [
     "RadrootsCalendarDateValue",
     "RadrootsInboundCalendarDateEvent",
     "RadrootsInboundCalendarTimeEvent",
+    "RadrootsCalendar",
+    "RadrootsCalendarEventRsvp",
+    "RadrootsCalendarRsvp",
 ];
-const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 18] = [
+const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsNip01EventWireParts",
+    "RadrootsBlossomBlobUrl",
     "RadrootsAuthoredImage",
     "RadrootsAuthoredImageError",
     "RadrootsIanaTimeZoneId",
     "RadrootsCalendarUri",
     "RadrootsCalendarRequest",
+    "RadrootsCalendarParticipant",
     "RadrootsCalendarEventError",
     "RadrootsCalendarDate",
     "RadrootsAuthoredCalendarDateEvent",
@@ -77,8 +82,22 @@ const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 18] = [
     "RadrootsCalendarAdmissionError",
     "RadrootsAdmittedCalendarDateEvent",
     "RadrootsAdmittedCalendarTimeEvent",
+    "RadrootsCalendarUid",
+    "RadrootsCalendarEventReference",
+    "RadrootsCalendarEventRevisionReference",
+    "RadrootsCalendarEventAuthorReference",
+    "RadrootsAuthoredCalendar",
+    "RadrootsParsedNip52CalendarParts",
+    "RadrootsParsedNip52Calendar",
+    "RadrootsAdmittedCalendar",
+    "RadrootsCalendarEventRsvpStatus",
+    "RadrootsCalendarEventFreeBusy",
+    "RadrootsAuthoredCalendarEventRsvp",
+    "RadrootsParsedNip52CalendarEventRsvpParts",
+    "RadrootsParsedNip52CalendarEventRsvp",
+    "RadrootsAdmittedCalendarEventRsvp",
 ];
-const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 6] = [
+const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_date_event_build_authored_draft",
         id: "social.calendar_date_event.build_authored_draft",
@@ -195,6 +214,138 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 6] = [
             "radroots_event::calendar::RadrootsAdmittedCalendarTimeEvent",
             "radroots_event::calendar::RadrootsCalendarAdmissionError",
             "radroots_event::calendar::RadrootsParsedNip52CalendarTimeEvent",
+        ],
+        vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_build_authored_draft",
+        id: "social.calendar.build_authored_draft",
+        inputs: &["RadrootsAuthoredCalendar"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event/src/media.rs",
+            "crates/event_codec/src/calendar/encode.rs",
+        ],
+        rust_types: &[
+            "radroots_event::calendar::RadrootsAuthoredCalendar",
+            "radroots_event::calendar::RadrootsCalendarEventError",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarUid",
+            "radroots_event::media::RadrootsAuthoredImage",
+            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event_codec::error::EventEncodeError",
+        ],
+        vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_parse_nip52",
+        id: "social.calendar.parse_nip52",
+        inputs: &["u32", "NostrTags", "String"],
+        outputs: &["RadrootsParsedNip52Calendar"],
+        error_class: "parse_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event_codec/src/calendar/decode.rs",
+        ],
+        rust_types: &[
+            "radroots_event::calendar::RadrootsCalendarEventError",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarUri",
+            "radroots_event::calendar::RadrootsParsedNip52Calendar",
+            "radroots_event::calendar::RadrootsParsedNip52CalendarParts",
+            "radroots_event_codec::error::EventParseError",
+        ],
+        vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_admit_radroots_profile",
+        id: "social.calendar.admit_radroots_profile",
+        inputs: &["RadrootsParsedNip52Calendar"],
+        outputs: &["RadrootsAdmittedCalendar"],
+        error_class: "admission_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event_codec/src/calendar/decode.rs",
+        ],
+        rust_types: &[
+            "radroots_blossom::RadrootsBlossomBlobUrl",
+            "radroots_event::calendar::RadrootsAdmittedCalendar",
+            "radroots_event::calendar::RadrootsCalendarAdmissionError",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarUid",
+            "radroots_event::calendar::RadrootsParsedNip52Calendar",
+        ],
+        vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_rsvp_build_authored_draft",
+        id: "social.calendar_rsvp.build_authored_draft",
+        inputs: &["RadrootsAuthoredCalendarEventRsvp"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event_codec/src/calendar/encode.rs",
+        ],
+        rust_types: &[
+            "radroots_event::calendar::RadrootsAuthoredCalendarEventRsvp",
+            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+            "radroots_event::calendar::RadrootsCalendarEventError",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+            "radroots_event::calendar::RadrootsCalendarUid",
+            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event_codec::error::EventEncodeError",
+        ],
+        vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_rsvp_parse_nip52",
+        id: "social.calendar_rsvp.parse_nip52",
+        inputs: &["u32", "NostrTags", "String"],
+        outputs: &["RadrootsParsedNip52CalendarEventRsvp"],
+        error_class: "parse_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event_codec/src/calendar/decode.rs",
+        ],
+        rust_types: &[
+            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+            "radroots_event::calendar::RadrootsCalendarEventError",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
+            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvpParts",
+            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+            "radroots_event_codec::error::EventParseError",
+        ],
+        vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
+    },
+    CalendarOperationExpectation {
+        key: "social_calendar_rsvp_admit_radroots_profile",
+        id: "social.calendar_rsvp.admit_radroots_profile",
+        inputs: &["RadrootsParsedNip52CalendarEventRsvp"],
+        outputs: &["RadrootsAdmittedCalendarEventRsvp"],
+        error_class: "admission_error",
+        rust_modules: &[
+            "crates/event/src/calendar.rs",
+            "crates/event_codec/src/calendar/decode.rs",
+        ],
+        rust_types: &[
+            "radroots_event::calendar::RadrootsAdmittedCalendarEventRsvp",
+            "radroots_event::calendar::RadrootsCalendarAdmissionError",
+            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+            "radroots_event::calendar::RadrootsCalendarEventReference",
+            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+            "radroots_event::calendar::RadrootsCalendarUid",
+            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
+            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
@@ -769,10 +920,25 @@ const CALENDAR_TIME_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
 ];
 
-const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
-        required_fragments: &["pub struct RadrootsCalendar"],
+        required_fragments: &[
+            "pub struct RadrootsAuthoredCalendar {",
+            "pub struct RadrootsParsedNip52Calendar {",
+            "pub struct RadrootsAdmittedCalendar {",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/calendar/encode.rs",
+        required_fragments: &["pub fn calendar_to_wire_parts("],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/calendar/decode.rs",
+        required_fragments: &[
+            "pub fn parse_nip52_calendar(",
+            "pub fn admit_radroots_calendar(",
+        ],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -780,10 +946,25 @@ const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
-        required_fragments: &["pub struct RadrootsCalendarEventRsvp"],
+        required_fragments: &[
+            "pub struct RadrootsAuthoredCalendarEventRsvp {",
+            "pub struct RadrootsParsedNip52CalendarEventRsvp {",
+            "pub struct RadrootsAdmittedCalendarEventRsvp {",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/calendar/encode.rs",
+        required_fragments: &["pub fn rsvp_to_wire_parts("],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/calendar/decode.rs",
+        required_fragments: &[
+            "pub fn parse_nip52_calendar_event_rsvp(",
+            "pub fn admit_radroots_calendar_event_rsvp(",
+        ],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -1192,7 +1373,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     },
     EventBoundaryExpectation {
         domain: "list_set",
-        kind: "30000..39092",
+        kind: "30000..30007, 30015, 30030, 30063, 30267, 39089, 39092",
         radroots_type: "RadrootsListSet",
         rpc_methods: &[
             "events.list_set.publish",
@@ -1270,7 +1451,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     EventBoundaryExpectation {
         domain: "calendar",
         kind: "31924",
-        radroots_type: "RadrootsCalendar",
+        radroots_type: "RadrootsAuthoredCalendar / RadrootsParsedNip52Calendar / RadrootsAdmittedCalendar",
         rpc_methods: &[
             "events.calendar.publish",
             "events.calendar.list",
@@ -1281,7 +1462,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     EventBoundaryExpectation {
         domain: "calendar_rsvp",
         kind: "31925",
-        radroots_type: "RadrootsCalendarEventRsvp",
+        radroots_type: "RadrootsAuthoredCalendarEventRsvp / RadrootsParsedNip52CalendarEventRsvp / RadrootsAdmittedCalendarEventRsvp",
         rpc_methods: &[
             "events.calendar_rsvp.publish",
             "events.calendar_rsvp.list",
@@ -3109,10 +3290,7 @@ fn validate_calendar_operation_authority(
         .operations
         .iter()
         .filter(|(key, operation)| {
-            key.starts_with("social_calendar_date_event_")
-                || key.starts_with("social_calendar_time_event_")
-                || operation.id.starts_with("social.calendar_date_event.")
-                || operation.id.starts_with("social.calendar_time_event.")
+            key.starts_with("social_calendar_") || operation.id.starts_with("social.calendar")
         })
         .map(|(key, _)| key.clone())
         .collect::<BTreeSet<_>>();
@@ -4914,6 +5092,31 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     }
 
     #[test]
+    fn calendar_operation_authority_reports_obsolete_rsvp_operation_drift() {
+        let root = workspace_root();
+        let mut bundle = load_contract_bundle(&root).expect("load contract");
+        let manifest = bundle
+            .operations_manifest
+            .as_mut()
+            .expect("operations manifest");
+        let shared_types =
+            collect_non_empty_set(&manifest.shared_types.public, "shared_types.public")
+                .expect("shared public types");
+        let obsolete = manifest
+            .operations
+            .remove("social_calendar_rsvp_build_authored_draft")
+            .expect("calendar RSVP authored operation");
+        manifest
+            .operations
+            .insert("social_calendar_rsvp_build_tags".to_string(), obsolete);
+
+        let error = validate_calendar_operation_authority(manifest, &shared_types)
+            .expect_err("obsolete calendar RSVP operation drift");
+        assert!(error.contains("calendar operation authority drift"));
+        assert!(error.contains("social_calendar_rsvp_build_tags"));
+    }
+
+    #[test]
     fn validate_current_canonical_event_boundary() {
         let root = workspace_root();
         validate_canonical_event_boundary(&root).expect("validate canonical event boundary");
@@ -6374,6 +6577,42 @@ rust_package = "radroots_sdk"
                     .shared_types
                     .public
                     .push("RadrootsInboundCalendarDateEvent".to_string());
+            },
+        );
+        assert_bundle_error(
+            "shared_types.public uses retired event type RadrootsCalendar",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .shared_types
+                    .public
+                    .push("RadrootsCalendar".to_string());
+            },
+        );
+        assert_bundle_error(
+            "shared_types.public uses retired event type RadrootsCalendarEventRsvp",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .shared_types
+                    .public
+                    .push("RadrootsCalendarEventRsvp".to_string());
+            },
+        );
+        assert_bundle_error(
+            "shared_types.public uses retired event type RadrootsCalendarRsvp",
+            |bundle| {
+                bundle
+                    .operations_manifest
+                    .as_mut()
+                    .expect("operations manifest")
+                    .shared_types
+                    .public
+                    .push("RadrootsCalendarRsvp".to_string());
             },
         );
         assert_bundle_error(

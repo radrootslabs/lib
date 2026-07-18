@@ -1,9 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_event::{
-    kinds::is_nip51_list_set_kind, list::RadrootsListEntry, list_set::RadrootsListSet,
-};
+use radroots_event::{list::RadrootsListEntry, list_set::RadrootsListSet};
 
 use crate::error::EventParseError;
 #[cfg(feature = "serde_json")]
@@ -36,9 +34,9 @@ pub fn list_set_from_tags(
     content: String,
     tags: &[Vec<String>],
 ) -> Result<RadrootsListSet, EventParseError> {
-    if !is_nip51_list_set_kind(kind) {
+    if !super::is_generic_list_set_codec_kind(kind) {
         return Err(EventParseError::InvalidKind {
-            expected: "nip51 list set kind",
+            expected: "generic nip51 list-set kind",
             got: kind,
         });
     }

@@ -328,6 +328,658 @@
         "tags": [["d", "wrong-kind"], ["title", "Wrong kind"], ["start", "2026-06-20"]]
       },
       "expected": { "error": "invalid_kind" }
+    },
+    {
+      "id": "baseline_collection_empty_001",
+      "kind": "calendar.baseline.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "Victoria farm calendar"], ["title", "Victoria farm calendar"]]
+      },
+      "expected": {
+        "d": "Victoria farm calendar",
+        "title": "Victoria farm calendar",
+        "content": "",
+        "list_description": null,
+        "image": null,
+        "event_references": []
+      }
+    },
+    {
+      "id": "baseline_collection_ordered_mixed_nip51_metadata_001",
+      "kind": "calendar.baseline.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "Shared schedule for Victoria growers.",
+        "tags": [
+          ["d", "regional-farm-calendar"],
+          ["title", "Regional farm calendar"],
+          ["description", "NIP-51 client-facing set description"],
+          ["image", "https://ordinary.example.test/calendars/victoria.jpg"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:moss-street-market", "wss://date-relay.example.test/events"],
+          ["a", "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:harvest-window", "WSS://Time-Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {
+        "d": "regional-farm-calendar",
+        "title": "Regional farm calendar",
+        "content": "Shared schedule for Victoria growers.",
+        "list_description": "NIP-51 client-facing set description",
+        "image": "https://ordinary.example.test/calendars/victoria.jpg",
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:moss-street-market",
+            "relay": "wss://date-relay.example.test/events"
+          },
+          {
+            "coordinate": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:harvest-window",
+            "relay": "WSS://Time-Relay.Example.Test/events"
+          }
+        ]
+      }
+    },
+    {
+      "id": "baseline_collection_uppercase_coordinate_and_relay_001",
+      "kind": "calendar.baseline.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "uppercase-observed"],
+          ["title", "Uppercase observed"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:farm-tour", "WSS://Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {
+        "d": "uppercase-observed",
+        "title": "Uppercase observed",
+        "content": "",
+        "list_description": null,
+        "image": null,
+        "event_references": [
+          {
+            "coordinate": "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:farm-tour",
+            "relay": "WSS://Relay.Example.Test/events"
+          }
+        ]
+      }
+    },
+    {
+      "id": "baseline_collection_duplicate_coordinate_observed_001",
+      "kind": "calendar.baseline.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "duplicates-observed"],
+          ["title", "Duplicates observed"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour", "wss://one.example.test"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour", "wss://two.example.test"]
+        ]
+      },
+      "expected": {
+        "d": "duplicates-observed",
+        "title": "Duplicates observed",
+        "content": "",
+        "list_description": null,
+        "image": null,
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour",
+            "relay": "wss://one.example.test"
+          },
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour",
+            "relay": "wss://two.example.test"
+          }
+        ]
+      }
+    },
+    {
+      "id": "baseline_collection_missing_d_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {"kind": 31924, "content": "", "tags": [["title", "Missing identifier"]]},
+      "expected": {"error": "missing_tag", "tag": "d"}
+    },
+    {
+      "id": "baseline_collection_missing_title_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {"kind": 31924, "content": "", "tags": [["d", "missing-title"]]},
+      "expected": {"error": "missing_tag", "tag": "title"}
+    },
+    {
+      "id": "baseline_collection_duplicate_d_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "one"], ["d", "two"], ["title", "Duplicate identifier"]]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "d"}
+    },
+    {
+      "id": "baseline_collection_duplicate_title_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "duplicate-title"], ["title", "One"], ["title", "Two"]]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "title"}
+    },
+    {
+      "id": "baseline_collection_d_extra_element_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "extra", "unexpected"], ["title", "Bad identifier tag"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "d"}
+    },
+    {
+      "id": "baseline_collection_title_extra_element_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "bad-title-tag"], ["title", "Bad title tag", "unexpected"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "title"}
+    },
+    {
+      "id": "baseline_collection_a_extra_element_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "bad-a-arity"],
+          ["title", "Bad a arity"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour", "wss://relay.example.test", "unexpected"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_collection_malformed_coordinate_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "bad-coordinate"], ["title", "Bad coordinate"], ["a", "31922:not-a-pubkey:farm-tour"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_collection_wrong_coordinate_kind_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "wrong-coordinate-kind"], ["title", "Wrong coordinate kind"], ["a", "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:another-calendar"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_collection_invalid_relay_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "bad-relay"],
+          ["title", "Bad relay"],
+          ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:harvest-window", "https://relay.example.test"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_collection_tag_element_over_limit_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "oversized-title"], ["title", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]]
+      },
+      "expected": {"error": "invalid_envelope"}
+    },
+    {
+      "id": "baseline_rsvp_minimal_accepted_001",
+      "kind": "calendar.baseline.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "farm-tour-rsvp"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {
+        "d": "farm-tour-rsvp",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour",
+          "relay": null
+        },
+        "revision_reference": null,
+        "status": "accepted",
+        "observed_free_busy": null,
+        "effective_free_busy": null,
+        "author_hint": null,
+        "note": null
+      }
+    },
+    {
+      "id": "baseline_rsvp_complete_independent_hints_001",
+      "kind": "calendar.baseline.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "I can help at the produce table.",
+        "tags": [
+          ["d", "market-rsvp"],
+          ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:market-shift", "wss://coordinate-relay.example.test/events"],
+          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://event-relay.example.test/events"],
+          ["status", "tentative"],
+          ["fb", "busy"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://author-relay.example.test/events"]
+        ]
+      },
+      "expected": {
+        "d": "market-rsvp",
+        "event_reference": {
+          "coordinate": "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:market-shift",
+          "relay": "wss://coordinate-relay.example.test/events"
+        },
+        "revision_reference": {
+          "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "relay": "wss://event-relay.example.test/events"
+        },
+        "status": "tentative",
+        "observed_free_busy": "busy",
+        "effective_free_busy": "busy",
+        "author_hint": {
+          "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://author-relay.example.test/events"
+        },
+        "note": "I can help at the produce table."
+      }
+    },
+    {
+      "id": "baseline_rsvp_declined_observed_free_busy_001",
+      "kind": "calendar.baseline.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "Unable to attend.",
+        "tags": [
+          ["d", "declined-rsvp"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:seed-swap"],
+          ["status", "declined"],
+          ["fb", "busy"]
+        ]
+      },
+      "expected": {
+        "d": "declined-rsvp",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:seed-swap",
+          "relay": null
+        },
+        "revision_reference": null,
+        "status": "declined",
+        "observed_free_busy": "busy",
+        "effective_free_busy": null,
+        "author_hint": null,
+        "note": "Unable to attend."
+      }
+    },
+    {
+      "id": "baseline_rsvp_uppercase_identifiers_and_relays_001",
+      "kind": "calendar.baseline.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "uppercase-rsvp"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:farm-tour", "WSS://Coordinate-Relay.Example.Test/events"],
+          ["e", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "WSS://Event-Relay.Example.Test/events"],
+          ["status", "accepted"],
+          ["fb", "free"],
+          ["p", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "WSS://Author-Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {
+        "d": "uppercase-rsvp",
+        "event_reference": {
+          "coordinate": "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:farm-tour",
+          "relay": "WSS://Coordinate-Relay.Example.Test/events"
+        },
+        "revision_reference": {
+          "id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "relay": "WSS://Event-Relay.Example.Test/events"
+        },
+        "status": "accepted",
+        "observed_free_busy": "free",
+        "effective_free_busy": "free",
+        "author_hint": {
+          "pubkey": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          "relay": "WSS://Author-Relay.Example.Test/events"
+        },
+        "note": null
+      }
+    },
+    {
+      "id": "baseline_rsvp_missing_d_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"]]
+      },
+      "expected": {"error": "missing_tag", "tag": "d"}
+    },
+    {
+      "id": "baseline_rsvp_missing_a_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {"kind": 31925, "content": "", "tags": [["d", "missing-a"], ["status", "accepted"]]},
+      "expected": {"error": "missing_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_missing_status_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "missing-status"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"]]
+      },
+      "expected": {"error": "missing_tag", "tag": "status"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_d_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "one"], ["d", "two"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"]]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "d"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_a_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "duplicate-a"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-shift"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_status_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "duplicate-status"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"], ["status", "tentative"]]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "status"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_e_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "duplicate-e"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+          ["e", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "e"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_fb_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "duplicate-fb"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"], ["fb", "free"], ["fb", "busy"]]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "fb"}
+    },
+    {
+      "id": "baseline_rsvp_duplicate_p_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "duplicate-p"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["status", "accepted"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+          ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+        ]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "p"}
+    },
+    {
+      "id": "baseline_rsvp_a_extra_element_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "bad-a-arity"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour", "wss://relay.example.test", "unexpected"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_e_extra_element_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "bad-e-arity"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://relay.example.test", "unexpected"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "e"}
+    },
+    {
+      "id": "baseline_rsvp_p_role_element_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "bad-p-role"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["status", "accepted"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://relay.example.test", "host"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "p"}
+    },
+    {
+      "id": "baseline_rsvp_wrong_coordinate_kind_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "wrong-kind"], ["a", "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar"], ["status", "accepted"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_malformed_coordinate_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {"kind": 31925, "content": "", "tags": [["d", "bad-coordinate"], ["a", "31922:bad:farm-tour"], ["status", "accepted"]]},
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_malformed_event_id_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-event-id"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["e", "not-an-event-id"], ["status", "accepted"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "e"}
+    },
+    {
+      "id": "baseline_rsvp_malformed_author_pubkey_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-author"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"], ["p", "not-a-pubkey"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "p"}
+    },
+    {
+      "id": "baseline_rsvp_invalid_a_relay_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-a-relay"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour", "https://relay.example.test"], ["status", "accepted"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "a"}
+    },
+    {
+      "id": "baseline_rsvp_invalid_e_relay_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-e-relay"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "https://relay.example.test"], ["status", "accepted"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "e"}
+    },
+    {
+      "id": "baseline_rsvp_invalid_p_relay_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-p-relay"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"], ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "https://relay.example.test"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "p"}
+    },
+    {
+      "id": "baseline_rsvp_invalid_status_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-status"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "maybe"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "status"}
+    },
+    {
+      "id": "baseline_rsvp_invalid_free_busy_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [["d", "bad-fb"], ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"], ["status", "accepted"], ["fb", "unknown"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "fb"}
+    },
+    {
+      "id": "baseline_collection_duplicate_nip51_description_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "NIP-52 content description.",
+        "tags": [
+          ["d", "duplicate-description"],
+          ["title", "Duplicate description"],
+          ["description", "One"],
+          ["description", "Two"]
+        ]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "description"}
+    },
+    {
+      "id": "baseline_collection_duplicate_image_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "duplicate-image"],
+          ["title", "Duplicate image"],
+          ["image", "https://one.example.test/calendar.jpg"],
+          ["image", "https://two.example.test/calendar.jpg"]
+        ]
+      },
+      "expected": {"error": "duplicate_tag", "tag": "image"}
+    },
+    {
+      "id": "baseline_collection_nip51_description_extra_element_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "bad-description-arity"], ["title", "Bad description arity"], ["description", "Description", "unexpected"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "description"}
+    },
+    {
+      "id": "baseline_collection_image_extra_element_001",
+      "kind": "calendar.baseline.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "bad-image-arity"], ["title", "Bad image arity"], ["image", "https://example.test/calendar.jpg", "unexpected"]]
+      },
+      "expected": {"error": "invalid_tag", "tag": "image"}
+    },
+    {
+      "id": "baseline_rsvp_status_extra_element_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "bad-status-arity"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["status", "accepted", "unexpected"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "status"}
+    },
+    {
+      "id": "baseline_rsvp_fb_extra_element_001",
+      "kind": "calendar.baseline.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "bad-fb-arity"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-tour"],
+          ["status", "accepted"],
+          ["fb", "free", "unexpected"]
+        ]
+      },
+      "expected": {"error": "invalid_tag", "tag": "fb"}
     }
   ]
 }

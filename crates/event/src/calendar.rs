@@ -8,13 +8,10 @@ use alloc::{
 use core::{fmt, ops::RangeInclusive, str::FromStr};
 
 use crate::ids::{
-    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsPublicKey, RadrootsRelayUrl,
+    RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
+    RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl,
 };
 use crate::media::RadrootsAuthoredImage;
-use crate::social::{
-    RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus, RadrootsCalendarParticipant,
-    RadrootsSocialTarget,
-};
 use crate::wire::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_MAX_BYTES,
@@ -30,32 +27,47 @@ pub const RADROOTS_CALENDAR_MAX_PARTICIPANTS: usize = DEFAULT_TAG_MAX_COUNT - 16
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[derive(Clone, Debug)]
-pub struct RadrootsCalendar {
-    pub d_tag: String,
-    pub title: String,
-    pub events: Vec<RadrootsSocialTarget>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub description: Option<String>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub summary: Option<String>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub image: Option<String>,
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RadrootsCalendarParticipant {
+    pub pubkey: String,
+    pub relay: Option<String>,
+    pub role: Option<String>,
+}
+
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsCalendarEventRsvpStatus {
+    Accepted,
+    Declined,
+    Tentative,
+}
+
+#[cfg_attr(
+    any(feature = "serde", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsCalendarEventFreeBusy {
+    Free,
+    Busy,
 }
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsCalendarEventError {
     InvalidIdentifier,
+    InvalidCalendarUid,
+    InvalidEventReference,
+    InvalidRevisionReference,
+    InvalidAuthorReference,
+    DuplicateEventReference,
+    AuthorHintMismatch,
+    DeclinedFreeBusyForbidden,
     InvalidTitle,
     InvalidText(&'static str),
     InvalidUrl(&'static str),
@@ -97,6 +109,13 @@ impl RadrootsCalendarEventError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidIdentifier => "invalid_identifier",
+            Self::InvalidCalendarUid => "invalid_calendar_uid",
+            Self::InvalidEventReference => "invalid_event_reference",
+            Self::InvalidRevisionReference => "invalid_revision_reference",
+            Self::InvalidAuthorReference => "invalid_author_reference",
+            Self::DuplicateEventReference => "duplicate_event_reference",
+            Self::AuthorHintMismatch => "author_hint_mismatch",
+            Self::DeclinedFreeBusyForbidden => "declined_free_busy_forbidden",
             Self::InvalidTitle => "invalid_title",
             Self::InvalidText(_) => "invalid_text",
             Self::InvalidUrl(_) => "invalid_url",
@@ -119,6 +138,25 @@ impl fmt::Display for RadrootsCalendarEventError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidIdentifier => f.write_str("calendar identifier is invalid"),
+            Self::InvalidCalendarUid => f.write_str(
+                "calendar UID must be an unpadded 22-character base64url encoding of 128 bits",
+            ),
+            Self::InvalidEventReference => f.write_str("calendar event reference is invalid"),
+            Self::InvalidRevisionReference => {
+                f.write_str("calendar event revision reference is invalid")
+            }
+            Self::InvalidAuthorReference => {
+                f.write_str("calendar event author reference is invalid")
+            }
+            Self::DuplicateEventReference => {
+                f.write_str("calendar event references must have unique coordinates")
+            }
+            Self::AuthorHintMismatch => {
+                f.write_str("calendar event author hint does not match the event coordinate")
+            }
+            Self::DeclinedFreeBusyForbidden => {
+                f.write_str("an authored declined RSVP cannot carry free/busy state")
+            }
             Self::InvalidTitle => f.write_str("calendar title must be canonical visible text"),
             Self::InvalidText(field) => write!(f, "calendar {field} must be visible text"),
             Self::InvalidUrl(field) => write!(f, "calendar {field} is not a valid URI"),
@@ -158,6 +196,253 @@ impl fmt::Display for RadrootsCalendarEventError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsCalendarEventError {}
+
+/// A syntax-valid 128-bit calendar identifier encoded as unpadded base64url.
+///
+/// This type validates the identifier's entropy shape, not uniqueness. The
+/// authoring runtime must still generate a fresh value for every calendar or
+/// RSVP identity it creates.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsCalendarUid(String);
+
+impl RadrootsCalendarUid {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsCalendarEventError> {
+        let value = value.as_ref();
+        let valid_alphabet = value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+        let valid_final_quantum = value
+            .as_bytes()
+            .last()
+            .is_some_and(|byte| matches!(byte, b'A' | b'Q' | b'g' | b'w'));
+        if value.len() != 22 || !valid_alphabet || !valid_final_quantum {
+            return Err(RadrootsCalendarEventError::InvalidCalendarUid);
+        }
+        Ok(Self(value.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for RadrootsCalendarUid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for RadrootsCalendarUid {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for RadrootsCalendarUid {
+    type Err = RadrootsCalendarEventError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for RadrootsCalendarUid {
+    type Error = RadrootsCalendarEventError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for RadrootsCalendarUid {
+    type Error = RadrootsCalendarEventError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+#[cfg(any(feature = "serde", test))]
+impl serde::Serialize for RadrootsCalendarUid {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// A raw-preserving NIP-52 address reference to a kind-31922 or kind-31923 event.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsCalendarEventReference {
+    coordinate: RadrootsAddressableCoordinate,
+    kind: u32,
+    author: RadrootsPublicKey,
+    d_tag: RadrootsDTag,
+    relay: Option<String>,
+}
+
+impl RadrootsCalendarEventReference {
+    pub fn parse(
+        coordinate: impl AsRef<str>,
+        relay: Option<&str>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let coordinate = RadrootsAddressableCoordinate::parse(coordinate.as_ref())
+            .map_err(|_| RadrootsCalendarEventError::InvalidEventReference)?;
+        let parts = RadrootsAddressableCoordinateParts::parse(coordinate.as_str())
+            .map_err(|_| RadrootsCalendarEventError::InvalidEventReference)?;
+        if !matches!(
+            parts.kind,
+            crate::kinds::KIND_CALENDAR_DATE_EVENT | crate::kinds::KIND_CALENDAR_TIME_EVENT
+        ) {
+            return Err(RadrootsCalendarEventError::InvalidEventReference);
+        }
+        let relay = parse_calendar_reference_relay(
+            relay,
+            RadrootsCalendarEventError::InvalidEventReference,
+        )?;
+        Ok(Self {
+            coordinate,
+            kind: parts.kind,
+            author: parts.pubkey,
+            d_tag: parts.d_tag,
+            relay,
+        })
+    }
+
+    pub fn coordinate(&self) -> &RadrootsAddressableCoordinate {
+        &self.coordinate
+    }
+
+    pub const fn kind(&self) -> u32 {
+        self.kind
+    }
+
+    pub fn author(&self) -> &RadrootsPublicKey {
+        &self.author
+    }
+
+    pub fn d_tag(&self) -> &RadrootsDTag {
+        &self.d_tag
+    }
+
+    pub fn relay(&self) -> Option<&str> {
+        self.relay.as_deref()
+    }
+
+    pub fn is_canonical(&self) -> bool {
+        // Nostr does not define relay URL normalization. Strict admission validates the
+        // lowercase ws/wss syntax while preserving the caller's host, port, path, and query.
+        self.coordinate.as_str() == format!("{}:{}:{}", self.kind, self.author, self.d_tag)
+            && self
+                .relay()
+                .is_none_or(|relay| RadrootsRelayUrl::parse(relay).is_ok())
+    }
+
+    fn has_same_coordinate(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.author == other.author && self.d_tag == other.d_tag
+    }
+}
+
+/// A raw-preserving event-id reference to a specific NIP-52 event revision.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsCalendarEventRevisionReference {
+    raw_event_id: String,
+    event_id: RadrootsEventId,
+    relay: Option<String>,
+}
+
+impl RadrootsCalendarEventRevisionReference {
+    pub fn parse(
+        event_id: impl AsRef<str>,
+        relay: Option<&str>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let raw_event_id = event_id.as_ref();
+        let event_id = RadrootsEventId::parse(raw_event_id)
+            .map_err(|_| RadrootsCalendarEventError::InvalidRevisionReference)?;
+        let relay = parse_calendar_reference_relay(
+            relay,
+            RadrootsCalendarEventError::InvalidRevisionReference,
+        )?;
+        Ok(Self {
+            raw_event_id: raw_event_id.to_string(),
+            event_id,
+            relay,
+        })
+    }
+
+    pub fn raw_event_id(&self) -> &str {
+        &self.raw_event_id
+    }
+
+    pub fn event_id(&self) -> &RadrootsEventId {
+        &self.event_id
+    }
+
+    pub fn relay(&self) -> Option<&str> {
+        self.relay.as_deref()
+    }
+
+    pub fn is_canonical(&self) -> bool {
+        // Relay hints use strict Radroots syntax; their raw URL spelling is not normalized.
+        self.raw_event_id == self.event_id.as_str()
+            && self
+                .relay()
+                .is_none_or(|relay| RadrootsRelayUrl::parse(relay).is_ok())
+    }
+}
+
+/// A raw-preserving optional RSVP author hint. This reference has no role field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsCalendarEventAuthorReference {
+    raw_pubkey: String,
+    pubkey: RadrootsPublicKey,
+    relay: Option<String>,
+}
+
+impl RadrootsCalendarEventAuthorReference {
+    pub fn parse(
+        pubkey: impl AsRef<str>,
+        relay: Option<&str>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let raw_pubkey = pubkey.as_ref();
+        let pubkey = RadrootsPublicKey::parse(raw_pubkey)
+            .map_err(|_| RadrootsCalendarEventError::InvalidAuthorReference)?;
+        let relay = parse_calendar_reference_relay(
+            relay,
+            RadrootsCalendarEventError::InvalidAuthorReference,
+        )?;
+        Ok(Self {
+            raw_pubkey: raw_pubkey.to_string(),
+            pubkey,
+            relay,
+        })
+    }
+
+    pub fn raw_pubkey(&self) -> &str {
+        &self.raw_pubkey
+    }
+
+    pub fn pubkey(&self) -> &RadrootsPublicKey {
+        &self.pubkey
+    }
+
+    pub fn relay(&self) -> Option<&str> {
+        self.relay.as_deref()
+    }
+
+    pub fn is_canonical(&self) -> bool {
+        // Relay hints use strict Radroots syntax; their raw URL spelling is not normalized.
+        self.raw_pubkey == self.pubkey.as_str()
+            && self
+                .relay()
+                .is_none_or(|relay| RadrootsRelayUrl::parse(relay).is_ok())
+    }
+}
 
 /// A canonical IANA Time Zone Database identifier.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -283,6 +568,253 @@ impl<'de> serde::Deserialize<'de> for RadrootsCalendarUri {
     {
         let value = <String as serde::Deserialize>::deserialize(deserializer)?;
         Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Strict authored representation of a NIP-52 kind-31924 calendar collection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsAuthoredCalendar {
+    uid: RadrootsCalendarUid,
+    title: String,
+    content: String,
+    event_references: Vec<RadrootsCalendarEventReference>,
+    list_description: Option<String>,
+    image: Option<RadrootsAuthoredImage>,
+}
+
+impl RadrootsAuthoredCalendar {
+    pub fn new(
+        uid: RadrootsCalendarUid,
+        title: impl Into<String>,
+        content: impl Into<String>,
+        event_references: Vec<RadrootsCalendarEventReference>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let title = validated_title(title.into())?;
+        let content = content.into();
+        validate_calendar_content(&content)?;
+        validate_strict_calendar_event_references(&event_references)?;
+        let authored = Self {
+            uid,
+            title,
+            content,
+            event_references,
+            list_description: None,
+            image: None,
+        };
+        authored.validate_budget()?;
+        Ok(authored)
+    }
+
+    pub fn with_list_description(
+        mut self,
+        value: impl Into<String>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let value = value.into();
+        validate_canonical_calendar_tag_text(&value, "description")?;
+        self.list_description = Some(value);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn with_image(
+        mut self,
+        image: RadrootsAuthoredImage,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        self.image = Some(image);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn uid(&self) -> &RadrootsCalendarUid {
+        &self.uid
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    pub fn event_references(&self) -> &[RadrootsCalendarEventReference] {
+        &self.event_references
+    }
+
+    pub fn list_description(&self) -> Option<&str> {
+        self.list_description.as_deref()
+    }
+
+    pub fn image(&self) -> Option<&RadrootsAuthoredImage> {
+        self.image.as_ref()
+    }
+
+    fn validate_budget(&self) -> Result<(), RadrootsCalendarEventError> {
+        validate_calendar_collection_budget(
+            self.uid.as_str(),
+            &self.title,
+            &self.content,
+            &self.event_references,
+            self.list_description.as_deref(),
+            self.image
+                .as_ref()
+                .map(|image| image.descriptor().url().as_str()),
+        )
+    }
+}
+
+/// Constructor input for the tolerant, raw-preserving kind-31924 parse layer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsParsedNip52CalendarParts {
+    pub d_tag: String,
+    pub title: String,
+    pub content: String,
+    pub event_references: Vec<RadrootsCalendarEventReference>,
+    pub list_description: Option<String>,
+    pub image: Option<RadrootsCalendarUri>,
+}
+
+/// Structurally valid kind-31924 data. Canonical admission is a separate step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsParsedNip52Calendar {
+    d_tag: String,
+    title: String,
+    content: String,
+    event_references: Vec<RadrootsCalendarEventReference>,
+    list_description: Option<String>,
+    image: Option<RadrootsCalendarUri>,
+}
+
+impl RadrootsParsedNip52Calendar {
+    pub fn try_new(
+        parts: RadrootsParsedNip52CalendarParts,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        validate_calendar_tag_text(&parts.d_tag, "d")?;
+        validate_calendar_tag_text(&parts.title, "title")?;
+        validate_calendar_content(&parts.content)?;
+        if let Some(description) = parts.list_description.as_deref() {
+            validate_calendar_tag_text(description, "description")?;
+        }
+        validate_calendar_collection_budget(
+            &parts.d_tag,
+            &parts.title,
+            &parts.content,
+            &parts.event_references,
+            parts.list_description.as_deref(),
+            parts.image.as_ref().map(RadrootsCalendarUri::as_str),
+        )?;
+        Ok(Self {
+            d_tag: parts.d_tag,
+            title: parts.title,
+            content: parts.content,
+            event_references: parts.event_references,
+            list_description: parts.list_description,
+            image: parts.image,
+        })
+    }
+
+    pub fn d_tag(&self) -> &str {
+        &self.d_tag
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    pub fn event_references(&self) -> &[RadrootsCalendarEventReference] {
+        &self.event_references
+    }
+
+    pub fn list_description(&self) -> Option<&str> {
+        self.list_description.as_deref()
+    }
+
+    pub fn image(&self) -> Option<&RadrootsCalendarUri> {
+        self.image.as_ref()
+    }
+}
+
+/// Canonical Radroots admission of a parsed kind-31924 calendar collection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsAdmittedCalendar {
+    parsed: RadrootsParsedNip52Calendar,
+    uid: RadrootsCalendarUid,
+    blossom_image: Option<RadrootsBlossomBlobUrl>,
+}
+
+impl RadrootsAdmittedCalendar {
+    pub fn try_from_parsed(
+        parsed: RadrootsParsedNip52Calendar,
+    ) -> Result<Self, RadrootsCalendarAdmissionError> {
+        let uid = RadrootsCalendarUid::parse(parsed.d_tag())
+            .map_err(|_| RadrootsCalendarAdmissionError::NonCanonicalField("d"))?;
+        if !canonical_calendar_tag_text_is_valid(parsed.title()) {
+            return Err(RadrootsCalendarAdmissionError::NonCanonicalField("title"));
+        }
+        if parsed
+            .list_description()
+            .is_some_and(|description| !canonical_calendar_tag_text_is_valid(description))
+        {
+            return Err(RadrootsCalendarAdmissionError::NonCanonicalField(
+                "description",
+            ));
+        }
+        if parsed
+            .event_references()
+            .iter()
+            .any(|reference| !reference.is_canonical())
+        {
+            return Err(RadrootsCalendarAdmissionError::NonCanonicalField(
+                "event_reference",
+            ));
+        }
+        if calendar_event_references_have_duplicates(parsed.event_references()) {
+            return Err(RadrootsCalendarAdmissionError::DuplicateEventReference);
+        }
+        let blossom_image = parsed
+            .image()
+            .map(|image| {
+                RadrootsBlossomBlobUrl::parse(image.as_str())
+                    .map_err(|_| RadrootsCalendarAdmissionError::NonBlossomImage)
+            })
+            .transpose()?;
+        Ok(Self {
+            parsed,
+            uid,
+            blossom_image,
+        })
+    }
+
+    pub fn parsed(&self) -> &RadrootsParsedNip52Calendar {
+        &self.parsed
+    }
+
+    pub fn uid(&self) -> &RadrootsCalendarUid {
+        &self.uid
+    }
+
+    pub fn title(&self) -> &str {
+        self.parsed.title()
+    }
+
+    pub fn content(&self) -> &str {
+        self.parsed.content()
+    }
+
+    pub fn event_references(&self) -> &[RadrootsCalendarEventReference] {
+        self.parsed.event_references()
+    }
+
+    pub fn list_description(&self) -> Option<&str> {
+        self.parsed.list_description()
+    }
+
+    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+        self.blossom_image.as_ref()
     }
 }
 
@@ -1156,6 +1688,8 @@ impl RadrootsParsedNip52CalendarTimeEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsCalendarAdmissionError {
     NonCanonicalField(&'static str),
+    DuplicateEventReference,
+    AuthorHintMismatch,
     ForbiddenDateDayIndex,
     IncompleteDayCoverage,
     CoveredDayLimitExceeded { max: u64, actual: u64 },
@@ -1166,6 +1700,8 @@ impl RadrootsCalendarAdmissionError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::NonCanonicalField(_) => "non_canonical_field",
+            Self::DuplicateEventReference => "duplicate_event_reference",
+            Self::AuthorHintMismatch => "author_hint_mismatch",
             Self::ForbiddenDateDayIndex => "forbidden_date_day_index",
             Self::IncompleteDayCoverage => "incomplete_day_coverage",
             Self::CoveredDayLimitExceeded { .. } => "covered_day_limit_exceeded",
@@ -1178,6 +1714,12 @@ impl fmt::Display for RadrootsCalendarAdmissionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonCanonicalField(field) => write!(f, "calendar {field} is not canonical"),
+            Self::DuplicateEventReference => {
+                f.write_str("calendar event references must have unique coordinates")
+            }
+            Self::AuthorHintMismatch => {
+                f.write_str("calendar event author hint does not match the event coordinate")
+            }
             Self::ForbiddenDateDayIndex => {
                 f.write_str("calendar date event carries a forbidden uppercase-D extension")
             }
@@ -1409,6 +1951,57 @@ pub fn calendar_relay_url_is_valid(value: &str) -> bool {
         && parsed.fragment().is_none()
         && parsed.port() != Some(0)
         && !authority.contains('@')
+}
+
+fn parse_calendar_reference_relay(
+    relay: Option<&str>,
+    error: RadrootsCalendarEventError,
+) -> Result<Option<String>, RadrootsCalendarEventError> {
+    relay
+        .map(|relay| {
+            if calendar_relay_url_is_valid(relay) {
+                Ok(relay.to_string())
+            } else {
+                Err(error.clone())
+            }
+        })
+        .transpose()
+}
+
+fn calendar_event_references_have_duplicates(
+    references: &[RadrootsCalendarEventReference],
+) -> bool {
+    references.iter().enumerate().any(|(index, reference)| {
+        references
+            .iter()
+            .skip(index + 1)
+            .any(|candidate| reference.has_same_coordinate(candidate))
+    })
+}
+
+fn validate_strict_calendar_event_references(
+    references: &[RadrootsCalendarEventReference],
+) -> Result<(), RadrootsCalendarEventError> {
+    if references.iter().any(|reference| !reference.is_canonical()) {
+        return Err(RadrootsCalendarEventError::InvalidEventReference);
+    }
+    if calendar_event_references_have_duplicates(references) {
+        return Err(RadrootsCalendarEventError::DuplicateEventReference);
+    }
+    Ok(())
+}
+
+fn validate_strict_calendar_author_hint(
+    event_reference: &RadrootsCalendarEventReference,
+    author_hint: &RadrootsCalendarEventAuthorReference,
+) -> Result<(), RadrootsCalendarEventError> {
+    if !author_hint.is_canonical() {
+        return Err(RadrootsCalendarEventError::InvalidAuthorReference);
+    }
+    if author_hint.pubkey() != event_reference.author() {
+        return Err(RadrootsCalendarEventError::AuthorHintMismatch);
+    }
+    Ok(())
 }
 
 fn validate_calendar_tag_text(
@@ -1702,6 +2295,85 @@ fn budget_tag(key: &str, value: &str) -> Vec<String> {
     vec![key.to_string(), value.to_string()]
 }
 
+fn validate_calendar_collection_budget(
+    d_tag: &str,
+    title: &str,
+    content: &str,
+    event_references: &[RadrootsCalendarEventReference],
+    list_description: Option<&str>,
+    image: Option<&str>,
+) -> Result<(), RadrootsCalendarEventError> {
+    let mut tags = vec![budget_tag("d", d_tag), budget_tag("title", title)];
+    for reference in event_references {
+        let mut tag = budget_tag("a", reference.coordinate().as_str());
+        if let Some(relay) = reference.relay() {
+            tag.push(relay.to_string());
+        }
+        tags.push(tag);
+    }
+    if let Some(description) = list_description {
+        tags.push(budget_tag("description", description));
+    }
+    if let Some(image) = image {
+        tags.push(budget_tag("image", image));
+    }
+    validate_authored_calendar_budget(Some(content), tags)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_calendar_rsvp_budget(
+    d_tag: &str,
+    event_reference: &RadrootsCalendarEventReference,
+    revision_reference: Option<&RadrootsCalendarEventRevisionReference>,
+    status: &RadrootsCalendarEventRsvpStatus,
+    free_busy: Option<&RadrootsCalendarEventFreeBusy>,
+    author_hint: Option<&RadrootsCalendarEventAuthorReference>,
+    note: Option<&str>,
+) -> Result<(), RadrootsCalendarEventError> {
+    let mut event_tag = budget_tag("a", event_reference.coordinate().as_str());
+    if let Some(relay) = event_reference.relay() {
+        event_tag.push(relay.to_string());
+    }
+    let mut tags = vec![
+        budget_tag("d", d_tag),
+        event_tag,
+        budget_tag("status", calendar_rsvp_status_wire_value(status)),
+    ];
+    if let Some(reference) = revision_reference {
+        let mut tag = budget_tag("e", reference.raw_event_id());
+        if let Some(relay) = reference.relay() {
+            tag.push(relay.to_string());
+        }
+        tags.push(tag);
+    }
+    if let Some(free_busy) = free_busy {
+        tags.push(budget_tag("fb", calendar_free_busy_wire_value(free_busy)));
+    }
+    if let Some(author_hint) = author_hint {
+        let mut tag = budget_tag("p", author_hint.raw_pubkey());
+        if let Some(relay) = author_hint.relay() {
+            tag.push(relay.to_string());
+        }
+        tags.push(tag);
+    }
+    validate_authored_calendar_budget(note, tags)
+}
+
+fn calendar_rsvp_status_wire_value(status: &RadrootsCalendarEventRsvpStatus) -> &'static str {
+    match status {
+        RadrootsCalendarEventRsvpStatus::Accepted => "accepted",
+        RadrootsCalendarEventRsvpStatus::Declined => "declined",
+        RadrootsCalendarEventRsvpStatus::Tentative => "tentative",
+    }
+}
+
+fn calendar_free_busy_wire_value(free_busy: &RadrootsCalendarEventFreeBusy) -> &'static str {
+    match free_busy {
+        RadrootsCalendarEventFreeBusy::Free => "free",
+        RadrootsCalendarEventFreeBusy::Busy => "busy",
+    }
+}
+
 fn validate_authored_calendar_budget(
     description: Option<&str>,
     tags: Vec<Vec<String>>,
@@ -1761,35 +2433,293 @@ const fn is_leap_year(year: u16) -> bool {
     year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Clone, Debug)]
-pub struct RadrootsCalendarEventRsvp {
+/// Strict authored representation of a NIP-52 kind-31925 RSVP.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsAuthoredCalendarEventRsvp {
+    uid: RadrootsCalendarUid,
+    event_reference: RadrootsCalendarEventReference,
+    revision_reference: Option<RadrootsCalendarEventRevisionReference>,
+    status: RadrootsCalendarEventRsvpStatus,
+    free_busy: Option<RadrootsCalendarEventFreeBusy>,
+    author_hint: Option<RadrootsCalendarEventAuthorReference>,
+    note: Option<String>,
+}
+
+impl RadrootsAuthoredCalendarEventRsvp {
+    pub fn new(
+        uid: RadrootsCalendarUid,
+        event_reference: RadrootsCalendarEventReference,
+        status: RadrootsCalendarEventRsvpStatus,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        if !event_reference.is_canonical() {
+            return Err(RadrootsCalendarEventError::InvalidEventReference);
+        }
+        let authored = Self {
+            uid,
+            event_reference,
+            revision_reference: None,
+            status,
+            free_busy: None,
+            author_hint: None,
+            note: None,
+        };
+        authored.validate_budget()?;
+        Ok(authored)
+    }
+
+    pub fn with_revision_reference(
+        mut self,
+        revision_reference: RadrootsCalendarEventRevisionReference,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        if !revision_reference.is_canonical() {
+            return Err(RadrootsCalendarEventError::InvalidRevisionReference);
+        }
+        self.revision_reference = Some(revision_reference);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn with_free_busy(
+        mut self,
+        free_busy: RadrootsCalendarEventFreeBusy,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        if self.status == RadrootsCalendarEventRsvpStatus::Declined {
+            return Err(RadrootsCalendarEventError::DeclinedFreeBusyForbidden);
+        }
+        self.free_busy = Some(free_busy);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn with_author_hint(
+        mut self,
+        author_hint: RadrootsCalendarEventAuthorReference,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        validate_strict_calendar_author_hint(&self.event_reference, &author_hint)?;
+        self.author_hint = Some(author_hint);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn with_note(
+        mut self,
+        note: impl Into<String>,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        let note = note.into();
+        validate_calendar_content(&note)?;
+        self.note = (!note.is_empty()).then_some(note);
+        self.validate_budget()?;
+        Ok(self)
+    }
+
+    pub fn uid(&self) -> &RadrootsCalendarUid {
+        &self.uid
+    }
+
+    pub fn event_reference(&self) -> &RadrootsCalendarEventReference {
+        &self.event_reference
+    }
+
+    pub fn revision_reference(&self) -> Option<&RadrootsCalendarEventRevisionReference> {
+        self.revision_reference.as_ref()
+    }
+
+    pub fn status(&self) -> &RadrootsCalendarEventRsvpStatus {
+        &self.status
+    }
+
+    pub fn observed_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        self.free_busy.as_ref()
+    }
+
+    pub fn effective_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        self.free_busy.as_ref()
+    }
+
+    pub fn author_hint(&self) -> Option<&RadrootsCalendarEventAuthorReference> {
+        self.author_hint.as_ref()
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+
+    fn validate_budget(&self) -> Result<(), RadrootsCalendarEventError> {
+        validate_calendar_rsvp_budget(
+            self.uid.as_str(),
+            &self.event_reference,
+            self.revision_reference.as_ref(),
+            &self.status,
+            self.free_busy.as_ref(),
+            self.author_hint.as_ref(),
+            self.note.as_deref(),
+        )
+    }
+}
+
+/// Constructor input for the tolerant, raw-preserving kind-31925 parse layer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsParsedNip52CalendarEventRsvpParts {
     pub d_tag: String,
-    pub event: RadrootsSocialTarget,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub event_id: Option<String>,
+    pub event_reference: RadrootsCalendarEventReference,
+    pub revision_reference: Option<RadrootsCalendarEventRevisionReference>,
     pub status: RadrootsCalendarEventRsvpStatus,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub free_busy: Option<RadrootsCalendarEventFreeBusy>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    pub observed_free_busy: Option<RadrootsCalendarEventFreeBusy>,
+    pub author_hint: Option<RadrootsCalendarEventAuthorReference>,
     pub note: Option<String>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub participants: Option<Vec<RadrootsCalendarParticipant>>,
+}
+
+/// Structurally valid kind-31925 data. Canonical admission is a separate step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsParsedNip52CalendarEventRsvp {
+    d_tag: String,
+    event_reference: RadrootsCalendarEventReference,
+    revision_reference: Option<RadrootsCalendarEventRevisionReference>,
+    status: RadrootsCalendarEventRsvpStatus,
+    observed_free_busy: Option<RadrootsCalendarEventFreeBusy>,
+    author_hint: Option<RadrootsCalendarEventAuthorReference>,
+    note: Option<String>,
+}
+
+impl RadrootsParsedNip52CalendarEventRsvp {
+    pub fn try_new(
+        parts: RadrootsParsedNip52CalendarEventRsvpParts,
+    ) -> Result<Self, RadrootsCalendarEventError> {
+        validate_calendar_tag_text(&parts.d_tag, "d")?;
+        if let Some(note) = parts.note.as_deref() {
+            validate_calendar_content(note)?;
+        }
+        validate_calendar_rsvp_budget(
+            &parts.d_tag,
+            &parts.event_reference,
+            parts.revision_reference.as_ref(),
+            &parts.status,
+            parts.observed_free_busy.as_ref(),
+            parts.author_hint.as_ref(),
+            parts.note.as_deref(),
+        )?;
+        Ok(Self {
+            d_tag: parts.d_tag,
+            event_reference: parts.event_reference,
+            revision_reference: parts.revision_reference,
+            status: parts.status,
+            observed_free_busy: parts.observed_free_busy,
+            author_hint: parts.author_hint,
+            note: parts.note,
+        })
+    }
+
+    pub fn d_tag(&self) -> &str {
+        &self.d_tag
+    }
+
+    pub fn event_reference(&self) -> &RadrootsCalendarEventReference {
+        &self.event_reference
+    }
+
+    pub fn revision_reference(&self) -> Option<&RadrootsCalendarEventRevisionReference> {
+        self.revision_reference.as_ref()
+    }
+
+    pub fn status(&self) -> &RadrootsCalendarEventRsvpStatus {
+        &self.status
+    }
+
+    pub fn observed_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        self.observed_free_busy.as_ref()
+    }
+
+    pub fn effective_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        if self.status == RadrootsCalendarEventRsvpStatus::Declined {
+            None
+        } else {
+            self.observed_free_busy.as_ref()
+        }
+    }
+
+    pub fn author_hint(&self) -> Option<&RadrootsCalendarEventAuthorReference> {
+        self.author_hint.as_ref()
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+}
+
+/// Canonical Radroots admission of a parsed kind-31925 RSVP.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsAdmittedCalendarEventRsvp {
+    parsed: RadrootsParsedNip52CalendarEventRsvp,
+    uid: RadrootsCalendarUid,
+}
+
+impl RadrootsAdmittedCalendarEventRsvp {
+    pub fn try_from_parsed(
+        parsed: RadrootsParsedNip52CalendarEventRsvp,
+    ) -> Result<Self, RadrootsCalendarAdmissionError> {
+        let uid = RadrootsCalendarUid::parse(parsed.d_tag())
+            .map_err(|_| RadrootsCalendarAdmissionError::NonCanonicalField("d"))?;
+        if !parsed.event_reference().is_canonical() {
+            return Err(RadrootsCalendarAdmissionError::NonCanonicalField(
+                "event_reference",
+            ));
+        }
+        if parsed
+            .revision_reference()
+            .is_some_and(|reference| !reference.is_canonical())
+        {
+            return Err(RadrootsCalendarAdmissionError::NonCanonicalField(
+                "revision_reference",
+            ));
+        }
+        if let Some(author_hint) = parsed.author_hint() {
+            if !author_hint.is_canonical() {
+                return Err(RadrootsCalendarAdmissionError::NonCanonicalField(
+                    "author_hint",
+                ));
+            }
+            if author_hint.pubkey() != parsed.event_reference().author() {
+                return Err(RadrootsCalendarAdmissionError::AuthorHintMismatch);
+            }
+        }
+        Ok(Self { parsed, uid })
+    }
+
+    pub fn parsed(&self) -> &RadrootsParsedNip52CalendarEventRsvp {
+        &self.parsed
+    }
+
+    pub fn uid(&self) -> &RadrootsCalendarUid {
+        &self.uid
+    }
+
+    pub fn event_reference(&self) -> &RadrootsCalendarEventReference {
+        self.parsed.event_reference()
+    }
+
+    pub fn revision_reference(&self) -> Option<&RadrootsCalendarEventRevisionReference> {
+        self.parsed.revision_reference()
+    }
+
+    pub fn status(&self) -> &RadrootsCalendarEventRsvpStatus {
+        self.parsed.status()
+    }
+
+    pub fn observed_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        self.parsed.observed_free_busy()
+    }
+
+    pub fn effective_free_busy(&self) -> Option<&RadrootsCalendarEventFreeBusy> {
+        self.parsed.effective_free_busy()
+    }
+
+    pub fn author_hint(&self) -> Option<&RadrootsCalendarEventAuthorReference> {
+        self.parsed.author_hint()
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.parsed.note()
+    }
 }
 
 #[cfg(test)]
@@ -2008,51 +2938,313 @@ mod tests {
     }
 
     #[test]
-    fn calendar_collection_represents_event_address_refs() {
-        let calendar = RadrootsCalendar {
-            d_tag: "farm-calendar".to_string(),
-            title: "farm calendar".to_string(),
-            events: vec![RadrootsSocialTarget::Address {
-                address: "31923:pubkey:wash-pack".to_string(),
-                author: None,
-                event_kind: Some(31923),
-                relays: None,
-            }],
-            description: Some("Shared farm operations schedule.".to_string()),
-            summary: None,
-            image: None,
-        };
-
-        assert_eq!(calendar.d_tag, "farm-calendar");
-        assert_eq!(calendar.events.len(), 1);
-        assert!(matches!(
-            calendar.events[0],
-            RadrootsSocialTarget::Address { .. }
-        ));
+    fn calendar_uid_requires_exact_unpadded_128_bit_base64url_shape() {
+        for valid in [
+            "AAAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAAQ",
+            "_____________________w",
+        ] {
+            assert_eq!(RadrootsCalendarUid::parse(valid).unwrap().as_str(), valid);
+        }
+        for invalid in [
+            "AAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAA=",
+            "AAAAAAAAAAAAAAAAAAAAA+",
+            "AAAAAAAAAAAAAAAAAAAAAB",
+        ] {
+            assert_eq!(
+                RadrootsCalendarUid::parse(invalid),
+                Err(RadrootsCalendarEventError::InvalidCalendarUid),
+                "{invalid}"
+            );
+        }
     }
 
     #[test]
-    fn rsvp_represents_status_and_free_busy_state() {
-        let rsvp = RadrootsCalendarEventRsvp {
-            d_tag: "rsvp-1".to_string(),
-            event: RadrootsSocialTarget::Address {
-                address: "31923:pubkey:wash-pack".to_string(),
-                author: Some("a".repeat(64)),
-                event_kind: Some(31923),
-                relays: None,
-            },
-            event_id: Some("b".repeat(64)),
-            status: RadrootsCalendarEventRsvpStatus::Tentative,
-            free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
-            note: Some("depends on harvest".to_string()),
-            participants: None,
-        };
-
-        assert_eq!(rsvp.status, RadrootsCalendarEventRsvpStatus::Tentative);
+    fn calendar_references_preserve_structural_wire_values_and_expose_canonicality() {
+        let uppercase_author = "A".repeat(64);
+        let event = RadrootsCalendarEventReference::parse(
+            format!("031923:{uppercase_author}:wash-pack"),
+            Some("WSS://Relay.Example/events"),
+        )
+        .unwrap();
         assert_eq!(
-            rsvp.event_id.as_deref(),
-            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            event.coordinate().as_str(),
+            format!("031923:{uppercase_author}:wash-pack")
         );
-        assert_eq!(rsvp.free_busy, Some(RadrootsCalendarEventFreeBusy::Busy));
+        assert_eq!(event.author().as_str(), "a".repeat(64));
+        assert_eq!(event.relay(), Some("WSS://Relay.Example/events"));
+        assert!(!event.is_canonical());
+
+        let revision = RadrootsCalendarEventRevisionReference::parse(
+            "B".repeat(64),
+            Some("WSS://revision.example"),
+        )
+        .unwrap();
+        assert_eq!(revision.raw_event_id(), "B".repeat(64));
+        assert_eq!(revision.event_id().as_str(), "b".repeat(64));
+        assert!(!revision.is_canonical());
+
+        let author = RadrootsCalendarEventAuthorReference::parse(
+            uppercase_author.clone(),
+            Some("WSS://author.example"),
+        )
+        .unwrap();
+        assert_eq!(author.raw_pubkey(), uppercase_author);
+        assert_eq!(author.pubkey().as_str(), "a".repeat(64));
+        assert!(!author.is_canonical());
+
+        assert_eq!(
+            RadrootsCalendarEventReference::parse(
+                format!("31924:{}:not-an-event", "a".repeat(64)),
+                None,
+            ),
+            Err(RadrootsCalendarEventError::InvalidEventReference)
+        );
+    }
+
+    #[test]
+    fn calendar_collection_layers_keep_baseline_tolerance_out_of_strict_states() {
+        let uid = RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap();
+        let event = canonical_event_reference("wash-pack");
+
+        let empty = RadrootsAuthoredCalendar::new(
+            uid.clone(),
+            "Farm calendar",
+            "Shared farm operations schedule.",
+            Vec::new(),
+        )
+        .unwrap();
+        assert!(empty.event_references().is_empty());
+
+        assert_eq!(
+            RadrootsAuthoredCalendar::new(
+                uid.clone(),
+                "Farm calendar",
+                "",
+                vec![event.clone(), event.clone()],
+            ),
+            Err(RadrootsCalendarEventError::DuplicateEventReference)
+        );
+
+        let noncanonical = RadrootsCalendarEventReference::parse(
+            format!("031923:{}:wash-pack", "A".repeat(64)),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            RadrootsAuthoredCalendar::new(uid.clone(), "Farm calendar", "", vec![noncanonical],),
+            Err(RadrootsCalendarEventError::InvalidEventReference)
+        );
+
+        let parsed = RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+            d_tag: uid.to_string(),
+            title: " Farm calendar ".to_string(),
+            content: "Shared farm operations schedule.".to_string(),
+            event_references: vec![event.clone(), event],
+            list_description: Some(" Local operations ".to_string()),
+            image: None,
+        })
+        .unwrap();
+        assert_eq!(parsed.event_references().len(), 2);
+        assert_eq!(
+            RadrootsAdmittedCalendar::try_from_parsed(parsed),
+            Err(RadrootsCalendarAdmissionError::NonCanonicalField("title"))
+        );
+
+        let parsed = RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+            d_tag: uid.to_string(),
+            title: "Farm calendar".to_string(),
+            content: String::new(),
+            event_references: Vec::new(),
+            list_description: None,
+            image: None,
+        })
+        .unwrap();
+        assert!(
+            RadrootsAdmittedCalendar::try_from_parsed(parsed)
+                .unwrap()
+                .event_references()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn calendar_admission_requires_unique_refs_and_structural_blossom_images() {
+        let uid = "AAAAAAAAAAAAAAAAAAAAAA";
+        let event = canonical_event_reference("market-day");
+        let duplicate = RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+            d_tag: uid.to_string(),
+            title: "Market calendar".to_string(),
+            content: String::new(),
+            event_references: vec![event.clone(), event.clone()],
+            list_description: None,
+            image: None,
+        })
+        .unwrap();
+        let error = RadrootsAdmittedCalendar::try_from_parsed(duplicate).unwrap_err();
+        assert_eq!(
+            error,
+            RadrootsCalendarAdmissionError::DuplicateEventReference
+        );
+        assert_eq!(error.code(), "duplicate_event_reference");
+
+        let ordinary_image =
+            RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+                d_tag: uid.to_string(),
+                title: "Market calendar".to_string(),
+                content: String::new(),
+                event_references: vec![event.clone()],
+                list_description: None,
+                image: Some(
+                    RadrootsCalendarUri::parse("https://media.example/market.webp").unwrap(),
+                ),
+            })
+            .unwrap();
+        assert_eq!(
+            RadrootsAdmittedCalendar::try_from_parsed(ordinary_image),
+            Err(RadrootsCalendarAdmissionError::NonBlossomImage)
+        );
+
+        let blossom_url = format!("https://media.example/{}.webp", "c".repeat(64));
+        let blossom = RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+            d_tag: uid.to_string(),
+            title: "Market calendar".to_string(),
+            content: String::new(),
+            event_references: vec![event],
+            list_description: Some("Victoria farm markets".to_string()),
+            image: Some(RadrootsCalendarUri::parse(&blossom_url).unwrap()),
+        })
+        .unwrap();
+        assert_eq!(
+            RadrootsAdmittedCalendar::try_from_parsed(blossom)
+                .unwrap()
+                .blossom_image()
+                .unwrap()
+                .as_str(),
+            blossom_url
+        );
+    }
+
+    #[test]
+    fn calendar_collection_enforces_wire_tag_budgets() {
+        let references = (0..DEFAULT_TAG_MAX_COUNT)
+            .map(|index| canonical_event_reference(&format!("event-{index}")))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            RadrootsAuthoredCalendar::new(
+                RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap(),
+                "Farm calendar",
+                "",
+                references,
+            ),
+            Err(RadrootsCalendarEventError::TagCountExceeded {
+                max: DEFAULT_TAG_MAX_COUNT,
+                actual: DEFAULT_TAG_MAX_COUNT + 2,
+            })
+        );
+    }
+
+    #[test]
+    fn declined_rsvp_retains_observed_fb_only_in_parsed_and_admitted_layers() {
+        let uid = RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
+        let event = canonical_event_reference("wash-pack");
+        assert_eq!(
+            RadrootsAuthoredCalendarEventRsvp::new(
+                uid.clone(),
+                event.clone(),
+                RadrootsCalendarEventRsvpStatus::Declined,
+            )
+            .unwrap()
+            .with_free_busy(RadrootsCalendarEventFreeBusy::Busy),
+            Err(RadrootsCalendarEventError::DeclinedFreeBusyForbidden)
+        );
+
+        let parsed = RadrootsParsedNip52CalendarEventRsvp::try_new(
+            RadrootsParsedNip52CalendarEventRsvpParts {
+                d_tag: uid.to_string(),
+                event_reference: event,
+                revision_reference: Some(
+                    RadrootsCalendarEventRevisionReference::parse(
+                        "b".repeat(64),
+                        Some("wss://revision.example"),
+                    )
+                    .unwrap(),
+                ),
+                status: RadrootsCalendarEventRsvpStatus::Declined,
+                observed_free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
+                author_hint: Some(
+                    RadrootsCalendarEventAuthorReference::parse(
+                        "a".repeat(64),
+                        Some("wss://author.example"),
+                    )
+                    .unwrap(),
+                ),
+                note: Some("Unable to attend".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.observed_free_busy(),
+            Some(&RadrootsCalendarEventFreeBusy::Busy)
+        );
+        assert_eq!(parsed.effective_free_busy(), None);
+
+        let admitted = RadrootsAdmittedCalendarEventRsvp::try_from_parsed(parsed).unwrap();
+        assert_eq!(
+            admitted.observed_free_busy(),
+            Some(&RadrootsCalendarEventFreeBusy::Busy)
+        );
+        assert_eq!(admitted.effective_free_busy(), None);
+        assert_eq!(
+            admitted.revision_reference().unwrap().relay(),
+            Some("wss://revision.example")
+        );
+        assert_eq!(
+            admitted.author_hint().unwrap().relay(),
+            Some("wss://author.example")
+        );
+    }
+
+    #[test]
+    fn rsvp_author_hint_must_match_event_coordinate_in_strict_layers() {
+        let uid = RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
+        let event = canonical_event_reference("wash-pack");
+        let mismatched = RadrootsCalendarEventAuthorReference::parse("b".repeat(64), None).unwrap();
+        assert_eq!(
+            RadrootsAuthoredCalendarEventRsvp::new(
+                uid.clone(),
+                event.clone(),
+                RadrootsCalendarEventRsvpStatus::Accepted,
+            )
+            .unwrap()
+            .with_author_hint(mismatched.clone()),
+            Err(RadrootsCalendarEventError::AuthorHintMismatch)
+        );
+
+        let parsed = RadrootsParsedNip52CalendarEventRsvp::try_new(
+            RadrootsParsedNip52CalendarEventRsvpParts {
+                d_tag: uid.to_string(),
+                event_reference: event,
+                revision_reference: None,
+                status: RadrootsCalendarEventRsvpStatus::Accepted,
+                observed_free_busy: None,
+                author_hint: Some(mismatched),
+                note: None,
+            },
+        )
+        .unwrap();
+        let error = RadrootsAdmittedCalendarEventRsvp::try_from_parsed(parsed).unwrap_err();
+        assert_eq!(error, RadrootsCalendarAdmissionError::AuthorHintMismatch);
+        assert_eq!(error.code(), "author_hint_mismatch");
+    }
+
+    fn canonical_event_reference(d_tag: &str) -> RadrootsCalendarEventReference {
+        RadrootsCalendarEventReference::parse(
+            format!("31923:{}:{d_tag}", "a".repeat(64)),
+            Some("wss://relay.example"),
+        )
+        .unwrap()
     }
 }

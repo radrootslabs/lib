@@ -6,9 +6,12 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::social::{
-    RadrootsCalendarParticipant, RadrootsSocialFarmAnchor, RadrootsSocialLocation,
-    RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail,
+use radroots_event::{
+    calendar::RadrootsCalendarParticipant,
+    social::{
+        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
+        RadrootsSocialMediaThumbnail,
+    },
 };
 
 use crate::error::{EventEncodeError, EventParseError};
@@ -55,31 +58,6 @@ pub(crate) fn push_farm_anchor(tags: &mut Vec<Vec<String>>, farm: &RadrootsSocia
     }
     let address = format!("30340:{}:{}", farm.farm.pubkey, farm.farm.d_tag);
     push_tag(tags, "a", address);
-}
-
-pub(crate) fn participants_from_tags(
-    tags: &[Vec<String>],
-) -> Option<Vec<RadrootsCalendarParticipant>> {
-    let participants = tags
-        .iter()
-        .filter(|tag| tag.first().map(|value| value.as_str()) == Some("p"))
-        .filter_map(|tag| {
-            let pubkey = tag.get(1)?.clone();
-            if pubkey.trim().is_empty() {
-                return None;
-            }
-            Some(RadrootsCalendarParticipant {
-                pubkey,
-                relay: tag.get(2).filter(|value| !value.trim().is_empty()).cloned(),
-                role: tag.get(3).filter(|value| !value.trim().is_empty()).cloned(),
-            })
-        })
-        .collect::<Vec<_>>();
-    if participants.is_empty() {
-        None
-    } else {
-        Some(participants)
-    }
 }
 
 pub(crate) fn push_participants(
@@ -171,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn encodes_and_decodes_location_participant_and_dimensions_tags() {
+    fn encodes_location_participant_and_dimensions_tags() {
         let mut tags = Vec::new();
         push_location_tags(
             &mut tags,
@@ -202,10 +180,6 @@ mod tests {
                 .expect("geohash location");
         assert_eq!(geohash_location.name, None);
         assert_eq!(geohash_location.geohash.as_deref(), Some("c23nb62w20st"));
-        let participants = participants_from_tags(&tags).expect("participants");
-        assert_eq!(participants[0].pubkey, "crew_pubkey");
-        assert_eq!(participants[0].role.as_deref(), Some("participant"));
-
         let mut empty_tags = Vec::new();
         push_location_tags(
             &mut empty_tags,
@@ -263,25 +237,6 @@ mod tests {
                 "30340:farm_pubkey:farm-d-tag".to_string()
             ]]
         );
-
-        assert_eq!(participants_from_tags(&[]), None);
-        let participants = participants_from_tags(&[
-            vec!["p".to_string()],
-            vec!["p".to_string(), " ".to_string()],
-            vec![
-                "p".to_string(),
-                "crew_pubkey".to_string(),
-                "wss://relay.example.test".to_string(),
-                "host".to_string(),
-            ],
-        ])
-        .expect("participants");
-        assert_eq!(participants.len(), 1);
-        assert_eq!(
-            participants[0].relay.as_deref(),
-            Some("wss://relay.example.test")
-        );
-        assert_eq!(participants[0].role.as_deref(), Some("host"));
 
         let mut participant_tags = Vec::new();
         push_participants(&mut participant_tags, None);

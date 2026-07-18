@@ -107,40 +107,6 @@ pub struct RadrootsSocialMediaMetadata {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsCalendarParticipant {
-    pub pubkey: String,
-    pub relay: Option<String>,
-    pub role: Option<String>,
-}
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsCalendarEventRsvpStatus {
-    Accepted,
-    Declined,
-    Tentative,
-}
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsCalendarEventFreeBusy {
-    Free,
-    Busy,
-}
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsReportType {
@@ -218,15 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn exposes_calendar_and_report_enums() {
-        assert_eq!(
-            RadrootsCalendarEventRsvpStatus::Accepted,
-            RadrootsCalendarEventRsvpStatus::Accepted
-        );
-        assert_eq!(
-            RadrootsCalendarEventFreeBusy::Busy,
-            RadrootsCalendarEventFreeBusy::Busy
-        );
+    fn exposes_report_enums() {
         assert_eq!(RadrootsReportType::Spam, RadrootsReportType::Spam);
     }
 }

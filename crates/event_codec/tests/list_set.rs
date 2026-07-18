@@ -4,7 +4,7 @@ mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{KIND_LIST_SET_FOLLOW, KIND_POST},
+    kinds::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
     list::RadrootsListEntry,
     list_set::RadrootsListSet,
 };
@@ -57,6 +57,31 @@ fn list_set_build_tags_and_decode_roundtrip() {
 }
 
 #[test]
+fn generic_list_set_decode_rejects_calendar_kind() {
+    assert!(is_nip51_list_set_kind(KIND_CALENDAR));
+    let tags = list_set_build_tags(&sample_list_set()).unwrap();
+
+    let err = list_set_from_tags(KIND_CALENDAR, "private".to_string(), &tags).unwrap_err();
+
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "generic nip51 list-set kind",
+            got: KIND_CALENDAR
+        }
+    ));
+}
+
+#[test]
+fn generic_list_set_encode_rejects_calendar_kind() {
+    assert!(is_nip51_list_set_kind(KIND_CALENDAR));
+
+    let err = to_wire_parts_with_kind(&sample_list_set(), KIND_CALENDAR).unwrap_err();
+
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_CALENDAR)));
+}
+
+#[test]
 fn list_set_encode_and_decode_reject_invalid_inputs() {
     let invalid = RadrootsListSet {
         d_tag: " ".to_string(),
@@ -89,7 +114,7 @@ fn list_set_encode_and_decode_reject_invalid_inputs() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 list set kind",
+            expected: "generic nip51 list-set kind",
             got: KIND_POST
         }
     ));
@@ -213,7 +238,7 @@ fn list_set_index_from_event_propagates_parse_errors() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 list set kind",
+            expected: "generic nip51 list-set kind",
             got: KIND_POST
         }
     ));

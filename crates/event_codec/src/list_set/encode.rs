@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{kinds::is_nip51_list_set_kind, list_set::RadrootsListSet};
+use radroots_event::list_set::RadrootsListSet;
 
 use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
@@ -62,7 +62,7 @@ pub fn to_wire_parts_with_kind(
     list: &RadrootsListSet,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
-    if !is_nip51_list_set_kind(kind) {
+    if !super::is_generic_list_set_codec_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = list_set_build_tags(list)?;

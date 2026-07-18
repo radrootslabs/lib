@@ -461,6 +461,9 @@ pub struct RadrootsTradeProjectionCheckpoint {
 pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
     match value {
         RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
+        RadrootsTagSemantic::CalendarEventAuthor => "calendar_event_author",
+        RadrootsTagSemantic::CalendarEventReference => "calendar_event_reference",
+        RadrootsTagSemantic::CalendarEventRevision => "calendar_event_revision",
         RadrootsTagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
         RadrootsTagSemantic::CalendarEnd => "calendar_end",
         RadrootsTagSemantic::CalendarStart => "calendar_start",
@@ -470,6 +473,7 @@ pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::Counterparty => "counterparty",
         RadrootsTagSemantic::Evidence => "evidence",
         RadrootsTagSemantic::EventPointer => "event_pointer",
+        RadrootsTagSemantic::FreeBusy => "free_busy",
         RadrootsTagSemantic::Geohash => "geohash",
         RadrootsTagSemantic::GroupId => "group_id",
         RadrootsTagSemantic::Identifier => "identifier",
@@ -477,6 +481,7 @@ pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::Kind => "kind",
         RadrootsTagSemantic::ListingAddress => "listing_address",
         RadrootsTagSemantic::ListingSnapshot => "listing_snapshot",
+        RadrootsTagSemantic::ListDescription => "list_description",
         RadrootsTagSemantic::Location => "location",
         RadrootsTagSemantic::Participant => "participant",
         RadrootsTagSemantic::PreviousEvent => "previous_event",
@@ -503,6 +508,10 @@ pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
     match value {
         RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
         RadrootsTagValueType::CalendarDate => "calendar_date",
+        RadrootsTagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
+        RadrootsTagValueType::CalendarFreeBusy => "calendar_free_busy",
+        RadrootsTagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
+        RadrootsTagValueType::CalendarUid => "calendar_uid",
         RadrootsTagValueType::ContractId => "contract_id",
         RadrootsTagValueType::DTag => "d_tag",
         RadrootsTagValueType::EventId => "event_id",
@@ -703,6 +712,18 @@ mod tests {
                 "addressable_coordinate",
             ),
             (
+                RadrootsTagSemantic::CalendarEventAuthor,
+                "calendar_event_author",
+            ),
+            (
+                RadrootsTagSemantic::CalendarEventReference,
+                "calendar_event_reference",
+            ),
+            (
+                RadrootsTagSemantic::CalendarEventRevision,
+                "calendar_event_revision",
+            ),
+            (
                 RadrootsTagSemantic::CalendarInclusionRequest,
                 "calendar_inclusion_request",
             ),
@@ -714,6 +735,7 @@ mod tests {
             (RadrootsTagSemantic::Counterparty, "counterparty"),
             (RadrootsTagSemantic::Evidence, "evidence"),
             (RadrootsTagSemantic::EventPointer, "event_pointer"),
+            (RadrootsTagSemantic::FreeBusy, "free_busy"),
             (RadrootsTagSemantic::Geohash, "geohash"),
             (RadrootsTagSemantic::GroupId, "group_id"),
             (RadrootsTagSemantic::Identifier, "identifier"),
@@ -721,6 +743,7 @@ mod tests {
             (RadrootsTagSemantic::Kind, "kind"),
             (RadrootsTagSemantic::ListingAddress, "listing_address"),
             (RadrootsTagSemantic::ListingSnapshot, "listing_snapshot"),
+            (RadrootsTagSemantic::ListDescription, "list_description"),
             (RadrootsTagSemantic::Location, "location"),
             (RadrootsTagSemantic::Participant, "participant"),
             (RadrootsTagSemantic::PreviousEvent, "previous_event"),
@@ -750,6 +773,16 @@ mod tests {
                 "addressable_coordinate",
             ),
             (RadrootsTagValueType::CalendarDate, "calendar_date"),
+            (
+                RadrootsTagValueType::CalendarEventCoordinate,
+                "calendar_event_coordinate",
+            ),
+            (RadrootsTagValueType::CalendarFreeBusy, "calendar_free_busy"),
+            (
+                RadrootsTagValueType::CalendarRsvpStatus,
+                "calendar_rsvp_status",
+            ),
+            (RadrootsTagValueType::CalendarUid, "calendar_uid"),
             (RadrootsTagValueType::ContractId, "contract_id"),
             (RadrootsTagValueType::DTag, "d_tag"),
             (RadrootsTagValueType::EventId, "event_id"),

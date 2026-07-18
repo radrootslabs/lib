@@ -71,6 +71,7 @@ public = [
   "RadrootsIanaTimeZoneId",
   "RadrootsCalendarUri",
   "RadrootsCalendarRequest",
+  "RadrootsCalendarParticipant",
   "RadrootsCalendarEventError",
   "RadrootsCalendarDate",
   "RadrootsAuthoredCalendarDateEvent",
@@ -83,6 +84,20 @@ public = [
   "RadrootsCalendarAdmissionError",
   "RadrootsAdmittedCalendarDateEvent",
   "RadrootsAdmittedCalendarTimeEvent",
+  "RadrootsCalendarUid",
+  "RadrootsCalendarEventReference",
+  "RadrootsCalendarEventRevisionReference",
+  "RadrootsCalendarEventAuthorReference",
+  "RadrootsAuthoredCalendar",
+  "RadrootsParsedNip52CalendarParts",
+  "RadrootsParsedNip52Calendar",
+  "RadrootsAdmittedCalendar",
+  "RadrootsCalendarEventRsvpStatus",
+  "RadrootsCalendarEventFreeBusy",
+  "RadrootsAuthoredCalendarEventRsvp",
+  "RadrootsParsedNip52CalendarEventRsvpParts",
+  "RadrootsParsedNip52CalendarEventRsvp",
+  "RadrootsAdmittedCalendarEventRsvp",
   "RadrootsTradeId",
   "RadrootsTradeCandidateId",
   "RadrootsTradeMutationId",
@@ -740,6 +755,186 @@ rust_types = [
 ]
 
 [operations.social_calendar_time_event_admit_radroots_profile.conformance]
+vector = "contracts/conformance/vectors/calendar/radroots_profile.v1.json"
+
+[operations.social_calendar_build_authored_draft]
+domain = "social"
+id = "social.calendar.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredCalendar"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event/src/media.rs",
+  "crates/event_codec/src/calendar/encode.rs",
+]
+rust_types = [
+  "radroots_event::calendar::RadrootsAuthoredCalendar",
+  "radroots_event::calendar::RadrootsCalendarEventError",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarUid",
+  "radroots_event::media::RadrootsAuthoredImage",
+  "radroots_event::wire::RadrootsNip01EventWireParts",
+  "radroots_event_codec::error::EventEncodeError",
+]
+
+[operations.social_calendar_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/calendar/radroots_profile.v1.json"
+
+[operations.social_calendar_parse_nip52]
+domain = "social"
+id = "social.calendar.parse_nip52"
+stability = "beta"
+inputs = ["u32", "NostrTags", "String"]
+outputs = ["RadrootsParsedNip52Calendar"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_parse_nip52.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/decode.rs",
+]
+rust_types = [
+  "radroots_event::calendar::RadrootsCalendarEventError",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarUri",
+  "radroots_event::calendar::RadrootsParsedNip52Calendar",
+  "radroots_event::calendar::RadrootsParsedNip52CalendarParts",
+  "radroots_event_codec::error::EventParseError",
+]
+
+[operations.social_calendar_parse_nip52.conformance]
+vector = "contracts/conformance/vectors/calendar/nip52_baseline.v1.json"
+
+[operations.social_calendar_admit_radroots_profile]
+domain = "social"
+id = "social.calendar.admit_radroots_profile"
+stability = "beta"
+inputs = ["RadrootsParsedNip52Calendar"]
+outputs = ["RadrootsAdmittedCalendar"]
+error_class = "admission_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_admit_radroots_profile.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/decode.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomBlobUrl",
+  "radroots_event::calendar::RadrootsAdmittedCalendar",
+  "radroots_event::calendar::RadrootsCalendarAdmissionError",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarUid",
+  "radroots_event::calendar::RadrootsParsedNip52Calendar",
+]
+
+[operations.social_calendar_admit_radroots_profile.conformance]
+vector = "contracts/conformance/vectors/calendar/radroots_profile.v1.json"
+
+[operations.social_calendar_rsvp_build_authored_draft]
+domain = "social"
+id = "social.calendar_rsvp.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredCalendarEventRsvp"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_rsvp_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/encode.rs",
+]
+rust_types = [
+  "radroots_event::calendar::RadrootsAuthoredCalendarEventRsvp",
+  "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+  "radroots_event::calendar::RadrootsCalendarEventError",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+  "radroots_event::calendar::RadrootsCalendarUid",
+  "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+  "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+  "radroots_event::wire::RadrootsNip01EventWireParts",
+  "radroots_event_codec::error::EventEncodeError",
+]
+
+[operations.social_calendar_rsvp_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/calendar/radroots_profile.v1.json"
+
+[operations.social_calendar_rsvp_parse_nip52]
+domain = "social"
+id = "social.calendar_rsvp.parse_nip52"
+stability = "beta"
+inputs = ["u32", "NostrTags", "String"]
+outputs = ["RadrootsParsedNip52CalendarEventRsvp"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_rsvp_parse_nip52.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/decode.rs",
+]
+rust_types = [
+  "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+  "radroots_event::calendar::RadrootsCalendarEventError",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+  "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
+  "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvpParts",
+  "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+  "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+  "radroots_event_codec::error::EventParseError",
+]
+
+[operations.social_calendar_rsvp_parse_nip52.conformance]
+vector = "contracts/conformance/vectors/calendar/nip52_baseline.v1.json"
+
+[operations.social_calendar_rsvp_admit_radroots_profile]
+domain = "social"
+id = "social.calendar_rsvp.admit_radroots_profile"
+stability = "beta"
+inputs = ["RadrootsParsedNip52CalendarEventRsvp"]
+outputs = ["RadrootsAdmittedCalendarEventRsvp"]
+error_class = "admission_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_calendar_rsvp_admit_radroots_profile.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/decode.rs",
+]
+rust_types = [
+  "radroots_event::calendar::RadrootsAdmittedCalendarEventRsvp",
+  "radroots_event::calendar::RadrootsCalendarAdmissionError",
+  "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
+  "radroots_event::calendar::RadrootsCalendarEventReference",
+  "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
+  "radroots_event::calendar::RadrootsCalendarUid",
+  "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
+  "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
+  "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+]
+
+[operations.social_calendar_rsvp_admit_radroots_profile.conformance]
 vector = "contracts/conformance/vectors/calendar/radroots_profile.v1.json"
 
 [operations.trade_canonicalize_mutation]

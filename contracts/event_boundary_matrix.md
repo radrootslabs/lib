@@ -22,12 +22,14 @@ contract package.
 
 ## Calendar boundary rule
 
-Calendar kinds `31922` and `31923` expose separate authored, baseline-parsed, and
-strict-admitted types. A structural `RadrootsEventEnvelope` is not cryptographic verification, and
-neither the NIP-52 parser nor Radroots admission verifies the declared event id or Schnorr
-signature. A read-side runtime must keep the parsed or admitted value bound to an envelope whose id
-and signature it has independently verified and whose kind the corresponding parser accepted.
-Outbound authored models produce unsigned wire parts and require runtime signing and transport.
+Calendar kinds `31922` through `31925` expose separate authored,
+baseline-parsed, and strict-admitted types. A structural
+`RadrootsEventEnvelope` is not cryptographic verification, and neither the
+NIP-52 parser nor Radroots admission verifies the declared event id or Schnorr
+signature. A read-side runtime must keep the parsed or admitted value bound to
+an envelope whose id and signature it has independently verified and whose kind
+the corresponding parser accepted. Outbound authored models produce unsigned
+wire parts and require runtime signing and transport.
 
 ## Coverage matrix
 
@@ -48,15 +50,15 @@ Outbound authored models produce unsigned wire parts and require runtime signing
 | report | 1984 | RadrootsReport | events.report.publish, events.report.list, events.report.get | NIP-56 report with required reported pubkey |
 | list | 10000..10102 | RadrootsList | events.list.publish, events.list.list, events.list.get | replaceable NIP-51 list kinds excluding kind 3 |
 | relay_list | 10002 | RadrootsList | events.relay_list.publish, events.relay_list.list, events.relay_list.get | NIP-65 relay list entries with `read` or `write` markers |
-| list_set | 30000..39092 | RadrootsListSet | events.list_set.publish, events.list_set.list, events.list_set.get | addressable NIP-51 list sets with `d` tag |
+| list_set | 30000..30007, 30015, 30030, 30063, 30267, 39089, 39092 | RadrootsListSet | events.list_set.publish, events.list_set.list, events.list_set.get | enumerated addressable NIP-51 list sets with `d` tag; NIP-52 kind `31924` is exclusively the calendar surface |
 | article | 30023 | RadrootsArticle | events.article.publish, events.article.list, events.article.get | NIP-23 long-form content |
 | knowledge | 818, 3460..3465, 30450..30451, 30818..30819 | RadrootsKnowledgeEvent | events.knowledge.publish, events.knowledge.list, events.knowledge.get | NIP-54 wiki plus Radroots knowledge source, claim, relation, review, field-report, bounty, proposal, and contribution contracts |
 | app_data | 30078 | RadrootsAppData | events.app_data.publish, events.app_data.list, events.app_data.get | addressable app data with `d` tag |
 | app_handler | 31990 | KIND_APPLICATION_HANDLER | events.app_handler.publish, events.app_handler.list, events.app_handler.get | optional discoverability |
 | calendar_date | 31922 | RadrootsAuthoredCalendarDateEvent / RadrootsParsedNip52CalendarDateEvent / RadrootsAdmittedCalendarDateEvent | events.calendar_date.publish, events.calendar_date.list, events.calendar_date.get | NIP-52 date event; baseline retains uppercase-`D` extensions, strict admission rejects them |
 | calendar_time | 31923 | RadrootsAuthoredCalendarTimeEvent / RadrootsParsedNip52CalendarTimeEvent / RadrootsAdmittedCalendarTimeEvent | events.calendar_time.publish, events.calendar_time.list, events.calendar_time.get | NIP-52 time event; baseline applies required day anchoring, strict admission requires exact bounded UTC-day coverage |
-| calendar | 31924 | RadrootsCalendar | events.calendar.publish, events.calendar.list, events.calendar.get | NIP-52 calendar collection |
-| calendar_rsvp | 31925 | RadrootsCalendarEventRsvp | events.calendar_rsvp.publish, events.calendar_rsvp.list, events.calendar_rsvp.get | NIP-52 calendar RSVP |
+| calendar | 31924 | RadrootsAuthoredCalendar / RadrootsParsedNip52Calendar / RadrootsAdmittedCalendar | events.calendar.publish, events.calendar.list, events.calendar.get | NIP-52 calendar collection with separate authored, baseline parse, and strict Radroots admission boundaries |
+| calendar_rsvp | 31925 | RadrootsAuthoredCalendarEventRsvp / RadrootsParsedNip52CalendarEventRsvp / RadrootsAdmittedCalendarEventRsvp | events.calendar_rsvp.publish, events.calendar_rsvp.list, events.calendar_rsvp.get | NIP-52 calendar RSVP with separate authored, baseline parse, and strict Radroots admission boundaries |
 | farm | 30340 | RadrootsFarm | events.farm.publish, events.farm.list, events.farm.get | addressable; canonical JSON; `g` tag only when a geohash exists |
 | plot | 30350 | RadrootsPlot | events.plot.publish, events.plot.list, events.plot.get | requires address and pubkey tags; preserve self-tag |
 | coop | 30360 | RadrootsCoop | events.coop.publish, events.coop.list, events.coop.get | addressable; canonical JSON; `g` tag from geohash |

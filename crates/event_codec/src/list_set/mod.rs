@@ -2,6 +2,11 @@ pub mod decode;
 pub mod encode;
 
 use crate::d_tag::is_d_tag_base64url;
+use radroots_event::kinds::{KIND_CALENDAR, is_nip51_list_set_kind};
+
+pub(crate) const fn is_generic_list_set_codec_kind(kind: u32) -> bool {
+    is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR
+}
 
 fn list_set_requires_base64(d_tag: &str) -> bool {
     d_tag.starts_with("farm:") || d_tag.starts_with("coop:") || d_tag.starts_with("resource:")
@@ -20,13 +25,23 @@ fn list_set_base64_id_is_valid(d_tag: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode::list_set_from_tags, encode::list_set_build_tags};
+    use super::{
+        decode::list_set_from_tags, encode::list_set_build_tags, is_generic_list_set_codec_kind,
+    };
     use crate::error::{EventEncodeError, EventParseError};
     use radroots_event::{
-        kinds::{KIND_LIST_SET_FOLLOW, KIND_POST},
+        kinds::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
         list::RadrootsListEntry,
         list_set::RadrootsListSet,
     };
+
+    #[test]
+    fn generic_list_set_codec_kind_excludes_calendar() {
+        assert!(is_nip51_list_set_kind(KIND_CALENDAR));
+        assert!(!is_generic_list_set_codec_kind(KIND_CALENDAR));
+        assert!(is_generic_list_set_codec_kind(KIND_LIST_SET_FOLLOW));
+        assert!(!is_generic_list_set_codec_kind(KIND_POST));
+    }
 
     #[test]
     fn list_set_tags_round_trip() {
@@ -164,7 +179,7 @@ mod tests {
         assert!(matches!(
             err,
             EventParseError::InvalidKind {
-                expected: "nip51 list set kind",
+                expected: "generic nip51 list-set kind",
                 got: KIND_POST
             }
         ));

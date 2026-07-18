@@ -1,6 +1,5 @@
 #[cfg(not(feature = "std"))]
 use alloc::{
-    format,
     string::{String, ToString},
     vec,
     vec::Vec,
@@ -8,27 +7,25 @@ use alloc::{
 
 use radroots_event::{
     calendar::{
-        RadrootsAuthoredCalendarDateEvent, RadrootsAuthoredCalendarTimeEvent, RadrootsCalendar,
-        RadrootsCalendarEventRsvp, RadrootsCalendarRequest, RadrootsCalendarUri, covered_utc_days,
+        RadrootsAuthoredCalendar, RadrootsAuthoredCalendarDateEvent,
+        RadrootsAuthoredCalendarEventRsvp, RadrootsAuthoredCalendarTimeEvent,
+        RadrootsCalendarEventAuthorReference, RadrootsCalendarEventFreeBusy,
+        RadrootsCalendarEventReference, RadrootsCalendarEventRevisionReference,
+        RadrootsCalendarEventRsvpStatus, RadrootsCalendarParticipant, RadrootsCalendarRequest,
+        RadrootsCalendarUri, covered_utc_days,
     },
     kinds::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP, KIND_CALENDAR_TIME_EVENT,
     },
-    social::{
-        RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus, RadrootsSocialTarget,
-    },
     tags::{
-        TAG_A, TAG_D, TAG_D_DAY, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY, TAG_G, TAG_IMAGE,
-        TAG_LOCATION, TAG_R, TAG_START, TAG_START_TZID, TAG_STATUS, TAG_SUMMARY, TAG_T, TAG_TITLE,
+        TAG_A, TAG_D, TAG_D_DAY, TAG_DESCRIPTION, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY,
+        TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P, TAG_R, TAG_START, TAG_START_TZID, TAG_STATUS,
+        TAG_SUMMARY, TAG_T, TAG_TITLE,
     },
 };
 
-use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
-use crate::field_helpers::{
-    parse_address_tag, push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
-    validate_non_empty_field,
-};
+use crate::field_helpers::{push_optional_tag, push_tag};
 use crate::social_helpers::push_participants;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
@@ -96,44 +93,41 @@ pub fn calendar_time_event_build_tags(
 }
 
 pub fn calendar_collection_build_tags(
-    calendar: &RadrootsCalendar,
+    calendar: &RadrootsAuthoredCalendar,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_calendar_collection(calendar)?;
     let mut tags = Vec::new();
-    push_tag(&mut tags, TAG_D, calendar.d_tag.as_str());
-    push_tag(&mut tags, TAG_TITLE, calendar.title.as_str());
-    push_optional_tag(&mut tags, TAG_SUMMARY, calendar.summary.as_deref());
-    push_optional_tag(&mut tags, TAG_IMAGE, calendar.image.as_deref());
-    for event in &calendar.events {
-        push_calendar_event_address(&mut tags, event, "events")?;
+    push_tag(&mut tags, TAG_D, calendar.uid().as_str());
+    push_tag(&mut tags, TAG_TITLE, calendar.title());
+    for event in calendar.event_references() {
+        push_calendar_event_reference(&mut tags, event);
     }
+    push_optional_tag(&mut tags, TAG_DESCRIPTION, calendar.list_description());
+    push_optional_tag(
+        &mut tags,
+        TAG_IMAGE,
+        calendar
+            .image()
+            .map(|image| image.descriptor().url().as_str()),
+    );
     Ok(tags)
 }
 
 pub fn rsvp_build_tags(
-    rsvp: &RadrootsCalendarEventRsvp,
+    rsvp: &RadrootsAuthoredCalendarEventRsvp,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    validate_rsvp(rsvp)?;
     let mut tags = Vec::new();
-    push_tag(&mut tags, TAG_D, rsvp.d_tag.as_str());
-    push_calendar_event_address(&mut tags, &rsvp.event, "event")?;
-    if let Some(event_id) = rsvp.event_id.as_deref() {
-        let mut tag = vec![TAG_E.to_string(), event_id.to_string()];
-        if let Some(relays) = calendar_event_relays(&rsvp.event) {
-            tag.extend(
-                relays
-                    .iter()
-                    .filter(|relay| !relay.trim().is_empty())
-                    .cloned(),
-            );
-        }
-        tags.push(tag);
+    push_tag(&mut tags, TAG_D, rsvp.uid().as_str());
+    push_calendar_event_reference(&mut tags, rsvp.event_reference());
+    push_tag(&mut tags, TAG_STATUS, rsvp_status_as_str(rsvp.status()));
+    if let Some(reference) = rsvp.revision_reference() {
+        push_calendar_revision_reference(&mut tags, reference);
     }
-    push_tag(&mut tags, TAG_STATUS, rsvp_status_as_str(&rsvp.status));
-    if let Some(free_busy) = rsvp.free_busy.as_ref() {
+    if let Some(free_busy) = rsvp.observed_free_busy() {
         push_tag(&mut tags, TAG_FREE_BUSY, free_busy_as_str(free_busy));
     }
-    push_participants(&mut tags, rsvp.participants.as_ref());
+    if let Some(author_hint) = rsvp.author_hint() {
+        push_calendar_author_reference(&mut tags, author_hint);
+    }
     Ok(tags)
 }
 
@@ -150,13 +144,13 @@ pub fn time_to_wire_parts(
 }
 
 pub fn calendar_to_wire_parts(
-    calendar: &RadrootsCalendar,
+    calendar: &RadrootsAuthoredCalendar,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     calendar_to_wire_parts_with_kind(calendar, KIND_CALENDAR)
 }
 
 pub fn rsvp_to_wire_parts(
-    rsvp: &RadrootsCalendarEventRsvp,
+    rsvp: &RadrootsAuthoredCalendarEventRsvp,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     rsvp_to_wire_parts_with_kind(rsvp, KIND_CALENDAR_EVENT_RSVP)
 }
@@ -190,7 +184,7 @@ pub fn time_to_wire_parts_with_kind(
 }
 
 pub fn calendar_to_wire_parts_with_kind(
-    calendar: &RadrootsCalendar,
+    calendar: &RadrootsAuthoredCalendar,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR {
@@ -198,13 +192,13 @@ pub fn calendar_to_wire_parts_with_kind(
     }
     Ok(RadrootsNip01EventWireParts {
         kind,
-        content: calendar.description.clone().unwrap_or_default(),
+        content: calendar.content().to_string(),
         tags: calendar_collection_build_tags(calendar)?,
     })
 }
 
 pub fn rsvp_to_wire_parts_with_kind(
-    rsvp: &RadrootsCalendarEventRsvp,
+    rsvp: &RadrootsAuthoredCalendarEventRsvp,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_EVENT_RSVP {
@@ -212,7 +206,7 @@ pub fn rsvp_to_wire_parts_with_kind(
     }
     Ok(RadrootsNip01EventWireParts {
         kind,
-        content: rsvp.note.clone().unwrap_or_default(),
+        content: rsvp.note().unwrap_or_default().to_string(),
         tags: rsvp_build_tags(rsvp)?,
     })
 }
@@ -238,7 +232,7 @@ fn push_authored_calendar_common_tags(
     geohash: Option<&str>,
     summary: Option<&str>,
     image: Option<&str>,
-    participants: Option<&Vec<radroots_event::social::RadrootsCalendarParticipant>>,
+    participants: Option<&Vec<RadrootsCalendarParticipant>>,
     categories: &[String],
     references: &[RadrootsCalendarUri],
     calendar_requests: &[RadrootsCalendarRequest],
@@ -265,85 +259,40 @@ fn push_authored_calendar_common_tags(
     }
 }
 
-fn validate_calendar_collection(calendar: &RadrootsCalendar) -> Result<(), EventEncodeError> {
-    validate_d_tag(&calendar.d_tag, "d_tag")?;
-    validate_non_empty_field(&calendar.title, "title")?;
-    if calendar.events.is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("events"));
-    }
-    Ok(())
-}
-
-fn validate_rsvp(rsvp: &RadrootsCalendarEventRsvp) -> Result<(), EventEncodeError> {
-    validate_d_tag(&rsvp.d_tag, "d_tag")?;
-    validate_calendar_event_address(&rsvp.event, "event")?;
-    if let Some(event_id) = rsvp.event_id.as_deref() {
-        validate_lowercase_hex_64(event_id, "event_id")?;
-    }
-    Ok(())
-}
-
-fn push_calendar_event_address(
+fn push_calendar_event_reference(
     tags: &mut Vec<Vec<String>>,
-    target: &RadrootsSocialTarget,
-    field: &'static str,
-) -> Result<(), EventEncodeError> {
-    let RadrootsSocialTarget::Address {
-        address,
-        event_kind,
-        relays,
-        ..
-    } = target
-    else {
-        return Err(EventEncodeError::InvalidField(field));
-    };
-    let address =
-        parse_address_tag(address, field).map_err(|_| EventEncodeError::InvalidField(field))?;
-    if !is_calendar_event_kind(address.kind) {
-        return Err(EventEncodeError::InvalidField(field));
+    reference: &RadrootsCalendarEventReference,
+) {
+    let mut tag = vec![
+        TAG_A.to_string(),
+        reference.coordinate().as_str().to_string(),
+    ];
+    if let Some(relay) = reference.relay() {
+        tag.push(relay.to_string());
     }
-    if let Some(event_kind) = event_kind
-        && *event_kind != address.kind
-    {
-        return Err(EventEncodeError::InvalidField(field));
-    }
-    let value = format!("{}:{}:{}", address.kind, address.pubkey, address.d_tag);
-    if let Some(relays) = relays.as_ref() {
-        let mut values = Vec::with_capacity(1 + relays.len());
-        values.push(value);
-        values.extend(
-            relays
-                .iter()
-                .filter(|relay| !relay.trim().is_empty())
-                .cloned(),
-        );
-        push_tag_values(tags, TAG_A, values);
-    } else {
-        push_tag(tags, TAG_A, value);
-    }
-    Ok(())
+    tags.push(tag);
 }
 
-fn validate_calendar_event_address(
-    target: &RadrootsSocialTarget,
-    field: &'static str,
-) -> Result<(), EventEncodeError> {
-    let mut tags = Vec::new();
-    push_calendar_event_address(&mut tags, target, field)
-}
-
-fn calendar_event_relays(target: &RadrootsSocialTarget) -> Option<&Vec<String>> {
-    match target {
-        RadrootsSocialTarget::Address {
-            relays: Some(relays),
-            ..
-        } => Some(relays),
-        _ => None,
+fn push_calendar_revision_reference(
+    tags: &mut Vec<Vec<String>>,
+    reference: &RadrootsCalendarEventRevisionReference,
+) {
+    let mut tag = vec![TAG_E.to_string(), reference.event_id().as_str().to_string()];
+    if let Some(relay) = reference.relay() {
+        tag.push(relay.to_string());
     }
+    tags.push(tag);
 }
 
-fn is_calendar_event_kind(kind: u32) -> bool {
-    matches!(kind, KIND_CALENDAR_DATE_EVENT | KIND_CALENDAR_TIME_EVENT)
+fn push_calendar_author_reference(
+    tags: &mut Vec<Vec<String>>,
+    reference: &RadrootsCalendarEventAuthorReference,
+) {
+    let mut tag = vec![TAG_P.to_string(), reference.pubkey().as_str().to_string()];
+    if let Some(relay) = reference.relay() {
+        tag.push(relay.to_string());
+    }
+    tags.push(tag);
 }
 
 fn rsvp_status_as_str(status: &RadrootsCalendarEventRsvpStatus) -> &'static str {

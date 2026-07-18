@@ -251,6 +251,657 @@
         "tags": [["d", "long-range"], ["title", "Long range"], ["start", "0"], ["end", "31708800"], ["D", "0"]]
       },
       "expected": {"error": "covered_day_limit_exceeded", "max": 366, "actual": 367}
+    },
+    {
+      "id": "profile_authored_collection_empty_001",
+      "kind": "calendar.profile.authored.collection.valid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Victoria farm calendar",
+        "event_references": []
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31924,
+          "content": "",
+          "tags": [["d", "AAAAAAAAAAAAAAAAAAAAAA"], ["title", "Victoria farm calendar"]]
+        }
+      }
+    },
+    {
+      "id": "profile_authored_collection_ordered_mixed_001",
+      "kind": "calendar.profile.authored.collection.valid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "South Island farm schedule",
+        "content": "Market dates and farm work windows for Victoria growers.",
+        "list_description": "NIP-51 set description for compatible clients.",
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": "wss://date-relay.example.test/events"
+          },
+          {
+            "coordinate": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg",
+            "relay": "wss://time-relay.example.test/events"
+          }
+        ]
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31924,
+          "content": "Market dates and farm work windows for Victoria growers.",
+          "tags": [
+            ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+            ["title", "South Island farm schedule"],
+            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
+            ["a", "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
+            ["description", "NIP-51 set description for compatible clients."]
+          ]
+        }
+      }
+    },
+    {
+      "id": "profile_authored_collection_byte_verified_blossom_image_001",
+      "kind": "calendar.profile.authored.collection.valid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Victoria farm calendar",
+        "content": "A shared calendar with a verified cover image.",
+        "image": {
+          "bytes_utf8": "victoria-calendar",
+          "descriptor": {
+            "url": "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp",
+            "sha256": "aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84",
+            "size": 17,
+            "type": "image/webp",
+            "uploaded": 1784347200
+          }
+        },
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": null
+          }
+        ]
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31924,
+          "content": "A shared calendar with a verified cover image.",
+          "tags": [
+            ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+            ["title", "Victoria farm calendar"],
+            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+            ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"]
+          ]
+        },
+        "media_verification": "byte_verified",
+        "upload_completion": "not_attested_by_codec"
+      }
+    },
+    {
+      "id": "profile_authored_collection_human_identifier_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {"d": "victoria-calendar", "title": "Victoria farm calendar", "event_references": []},
+      "expected": {"error": "invalid_calendar_uid"}
+    },
+    {
+      "id": "profile_authored_collection_noncanonical_title_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {"d": "AAAAAAAAAAAAAAAAAAAAAA", "title": " Victoria farm calendar ", "event_references": []},
+      "expected": {"error": "invalid_title"}
+    },
+    {
+      "id": "profile_authored_collection_duplicate_coordinate_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Duplicate event calendar",
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": "wss://one.example.test"
+          },
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": "wss://two.example.test"
+          }
+        ]
+      },
+      "expected": {"error": "duplicate_event_reference"}
+    },
+    {
+      "id": "profile_authored_collection_uppercase_relay_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Uppercase relay",
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": "WSS://Relay.Example.Test/events"
+          }
+        ]
+      },
+      "expected": {"error": "invalid_event_reference"}
+    },
+    {
+      "id": "profile_authored_collection_wrong_coordinate_kind_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Wrong coordinate kind",
+        "event_references": [
+          {
+            "coordinate": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": null
+          }
+        ]
+      },
+      "expected": {"error": "invalid_event_reference"}
+    },
+    {
+      "id": "profile_authored_collection_media_hash_mismatch_001",
+      "kind": "calendar.profile.authored.collection.invalid",
+      "input": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "title": "Mismatched media",
+        "image": {
+          "bytes_utf8": "victoria-calendar",
+          "descriptor": {
+            "url": "https://media.example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "size": 17,
+            "type": "image/webp",
+            "uploaded": 1784347200
+          }
+        },
+        "event_references": []
+      },
+      "expected": {"error": "blob_hash_mismatch"}
+    },
+    {
+      "id": "profile_admit_collection_empty_001",
+      "kind": "calendar.profile.admit.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "AAAAAAAAAAAAAAAAAAAAAA"], ["title", "Victoria farm calendar"]]
+      },
+      "expected": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "event_references": [],
+        "blossom_image": false
+      }
+    },
+    {
+      "id": "profile_admit_collection_ordered_mixed_blossom_001",
+      "kind": "calendar.profile.admit.collection.valid",
+      "input": {
+        "kind": 31924,
+        "content": "Market dates and farm work windows for Victoria growers.",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "South Island farm schedule"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
+          ["a", "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
+          ["description", "NIP-51 set description for compatible clients."],
+          ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"]
+        ]
+      },
+      "expected": {
+        "d": "AAAAAAAAAAAAAAAAAAAAAA",
+        "content": "Market dates and farm work windows for Victoria growers.",
+        "list_description": "NIP-51 set description for compatible clients.",
+        "event_references": [
+          {
+            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "relay": "wss://date-relay.example.test/events"
+          },
+          {
+            "coordinate": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg",
+            "relay": "wss://time-relay.example.test/events"
+          }
+        ],
+        "blossom_image": true,
+        "media_verification": "structural_only"
+      }
+    },
+    {
+      "id": "profile_admit_collection_uppercase_coordinate_and_relay_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "Uppercase reference"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "event_reference"}
+    },
+    {
+      "id": "profile_admit_collection_duplicate_coordinate_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "Duplicate reference"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://one.example.test"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://two.example.test"]
+        ]
+      },
+      "expected": {"error": "duplicate_event_reference"}
+    },
+    {
+      "id": "profile_admit_collection_human_identifier_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [["d", "victoria-calendar"], ["title", "Victoria farm calendar"]]
+      },
+      "expected": {"error": "non_canonical_field", "field": "d"}
+    },
+    {
+      "id": "profile_admit_collection_non_blossom_image_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "Ordinary image"],
+          ["image", "https://ordinary.example.test/victoria-calendar.jpg"]
+        ]
+      },
+      "expected": {"error": "non_blossom_image"}
+    },
+    {
+      "id": "profile_authored_rsvp_minimal_accepted_001",
+      "kind": "calendar.profile.authored.rsvp.valid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "status": "accepted"
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31925,
+          "content": "",
+          "tags": [
+            ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+            ["status", "accepted"]
+          ]
+        }
+      }
+    },
+    {
+      "id": "profile_authored_rsvp_complete_independent_hints_001",
+      "kind": "calendar.profile.authored.rsvp.valid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": "wss://coordinate-relay.example.test/events"
+        },
+        "revision_reference": {
+          "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "relay": "wss://event-relay.example.test/events"
+        },
+        "status": "tentative",
+        "free_busy": "busy",
+        "author_hint": {
+          "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://author-relay.example.test/events"
+        },
+        "note": "I can help with the wash-pack shift."
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 31925,
+          "content": "I can help with the wash-pack shift.",
+          "tags": [
+            ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+            ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
+            ["status", "tentative"],
+            ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://event-relay.example.test/events"],
+            ["fb", "busy"],
+            ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://author-relay.example.test/events"]
+          ]
+        },
+        "observed_free_busy": "busy",
+        "effective_free_busy": "busy"
+      }
+    },
+    {
+      "id": "profile_authored_rsvp_declined_with_free_busy_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "status": "declined",
+        "free_busy": "busy"
+      },
+      "expected": {"error": "declined_free_busy_forbidden"}
+    },
+    {
+      "id": "profile_authored_rsvp_human_identifier_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "farm-tour-rsvp",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "status": "accepted"
+      },
+      "expected": {"error": "invalid_calendar_uid"}
+    },
+    {
+      "id": "profile_authored_rsvp_uppercase_event_id_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "revision_reference": {
+          "id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "relay": null
+        },
+        "status": "accepted"
+      },
+      "expected": {"error": "invalid_revision_reference"}
+    },
+    {
+      "id": "profile_authored_rsvp_author_mismatch_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "status": "accepted",
+        "author_hint": {
+          "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "relay": null
+        }
+      },
+      "expected": {"error": "author_hint_mismatch"}
+    },
+    {
+      "id": "profile_authored_rsvp_uppercase_event_relay_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": "WSS://Relay.Example.Test/events"
+        },
+        "status": "accepted"
+      },
+      "expected": {"error": "invalid_event_reference"}
+    },
+    {
+      "id": "profile_authored_rsvp_wrong_coordinate_kind_001",
+      "kind": "calendar.profile.authored.rsvp.invalid",
+      "input": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": null
+        },
+        "status": "accepted"
+      },
+      "expected": {"error": "invalid_event_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_minimal_accepted_001",
+      "kind": "calendar.profile.admit.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "status": "accepted",
+        "observed_free_busy": null,
+        "effective_free_busy": null
+      }
+    },
+    {
+      "id": "profile_admit_rsvp_complete_independent_hints_001",
+      "kind": "calendar.profile.admit.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "I can help with the wash-pack shift.",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
+          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://event-relay.example.test/events"],
+          ["status", "tentative"],
+          ["fb", "busy"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://author-relay.example.test/events"]
+        ]
+      },
+      "expected": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "event_reference": {
+          "coordinate": "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "relay": "wss://coordinate-relay.example.test/events"
+        },
+        "revision_reference": {
+          "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "relay": "wss://event-relay.example.test/events"
+        },
+        "author_hint": {
+          "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://author-relay.example.test/events"
+        },
+        "status": "tentative",
+        "observed_free_busy": "busy",
+        "effective_free_busy": "busy"
+      }
+    },
+    {
+      "id": "profile_admit_rsvp_declined_observed_free_busy_001",
+      "kind": "calendar.profile.admit.rsvp.valid",
+      "input": {
+        "kind": 31925,
+        "content": "Unable to attend.",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "declined"],
+          ["fb", "busy"]
+        ]
+      },
+      "expected": {
+        "d": "DDDDDDDDDDDDDDDDDDDDDw",
+        "status": "declined",
+        "observed_free_busy": "busy",
+        "effective_free_busy": null
+      }
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_fields_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
+          ["e", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "WSS://Event-Relay.Example.Test/events"],
+          ["status", "accepted"],
+          ["p", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "WSS://Author-Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field"}
+    },
+    {
+      "id": "profile_admit_rsvp_author_mismatch_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"],
+          ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+        ]
+      },
+      "expected": {"error": "author_hint_mismatch"}
+    },
+    {
+      "id": "profile_admit_rsvp_human_identifier_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "farm-tour-rsvp"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "d"}
+    },
+    {
+      "id": "profile_admit_collection_uppercase_coordinate_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "Uppercase coordinate"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "event_reference"}
+    },
+    {
+      "id": "profile_admit_collection_uppercase_relay_001",
+      "kind": "calendar.profile.admit.collection.invalid",
+      "input": {
+        "kind": 31924,
+        "content": "",
+        "tags": [
+          ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
+          ["title", "Uppercase relay"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "event_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_coordinate_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "event_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_event_id_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["e", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "revision_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_author_pubkey_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"],
+          ["p", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "author_hint"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_a_relay_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "event_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_e_relay_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "WSS://Event-Relay.Example.Test/events"],
+          ["status", "accepted"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "revision_reference"}
+    },
+    {
+      "id": "profile_admit_rsvp_uppercase_p_relay_001",
+      "kind": "calendar.profile.admit.rsvp.invalid",
+      "input": {
+        "kind": 31925,
+        "content": "",
+        "tags": [
+          ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
+          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["status", "accepted"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "WSS://Author-Relay.Example.Test/events"]
+        ]
+      },
+      "expected": {"error": "non_canonical_field", "field": "author_hint"}
     }
   ]
 }

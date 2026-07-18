@@ -22,7 +22,7 @@ use radroots_event::event_head::{
 };
 use radroots_event::ids::RadrootsEventId;
 use radroots_event::kinds::{
-    KIND_FARM, KIND_LISTING, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind,
+    KIND_CALENDAR, KIND_FARM, KIND_LISTING, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind,
 };
 use radroots_event::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingStatus,
@@ -207,7 +207,9 @@ fn ingest_event_inner(
         KIND_FARM => ingest_farm_event(exec, event, factory),
         KIND_PLOT => ingest_plot_event(exec, event, factory),
         KIND_LISTING => ingest_listing_event(exec, event),
-        kind if is_nip51_list_set_kind(kind) => ingest_list_set_event(exec, event),
+        kind if is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR => {
+            ingest_list_set_event(exec, event)
+        }
         _ => Err(RadrootsReplicaEventsError::InvalidData(format!(
             "unsupported kind {}",
             event.kind_u32()
@@ -2253,6 +2255,35 @@ mod tests {
         .expect_err("rollback");
         assert!(err.to_string().contains("unsupported kind"));
         assert_eq!(rollback_executor.rollback_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn calendar_kind_uses_unsupported_transaction_path() {
+        let rollback_count = Arc::new(AtomicUsize::new(0));
+        let executor = TxnExecutor {
+            inner: None,
+            begin_err: None,
+            commit_err: None,
+            rollback_count: rollback_count.clone(),
+        };
+        let event = test_event_envelope(
+            3,
+            &"a".repeat(64),
+            3,
+            KIND_CALENDAR,
+            Vec::new(),
+            String::new(),
+        );
+
+        let err = radroots_replica_ingest_event_with_factory(&executor, &event, &FixedFactory)
+            .expect_err("calendar is not supported by the replica projection");
+
+        assert!(matches!(
+            err,
+            RadrootsReplicaEventsError::InvalidData(ref message)
+                if message == "unsupported kind 31924"
+        ));
+        assert_eq!(rollback_count.load(Ordering::SeqCst), 1);
     }
 
     #[test]

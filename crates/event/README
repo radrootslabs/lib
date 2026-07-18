@@ -21,12 +21,15 @@ syntax without making a network identity claim. The legacy `RadrootsProfile`
 model remains available for compatibility.
 
 The calendar module keeps three different states explicit for NIP-52 kinds
-`31922` and `31923`: the complete structural event envelope, a tolerant
-baseline NIP-52 projection, and a strict Radroots-admitted projection. Envelope
-construction validates structure, not a matching event id or Schnorr
-signature. Callers must perform those cryptographic checks independently and
-keep any parsed or admitted value bound to the verified envelope and expected
-kind.
+`31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,
+a tolerant baseline NIP-52 projection, and a strict Radroots-admitted
+projection. The authored types are `RadrootsAuthoredCalendarDateEvent`,
+`RadrootsAuthoredCalendarTimeEvent`, `RadrootsAuthoredCalendar`, and
+`RadrootsAuthoredCalendarEventRsvp`; their inbound counterparts use matching
+`RadrootsParsedNip52*` and `RadrootsAdmitted*` types. Envelope construction
+validates structure, not a matching event id or Schnorr signature. Callers must
+perform those cryptographic checks independently and keep any parsed or
+admitted value bound to the verified envelope and expected kind.
 
 Baseline projections retain the pinned NIP-52 common fields: repeated
 locations, participants, categories, absolute-URI references, kind-`31924`
@@ -45,12 +48,35 @@ not authored. Strict date events reject uppercase `D`, while strict time
 events derive or admit only the complete, ascending sequence of UTC-day
 indices and cover at most 366 days.
 
-Inbound images begin as unverified absolute URIs. Strict admission requires a
-structural Blossom hash-path URL but makes no byte or network claim. Authored
-calendar images require the shared `image/*`, byte-verified Blossom descriptor.
-That state is not an upload receipt: a runtime must require successful BUD-02
-upload completion and a bounded retrievability check before signing or
-publishing a media-bearing event.
+Kind `31924` has one calendar-specific contract. It is not decoded or authored
+through either generic NIP-51 list codec. Its NIP-52 detailed description is
+plain-text event content and remains distinct from the optional NIP-51
+`description` tag. It requires one `d` and one `title`, permits optional NIP-51
+`description` and `image` tags, and contains zero or more `a` references to
+kind `31922` or `31923` events. Each reference may have its own relay hint, and
+an empty calendar collection is valid.
+
+Kind `31925` has exactly one required `d`, one `a` event coordinate, and one
+`status`; `e`, `fb`, and `p` are optional singletons. The `a`, `e`, and `p`
+references preserve independent optional relay hints. The `p` tag is an event
+author hint without participant-role semantics, and strict admission requires
+it to match the author in the `a` coordinate. An inbound declined RSVP may
+retain an observed `fb` for diagnostics but exposes no effective free/busy
+state. Authored declined RSVPs cannot carry `fb`.
+
+Strict collection and RSVP identifiers use exactly 22 unpadded base64url
+characters representing 128 bits. The type proves only syntax; the runtime is
+responsible for generating a fresh value for each new identity. Parsing or
+admission does not prove reference existence, revision correspondence, RSVP
+authority, upload completion, or network availability.
+
+Inbound images begin as unverified absolute URIs. Strict admission, including
+kind-`31924` collection images, requires a structural Blossom hash-path URL but
+makes no byte or network claim. Authored calendar images require the shared
+`image/*`, byte-verified Blossom descriptor. That state is not an upload
+receipt: a runtime must require successful BUD-02 upload completion and a
+bounded retrievability check before signing or publishing a media-bearing
+event.
 
 ## Field Event Boundary
 

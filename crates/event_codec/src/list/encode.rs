@@ -2,11 +2,12 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_list_set_kind, is_nip51_standard_list_kind},
+    kinds::KIND_LIST_READ_WRITE_RELAYS,
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
 };
 
+use super::is_generic_list_codec_kind;
 use crate::error::EventEncodeError;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
@@ -45,7 +46,7 @@ pub fn to_wire_parts_with_kind(
     list: &RadrootsList,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
-    if !is_supported_list_kind(kind) {
+    if !is_generic_list_codec_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     if kind == KIND_LIST_READ_WRITE_RELAYS {
@@ -57,10 +58,6 @@ pub fn to_wire_parts_with_kind(
         content: list.content.clone(),
         tags,
     })
-}
-
-fn is_supported_list_kind(kind: u32) -> bool {
-    is_nip51_standard_list_kind(kind) || is_nip51_list_set_kind(kind)
 }
 
 fn validate_relay_entries(entries: &[RadrootsListEntry]) -> Result<(), EventEncodeError> {

@@ -92,35 +92,6 @@
       }
     },
     {
-      "id": "social_list_set_calendar_address_valid_006",
-      "kind": "social.list_set.parse_event.valid",
-      "input": {
-        "event": {
-          "kind": 31924,
-          "content": "Shared schedule for farm operations.",
-          "tags": [
-            [
-              "d",
-              "AAAAAAAAAAAAAAAAAAAA_A"
-            ],
-            [
-              "title",
-              "farm calendar"
-            ],
-            [
-              "a",
-              "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAA-A"
-            ]
-          ]
-        }
-      },
-      "expected": {
-        "result": "ok",
-        "typed_model": "RadrootsCalendar",
-        "generic_model": "RadrootsListSet"
-      }
-    },
-    {
       "id": "social_farm_rejects_private_ops_json_invalid_007",
       "kind": "social.farm.parse_event.invalid",
       "input": {

@@ -2,7 +2,9 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST},
+    kinds::{
+        KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST,
+    },
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
 };
@@ -95,9 +97,29 @@ fn list_encode_and_decode_reject_invalid_inputs() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 standard or list-set kind",
+            expected: "generic nip51 standard or non-calendar list-set kind",
             got: KIND_POST
         }
+    ));
+}
+
+#[test]
+fn generic_list_encode_and_decode_reject_calendar_kind() {
+    let list = sample_list();
+    assert!(matches!(
+        to_wire_parts_with_kind(&list, KIND_CALENDAR),
+        Err(EventEncodeError::InvalidKind(KIND_CALENDAR))
+    ));
+    assert!(matches!(
+        list_from_tags(
+            KIND_CALENDAR,
+            list.content,
+            &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+        ),
+        Err(EventParseError::InvalidKind {
+            expected: "generic nip51 standard or non-calendar list-set kind",
+            got: KIND_CALENDAR,
+        })
     ));
 }
 
@@ -182,7 +204,7 @@ fn list_index_from_event_propagates_parse_errors() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 standard or list-set kind",
+            expected: "generic nip51 standard or non-calendar list-set kind",
             got: KIND_POST
         }
     ));

@@ -6,12 +6,16 @@ use radroots_event::{
     RadrootsAuthoredImage, RadrootsEventTags,
     calendar::{
         RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RADROOTS_CALENDAR_SECONDS_PER_DAY,
-        RadrootsAuthoredCalendarDateEvent, RadrootsAuthoredCalendarTimeEvent,
+        RadrootsAuthoredCalendar, RadrootsAuthoredCalendarDateEvent,
+        RadrootsAuthoredCalendarEventRsvp, RadrootsAuthoredCalendarTimeEvent,
         RadrootsCalendarAdmissionError, RadrootsCalendarDate, RadrootsCalendarEventError,
-        RadrootsIanaTimeZoneId, covered_utc_days,
+        RadrootsCalendarEventReference, RadrootsCalendarEventRsvpStatus,
+        RadrootsCalendarParticipant, RadrootsCalendarUid, RadrootsIanaTimeZoneId, covered_utc_days,
     },
-    kinds::{KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_POST},
-    social::RadrootsCalendarParticipant,
+    kinds::{
+        KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP,
+        KIND_CALENDAR_TIME_EVENT, KIND_POST,
+    },
     tags::{
         TAG_A, TAG_D, TAG_D_DAY, TAG_END, TAG_END_TZID, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P,
         TAG_R, TAG_START, TAG_START_TZID, TAG_SUMMARY, TAG_T, TAG_TITLE,
@@ -22,12 +26,16 @@ use radroots_event_codec::{
     calendar::{
         decode::{
             admit_radroots_calendar_date_event, admit_radroots_calendar_time_event,
+            nip52_calendar_data_from_event, nip52_calendar_event_rsvp_data_from_event,
+            nip52_calendar_event_rsvp_parsed_from_event, nip52_calendar_parsed_from_event,
             nip52_date_data_from_event, nip52_date_parsed_from_event,
             parse_nip52_calendar_date_event, parse_nip52_calendar_time_event,
         },
         encode::{
-            calendar_date_event_build_tags, calendar_time_event_build_tags, date_to_wire_parts,
-            date_to_wire_parts_with_kind, time_to_wire_parts, time_to_wire_parts_with_kind,
+            calendar_date_event_build_tags, calendar_time_event_build_tags, calendar_to_wire_parts,
+            calendar_to_wire_parts_with_kind, date_to_wire_parts, date_to_wire_parts_with_kind,
+            rsvp_to_wire_parts, rsvp_to_wire_parts_with_kind, time_to_wire_parts,
+            time_to_wire_parts_with_kind,
         },
     },
     error::{EventEncodeError, EventParseError},
@@ -602,6 +610,88 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
     .unwrap();
     assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.common().d_tag(), DATE_D_TAG);
+
+    let event_reference = RadrootsCalendarEventReference::parse(
+        format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{TIME_D_TAG}"),
+        Some("wss://relay.example.test/events"),
+    )
+    .unwrap();
+    let calendar = RadrootsAuthoredCalendar::new(
+        RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap(),
+        "Farm calendar",
+        "Shared farm schedule.",
+        vec![event_reference.clone()],
+    )
+    .unwrap();
+    assert!(matches!(
+        calendar_to_wire_parts_with_kind(&calendar, KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
+    let parts = calendar_to_wire_parts(&calendar).unwrap();
+    assert_eq!(parts.kind, KIND_CALENDAR);
+    let data = nip52_calendar_data_from_event(
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
+        8,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        data.data.event_references(),
+        core::slice::from_ref(&event_reference)
+    );
+    let parsed = nip52_calendar_parsed_from_event(
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
+        8,
+        parts.kind,
+        parts.content,
+        parts.tags,
+        EVENT_SIG.to_string(),
+    )
+    .unwrap();
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.data.data.title(), "Farm calendar");
+
+    let rsvp = RadrootsAuthoredCalendarEventRsvp::new(
+        RadrootsCalendarUid::parse("DDDDDDDDDDDDDDDDDDDDDw").unwrap(),
+        event_reference,
+        RadrootsCalendarEventRsvpStatus::Accepted,
+    )
+    .unwrap();
+    assert!(matches!(
+        rsvp_to_wire_parts_with_kind(&rsvp, KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
+    let parts = rsvp_to_wire_parts(&rsvp).unwrap();
+    assert_eq!(parts.kind, KIND_CALENDAR_EVENT_RSVP);
+    let data = nip52_calendar_event_rsvp_data_from_event(
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
+        9,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        data.data.status(),
+        &RadrootsCalendarEventRsvpStatus::Accepted
+    );
+    let parsed = nip52_calendar_event_rsvp_parsed_from_event(
+        EVENT_ID.to_string(),
+        EVENT_AUTHOR.to_string(),
+        9,
+        parts.kind,
+        parts.content,
+        parts.tags,
+        EVENT_SIG.to_string(),
+    )
+    .unwrap();
+    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.data.data.d_tag(), "DDDDDDDDDDDDDDDDDDDDDw");
 }
 
 #[test]

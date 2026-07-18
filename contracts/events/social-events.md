@@ -17,7 +17,9 @@ deterministic fixtures live under `contracts/conformance`.
 
 Calendar behavior is based on
 [NIP-52](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/52.md)
-at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
+and its collection metadata uses
+[NIP-51](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/51.md),
+both at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
 Blossom primitives governed by the protocol pin in
 [`blossom-media.md`](blossom-media.md). The upstream NIP-52 rules and the stricter Radroots
 authoring and admission profile are separate contract layers.
@@ -58,8 +60,12 @@ The production-v1 public social substrate includes:
 
 - `RadrootsRepost` for NIP-18 kind `6`
 - `RadrootsGenericRepost` for NIP-18 kind `16`
-- `RadrootsCalendar` for NIP-52 kind `31924`
-- `RadrootsCalendarEventRsvp` for NIP-52 kind `31925`
+- strict authored `RadrootsAuthoredCalendar`, tolerant
+  `RadrootsParsedNip52Calendar`, and strict admitted `RadrootsAdmittedCalendar`
+  models for NIP-52 kind `31924`
+- strict authored `RadrootsAuthoredCalendarEventRsvp`, tolerant
+  `RadrootsParsedNip52CalendarEventRsvp`, and strict admitted
+  `RadrootsAdmittedCalendarEventRsvp` models for NIP-52 kind `31925`
 - `RadrootsReport` for NIP-56 kind `1984`
 - stable listing kind `30402` validation through `RadrootsListing`
 - relay-list kind `10002` validation through `RadrootsList`
@@ -90,28 +96,31 @@ summary, alt text, fallback, `magnet`, `i`, and `service`.
 
 ### Calendar Trust Layers
 
-Kinds `31922` and `31923` have three explicit, non-interchangeable layers:
+Kinds `31922`, `31923`, `31924`, and `31925` have three explicit,
+non-interchangeable layers:
 
 | Layer | Public role | What success establishes |
 | --- | --- | --- |
 | bounded structural wire or envelope | preserves the complete NIP-01 event while validating wire shape, identifier syntax, and resource limits | structural data only; it does not establish a matching event id or valid Schnorr signature unless the caller invokes the separate verification operations |
-| tolerant NIP-52 parse | `RadrootsParsedNip52CalendarDateEvent` or `RadrootsParsedNip52CalendarTimeEvent` | the expected kind and the pinned baseline NIP-52 calendar semantics parse successfully; observed standard fields and tolerated wire spellings remain distinguishable from canonical authored data |
-| strict Radroots admission | `RadrootsAdmittedCalendarDateEvent` or `RadrootsAdmittedCalendarTimeEvent` | the parsed calendar event also satisfies the canonical Radroots metadata, media-reference, and date or UTC-day coverage profile |
+| tolerant NIP-52 parse | one of the `RadrootsParsedNip52*` date event, time event, calendar collection, or RSVP types | the expected kind and the pinned baseline NIP-52 semantics parse successfully; observed standard fields and tolerated wire spellings remain distinguishable from canonical authored data |
+| strict Radroots admission | one of the corresponding `RadrootsAdmitted*` calendar types | the parsed value also satisfies the canonical Radroots identifier, reference, metadata, media, date, or UTC-day profile applicable to that kind |
 
 The calendar `*_parsed_from_event` helpers construct a structurally checked raw envelope alongside
 the tolerant projection. Their names do not mean that the event id or signature has been verified.
 Before a caller treats relay data as accepted, it must recompute and compare the NIP-01 event id,
 verify the Schnorr signature against the event author, dispatch the event to the matching kind
-`31922` or `31923` parser, and then apply strict admission when the Radroots profile is required.
+`31922`, `31923`, `31924`, or `31925` parser, and then apply strict admission when the Radroots
+profile is required.
 The kind-specific parsers reject the wrong kind, but neither baseline parsing nor strict admission
 performs cryptographic verification. An admitted model is therefore valid only while it remains
 bound to the already id- and signature-verified envelope from which it was parsed.
 
 Strict authoring is the outbound counterpart, not a fourth inbound verification state.
-`RadrootsAuthoredCalendarDateEvent` and `RadrootsAuthoredCalendarTimeEvent` have private checked
-fields and encode deterministic `RadrootsNip01EventWireParts`. Wire parts contain only `kind`,
-`content`, and `tags`; the owning runtime still supplies `created_at` and author identity, computes
-the event id, signs the event, and publishes it.
+`RadrootsAuthoredCalendarDateEvent`, `RadrootsAuthoredCalendarTimeEvent`,
+`RadrootsAuthoredCalendar`, and `RadrootsAuthoredCalendarEventRsvp` have private checked fields and
+encode deterministic `RadrootsNip01EventWireParts`. Wire parts contain only `kind`, `content`, and
+`tags`; the owning runtime still supplies `created_at` and author identity, computes the event id,
+signs the event, and publishes it.
 
 ### Baseline NIP-52 Parse
 
@@ -154,10 +163,34 @@ When `end_tzid` is absent and `start_tzid` is present, the effective end time zo
 An inbound baseline `image` is only a structurally valid absolute URI. It is not a Blossom claim,
 an approved reference, or evidence about bytes or network state.
 
+Kind `31924` is a calendar collection, not a generic list or list-set publication surface. Its bounded
+plain-text `content` is the NIP-52 detailed description and is required on wire even when empty.
+The required singleton `d` and `title` tags identify and name the collection. Repeated `a` tags
+contain only kind-`31922` or kind-`31923` addressable coordinates and may each carry their own
+recommended relay URL. A collection with no `a` tags is valid. The optional singleton
+`description` and `image` tags are NIP-51 list metadata; `description` is distinct from NIP-52
+description content and the parser does not merge one into the other. The baseline parser accepts a
+structurally valid absolute `image` URI without making a Blossom or network claim. Singleton text
+tags have exactly two elements; collection `a` tags have exactly two elements plus an optional relay
+element.
+
+Kind `31925` is an RSVP with bounded optional free-form note content. It has exactly one required
+`d` identifier, one required `a` coordinate for a kind-`31922` or kind-`31923` event, and one
+required `status` value: `accepted`, `declined`, or `tentative`. Optional singleton `e`, `fb`, and
+`p` tags respectively identify one exact event revision, the `free` or `busy` availability state,
+and the event author. The `a`, `e`, and `p` references each carry an independent optional
+recommended relay URL; a relay hint on one reference is never copied to another. The `p` form is
+an author hint without participant-role semantics. The `d`, `status`, and `fb` tags have exactly
+two elements; the `a`, `e`, and `p` tags have exactly two elements plus an optional relay element.
+Baseline parsing preserves `fb` observed on a declined RSVP for diagnostics but treats its effective
+value as absent, as required by NIP-52. Parsing a syntactically valid `e` tag does not establish
+that it is a revision of the referenced addressable event.
+
 ### Strict Radroots Calendar Profile
 
 Strict authored and admitted calendar metadata uses canonical nonempty text, canonical participant
-and relay values, and lowercase geohashes. The authored common surface supports repeated locations,
+values, validated lowercase-scheme `ws`/`wss` relay URLs, and lowercase geohashes. Relay URL host,
+port, path, and query spellings are preserved rather than normalized. The authored common surface supports repeated locations,
 optional geohash and summary, repeated participants, categories, absolute-URI references, and
 kind-`31924` calendar-inclusion requests. It intentionally does not author deprecated `name` tags.
 
@@ -166,6 +199,20 @@ canonical decimal timestamps and the exact, ascending, duplicate-free sequence o
 index covered by the interval, where `D = floor(unix_seconds / 86400)` and `end` is exclusive.
 Authoring derives this sequence rather than accepting it from callers. Strict authored and admitted
 time events cover at most 366 UTC days.
+
+Strict kind-`31924` and kind-`31925` identifiers are syntax-valid 128-bit values encoded as exactly
+22 unpadded base64url characters. This shape does not prove uniqueness; an authoring runtime must
+generate a fresh identifier for every collection or RSVP identity. Strict collection authoring and
+admission require canonical title and optional NIP-51 description text, validated relay hints, and
+duplicate-free event coordinates while still permitting an empty collection. Collection event
+references remain limited to kinds `31922` and `31923`.
+
+Strict RSVP authoring and admission require canonical `a`, optional `e`, and optional `p`
+references. An admitted `p` author hint must match the public key in the `a` coordinate. Authored
+RSVPs never emit `fb` when status is `declined`; inbound baseline and admitted values retain such an
+observation only for diagnostics and return no effective free/busy state. Neither baseline parsing
+nor strict admission proves that a referenced revision exists, that it matches the addressable
+event, or that the RSVP author is authorized to answer for another party.
 
 Calendar images have an explicit progression of trust. Tolerant inbound parsing accepts any
 absolute image URI. Strict inbound admission requires a structural Blossom hash-path URL, but does
@@ -180,9 +227,6 @@ succeeded. Consumers remain responsible for bounded retrieval, redirects, conten
 format-safety policy. No calendar model upgrades an observed relay URL into either an upload receipt
 or an availability guarantee.
 
-`RadrootsCalendar` continues to use NIP-52 description content; its kind-`31924` collection
-semantics are governed separately from the kind-`31922` and kind-`31923` authored/inbound split.
-
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
 Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`
 can appear in public product surfaces. Report kind `1984` is a moderation/admin candidate, not
@@ -192,7 +236,9 @@ farm CRDT change envelope, farm file metadata, and the supported NIP-29 group ev
 
 `RadrootsRelayList` is not a separate model type in the target contract. Stable listings are
 represented through `RadrootsListing`, and NIP-51 standard and list-set entries, including NIP-65
-relay metadata kind `10002`, are represented through `RadrootsList`.
+relay metadata kind `10002`, are represented through `RadrootsList`. NIP-51 taxonomy may classify
+kind `31924` as a calendar list, but generic list and list-set decoding or authoring must reject that kind;
+only the calendar-specific model and codec may parse or publish it.
 
 ## Exclusions
 

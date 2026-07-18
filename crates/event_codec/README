@@ -22,14 +22,14 @@ network verification. Its content parser accepts only bounded kind-`0` content
 from an event whose identifier and signature the caller has already verified.
 
 The NIP-52 calendar codecs expose a deliberate three-stage boundary for kinds
-`31922` and `31923`:
+`31922`, `31923`, `31924`, and `31925`:
 
 1. bounded structural wire or envelope parsing preserves the complete event;
-2. `parse_nip52_calendar_date_event` or
-   `parse_nip52_calendar_time_event` produces a tolerant baseline NIP-52
-   projection and rejects a mismatched kind;
-3. `admit_radroots_calendar_date_event` or
-   `admit_radroots_calendar_time_event` applies the stricter Radroots profile.
+2. the kind-specific date event, time event, calendar collection, or RSVP
+   parser produces a tolerant `RadrootsParsedNip52*` projection and rejects a
+   mismatched kind;
+3. the corresponding `admit_radroots_*` operation applies the stricter
+   Radroots profile and returns a non-interchangeable admitted type.
 
 Structural envelope construction, the baseline parsers, and the admission
 functions do not verify a Schnorr signature. Before treating inbound data as
@@ -58,12 +58,42 @@ days. Authored codecs derive that sequence and emit unsigned
 `RadrootsNip01EventWireParts`; signing and transport stay at the owning runtime
 boundary.
 
-Strict inbound admission upgrades an image only to a structural Blossom
-hash-path URL. It does not prove reference approval, bytes, upload completion,
-or retrievability. Strict authored image inputs are approved, byte-verified
-Blossom `image/*` descriptors, but are still not upload receipts. A publishing
-runtime must require successful BUD-02 completion and a bounded retrievability
-check before signing or publishing media-bearing wire parts.
+Kind `31924` is handled only by the calendar-specific codec. Generic NIP-51
+taxonomy may recognize it as a calendar list, but the generic list-set decoder
+and authoring path and the broader generic list codec reject it. Calendar collection content is the bounded
+plain-text NIP-52 detailed description; it is not substituted from or collapsed
+into the optional NIP-51 `description` tag. The parser requires exactly one
+`d` and `title`, accepts optional singleton `description` and `image` tags, and
+accepts zero or more exact `a` references to kind `31922` or `31923` events.
+An empty collection is valid, and each event reference preserves its own
+optional relay hint. Singleton collection tags have exactly two elements; an
+`a` tag has exactly two elements plus an optional relay element.
+
+Kind `31925` has bounded optional note content and exact singleton
+cardinality: required `d`, `a`, and `status`, with optional `e`, `fb`, and `p`.
+The `a`, `e`, and `p` values preserve independent optional relay hints. The
+`p` tag is parsed as an event-author hint without participant-role semantics;
+strict admission requires it to match the author in the `a` coordinate.
+`d`, `status`, and `fb` tags have exactly two elements, while `a`, `e`, and `p`
+have exactly two elements plus an optional relay element.
+Tolerant parsing preserves `fb` observed on a declined RSVP, but parsed and
+admitted values expose no effective free/busy state for it. Authored declined
+RSVPs never emit `fb`.
+
+Strict collection and RSVP authoring and admission require a canonical
+22-character unpadded base64url 128-bit identifier and canonical reference
+spellings. Identifier syntax does not establish runtime uniqueness. Parsing
+valid identifiers, event ids, author keys, coordinates, and relay hints does
+not establish reference existence, revision correspondence, RSVP authority,
+or relay availability.
+
+Strict inbound admission, including kind-`31924` collection images, upgrades
+an image only to a structural Blossom hash-path URL. It does not prove
+reference approval, bytes, upload completion, or retrievability. Strict
+authored image inputs are approved, byte-verified Blossom `image/*`
+descriptors, but are still not upload receipts. A publishing runtime must
+require successful BUD-02 completion and a bounded retrievability check before
+signing or publishing media-bearing wire parts.
 
 ## Field Event Codecs
 
