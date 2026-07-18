@@ -196,6 +196,7 @@ const ERROR_FIELDS: &[RequiredField] = &[
     field("MeshAgentError", "message", 1, "Text"),
 ];
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn field(
     owner: &'static str,
     name: &'static str,
@@ -210,6 +211,7 @@ const fn field(
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn variant(owner: &'static str, name: &'static str, ordinal: u16) -> RequiredVariant {
     RequiredVariant {
         owner,
@@ -218,10 +220,12 @@ const fn variant(owner: &'static str, name: &'static str, ordinal: u16) -> Requi
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn forbidden_field(owner: &'static str, name: &'static str) -> ForbiddenField {
     ForbiddenField { owner, name }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn forbidden_variant(owner: &'static str, name: &'static str) -> ForbiddenVariant {
     ForbiddenVariant { owner, name }
 }
@@ -477,12 +481,14 @@ impl SchemaParser {
                 Some(SchemaToken::Symbol('$')) => self.parse_annotation(&mut ast)?,
                 Some(SchemaToken::Ident(value)) if value == "using" => self.skip_statement()?,
                 Some(SchemaToken::Ident(value)) if value == "struct" => {
+                    self.index += 1;
                     let (name, decl) = self.parse_struct()?;
                     if ast.structs.insert(name, decl).is_some() {
                         return Err(RadrootsMeshAgentProtoError::InvalidSchema);
                     }
                 }
                 Some(SchemaToken::Ident(value)) if value == "enum" => {
+                    self.index += 1;
                     let (name, decl) = self.parse_enum()?;
                     if ast.enums.insert(name, decl).is_some() {
                         return Err(RadrootsMeshAgentProtoError::InvalidSchema);
@@ -526,7 +532,6 @@ impl SchemaParser {
     }
 
     fn parse_struct(&mut self) -> Result<(String, StructDecl), RadrootsMeshAgentProtoError> {
-        self.expect_ident_value("struct")?;
         let name = self.expect_ident()?;
         self.expect_symbol('{')?;
         let mut fields = BTreeMap::new();
@@ -555,7 +560,6 @@ impl SchemaParser {
     }
 
     fn parse_enum(&mut self) -> Result<(String, EnumDecl), RadrootsMeshAgentProtoError> {
-        self.expect_ident_value("enum")?;
         let name = self.expect_ident()?;
         self.expect_symbol('{')?;
         let mut variants = BTreeMap::new();
@@ -627,14 +631,6 @@ impl SchemaParser {
 
     fn expect_symbol(&mut self, expected: char) -> Result<(), RadrootsMeshAgentProtoError> {
         if self.consume_symbol(expected) {
-            Ok(())
-        } else {
-            Err(RadrootsMeshAgentProtoError::InvalidSchema)
-        }
-    }
-
-    fn expect_ident_value(&mut self, expected: &str) -> Result<(), RadrootsMeshAgentProtoError> {
-        if self.consume_ident(expected) {
             Ok(())
         } else {
             Err(RadrootsMeshAgentProtoError::InvalidSchema)

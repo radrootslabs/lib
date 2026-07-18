@@ -408,6 +408,10 @@ fn schema_validator_rejects_duplicate_incompatible_declarations() {
 fn schema_validator_rejects_type_drift() {
     let request_type_drift =
         RADROOTS_MESH_AGENT_SCHEMA.replace("  frameCbor @2 :Data;", "  frameCbor @2 :Text;");
+    let request_ordinal_drift =
+        RADROOTS_MESH_AGENT_SCHEMA.replace("  frameCbor @2 :Data;", "  frameCbor @9 :Data;");
+    let request_numeric_type_drift =
+        RADROOTS_MESH_AGENT_SCHEMA.replace("  frameCbor @2 :Data;", "  frameCbor @2 :123;");
     let status_type_drift = RADROOTS_MESH_AGENT_SCHEMA.replace(
         "  includeTransports @0 :Bool;",
         "  includeTransports @0 :Text;",
@@ -418,9 +422,77 @@ fn schema_validator_rejects_type_drift() {
         Err(RadrootsMeshAgentProtoError::MissingRequest)
     );
     assert_eq!(
+        validate_schema_text(request_ordinal_drift.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingRequest)
+    );
+    assert_eq!(
+        validate_schema_text(request_numeric_type_drift.as_str()),
+        Err(RadrootsMeshAgentProtoError::MissingRequest)
+    );
+    assert_eq!(
         validate_schema_text(status_type_drift.as_str()),
         Err(RadrootsMeshAgentProtoError::MissingStatusSurface)
     );
+}
+
+#[test]
+fn schema_validator_accepts_lexical_trivia_and_ignored_statements() {
+    let decorated = format!(
+        "# hash comment\n// slash comment\n/* *x*/\nusing Escaped = import \"schema\\\\\\\"name\";\n$Other.annotation(\"ignored\");\n;\n{RADROOTS_MESH_AGENT_SCHEMA}"
+    );
+
+    assert_eq!(validate_schema_text(decorated.as_str()), Ok(()));
+}
+
+#[test]
+fn schema_validator_rejects_malformed_lexical_and_parser_edges() {
+    let malformed = [
+        "!",
+        "/",
+        "/* unterminated",
+        "\"unterminated",
+        "\"trailing\\",
+        "using Alias",
+        "@;",
+        "@1",
+        "$Cxx.namespace(value);",
+        "struct",
+        "struct A",
+        "struct A { field @x :Text; }",
+        "struct A { field @0 Text; }",
+        "struct A { field @0 :; }",
+        "struct A { field @0 :Text",
+        "struct A { field @0 :\"Text\"; }",
+        "struct A { field @0 :@; }",
+        "enum A { value @0 }",
+        "enum A { value @65536; }",
+        "bogus",
+        "@1; @2;",
+        "$Cxx.namespace(\"a\"); $Cxx.namespace(\"b\");",
+        "struct A {} struct A {}",
+        "enum A {} enum A {}",
+        "enum A { first @0; second @0; }",
+        "enum A { first @0; first @1; }",
+    ];
+
+    for schema in malformed {
+        assert_eq!(
+            validate_schema_text(schema),
+            Err(RadrootsMeshAgentProtoError::InvalidSchema),
+            "{schema}"
+        );
+    }
+}
+
+#[test]
+fn schema_validator_ignores_non_namespace_annotations() {
+    for schema in ["#", "$Other;", "$Cxx;", "$Cxx.other;", "$Cxx.namespace;"] {
+        assert_eq!(
+            validate_schema_text(schema),
+            Err(RadrootsMeshAgentProtoError::MissingSchemaId),
+            "{schema}"
+        );
+    }
 }
 
 #[test]
