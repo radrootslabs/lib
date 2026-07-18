@@ -290,10 +290,7 @@ vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
 domain = "blossom"
 id = "blossom.decode_verify_authorization_header"
 stability = "beta"
-inputs = [
-  "String",
-  "RadrootsBlossomAuthorizationValidation",
-]
+inputs = ["String", "RadrootsBlossomAuthorizationValidation"]
 outputs = ["RadrootsNostrVerifiedBlossomAuthorization"]
 error_class = "decode_error"
 deterministic = true

@@ -26,6 +26,12 @@ let
       ]
     );
   };
+  sqlitePatchSource = lib.fileset.toSource {
+    root = root;
+    fileset = lib.fileset.intersection (lib.fileset.fromSource repoSource) (
+      lib.fileset.unions [ ../../crates/libsqlite3_sys_3_53_3 ]
+    );
+  };
   baseEnv = {
     CARGO_TERM_COLOR = "always";
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -123,7 +129,18 @@ let
       PKG_CONFIG_PATH
       ;
   };
-  cargoArtifacts = craneLib.buildDepsOnly commonCraneArgs;
+  cargoArtifacts = craneLib.buildDepsOnly (
+    commonCraneArgs
+    // {
+      dummySrc = craneLib.mkDummySrc {
+        src = cargoSource;
+        extraDummyScript = ''
+          rm -rf "$out/crates/libsqlite3_sys_3_53_3"
+          cp -R ${sqlitePatchSource}/crates/libsqlite3_sys_3_53_3 "$out/crates/"
+        '';
+      };
+    }
+  );
   xtaskPackage = craneLib.buildPackage (
     commonCraneArgs
     // {

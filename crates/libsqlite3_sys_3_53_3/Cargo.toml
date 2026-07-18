@@ -12,10 +12,7 @@ autoexamples = false
 autotests = false
 autobenches = false
 description = "Native bindings to the libsqlite3 library"
-keywords = [
-    "sqlite",
-    "ffi",
-]
+keywords = ["sqlite", "ffi"]
 categories = ["external-ffi-bindings"]
 license = "MIT"
 repository = "https://github.com/rusqlite/rusqlite"
@@ -28,37 +25,17 @@ sqlite_source_id = "2026-06-26 20:14:12 d4c0e51e4aeb96955b99185ab9cde75c339e2c29
 sqlite_amalgamation_sha3_256 = "d45c688a8cb23f68611a894a756a12d7eb6ab6e9e2468ca70adbeab3808b5ab9"
 
 [features]
-buildtime_bindgen = [
-    "bindgen",
-    "pkg-config",
-    "vcpkg",
-]
-bundled = [
-    "cc",
-    "bundled_bindings",
-]
-bundled-windows = [
-    "cc",
-    "bundled_bindings",
-]
+buildtime_bindgen = ["bindgen", "pkg-config", "vcpkg"]
+bundled = ["cc", "bundled_bindings"]
+bundled-windows = ["cc", "bundled_bindings"]
 bundled_bindings = []
 column_metadata = []
 default = []
 in_gecko = []
-loadable_extension = [
-    "prettyplease",
-    "quote",
-    "syn",
-]
-min_sqlite_version_3_34_1 = [
-    "pkg-config",
-    "vcpkg",
-]
+loadable_extension = ["prettyplease", "quote", "syn"]
+min_sqlite_version_3_34_1 = ["pkg-config", "vcpkg"]
 preupdate_hook = ["buildtime_bindgen"]
-session = [
-    "preupdate_hook",
-    "buildtime_bindgen",
-]
+session = ["preupdate_hook", "buildtime_bindgen"]
 unlock_notify = []
 wasm32-wasi-vfs = []
 with-asan = []
@@ -92,11 +69,7 @@ default-features = false
 
 [build-dependencies.syn]
 version = "2.0.89"
-features = [
-    "full",
-    "extra-traits",
-    "visit-mut",
-]
+features = ["full", "extra-traits", "visit-mut"]
 optional = true
 
 [build-dependencies.vcpkg]
