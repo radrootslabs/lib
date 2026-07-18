@@ -1,15 +1,13 @@
 #![forbid(unsafe_code)]
 
+#[cfg(all(not(feature = "std"), feature = "serde"))]
+use alloc::{collections::BTreeMap, format, string::ToString};
 #[cfg(not(feature = "std"))]
-use alloc::{
-    collections::BTreeMap,
-    format,
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
+#[cfg(all(feature = "std", feature = "serde"))]
+use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{
-    collections::BTreeMap,
     string::{String, ToString},
     vec::Vec,
 };
@@ -30,7 +28,9 @@ use serde::{
     Deserialize, Deserializer, Serialize,
     de::{Error as _, MapAccess, SeqAccess, Visitor},
 };
+#[cfg(feature = "serde")]
 use serde_json::{Map, Number, Value};
+#[cfg(feature = "serde")]
 use sha2::{Digest, Sha256};
 
 pub const RADROOTS_TRADE_SCHEMA_VERSION: u16 = 1;
@@ -795,6 +795,7 @@ fn write_canonical_jcs(
     Ok(())
 }
 
+#[cfg(feature = "serde")]
 fn canonical_number(number: &Number) -> Result<String, RadrootsTradeProtocolError> {
     if number.is_i64() || number.is_u64() {
         Ok(number.to_string())
@@ -803,6 +804,7 @@ fn canonical_number(number: &Number) -> Result<String, RadrootsTradeProtocolErro
     }
 }
 
+#[cfg(feature = "serde")]
 fn digest_prefixed(domain: &[u8], bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(domain);
