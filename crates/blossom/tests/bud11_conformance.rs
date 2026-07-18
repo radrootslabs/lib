@@ -34,7 +34,7 @@ fn checked_in_bud11_vectors_execute_against_public_api() {
     let vectors = conformance_vectors();
     let suite: Suite = serde_json::from_str(&vectors).expect("BUD-11 vectors must parse");
     assert_eq!(suite.suite, "blossom_bud11_claims");
-    assert_eq!(suite.contract_version, "0.1.0");
+    assert_eq!(suite.contract_version, "1.0.0");
     assert!(!suite.vectors.is_empty());
 
     for vector in &suite.vectors {

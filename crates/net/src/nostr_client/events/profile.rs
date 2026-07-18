@@ -1,10 +1,7 @@
 use crate::error::{NetError, Result};
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_event_codec::profile::RadrootsProfileData;
-use radroots_nostr::prelude::{
-    RadrootsNostrMetadata, RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author,
-    radroots_nostr_post_metadata_event,
-};
+use radroots_nostr::prelude::{RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author};
 
 use crate::nostr_client::manager::NostrClientManager;
 
@@ -38,40 +35,5 @@ impl NostrClientManager {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.fetch_profile_event(author).await })
-    }
-
-    /// Publishes through the legacy generic metadata compatibility surface.
-    ///
-    /// This API does not enforce the strict authored Profile media contract.
-    /// New strict Profile authoring must use `profile.build_authored_draft`.
-    pub fn publish_profile_event_blocking(
-        &self,
-        name: Option<String>,
-        display_name: Option<String>,
-        nip05: Option<String>,
-        about: Option<String>,
-    ) -> Result<String> {
-        let rt = self.inner.rt.clone();
-        let inner_for_task = self.inner.clone();
-        let event_id = rt.block_on(async move {
-            let mut md = RadrootsNostrMetadata::new();
-            if let Some(v) = name {
-                md = md.name(v);
-            }
-            if let Some(v) = display_name {
-                md = md.display_name(v);
-            }
-            if let Some(v) = nip05 {
-                md = md.nip05(v);
-            }
-            if let Some(v) = about {
-                md = md.about(v);
-            }
-            let out = radroots_nostr_post_metadata_event(&inner_for_task.client, &md)
-                .await
-                .map_err(|e| NetError::Msg(e.to_string()))?;
-            Ok::<String, NetError>(out.val.to_string())
-        })?;
-        Ok(event_id)
     }
 }

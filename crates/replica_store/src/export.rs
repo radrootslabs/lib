@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::backup::{
-    DATABASE_BACKUP_VERSION, MigrationBackup, REPLICA_STORE_VERSION, SchemaEntry,
+    DATABASE_BACKUP_VERSION, MigrationBackup, REPLICA_STORE_SCHEMA_VERSION, SchemaEntry,
     escape_identifier, export_migrations, load_schema,
 };
 
@@ -18,6 +18,7 @@ pub struct TableCount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplicaStoreExportManifestRs {
     pub export_version: String,
+    /// Replica schema compatibility version, independent of package SemVer.
     pub replica_store_version: String,
     pub backup_format_version: String,
     pub schema_hash: String,
@@ -35,7 +36,7 @@ pub fn export_manifest(
     let schema_hash = schema_hash(&schema);
     Ok(ReplicaStoreExportManifestRs {
         export_version: REPLICA_STORE_EXPORT_VERSION.to_string(),
-        replica_store_version: REPLICA_STORE_VERSION.to_string(),
+        replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
         backup_format_version: DATABASE_BACKUP_VERSION.to_string(),
         schema_hash,
         schema,
@@ -235,6 +236,7 @@ mod tests {
             None,
         );
         let manifest = export_manifest(&executor).expect("export should succeed");
+        assert_eq!(manifest.replica_store_version, "1.0.0");
         assert_eq!(manifest.table_counts.len(), 1);
         assert_eq!(manifest.table_counts[0].name, "tb_a");
         assert_eq!(manifest.table_counts[0].row_count, 0);

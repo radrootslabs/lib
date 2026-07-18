@@ -1,6 +1,6 @@
 {
   "suite": "social_upgraded_boundaries",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "social_listing_published_at_valid_001",

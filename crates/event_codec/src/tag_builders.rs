@@ -3,8 +3,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use core::convert::Infallible;
-
 #[cfg(feature = "knowledge")]
 use radroots_event::knowledge::{
     RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
@@ -19,7 +17,7 @@ use radroots_event::{
     job_request::RadrootsJobRequest, job_result::RadrootsJobResult, list::RadrootsList,
     list_set::RadrootsListSet, listing::RadrootsListing, message::RadrootsMessage,
     message_file::RadrootsMessageFile, plot::RadrootsPlot, post::RadrootsPost,
-    profile::RadrootsProfile, reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
+    reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
     resource_cap::RadrootsResourceHarvestCap, seal::RadrootsSeal,
 };
 
@@ -229,14 +227,6 @@ impl RadrootsEventTagBuilder for RadrootsGiftWrap {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         gift_wrap_build_tags(self)
-    }
-}
-
-impl RadrootsEventTagBuilder for RadrootsProfile {
-    type Error = Infallible;
-
-    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
-        Ok(Vec::new())
     }
 }
 

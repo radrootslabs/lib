@@ -1,6 +1,6 @@
 [contract]
 name = "radroots_core_contract"
-version = "0.1.0-alpha.2"
+version = "1.0.0-alpha.1"
 source = "rust"
 
 [public]
@@ -49,13 +49,10 @@ public = [
   "RadrootsListingAddress",
   "RadrootsAuthoredImage",
   "RadrootsAuthoredImageError",
-  "RadrootsProfile",
   "RadrootsNip05Identifier",
   "RadrootsNip05IdentifierError",
   "RadrootsAuthoredProfile",
   "RadrootsAuthoredProfileError",
-  "RadrootsAuthoredProfileImage",
-  "RadrootsAuthoredProfileImageError",
   "RadrootsAuthoredProfileEncodeError",
   "RadrootsInboundProfileMetadata",
   "RadrootsProfileMetadataParseError",
@@ -344,24 +341,6 @@ rust_types = [
 [operations.blossom_decode_verify_authorization_header.conformance]
 vector = "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json"
 
-[operations.profile_build_draft]
-domain = "profile"
-id = "profile.build_draft"
-stability = "beta"
-inputs = ["RadrootsProfile", "RadrootsProfileType?"]
-outputs = ["RadrootsNip01EventWireParts"]
-error_class = "encode_error"
-deterministic = true
-signing = "native"
-transport = "native"
-
-[operations.profile_build_draft.implementation]
-rust_modules = ["crates/event_codec/src/profile/encode.rs"]
-rust_types = ["radroots_event::profile::RadrootsProfile"]
-
-[operations.profile_build_draft.conformance]
-vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
-
 [operations.profile_build_authored_draft]
 domain = "profile"
 id = "profile.build_authored_draft"
@@ -380,10 +359,10 @@ rust_modules = [
 ]
 rust_types = [
   "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_event::media::RadrootsAuthoredImage",
+  "radroots_event::media::RadrootsAuthoredImageError",
   "radroots_event::profile::RadrootsAuthoredProfile",
   "radroots_event::profile::RadrootsAuthoredProfileError",
-  "radroots_event::profile::RadrootsAuthoredProfileImage",
-  "radroots_event::profile::RadrootsAuthoredProfileImageError",
   "radroots_event::profile::RadrootsNip05Identifier",
   "radroots_event::profile::RadrootsNip05IdentifierError",
   "radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError",

@@ -9,7 +9,6 @@ use radroots_event_codec::job::encode::{
     push_status_tag,
 };
 use radroots_event_codec::job::error::JobParseError;
-use radroots_event_codec::profile::error::ProfileEncodeError;
 #[cfg(feature = "serde_json")]
 use serde::Serialize;
 #[cfg(feature = "serde_json")]
@@ -174,16 +173,4 @@ fn job_parse_error_display_and_source_covers_variants() {
     let missing_chain = JobParseError::MissingChainTag("e");
     assert_eq!(missing_chain.to_string(), "missing required chain tag: e");
     assert!(missing_chain.source().is_none());
-}
-
-#[test]
-fn profile_encode_error_display_covers_variants() {
-    let invalid = ProfileEncodeError::InvalidUrl("website", "ftp://example.com".to_string());
-    assert_eq!(
-        invalid.to_string(),
-        "invalid URL for website: ftp://example.com"
-    );
-
-    let json = ProfileEncodeError::Json;
-    assert_eq!(json.to_string(), "failed to serialize metadata JSON");
 }

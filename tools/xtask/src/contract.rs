@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
+use semver::Version;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -20,6 +21,39 @@ const KNOWLEDGE_MANIFEST_AND_DECODE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/manifest_and_decode.v1.json";
 const KNOWLEDGE_PUBLIC_SURFACE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/public_surface.v1.json";
+const RELEASES_ROOT_RELATIVE: &str = "contracts/releases";
+const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
+const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
+const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
+const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
+const REPLICA_TRANSFER_VERSION: u32 = 2;
+const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 6] = [
+    (
+        "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
+        "crates/blossom/tests/fixtures/bud11_claims.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json",
+        "crates/blossom/tests/fixtures/hash_path_and_descriptor.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",
+        "crates/nostr/tests/fixtures/bud11_nostr_adapter.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
+        "crates/event_codec/tests/fixtures/calendar_nip52_baseline.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
+        "crates/event_codec/tests/fixtures/calendar_radroots_profile.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/profile/metadata.v1.json",
+        "crates/event_codec/tests/fixtures/profile_metadata.v1.json",
+    ),
+];
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
     "radroots.wiki.article.v1",
     "radroots.wiki.redirect.v1",
@@ -415,6 +449,50 @@ pub struct ReplicaPolicy {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ReplicaContractManifest {
+    pub schema_version: u32,
+    pub contract: ReplicaContractMetadata,
+    pub crate_family: ReplicaContractCrateFamily,
+    pub policy: ReplicaContractPolicy,
+    pub transfer: ReplicaTransferContract,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplicaContractMetadata {
+    pub name: String,
+    pub version: String,
+    pub purpose: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplicaContractCrateFamily {
+    pub schema: String,
+    pub storage: String,
+    pub sync: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplicaContractPolicy {
+    pub transport_agnostic_sync_core: bool,
+    pub deterministic_emit_and_ingest: bool,
+    pub forbid_legacy_alias_identifiers: bool,
+    pub profile_event_emission: String,
+    pub unknown_sync_request_fields: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplicaTransferContract {
+    pub version: u32,
+    pub source: String,
+    pub constant: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OperationsContractManifest {
     pub contract: ManifestContract,
     pub public: PublicContract,
@@ -522,11 +600,49 @@ pub struct ReleaseIntegrityRules {
     pub requires_release_notes: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReleaseRecord {
+    schema_version: u32,
+    release: ReleaseRecordMetadata,
+    artifacts: ReleaseRecordArtifacts,
+    changes: Vec<ReleaseRecordChange>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReleaseRecordMetadata {
+    version: String,
+    previous_version: String,
+    contract_base_version: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReleaseRecordArtifacts {
+    changelog: String,
+    manifest: String,
+    operations: String,
+    replica: String,
+    conformance: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReleaseRecordChange {
+    id: String,
+    classification: String,
+    semver_impacts: Vec<String>,
+    summary: String,
+}
+
 #[derive(Debug)]
 pub struct ContractBundle {
     pub root: PathBuf,
     pub manifest: ContractManifest,
     pub version: VersionPolicy,
+    pub replica: ReplicaContractManifest,
     pub operations_manifest: Option<OperationsContractManifest>,
 }
 
@@ -538,6 +654,59 @@ struct WorkspaceCargoManifest {
 #[derive(Debug, Deserialize)]
 struct WorkspaceSection {
     members: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceVersionCargoManifest {
+    workspace: WorkspaceVersionSection,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceVersionSection {
+    members: Vec<String>,
+    package: WorkspacePackageVersion,
+    dependencies: BTreeMap<String, WorkspaceDependencyVersion>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspacePackageVersion {
+    version: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceDependencyVersion {
+    path: Option<String>,
+    version: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VersionedPackageCargoManifest {
+    package: VersionedPackageSection,
+}
+
+#[derive(Debug, Deserialize)]
+struct VersionedPackageSection {
+    name: String,
+    version: PackageVersionSource,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PackageVersionSource {
+    Literal(String),
+    Workspace { workspace: bool },
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoLockManifest {
+    package: Vec<CargoLockPackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoLockPackage {
+    name: String,
+    version: String,
+    source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -593,10 +762,14 @@ struct EventBoundaryExpectation {
     witnesses: &'static [EventBoundarySourceWitness],
 }
 
-const PROFILE_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const PROFILE_WITNESSES: [EventBoundarySourceWitness; 3] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/profile.rs",
-        required_fragments: &["pub struct RadrootsProfile"],
+        required_fragments: &["pub struct RadrootsAuthoredProfile"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/profile/inbound.rs",
+        required_fragments: &["pub struct RadrootsInboundProfileMetadata"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -1221,7 +1394,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
-        radroots_type: "RadrootsProfile",
+        radroots_type: "RadrootsAuthoredProfile / RadrootsInboundProfileMetadata",
         rpc_methods: &[
             "events.profile.publish",
             "events.profile.list",
@@ -2302,6 +2475,416 @@ fn base_contract_version(version: &str) -> &str {
     version.split_once('-').map_or(version, |(base, _)| base)
 }
 
+fn parse_semver_version(version: &str) -> Result<Version, String> {
+    Version::parse(version)
+        .map_err(|error| format!("version {version} is not valid SemVer: {error}"))
+}
+
+fn validate_contract_version_lockstep(bundle: &ContractBundle) -> Result<(), String> {
+    let contract_version = bundle.manifest.contract.version.as_str();
+    parse_semver_version(contract_version)?;
+    if bundle.version.contract.version != contract_version {
+        return Err(format!(
+            "version contract {} must match manifest contract version {}",
+            bundle.version.contract.version, contract_version
+        ));
+    }
+    if let Some(operations) = bundle.operations_manifest.as_ref()
+        && operations.contract.version != contract_version
+    {
+        return Err(format!(
+            "operations contract version {} must match manifest contract version {}",
+            operations.contract.version, contract_version
+        ));
+    }
+    Ok(())
+}
+
+fn validate_workspace_version_lockstep(
+    workspace_root: &Path,
+    contract_version: &str,
+) -> Result<(), String> {
+    let workspace_manifest =
+        parse_toml::<WorkspaceVersionCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    if workspace_manifest.workspace.package.version != contract_version {
+        return Err(format!(
+            "workspace.package.version {} must match contract version {}",
+            workspace_manifest.workspace.package.version, contract_version
+        ));
+    }
+
+    let exact_requirement = format!("={contract_version}");
+    let mut governed_packages = BTreeMap::new();
+    for member in &workspace_manifest.workspace.members {
+        let package_path = workspace_root.join(member).join("Cargo.toml");
+        let package = parse_toml::<VersionedPackageCargoManifest>(&package_path)?;
+        if member != VENDORED_WORKSPACE_MEMBER_RELATIVE {
+            match package.package.version {
+                PackageVersionSource::Literal(ref version) if version == contract_version => {}
+                PackageVersionSource::Literal(version) => {
+                    return Err(format!(
+                        "workspace member {member} package version {version} must match contract version {contract_version}"
+                    ));
+                }
+                PackageVersionSource::Workspace { workspace } => {
+                    return Err(format!(
+                        "workspace member {member} must set an explicit package version {contract_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
+                    ));
+                }
+            }
+            governed_packages.insert(member.clone(), package.package.name.clone());
+        }
+
+        if package.package.name.starts_with("radroots_") {
+            let dependency = workspace_manifest
+                .workspace
+                .dependencies
+                .get(&package.package.name)
+                .ok_or_else(|| {
+                    format!(
+                        "workspace dependency {} is required for member {member}",
+                        package.package.name
+                    )
+                })?;
+            if dependency.path.as_deref() != Some(member.as_str()) {
+                return Err(format!(
+                    "workspace dependency {} path must be {member}",
+                    package.package.name
+                ));
+            }
+            if dependency.version.as_deref() != Some(exact_requirement.as_str()) {
+                return Err(format!(
+                    "workspace dependency {} version must be the exact requirement {}",
+                    package.package.name, exact_requirement
+                ));
+            }
+        }
+    }
+
+    for (dependency_name, dependency) in &workspace_manifest.workspace.dependencies {
+        let Some(path) = dependency.path.as_deref() else {
+            continue;
+        };
+        if path == VENDORED_WORKSPACE_MEMBER_RELATIVE {
+            continue;
+        }
+        if governed_packages.contains_key(path)
+            && dependency.version.as_deref() != Some(exact_requirement.as_str())
+        {
+            return Err(format!(
+                "workspace path dependency {dependency_name} version must be the exact requirement {exact_requirement}"
+            ));
+        }
+    }
+
+    validate_cargo_lock_version_lockstep(workspace_root, contract_version, &governed_packages)
+}
+
+fn validate_cargo_lock_version_lockstep(
+    workspace_root: &Path,
+    contract_version: &str,
+    governed_packages: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let lock = parse_toml::<CargoLockManifest>(&workspace_root.join("Cargo.lock"))?;
+    for (member, package_name) in governed_packages {
+        let workspace_entries = lock
+            .package
+            .iter()
+            .filter(|package| package.name == *package_name && package.source.is_none())
+            .collect::<Vec<_>>();
+        if workspace_entries.len() != 1 {
+            return Err(format!(
+                "Cargo.lock must contain exactly one source-free entry for workspace member {member} ({package_name})"
+            ));
+        }
+        if workspace_entries[0].version != contract_version {
+            return Err(format!(
+                "Cargo.lock package {package_name} version {} must match contract version {contract_version}",
+                workspace_entries[0].version
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn valid_release_change_id(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.ends_with('-')
+        && !value.contains("--")
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn validate_release_record(
+    workspace_root: &Path,
+    contract_version: &str,
+    requires_operations: bool,
+    semver: &SemverRules,
+) -> Result<(), String> {
+    let current_version = parse_semver_version(contract_version)?;
+    let releases_root = workspace_root.join(RELEASES_ROOT_RELATIVE);
+    if !releases_root.is_dir() {
+        return Err(format!(
+            "release records directory {RELEASES_ROOT_RELATIVE} is required"
+        ));
+    }
+    let record_relative = format!("{RELEASES_ROOT_RELATIVE}/{contract_version}.toml");
+    let record = parse_toml::<ReleaseRecord>(&workspace_root.join(&record_relative))?;
+    if record.schema_version != 1 {
+        return Err(format!(
+            "release record {record_relative} schema_version must be 1"
+        ));
+    }
+    if record.release.version != contract_version {
+        return Err(format!(
+            "release record version {} must match contract version {contract_version}",
+            record.release.version
+        ));
+    }
+    let previous_version = parse_semver_version(&record.release.previous_version)?;
+    if record.release.previous_version == contract_version {
+        return Err("release.previous_version must differ from release.version".to_string());
+    }
+    if current_version <= previous_version {
+        return Err(format!(
+            "release version {contract_version} must be greater than previous version {}",
+            record.release.previous_version
+        ));
+    }
+    let contract_base_version = format!(
+        "{}.{}.{}",
+        current_version.major, current_version.minor, current_version.patch
+    );
+    if record.release.contract_base_version != contract_base_version {
+        return Err(format!(
+            "release.contract_base_version {} must match contract base version {}",
+            record.release.contract_base_version, contract_base_version
+        ));
+    }
+    if !matches!(
+        record.release.status.as_str(),
+        "unreleased" | "released" | "yanked"
+    ) {
+        return Err(format!(
+            "release.status {} must be unreleased, released, or yanked",
+            record.release.status
+        ));
+    }
+
+    let expected_artifacts = [
+        (
+            record.artifacts.changelog.as_str(),
+            CHANGELOG_RELATIVE,
+            false,
+        ),
+        (
+            record.artifacts.manifest.as_str(),
+            "contracts/manifest.toml",
+            false,
+        ),
+        (
+            record.artifacts.operations.as_str(),
+            "contracts/operations.toml",
+            false,
+        ),
+        (
+            record.artifacts.replica.as_str(),
+            REPLICA_CONTRACT_RELATIVE,
+            false,
+        ),
+        (
+            record.artifacts.conformance.as_str(),
+            CONFORMANCE_ROOT_RELATIVE,
+            true,
+        ),
+    ];
+    for (actual, expected, directory) in expected_artifacts {
+        if actual != expected {
+            return Err(format!(
+                "release artifact path {actual} must use canonical path {expected}"
+            ));
+        }
+        let path = workspace_root.join(actual);
+        let required = actual != "contracts/operations.toml" || requires_operations;
+        if required && (directory && !path.is_dir() || !directory && !path.is_file()) {
+            return Err(format!("release artifact {actual} does not exist"));
+        }
+    }
+
+    if record.changes.is_empty() {
+        return Err("release record must contain at least one change".to_string());
+    }
+    let mut change_ids = BTreeSet::new();
+    let mut has_breaking_change = false;
+    let major_impacts = semver
+        .major_on
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let minor_impacts = semver
+        .minor_on
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let patch_impacts = semver
+        .patch_on
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    for change in &record.changes {
+        if !valid_release_change_id(&change.id) {
+            return Err(format!(
+                "release change id {} must use lowercase kebab-case",
+                change.id
+            ));
+        }
+        if !change_ids.insert(change.id.as_str()) {
+            return Err(format!(
+                "release record has duplicate change id {}",
+                change.id
+            ));
+        }
+        if !matches!(
+            change.classification.as_str(),
+            "breaking" | "feature" | "fix" | "deprecation" | "security" | "docs"
+        ) {
+            return Err(format!(
+                "release change {} has unsupported classification {}",
+                change.id, change.classification
+            ));
+        }
+        has_breaking_change |= change.classification == "breaking";
+        if change.semver_impacts.is_empty() {
+            return Err(format!(
+                "release change {} must declare at least one exact semver impact",
+                change.id
+            ));
+        }
+        let mut change_impacts = BTreeSet::new();
+        let mut has_major_impact = false;
+        let mut has_minor_impact = false;
+        let mut has_patch_impact = false;
+        for impact in &change.semver_impacts {
+            if !change_impacts.insert(impact.as_str()) {
+                return Err(format!(
+                    "release change {} has duplicate semver impact {impact}",
+                    change.id
+                ));
+            }
+            if major_impacts.contains(impact.as_str()) {
+                has_major_impact = true;
+            } else if minor_impacts.contains(impact.as_str()) {
+                has_minor_impact = true;
+            } else if patch_impacts.contains(impact.as_str()) {
+                has_patch_impact = true;
+            } else {
+                return Err(format!(
+                    "release change {} semver impact {impact} is not governed by contracts/version.toml",
+                    change.id
+                ));
+            }
+        }
+        let classification_matches = if has_major_impact {
+            change.classification == "breaking"
+        } else if has_minor_impact {
+            matches!(change.classification.as_str(), "feature" | "deprecation")
+        } else if has_patch_impact {
+            matches!(change.classification.as_str(), "fix" | "security" | "docs")
+        } else {
+            false
+        };
+        if !classification_matches {
+            return Err(format!(
+                "release change {} classification {} does not match its governed semver impacts",
+                change.id, change.classification
+            ));
+        }
+        if change.summary.trim().is_empty() {
+            return Err(format!(
+                "release change {} summary must not be empty",
+                change.id
+            ));
+        }
+    }
+    if current_version.major != previous_version.major && !has_breaking_change {
+        return Err("a major version transition requires a breaking release change".to_string());
+    }
+
+    validate_changelog_release_notes(workspace_root, contract_version)
+}
+
+fn validate_changelog_release_notes(
+    workspace_root: &Path,
+    contract_version: &str,
+) -> Result<(), String> {
+    let path = workspace_root.join(CHANGELOG_RELATIVE);
+    let raw =
+        fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    let heading = format!("## [{contract_version}]");
+    let mut in_release = false;
+    let mut has_release_note = false;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed == heading {
+            if in_release {
+                return Err(format!(
+                    "{CHANGELOG_RELATIVE} contains duplicate heading {heading}"
+                ));
+            }
+            in_release = true;
+            continue;
+        }
+        if in_release && trimmed.starts_with("## [") {
+            break;
+        }
+        if in_release && trimmed.starts_with("- ") && trimmed.len() > 2 {
+            has_release_note = true;
+        }
+    }
+    if !in_release {
+        return Err(format!("{CHANGELOG_RELATIVE} is missing heading {heading}"));
+    }
+    if !has_release_note {
+        return Err(format!(
+            "{CHANGELOG_RELATIVE} release {contract_version} must contain at least one note"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_conformance_vector_mirrors(workspace_root: &Path) -> Result<(), String> {
+    for (canonical_relative, mirror_relative) in CONFORMANCE_VECTOR_MIRRORS {
+        let canonical = fs::read(workspace_root.join(canonical_relative))
+            .map_err(|error| format!("read {canonical_relative}: {error}"))?;
+        let mirror = fs::read(workspace_root.join(mirror_relative))
+            .map_err(|error| format!("read {mirror_relative}: {error}"))?;
+        if canonical != mirror {
+            return Err(format!(
+                "packaged conformance mirror {mirror_relative} must exactly match {canonical_relative}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_version_governance(
+    bundle: &ContractBundle,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    validate_contract_version_lockstep(bundle)?;
+    let version = bundle.manifest.contract.version.as_str();
+    validate_workspace_version_lockstep(workspace_root, version)?;
+    validate_release_record(
+        workspace_root,
+        version,
+        bundle.operations_manifest.is_some(),
+        &bundle.version.semver,
+    )?;
+    validate_conformance_vector_mirrors(workspace_root)
+}
+
 fn collect_conformance_vector_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
     let read_dir = match fs::read_dir(dir) {
         Ok(read_dir) => read_dir,
@@ -3060,6 +3643,254 @@ fn validate_policy_metadata(policy: &Policy) -> Result<(), String> {
     {
         return Err("contract replica policy flags must all be true".to_string());
     }
+    Ok(())
+}
+
+fn parse_replica_transfer_constant(path: &Path, name: &str) -> Result<u32, String> {
+    let source =
+        fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    let declaration_prefix = format!("pub const {name}: u32 =");
+    let mut value = None;
+    for line in source.lines() {
+        let Some(raw_value) = line.trim().strip_prefix(&declaration_prefix) else {
+            continue;
+        };
+        let raw_value = raw_value.trim().strip_suffix(';').ok_or_else(|| {
+            format!(
+                "replica transfer constant {name} in {} must terminate with a semicolon",
+                path.display()
+            )
+        })?;
+        let parsed = raw_value.parse::<u32>().map_err(|error| {
+            format!(
+                "replica transfer constant {name} in {} must be a u32 literal: {error}",
+                path.display()
+            )
+        })?;
+        if value.replace(parsed).is_some() {
+            return Err(format!(
+                "replica transfer constant {name} must be declared exactly once in {}",
+                path.display()
+            ));
+        }
+    }
+    value.ok_or_else(|| {
+        format!(
+            "replica transfer constant {name} is missing from {}",
+            path.display()
+        )
+    })
+}
+
+fn validate_replica_policy_source_witnesses(sync_root: &Path) -> Result<(), String> {
+    let types_path = sync_root.join("src/types.rs");
+    let types_source = fs::read_to_string(&types_path)
+        .map_err(|error| format!("read {}: {error}", types_path.display()))?;
+    for type_name in [
+        "RadrootsReplicaFarmSelector",
+        "RadrootsReplicaSyncOptions",
+        "RadrootsReplicaSyncRequest",
+    ] {
+        let witness = format!("#[serde(deny_unknown_fields)]\npub struct {type_name}");
+        if !types_source.contains(&witness) {
+            return Err(format!(
+                "replica request type {type_name} must place #[serde(deny_unknown_fields)] immediately before its public struct declaration in {}",
+                types_path.display()
+            ));
+        }
+    }
+    if types_source.contains("include_profiles") {
+        return Err(format!(
+            "retired replica request identifier include_profiles is forbidden in {}",
+            types_path.display()
+        ));
+    }
+
+    let emit_path = sync_root.join("src/emit.rs");
+    let emit_source = fs::read_to_string(&emit_path)
+        .map_err(|error| format!("read {}: {error}", emit_path.display()))?;
+    let test_module_marker = "#[cfg(test)]\nmod tests {";
+    let test_module_start = emit_source.rfind(test_module_marker).ok_or_else(|| {
+        format!(
+            "replica emit source {} must keep its bottom test module behind #[cfg(test)]",
+            emit_path.display()
+        )
+    })?;
+    let production_source = &emit_source[..test_module_start];
+    if !production_source.contains("pub fn radroots_replica_sync_all_with_options(") {
+        return Err(format!(
+            "replica emit source {} is missing radroots_replica_sync_all_with_options",
+            emit_path.display()
+        ));
+    }
+    let production_code = production_source
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for identifier in production_code
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        .filter(|identifier| !identifier.is_empty())
+    {
+        if identifier.to_ascii_lowercase().contains("profile") {
+            return Err(format!(
+                "replica emit production source {} must not contain Profile-related identifier {identifier}",
+                emit_path.display()
+            ));
+        }
+    }
+    let compact_production = production_code
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace())
+        .collect::<String>();
+    if compact_production.contains("kind:0") {
+        return Err(format!(
+            "replica emit production source {} must not construct a literal kind-0 event",
+            emit_path.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_replica_contract(bundle: &ContractBundle, workspace_root: &Path) -> Result<(), String> {
+    let replica = &bundle.replica;
+    if replica.schema_version != 1 {
+        return Err("replica contract schema_version must be 1".to_string());
+    }
+    if replica.contract.name != REPLICA_CONTRACT_NAME {
+        return Err(format!(
+            "replica contract name must be {REPLICA_CONTRACT_NAME}"
+        ));
+    }
+    if replica.contract.version != bundle.manifest.contract.version {
+        return Err(format!(
+            "replica contract version {} must match manifest contract version {}",
+            replica.contract.version, bundle.manifest.contract.version
+        ));
+    }
+    if replica.contract.purpose.trim().is_empty() {
+        return Err("replica contract purpose is required".to_string());
+    }
+
+    let manifest_family = bundle
+        .manifest
+        .surface
+        .internal_replica_crates
+        .as_ref()
+        .ok_or_else(|| "surface.internal_replica_crates is required".to_string())?;
+    for (field, actual, expected) in [
+        (
+            "schema",
+            replica.crate_family.schema.as_str(),
+            manifest_family.schema.as_str(),
+        ),
+        (
+            "storage",
+            replica.crate_family.storage.as_str(),
+            manifest_family.storage.as_str(),
+        ),
+        (
+            "sync",
+            replica.crate_family.sync.as_str(),
+            manifest_family.sync.as_str(),
+        ),
+    ] {
+        validate_crate_identifier(actual, &format!("replica.crate_family.{field}"))?;
+        if actual != expected {
+            return Err(format!(
+                "replica crate_family.{field} {actual} must match surface.internal_replica_crates.{field} {expected}"
+            ));
+        }
+    }
+
+    let package_manifests = workspace_package_manifests(workspace_root)?;
+    for (field, crate_name) in [
+        ("schema", replica.crate_family.schema.as_str()),
+        ("storage", replica.crate_family.storage.as_str()),
+        ("sync", replica.crate_family.sync.as_str()),
+    ] {
+        if !package_manifests.contains_key(crate_name) {
+            return Err(format!(
+                "replica crate_family.{field} {crate_name} must name a workspace package"
+            ));
+        }
+    }
+
+    let manifest_policy = bundle
+        .manifest
+        .policy
+        .replica
+        .as_ref()
+        .ok_or_else(|| "policy.replica is required".to_string())?;
+    let policy_parity = [
+        (
+            "transport_agnostic_sync_core",
+            replica.policy.transport_agnostic_sync_core,
+            manifest_policy.require_transport_agnostic_sync_contract,
+        ),
+        (
+            "deterministic_emit_and_ingest",
+            replica.policy.deterministic_emit_and_ingest,
+            manifest_policy.require_deterministic_emit_ingest,
+        ),
+        (
+            "forbid_legacy_alias_identifiers",
+            replica.policy.forbid_legacy_alias_identifiers,
+            manifest_policy.forbid_legacy_alias_identifiers,
+        ),
+    ];
+    for (field, actual, expected) in policy_parity {
+        if !actual || actual != expected {
+            return Err(format!(
+                "replica policy.{field} must be true and match manifest policy.replica"
+            ));
+        }
+    }
+    if replica.policy.profile_event_emission != "excluded" {
+        return Err("replica policy.profile_event_emission must be excluded".to_string());
+    }
+    if replica.policy.unknown_sync_request_fields != "reject" {
+        return Err("replica policy.unknown_sync_request_fields must be reject".to_string());
+    }
+
+    if replica.transfer.version != REPLICA_TRANSFER_VERSION {
+        return Err(format!(
+            "replica transfer.version must be {REPLICA_TRANSFER_VERSION}"
+        ));
+    }
+    if replica.transfer.constant != REPLICA_TRANSFER_CONSTANT {
+        return Err(format!(
+            "replica transfer.constant must be {REPLICA_TRANSFER_CONSTANT}"
+        ));
+    }
+    let sync_manifest = package_manifests
+        .get(&replica.crate_family.sync)
+        .expect("replica sync workspace package was validated");
+    let sync_root = sync_manifest
+        .parent()
+        .expect("workspace package manifest has a parent");
+    validate_replica_policy_source_witnesses(sync_root)?;
+    let expected_source = sync_root
+        .strip_prefix(workspace_root)
+        .expect("workspace package lives under the workspace root")
+        .join("src/types.rs");
+    if Path::new(&replica.transfer.source) != expected_source {
+        return Err(format!(
+            "replica transfer.source {} must be {}",
+            replica.transfer.source,
+            expected_source.display()
+        ));
+    }
+    let source_path = workspace_root.join(&replica.transfer.source);
+    let source_version = parse_replica_transfer_constant(&source_path, &replica.transfer.constant)?;
+    if source_version != replica.transfer.version {
+        return Err(format!(
+            "replica transfer source constant {} value {} must match contract version {}",
+            replica.transfer.constant, source_version, replica.transfer.version
+        ));
+    }
+
     Ok(())
 }
 
@@ -4198,12 +5029,14 @@ fn validate_contract_bundle_with_release_policy_override(
         .root
         .parent()
         .expect("contract root must have a workspace parent");
+    validate_replica_contract(bundle, workspace_root)?;
     if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
         validate_operations_contract(bundle, operations_manifest, workspace_root)?;
     }
     validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
+    validate_version_governance(bundle, workspace_root)?;
     if resolve_release_contract_path_with_override(workspace_root, release_policy_override.clone())
         .expect("validated release contract path resolution should not fail")
         .is_some()
@@ -4465,6 +5298,8 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
     let version = parse_toml::<VersionPolicy>(&root.join("version.toml"))?;
+    let replica =
+        parse_toml::<ReplicaContractManifest>(&workspace_root.join(REPLICA_CONTRACT_RELATIVE))?;
     let operations_manifest_path = root.join("operations.toml");
     let operations_manifest = if operations_manifest_path.is_file() {
         Some(parse_toml::<OperationsContractManifest>(
@@ -4477,6 +5312,7 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
         root,
         manifest,
         version,
+        replica,
         operations_manifest,
     })
 }
@@ -4541,12 +5377,14 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         .root
         .parent()
         .expect("contract root must have a workspace parent");
+    validate_replica_contract(bundle, workspace_root)?;
     if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
         validate_operations_contract(bundle, operations_manifest, workspace_root)?;
     }
     validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
+    validate_version_governance(bundle, workspace_root)?;
     if resolve_release_contract_path(workspace_root)
         .expect("validated release contract path resolution should not fail")
         .is_some()
@@ -4567,6 +5405,20 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    const SYNTHETIC_CONFORMANCE_VECTOR: &str = r#"{
+  "suite": "synthetic",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "synthetic_vector_001",
+      "kind": "synthetic.operation",
+      "input": {},
+      "expected": {}
+    }
+  ]
+}
+"#;
 
     fn workspace_root() -> PathBuf {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -4719,6 +5571,13 @@ mod tests {
             r#"[workspace]
 members = ["crates/a", "crates/b"]
 resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+
+[workspace.dependencies]
+radroots_a = { path = "crates/a", version = "=1.0.0" }
+radroots_b = { path = "crates/b", version = "=1.0.0" }
 "#,
         );
         write_file(
@@ -4726,7 +5585,7 @@ resolver = "2"
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -4739,9 +5598,49 @@ readme = "README"
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_b"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("src").join("types.rs"),
+            r#"use serde::{Deserialize, Serialize};
+
+pub const RADROOTS_REPLICA_TRANSFER_VERSION: u32 = 2;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsReplicaFarmSelector;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsReplicaSyncOptions;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsReplicaSyncRequest;
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("src").join("emit.rs"),
+            r#"pub fn radroots_replica_sync_all_with_options() {}
+
+#[cfg(test)]
+mod tests {}
+"#,
+        );
+        write_file(
+            &root.join("Cargo.lock"),
+            r#"version = 4
+
+[[package]]
+name = "radroots_a"
+version = "1.0.0"
+
+[[package]]
+name = "radroots_b"
+version = "1.0.0"
 "#,
         );
         write_file(
@@ -4765,10 +5664,20 @@ source = "synthetic"
 model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 
+[surface.internal_replica_crates]
+schema = "radroots_a"
+storage = "radroots_b"
+sync = "radroots_b"
+
 [policy]
 exclude_internal_workspace_crates = true
 require_reproducible_exports = true
 require_conformance_vectors = true
+
+[policy.replica]
+forbid_legacy_alias_identifiers = true
+require_transport_agnostic_sync_contract = true
+require_deterministic_emit_ingest = true
 "#,
         );
         write_file(
@@ -4789,6 +5698,33 @@ requires_release_notes = true
 "#,
         );
         write_file(
+            &root.join("contracts").join("replica.toml"),
+            r#"schema_version = 1
+
+[contract]
+name = "radroots_replica_contract"
+version = "1.0.0"
+purpose = "synthetic deterministic replica sync"
+
+[crate_family]
+schema = "radroots_a"
+storage = "radroots_b"
+sync = "radroots_b"
+
+[policy]
+transport_agnostic_sync_core = true
+deterministic_emit_and_ingest = true
+forbid_legacy_alias_identifiers = true
+profile_event_emission = "excluded"
+unknown_sync_request_fields = "reject"
+
+[transfer]
+version = 2
+source = "crates/b/src/types.rs"
+constant = "RADROOTS_REPLICA_TRANSFER_VERSION"
+"#,
+        );
+        write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
@@ -4799,6 +5735,38 @@ require_branches = true
 
 [required]
 crates = ["radroots_a", "radroots_b"]
+"#,
+        );
+        write_file(
+            &root.join(CHANGELOG_RELATIVE),
+            "# Changelog\n\n## [1.0.0]\n\n- Synthetic breaking release.\n",
+        );
+        for (canonical_relative, mirror_relative) in CONFORMANCE_VECTOR_MIRRORS {
+            write_file(&root.join(canonical_relative), SYNTHETIC_CONFORMANCE_VECTOR);
+            write_file(&root.join(mirror_relative), SYNTHETIC_CONFORMANCE_VECTOR);
+        }
+        write_file(
+            &root.join(RELEASES_ROOT_RELATIVE).join("1.0.0.toml"),
+            r#"schema_version = 1
+
+[release]
+version = "1.0.0"
+previous_version = "0.1.0-alpha.2"
+contract_base_version = "1.0.0"
+status = "unreleased"
+
+[artifacts]
+changelog = "CHANGELOG.md"
+manifest = "contracts/manifest.toml"
+operations = "contracts/operations.toml"
+replica = "contracts/replica.toml"
+conformance = "contracts/conformance"
+
+[[changes]]
+id = "synthetic-major-release"
+classification = "breaking"
+semver_impacts = ["breaking"]
+summary = "Exercise synthetic major release governance."
 "#,
         );
         write_file(
@@ -4846,7 +5814,8 @@ public = [
   "RadrootsEventRef",
   "RadrootsEventPtr",
   "RadrootsListingAddress",
-  "RadrootsProfile",
+  "RadrootsAuthoredProfile",
+  "RadrootsInboundProfileMetadata",
   "RadrootsFarm",
   "RadrootsListing",
 ]
@@ -4858,23 +5827,23 @@ classes = ["encode_error", "parse_error", "validation_error", "address_error"]
 model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 
-[operations.profile_build_draft]
+[operations.profile_build_authored_draft]
 domain = "profile"
-id = "profile.build_draft"
+id = "profile.build_authored_draft"
 stability = "beta"
-inputs = ["RadrootsProfile", "RadrootsProfileType?"]
+inputs = ["RadrootsAuthoredProfile"]
 outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.profile_build_draft.implementation]
+[operations.profile_build_authored_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_event::profile::RadrootsProfile"]
+rust_types = ["radroots_event::profile::RadrootsAuthoredProfile"]
 
-[operations.profile_build_draft.conformance]
-vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
+[operations.profile_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/profile/metadata.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -4947,20 +5916,8 @@ vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
                 .join("conformance")
                 .join("vectors")
                 .join("profile")
-                .join("build_draft.v1.json"),
-            r#"{
-  "suite": "profile",
-  "contract_version": "1.0.0",
-  "vectors": [
-    {
-      "id": "profile_build_draft_minimal_001",
-      "kind": "profile.build_draft",
-      "input": {},
-      "expected": {}
-    }
-  ]
-}
-"#,
+                .join("metadata.v1.json"),
+            SYNTHETIC_CONFORMANCE_VECTOR,
         );
         write_file(
             &root
@@ -4995,6 +5952,16 @@ vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
             r#"[workspace]
 members = ["crates/a", "crates/b", "crates/c", "crates/d", "crates/e"]
 resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+
+[workspace.dependencies]
+radroots_a = { path = "crates/a", version = "=1.0.0" }
+radroots_b = { path = "crates/b", version = "=1.0.0" }
+radroots_c = { path = "crates/c", version = "=1.0.0" }
+radroots_d = { path = "crates/d", version = "=1.0.0" }
+radroots_e = { path = "crates/e", version = "=1.0.0" }
 "#,
         );
         for crate_name in ["c", "d", "e"] {
@@ -5003,13 +5970,38 @@ resolver = "2"
                 &format!(
                     r#"[package]
 name = "radroots_{crate_name}"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
 "#
                 ),
             );
         }
+        write_file(
+            &root.join("Cargo.lock"),
+            r#"version = 4
+
+[[package]]
+name = "radroots_a"
+version = "1.0.0"
+
+[[package]]
+name = "radroots_b"
+version = "1.0.0"
+
+[[package]]
+name = "radroots_c"
+version = "1.0.0"
+
+[[package]]
+name = "radroots_d"
+version = "1.0.0"
+
+[[package]]
+name = "radroots_e"
+version = "1.0.0"
+"#,
+        );
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
@@ -5041,6 +6033,316 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let root = workspace_root();
         let bundle = load_contract_bundle(&root).expect("load contract");
         validate_contract_bundle(&bundle).expect("validate contract");
+    }
+
+    #[test]
+    fn version_governance_rejects_contract_workspace_and_lock_drift() {
+        let root = create_synthetic_workspace("version_governance_drift");
+        let mut bundle = load_contract_bundle(&root).expect("load contract");
+        bundle.version.contract.version = "1.0.1".to_string();
+        let contract_error = validate_contract_version_lockstep(&bundle)
+            .expect_err("contract header drift must fail");
+        assert!(contract_error.contains("must match manifest contract version"));
+
+        let member_path = root.join("crates/a/Cargo.toml");
+        let member = fs::read_to_string(&member_path).expect("read member manifest");
+        write_file(
+            &member_path,
+            &member.replace("version = \"1.0.0\"", "version.workspace = true"),
+        );
+        let member_error = validate_workspace_version_lockstep(&root, "1.0.0")
+            .expect_err("inherited member version must fail");
+        assert!(member_error.contains("must set an explicit package version"));
+        write_file(&member_path, &member);
+
+        let workspace_path = root.join("Cargo.toml");
+        let workspace = fs::read_to_string(&workspace_path).expect("read workspace manifest");
+        write_file(
+            &workspace_path,
+            &workspace.replacen(
+                "radroots_a = { path = \"crates/a\", version = \"=1.0.0\" }",
+                "radroots_a = { path = \"crates/a\", version = \"1.0.0\" }",
+                1,
+            ),
+        );
+        let requirement_error = validate_workspace_version_lockstep(&root, "1.0.0")
+            .expect_err("non-exact internal dependency must fail");
+        assert!(requirement_error.contains("exact requirement =1.0.0"));
+        write_file(&workspace_path, &workspace);
+
+        let lock_path = root.join("Cargo.lock");
+        let lock = fs::read_to_string(&lock_path).expect("read Cargo.lock");
+        write_file(&lock_path, &lock.replacen("1.0.0", "1.0.1", 1));
+        let lock_error = validate_workspace_version_lockstep(&root, "1.0.0")
+            .expect_err("lockfile version drift must fail");
+        assert!(lock_error.contains("Cargo.lock package radroots_a version"));
+
+        assert!(parse_semver_version("01.0.0").is_err());
+        assert!(parse_semver_version("1.0").is_err());
+        assert!(parse_semver_version("1.0.0-alpha_1").is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn replica_contract_governance_rejects_metadata_policy_and_transfer_drift() {
+        let root = create_synthetic_workspace("replica_contract_drift");
+        let bundle = load_contract_bundle(&root).expect("load synthetic contract");
+        validate_replica_contract(&bundle, &root).expect("validate replica contract");
+
+        let assert_replica_error = |expected: &str, mutator: fn(&mut ContractBundle)| {
+            let mut bundle = load_contract_bundle(&root).expect("load synthetic contract");
+            mutator(&mut bundle);
+            let error = validate_replica_contract(&bundle, &root)
+                .expect_err("replica contract drift must fail");
+            assert!(
+                error.contains(expected),
+                "expected `{expected}` in `{error}`"
+            );
+        };
+
+        assert_replica_error("schema_version must be 1", |bundle| {
+            bundle.replica.schema_version = 2;
+        });
+        assert_replica_error("name must be radroots_replica_contract", |bundle| {
+            bundle.replica.contract.name = "replica".to_string();
+        });
+        assert_replica_error("must match manifest contract version", |bundle| {
+            bundle.replica.contract.version = "1.0.1".to_string();
+        });
+        assert_replica_error("purpose is required", |bundle| {
+            bundle.replica.contract.purpose.clear();
+        });
+        assert_replica_error("crate_family.schema", |bundle| {
+            bundle.replica.crate_family.schema = "radroots_b".to_string();
+        });
+        assert_replica_error("must name a workspace package", |bundle| {
+            bundle.replica.crate_family.schema = "radroots_missing".to_string();
+            bundle
+                .manifest
+                .surface
+                .internal_replica_crates
+                .as_mut()
+                .expect("replica family")
+                .schema = "radroots_missing".to_string();
+        });
+        assert_replica_error("policy.replica is required", |bundle| {
+            bundle.manifest.policy.replica = None;
+        });
+        assert_replica_error("transport_agnostic_sync_core", |bundle| {
+            bundle.replica.policy.transport_agnostic_sync_core = false;
+        });
+        assert_replica_error("profile_event_emission must be excluded", |bundle| {
+            bundle.replica.policy.profile_event_emission = "included".to_string();
+        });
+        assert_replica_error("unknown_sync_request_fields must be reject", |bundle| {
+            bundle.replica.policy.unknown_sync_request_fields = "ignore".to_string();
+        });
+        assert_replica_error("transfer.version must be 2", |bundle| {
+            bundle.replica.transfer.version = 1;
+        });
+        assert_replica_error("transfer.constant", |bundle| {
+            bundle.replica.transfer.constant = "REPLICA_VERSION".to_string();
+        });
+        assert_replica_error("transfer.source", |bundle| {
+            bundle.replica.transfer.source = "crates/a/src/types.rs".to_string();
+        });
+
+        let source_path = root.join("crates/b/src/types.rs");
+        let source = fs::read_to_string(&source_path).expect("read replica types source");
+        write_file(
+            &source_path,
+            &source.replace(
+                "pub const RADROOTS_REPLICA_TRANSFER_VERSION: u32 = 2;",
+                "pub const RADROOTS_REPLICA_TRANSFER_VERSION: u32 = 1;",
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load source-drift contract");
+        let source_error = validate_replica_contract(&bundle, &root)
+            .expect_err("source constant version drift must fail");
+        assert!(source_error.contains("source constant"));
+        assert!(source_error.contains("must match contract version 2"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn replica_policy_source_witnesses_reject_runtime_drift() {
+        let root = create_synthetic_workspace("replica_policy_source_drift");
+        let types_path = root.join("crates/b/src/types.rs");
+        let emit_path = root.join("crates/b/src/emit.rs");
+        let types = fs::read_to_string(&types_path).expect("read replica types source");
+        let emit = fs::read_to_string(&emit_path).expect("read replica emit source");
+
+        write_file(
+            &types_path,
+            &types.replace(
+                "#[serde(deny_unknown_fields)]\npub struct RadrootsReplicaSyncOptions",
+                "pub struct RadrootsReplicaSyncOptions",
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load attribute-drift contract");
+        let attribute_error = validate_replica_contract(&bundle, &root)
+            .expect_err("missing fail-closed request attribute must fail");
+        assert!(attribute_error.contains("RadrootsReplicaSyncOptions"));
+        assert!(attribute_error.contains("immediately before"));
+
+        write_file(
+            &types_path,
+            &format!("{types}\npub struct include_profiles;\n"),
+        );
+        let bundle = load_contract_bundle(&root).expect("load retired-option contract");
+        let retired_error = validate_replica_contract(&bundle, &root)
+            .expect_err("retired include_profiles identifier must fail");
+        assert!(retired_error.contains("include_profiles is forbidden"));
+
+        write_file(&types_path, &types);
+        write_file(
+            &emit_path,
+            &emit.replace(
+                "#[cfg(test)]\nmod tests {}",
+                "fn emit_profile_event() {}\n\n#[cfg(test)]\nmod tests {}",
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load profile-emitter contract");
+        let profile_error = validate_replica_contract(&bundle, &root)
+            .expect_err("Profile-related production emitter must fail");
+        assert!(profile_error.contains("Profile-related identifier emit_profile_event"));
+
+        write_file(
+            &emit_path,
+            &emit.replace(
+                "#[cfg(test)]\nmod tests {}",
+                "fn emit_kind_zero() { let _event = Event { kind: 0 }; }\n\n#[cfg(test)]\nmod tests {}",
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load literal-kind-zero contract");
+        let kind_error = validate_replica_contract(&bundle, &root)
+            .expect_err("literal kind-0 production emitter must fail");
+        assert!(kind_error.contains("must not construct a literal kind-0 event"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn replica_contract_is_required_and_rejects_unknown_fields() {
+        let missing_root = create_synthetic_workspace("replica_contract_missing");
+        fs::remove_file(missing_root.join(REPLICA_CONTRACT_RELATIVE))
+            .expect("remove replica contract");
+        let missing_error = load_contract_bundle(&missing_root)
+            .expect_err("missing replica contract must fail bundle loading");
+        assert!(missing_error.contains(REPLICA_CONTRACT_RELATIVE));
+        let _ = fs::remove_dir_all(missing_root);
+
+        let unknown_root = create_synthetic_workspace("replica_contract_unknown_field");
+        let replica_path = unknown_root.join(REPLICA_CONTRACT_RELATIVE);
+        let replica = fs::read_to_string(&replica_path).expect("read replica contract");
+        write_file(&replica_path, &format!("{replica}unexpected = true\n"));
+        let unknown_error = load_contract_bundle(&unknown_root)
+            .expect_err("unknown replica contract field must fail bundle loading");
+        assert!(unknown_error.contains(REPLICA_CONTRACT_RELATIVE));
+        assert!(unknown_error.contains("unexpected"));
+        let _ = fs::remove_dir_all(unknown_root);
+    }
+
+    #[test]
+    fn conformance_vector_mirrors_are_required_even_when_parent_is_deleted() {
+        let root = create_synthetic_workspace("required_conformance_mirrors");
+        validate_conformance_vector_mirrors(&root).expect("validate synthetic mirrors");
+
+        let (_, mirror_relative) = CONFORMANCE_VECTOR_MIRRORS[0];
+        let mirror_path = root.join(mirror_relative);
+        fs::remove_file(&mirror_path).expect("remove required mirror");
+        let missing_file_error = validate_conformance_vector_mirrors(&root)
+            .expect_err("missing required mirror file must fail");
+        assert!(missing_file_error.contains(&format!("read {mirror_relative}")));
+
+        write_file(&mirror_path, SYNTHETIC_CONFORMANCE_VECTOR);
+        fs::remove_dir_all(mirror_path.parent().expect("mirror parent"))
+            .expect("remove required mirror parent");
+        let missing_parent_error = validate_conformance_vector_mirrors(&root)
+            .expect_err("missing required mirror parent must fail");
+        assert!(missing_parent_error.contains(&format!("read {mirror_relative}")));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn release_record_and_conformance_mirror_validation_reject_drift() {
+        let root = create_synthetic_workspace("release_record_drift");
+        let bundle = load_contract_bundle(&root).expect("load synthetic contract");
+        validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            .expect("validate release record");
+
+        let record_path = root.join("contracts/releases/1.0.0.toml");
+        let record = fs::read_to_string(&record_path).expect("read release record");
+        write_file(
+            &record_path,
+            &record.replace("status = \"unreleased\"", "status = \"pending\""),
+        );
+        let status_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            .expect_err("unsupported release status must fail");
+        assert!(status_error.contains("must be unreleased, released, or yanked"));
+
+        write_file(
+            &record_path,
+            &record.replace(
+                "replica = \"contracts/replica.toml\"",
+                "replica = \"contracts/replica-v1.toml\"",
+            ),
+        );
+        let replica_artifact_error =
+            validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+                .expect_err("noncanonical replica artifact must fail");
+        assert!(replica_artifact_error.contains(
+            "release artifact path contracts/replica-v1.toml must use canonical path contracts/replica.toml"
+        ));
+
+        write_file(
+            &record_path,
+            &record.replace("id = \"synthetic-major-release\"", "id = \"Bad_Id\""),
+        );
+        let id_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            .expect_err("invalid release change id must fail");
+        assert!(id_error.contains("lowercase kebab-case"));
+        write_file(&record_path, &record);
+
+        write_file(
+            &record_path,
+            &record.replace(
+                "semver_impacts = [\"breaking\"]",
+                "semver_impacts = [\"fix\"]",
+            ),
+        );
+        let classification_error =
+            validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+                .expect_err("classification and semver impact mismatch must fail");
+        assert!(classification_error.contains("does not match its governed semver impacts"));
+
+        write_file(
+            &record_path,
+            &record.replace(
+                "semver_impacts = [\"breaking\"]",
+                "semver_impacts = [\"unknown-impact\"]",
+            ),
+        );
+        let impact_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            .expect_err("unknown semver impact must fail");
+        assert!(impact_error.contains("is not governed by contracts/version.toml"));
+        write_file(&record_path, &record);
+
+        write_file(&root.join(CHANGELOG_RELATIVE), "# Changelog\n");
+        let notes_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            .expect_err("missing release notes must fail");
+        assert!(notes_error.contains("missing heading"));
+
+        let (canonical_relative, mirror_relative) = CONFORMANCE_VECTOR_MIRRORS[0];
+        write_file(&root.join(canonical_relative), "canonical\n");
+        write_file(&root.join(mirror_relative), "drifted\n");
+        let mirror_error = validate_conformance_vector_mirrors(&root)
+            .expect_err("packaged conformance drift must fail");
+        assert!(mirror_error.contains("must exactly match"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -5218,7 +6520,7 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -5229,7 +6531,7 @@ edition = "2024"
                 .join("Cargo.toml"),
             r#"[package]
 name = "libsqlite3-sys"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -5240,7 +6542,7 @@ edition = "2024"
                 .join("Cargo.toml"),
             r#"[package]
 name = "radroots_simplex_probe"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -5248,7 +6550,7 @@ edition = "2024"
             &root.join("crates").join("simplex_probe").join("Cargo.toml"),
             r#"[package]
 name = "simplex_probe"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -5418,7 +6720,7 @@ edition = "2024"
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
             policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_event_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_event_codec\", \"radroots_log\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_event_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 1.0.0-alpha.1 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_event_codec\", \"radroots_log\"]\n",
         )
         .expect("write coverage policy");
         let required = [
@@ -5544,7 +6846,7 @@ members = ["crates/a"]
             root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -6167,7 +7469,7 @@ crates = ["radroots_a", "radroots_b"]
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -6183,7 +7485,7 @@ radroots_b = { path = "../b" }
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_b"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate b"
 repository = "https://example.com/b"
@@ -6230,7 +7532,7 @@ crates = ["radroots_a"]
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_b"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
 "#,
@@ -6242,7 +7544,7 @@ publish = false
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
 "#,
@@ -6271,7 +7573,7 @@ crates = ["radroots_a"]
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -6284,7 +7586,7 @@ readme = "README"
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_b"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -6304,7 +7606,7 @@ edition = "2024"
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -6326,8 +7628,13 @@ dto_bindgen_core = { path = "../../dto_bindgen_core", version = "0.1.0", optiona
 members = ["crates/a", "crates/b"]
 resolver = "2"
 
+[workspace.package]
+version = "1.0.0"
+
 [workspace.dependencies]
 dto_bindgen = { version = "0.1.0", git = "https://example.com/dto_bindgen", rev = "abc123" }
+radroots_a = { path = "crates/a", version = "=1.0.0" }
+radroots_b = { path = "crates/b", version = "=1.0.0" }
 "#,
         );
         write_file(
@@ -6335,7 +7642,7 @@ dto_bindgen = { version = "0.1.0", git = "https://example.com/dto_bindgen", rev 
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -6357,7 +7664,7 @@ dto_bindgen = { workspace = true, optional = true }
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = "https://example.com/a"
@@ -6370,7 +7677,7 @@ readme = "README"
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_b"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
 
@@ -6616,42 +7923,42 @@ rust_package = "radroots_sdk"
             },
         );
         assert_bundle_error(
-            "operation profile.build_draft inputs uses retired event type RadrootsNostrEvent",
+            "operation profile.build_authored_draft inputs uses retired event type RadrootsNostrEvent",
             |bundle| {
                 bundle
                     .operations_manifest
                     .as_mut()
                     .expect("operations manifest")
                     .operations
-                    .get_mut("profile_build_draft")
+                    .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
                     .inputs
                     .push("RadrootsNostrEvent".to_string());
             },
         );
         assert_bundle_error(
-            "operation profile.build_draft outputs uses retired event type WireEventParts",
+            "operation profile.build_authored_draft outputs uses retired event type WireEventParts",
             |bundle| {
                 bundle
                     .operations_manifest
                     .as_mut()
                     .expect("operations manifest")
                     .operations
-                    .get_mut("profile_build_draft")
+                    .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
                     .outputs
                     .push("WireEventParts".to_string());
             },
         );
         assert_bundle_error(
-            "operation profile.build_draft implementation.rust_types uses retired event type RadrootsNostrEventPtr",
+            "operation profile.build_authored_draft implementation.rust_types uses retired event type RadrootsNostrEventPtr",
             |bundle| {
                 bundle
                     .operations_manifest
                     .as_mut()
                     .expect("operations manifest")
                     .operations
-                    .get_mut("profile_build_draft")
+                    .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
                     .implementation
                     .rust_types
@@ -6679,14 +7986,14 @@ rust_package = "radroots_sdk"
                 .join("conformance")
                 .join("vectors")
                 .join("profile")
-                .join("build_draft.v1.json"),
+                .join("metadata.v1.json"),
             r#"{
   "suite": "profile",
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "profile_build_draft_minimal_001",
-      "kind": "profile.build_draft",
+      "id": "profile_build_authored_draft_minimal_001",
+      "kind": "profile.build_authored_draft",
       "input": {}
     }
   ]
@@ -6695,7 +8002,7 @@ rust_package = "radroots_sdk"
         );
         let bundle = load_contract_bundle(&invalid_vector_root).expect("load bundle");
         let err = validate_contract_bundle(&bundle).expect_err("invalid vector should fail");
-        assert!(err.contains("build_draft.v1.json"));
+        assert!(err.contains("metadata.v1.json"));
         assert!(err.contains("parse"));
         let _ = fs::remove_dir_all(&invalid_vector_root);
 
@@ -6707,10 +8014,10 @@ rust_package = "radroots_sdk"
             .as_mut()
             .expect("operations manifest")
             .operations
-            .get_mut("profile_build_draft")
+            .get_mut("profile_build_authored_draft")
             .expect("profile operation")
             .conformance
-            .vector = "conformance/vectors/profile/build_draft.v1.json".to_string();
+            .vector = "conformance/vectors/profile/metadata.v1.json".to_string();
         let err = validate_contract_bundle(&bundle).expect_err("legacy path should fail");
         assert!(err.contains("must live under contracts/conformance/"));
         let _ = fs::remove_dir_all(root);
@@ -6877,7 +8184,7 @@ resolver = "2"
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate b duplicate name"
 repository = "https://example.com/b"
@@ -6915,7 +8222,7 @@ publish = false
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 publish = false
 "#,
@@ -7280,7 +8587,7 @@ crates = ["radroots_a"]
             r#"[package]
 name = "radroots_a"
 publish = ["crates-io"]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 "#,
         );
@@ -7433,7 +8740,7 @@ members = ["crates/a"]
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "crate a"
 repository = { workspace = true }

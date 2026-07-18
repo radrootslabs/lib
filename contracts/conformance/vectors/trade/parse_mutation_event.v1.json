@@ -1,6 +1,6 @@
 {
   "suite": "trade",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "trade_parse_mutation_event_proposal_001",

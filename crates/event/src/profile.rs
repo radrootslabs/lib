@@ -2,7 +2,7 @@
 use alloc::string::String;
 use core::{fmt, str::FromStr};
 
-use radroots_blossom::RadrootsBlossomByteVerifiedDescriptor;
+use crate::media::RadrootsAuthoredImage;
 
 pub const RADROOTS_PROFILE_TYPE_TAG_KEY: &str = "t";
 pub const RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL: &str = "radroots:type:individual";
@@ -55,16 +55,13 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-/// Compatibility-only Profile model used by legacy codecs and runtimes.
+#[cfg_attr(any(feature = "serde", test), derive(serde::Deserialize))]
+/// Read-only compatibility projection used by legacy inbound codecs.
 ///
-/// Its media fields are arbitrary strings and its `bot` field is not a JSON
-/// Boolean. New strict Profile authoring must use `RadrootsAuthoredProfile`.
+/// This type deliberately has no serializer or DTO export. Its media fields are
+/// unverified strings and its `bot` field is not a JSON Boolean, so it must not
+/// cross an authored or publication boundary. New reads use the tolerant
+/// inbound metadata model; new authoring must use `RadrootsAuthoredProfile`.
 #[derive(Clone, Debug)]
 pub struct RadrootsProfile {
     pub name: String,
@@ -205,63 +202,6 @@ fn valid_nip05_domain(domain: &str) -> bool {
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsAuthoredProfileImageError {
-    MediaTypeNotImage,
-}
-
-impl RadrootsAuthoredProfileImageError {
-    pub const fn code(&self) -> &'static str {
-        match self {
-            Self::MediaTypeNotImage => "media_type_not_image",
-        }
-    }
-}
-
-impl fmt::Display for RadrootsAuthoredProfileImageError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MediaTypeNotImage => {
-                f.write_str("Profile media descriptor must have an image media type")
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for RadrootsAuthoredProfileImageError {}
-
-/// A byte-verified Blossom descriptor whose declared media type is `image/*`.
-///
-/// This typestate does not inspect or sanitize the image format. Media runtimes
-/// remain responsible for decode and format-safety policy.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredProfileImage(RadrootsBlossomByteVerifiedDescriptor);
-
-impl RadrootsAuthoredProfileImage {
-    pub fn try_from_verified_descriptor(
-        descriptor: RadrootsBlossomByteVerifiedDescriptor,
-    ) -> Result<Self, RadrootsAuthoredProfileImageError> {
-        if !descriptor.media_type().as_str().starts_with("image/") {
-            return Err(RadrootsAuthoredProfileImageError::MediaTypeNotImage);
-        }
-        Ok(Self(descriptor))
-    }
-
-    pub fn descriptor(&self) -> &RadrootsBlossomByteVerifiedDescriptor {
-        &self.0
-    }
-}
-
-impl TryFrom<RadrootsBlossomByteVerifiedDescriptor> for RadrootsAuthoredProfileImage {
-    type Error = RadrootsAuthoredProfileImageError;
-
-    fn try_from(value: RadrootsBlossomByteVerifiedDescriptor) -> Result<Self, Self::Error> {
-        Self::try_from_verified_descriptor(value)
-    }
-}
-
-#[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsAuthoredProfileError {
     InvalidName,
 }
@@ -305,8 +245,8 @@ pub struct RadrootsAuthoredProfile {
     name: String,
     display_name: Option<String>,
     about: Option<String>,
-    picture: Option<RadrootsAuthoredProfileImage>,
-    banner: Option<RadrootsAuthoredProfileImage>,
+    picture: Option<RadrootsAuthoredImage>,
+    banner: Option<RadrootsAuthoredImage>,
     nip05: Option<RadrootsNip05Identifier>,
     bot: Option<bool>,
 }
@@ -341,13 +281,13 @@ impl RadrootsAuthoredProfile {
     }
 
     #[must_use]
-    pub fn with_picture(mut self, value: RadrootsAuthoredProfileImage) -> Self {
+    pub fn with_picture(mut self, value: RadrootsAuthoredImage) -> Self {
         self.picture = Some(value);
         self
     }
 
     #[must_use]
-    pub fn with_banner(mut self, value: RadrootsAuthoredProfileImage) -> Self {
+    pub fn with_banner(mut self, value: RadrootsAuthoredImage) -> Self {
         self.banner = Some(value);
         self
     }
@@ -376,11 +316,11 @@ impl RadrootsAuthoredProfile {
         self.about.as_deref()
     }
 
-    pub fn picture(&self) -> Option<&RadrootsAuthoredProfileImage> {
+    pub fn picture(&self) -> Option<&RadrootsAuthoredImage> {
         self.picture.as_ref()
     }
 
-    pub fn banner(&self) -> Option<&RadrootsAuthoredProfileImage> {
+    pub fn banner(&self) -> Option<&RadrootsAuthoredImage> {
         self.banner.as_ref()
     }
 
@@ -397,8 +337,8 @@ impl RadrootsAuthoredProfile {
 mod tests {
     use super::*;
     use radroots_blossom::{
-        RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-        RadrootsBlossomSha256,
+        RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl,
+        RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomMediaType, RadrootsBlossomSha256,
     };
 
     #[test]
@@ -543,8 +483,7 @@ mod tests {
     #[test]
     fn authored_profile_requires_name_and_image_only_verified_media() {
         let media =
-            RadrootsAuthoredProfileImage::try_from(verified_descriptor("image/webp", "webp"))
-                .unwrap();
+            RadrootsAuthoredImage::try_from(verified_descriptor("image/webp", "webp")).unwrap();
         let profile = RadrootsAuthoredProfile::new("alice")
             .unwrap()
             .with_display_name("Alice")
@@ -580,9 +519,11 @@ mod tests {
         );
 
         let error =
-            RadrootsAuthoredProfileImage::try_from(verified_descriptor("text/plain", "txt"))
-                .unwrap_err();
-        assert_eq!(error, RadrootsAuthoredProfileImageError::MediaTypeNotImage);
+            RadrootsAuthoredImage::try_from(verified_descriptor("text/plain", "txt")).unwrap_err();
+        assert_eq!(
+            error,
+            crate::media::RadrootsAuthoredImageError::MediaTypeNotImage
+        );
         assert_eq!(error.code(), "media_type_not_image");
         assert!(!error.to_string().is_empty());
 

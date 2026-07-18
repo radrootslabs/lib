@@ -1,6 +1,6 @@
 {
   "suite": "knowledge_public_surface",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "knowledge_source_public_surface_valid_001",

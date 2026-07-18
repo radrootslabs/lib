@@ -56,10 +56,6 @@ pub enum RadrootsNostrError {
 
     #[error("Filter tag error: {0}")]
     FilterTagError(String),
-
-    #[cfg(feature = "codec")]
-    #[error("Profile encode error: {0}")]
-    ProfileEncodeError(#[from] radroots_event_codec::profile::error::ProfileEncodeError),
 }
 
 #[derive(Debug, Error)]

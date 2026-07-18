@@ -33,6 +33,9 @@ pub type RadrootsNostrMonitorNotification = nostr_sdk::prelude::MonitorNotificat
 pub type RadrootsNostrOutput<T> = nostr_sdk::prelude::Output<T>;
 
 #[cfg(feature = "client")]
+pub type RadrootsNostrEventStream = nostr_sdk::pool::stream::BoxedStream<RadrootsNostrEvent>;
+
+#[cfg(feature = "client")]
 pub type RadrootsNostrRelay = nostr_sdk::Relay;
 
 #[cfg(feature = "client")]

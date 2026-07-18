@@ -138,7 +138,6 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::plot::RadrootsPlotLocation>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::plot::RadrootsPlotRef>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::post::RadrootsPost>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::profile::RadrootsProfile>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::profile::RadrootsProfileType>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::reaction::RadrootsReaction>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::relay_document::RadrootsRelayDocument>(

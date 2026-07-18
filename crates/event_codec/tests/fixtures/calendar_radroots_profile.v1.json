@@ -1,6 +1,6 @@
 {
   "suite": "calendar_radroots_profile",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "profile_date_parse_minimum_gregorian_001",

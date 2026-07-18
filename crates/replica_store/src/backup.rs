@@ -4,7 +4,9 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
 
 pub const DATABASE_BACKUP_VERSION: &str = "1.0.0";
-pub const REPLICA_STORE_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Replica schema compatibility version recorded in backups and export manifests.
+pub const REPLICA_STORE_SCHEMA_VERSION: &str = "1.0.0";
+const LEGACY_COMPATIBLE_REPLICA_STORE_SCHEMA_VERSIONS: [&str; 1] = ["0.1.0-alpha.2"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaEntry {
@@ -32,6 +34,7 @@ pub struct MigrationBackup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseBackup {
     pub format_version: String,
+    /// Backup schema compatibility version; the field name is retained on wire.
     pub replica_store_version: String,
     pub schema: Vec<SchemaEntry>,
     pub migrations: Vec<MigrationBackup>,
@@ -44,7 +47,7 @@ pub fn export_database_backup(executor: &dyn SqlExecutor) -> Result<DatabaseBack
     let migrations = export_migrations();
     Ok(DatabaseBackup {
         format_version: DATABASE_BACKUP_VERSION.to_string(),
-        replica_store_version: REPLICA_STORE_VERSION.to_string(),
+        replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
         schema,
         migrations,
         data,
@@ -277,10 +280,13 @@ fn validate_backup_version(backup: &DatabaseBackup) -> Result<(), SqlError> {
             backup.format_version, DATABASE_BACKUP_VERSION
         )));
     }
-    if backup.replica_store_version != REPLICA_STORE_VERSION {
+    if backup.replica_store_version != REPLICA_STORE_SCHEMA_VERSION
+        && !LEGACY_COMPATIBLE_REPLICA_STORE_SCHEMA_VERSIONS
+            .contains(&backup.replica_store_version.as_str())
+    {
         return Err(SqlError::InvalidArgument(format!(
-            "unsupported replica-store version {}, expected {}",
-            backup.replica_store_version, REPLICA_STORE_VERSION
+            "unsupported replica-store backup schema version {}, expected {}",
+            backup.replica_store_version, REPLICA_STORE_SCHEMA_VERSION
         )));
     }
     Ok(())
@@ -433,7 +439,7 @@ mod tests {
         );
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_store_version: REPLICA_STORE_VERSION.to_string(),
+            replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
             schema: vec![SchemaEntry {
                 object_type: String::from("table"),
                 name: String::from("fail_table"),
@@ -558,7 +564,7 @@ mod tests {
         row.insert(String::from("co\"l"), Value::from(7));
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_store_version: REPLICA_STORE_VERSION.to_string(),
+            replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
             schema: vec![
                 SchemaEntry {
                     object_type: String::from("table"),
@@ -634,7 +640,7 @@ mod tests {
 
     #[test]
     fn validate_backup_version_rejects_invalid_versions() {
-        let wrong_format = backup_with_versions("0.0.1", REPLICA_STORE_VERSION);
+        let wrong_format = backup_with_versions("0.0.1", REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             validate_backup_version(&wrong_format),
             "ERR_INVALID_ARGUMENT",
@@ -645,6 +651,10 @@ mod tests {
             validate_backup_version(&wrong_db_version),
             "ERR_INVALID_ARGUMENT",
         );
+
+        let previous_alpha = backup_with_versions(DATABASE_BACKUP_VERSION, "0.1.0-alpha.2");
+        validate_backup_version(&previous_alpha)
+            .expect("schema-compatible alpha.2 backup must remain restorable");
     }
 
     #[test]
@@ -656,7 +666,7 @@ mod tests {
             )],
             None,
         );
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
 
         let matched = executor
             .query_raw("select type, name from sqlite_master", "[]")
@@ -692,7 +702,7 @@ mod tests {
             )],
             None,
         );
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         let backup_json = serde_json::to_string(&backup).expect("serialize backup");
 
         restore_database_backup_json(&executor, &backup_json).expect("restore should succeed");
@@ -749,6 +759,7 @@ mod tests {
             None,
         );
         let backup = export_database_backup(&executor).expect("backup success");
+        assert_eq!(backup.replica_store_version, "1.0.0");
         assert!(backup.schema.is_empty());
         assert!(backup.data.is_empty());
     }
@@ -843,7 +854,7 @@ mod tests {
     #[test]
     fn restore_database_backup_rejects_invalid_versions_before_transaction() {
         let executor = MockExecutor::new(Vec::new(), None);
-        let backup = backup_with_versions("0.0.1", REPLICA_STORE_VERSION);
+        let backup = backup_with_versions("0.0.1", REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_ARGUMENT",
@@ -860,7 +871,7 @@ mod tests {
             )],
             Some(String::from("PRAGMA foreign_keys = OFF;")),
         );
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_QUERY",
@@ -877,7 +888,7 @@ mod tests {
             None,
         )
         .with_begin_failure();
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_QUERY",
@@ -888,7 +899,7 @@ mod tests {
     fn restore_database_backup_fails_when_drop_query_fails() {
         let executor = MockExecutor::new(Vec::new(), None)
             .with_query_failure("select type, name from sqlite_master");
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_QUERY",
@@ -906,7 +917,7 @@ mod tests {
         );
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_store_version: REPLICA_STORE_VERSION.to_string(),
+            replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
             schema: vec![SchemaEntry {
                 object_type: String::from("table"),
                 name: String::from("tb_a"),
@@ -939,7 +950,7 @@ mod tests {
         row.insert(String::from("id"), Value::from("1"));
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_store_version: REPLICA_STORE_VERSION.to_string(),
+            replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
             schema: vec![SchemaEntry {
                 object_type: String::from("table"),
                 name: String::from("tb_a"),
@@ -968,7 +979,7 @@ mod tests {
             None,
         )
         .with_commit_failure();
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_QUERY",
@@ -984,7 +995,7 @@ mod tests {
             )],
             Some(String::from("PRAGMA foreign_keys = ON;")),
         );
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
         assert_sql_error_code(
             restore_database_backup(&executor, &backup),
             "ERR_INVALID_QUERY",

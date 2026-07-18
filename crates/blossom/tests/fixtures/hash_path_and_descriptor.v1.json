@@ -1,6 +1,6 @@
 {
   "suite": "blossom_hash_path_and_descriptor",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "blossom_sha256_digest_empty_001",

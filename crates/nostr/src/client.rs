@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-use core::ops::Deref;
 use core::time::Duration;
 use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
@@ -10,11 +9,11 @@ use nostr_sdk::{Client, ClientBuilder, ClientOptions};
 use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
-use crate::types::RadrootsNostrMetadata;
 use crate::types::{
-    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrFilter,
-    RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput, RadrootsNostrRelay,
-    RadrootsNostrRelayUrl, RadrootsNostrSubscribeAutoCloseOptions, RadrootsNostrSubscriptionId,
+    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrEventStream,
+    RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput,
+    RadrootsNostrPublicKey, RadrootsNostrRelay, RadrootsNostrRelayUrl,
+    RadrootsNostrSubscribeAutoCloseOptions, RadrootsNostrSubscriptionId,
 };
 
 #[derive(Clone)]
@@ -142,8 +141,33 @@ impl RadrootsNostrClient {
         Self { inner }
     }
 
+    /// Returns the underlying SDK client for explicit low-level interoperability.
     pub fn into_inner(self) -> Client {
         self.inner
+    }
+
+    pub async fn has_signer(&self) -> bool {
+        self.inner.has_signer().await
+    }
+
+    pub async fn public_key(&self) -> Result<RadrootsNostrPublicKey, RadrootsNostrError> {
+        Ok(self.inner.public_key().await?)
+    }
+
+    pub fn monitor(&self) -> Option<&RadrootsNostrMonitor> {
+        self.inner.monitor()
+    }
+
+    pub async fn connect(&self) {
+        self.inner.connect().await;
+    }
+
+    pub async fn wait_for_connection(&self, timeout: Duration) {
+        self.inner.wait_for_connection(timeout).await;
+    }
+
+    pub async fn try_connect(&self, timeout: Duration) -> RadrootsNostrOutput<()> {
+        self.inner.try_connect(timeout).await
     }
 
     pub async fn add_relay(&self, url: &str) -> Result<bool, RadrootsNostrError> {
@@ -174,6 +198,21 @@ impl RadrootsNostrClient {
     ) -> Result<Vec<RadrootsNostrEvent>, RadrootsNostrError> {
         let events = self.inner.fetch_events(filter, timeout).await?;
         Ok(events.to_vec())
+    }
+
+    pub async fn query_database(
+        &self,
+        filter: RadrootsNostrFilter,
+    ) -> Result<Vec<RadrootsNostrEvent>, RadrootsNostrError> {
+        Ok(self.inner.database().query(filter).await?.to_vec())
+    }
+
+    pub async fn stream_events(
+        &self,
+        filter: RadrootsNostrFilter,
+        timeout: Duration,
+    ) -> Result<RadrootsNostrEventStream, RadrootsNostrError> {
+        Ok(self.inner.stream_events(filter, timeout).await?)
     }
 
     pub async fn subscribe(
@@ -225,23 +264,12 @@ impl RadrootsNostrClient {
             .await?)
     }
 
-    /// Publishes through the legacy generic metadata compatibility surface.
-    ///
-    /// This API does not enforce the strict authored Profile media contract.
-    /// New strict Profile authoring must use `profile.build_authored_draft`.
-    pub async fn set_metadata(
+    pub async fn send_event_to(
         &self,
-        md: &RadrootsNostrMetadata,
+        relays: Vec<String>,
+        event: &RadrootsNostrEvent,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
-        Ok(self.inner.set_metadata(md).await?)
-    }
-}
-
-impl Deref for RadrootsNostrClient {
-    type Target = Client;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+        Ok(self.inner.send_event_to(relays, event).await?)
     }
 }
 

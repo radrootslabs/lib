@@ -8,7 +8,6 @@ use radroots_nostr::error::RadrootsNostrTagsResolveError;
 use radroots_nostr::events::jobs::{
     radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,
 };
-use radroots_nostr::events::metadata::radroots_nostr_build_metadata_event;
 use radroots_nostr::events::post::{
     radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
     radroots_nostr_post_events_filter,
@@ -27,9 +26,8 @@ use radroots_nostr::tags::{
     radroots_nostr_tags_resolve,
 };
 use radroots_nostr::types::{
-    RadrootsNostrEventBuilder, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrMetadata,
-    RadrootsNostrRelayUrl, RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard,
-    RadrootsNostrTimestamp,
+    RadrootsNostrEventBuilder, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrRelayUrl,
+    RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
 };
 use radroots_nostr::util::{
     created_at_u32_saturating, event_created_at_u32_saturating, radroots_nostr_npub_string,
@@ -132,14 +130,6 @@ fn job_event_builders_are_callable() {
         Some(Vec::new()),
     );
     assert!(invalid_job_result.is_err());
-}
-
-#[test]
-fn metadata_builder_is_callable() {
-    let keys = make_keys();
-    let metadata = RadrootsNostrMetadata::default();
-    let builder = radroots_nostr_build_metadata_event(&metadata);
-    let _ = builder.build(keys.public_key());
 }
 
 #[test]

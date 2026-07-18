@@ -35,7 +35,7 @@ wire parts and require runtime signing and transport.
 
 | Domain | Kind | Radroots Type | RPC Methods | Notes |
 | --- | --- | --- | --- | --- |
-| profile | 0 | RadrootsProfile | events.profile.publish, events.profile.list, events.profile.get | compatibility RPCs retain legacy authoring; only `profile.build_authored_draft` is strict authored authority and it emits deterministic JSON with no marker tag |
+| profile | 0 | RadrootsAuthoredProfile / RadrootsInboundProfileMetadata | events.profile.publish, events.profile.list, events.profile.get | publish must use `profile.build_authored_draft`; inbound projection must use `profile.parse_inbound_metadata`; authored output is deterministic JSON with no marker tag |
 | follow | 3 | RadrootsFollow | events.follow.publish, events.follow.list, events.follow.get | replaceable event |
 | post | 1 | RadrootsPost | events.post.publish, events.post.list, events.post.get | plaintext content |
 | comment | 1111 | RadrootsComment | events.comment.publish, events.comment.list, events.comment.get | requires root and parent tags |

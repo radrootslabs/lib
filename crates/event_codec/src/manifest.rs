@@ -18,6 +18,23 @@ use sha2::{Digest, Sha256};
 
 pub const RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
+const HISTORICAL_KNOWLEDGE_CONTRACT_INTRODUCTIONS: [(&str, &str); 11] = [
+    ("radroots.knowledge.change_proposal.v1", "0.1.0-alpha.2"),
+    ("radroots.knowledge.claim.v1", "0.1.0-alpha.2"),
+    (
+        "radroots.knowledge.contribution_attestation.v1",
+        "0.1.0-alpha.2",
+    ),
+    ("radroots.knowledge.evidence_bounty.v1", "0.1.0-alpha.2"),
+    ("radroots.knowledge.field_report.v1", "0.1.0-alpha.2"),
+    ("radroots.knowledge.relation.v1", "0.1.0-alpha.2"),
+    ("radroots.knowledge.review.v1", "0.1.0-alpha.2"),
+    ("radroots.knowledge.source.v1", "0.1.0-alpha.2"),
+    ("radroots.wiki.article.v1", "0.1.0-alpha.2"),
+    ("radroots.wiki.merge_request.v1", "0.1.0-alpha.2"),
+    ("radroots.wiki.redirect.v1", "0.1.0-alpha.2"),
+];
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsKnowledgeContractManifest {
     pub schema_version: u32,
@@ -168,8 +185,15 @@ fn manifest_entry(contract: &RadrootsEventContract) -> RadrootsKnowledgeContract
         wasm_verified_decode_support: true,
         deprecated: false,
         replaced_by: None,
-        introduced_at: env!("CARGO_PKG_VERSION").to_string(),
+        introduced_at: knowledge_contract_introduced_at(contract.id).to_string(),
     }
+}
+
+fn knowledge_contract_introduced_at(contract_id: &str) -> &'static str {
+    HISTORICAL_KNOWLEDGE_CONTRACT_INTRODUCTIONS
+        .iter()
+        .find_map(|(historical_id, version)| (*historical_id == contract_id).then_some(*version))
+        .unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
 fn mvp_sdk_and_wasm_tag_support(contract_id: &str) -> bool {

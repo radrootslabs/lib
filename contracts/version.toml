@@ -1,13 +1,19 @@
 [contract]
-version = "0.1.0-alpha.2"
+version = "1.0.0-alpha.1"
 stability = "draft"
 
 [semver]
 major_on = [
   "remove_exported_type",
   "remove_exported_field",
+  "remove_exported_function",
+  "remove_exported_module",
+  "remove_exported_constant",
+  "remove_exported_trait_impl",
+  "remove_public_cargo_feature",
   "change_exported_field_type",
   "change_exported_enum_variant",
+  "change_exported_constant_value",
   "change_exported_algorithm_behavior",
   "rename_internal_replica_crate_family",
 ]

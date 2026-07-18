@@ -1,6 +1,6 @@
 {
   "suite": "social_production",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "social_repost_note_valid_001",

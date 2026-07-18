@@ -14,11 +14,12 @@ models, kinds, and tag conventions for the `radroots` core libraries.
  * portable event model semantics for both `std` and `no_std` builds;
  * optional integration with `serde` for serialization.
 
-The Profile module also exposes an additive strict authored model. It requires
-a non-whitespace, control-free name; its media fields accept only image-typed,
+The Profile module exposes the exclusive strict authored model. It requires a
+non-whitespace, control-free name; its media fields accept only image-typed,
 byte-verified Blossom descriptors; and its NIP-05 identifier type validates
-syntax without making a network identity claim. The legacy `RadrootsProfile`
-model remains available for compatibility.
+syntax without making a network identity claim. The legacy read projection is
+not serializable or exported as a DTO. Tolerant reads use
+`RadrootsInboundProfileMetadata` from `radroots_event_codec`.
 
 The calendar module keeps three different states explicit for NIP-52 kinds
 `31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,

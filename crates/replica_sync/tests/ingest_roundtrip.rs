@@ -7,8 +7,7 @@ use radroots_event::list::RadrootsListEntry;
 use radroots_event::list_set::RadrootsListSet;
 use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation};
 use radroots_event::profile::{
-    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
-    radroots_profile_type_tag_value,
+    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
 };
 use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
@@ -462,7 +461,7 @@ fn seed_source(
 fn ingest_roundtrip_yields_zero_pending_sync() {
     let source = SqlxSqliteExecutor::open_memory().expect("source db");
     let (_source_request, farm_d_tag, farm_pubkey, drafts) = seed_source(&source);
-    assert_eq!(drafts.len(), 10);
+    assert_eq!(drafts.len(), 8);
 
     let target = SqlxSqliteExecutor::open_memory().expect("target db");
     migrations::run_all_up(&target).expect("target migrations");
@@ -532,7 +531,6 @@ fn sync_all_selector_and_options_paths_are_supported() {
         &RadrootsReplicaSyncRequest {
             farm: request.farm,
             options: Some(RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
                 include_list_sets: Some(false),
                 include_membership_claims: Some(false),
             }),
@@ -979,18 +977,17 @@ fn profile_event(
     profile_type: Option<RadrootsProfileType>,
     name: &str,
 ) -> RadrootsEventEnvelope {
-    let profile = RadrootsProfile {
-        name: name.to_string(),
-        display_name: Some(format!("{name}_display")),
-        nip05: Some(format!("{name}@example.com")),
-        about: Some(format!("{name} about")),
-        website: Some("https://example.com".to_string()),
-        picture: Some("https://example.com/p.png".to_string()),
-        banner: Some("https://example.com/b.png".to_string()),
-        lud06: Some("lud06".to_string()),
-        lud16: Some("lud16".to_string()),
-        bot: None,
-    };
+    let profile = serde_json::json!({
+        "name": name,
+        "display_name": format!("{name}_display"),
+        "nip05": format!("{name}@example.com"),
+        "about": format!("{name} about"),
+        "website": "https://example.com",
+        "picture": "https://example.com/p.png",
+        "banner": "https://example.com/b.png",
+        "lud06": "lud06",
+        "lud16": "lud16"
+    });
     let mut tags = Vec::new();
     if let Some(kind) = profile_type {
         tags.push(vec![
@@ -1003,7 +1000,7 @@ fn profile_event(
         author,
         created_at,
         KIND_PROFILE,
-        serde_json::to_string(&profile).expect("profile json"),
+        profile.to_string(),
         tags,
     )
 }
@@ -2111,14 +2108,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
     }
     assert!(list_set_seen);
     assert!(list_set_missed);
-    assert!(bundle.events.iter().any(|event| {
-        event.kind == KIND_PROFILE
-            && event.author == member_pubkey
-            && event
-                .tags
-                .iter()
-                .all(|tag| tag[0] != RADROOTS_PROFILE_TYPE_TAG_KEY)
-    }));
+    assert!(bundle.events.iter().all(|event| event.kind != KIND_PROFILE));
 }
 
 #[test]

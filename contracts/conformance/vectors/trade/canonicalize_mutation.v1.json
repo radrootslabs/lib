@@ -1,6 +1,6 @@
 {
   "suite": "trade",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "trade_canonicalize_proposal_minimal_001",

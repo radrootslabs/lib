@@ -13,7 +13,7 @@ pub async fn radroots_nostr_remove_relay(
     client: &RadrootsNostrClient,
     url: &str,
 ) -> Result<(), RadrootsNostrError> {
-    client.force_remove_relay(url).await?;
+    client.remove_relay(url).await?;
     Ok(())
 }
 

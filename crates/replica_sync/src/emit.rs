@@ -9,15 +9,18 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
+use crate::canonical::canonical_json_string;
+use crate::error::RadrootsReplicaEventsError;
+use crate::geo::{geojson_point_from_lat_lng, geojson_polygon_circle_wgs84};
+use crate::types::{
+    RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector,
+    RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
+};
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
 use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
 use radroots_event::location::{has_textual_locality, is_public_geohash5};
 use radroots_event::plot::RadrootsPlot;
-use radroots_event::profile::{
-    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
-    radroots_profile_type_from_tag_value, radroots_profile_type_tag_value,
-};
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
@@ -39,28 +42,16 @@ use radroots_replica_schema::farm_tag::{IFarmTagFieldsFilter, IFarmTagFindMany};
 use radroots_replica_schema::gcs_location::{
     GcsLocation, GcsLocationQueryBindValues, IGcsLocationFindOne, IGcsLocationFindOneArgs,
 };
-use radroots_replica_schema::nostr_profile::{
-    INostrProfileFindOne, INostrProfileFindOneArgs, NostrProfileQueryBindValues,
-};
 use radroots_replica_schema::plot::{IPlotFieldsFilter, IPlotFindMany, Plot};
 use radroots_replica_schema::plot_gcs_location::{
     IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany, PlotGcsLocation,
 };
 use radroots_replica_schema::plot_tag::{IPlotTagFieldsFilter, IPlotTagFindMany};
 use radroots_replica_store::{
-    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_profile,
-    plot, plot_gcs_location, plot_tag,
+    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, plot,
+    plot_gcs_location, plot_tag,
 };
 use radroots_sql_core::SqlExecutor;
-use serde_json::Value;
-
-use crate::canonical::canonical_json_string;
-use crate::error::RadrootsReplicaEventsError;
-use crate::geo::{geojson_point_from_lat_lng, geojson_polygon_circle_wgs84};
-use crate::types::{
-    RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector,
-    RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
-};
 
 const ROLE_PRIMARY: &str = "primary";
 const ROLE_MEMBER: &str = "member";
@@ -103,8 +94,8 @@ pub(crate) mod failpoints {
 
 /// Builds the full replica transfer bundle.
 ///
-/// When Profile inclusion is enabled, the bundle contains compatibility-only
-/// legacy Profile drafts that do not satisfy `profile.build_authored_draft`.
+/// Profile events are intentionally excluded. Ingested Profile rows are lossy
+/// projections and cannot prove author intent for a complete kind-0 snapshot.
 pub fn radroots_replica_sync_all(
     exec: &dyn SqlExecutor,
     request: &RadrootsReplicaSyncRequest,
@@ -114,15 +105,13 @@ pub fn radroots_replica_sync_all(
 
 /// Builds a replica transfer bundle using explicit inclusion options.
 ///
-/// Included Profile drafts use the compatibility-only legacy Profile model and
-/// do not satisfy `profile.build_authored_draft`.
+/// Profile events are intentionally excluded from replica emission.
 pub fn radroots_replica_sync_all_with_options(
     exec: &dyn SqlExecutor,
     farm_selector: &RadrootsReplicaFarmSelector,
     options: Option<&RadrootsReplicaSyncOptions>,
 ) -> Result<RadrootsReplicaSyncBundle, RadrootsReplicaEventsError> {
     let farm = resolve_farm(exec, farm_selector)?;
-    let include_profiles = options.and_then(|opt| opt.include_profiles).unwrap_or(true);
     let include_list_sets = options
         .and_then(|opt| opt.include_list_sets)
         .unwrap_or(true);
@@ -131,11 +120,6 @@ pub fn radroots_replica_sync_all_with_options(
         .unwrap_or(true);
 
     let mut events = Vec::new();
-
-    if include_profiles {
-        let profiles = radroots_replica_profile_events(exec, &farm)?;
-        events.extend(profiles);
-    }
 
     events.push(radroots_replica_farm_event(exec, &farm)?);
 
@@ -156,26 +140,6 @@ pub fn radroots_replica_sync_all_with_options(
         version: RADROOTS_REPLICA_TRANSFER_VERSION,
         events,
     })
-}
-
-/// Builds compatibility-only legacy Profile drafts for replica transfer.
-///
-/// These drafts do not satisfy `profile.build_authored_draft`.
-pub fn radroots_replica_profile_events(
-    exec: &dyn SqlExecutor,
-    farm: &Farm,
-) -> Result<Vec<RadrootsReplicaEventDraft>, RadrootsReplicaEventsError> {
-    let mut pubkeys = collect_profile_pubkeys(exec, farm)?;
-    pubkeys.sort();
-    pubkeys.dedup();
-
-    let mut events = Vec::new();
-    for pubkey in pubkeys {
-        if let Some(profile) = load_profile(exec, &pubkey)? {
-            events.push(profile_event(&pubkey, profile)?);
-        }
-    }
-    Ok(events)
 }
 
 pub fn radroots_replica_farm_event(
@@ -760,120 +724,6 @@ fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
         return parsed;
     }
     geojson_polygon_circle_wgs84(lat, lng, 100.0, 64)
-}
-
-fn load_profile(
-    exec: &dyn SqlExecutor,
-    pubkey: &str,
-) -> Result<Option<radroots_replica_schema::nostr_profile::NostrProfile>, RadrootsReplicaEventsError>
-{
-    let result_query = nostr_profile::find_one(
-        exec,
-        &INostrProfileFindOne::On(INostrProfileFindOneArgs {
-            on: NostrProfileQueryBindValues::PublicKey {
-                public_key: pubkey.to_string(),
-            },
-        }),
-    );
-    let result = result_query?;
-    Ok(result.result)
-}
-
-fn profile_event(
-    pubkey: &str,
-    profile: radroots_replica_schema::nostr_profile::NostrProfile,
-) -> Result<RadrootsReplicaEventDraft, RadrootsReplicaEventsError> {
-    let profile_type = match profile.profile_type.as_str() {
-        "individual" | "farmer" => Some(RadrootsProfileType::Individual),
-        "farm" => Some(RadrootsProfileType::Farm),
-        "coop" => Some(RadrootsProfileType::Coop),
-        "any" => Some(RadrootsProfileType::Any),
-        other => radroots_profile_type_from_tag_value(other),
-    };
-    let profile_event = RadrootsProfile {
-        name: profile.name,
-        display_name: profile.display_name,
-        nip05: profile.nip05,
-        about: profile.about,
-        website: profile.website,
-        picture: profile.picture,
-        banner: profile.banner,
-        lud06: profile.lud06,
-        lud16: profile.lud16,
-        bot: None,
-    };
-    let content = serialize_profile_content(&profile_event)?;
-    let mut tags = Vec::new();
-    if let Some(profile_type) = profile_type {
-        let tag = vec![
-            RADROOTS_PROFILE_TYPE_TAG_KEY.to_string(),
-            radroots_profile_type_tag_value(profile_type).to_string(),
-        ];
-        tags.push(tag);
-    }
-    Ok(RadrootsReplicaEventDraft {
-        kind: radroots_event::kinds::KIND_PROFILE,
-        author: pubkey.to_string(),
-        content,
-        tags,
-    })
-}
-
-fn serialize_profile_content(
-    profile: &RadrootsProfile,
-) -> Result<String, RadrootsReplicaEventsError> {
-    let mut obj = serde_json::Map::new();
-    obj.insert("name".to_string(), Value::from(profile.name.clone()));
-    if let Some(value) = profile.display_name.as_ref() {
-        obj.insert("display_name".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.nip05.as_ref() {
-        obj.insert("nip05".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.about.as_ref() {
-        obj.insert("about".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.website.as_ref() {
-        obj.insert("website".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.picture.as_ref() {
-        obj.insert("picture".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.banner.as_ref() {
-        obj.insert("banner".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.lud06.as_ref() {
-        obj.insert("lud06".to_string(), Value::from(value.clone()));
-    }
-    if let Some(value) = profile.lud16.as_ref() {
-        obj.insert("lud16".to_string(), Value::from(value.clone()));
-    }
-    canonical_json_string(&Value::Object(obj))
-}
-
-fn collect_member_pubkeys(
-    exec: &dyn SqlExecutor,
-    farm_id: &str,
-) -> Result<Vec<String>, RadrootsReplicaEventsError> {
-    let members = load_farm_members(exec, farm_id)?;
-    let mut pubkeys = members
-        .into_iter()
-        .map(|row| row.member_pubkey)
-        .collect::<Vec<_>>();
-    pubkeys.sort();
-    pubkeys.dedup();
-    Ok(pubkeys)
-}
-
-fn collect_profile_pubkeys(
-    exec: &dyn SqlExecutor,
-    farm: &Farm,
-) -> Result<Vec<String>, RadrootsReplicaEventsError> {
-    let mut pubkeys = collect_member_pubkeys(exec, &farm.id)?;
-    let claims = load_member_claims(exec, &farm.pubkey)?;
-    pubkeys.extend(claims.into_iter().map(|claim| claim.member_pubkey));
-    pubkeys.push(farm.pubkey.clone());
-    Ok(pubkeys)
 }
 
 fn load_member_claims(
@@ -1513,87 +1363,12 @@ mod tests {
         let polygon_blank = parse_polygon("", 3.0, 4.0);
         assert!(!polygon_blank.coordinates[0].is_empty());
 
-        assert!(
-            load_profile(&exec, &farm_row.pubkey)
-                .expect("farm profile")
-                .is_some()
-        );
-        assert!(
-            load_profile(&exec, &"3".repeat(64))
-                .expect("missing profile")
-                .is_none()
-        );
-
-        let profile_event_farm = profile_event(
-            &farm_row.pubkey,
-            radroots_replica_schema::nostr_profile::NostrProfile {
-                id: "00000000-0000-0000-0000-000000000001".to_string(),
-                created_at: "2024-01-01T00:00:00.000Z".to_string(),
-                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
-                public_key: farm_row.pubkey.clone(),
-                profile_type: "farm".to_string(),
-                name: "farm".to_string(),
-                display_name: None,
-                about: None,
-                website: None,
-                picture: None,
-                banner: None,
-                nip05: None,
-                lud06: None,
-                lud16: None,
-            },
-        )
-        .expect("profile farm");
-        assert!(!profile_event_farm.tags.is_empty());
-        let profile_event_unknown = profile_event(
-            &"6".repeat(64),
-            radroots_replica_schema::nostr_profile::NostrProfile {
-                id: "00000000-0000-0000-0000-000000000002".to_string(),
-                created_at: "2024-01-01T00:00:00.000Z".to_string(),
-                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
-                public_key: "6".repeat(64),
-                profile_type: "legacy".to_string(),
-                name: "legacy".to_string(),
-                display_name: None,
-                about: None,
-                website: None,
-                picture: None,
-                banner: None,
-                nip05: None,
-                lud06: None,
-                lud16: None,
-            },
-        )
-        .expect("profile legacy");
-        assert!(profile_event_unknown.tags.is_empty());
-
-        let profile_content = serialize_profile_content(&RadrootsProfile {
-            name: "name".to_string(),
-            display_name: Some("display".to_string()),
-            nip05: Some("nip05".to_string()),
-            about: Some("about".to_string()),
-            website: Some("website".to_string()),
-            picture: Some("picture".to_string()),
-            banner: Some("banner".to_string()),
-            lud06: Some("lud06".to_string()),
-            lud16: Some("lud16".to_string()),
-            bot: None,
-        })
-        .expect("serialize profile");
-        assert!(profile_content.contains("\"name\":\"name\""));
-
-        let member_pubkeys = collect_member_pubkeys(&exec, &farm_row.id).expect("member pubkeys");
-        assert!(!member_pubkeys.is_empty());
-        let profile_pubkeys = collect_profile_pubkeys(&exec, &farm_row).expect("profile pubkeys");
-        assert!(!profile_pubkeys.is_empty());
         let claims = load_member_claims(&exec, &farm_row.pubkey).expect("claims");
         assert!(!claims.is_empty());
         let member_claims =
             load_member_claims_for_member(&exec, &"6".repeat(64)).expect("claims by member");
         assert!(!member_claims.is_empty());
 
-        let profile_events = radroots_replica_profile_events(&exec, &farm_row).expect("profiles");
-        assert!(!profile_events.is_empty());
         let farm_event = radroots_replica_farm_event(&exec, &farm_row).expect("farm event");
         assert_eq!(farm_event.kind, KIND_FARM);
         let plot_events = radroots_replica_plot_events(&exec, &farm_row).expect("plot events");
@@ -1611,7 +1386,6 @@ mod tests {
                 pubkey: None,
             },
             Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(true),
                 include_list_sets: Some(true),
                 include_membership_claims: Some(true),
             }),
@@ -1724,7 +1498,6 @@ mod tests {
             &exec,
             &selector,
             Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
                 include_list_sets: Some(false),
                 include_membership_claims: Some(false),
             }),
@@ -1751,84 +1524,6 @@ mod tests {
         )
         .expect("resolve by pair");
         assert_eq!(by_pair.id, farm.id);
-    }
-
-    #[test]
-    fn emit_profile_variants_and_missing_profiles_are_handled() {
-        let exec = SqlxSqliteExecutor::open_memory().expect("db");
-        let (farm_row, _, _) = seed(&exec);
-
-        let _ = farm_member::create(
-            &exec,
-            &IFarmMemberFields {
-                farm_id: farm_row.id.clone(),
-                member_pubkey: "3".repeat(64),
-                role: ROLE_MEMBER.to_string(),
-            },
-        )
-        .expect("member");
-
-        let profiles = radroots_replica_profile_events(&exec, &farm_row).expect("profiles");
-        assert!(!profiles.is_empty());
-
-        let profile_coop = profile_event(
-            &"c".repeat(64),
-            radroots_replica_schema::nostr_profile::NostrProfile {
-                id: "00000000-0000-0000-0000-0000000000c0".to_string(),
-                created_at: "2024-01-01T00:00:00.000Z".to_string(),
-                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
-                public_key: "c".repeat(64),
-                profile_type: "coop".to_string(),
-                name: "coop".to_string(),
-                display_name: None,
-                about: None,
-                website: None,
-                picture: None,
-                banner: None,
-                nip05: None,
-                lud06: None,
-                lud16: None,
-            },
-        )
-        .expect("profile coop");
-        assert!(!profile_coop.tags.is_empty());
-
-        let profile_any = profile_event(
-            &"a".repeat(64),
-            radroots_replica_schema::nostr_profile::NostrProfile {
-                id: "00000000-0000-0000-0000-0000000000a0".to_string(),
-                created_at: "2024-01-01T00:00:00.000Z".to_string(),
-                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
-                public_key: "a".repeat(64),
-                profile_type: "any".to_string(),
-                name: "any".to_string(),
-                display_name: None,
-                about: None,
-                website: None,
-                picture: None,
-                banner: None,
-                nip05: None,
-                lud06: None,
-                lud16: None,
-            },
-        )
-        .expect("profile any");
-        assert!(!profile_any.tags.is_empty());
-
-        let profile_sparse = serialize_profile_content(&RadrootsProfile {
-            name: "sparse".to_string(),
-            display_name: None,
-            nip05: None,
-            about: None,
-            website: None,
-            picture: None,
-            banner: None,
-            lud06: None,
-            lud16: None,
-            bot: None,
-        })
-        .expect("serialize");
-        assert!(profile_sparse.contains("\"name\""));
     }
 
     #[test]
@@ -1908,13 +1603,6 @@ mod tests {
         };
         assert!(load_plot_location(&plot_location_fail, &plot).is_err());
 
-        let profile_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "nostr_profile",
-            err: SqlError::Internal,
-        };
-        assert!(load_profile(&profile_fail, "p").is_err());
-
         let claims_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member_claim",
@@ -1922,7 +1610,6 @@ mod tests {
         };
         assert!(load_member_claims(&claims_fail, "p").is_err());
         assert!(load_member_claims_for_member(&claims_fail, "p").is_err());
-        assert!(collect_profile_pubkeys(&claims_fail, &farm).is_err());
     }
 
     #[test]
@@ -1962,19 +1649,6 @@ mod tests {
             pubkey: None,
         };
 
-        let profile_query_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "farm_member_claim",
-            err: SqlError::Internal,
-        };
-        assert!(radroots_replica_profile_events(&profile_query_fail, &farm_row).is_err());
-        let profile_load_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "nostr_profile",
-            err: SqlError::Internal,
-        };
-        assert!(radroots_replica_profile_events(&profile_load_fail, &farm_row).is_err());
-
         let farm_tag_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_tag",
@@ -2003,23 +1677,6 @@ mod tests {
         };
         assert!(radroots_replica_membership_claim_events(&claims_fail, &farm_row.pubkey).is_err());
 
-        let sync_profiles_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "nostr_profile",
-            err: SqlError::Internal,
-        };
-        assert!(
-            radroots_replica_sync_all_with_options(
-                &sync_profiles_fail,
-                &selector,
-                Some(&RadrootsReplicaSyncOptions {
-                    include_profiles: Some(true),
-                    include_list_sets: Some(false),
-                    include_membership_claims: Some(false),
-                }),
-            )
-            .is_err()
-        );
         let sync_farm_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_tag",
@@ -2030,7 +1687,6 @@ mod tests {
                 &sync_farm_fail,
                 &selector,
                 Some(&RadrootsReplicaSyncOptions {
-                    include_profiles: Some(false),
                     include_list_sets: Some(false),
                     include_membership_claims: Some(false),
                 }),
@@ -2047,7 +1703,6 @@ mod tests {
                 &sync_plot_fail,
                 &selector,
                 Some(&RadrootsReplicaSyncOptions {
-                    include_profiles: Some(false),
                     include_list_sets: Some(false),
                     include_membership_claims: Some(false),
                 }),
@@ -2064,7 +1719,6 @@ mod tests {
                 &sync_list_set_fail,
                 &selector,
                 Some(&RadrootsReplicaSyncOptions {
-                    include_profiles: Some(false),
                     include_list_sets: Some(true),
                     include_membership_claims: Some(false),
                 }),
@@ -2081,7 +1735,6 @@ mod tests {
                 &sync_claims_fail,
                 &selector,
                 Some(&RadrootsReplicaSyncOptions {
-                    include_profiles: Some(false),
                     include_list_sets: Some(false),
                     include_membership_claims: Some(true),
                 }),
@@ -2097,14 +1750,6 @@ mod tests {
     fn emit_additional_error_branches_are_reported() {
         let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_row, _, _) = seed(&exec);
-
-        crate::canonical::failpoints::set_error();
-        assert!(radroots_replica_profile_events(&exec, &farm_row).is_err());
-        let farm_profile = load_profile(&exec, &farm_row.pubkey)
-            .expect("load profile")
-            .expect("farm profile");
-        crate::canonical::failpoints::set_error();
-        assert!(profile_event(&farm_row.pubkey, farm_profile).is_err());
 
         let farm_location_fail = QueryFailExecutor {
             inner: &exec,
@@ -2200,14 +1845,6 @@ mod tests {
         assert!(
             load_relation_by_role(&exec, &farm_row.id, ROLE_PRIMARY, RelationType::Farm).is_err()
         );
-
-        let member_fail = QueryFailExecutor {
-            inner: &exec,
-            needle: "farm_member",
-            err: SqlError::Internal,
-        };
-        assert!(collect_member_pubkeys(&member_fail, &farm_row.id).is_err());
-        assert!(collect_profile_pubkeys(&member_fail, &farm_row).is_err());
 
         let list_plot_fail = QueryFailExecutor {
             inner: &exec,
@@ -2455,11 +2092,6 @@ mod tests {
             )
             .is_err()
         );
-
-        let member_pubkeys = collect_member_pubkeys(&pass, &farm_row.id).expect("member pubkeys");
-        assert!(!member_pubkeys.is_empty());
-        let profile_pubkeys = collect_profile_pubkeys(&pass, &farm_row).expect("profile pubkeys");
-        assert!(!profile_pubkeys.is_empty());
 
         assert!(
             load_relation_by_role(&pass, &farm_row.id, ROLE_PRIMARY, RelationType::Farm)

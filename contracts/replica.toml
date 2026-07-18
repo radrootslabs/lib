@@ -1,6 +1,8 @@
-[replica]
+schema_version = 1
+
+[contract]
 name = "radroots_replica_contract"
-version = "0.1.0"
+version = "1.0.0-alpha.1"
 purpose = "offline-first local replica state and deterministic sync"
 
 [crate_family]
@@ -12,3 +14,10 @@ sync = "radroots_replica_sync"
 transport_agnostic_sync_core = true
 deterministic_emit_and_ingest = true
 forbid_legacy_alias_identifiers = true
+profile_event_emission = "excluded"
+unknown_sync_request_fields = "reject"
+
+[transfer]
+version = 2
+source = "crates/replica_sync/src/types.rs"
+constant = "RADROOTS_REPLICA_TRANSFER_VERSION"

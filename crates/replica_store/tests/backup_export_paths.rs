@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use radroots_replica_store::backup::{
-    DATABASE_BACKUP_VERSION, DatabaseBackup, REPLICA_STORE_VERSION, SchemaEntry, TableData,
+    DATABASE_BACKUP_VERSION, DatabaseBackup, REPLICA_STORE_SCHEMA_VERSION, SchemaEntry, TableData,
     export_database_backup, export_database_backup_json, restore_database_backup,
 };
 use radroots_replica_store::export::export_manifest;
@@ -171,13 +171,13 @@ fn backup_public_api_error_paths_cover_library_instantiations() {
     assert!(backup_json.contains("\"schema\":[]"));
 
     let executor = PatternExecutor::new();
-    let backup = backup_with_versions("0.0.1", REPLICA_STORE_VERSION);
+    let backup = backup_with_versions("0.0.1", REPLICA_STORE_SCHEMA_VERSION);
     assert_sql_error_code(
         restore_database_backup(&executor, &backup),
         "ERR_INVALID_ARGUMENT",
     );
 
-    let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_VERSION);
+    let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_STORE_SCHEMA_VERSION);
     let executor = PatternExecutor::new().with_exec_failure("PRAGMA foreign_keys = OFF;");
     assert_sql_error_code(
         restore_database_backup(&executor, &backup),
@@ -214,7 +214,7 @@ fn backup_public_api_error_paths_cover_library_instantiations() {
 fn backup_public_api_insert_and_parse_failures_cover_library_instantiations() {
     let backup = DatabaseBackup {
         format_version: DATABASE_BACKUP_VERSION.to_string(),
-        replica_store_version: REPLICA_STORE_VERSION.to_string(),
+        replica_store_version: REPLICA_STORE_SCHEMA_VERSION.to_string(),
         schema: vec![SchemaEntry {
             object_type: String::from("table"),
             name: String::from("tb_a"),

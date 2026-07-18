@@ -1,6 +1,6 @@
 {
   "suite": "knowledge_manifest_and_decode",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "knowledge_manifest_fields_valid_001",

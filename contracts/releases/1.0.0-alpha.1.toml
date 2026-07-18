@@ -1,0 +1,79 @@
+schema_version = 1
+
+[release]
+version = "1.0.0-alpha.1"
+previous_version = "0.1.0-alpha.2"
+contract_base_version = "1.0.0"
+status = "unreleased"
+
+[artifacts]
+changelog = "CHANGELOG.md"
+manifest = "contracts/manifest.toml"
+operations = "contracts/operations.toml"
+replica = "contracts/replica.toml"
+conformance = "contracts/conformance"
+
+[[changes]]
+id = "calendar-nip52-typestate"
+classification = "breaking"
+semver_impacts = [
+  "remove_exported_type",
+  "remove_exported_field",
+  "remove_exported_function",
+  "change_exported_field_type",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace legacy calendar authoring models with authored, parsed, and admitted NIP-52 states."
+
+[[changes]]
+id = "authored-blossom-media-proof"
+classification = "breaking"
+semver_impacts = ["remove_exported_type", "change_exported_field_type"]
+summary = "Require byte-verified Blossom image proofs at strict profile and calendar authoring boundaries."
+
+[[changes]]
+id = "legacy-profile-authoring-removal"
+classification = "breaking"
+semver_impacts = [
+  "remove_exported_type",
+  "remove_exported_field",
+  "remove_exported_function",
+  "remove_exported_module",
+  "remove_exported_trait_impl",
+  "remove_public_cargo_feature",
+  "change_exported_enum_variant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Remove direct profile draft encoding, the radroots_identity profile Cargo feature, and identity publishing paths that bypass authored validation; reject identity files containing the retired embedded profile projection."
+
+[[changes]]
+id = "nostr-client-boundary"
+classification = "breaking"
+semver_impacts = ["remove_exported_trait_impl"]
+summary = "Remove implicit Deref access to the upstream Nostr SDK client while retaining narrow operations and an explicit ownership bridge."
+
+[[changes]]
+id = "replica-profile-compatibility"
+classification = "breaking"
+semver_impacts = [
+  "remove_exported_field",
+  "remove_exported_function",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Stop synthesizing lossy Profile events from replica projections, remove the include_profiles sync option, reject obsolete request fields, and advance the transfer contract to version 2."
+
+[[changes]]
+id = "replica-backup-schema-version"
+classification = "breaking"
+semver_impacts = [
+  "remove_exported_constant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Decouple replica backup compatibility from package SemVer and retain restore support for schema-compatible 0.1.0-alpha.2 backups."
+
+[[changes]]
+id = "workspace-version-lockstep"
+classification = "fix"
+semver_impacts = ["fix_packaging_metadata"]
+summary = "Move the workspace and event contract to the 1.0.0-alpha.1 version cohort with exact internal requirements."

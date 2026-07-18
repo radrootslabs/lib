@@ -7,8 +7,6 @@ use nostr::{
     nips::nip19::{FromBech32, ToBech32},
     nips::nip49::{EncryptedSecretKey, KeySecurity},
 };
-#[cfg(feature = "profile")]
-use radroots_event::profile::RadrootsProfile;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -37,6 +35,7 @@ pub struct RadrootsIdentity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsIdentityPublic {
     pub id: RadrootsIdentityId,
     pub public_key_hex: String,
@@ -46,6 +45,7 @@ pub struct RadrootsIdentityPublic {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsIdentityProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
@@ -53,12 +53,10 @@ pub struct RadrootsIdentityProfile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
-    #[cfg(feature = "profile")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profile: Option<RadrootsProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsIdentityFile {
     pub secret_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -69,9 +67,6 @@ pub struct RadrootsIdentityFile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
-    #[cfg(feature = "profile")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profile: Option<RadrootsProfile>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -187,15 +182,7 @@ impl RadrootsIdentityPublic {
 
 impl RadrootsIdentityProfile {
     pub fn is_empty(&self) -> bool {
-        #[cfg(feature = "profile")]
-        let profile_empty = self.profile.is_none();
-        #[cfg(not(feature = "profile"))]
-        let profile_empty = true;
-
-        self.identifier.is_none()
-            && self.metadata.is_none()
-            && self.application_handler.is_none()
-            && profile_empty
+        self.identifier.is_none() && self.metadata.is_none() && self.application_handler.is_none()
     }
 }
 
@@ -359,17 +346,6 @@ impl RadrootsIdentity {
             RadrootsIdentitySecretKeyFormat::Hex => self.secret_key_hex(),
             RadrootsIdentitySecretKeyFormat::Nsec => self.secret_key_nsec(),
         };
-        #[cfg(feature = "profile")]
-        let (identifier, metadata, application_handler, profile) = match &self.profile {
-            Some(profile) => (
-                profile.identifier.clone(),
-                profile.metadata.clone(),
-                profile.application_handler.clone(),
-                profile.profile.clone(),
-            ),
-            None => (None, None, None, None),
-        };
-        #[cfg(not(feature = "profile"))]
         let (identifier, metadata, application_handler) = match &self.profile {
             Some(profile) => (
                 profile.identifier.clone(),
@@ -378,26 +354,12 @@ impl RadrootsIdentity {
             ),
             None => (None, None, None),
         };
-        #[cfg(feature = "profile")]
-        {
-            RadrootsIdentityFile {
-                secret_key,
-                public_key: Some(self.public_key_hex()),
-                identifier,
-                metadata,
-                application_handler,
-                profile,
-            }
-        }
-        #[cfg(not(feature = "profile"))]
-        {
-            RadrootsIdentityFile {
-                secret_key,
-                public_key: Some(self.public_key_hex()),
-                identifier,
-                metadata,
-                application_handler,
-            }
+        RadrootsIdentityFile {
+            secret_key,
+            public_key: Some(self.public_key_hex()),
+            identifier,
+            metadata,
+            application_handler,
         }
     }
 
@@ -513,14 +475,6 @@ impl TryFrom<RadrootsIdentityFile> for RadrootsIdentity {
     fn try_from(file: RadrootsIdentityFile) -> Result<Self, Self::Error> {
         let keys = Keys::parse(&file.secret_key)?;
         validate_public_key(&keys, file.public_key.as_deref())?;
-        #[cfg(feature = "profile")]
-        let profile = RadrootsIdentityProfile {
-            identifier: file.identifier,
-            metadata: file.metadata,
-            application_handler: file.application_handler,
-            profile: file.profile,
-        };
-        #[cfg(not(feature = "profile"))]
         let profile = RadrootsIdentityProfile {
             identifier: file.identifier,
             metadata: file.metadata,

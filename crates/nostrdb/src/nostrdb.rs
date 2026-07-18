@@ -357,8 +357,8 @@ mod tests {
     use crate::query::RadrootsNostrdbQuerySpec;
     use crate::test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use futures::StreamExt;
+    use radroots_nostr::prelude::RadrootsNostrMetadata;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
-    use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
@@ -805,7 +805,7 @@ mod tests {
             .display_name(FIXTURE_ALICE_USERNAME)
             .about("coffee operator")
             .lud16(FIXTURE_ALICE_EMAIL);
-        let metadata_event = radroots_nostr_build_metadata_event(&metadata)
+        let metadata_event = RadrootsNostrEventBuilder::metadata(&metadata)
             .sign_with_keys(&keys)
             .expect("metadata event should sign");
         nostrdb

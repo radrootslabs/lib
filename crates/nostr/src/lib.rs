@@ -43,9 +43,6 @@ pub mod event_convert;
 #[cfg(feature = "events")]
 pub mod event_verify;
 
-#[cfg(all(feature = "client", feature = "codec"))]
-pub mod identity_profile;
-
 pub mod prelude {
     pub use crate::events::radroots_nostr_build_event;
 
@@ -72,7 +69,6 @@ pub mod prelude {
 
     pub use crate::events::{
         jobs::{radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result},
-        metadata::radroots_nostr_build_metadata_event,
         post::{
             radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
             radroots_nostr_post_events_filter,
@@ -89,17 +85,7 @@ pub mod prelude {
     pub use crate::events::application_handler::radroots_nostr_publish_application_handler;
 
     #[cfg(feature = "client")]
-    pub use crate::events::metadata::{
-        radroots_nostr_fetch_metadata_for_author, radroots_nostr_post_metadata_event,
-    };
-
-    #[cfg(all(feature = "client", feature = "codec"))]
-    pub use crate::identity_profile::{
-        radroots_nostr_publish_identity_profile, radroots_nostr_publish_identity_profile_with_type,
-    };
-
-    #[cfg(all(feature = "client", feature = "codec", feature = "events"))]
-    pub use crate::identity_profile::radroots_nostr_bootstrap_service_presence;
+    pub use crate::events::metadata::radroots_nostr_fetch_metadata_for_author;
 
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::events::post::radroots_nostr_fetch_post_events;
@@ -120,9 +106,9 @@ pub mod prelude {
     };
     #[cfg(feature = "client")]
     pub use crate::types::{
-        RadrootsNostrMonitor, RadrootsNostrMonitorNotification, RadrootsNostrOutput,
-        RadrootsNostrRelay, RadrootsNostrRelayPoolNotification, RadrootsNostrRelayStatus,
-        RadrootsNostrSubscribeAutoCloseOptions,
+        RadrootsNostrEventStream, RadrootsNostrMonitor, RadrootsNostrMonitorNotification,
+        RadrootsNostrOutput, RadrootsNostrRelay, RadrootsNostrRelayPoolNotification,
+        RadrootsNostrRelayStatus, RadrootsNostrSubscribeAutoCloseOptions,
     };
     pub use crate::util::radroots_nostr_npub_string;
 

@@ -3,7 +3,7 @@ use crate::{
     radroots_replica_sync_all,
 };
 use radroots_event::gcs::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE};
+use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::IFarmFields;
 use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
@@ -31,7 +31,7 @@ fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -
 }
 
 #[test]
-fn sync_all_emits_expected_order() {
+fn sync_all_emits_expected_order_without_lossy_profiles() {
     let exec = SqlxSqliteExecutor::open_memory().expect("exec");
     migrations::run_all_up(&exec).expect("migrations");
 
@@ -217,22 +217,54 @@ fn sync_all_emits_expected_order() {
     let bundle = radroots_replica_sync_all(&exec, &request).expect("sync");
 
     assert_eq!(bundle.version, RADROOTS_REPLICA_TRANSFER_VERSION);
-    assert_eq!(bundle.events.len(), 9);
+    assert_eq!(bundle.events.len(), 7);
     let kinds = bundle
         .events
         .iter()
         .map(|event| event.kind)
         .collect::<Vec<_>>();
-    assert_eq!(kinds[0], KIND_PROFILE);
-    assert_eq!(kinds[1], KIND_PROFILE);
-    assert_eq!(kinds[2], KIND_FARM);
-    assert_eq!(kinds[3], KIND_PLOT);
+    assert_eq!(kinds[0], KIND_FARM);
+    assert_eq!(kinds[1], KIND_PLOT);
+    assert!(kinds[2..].iter().all(|kind| *kind == KIND_LIST_SET_GENERIC));
+}
+
+#[test]
+fn sync_request_json_rejects_removed_profile_option() {
+    let encoded = serde_json::json!({
+        "farm": {
+            "id": "AAAAAAAAAAAAAAAAAAAAAA",
+            "d_tag": null,
+            "pubkey": null
+        },
+        "options": {
+            "include_list_sets": true,
+            "include_membership_claims": false
+        }
+    });
+    let request: RadrootsReplicaSyncRequest =
+        serde_json::from_value(encoded).expect("current sync request");
+    let options = request.options.expect("sync options");
+    assert_eq!(options.include_list_sets, Some(true));
+    assert_eq!(options.include_membership_claims, Some(false));
+    assert_eq!(RADROOTS_REPLICA_TRANSFER_VERSION, 2);
+
+    let legacy = serde_json::json!({
+        "farm": {
+            "id": "AAAAAAAAAAAAAAAAAAAAAA",
+            "d_tag": null,
+            "pubkey": null
+        },
+        "options": {
+            "include_profiles": true
+        }
+    });
+    let error = serde_json::from_value::<RadrootsReplicaSyncRequest>(legacy)
+        .expect_err("removed include_profiles option must fail closed");
     assert!(
-        kinds[4..8]
-            .iter()
-            .all(|kind| *kind == KIND_LIST_SET_GENERIC)
+        error
+            .to_string()
+            .contains("unknown field `include_profiles`")
     );
-    assert_eq!(kinds[8], KIND_LIST_SET_GENERIC);
 }
 
 #[test]

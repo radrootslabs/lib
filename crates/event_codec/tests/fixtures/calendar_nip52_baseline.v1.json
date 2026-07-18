@@ -1,6 +1,6 @@
 {
   "suite": "calendar_nip52_baseline",
-  "contract_version": "0.1.0",
+  "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "baseline_date_minimal_001",

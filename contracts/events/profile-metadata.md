@@ -19,22 +19,19 @@ pinned NIP-01, NIP-05, and NIP-24 documents at NIPs commit
 boundary. A caller must supply content from a kind-`0` event only after the
 event identifier and signature have been verified.
 
-The following authored paths remain compatibility-only. Their behavior is
-preserved, but none can satisfy the strict authored operation:
+The direct legacy `RadrootsProfile` codec, Profile-specific Nostr/network
+publish helpers, and replica Profile draft emission were removed in the
+`1.0.0-alpha.1` breaking contract. A replica Profile row is a lossy inbound
+projection and cannot prove author intent for a complete kind-`0` replacement.
+New authored callers must use `profile.build_authored_draft`. Generic raw event
+builders and send APIs remain protocol escape hatches; their ability to emit
+kind `0` does not make them Profile operation authority.
 
-| Compatibility surface | Exclusion reason |
-| --- | --- |
-| `RadrootsProfile` and `profile::encode::{to_metadata, to_wire_parts, to_wire_parts_with_profile_type, profile_type_tags, profile_build_tags}` (`profile.build_draft`) | accept arbitrary media strings, model `bot` as a string, and support a Radroots marker tag |
-| `radroots_nostr_build_metadata_event` and `radroots_nostr_post_metadata_event` | accept generic upstream metadata without the strict Profile typestates |
-| `RadrootsNostrClient::set_metadata` | publishes generic upstream metadata directly |
-| `radroots_nostr_publish_identity_profile*` and `radroots_nostr_bootstrap_service_presence` | publish the legacy identity Profile and can add the marker tag |
-| `NostrClientManager::publish_profile_event_blocking` | publishes generic metadata directly through the legacy network client |
-| `radroots_replica_sync` Profile draft emission | serializes stored legacy Profile fields without the strict authored model |
-
-New authored callers must use `profile.build_authored_draft`. Tightening or
-removing the compatibility paths is a separate breaking-release decision.
-Generic raw event builders and send APIs remain protocol escape hatches; their
-ability to emit kind `0` does not make them Profile operation authority.
+`RadrootsNostrClient` no longer dereferences implicitly to the upstream SDK
+client, so upstream Profile conveniences are not exposed through ordinary
+method resolution. `from_inner` and `into_inner` remain explicit low-level
+interoperability boundaries; once a caller takes that boundary, upstream APIs
+are outside the Radroots authored-operation contract.
 
 Legacy `profile::decode`, Nostr Profile adapters/fetchers, the network Profile
 fetch methods, and replica Profile ingest remain read-side compatibility paths.
@@ -49,8 +46,8 @@ control-free `name`, consistent with the NIP-24 recommendation that `name`
 remain present when `display_name` is used. The scoped optional fields are
 `display_name`, `about`, `nip05`, `bot`, `picture`, and `banner`; `bot` is a
 Boolean. NIP-05 values enter only through `RadrootsNip05Identifier`. Picture and
-banner values enter through `RadrootsAuthoredProfileImage`, which can wrap only
-an `image/*` `RadrootsBlossomByteVerifiedDescriptor`. There is no raw-string
+banner values enter through the shared `RadrootsAuthoredImage`, which can wrap
+only an `image/*` `RadrootsBlossomByteVerifiedDescriptor`. There is no raw-string
 media setter or unchecked deserialization path. Generic `website`, `lud06`, and
 `lud16` strings remain outside this strict authored operation.
 
@@ -126,7 +123,7 @@ making downstream matches exhaustive. Current stable codes are:
 | --- | --- |
 | NIP-05 syntax | `missing_separator`, `multiple_separators`, `invalid_local_part`, `invalid_domain` |
 | strict Profile construction | `invalid_name` |
-| strict Profile image construction | `media_type_not_image` |
+| shared authored image construction | `media_type_not_image` |
 | strict Profile encoding | `content_too_large` |
 | tolerant inbound parsing | `content_too_large`, `invalid_json`, `root_not_object`, `duplicate_field` |
 

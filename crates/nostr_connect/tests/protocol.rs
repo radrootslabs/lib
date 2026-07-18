@@ -430,7 +430,7 @@ fn checked_in_current_session_vectors_match_protocol_behavior() {
         include_str!("../../../contracts/conformance/vectors/nip46/current_session.v1.json");
     let document: Value = serde_json::from_str(vectors).expect("NIP-46 vector JSON");
     assert_eq!(document["suite"], "nip46_current_session");
-    assert_eq!(document["contract_version"], "0.1.0");
+    assert_eq!(document["contract_version"], "1.0.0");
     let entries = document["vectors"].as_array().expect("NIP-46 vectors");
 
     for entry in entries {

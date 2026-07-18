@@ -1822,7 +1822,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         "radroots.profile.metadata.v1",
         KIND_PROFILE,
         "Profile Metadata",
-        "RadrootsProfile",
+        "RadrootsAuthoredProfile / RadrootsInboundProfileMetadata",
         RadrootsEventClass::Replaceable,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,

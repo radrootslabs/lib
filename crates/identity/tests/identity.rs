@@ -1,7 +1,6 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::profile::RadrootsProfile;
 use radroots_identity::{
     DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
@@ -93,35 +92,55 @@ fn load_from_json_file_hex() {
 }
 
 #[test]
-fn load_from_json_file_profile() {
-    let mut identity = fixture_identity(FIXTURE_ALICE);
-    let profile = RadrootsProfile {
-        name: "relay-agent".to_string(),
-        display_name: Some("Relay Agent".to_string()),
-        nip05: None,
-        about: Some("hello".to_string()),
-        website: None,
-        picture: None,
-        banner: None,
-        lud06: None,
-        lud16: None,
-        bot: None,
-    };
-    identity.set_profile(RadrootsIdentityProfile {
-        profile: Some(profile),
-        ..Default::default()
-    });
-    let json = serde_json::to_string(&identity.to_file()).unwrap();
+fn legacy_embedded_profile_is_rejected_instead_of_silently_discarded() {
+    let identity = fixture_identity(FIXTURE_ALICE);
+    let mut file = serde_json::to_value(identity.to_file()).unwrap();
+    file.as_object_mut().unwrap().insert(
+        "profile".to_owned(),
+        serde_json::json!({
+            "name": "legacy-profile",
+            "picture": "https://example.test/unverified.png"
+        }),
+    );
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("identity.json");
-    std::fs::write(&path, json).unwrap();
+    let encoded = serde_json::to_vec_pretty(&file).unwrap();
+    std::fs::write(&path, &encoded).unwrap();
 
-    let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    let loaded_profile = loaded.profile().and_then(|p| p.profile.as_ref()).unwrap();
-    assert_eq!(loaded_profile.name, "relay-agent");
-    assert_eq!(loaded_profile.display_name.as_deref(), Some("Relay Agent"));
-    assert_eq!(loaded_profile.about.as_deref(), Some("hello"));
+    let error = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
+    assert!(
+        matches!(&error, IdentityError::InvalidJson(source) if source.to_string().contains("unknown field `profile`")),
+        "unexpected error: {error}"
+    );
+    assert_eq!(std::fs::read(path).unwrap(), encoded);
+}
+
+#[test]
+fn legacy_nested_identity_profile_is_rejected_without_rewriting() {
+    let identity = fixture_identity(FIXTURE_ALICE);
+    let mut public = serde_json::to_value(
+        identity
+            .to_public()
+            .with_profile(profile_with_identifier("alice")),
+    )
+    .unwrap();
+    public["profile"].as_object_mut().unwrap().insert(
+        "profile".to_owned(),
+        serde_json::json!({
+            "name": "legacy-profile",
+            "picture": "https://example.test/unverified.png"
+        }),
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("profile.json");
+    let encoded = serde_json::to_vec_pretty(&public).unwrap();
+    std::fs::write(&path, &encoded).unwrap();
+
+    let error = load_identity_profile(&path).unwrap_err();
+    assert!(matches!(error, IdentityError::InvalidJson(_)));
+    assert_eq!(std::fs::read(path).unwrap(), encoded);
 }
 
 #[test]

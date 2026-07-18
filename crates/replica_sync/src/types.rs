@@ -3,7 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
-pub const RADROOTS_REPLICA_TRANSFER_VERSION: u32 = 1;
+pub const RADROOTS_REPLICA_TRANSFER_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsReplicaEventDraft {
@@ -20,6 +20,7 @@ pub struct RadrootsReplicaSyncBundle {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsReplicaFarmSelector {
     pub id: Option<String>,
     pub d_tag: Option<String>,
@@ -27,13 +28,14 @@ pub struct RadrootsReplicaFarmSelector {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsReplicaSyncOptions {
-    pub include_profiles: Option<bool>,
     pub include_list_sets: Option<bool>,
     pub include_membership_claims: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsReplicaSyncRequest {
     pub farm: RadrootsReplicaFarmSelector,
     pub options: Option<RadrootsReplicaSyncOptions>,

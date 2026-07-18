@@ -1545,8 +1545,7 @@ mod tests {
     use radroots_event::listing::RadrootsListingProduct;
     use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation};
     use radroots_event::profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
-        radroots_profile_type_tag_value,
+        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
     };
     use radroots_event_codec::farm::encode as farm_encode;
     use radroots_event_codec::farm::list_sets as farm_list_sets;
@@ -1799,18 +1798,17 @@ mod tests {
         profile_type: Option<RadrootsProfileType>,
         name: &str,
     ) -> RadrootsEventEnvelope {
-        let profile = RadrootsProfile {
-            name: name.to_string(),
-            display_name: Some(format!("{name}-display")),
-            nip05: Some(format!("{name}@example.com")),
-            about: Some(format!("{name}-about")),
-            website: Some("https://example.com".to_string()),
-            picture: Some("https://example.com/p.png".to_string()),
-            banner: Some("https://example.com/b.png".to_string()),
-            lud06: Some("lud06".to_string()),
-            lud16: Some("lud16".to_string()),
-            bot: None,
-        };
+        let profile = serde_json::json!({
+            "name": name,
+            "display_name": format!("{name}-display"),
+            "nip05": format!("{name}@example.com"),
+            "about": format!("{name}-about"),
+            "website": "https://example.com",
+            "picture": "https://example.com/p.png",
+            "banner": "https://example.com/b.png",
+            "lud06": "lud06",
+            "lud16": "lud16"
+        });
         let mut tags = Vec::new();
         if let Some(profile_type) = profile_type {
             tags.push(vec![
@@ -1824,7 +1822,7 @@ mod tests {
             u64::from(created_at),
             KIND_PROFILE,
             tags,
-            serde_json::to_string(&profile).expect("profile json"),
+            profile.to_string(),
         )
     }
 

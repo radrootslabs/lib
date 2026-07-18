@@ -17,8 +17,7 @@ pub mod types;
 pub use emit::{
     radroots_replica_farm_event, radroots_replica_list_set_events,
     radroots_replica_membership_claim_events, radroots_replica_plot_events,
-    radroots_replica_profile_events, radroots_replica_sync_all,
-    radroots_replica_sync_all_with_options,
+    radroots_replica_sync_all, radroots_replica_sync_all_with_options,
 };
 pub use error::RadrootsReplicaEventsError;
 pub use ingest::{

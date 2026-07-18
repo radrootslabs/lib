@@ -79,7 +79,7 @@ const PROFILE_VECTOR_KIND_COUNTS: &[(&str, usize)] = &[
 fn checked_in_baseline_vectors_execute_against_tolerant_nip52_parsers() {
     let suite = conformance_suite(WORKSPACE_BASELINE_PATH, PACKAGED_BASELINE);
     assert_eq!(suite["suite"], "calendar_nip52_baseline");
-    assert_eq!(suite["contract_version"], "0.1.0");
+    assert_eq!(suite["contract_version"], "1.0.0");
     let vectors = suite["vectors"].as_array().expect("baseline vectors");
     assert_vector_kind_inventory(vectors, BASELINE_VECTOR_KIND_COUNTS);
     for vector in vectors {
@@ -91,7 +91,7 @@ fn checked_in_baseline_vectors_execute_against_tolerant_nip52_parsers() {
 fn checked_in_profile_vectors_execute_against_authored_and_admission_apis() {
     let suite = conformance_suite(WORKSPACE_PROFILE_PATH, PACKAGED_PROFILE);
     assert_eq!(suite["suite"], "calendar_radroots_profile");
-    assert_eq!(suite["contract_version"], "0.1.0");
+    assert_eq!(suite["contract_version"], "1.0.0");
     let vectors = suite["vectors"].as_array().expect("profile vectors");
     assert_vector_kind_inventory(vectors, PROFILE_VECTOR_KIND_COUNTS);
     for vector in vectors {

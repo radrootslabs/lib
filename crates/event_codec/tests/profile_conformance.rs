@@ -3,10 +3,12 @@
 use std::{borrow::Cow, fs, path::Path};
 
 use radroots_blossom::{RadrootsBlossomBlobDescriptor, RadrootsBlossomByteVerifiedDescriptor};
-use radroots_event::profile::{
-    RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsAuthoredProfile,
-    RadrootsAuthoredProfileError, RadrootsAuthoredProfileImage, RadrootsAuthoredProfileImageError,
-    RadrootsNip05Identifier,
+use radroots_event::{
+    media::{RadrootsAuthoredImage, RadrootsAuthoredImageError},
+    profile::{
+        RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsAuthoredProfile,
+        RadrootsAuthoredProfileError, RadrootsNip05Identifier,
+    },
 };
 use radroots_event_codec::profile::{
     authored::{RadrootsAuthoredProfileEncodeError, authored_profile_to_wire_parts},
@@ -58,7 +60,7 @@ fn checked_in_profile_vectors_execute_against_strict_and_tolerant_public_apis() 
     let vectors = conformance_vectors();
     let suite: Suite = serde_json::from_str(&vectors).expect("Profile vectors must parse");
     assert_eq!(suite.suite, "profile_metadata");
-    assert_eq!(suite.contract_version, "0.1.0");
+    assert_eq!(suite.contract_version, "1.0.0");
     assert!(!suite.vectors.is_empty());
 
     for vector in &suite.vectors {
@@ -205,9 +207,9 @@ fn authored_image_invalid(vector: &Vector) {
     let input: AuthoredMediaInput = serde_json::from_value(vector.input["media"].clone())
         .unwrap_or_else(|error| panic!("{} media fixture failed: {error}", vector.id));
     let descriptor = verified_descriptor(&input, &vector.id);
-    let error = RadrootsAuthoredProfileImage::try_from(descriptor)
-        .expect_err("non-image Profile media must fail");
-    assert_eq!(error, RadrootsAuthoredProfileImageError::MediaTypeNotImage);
+    let error =
+        RadrootsAuthoredImage::try_from(descriptor).expect_err("non-image Profile media must fail");
+    assert_eq!(error, RadrootsAuthoredImageError::MediaTypeNotImage);
     assert_eq!(error.code(), expected_str(vector, "error"));
 }
 
@@ -259,8 +261,8 @@ fn authored_profile(input: &Value, vector_id: &str) -> RadrootsAuthoredProfile {
     profile
 }
 
-fn authored_image(input: &AuthoredMediaInput, vector_id: &str) -> RadrootsAuthoredProfileImage {
-    RadrootsAuthoredProfileImage::try_from(verified_descriptor(input, vector_id))
+fn authored_image(input: &AuthoredMediaInput, vector_id: &str) -> RadrootsAuthoredImage {
+    RadrootsAuthoredImage::try_from(verified_descriptor(input, vector_id))
         .unwrap_or_else(|error| panic!("{vector_id} Profile image failed: {error}"))
 }
 
