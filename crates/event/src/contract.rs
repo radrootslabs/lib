@@ -4031,6 +4031,34 @@ mod tests {
             &[],
             r#"{"domain": "radroots.trade", "type": "proposal"}"#
         ));
+
+        let base = *event_contract("radroots.trade.proposal.v1").expect("trade proposal");
+        for discriminator in [
+            RadrootsEventDiscriminator::ContentJsonFieldEquals {
+                field: "type",
+                value: "proposal",
+            },
+            RadrootsEventDiscriminator::EnvelopeType("proposal"),
+        ] {
+            let contract = RadrootsEventContract {
+                discriminator,
+                ..base
+            };
+            assert!(validate_discriminator_parts(r#"{"type":"proposal"}"#, &contract).is_ok());
+            assert!(matches!(
+                validate_discriminator_parts(r#"{"type":"decision"}"#, &contract),
+                Err(RadrootsContractValidationError::ContentFieldMismatch { .. })
+            ));
+            assert!(matches!(
+                validate_discriminator_parts("{}", &contract),
+                Err(RadrootsContractValidationError::MissingContentField { .. })
+            ));
+        }
+        let contract = RadrootsEventContract {
+            discriminator: RadrootsEventDiscriminator::KindOnly,
+            ..base
+        };
+        assert!(validate_discriminator_parts("not-json", &contract).is_ok());
     }
 
     #[test]

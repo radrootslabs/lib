@@ -787,4 +787,153 @@ mod tests {
             Some(u64::from(u32::MAX) + 1)
         );
     }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn typed_envelope_api_and_error_contracts_are_complete() {
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingTimestamp {
+            value: RadrootsEventTimestamp,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingKind {
+            value: RadrootsEventKind,
+        }
+        #[allow(dead_code)]
+        #[derive(Debug, serde::Deserialize)]
+        struct MissingTags {
+            value: RadrootsEventTags,
+        }
+
+        for message in [
+            serde_json::from_str::<MissingTimestamp>("{}")
+                .expect_err("missing timestamp")
+                .to_string(),
+            serde_json::from_str::<MissingKind>("{}")
+                .expect_err("missing kind")
+                .to_string(),
+            serde_json::from_str::<MissingTags>("{}")
+                .expect_err("missing tags")
+                .to_string(),
+        ] {
+            assert!(message.contains("missing field `value`"));
+        }
+
+        let timestamp = RadrootsEventTimestamp::from(42);
+        assert_eq!(timestamp.as_u64(), 42);
+        assert_eq!(
+            serde_json::from_str::<RadrootsEventTimestamp>(
+                &serde_json::to_string(&timestamp).expect("timestamp json"),
+            )
+            .expect("timestamp"),
+            timestamp
+        );
+        let kind = RadrootsEventKind::from(30_023);
+        assert_eq!(kind.as_u32(), 30_023);
+        assert_eq!(
+            serde_json::from_str::<RadrootsEventKind>(
+                &serde_json::to_string(&kind).expect("kind json"),
+            )
+            .expect("kind"),
+            kind
+        );
+
+        let parse_error = RadrootsEventId::parse("bad").expect_err("invalid id");
+        for error in [
+            RadrootsEventEnvelopeError::InvalidId(parse_error.clone()),
+            RadrootsEventEnvelopeError::InvalidAuthor(parse_error.clone()),
+            RadrootsEventEnvelopeError::InvalidSignature(parse_error),
+            RadrootsEventEnvelopeError::NonCanonicalId,
+            RadrootsEventEnvelopeError::NonCanonicalAuthor,
+            RadrootsEventEnvelopeError::NonCanonicalSignature,
+            RadrootsEventEnvelopeError::EmptyTag { index: 1 },
+            RadrootsEventEnvelopeError::EmptyTagKey { index: 1 },
+            RadrootsEventEnvelopeError::ControlCharacterTagKey { index: 1 },
+            RadrootsEventEnvelopeError::ContentTooLarge { max: 1, actual: 2 },
+            RadrootsEventEnvelopeError::TooManyTags { max: 1, actual: 2 },
+            RadrootsEventEnvelopeError::TagElementTooLarge {
+                tag_index: 1,
+                element_index: 2,
+                max: 3,
+                actual: 4,
+            },
+            RadrootsEventEnvelopeError::TagsTooLarge { max: 1, actual: 2 },
+        ] {
+            assert!(!error.to_string().is_empty());
+        }
+
+        let tag = RadrootsEventTag::new(0, vec!["t".to_owned(), "soil".to_owned()]).expect("tag");
+        assert_eq!(tag.clone().into_vec(), vec!["t", "soil"]);
+        let tag_json = serde_json::to_string(&tag).expect("tag json");
+        assert_eq!(
+            serde_json::from_str::<RadrootsEventTag>(&tag_json).expect("tag"),
+            tag
+        );
+        assert!(serde_json::from_str::<RadrootsEventTag>("[]").is_err());
+        assert!(
+            RadrootsEventTag::new_with_limits(
+                0,
+                vec!["tag".to_owned()],
+                RadrootsEventEnvelopeLimits {
+                    max_total_tag_bytes: 2,
+                    ..RadrootsEventEnvelopeLimits::default()
+                },
+            )
+            .is_err()
+        );
+
+        let empty_tags = RadrootsEventTags::new(Vec::new()).expect("empty tags");
+        assert_eq!(empty_tags.len(), 0);
+        assert!(empty_tags.is_empty());
+        assert!(empty_tags.clone().into_vec().is_empty());
+        let tags =
+            RadrootsEventTags::new(vec![vec!["t".to_owned(), "soil".to_owned()]]).expect("tags");
+        let tags_json = serde_json::to_string(&tags).expect("tags json");
+        assert_eq!(
+            serde_json::from_str::<RadrootsEventTags>(&tags_json).expect("tags"),
+            tags
+        );
+        assert!(serde_json::from_str::<RadrootsEventTags>("[[]]").is_err());
+
+        let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
+        assert_eq!(envelope.id().as_str(), envelope.id_str());
+        assert_eq!(envelope.author().as_str(), envelope.author_str());
+        assert_eq!(envelope.created_at().as_u64(), envelope.created_at_u64());
+        assert_eq!(envelope.kind().as_u32(), envelope.kind_u32());
+        assert_eq!(envelope.tags().to_vec(), envelope.tags_as_vec());
+        assert_eq!(envelope.tag_slices(), envelope.tags().as_slice());
+        assert_eq!(envelope.sig().as_str(), envelope.sig_str());
+        let wire = envelope.to_nip01_wire();
+        assert_eq!(wire.id, envelope.id_str());
+        let encoded = serde_json::to_string(&envelope).expect("envelope json");
+        assert_eq!(
+            serde_json::from_str::<RadrootsEventEnvelope>(&encoded).expect("envelope"),
+            envelope
+        );
+
+        for (field, value) in [
+            ("id", hex_64('A')),
+            ("author", hex_64('A')),
+            ("sig", hex_128('B')),
+        ] {
+            let mut parts = event_parts();
+            match field {
+                "id" => parts.id = value,
+                "author" => parts.author = value,
+                "sig" => parts.sig = value,
+                _ => unreachable!("fixture field"),
+            }
+            assert!(RadrootsEventEnvelope::new(parts).is_err());
+        }
+        for tags in [
+            vec![vec![String::new()]],
+            vec![vec!["line\nbreak".to_owned()]],
+        ] {
+            let mut parts = event_parts();
+            parts.tags = tags;
+            assert!(RadrootsEventEnvelope::new(parts).is_err());
+        }
+    }
 }
