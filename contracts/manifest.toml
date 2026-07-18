@@ -12,7 +12,11 @@ model_crates = [
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_blossom", "radroots_event_codec"]
+algorithm_crates = [
+  "radroots_blossom",
+  "radroots_event_codec",
+  "radroots_nostr",
+]
 
 [surface.rust_crate_tiers]
 advanced_substrate = [

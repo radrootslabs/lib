@@ -4,11 +4,21 @@
 
 extern crate alloc;
 
+pub mod authorization;
 pub mod descriptor;
 pub mod error;
 pub mod hash;
 pub mod url;
 
+pub use authorization::{
+    RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS, RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS,
+    RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, RadrootsBlossomAuthoredUploadClaim,
+    RadrootsBlossomAuthorizationAction, RadrootsBlossomAuthorizationContent,
+    RadrootsBlossomAuthorizationTarget, RadrootsBlossomAuthorizationValidation,
+    RadrootsBlossomAuthorizationWireParts, RadrootsBlossomParsedAuthorizationClaim,
+    RadrootsBlossomServerDomain, RadrootsBlossomServerScopeRequirement,
+    RadrootsBlossomValidatedAuthorizationClaim,
+};
 pub use descriptor::{
     RadrootsBlossomApprovedDescriptor, RadrootsBlossomBlobDescriptor,
     RadrootsBlossomByteCommitment, RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomMediaType,

@@ -4459,8 +4459,10 @@ dependencies = [
 name = "radroots_nostr"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "base64 0.22.1",
  "nostr",
  "nostr-sdk",
+ "radroots_blossom",
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",

@@ -94,10 +94,13 @@ let
     "radroots_identity"
     "radroots_replica_schema"
     "radroots_event_codec"
+    "radroots_nostr"
     "radroots_nostr_connect"
     "radroots_nostr_signer"
   ];
-  coreContractCargoArgs = lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates);
+  coreContractCargoArgs =
+    lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)
+    + " --features radroots_nostr/blossom";
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
   commonCraneArgs = {
     inherit version;

@@ -15,6 +15,7 @@ readme = "README"
 [features]
 default = ["std"]
 std = []
+blossom = ["std", "dep:base64", "dep:radroots_blossom"]
 client = ["std", "dep:nostr-sdk", "dep:radroots_identity"]
 codec = [
   "dep:radroots_event",
@@ -32,6 +33,8 @@ http = ["dep:reqwest"]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
 
 [dependencies]
+base64 = { workspace = true, optional = true }
+radroots_blossom = { workspace = true, optional = true, default-features = false }
 radroots_event = { workspace = true, optional = true, default-features = false }
 radroots_event_codec = { workspace = true, optional = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [

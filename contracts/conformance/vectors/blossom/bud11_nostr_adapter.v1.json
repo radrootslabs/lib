@@ -1,0 +1,234 @@
+{
+  "suite": "blossom_bud11_nostr_adapter",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "decode-verified-upload",
+      "kind": "blossom.bud11.nostr.decode_verify.valid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMzAwIl0sWyJ4IiwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNCJdLFsic2VydmVyIiwiY2RuLmV4YW1wbGUuY29tIl1dLCJjb250ZW50IjoiVXBsb2FkIFZpY3RvcmlhIGZhcm0gcGhvdG8iLCJzaWciOiI4MmNhMWE2MWU3ZDdiZDlmYmQ4MzVlNmE0NjRhYzU2YmRlOWI3YTNiMTgwMDgyODMyMGNhMzA4YTEzNWMxNDQ0ZTFiNWZkOTE3YTVkMjA3ZWRiZTZkNzM3Y2ZjNDcwYTA4NGYyZGFmM2MzODA3ZjE1YjNjZWE1NmY2Yjg4Yzk3OSJ9",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photo\",\"sig\":\"82ca1a61e7d7bd9fbd835e6a464ac56bde9b7a3b1800828320ca308a135c1444e1b5fd917a5d207edbe6d737cfc470a084f2daf3c3807f15b3cea56f6b88c979\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com",
+          "server_scope": "required_any_match",
+          "now": 1700000001,
+          "max_created_age": 300
+        }
+      },
+      "expected": {
+        "event_id": "3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11",
+        "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "action": "upload",
+        "content": "Upload Victoria farm photo",
+        "created_at": 1700000000,
+        "expiration": 1700000300,
+        "hashes": ["2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"],
+        "servers": ["cdn.example.com"]
+      }
+    },
+    {
+      "id": "decode-leading-whitespace",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": " Nostr e30",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_header_whitespace" }
+    },
+    {
+      "id": "decode-wrong-scheme",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Bearer e30",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_header_scheme" }
+    },
+    {
+      "id": "decode-empty-payload",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr ",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "empty_header_payload" }
+    },
+    {
+      "id": "decode-padding-forbidden",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr e30=",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "header_padding_forbidden" }
+    },
+    {
+      "id": "decode-invalid-base64url-alphabet",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr +",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_header_base64" }
+    },
+    {
+      "id": "decode-noncanonical-base64url-tail",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr Zh",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "noncanonical_header_base64" }
+    },
+    {
+      "id": "decode-invalid-utf8",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr _w",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_header_utf8" }
+    },
+    {
+      "id": "decode-invalid-event-json-shape",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr e30",
+        "event_json": "{}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_json" }
+    },
+    {
+      "id": "decode-unknown-event-field",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMzAwIl0sWyJ4IiwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNCJdLFsic2VydmVyIiwiY2RuLmV4YW1wbGUuY29tIl1dLCJjb250ZW50IjoiVXBsb2FkIFZpY3RvcmlhIGZhcm0gcGhvdG8iLCJzaWciOiI4MmNhMWE2MWU3ZDdiZDlmYmQ4MzVlNmE0NjRhYzU2YmRlOWI3YTNiMTgwMDgyODMyMGNhMzA4YTEzNWMxNDQ0ZTFiNWZkOTE3YTVkMjA3ZWRiZTZkNzM3Y2ZjNDcwYTA4NGYyZGFmM2MzODA3ZjE1YjNjZWE1NmY2Yjg4Yzk3OSIsInVua25vd24iOnRydWV9",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photo\",\"sig\":\"82ca1a61e7d7bd9fbd835e6a464ac56bde9b7a3b1800828320ca308a135c1444e1b5fd917a5d207edbe6d737cfc470a084f2daf3c3807f15b3cea56f6b88c979\",\"unknown\":true}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_json" }
+    },
+    {
+      "id": "decode-duplicate-event-field",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsImtpbmQiOjI0MjQyLCJ0YWdzIjpbWyJ0IiwidXBsb2FkIl0sWyJleHBpcmF0aW9uIiwiMTcwMDAwMDMwMCJdLFsieCIsIjJjZjI0ZGJhNWZiMGEzMGUyNmU4M2IyYWM1YjllMjllMWIxNjFlNWMxZmE3NDI1ZTczMDQzMzYyOTM4Yjk4MjQiXSxbInNlcnZlciIsImNkbi5leGFtcGxlLmNvbSJdXSwiY29udGVudCI6IlVwbG9hZCBWaWN0b3JpYSBmYXJtIHBob3RvIiwic2lnIjoiODJjYTFhNjFlN2Q3YmQ5ZmJkODM1ZTZhNDY0YWM1NmJkZTliN2EzYjE4MDA4MjgzMjBjYTMwOGExMzVjMTQ0NGUxYjVmZDkxN2E1ZDIwN2VkYmU2ZDczN2NmYzQ3MGEwODRmMmRhZjNjMzgwN2YxNWIzY2VhNTZmNmI4OGM5NzkifQ",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"kind\":24242,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photo\",\"sig\":\"82ca1a61e7d7bd9fbd835e6a464ac56bde9b7a3b1800828320ca308a135c1444e1b5fd917a5d207edbe6d737cfc470a084f2daf3c3807f15b3cea56f6b88c979\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_json" }
+    },
+    {
+      "id": "decode-overflowed-event-kind",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6ODk3NzgsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMzAwIl0sWyJ4IiwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNCJdLFsic2VydmVyIiwiY2RuLmV4YW1wbGUuY29tIl1dLCJjb250ZW50IjoiVXBsb2FkIFZpY3RvcmlhIGZhcm0gcGhvdG8iLCJzaWciOiI4MmNhMWE2MWU3ZDdiZDlmYmQ4MzVlNmE0NjRhYzU2YmRlOWI3YTNiMTgwMDgyODMyMGNhMzA4YTEzNWMxNDQ0ZTFiNWZkOTE3YTVkMjA3ZWRiZTZkNzM3Y2ZjNDcwYTA4NGYyZGFmM2MzODA3ZjE1YjNjZWE1NmY2Yjg4Yzk3OSJ9",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":89778,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photo\",\"sig\":\"82ca1a61e7d7bd9fbd835e6a464ac56bde9b7a3b1800828320ca308a135c1444e1b5fd917a5d207edbe6d737cfc470a084f2daf3c3807f15b3cea56f6b88c979\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_kind", "actual_kind": 89778 }
+    },
+    {
+      "id": "decode-wrong-event-kind",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjE4NjhlOGFkNGNhNjZiN2E5YmI2ZGRhYWVjZGU2ZTVjYzVkMTE2ODJlODdhYmI2NTBhNmNlODg1Mzg1NGVmMDUiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MSwidGFncyI6W10sImNvbnRlbnQiOiIiLCJzaWciOiI0ODM1MTgzZDkzMmQ3M2ZjNmFhYTdjMTM3NDE3YzliMTgzZjVhZmFmNDk5NGRkMzU3MzlmMjllYjgyYjUxOTI2YmNhZjgyZGY3NjFjMDlhZDhjYTAzNDY3MGI1MmVmMjQzM2U1MzU1OTgzYWU0NGViNzVlOTI0NWYyZmU2ZmU3NiJ9",
+        "event_json": "{\"id\":\"1868e8ad4ca66b7a9bb6ddaaecde6e5cc5d11682e87abb650a6ce8853854ef05\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":1,\"tags\":[],\"content\":\"\",\"sig\":\"4835183d932d73fc6aaa7c137417c9b183f5afaf4994dd35739f29eb82b51926bcaf82df761c09ad8ca034670b52ef2433e5355983ae44eb75e9245f2fe6fe76\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_kind", "actual_kind": 1 }
+    },
+    {
+      "id": "decode-invalid-event-id-before-claim",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMzAwIl0sWyJ4IiwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNCJdLFsic2VydmVyIiwiY2RuLmV4YW1wbGUuY29tIl1dLCJjb250ZW50IjoiVXBsb2FkIFZpY3RvcmlhIGZhcm0gcGhvdG94Iiwic2lnIjoiODJjYTFhNjFlN2Q3YmQ5ZmJkODM1ZTZhNDY0YWM1NmJkZTliN2EzYjE4MDA4MjgzMjBjYTMwOGExMzVjMTQ0NGUxYjVmZDkxN2E1ZDIwN2VkYmU2ZDczN2NmYzQ3MGEwODRmMmRhZjNjMzgwN2YxNWIzY2VhNTZmNmI4OGM5NzkifQ",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photox\",\"sig\":\"82ca1a61e7d7bd9fbd835e6a464ac56bde9b7a3b1800828320ca308a135c1444e1b5fd917a5d207edbe6d737cfc470a084f2daf3c3807f15b3cea56f6b88c979\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_id" }
+    },
+    {
+      "id": "decode-invalid-event-signature-before-claim",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6IjNjYzQ1MmUyN2ZkYjk1NDE4YjBkMzViM2E3M2I5OTAyNTgyM2ViM2NhOWVhZjQ1Y2RkMWE0ZDAyZGM4ZGNmMTEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMzAwIl0sWyJ4IiwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNCJdLFsic2VydmVyIiwiY2RuLmV4YW1wbGUuY29tIl1dLCJjb250ZW50IjoiVXBsb2FkIFZpY3RvcmlhIGZhcm0gcGhvdG8iLCJzaWciOiI1YmIzMmVkZjMwY2MxYTJkNDlhNTUxYzc2YTExMzgxNDk4NzI1MjBlMDI4NjI4MjM5MjMzNTFjOGEyMzZkZTMwMjQxYTNlNDNkYjBlYTcyZWU4MTBmNGM4N2ZjYTQxMGU3ZTM5MjAyYmE2MDQ5NzM0ZWYzMTU3Y2VhYTRkOWEyZSJ9",
+        "event_json": "{\"id\":\"3cc452e27fdb95418b0d35b3a73b99025823eb3ca9eaf45cdd1a4d02dc8dcf11\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"tags\":[[\"t\",\"upload\"],[\"expiration\",\"1700000300\"],[\"x\",\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"],[\"server\",\"cdn.example.com\"]],\"content\":\"Upload Victoria farm photo\",\"sig\":\"5bb32edf30cc1a2d49a551c76a1138149872520e02862823923351c8a236de30241a3e43db0ea72ee810f4c87fca410e7e39202ba6049734ef3157ceaa4d9a2e\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_event_signature" }
+    },
+    {
+      "id": "decode-authenticated-invalid-claim",
+      "kind": "blossom.bud11.nostr.decode_verify.invalid",
+      "input": {
+        "header": "Nostr eyJpZCI6Ijc4YmVlMjI0NDIxNjA3MjNlMDRiZTgyYzhiZDAwNzVjNzkwNDY1YjRiOWYwYzFlMTllYzFiMWRhZWRlMGY0YjEiLCJwdWJrZXkiOiI3OWJlNjY3ZWY5ZGNiYmFjNTVhMDYyOTVjZTg3MGIwNzAyOWJmY2RiMmRjZTI4ZDk1OWYyODE1YjE2ZjgxNzk4IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltdLCJjb250ZW50IjoiIiwic2lnIjoiZGQwY2UwNTNiOTNlZmY2N2IyNTZhODA0YWI4MjE0M2JhY2YyMzE0ZTNhZDNmYjU0MGZkNzE5ZGU0N2NjN2M4NGNiNDhlMTQwYWJhMzJhNTFiZmMwYmI1ODNlOThjMDllNDliMjU2MTkxZDJjYzY5OGU4YTA1ODJlOTZlODY2MzAifQ",
+        "event_json": "{\"id\":\"78bee22442160723e04be82c8bd0075c790465b4b9f0c1e19ec1b1daede0f4b1\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1700000000,\"kind\":24242,\"tags\":[],\"content\":\"\",\"sig\":\"dd0ce053b93eff67b256a804ab82143bacf2314e3ad3fb540fd719de47cc7c84cb48e140aba32a51bfc0bb583e98c09e49b256191d2cc698e8a0582e96e86630\"}",
+        "validation": {
+          "target": { "type": "upload", "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" },
+          "server_domain": "cdn.example.com", "server_scope": "required_any_match",
+          "now": 1700000001, "max_created_age": 300
+        }
+      },
+      "expected": { "error": "invalid_authorization_content" }
+    }
+  ]
+}

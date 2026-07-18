@@ -1,0 +1,964 @@
+{
+  "suite": "blossom_bud11_claims",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "action-get",
+      "kind": "blossom.bud11.action.parse.valid",
+      "input": { "action": "get" },
+      "expected": { "action": "get" }
+    },
+    {
+      "id": "action-upload",
+      "kind": "blossom.bud11.action.parse.valid",
+      "input": { "action": "upload" },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "action-list",
+      "kind": "blossom.bud11.action.parse.valid",
+      "input": { "action": "list" },
+      "expected": { "action": "list" }
+    },
+    {
+      "id": "action-delete",
+      "kind": "blossom.bud11.action.parse.valid",
+      "input": { "action": "delete" },
+      "expected": { "action": "delete" }
+    },
+    {
+      "id": "action-media",
+      "kind": "blossom.bud11.action.parse.valid",
+      "input": { "action": "media" },
+      "expected": { "action": "media" }
+    },
+    {
+      "id": "action-empty",
+      "kind": "blossom.bud11.action.parse.invalid",
+      "input": { "action": "" },
+      "expected": { "error": "invalid_authorization_action" }
+    },
+    {
+      "id": "action-uppercase",
+      "kind": "blossom.bud11.action.parse.invalid",
+      "input": { "action": "Upload" },
+      "expected": { "error": "invalid_authorization_action" }
+    },
+    {
+      "id": "action-leading-space",
+      "kind": "blossom.bud11.action.parse.invalid",
+      "input": { "action": " upload" },
+      "expected": { "error": "invalid_authorization_action" }
+    },
+    {
+      "id": "action-trailing-space",
+      "kind": "blossom.bud11.action.parse.invalid",
+      "input": { "action": "upload " },
+      "expected": { "error": "invalid_authorization_action" }
+    },
+    {
+      "id": "action-unknown",
+      "kind": "blossom.bud11.action.parse.invalid",
+      "input": { "action": "mirror" },
+      "expected": { "error": "invalid_authorization_action" }
+    },
+    {
+      "id": "domain-basic",
+      "kind": "blossom.bud11.server_domain.parse.valid",
+      "input": { "domain": "blossom.radroots.test" },
+      "expected": { "domain": "blossom.radroots.test" }
+    },
+    {
+      "id": "domain-localhost",
+      "kind": "blossom.bud11.server_domain.parse.valid",
+      "input": { "domain": "localhost" },
+      "expected": { "domain": "localhost" }
+    },
+    {
+      "id": "domain-hyphen-and-digit",
+      "kind": "blossom.bud11.server_domain.parse.valid",
+      "input": { "domain": "blob-2.example.test" },
+      "expected": { "domain": "blob-2.example.test" }
+    },
+    {
+      "id": "domain-canonical-ipv4",
+      "kind": "blossom.bud11.server_domain.parse.valid",
+      "input": { "domain": "127.0.0.1" },
+      "expected": { "domain": "127.0.0.1" }
+    },
+    {
+      "id": "domain-max-label",
+      "kind": "blossom.bud11.server_domain.parse.valid",
+      "input": { "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test" },
+      "expected": { "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test" }
+    },
+    {
+      "id": "domain-empty",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-uppercase",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "Blossom.Radroots.Test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-scheme",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "https://blossom.radroots.test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-port",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom.radroots.test:443" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-path",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom.radroots.test/upload" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-trailing-dot",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom.radroots.test." },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-empty-label",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom..test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-leading-hyphen",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "-blossom.radroots.test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-trailing-hyphen",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom-.radroots.test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-underscore",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "blossom_server.radroots.test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-label-too-long",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-short-ipv4",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "127.1" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-leading-zero-ipv4",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "127.00.0.1" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "domain-out-of-range-ipv4",
+      "kind": "blossom.bud11.server_domain.parse.invalid",
+      "input": { "domain": "256.0.0.1" },
+      "expected": { "error": "invalid_authorization_server_domain" }
+    },
+    {
+      "id": "content-upload",
+      "kind": "blossom.bud11.content.parse.valid",
+      "input": { "content": "Upload farm photo" },
+      "expected": { "content": "Upload farm photo" }
+    },
+    {
+      "id": "content-delete",
+      "kind": "blossom.bud11.content.parse.valid",
+      "input": { "content": "Delete old farm photo" },
+      "expected": { "content": "Delete old farm photo" }
+    },
+    {
+      "id": "content-unicode",
+      "kind": "blossom.bud11.content.parse.valid",
+      "input": { "content": "Téléverser la photo" },
+      "expected": { "content": "Téléverser la photo" }
+    },
+    {
+      "id": "content-punctuation",
+      "kind": "blossom.bud11.content.parse.valid",
+      "input": { "content": "Upload: photo #2!" },
+      "expected": { "content": "Upload: photo #2!" }
+    },
+    {
+      "id": "content-empty",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": "" },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-space-only",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": " " },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-leading-space",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": " Upload farm photo" },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-trailing-space",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": "Upload farm photo " },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-newline",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": "Upload\nphoto" },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-tab",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": "Upload\tphoto" },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "content-control",
+      "kind": "blossom.bud11.content.parse.invalid",
+      "input": { "content": "Upload\u0000photo" },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "claim-parse-upload",
+      "kind": "blossom.bud11.claim.parse.valid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000060"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+          ["server", "blossom.radroots.test"]
+        ]
+      },
+      "expected": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "action": "upload",
+        "expiration": 2000000060,
+        "servers": ["blossom.radroots.test"],
+        "hashes": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+      }
+    },
+    {
+      "id": "claim-parse-unknown-tags-tolerated",
+      "kind": "blossom.bud11.claim.parse.valid",
+      "input": {
+        "content": "List farm photos",
+        "created_at": 1999999999,
+        "tags": [
+          ["client", "radroots", "future", "fields"],
+          ["t", "list"],
+          ["expiration", "2000000001"],
+          ["future-only"],
+          []
+        ]
+      },
+      "expected": {
+        "content": "List farm photos",
+        "created_at": 1999999999,
+        "action": "list",
+        "expiration": 2000000001,
+        "servers": [],
+        "hashes": []
+      }
+    },
+    {
+      "id": "claim-parse-known-trailing-elements-tolerated",
+      "kind": "blossom.bud11.claim.parse.valid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [
+          ["t", "upload", "ignored"],
+          ["expiration", "2000000060", "ignored", "again"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ignored"],
+          ["server", "blossom.radroots.test", "ignored"]
+        ]
+      },
+      "expected": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "action": "upload",
+        "expiration": 2000000060,
+        "servers": ["blossom.radroots.test"],
+        "hashes": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+      }
+    },
+    {
+      "id": "claim-parse-multiple-scopes",
+      "kind": "blossom.bud11.claim.parse.valid",
+      "input": {
+        "content": "Upload selected farm photos",
+        "created_at": 1999999990,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000060"],
+          ["server", "other.example.test"],
+          ["server", "blossom.radroots.test"],
+          ["x", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        ]
+      },
+      "expected": {
+        "content": "Upload selected farm photos",
+        "created_at": 1999999990,
+        "action": "upload",
+        "expiration": 2000000060,
+        "servers": ["other.example.test", "blossom.radroots.test"],
+        "hashes": [
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "id": "claim-parse-uppercase-tag-names-unknown",
+      "kind": "blossom.bud11.claim.parse.valid",
+      "input": {
+        "content": "Get farm photo",
+        "created_at": 1999999999,
+        "tags": [
+          ["T", "delete"],
+          ["Expiration", "1"],
+          ["Server", "BAD"],
+          ["X", "BAD"],
+          ["t", "get"],
+          ["expiration", "2000000001"]
+        ]
+      },
+      "expected": {
+        "content": "Get farm photo",
+        "created_at": 1999999999,
+        "action": "get",
+        "expiration": 2000000001,
+        "servers": [],
+        "hashes": []
+      }
+    },
+    {
+      "id": "claim-parse-invalid-content",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "2000000060"]]
+      },
+      "expected": { "error": "invalid_authorization_content" }
+    },
+    {
+      "id": "claim-parse-missing-action",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["expiration", "2000000060"]]
+      },
+      "expected": { "error": "missing_authorization_action_tag" }
+    },
+    {
+      "id": "claim-parse-duplicate-action",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["t", "upload"], ["expiration", "2000000060"]]
+      },
+      "expected": { "error": "duplicate_authorization_action_tag" }
+    },
+    {
+      "id": "claim-parse-conflicting-action",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["t", "delete"], ["expiration", "2000000060"]]
+      },
+      "expected": { "error": "duplicate_authorization_action_tag" }
+    },
+    {
+      "id": "claim-parse-action-missing-value",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t"], ["expiration", "2000000060"]]
+      },
+      "expected": { "error": "malformed_authorization_action_tag" }
+    },
+    {
+      "id": "claim-parse-action-invalid-value",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "UPLOAD"], ["expiration", "2000000060"]]
+      },
+      "expected": { "error": "malformed_authorization_action_tag" }
+    },
+    {
+      "id": "claim-parse-missing-expiration",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"]]
+      },
+      "expected": { "error": "missing_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-duplicate-expiration",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "2000000060"], ["expiration", "2000000061"]]
+      },
+      "expected": { "error": "duplicate_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-expiration-missing-value",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration"]]
+      },
+      "expected": { "error": "malformed_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-expiration-nondigit",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "later"]]
+      },
+      "expected": { "error": "malformed_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-expiration-negative",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "-1"]]
+      },
+      "expected": { "error": "malformed_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-expiration-overflow",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "18446744073709551616"]]
+      },
+      "expected": { "error": "malformed_authorization_expiration_tag" }
+    },
+    {
+      "id": "claim-parse-server-missing-value",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "2000000060"], ["server"]]
+      },
+      "expected": { "error": "malformed_authorization_server_tag" }
+    },
+    {
+      "id": "claim-parse-server-malformed-before-match",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000060"],
+          ["server", "https://bad.example"],
+          ["server", "blossom.radroots.test"]
+        ]
+      },
+      "expected": { "error": "malformed_authorization_server_tag" }
+    },
+    {
+      "id": "claim-parse-hash-missing-value",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [["t", "upload"], ["expiration", "2000000060"], ["x"]]
+      },
+      "expected": { "error": "malformed_authorization_hash_tag" }
+    },
+    {
+      "id": "claim-parse-hash-malformed-before-match",
+      "kind": "blossom.bud11.claim.parse.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "created_at": 1999999990,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000060"],
+          ["x", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        ]
+      },
+      "expected": { "error": "malformed_authorization_hash_tag" }
+    },
+    {
+      "id": "validation-max-age-zero",
+      "kind": "blossom.bud11.validation.new.valid",
+      "input": {
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 0
+      },
+      "expected": { "max_created_age": 0 }
+    },
+    {
+      "id": "validation-max-age-300",
+      "kind": "blossom.bud11.validation.new.valid",
+      "input": {
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "max_created_age": 300 }
+    },
+    {
+      "id": "validation-max-age-301",
+      "kind": "blossom.bud11.validation.new.invalid",
+      "input": {
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 301
+      },
+      "expected": { "error": "invalid_authorization_created_age" }
+    },
+    {
+      "id": "validate-get-no-hash-scope",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Get farm photo", "created_at": 2000000000, "tags": [["t", "get"], ["expiration", "2000000001"]] },
+        "target": { "type": "get_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "get" }
+    },
+    {
+      "id": "validate-get-multiple-hash-any-match",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Get selected farm photo", "created_at": 1999999990, "tags": [["t", "get"], ["expiration", "2000000060"], ["x", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "get_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "get" }
+    },
+    {
+      "id": "validate-upload",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Upload farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], ["server", "blossom.radroots.test"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "validate-list",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000060"], ["server", "blossom.radroots.test"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "list" }
+    },
+    {
+      "id": "validate-delete",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Delete farm photo", "created_at": 1999999990, "tags": [["t", "delete"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "delete_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "delete" }
+    },
+    {
+      "id": "validate-mirror-uses-upload",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Mirror farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "mirror", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "validate-media",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Transform farm photo", "created_at": 1999999990, "tags": [["t", "media"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "media", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "media" }
+    },
+    {
+      "id": "validate-list-ignores-valid-hash-scopes",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "list" }
+    },
+    {
+      "id": "validate-optional-server-absent",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Upload farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "validate-multiple-server-any-match",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Upload farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], ["server", "other.example.test"], ["server", "blossom.radroots.test"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "validate-multiple-hash-any-match-required",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "Upload selected farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "upload" }
+    },
+    {
+      "id": "validate-created-at-now",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 2000000000, "tags": [["t", "list"], ["expiration", "2000000001"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 0
+      },
+      "expected": { "action": "list" }
+    },
+    {
+      "id": "validate-horizon-300",
+      "kind": "blossom.bud11.claim.validate.valid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999701, "tags": [["t", "list"], ["expiration", "2000000001"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "action": "list" }
+    },
+    {
+      "id": "validate-action-mismatch",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "Upload farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]] },
+        "target": { "type": "delete_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_action_mismatch" }
+    },
+    {
+      "id": "validate-optional-server-mismatch",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000060"], ["server", "other.example.test"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_server_mismatch" }
+    },
+    {
+      "id": "validate-required-server-missing",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000060"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_server_required" }
+    },
+    {
+      "id": "validate-required-server-multiple-mismatch",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000060"], ["server", "one.example.test"], ["server", "two.example.test"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "required_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_server_mismatch" }
+    },
+    {
+      "id": "validate-required-hash-missing",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "Upload farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_hash_required" }
+    },
+    {
+      "id": "validate-required-hash-multiple-mismatch",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "Upload selected farm photo", "created_at": 1999999990, "tags": [["t", "upload"], ["expiration", "2000000060"], ["x", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], ["x", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]] },
+        "target": { "type": "upload", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_hash_mismatch" }
+    },
+    {
+      "id": "validate-get-optional-hash-mismatch",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "Get selected farm photo", "created_at": 1999999990, "tags": [["t", "get"], ["expiration", "2000000060"], ["x", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]] },
+        "target": { "type": "get_blob", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_hash_mismatch" }
+    },
+    {
+      "id": "validate-created-at-future",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 2000000001, "tags": [["t", "list"], ["expiration", "2000000002"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_created_in_future" }
+    },
+    {
+      "id": "validate-created-at-stale-301",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999699, "tags": [["t", "list"], ["expiration", "2000000001"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_stale" }
+    },
+    {
+      "id": "validate-expiration-at-now",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 1999999990, "tags": [["t", "list"], ["expiration", "2000000000"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "authorization_expired" }
+    },
+    {
+      "id": "validate-horizon-301",
+      "kind": "blossom.bud11.claim.validate.invalid",
+      "input": {
+        "claim": { "content": "List farm photos", "created_at": 2000000000, "tags": [["t", "list"], ["expiration", "2000000301"]] },
+        "target": { "type": "list" },
+        "server_domain": "blossom.radroots.test",
+        "server_scope": "optional_any_match",
+        "now": 2000000000,
+        "max_created_age": 300
+      },
+      "expected": { "error": "invalid_authorization_lifetime" }
+    },
+    {
+      "id": "authored-upload-lifetime-1",
+      "kind": "blossom.bud11.authored_upload.valid",
+      "input": {
+        "content": "Upload farm photo",
+        "server_domain": "blossom.radroots.test",
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 2000000000,
+        "lifetime": 1
+      },
+      "expected": {
+        "kind": 24242,
+        "content": "Upload farm photo",
+        "created_at": 2000000000,
+        "expiration": 2000000001,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000001"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+          ["server", "blossom.radroots.test"]
+        ]
+      }
+    },
+    {
+      "id": "authored-upload-lifetime-300",
+      "kind": "blossom.bud11.authored_upload.valid",
+      "input": {
+        "content": "Upload farm photo",
+        "server_domain": "blossom.radroots.test",
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 2000000000,
+        "lifetime": 300
+      },
+      "expected": {
+        "kind": 24242,
+        "content": "Upload farm photo",
+        "created_at": 2000000000,
+        "expiration": 2000000300,
+        "tags": [
+          ["t", "upload"],
+          ["expiration", "2000000300"],
+          ["x", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+          ["server", "blossom.radroots.test"]
+        ]
+      }
+    },
+    {
+      "id": "authored-upload-lifetime-zero",
+      "kind": "blossom.bud11.authored_upload.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "server_domain": "blossom.radroots.test",
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 2000000000,
+        "lifetime": 0
+      },
+      "expected": { "error": "invalid_authorization_lifetime" }
+    },
+    {
+      "id": "authored-upload-lifetime-301",
+      "kind": "blossom.bud11.authored_upload.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "server_domain": "blossom.radroots.test",
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 2000000000,
+        "lifetime": 301
+      },
+      "expected": { "error": "invalid_authorization_lifetime" }
+    },
+    {
+      "id": "authored-upload-expiration-overflow",
+      "kind": "blossom.bud11.authored_upload.invalid",
+      "input": {
+        "content": "Upload farm photo",
+        "server_domain": "blossom.radroots.test",
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "created_at": 18446744073709551615,
+        "lifetime": 1
+      },
+      "expected": { "error": "authorization_timestamp_overflow" }
+    }
+  ]
+}

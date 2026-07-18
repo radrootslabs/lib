@@ -27,6 +27,19 @@ public = [
   "RadrootsBlossomApprovedDescriptor",
   "RadrootsBlossomByteCommitment",
   "RadrootsBlossomByteVerifiedDescriptor",
+  "RadrootsBlossomAuthorizationAction",
+  "RadrootsBlossomAuthorizationContent",
+  "RadrootsBlossomServerDomain",
+  "RadrootsBlossomAuthorizationTarget",
+  "RadrootsBlossomServerScopeRequirement",
+  "RadrootsBlossomAuthorizationValidation",
+  "RadrootsBlossomParsedAuthorizationClaim",
+  "RadrootsBlossomValidatedAuthorizationClaim",
+  "RadrootsBlossomAuthorizationWireParts",
+  "RadrootsBlossomAuthoredUploadClaim",
+  "RadrootsNostrSignedBlossomAuthorization",
+  "RadrootsNostrBlossomAuthorizationHeader",
+  "RadrootsNostrVerifiedBlossomAuthorization",
   "RadrootsNip01EventWireParts",
   "RadrootsEventDraft",
   "RadrootsSignedEvent",
@@ -111,7 +124,11 @@ model_crates = [
   "radroots_trade",
   "radroots_identity",
 ]
-algorithm_crates = ["radroots_blossom", "radroots_event_codec"]
+algorithm_crates = [
+  "radroots_blossom",
+  "radroots_event_codec",
+  "radroots_nostr",
+]
 
 [operations.blossom_parse_hash_path]
 domain = "blossom"
@@ -185,6 +202,105 @@ rust_types = [
 
 [operations.blossom_verify_descriptor_bytes.conformance]
 vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json"
+
+[operations.blossom_build_upload_authorization_claim]
+domain = "blossom"
+id = "blossom.build_upload_authorization_claim"
+stability = "beta"
+inputs = [
+  "RadrootsBlossomAuthorizationContent",
+  "RadrootsBlossomServerDomain",
+  "RadrootsBlossomSha256",
+  "CreatedAt",
+  "LifetimeSeconds",
+]
+outputs = [
+  "RadrootsBlossomAuthoredUploadClaim",
+  "RadrootsBlossomAuthorizationWireParts",
+]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_build_upload_authorization_claim.implementation]
+rust_modules = ["crates/blossom/src/authorization.rs"]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomAuthorizationWireParts",
+  "radroots_blossom::RadrootsBlossomAuthoredUploadClaim",
+]
+
+[operations.blossom_build_upload_authorization_claim.conformance]
+vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
+
+[operations.blossom_parse_authorization_claim]
+domain = "blossom"
+id = "blossom.parse_authorization_claim"
+stability = "beta"
+inputs = ["String", "CreatedAt", "NostrTags"]
+outputs = ["RadrootsBlossomParsedAuthorizationClaim"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_parse_authorization_claim.implementation]
+rust_modules = ["crates/blossom/src/authorization.rs"]
+rust_types = ["radroots_blossom::RadrootsBlossomParsedAuthorizationClaim"]
+
+[operations.blossom_parse_authorization_claim.conformance]
+vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
+
+[operations.blossom_validate_authorization_claim]
+domain = "blossom"
+id = "blossom.validate_authorization_claim"
+stability = "beta"
+inputs = [
+  "RadrootsBlossomParsedAuthorizationClaim",
+  "RadrootsBlossomAuthorizationValidation",
+]
+outputs = ["RadrootsBlossomValidatedAuthorizationClaim"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_validate_authorization_claim.implementation]
+rust_modules = ["crates/blossom/src/authorization.rs"]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomAuthorizationValidation",
+  "radroots_blossom::RadrootsBlossomValidatedAuthorizationClaim",
+]
+
+[operations.blossom_validate_authorization_claim.conformance]
+vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
+
+[operations.blossom_decode_verify_authorization_header]
+domain = "blossom"
+id = "blossom.decode_verify_authorization_header"
+stability = "beta"
+inputs = [
+  "String",
+  "RadrootsBlossomAuthorizationValidation",
+]
+outputs = ["RadrootsNostrVerifiedBlossomAuthorization"]
+error_class = "decode_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.blossom_decode_verify_authorization_header.implementation]
+rust_modules = [
+  "crates/blossom/src/authorization.rs",
+  "crates/nostr/src/blossom.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomAuthorizationValidation",
+  "radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization",
+]
+
+[operations.blossom_decode_verify_authorization_header.conformance]
+vector = "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json"
 
 [operations.profile_build_draft]
 domain = "profile"

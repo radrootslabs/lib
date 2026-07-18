@@ -5,6 +5,9 @@ extern crate alloc;
 #[cfg(feature = "client")]
 pub mod client;
 
+#[cfg(feature = "blossom")]
+pub mod blossom;
+
 pub mod error;
 pub mod events;
 pub mod filter;
@@ -45,6 +48,15 @@ pub mod identity_profile;
 
 pub mod prelude {
     pub use crate::events::radroots_nostr_build_event;
+
+    #[cfg(feature = "blossom")]
+    pub use crate::blossom::{
+        RadrootsNostrBlossomAuthorizationHeader, RadrootsNostrBlossomError,
+        RadrootsNostrSignedBlossomAuthorization, RadrootsNostrVerifiedBlossomAuthorization,
+        radroots_nostr_decode_verify_blossom_authorization_header,
+        radroots_nostr_encode_blossom_authorization_header,
+        radroots_nostr_sign_blossom_authorization,
+    };
 
     #[cfg(feature = "client")]
     pub use crate::client::{
