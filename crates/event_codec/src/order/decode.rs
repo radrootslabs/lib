@@ -961,6 +961,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn order_parse_rejects_payload_and_chain_binding_mismatches() {
         let mut request_payload = order_request();
         request_payload.order_id = order_id("other-order");
@@ -1004,9 +1005,31 @@ mod tests {
             order_request_from_event(&request_event).unwrap_err(),
             RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("listing_addr")
         );
+
+        let mut decision_payload = order_decision();
+        decision_payload.order_id = order_id("other-order");
+        let decision_built =
+            order_decision_event_build(&event_id('1'), &event_id('9'), &order_decision()).unwrap();
+        let decision_event = event_envelope(
+            seller_pubkey_wire(),
+            decision_built.kind,
+            decision_built.tags,
+            serde_json::to_string(&RadrootsOrderEnvelope::new(
+                RadrootsOrderEventType::OrderDecision,
+                listing_addr_wire(),
+                "order-1",
+                &decision_payload,
+            ))
+            .unwrap(),
+        );
+        assert_eq!(
+            order_decision_from_event(&decision_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("order_id")
+        );
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn order_event_context_and_parse_error_mapping_cover_missing_context() {
         let err = order_event_context_from_tags(
             RadrootsOrderEventType::OrderRequested,
@@ -1073,6 +1096,10 @@ mod tests {
                 "json",
             )),
             RadrootsOrderEnvelopeParseError::InvalidTag("json")
+        );
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidEnvelope),
+            RadrootsOrderEnvelopeParseError::InvalidTag("event_envelope")
         );
     }
 

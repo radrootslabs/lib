@@ -589,6 +589,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_empty_required<T>(result: Result<T, EventEncodeError>, field: &'static str) {
         let err = match result {
             Ok(_) => panic!("expected empty required field error"),

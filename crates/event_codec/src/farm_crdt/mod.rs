@@ -602,6 +602,7 @@ mod tests {
         *tag = replacement;
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_same_parse_error(actual: EventParseError, expected: EventParseError) {
         match (actual, expected) {
             (EventParseError::MissingTag(actual), EventParseError::MissingTag(expected))
@@ -631,6 +632,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn assert_same_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
         match (actual, expected) {
             (

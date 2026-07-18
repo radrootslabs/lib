@@ -116,6 +116,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     #[cfg(feature = "serde_json")]
     fn farm_decode_rejects_empty_d_tag_and_content() {
         let farm = RadrootsFarm {
@@ -150,6 +151,32 @@ mod tests {
         assert!(matches!(
             empty_content,
             crate::error::EventParseError::InvalidJson("content")
+        ));
+
+        let with_empty_tag = farm_from_event(
+            KIND_FARM,
+            &[
+                Vec::new(),
+                vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+            ],
+            &content,
+        )
+        .expect("empty unrelated tags are ignored");
+        assert_eq!(with_empty_tag.name, "Test Farm");
+
+        let parsed_error = parsed_from_event(
+            EVENT_ID.to_string(),
+            AUTHOR.to_string(),
+            42,
+            KIND_FARM + 1,
+            content,
+            vec![vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            EVENT_SIG.to_string(),
+        )
+        .expect_err("parsed wrapper propagates decode failures");
+        assert!(matches!(
+            parsed_error,
+            crate::error::EventParseError::InvalidKind { .. }
         ));
     }
 
@@ -274,6 +301,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     #[cfg(feature = "serde_json")]
     fn farm_decode_rejects_private_location_and_ops_shapes() {
         let farm = RadrootsFarm {

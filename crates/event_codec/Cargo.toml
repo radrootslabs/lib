@@ -44,3 +44,6 @@ radroots_blossom = { workspace = true, default-features = false, features = [
 ] }
 radroots_test_fixtures = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
