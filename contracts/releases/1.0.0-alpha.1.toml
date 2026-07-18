@@ -108,3 +108,13 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace permissive kind-1 post authoring with strict Update, PhotoUpdate, and Ask states plus signature-gated tolerant product admission."
+
+[[changes]]
+id = "operational-listing-decoder-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_conformance_vector",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Consolidate operational listing decoding in radroots_event_codec, return the typed listing error contract, and make canonical tags authoritative over JSON content."

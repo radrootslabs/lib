@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, string::String};
 
 use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
@@ -18,7 +18,7 @@ use radroots_event::{
     trade_validation::RadrootsTradeValidationListingError as TradeListingValidationError,
 };
 
-use crate::listing::codec::listing_from_event_parts;
+use radroots_event_codec::listing::decode::listing_from_nostr_event;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
@@ -49,8 +49,7 @@ pub fn validate_listing_event(
         });
     }
 
-    let tags = event.tags_as_vec();
-    let listing = listing_from_event_parts(&tags, event.content())
+    let listing = listing_from_nostr_event(event)
         .map_err(|error| TradeListingValidationError::ParseError { error })?;
     let listing_id = listing.d_tag.trim().to_string();
 
@@ -271,19 +270,102 @@ mod tests {
     }
 
     fn base_event(listing: &RadrootsListing) -> RadrootsEventEnvelope {
-        event_with_parts(
-            SELLER,
-            KIND_LISTING,
+        let mut tags = vec![
+            vec!["d".into(), listing.d_tag.to_string()],
+            vec!["p".into(), listing.farm.pubkey.clone()],
             vec![
-                vec!["d".into(), listing.d_tag.to_string()],
-                vec!["p".into(), listing.farm.pubkey.clone()],
-                vec![
-                    "a".into(),
-                    format!("30340:{}:{}", listing.farm.pubkey, listing.farm.d_tag),
-                ],
+                "a".into(),
+                format!("30340:{}:{}", listing.farm.pubkey, listing.farm.d_tag),
             ],
-            serde_json::to_string(listing).unwrap(),
-        )
+            vec!["key".into(), listing.product.key.clone()],
+            vec!["title".into(), listing.product.title.clone()],
+            vec!["category".into(), listing.product.category.clone()],
+            vec![
+                "summary".into(),
+                listing.product.summary.clone().unwrap_or_default(),
+            ],
+            vec![
+                "radroots:primary_bin".into(),
+                listing.primary_bin_id.to_string(),
+            ],
+        ];
+        for bin in &listing.bins {
+            tags.push(vec![
+                "radroots:bin".into(),
+                bin.bin_id.to_string(),
+                bin.quantity.amount.to_string(),
+                bin.quantity.unit.code().to_string(),
+            ]);
+            tags.push(vec![
+                "radroots:price".into(),
+                bin.bin_id.to_string(),
+                bin.price_per_canonical_unit.amount.amount.to_string(),
+                bin.price_per_canonical_unit
+                    .amount
+                    .currency
+                    .as_str()
+                    .to_string(),
+                bin.price_per_canonical_unit.quantity.amount.to_string(),
+                bin.price_per_canonical_unit
+                    .quantity
+                    .unit
+                    .code()
+                    .to_string(),
+            ]);
+        }
+        if let Some(inventory) = listing.inventory_available {
+            tags.push(vec!["inventory".into(), inventory.to_string()]);
+        }
+        if let Some(availability) = &listing.availability {
+            match availability {
+                RadrootsListingAvailability::Status { status } => tags.push(vec![
+                    "status".into(),
+                    match status {
+                        radroots_event::listing::RadrootsListingStatus::Active => "active".into(),
+                        radroots_event::listing::RadrootsListingStatus::Sold => "sold".into(),
+                        radroots_event::listing::RadrootsListingStatus::Other { value } => {
+                            value.clone()
+                        }
+                    },
+                ]),
+                RadrootsListingAvailability::Window { start, end } => {
+                    if let Some(start) = start {
+                        tags.push(vec![
+                            "radroots:availability_start".into(),
+                            start.to_string(),
+                        ]);
+                    }
+                    if let Some(end) = end {
+                        tags.push(vec!["expires_at".into(), end.to_string()]);
+                    }
+                }
+            }
+        }
+        if let Some(delivery) = &listing.delivery_method {
+            let mut tag = vec!["delivery".into()];
+            match delivery {
+                RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
+                RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
+                RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
+                RadrootsListingDeliveryMethod::Other { method } => {
+                    tag.push("other".into());
+                    tag.push(method.clone());
+                }
+            }
+            tags.push(tag);
+        }
+        if let Some(location) = &listing.location {
+            tags.push(vec![
+                "location".into(),
+                location.primary.clone(),
+                location.city.clone().unwrap_or_default(),
+                location.region.clone().unwrap_or_default(),
+                location.country.clone().unwrap_or_default(),
+            ]);
+            tags.push(vec!["g".into(), location.geohash.clone()]);
+        }
+
+        event_with_parts(SELLER, KIND_LISTING, tags, String::new())
     }
 
     fn event_with_parts(
@@ -324,7 +406,7 @@ mod tests {
             SELLER,
             30403,
             base_event(&listing).tags_as_vec(),
-            serde_json::to_string(&listing).unwrap(),
+            String::new(),
         );
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(
@@ -335,18 +417,12 @@ mod tests {
 
     #[test]
     fn validate_listing_rejects_missing_d_tag() {
-        let listing = base_listing();
-        let event = event_with_parts(
-            SELLER,
-            KIND_LISTING,
-            Vec::new(),
-            serde_json::to_string(&listing).unwrap(),
-        );
+        let event = event_with_parts(SELLER, KIND_LISTING, Vec::new(), String::new());
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(
             err,
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::ListingParseError::MissingTag("d".to_string())
+                error: crate::listing::ListingParseError::MissingTag("d".to_string())
             }
         );
     }
@@ -400,7 +476,7 @@ mod tests {
             OTHER_SELLER,
             KIND_LISTING,
             base_event(&listing).tags_as_vec(),
-            serde_json::to_string(&listing).unwrap(),
+            String::new(),
         );
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(err, TradeListingValidationError::InvalidSeller);
@@ -418,12 +494,7 @@ mod tests {
     #[test]
     fn validate_listing_rejects_invalid_kind() {
         let listing = base_listing();
-        let event = event_with_parts(
-            SELLER,
-            0,
-            base_event(&listing).tags_as_vec(),
-            serde_json::to_string(&listing).unwrap(),
-        );
+        let event = event_with_parts(SELLER, 0, base_event(&listing).tags_as_vec(), String::new());
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(err, TradeListingValidationError::InvalidKind { kind: 0 });
     }
@@ -454,7 +525,12 @@ mod tests {
     fn validate_listing_rejects_missing_bins() {
         let mut listing = base_listing();
         listing.bins.clear();
-        assert_validation_err(listing, TradeListingValidationError::MissingBins);
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::ListingParseError::InvalidTag("radroots:primary_bin".into()),
+            },
+        );
     }
 
     #[test]
@@ -466,7 +542,12 @@ mod tests {
     fn validate_listing_rejects_primary_bin_not_found() {
         let mut listing = base_listing();
         listing.primary_bin_id = bin_id("missing");
-        assert_validation_err(listing, TradeListingValidationError::MissingPrimaryBin);
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::ListingParseError::InvalidTag("radroots:primary_bin".into()),
+            },
+        );
     }
 
     #[test]
@@ -480,14 +561,24 @@ mod tests {
     fn validate_listing_rejects_non_canonical_quantity() {
         let mut listing = base_listing();
         listing.bins[0].quantity.unit = RadrootsCoreUnit::MassKg;
-        assert_validation_err(listing, TradeListingValidationError::InvalidBin);
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::ListingParseError::InvalidTag("radroots:bin".into()),
+            },
+        );
     }
 
     #[test]
     fn validate_listing_rejects_non_canonical_price_quantity() {
         let mut listing = base_listing();
         listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
-        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::ListingParseError::InvalidTag("radroots:price".into()),
+            },
+        );
     }
 
     #[test]
@@ -501,7 +592,12 @@ mod tests {
     fn validate_listing_rejects_price_unit_mismatch() {
         let mut listing = base_listing();
         listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
-        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+        assert_validation_err(
+            listing,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::ListingParseError::InvalidTag("radroots:price".into()),
+            },
+        );
     }
 
     #[test]
@@ -545,7 +641,7 @@ mod tests {
         assert_validation_err(
             listing,
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::ListingParseError::InvalidTag("g".to_string()),
+                error: crate::listing::ListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -557,7 +653,7 @@ mod tests {
         assert_validation_err(
             listing,
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::ListingParseError::InvalidTag("g".to_string()),
+                error: crate::listing::ListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -581,7 +677,7 @@ mod tests {
                 listing_addr: "addr".into(),
             },
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::ListingParseError::InvalidTag("d".into()),
+                error: crate::listing::ListingParseError::InvalidTag("d".into()),
             },
             TradeListingValidationError::InvalidSeller,
             TradeListingValidationError::MissingFarmProfile,

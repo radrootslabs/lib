@@ -569,9 +569,10 @@ signing = "native"
 transport = "native"
 
 [operations.listing_parse_event.implementation]
-rust_modules = ["crates/trade/src/listing/codec.rs"]
+rust_modules = ["crates/event_codec/src/listing/decode.rs"]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::order::RadrootsListingParseError",
   "radroots_event::listing::RadrootsListing",
 ]
 

@@ -1,4 +1,3 @@
-mod codec;
 pub mod draft;
 pub mod model;
 pub mod mutation;
@@ -14,6 +13,7 @@ use radroots_event::{
     kinds::is_listing_kind,
     listing::RadrootsListing,
 };
+use radroots_event_codec::listing::decode::listing_from_nostr_event;
 use thiserror::Error;
 
 pub use self::draft::{
@@ -120,11 +120,7 @@ fn ensure_listing_kind(kind: u32) -> Result<(), RadrootsListingAddressError> {
 pub fn parse_listing_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsListing, ListingParseError> {
-    if !is_listing_kind(event.kind_u32()) {
-        return Err(ListingParseError::InvalidKind(event.kind_u32()));
-    }
-    let tags = event.tags_as_vec();
-    self::codec::listing_from_event_parts(&tags, event.content())
+    listing_from_nostr_event(event)
 }
 
 #[cfg(test)]

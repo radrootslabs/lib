@@ -15,14 +15,15 @@ use radroots_event::{
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
         RadrootsListingProduct, RadrootsListingPublicLocation, RadrootsListingStatus,
     },
+    order::RadrootsListingParseError,
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
     tags::{TAG_D, TAG_PUBLISHED_AT},
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::listing::decode::{
-    data_from_event, data_from_nostr_event, listing_from_event, parsed_from_event,
-    parsed_from_nostr_event,
+    data_from_event, data_from_nostr_event, listing_from_event, listing_from_event_parts,
+    listing_from_nostr_event, parsed_from_event, parsed_from_nostr_event,
 };
 use radroots_event_codec::listing::encode::{
     listing_build_tags, to_json_wire_parts_with_kind, to_wire_parts, to_wire_parts_with_kind,
@@ -30,7 +31,9 @@ use radroots_event_codec::listing::encode::{
 use radroots_event_codec::listing::tags::{
     ListingTagOptions, listing_tags_full, listing_tags_with_options,
 };
-use std::str::FromStr;
+use std::{borrow::Cow, collections::BTreeSet, fs, path::Path, str::FromStr};
+
+use serde_json::Value;
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -38,6 +41,10 @@ const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 );
+const PACKAGED_PARSE_VECTORS: &str = include_str!("fixtures/listing_parse_event.v1.json");
+const WORKSPACE_PARSE_VECTOR_PATH: &str =
+    "../../contracts/conformance/vectors/listing/parse_event.v1.json";
+const WORKSPACE_CONTRACT_MARKER_PATH: &str = "../../contracts/manifest.toml";
 
 fn listing_d_tag(raw: &str) -> RadrootsDTag {
     raw.parse().unwrap()
@@ -135,6 +142,205 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
         delivery_method: None,
         location: None,
         images: None,
+    }
+}
+
+#[test]
+fn listing_from_event_parts_preserves_listing_error_taxonomy() {
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, TAG_D);
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::MissingTag(TAG_D.to_string())
+    );
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, TAG_D, vec![TAG_D, "bad d"]);
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::InvalidTag(TAG_D.to_string())
+    );
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "bad", "each"],
+    );
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::InvalidNumber("radroots:bin".to_string())
+    );
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "1", "bad"],
+    );
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::InvalidUnit
+    );
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec!["radroots:price", "bin-1", "10", "not-currency", "1", "each"],
+    );
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::InvalidCurrency
+    );
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["radroots:discount".to_string(), "{".to_string()]);
+    assert_eq!(
+        listing_from_event_parts(&tags, "").unwrap_err(),
+        RadrootsListingParseError::InvalidDiscount("radroots:discount".to_string())
+    );
+
+    assert_eq!(
+        listing_from_event_parts(
+            &sample_listing_tags(),
+            r#"{"location":{"coordinates":[1,2]}}"#,
+        )
+        .unwrap_err(),
+        RadrootsListingParseError::InvalidJson("location".to_string())
+    );
+}
+
+#[test]
+fn listing_from_event_parts_does_not_allow_json_content_to_override_tags() {
+    let tags = sample_listing_tags();
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    listing.product.title = "Content override".to_string();
+    listing.product.category = "Content category".to_string();
+    listing.inventory_available = Some(RadrootsCoreDecimal::from(99u32));
+    listing.bins[0].quantity.amount = RadrootsCoreDecimal::from(42u32);
+
+    let decoded = listing_from_event_parts(&tags, &serde_json::to_string(&listing).unwrap())
+        .expect("decode tag-authoritative listing");
+
+    assert_eq!(decoded.product.title, "Widget");
+    assert_eq!(decoded.product.category, "Tools");
+    assert_eq!(decoded.inventory_available, None);
+    assert_eq!(
+        decoded.bins[0].quantity.amount,
+        RadrootsCoreDecimal::from(1u32)
+    );
+}
+
+#[test]
+fn checked_in_listing_parse_vectors_execute_against_the_typed_decoder() {
+    let vectors = listing_parse_vectors();
+    let suite: Value = serde_json::from_str(&vectors).expect("listing parse vectors must parse");
+    assert_eq!(suite["suite"], "operational_listing_parse_event");
+    assert_eq!(suite["contract_version"], "1.0.0");
+    let vectors = suite["vectors"].as_array().expect("listing parse vectors");
+    assert_eq!(vectors.len(), 9, "listing parse vector inventory drifted");
+
+    let mut ids = BTreeSet::new();
+    for vector in vectors {
+        let id = vector["id"].as_str().expect("vector id");
+        assert!(ids.insert(id), "duplicate listing parse vector id {id}");
+        execute_listing_parse_vector(vector, id);
+    }
+}
+
+fn listing_parse_vectors() -> Cow<'static, str> {
+    let workspace_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(WORKSPACE_PARSE_VECTOR_PATH);
+    match fs::read_to_string(&workspace_path) {
+        Ok(canonical) => {
+            assert_eq!(
+                canonical,
+                PACKAGED_PARSE_VECTORS,
+                "packaged listing parse vectors must match {}",
+                workspace_path.display()
+            );
+            Cow::Owned(canonical)
+        }
+        Err(error)
+            if error.kind() == std::io::ErrorKind::NotFound
+                && !Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(WORKSPACE_CONTRACT_MARKER_PATH)
+                    .is_file() =>
+        {
+            Cow::Borrowed(PACKAGED_PARSE_VECTORS)
+        }
+        Err(error) => panic!("failed to read {}: {error}", workspace_path.display()),
+    }
+}
+
+fn execute_listing_parse_vector(vector: &Value, id: &str) {
+    let input = &vector["input"];
+    let tags: Vec<Vec<String>> =
+        serde_json::from_value(input["tags"].clone()).expect("vector tags");
+    let content = input["content"].as_str().expect("vector content");
+    let event_kind = input["event_kind"].as_u64().expect("vector event kind") as u32;
+    let event = event_envelope(event_kind, tags, content.to_string());
+
+    match vector["kind"].as_str().expect("vector kind") {
+        "listing.parse_event.valid" => {
+            let listing = listing_from_nostr_event(&event)
+                .unwrap_or_else(|error| panic!("{id} failed: {error}"));
+            let expected = &vector["expected"]["listing"];
+            assert_eq!(listing.d_tag.as_str(), expected["d_tag"], "{id}");
+            assert_eq!(listing.product.title, expected["title"], "{id}");
+            assert_eq!(listing.product.category, expected["category"], "{id}");
+            assert_eq!(
+                listing.primary_bin_id.as_str(),
+                expected["primary_bin_id"],
+                "{id}"
+            );
+            let primary = listing
+                .bins
+                .iter()
+                .find(|bin| bin.bin_id == listing.primary_bin_id)
+                .expect("primary listing bin");
+            assert_eq!(
+                primary.quantity.amount.to_string(),
+                expected["quantity_amount"],
+                "{id}"
+            );
+            assert_eq!(
+                primary.quantity.unit.code(),
+                expected["quantity_unit"],
+                "{id}"
+            );
+            assert_eq!(
+                primary.price_per_canonical_unit.amount.amount.to_string(),
+                expected["price_amount"],
+                "{id}"
+            );
+            assert_eq!(
+                primary.price_per_canonical_unit.amount.currency.as_str(),
+                expected["price_currency"],
+                "{id}"
+            );
+            assert_eq!(
+                serde_json::to_value(
+                    listing
+                        .inventory_available
+                        .as_ref()
+                        .map(ToString::to_string)
+                )
+                .expect("inventory projection"),
+                expected["inventory_available"],
+                "{id}"
+            );
+        }
+        "listing.parse_event.invalid" => {
+            let error = listing_from_nostr_event(&event)
+                .expect_err("invalid listing parse vector must fail");
+            assert_eq!(
+                serde_json::to_value(error).expect("listing parse error"),
+                vector["expected"]["error"],
+                "{id}"
+            );
+        }
+        kind => panic!("{id} uses unsupported listing parse vector kind {kind}"),
     }
 }
 

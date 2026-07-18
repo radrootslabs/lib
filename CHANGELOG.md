@@ -9,6 +9,10 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Operational listing decoding now has one tag-authoritative implementation in
+  `radroots_event_codec`. The typed parts decoder reports the established
+  listing error taxonomy, and JSON content can no longer override canonical
+  product, inventory, or bin tags in trade and replica consumers.
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
   above `65535` instead of truncating them. Canonical-length author keys that
@@ -65,6 +69,8 @@ publish policy both pass for the same source revision.
 
 ### Removed
 
+- The duplicate private operational listing parser in `radroots_trade` was
+  removed; trade validation now consumes the canonical event codec.
 - Legacy calendar event models and permissive calendar tag-builder authoring
   paths were removed.
 - Direct `RadrootsProfile` draft encoding and the identity profile publisher were

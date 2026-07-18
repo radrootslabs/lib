@@ -30,7 +30,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 8] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 9] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -50,6 +50,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 8] = [
     (
         "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
         "crates/event_codec/tests/fixtures/calendar_radroots_profile.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/listing/parse_event.v1.json",
+        "crates/event_codec/tests/fixtures/listing_parse_event.v1.json",
     ),
     (
         "contracts/conformance/vectors/profile/metadata.v1.json",
