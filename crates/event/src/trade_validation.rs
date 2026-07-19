@@ -20,6 +20,7 @@ pub enum RadrootsOperationalListingValidationError {
     InvalidKind {
         kind: u32,
     },
+    InvalidProfile,
     MissingListingId,
     ListingEventNotFound {
         listing_addr: String,
@@ -55,6 +56,12 @@ impl core::fmt::Display for RadrootsOperationalListingValidationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidKind { kind } => write!(f, "invalid listing kind: {kind}"),
+            Self::InvalidProfile => {
+                write!(
+                    f,
+                    "classified listing is not an Operational Listing profile"
+                )
+            }
             Self::MissingListingId => write!(f, "missing listing id"),
             Self::ListingEventNotFound { listing_addr } => {
                 write!(f, "listing event not found: {listing_addr}")
@@ -95,6 +102,10 @@ mod tests {
 
     #[test]
     fn listing_validation_error_display_covers_location_variants() {
+        assert_eq!(
+            RadrootsOperationalListingValidationError::InvalidProfile.to_string(),
+            "classified listing is not an Operational Listing profile"
+        );
         assert_eq!(
             RadrootsOperationalListingValidationError::MissingLocation.to_string(),
             "missing listing location"

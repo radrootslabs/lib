@@ -1086,6 +1086,11 @@ pub struct ReplicaContractPolicy {
     pub forbid_legacy_alias_identifiers: bool,
     pub profile_event_emission: String,
     pub unknown_sync_request_fields: String,
+    pub classified_listing_signature_verification: String,
+    pub classified_listing_head_selection: String,
+    pub classified_listing_operational_projection: String,
+    pub classified_listing_excluded_or_rejected_head: String,
+    pub classified_listing_head_only_ingest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2412,7 +2417,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
     EventBoundaryExpectation {
         domain: "food_availability",
         kind: "30402",
-        radroots_type: "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent",
+        radroots_type: "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder",
         rpc_methods: &[
             "food_availability.build_authored_draft",
             "food_availability.project_verified_event",
@@ -4636,6 +4641,46 @@ fn validate_replica_contract(bundle: &ContractBundle, workspace_root: &Path) -> 
     }
     if replica.policy.unknown_sync_request_fields != "reject" {
         return Err("replica policy.unknown_sync_request_fields must be reject".to_string());
+    }
+    for (field, actual, expected) in [
+        (
+            "classified_listing_signature_verification",
+            replica
+                .policy
+                .classified_listing_signature_verification
+                .as_str(),
+            "required_before_state",
+        ),
+        (
+            "classified_listing_head_selection",
+            replica.policy.classified_listing_head_selection.as_str(),
+            "raw_before_profile",
+        ),
+        (
+            "classified_listing_operational_projection",
+            replica
+                .policy
+                .classified_listing_operational_projection
+                .as_str(),
+            "operational_partition_only",
+        ),
+        (
+            "classified_listing_excluded_or_rejected_head",
+            replica
+                .policy
+                .classified_listing_excluded_or_rejected_head
+                .as_str(),
+            "remove_projection_and_advance",
+        ),
+        (
+            "classified_listing_head_only_ingest",
+            replica.policy.classified_listing_head_only_ingest.as_str(),
+            "reject_require_profile_aware",
+        ),
+    ] {
+        if actual != expected {
+            return Err(format!("replica policy.{field} must be {expected}"));
+        }
     }
 
     if replica.transfer.version != REPLICA_TRANSFER_VERSION {
@@ -7021,6 +7066,11 @@ deterministic_emit_and_ingest = true
 forbid_legacy_alias_identifiers = true
 profile_event_emission = "excluded"
 unknown_sync_request_fields = "reject"
+classified_listing_signature_verification = "required_before_state"
+classified_listing_head_selection = "raw_before_profile"
+classified_listing_operational_projection = "operational_partition_only"
+classified_listing_excluded_or_rejected_head = "remove_projection_and_advance"
+classified_listing_head_only_ingest = "reject_require_profile_aware"
 
 [transfer]
 version = 2
@@ -7801,6 +7851,47 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         assert_replica_error("unknown_sync_request_fields must be reject", |bundle| {
             bundle.replica.policy.unknown_sync_request_fields = "ignore".to_string();
         });
+        assert_replica_error(
+            "classified_listing_signature_verification must be required_before_state",
+            |bundle| {
+                bundle
+                    .replica
+                    .policy
+                    .classified_listing_signature_verification = "unchecked".to_string();
+            },
+        );
+        assert_replica_error(
+            "classified_listing_head_selection must be raw_before_profile",
+            |bundle| {
+                bundle.replica.policy.classified_listing_head_selection =
+                    "profile_before_raw".to_string();
+            },
+        );
+        assert_replica_error(
+            "classified_listing_operational_projection must be operational_partition_only",
+            |bundle| {
+                bundle
+                    .replica
+                    .policy
+                    .classified_listing_operational_projection = "all_partitions".to_string();
+            },
+        );
+        assert_replica_error(
+            "classified_listing_excluded_or_rejected_head must be remove_projection_and_advance",
+            |bundle| {
+                bundle
+                    .replica
+                    .policy
+                    .classified_listing_excluded_or_rejected_head = "retain_projection".to_string();
+            },
+        );
+        assert_replica_error(
+            "classified_listing_head_only_ingest must be reject_require_profile_aware",
+            |bundle| {
+                bundle.replica.policy.classified_listing_head_only_ingest =
+                    "allow_head_only".to_string();
+            },
+        );
         assert_replica_error("transfer.version must be 2", |bundle| {
             bundle.replica.transfer.version = 1;
         });

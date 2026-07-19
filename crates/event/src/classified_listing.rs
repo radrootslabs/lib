@@ -38,7 +38,7 @@ pub fn classify_classified_listing_tags(
 pub fn classify_classified_listing_tag_slice(
     tags: &[RadrootsEventTag],
 ) -> RadrootsClassifiedListingPartition {
-    classify_classified_listing_tag_names(
+    classify_classified_listing_marker_names(
         tags.iter()
             .map(|tag| tag.as_slice().first().map(String::as_str)),
     )
@@ -47,10 +47,11 @@ pub fn classify_classified_listing_tag_slice(
 pub(crate) fn classify_classified_listing_raw_tags(
     tags: &[Vec<String>],
 ) -> RadrootsClassifiedListingPartition {
-    classify_classified_listing_tag_names(tags.iter().map(|tag| tag.first().map(String::as_str)))
+    classify_classified_listing_marker_names(tags.iter().map(|tag| tag.first().map(String::as_str)))
 }
 
-fn classify_classified_listing_tag_names<'a>(
+/// Partitions borrowed raw tag names without allocating or validating tag arity.
+pub fn classify_classified_listing_marker_names<'a>(
     names: impl IntoIterator<Item = Option<&'a str>>,
 ) -> RadrootsClassifiedListingPartition {
     let mut has_focused_marker = false;

@@ -12,13 +12,13 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::RadrootsCoreDecimal;
-use radroots_event::RadrootsEventEnvelope;
 #[cfg(test)]
 use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_event::contract::RadrootsEventClass;
 use radroots_event::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
-    RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_event,
-    select_event_head,
+    RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_class,
+    event_head_candidate_for_event, select_event_head,
 };
 use radroots_event::ids::RadrootsEventId;
 use radroots_event::kinds::{
@@ -29,11 +29,19 @@ use radroots_event::operational_listing::{
     RadrootsOperationalListing, RadrootsOperationalListingAvailability,
     RadrootsOperationalListingBin, RadrootsOperationalListingStatus,
 };
+use radroots_event::{
+    RadrootsEventEnvelope,
+    classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
+};
 use radroots_event_codec::farm::decode as farm_decode;
+use radroots_event_codec::food_availability::inbound::{
+    RadrootsFoodAvailabilityProjectionOutcome, project_verified_food_availability_event,
+};
 use radroots_event_codec::list_set::decode as list_set_decode;
 use radroots_event_codec::operational_listing::decode as listing_decode;
 use radroots_event_codec::plot::decode as plot_decode;
 use radroots_event_codec::profile::decode as profile_decode;
+use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::{
     FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
@@ -136,7 +144,13 @@ pub(crate) mod failpoints {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsReplicaIngestOutcome {
+    /// The selected event updated its supported legacy projection and raw head.
     Applied,
+    /// The selected raw head belongs to a valid profile this legacy projection excludes.
+    Excluded,
+    /// The selected raw head is invalid or ambiguous for its declared profile.
+    Rejected,
+    /// The event did not win NIP-01 replacement ordering.
     Skipped,
 }
 
@@ -177,13 +191,19 @@ pub fn radroots_replica_ingest_event_with_factory(
     event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
+    let verified_classified_listing = if event.kind_u32() == KIND_CLASSIFIED_LISTING {
+        Some(verify_nip01_event(event.clone())?)
+    } else {
+        None
+    };
+
     if let Err(err) = exec.begin() {
         return Err(RadrootsReplicaEventsError::from(ReplicaSchemaError::from(
             err,
         )));
     }
 
-    match ingest_event_inner(exec, event, factory) {
+    match ingest_event_inner(exec, event, factory, verified_classified_listing.as_ref()) {
         Ok(outcome) => {
             if let Err(err) = exec.commit() {
                 return Err(RadrootsReplicaEventsError::from(ReplicaSchemaError::from(
@@ -203,12 +223,20 @@ fn ingest_event_inner(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
+    verified_classified_listing: Option<&RadrootsSignatureVerifiedEvent>,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     match event.kind_u32() {
         KIND_PROFILE => ingest_profile_event(exec, event),
         KIND_FARM => ingest_farm_event(exec, event, factory),
         KIND_PLOT => ingest_plot_event(exec, event, factory),
-        KIND_CLASSIFIED_LISTING => ingest_listing_event(exec, event),
+        KIND_CLASSIFIED_LISTING => {
+            let verified_event = verified_classified_listing.ok_or_else(|| {
+                RadrootsReplicaEventsError::InvalidData(
+                    "classified listing verification invariant missing".to_string(),
+                )
+            })?;
+            ingest_listing_event(exec, verified_event)
+        }
         kind if is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR => {
             ingest_list_set_event(exec, event)
         }
@@ -473,28 +501,90 @@ fn ingest_plot_event(
 
 fn ingest_listing_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    verified_event: &RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let listing = listing_decode::operational_listing_from_event(
-        event.kind_u32(),
-        &event.tags_as_vec(),
-        event.content(),
-    )?;
+    let event = verified_event.event();
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
 
-    let listing_addr = listing_event_addr(event, &listing);
+    let partition = classify_classified_listing_tags(event.tags());
+    if partition == RadrootsClassifiedListingPartition::FocusedFoodAvailability {
+        let outcome = match project_verified_food_availability_event(verified_event) {
+            Ok(RadrootsFoodAvailabilityProjectionOutcome::Focused(_)) => {
+                RadrootsReplicaIngestOutcome::Excluded
+            }
+            Ok(RadrootsFoodAvailabilityProjectionOutcome::Excluded(_)) | Err(_) => {
+                RadrootsReplicaIngestOutcome::Rejected
+            }
+            Ok(_) => RadrootsReplicaIngestOutcome::Rejected,
+        };
+        return replace_listing_projection_with_raw_head(exec, &decision, outcome);
+    }
+    if partition == RadrootsClassifiedListingPartition::GenericNip99 {
+        return replace_listing_projection_with_raw_head(
+            exec,
+            &decision,
+            RadrootsReplicaIngestOutcome::Excluded,
+        );
+    }
+    if partition == RadrootsClassifiedListingPartition::Ambiguous {
+        return replace_listing_projection_with_raw_head(
+            exec,
+            &decision,
+            RadrootsReplicaIngestOutcome::Rejected,
+        );
+    }
+
+    let listing = match listing_decode::operational_listing_from_event(
+        event.kind_u32(),
+        &event.tags_as_vec(),
+        event.content(),
+    ) {
+        Ok(listing) => listing,
+        Err(_) => {
+            return replace_listing_projection_with_raw_head(
+                exec,
+                &decision,
+                RadrootsReplicaIngestOutcome::Rejected,
+            );
+        }
+    };
+
+    let listing_addr = decision.key.as_str();
     if listing_is_orderable(&listing) {
-        let fields = trade_product_fields_from_listing(&listing, &listing_addr)?;
-        upsert_trade_product_for_listing_addr(exec, &listing_addr, fields)?;
+        let fields = match trade_product_fields_from_listing(&listing, listing_addr) {
+            Ok(fields) => fields,
+            Err(_) => {
+                return replace_listing_projection_with_raw_head(
+                    exec,
+                    &decision,
+                    RadrootsReplicaIngestOutcome::Rejected,
+                );
+            }
+        };
+        upsert_trade_product_for_listing_addr(exec, listing_addr, fields)?;
     } else {
-        delete_trade_products_for_listing_addr(exec, &listing_addr)?;
+        delete_trade_products_for_listing_addr(exec, listing_addr)?;
     }
 
     upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
+}
+
+fn replace_listing_projection_with_raw_head(
+    exec: &dyn SqlExecutor,
+    decision: &EventHeadDecision,
+    outcome: RadrootsReplicaIngestOutcome,
+) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
+    debug_assert!(matches!(
+        outcome,
+        RadrootsReplicaIngestOutcome::Excluded | RadrootsReplicaIngestOutcome::Rejected
+    ));
+    delete_trade_products_for_listing_addr(exec, &decision.key)?;
+    upsert_event_head(exec, decision)?;
+    Ok(outcome)
 }
 
 fn ingest_list_set_event(
@@ -561,18 +651,6 @@ fn ingest_list_set_event(
     Err(RadrootsReplicaEventsError::InvalidData(
         "unsupported list set d_tag".to_string(),
     ))
-}
-
-fn listing_event_addr(
-    event: &RadrootsEventEnvelope,
-    listing: &RadrootsOperationalListing,
-) -> String {
-    format!(
-        "{}:{}:{}",
-        event.kind_u32(),
-        event.author_str(),
-        listing.d_tag
-    )
 }
 
 fn listing_is_orderable(listing: &RadrootsOperationalListing) -> bool {
@@ -849,10 +927,20 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
     }
 }
 
+/// Advances a supported non-classified event head without running projection.
+///
+/// Kind 30402 is rejected because its raw head and profile-aware projection
+/// cleanup must be applied atomically through full replica ingestion.
 pub fn radroots_replica_ingest_event_head(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
+    if event.kind_u32() == KIND_CLASSIFIED_LISTING {
+        verify_nip01_event(event.clone())?;
+        return Err(RadrootsReplicaEventsError::InvalidData(
+            "classified listing heads require profile-aware replica ingestion".to_string(),
+        ));
+    }
     let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -916,12 +1004,16 @@ fn event_head_decision(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<EventHeadDecision, RadrootsReplicaEventsError> {
-    let candidate_result = match event_head_candidate_for_event(event) {
-        Ok(candidate) => candidate,
-        Err(err) => {
-            return Err(RadrootsReplicaEventsError::InvalidData(format!(
-                "event head contract mismatch: {err:?}"
-            )));
+    let candidate_result = if event.kind_u32() == KIND_CLASSIFIED_LISTING {
+        event_head_candidate_for_class(event, RadrootsEventClass::Addressable)
+    } else {
+        match event_head_candidate_for_event(event) {
+            Ok(candidate) => candidate,
+            Err(err) => {
+                return Err(RadrootsReplicaEventsError::InvalidData(format!(
+                    "event head contract mismatch: {err:?}"
+                )));
+            }
         }
     };
     let candidate = match candidate_result {
@@ -1538,6 +1630,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
         RadrootsCoreUnit,
@@ -1556,6 +1649,7 @@ mod tests {
     use radroots_event_codec::farm::list_sets as farm_list_sets;
     use radroots_event_codec::list_set::encode as list_set_encode;
     use radroots_event_codec::plot::encode as plot_encode;
+    use radroots_nostr::prelude::radroots_event_from_nostr;
     use radroots_replica_schema::farm::IFarmFields;
     use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
     use radroots_replica_schema::farm_member::IFarmMemberFields;
@@ -1571,6 +1665,7 @@ mod tests {
         trade_product,
     };
     use radroots_sql_core::{ExecOutcome, SqlExecutor, SqlxSqliteExecutor};
+    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
 
     fn test_event_envelope(
         id: u64,
@@ -1910,7 +2005,6 @@ mod tests {
     }
 
     fn listing_event(
-        id: u64,
         author: &str,
         created_at: u32,
         d_tag: &str,
@@ -1918,11 +2012,9 @@ mod tests {
         title: &str,
     ) -> RadrootsEventEnvelope {
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
-        test_event_envelope(
-            id,
+        signed_listing_event(
             author,
             u64::from(created_at),
-            KIND_CLASSIFIED_LISTING,
             vec![
                 vec!["d".to_string(), d_tag.to_string()],
                 vec![
@@ -1962,6 +2054,78 @@ mod tests {
                 vec!["status".to_string(), status.to_string()],
             ],
             format!("# {title}"),
+        )
+    }
+
+    fn signed_listing_event(
+        author: &str,
+        created_at: u64,
+        tags: Vec<Vec<String>>,
+        content: String,
+    ) -> RadrootsEventEnvelope {
+        assert_eq!(
+            author, FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            "listing tests must use the approved fixture signer"
+        );
+        let keys = Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX).expect("fixture signing key");
+        let tags = tags
+            .into_iter()
+            .map(|tag| Tag::parse(tag).expect("listing tag"))
+            .collect::<Vec<_>>();
+        let event = EventBuilder::new(
+            Kind::Custom(u16::try_from(KIND_CLASSIFIED_LISTING).expect("classified listing kind")),
+            content,
+        )
+        .tags(tags)
+        .allow_self_tagging()
+        .custom_created_at(Timestamp::from_secs(created_at))
+        .sign_with_keys(&keys)
+        .expect("signed listing event");
+        radroots_event_from_nostr(&event).expect("listing event adapter")
+    }
+
+    fn focused_listing_event(author: &str, created_at: u64, d_tag: &str) -> RadrootsEventEnvelope {
+        focused_listing_event_with_content(
+            author,
+            created_at,
+            d_tag,
+            "Carrots available this week.",
+        )
+    }
+
+    fn focused_listing_event_with_content(
+        author: &str,
+        created_at: u64,
+        d_tag: &str,
+        content: &str,
+    ) -> RadrootsEventEnvelope {
+        signed_listing_event(
+            author,
+            created_at,
+            vec![
+                vec!["d".to_string(), d_tag.to_string()],
+                vec!["title".to_string(), "Nantes Carrots".to_string()],
+                vec!["summary".to_string(), "Fresh bunches".to_string()],
+                vec!["published_at".to_string(), "1".to_string()],
+                vec!["location".to_string(), "Central Saanich, BC".to_string()],
+                vec!["price".to_string(), "3".to_string(), "CAD".to_string()],
+                vec!["radroots:price_unit".to_string(), "lb".to_string()],
+                vec!["status".to_string(), "active".to_string()],
+            ],
+            content.to_string(),
+        )
+    }
+
+    fn generic_listing_event(author: &str, created_at: u64, d_tag: &str) -> RadrootsEventEnvelope {
+        signed_listing_event(
+            author,
+            created_at,
+            vec![
+                vec!["d".to_string(), d_tag.to_string()],
+                vec!["title".to_string(), "Generic listing".to_string()],
+                vec!["price".to_string(), "3".to_string(), "CAD".to_string()],
+            ],
+            "A standards-compatible marker-free NIP-99 listing.".to_string(),
         )
     }
 
@@ -2258,6 +2422,25 @@ mod tests {
         .expect_err("rollback");
         assert!(err.to_string().contains("unsupported kind"));
         assert_eq!(rollback_executor.rollback_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn classified_listing_signature_rejection_precedes_transaction_acquisition() {
+        let executor = TxnExecutor {
+            inner: None,
+            begin_err: Some(SqlError::Internal),
+            commit_err: None,
+            rollback_count: Arc::new(AtomicUsize::new(0)),
+        };
+        let signed =
+            focused_listing_event(FIXTURE_ALICE_PUBLIC_KEY_HEX, 10, "pre-transaction-check");
+        let tampered = test_event_with_content(&signed, "tampered".to_string());
+
+        assert!(matches!(
+            radroots_replica_ingest_event_with_factory(&executor, &tampered, &FixedFactory),
+            Err(RadrootsReplicaEventsError::Verification(_))
+        ));
+        assert_eq!(executor.rollback_count.load(Ordering::SeqCst), 0);
     }
 
     #[test]
@@ -2627,21 +2810,14 @@ mod tests {
         let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
-        let seller_pubkey = "c".repeat(64);
+        let seller_pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned();
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
         let listing_addr = format!(
             "{}:{}:{}",
             KIND_CLASSIFIED_LISTING, seller_pubkey, listing_d_tag
         );
 
-        let mut active = listing_event(
-            500,
-            &seller_pubkey,
-            10,
-            listing_d_tag,
-            "active",
-            "Pasture Eggs",
-        );
+        let mut active = listing_event(&seller_pubkey, 10, listing_d_tag, "active", "Pasture Eggs");
         let mut active_tags = active.tags_as_vec();
         active_tags.push(vec![
             "radroots:discount".to_string(),
@@ -2658,9 +2834,9 @@ mod tests {
             })
             .to_string(),
         ]);
-        active = test_event_with_parts(
-            &active,
-            active.kind_u32(),
+        active = signed_listing_event(
+            &seller_pubkey,
+            active.created_at_u64(),
             active_tags,
             active.content().to_owned(),
         );
@@ -2699,14 +2875,7 @@ mod tests {
                 .is_some_and(|notes| notes.contains("listing_discounts"))
         );
 
-        let updated = listing_event(
-            501,
-            &seller_pubkey,
-            11,
-            listing_d_tag,
-            "active",
-            "Market Eggs",
-        );
+        let updated = listing_event(&seller_pubkey, 11, listing_d_tag, "active", "Market Eggs");
         assert_eq!(
             radroots_replica_ingest_event(&exec, &updated).expect("listing update"),
             RadrootsReplicaIngestOutcome::Applied
@@ -2727,14 +2896,7 @@ mod tests {
             Some("bin-a")
         );
 
-        let archived = listing_event(
-            502,
-            &seller_pubkey,
-            12,
-            listing_d_tag,
-            "archived",
-            "Market Eggs",
-        );
+        let archived = listing_event(&seller_pubkey, 12, listing_d_tag, "archived", "Market Eggs");
         assert_eq!(
             radroots_replica_ingest_event(&exec, &archived).expect("archived ingest"),
             RadrootsReplicaIngestOutcome::Applied
@@ -2767,14 +2929,7 @@ mod tests {
         .expect("state row");
         assert_eq!(state.last_event_id, archived.id_str());
 
-        let stale_active = listing_event(
-            499,
-            &seller_pubkey,
-            11,
-            listing_d_tag,
-            "active",
-            "Stale Eggs",
-        );
+        let stale_active = listing_event(&seller_pubkey, 11, listing_d_tag, "active", "Stale Eggs");
         assert_eq!(
             radroots_replica_ingest_event(&exec, &stale_active).expect("stale ingest"),
             RadrootsReplicaIngestOutcome::Skipped
@@ -2795,7 +2950,7 @@ mod tests {
         let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
-        let seller_pubkey = "c".repeat(64);
+        let seller_pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned();
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAg";
         let listing_addr = format!(
             "{}:{}:{}",
@@ -2803,7 +2958,6 @@ mod tests {
         );
 
         let mut active = listing_event(
-            600,
             &seller_pubkey,
             10,
             listing_d_tag,
@@ -2828,9 +2982,9 @@ mod tests {
                 tag[7] = "g".to_string();
             }
         }
-        active = test_event_with_parts(
-            &active,
-            active.kind_u32(),
+        active = signed_listing_event(
+            &seller_pubkey,
+            active.created_at_u64(),
             active_tags,
             active.content().to_owned(),
         );
@@ -2855,6 +3009,208 @@ mod tests {
         assert_eq!(search_rows[0].price_amt_exact.as_deref(), Some("3.25"));
         assert_eq!(search_rows[0].price_qty_amt, 1.0);
         assert_eq!(search_rows[0].price_qty_amt_exact.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn listing_raw_head_partition_prevents_projection_fallback_and_tampering() {
+        let exec = SqlxSqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let seller = FIXTURE_ALICE_PUBLIC_KEY_HEX;
+        let d_tag = "AAAAAAAAAAAAAAAAAAAAAw";
+        let listing_addr = event_head_key(KIND_CLASSIFIED_LISTING, seller, d_tag);
+        let product_count = || {
+            trade_product::find_many(
+                &exec,
+                &ITradeProductFindMany {
+                    filter: Some(trade_product_listing_addr_filter(&listing_addr)),
+                },
+            )
+            .expect("listing products")
+            .results
+            .len()
+        };
+
+        let active = listing_event(seller, 10, d_tag, "active", "Pasture Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("operational ingest"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        assert_eq!(product_count(), 1);
+
+        let focused = focused_listing_event(seller, 20, d_tag);
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &focused).expect("focused ingest"),
+            RadrootsReplicaIngestOutcome::Excluded
+        );
+        assert_eq!(product_count(), 0);
+
+        let invalid_focused = signed_listing_event(
+            seller,
+            25,
+            vec![
+                vec!["d".to_string(), d_tag.to_string()],
+                vec!["radroots:price_unit".to_string(), "lb".to_string()],
+            ],
+            "invalid focused listing".to_string(),
+        );
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &invalid_focused).expect("invalid focused ingest"),
+            RadrootsReplicaIngestOutcome::Rejected
+        );
+        assert_eq!(product_count(), 0);
+
+        let stale = listing_event(seller, 15, d_tag, "active", "Stale Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &stale).expect("stale ingest"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
+        assert_eq!(product_count(), 0);
+
+        let active = listing_event(seller, 30, d_tag, "active", "Market Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("operational replacement"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        assert_eq!(product_count(), 1);
+
+        let generic = generic_listing_event(seller, 40, d_tag);
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &generic).expect("generic ingest"),
+            RadrootsReplicaIngestOutcome::Excluded
+        );
+        assert_eq!(product_count(), 0);
+
+        let active = listing_event(seller, 50, d_tag, "active", "Market Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("operational replacement"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        let ambiguous = signed_listing_event(
+            seller,
+            60,
+            vec![
+                vec!["d".to_string(), d_tag.to_string()],
+                vec!["radroots:price_unit".to_string(), "lb".to_string()],
+                vec!["radroots:primary_bin".to_string(), "bin-a".to_string()],
+            ],
+            "ambiguous".to_string(),
+        );
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &ambiguous).expect("ambiguous ingest"),
+            RadrootsReplicaIngestOutcome::Rejected
+        );
+        assert_eq!(product_count(), 0);
+
+        let active = listing_event(seller, 70, d_tag, "active", "Market Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("operational replacement"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        let malformed_operational = signed_listing_event(
+            seller,
+            80,
+            vec![
+                vec!["d".to_string(), d_tag.to_string()],
+                vec!["radroots:primary_bin".to_string()],
+            ],
+            "malformed".to_string(),
+        );
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &malformed_operational)
+                .expect("malformed operational ingest"),
+            RadrootsReplicaIngestOutcome::Rejected
+        );
+        assert_eq!(product_count(), 0);
+
+        let active = listing_event(seller, 90, d_tag, "active", "Market Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("operational replacement"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        assert_eq!(product_count(), 1);
+
+        let signed_replacement = focused_listing_event(seller, 100, d_tag);
+        assert!(matches!(
+            radroots_replica_ingest_event_head(&exec, &signed_replacement),
+            Err(RadrootsReplicaEventsError::InvalidData(ref message))
+                if message == "classified listing heads require profile-aware replica ingestion"
+        ));
+        assert_eq!(product_count(), 1);
+
+        let tampered = test_event_with_content(&signed_replacement, "tampered".to_string());
+        assert!(matches!(
+            radroots_replica_ingest_event(&exec, &tampered),
+            Err(RadrootsReplicaEventsError::Verification(_))
+        ));
+        assert!(matches!(
+            radroots_replica_ingest_event_head(&exec, &tampered),
+            Err(RadrootsReplicaEventsError::Verification(_))
+        ));
+        assert_eq!(product_count(), 1);
+
+        let state_before_replacement = nostr_event_head::find_one(
+            &exec,
+            &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
+                on: NostrEventHeadQueryBindValues::Key {
+                    key: listing_addr.clone(),
+                },
+            }),
+        )
+        .expect("event state")
+        .result
+        .expect("state row");
+        assert_eq!(state_before_replacement.last_event_id, active.id_str());
+
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &signed_replacement)
+                .expect("profile-aware focused replacement"),
+            RadrootsReplicaIngestOutcome::Excluded
+        );
+        assert_eq!(product_count(), 0);
+
+        let tied_operational =
+            listing_event(seller, 110, d_tag, "active", "Equal-time Market Eggs");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &tied_operational)
+                .expect("equal-time operational head"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        assert_eq!(product_count(), 1);
+
+        let tied_focused = (0..256)
+            .map(|nonce| {
+                focused_listing_event_with_content(
+                    seller,
+                    110,
+                    d_tag,
+                    &format!("Equal-time focused replacement {nonce}"),
+                )
+            })
+            .find(|candidate| candidate.id_str() < tied_operational.id_str())
+            .expect("deterministic lower-id focused candidate");
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &tied_focused)
+                .expect("lower-id focused replacement"),
+            RadrootsReplicaIngestOutcome::Excluded
+        );
+        assert_eq!(product_count(), 0);
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &tied_operational)
+                .expect("higher-id equal-time operational replay"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
+
+        let final_state = nostr_event_head::find_one(
+            &exec,
+            &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
+                on: NostrEventHeadQueryBindValues::Key { key: listing_addr },
+            }),
+        )
+        .expect("final event state")
+        .result
+        .expect("final state row");
+        assert_eq!(final_state.last_event_id, tied_focused.id_str());
     }
 
     #[test]

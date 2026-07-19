@@ -27,6 +27,7 @@ std = [
   "radroots_core/std",
   "radroots_event/std",
   "radroots_event_codec/std",
+  "radroots_event_codec/nostr",
 ]
 event_store = [
   "std",
@@ -77,6 +78,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 nostr = { workspace = true }
+radroots_test_fixtures = { workspace = true }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",

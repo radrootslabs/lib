@@ -10,6 +10,8 @@ use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]
+use crate::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
+#[cfg(feature = "events")]
 use crate::events::post::RadrootsNostrPostEventBuilder;
 use crate::types::{
     RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrEventStream, RadrootsNostrFilter,
@@ -243,9 +245,11 @@ impl RadrootsNostrClient {
 
     /// Publishes a generic event builder.
     ///
-    /// Kind 0 profiles and unmarked root kind 1 events are rejected because
-    /// their product shape must come from typed authoring. Kind 1 builders
-    /// with an `e` tag remain available for thread compatibility.
+    /// Kind 0 profiles, unmarked root kind 1 events, and focused or mixed kind
+    /// 30402 FoodAvailability marker partitions are rejected because their
+    /// product shape must come from typed authoring. Thread kind 1, marker-free
+    /// NIP-99, and operational-only kind 30402 builders remain available for
+    /// compatibility.
     pub async fn send_event_builder(
         &self,
         event: RadrootsNostrGenericEventBuilder,
@@ -259,6 +263,20 @@ impl RadrootsNostrClient {
     pub async fn send_post_event_builder(
         &self,
         event: RadrootsNostrPostEventBuilder,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_builder(event.into_event_builder())
+            .await?)
+    }
+
+    /// Publishes a validated focused FoodAvailability event.
+    ///
+    /// Media-bearing callers must prove successful BUD-02 upload first.
+    #[cfg(feature = "events")]
+    pub async fn send_food_availability_event_builder(
+        &self,
+        event: RadrootsNostrFoodAvailabilityEventBuilder,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
         Ok(self
             .inner
@@ -312,6 +330,17 @@ pub async fn radroots_nostr_send_post_event(
     event: RadrootsNostrPostEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_post_event_builder(event).await
+}
+
+/// Publishes a validated focused FoodAvailability event.
+///
+/// Media-bearing callers must prove successful BUD-02 upload first.
+#[cfg(feature = "events")]
+pub async fn radroots_nostr_send_food_availability_event(
+    client: &RadrootsNostrClient,
+    event: RadrootsNostrFoodAvailabilityEventBuilder,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    client.send_food_availability_event_builder(event).await
 }
 
 pub async fn radroots_nostr_fetch_event_by_id(
@@ -378,10 +407,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn generic_builder_rejects_typed_only_profiles_and_root_kind_one() {
+    async fn generic_builder_rejects_all_typed_authoring_reservations_before_signer_access() {
         let client = RadrootsNostrClient::new_signerless();
         let raw_kind_one = RadrootsNostrKind::Custom(RadrootsNostrKind::TextNote.as_u16());
-        let builders = [
+        let classified_listing = RadrootsNostrKind::Custom(30_402);
+        let builders = vec![
             RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Metadata, "{}"),
             RadrootsNostrGenericEventBuilder::new(raw_kind_one, "Unmarked root"),
             RadrootsNostrGenericEventBuilder::new(raw_kind_one, "Is it ripe?").tags([
@@ -392,6 +422,14 @@ mod tests {
                     "m image/webp",
                 ])
                 .expect("image metadata"),
+            ]),
+            RadrootsNostrGenericEventBuilder::new(classified_listing, "Focused").tag(
+                RadrootsNostrTag::parse(["radroots:price_unit", "lb"]).expect("focused marker"),
+            ),
+            RadrootsNostrGenericEventBuilder::new(classified_listing, "Ambiguous").tags([
+                RadrootsNostrTag::parse(["radroots:price_unit", "lb"]).expect("focused marker"),
+                RadrootsNostrTag::parse(["radroots:primary_bin", "bin-1"])
+                    .expect("operational marker"),
             ]),
         ];
 

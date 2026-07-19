@@ -16,6 +16,11 @@ deterministic_emit_and_ingest = true
 forbid_legacy_alias_identifiers = true
 profile_event_emission = "excluded"
 unknown_sync_request_fields = "reject"
+classified_listing_signature_verification = "required_before_state"
+classified_listing_head_selection = "raw_before_profile"
+classified_listing_operational_projection = "operational_partition_only"
+classified_listing_excluded_or_rejected_head = "remove_projection_and_advance"
+classified_listing_head_only_ingest = "reject_require_profile_aware"
 
 [transfer]
 version = 2

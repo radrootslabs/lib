@@ -20,6 +20,7 @@ default = ["std"]
 std = [
   "radroots_event/std",
   "radroots_event_codec/std",
+  "radroots_event_codec/nostr",
   "radroots_sql_core/std",
   "dep:base64",
   "dep:uuid",
@@ -49,6 +50,12 @@ base64 = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+nostr = { workspace = true }
+radroots_nostr = { workspace = true, default-features = false, features = [
+  "events",
+  "std",
+] }
+radroots_test_fixtures = { workspace = true }
 radroots_sql_core = { workspace = true, features = ["native"] }
 radroots_replica_store = { workspace = true }
 serde_json = { workspace = true }

@@ -217,6 +217,86 @@
         },
         "message": "missing listing inventory"
       }
+    },
+    {
+      "id": "trade_validation_validate_operational_listing_event_focused_profile_004",
+      "kind": "trade_validation.validate_operational_listing_event.invalid",
+      "input": {
+        "event": {
+          "id": "854bbadc6834830ba084fa1e85a40361d196b12e743e0c466675816bfcd90462",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "created_at": 1700000100,
+          "kind": 30402,
+          "tags": [
+            ["d", "food-focused"],
+            ["title", "Nantes Carrots"],
+            ["summary", "Fresh bunches"],
+            ["published_at", "1700000000"],
+            ["location", "Central Saanich, BC"],
+            ["price", "3", "CAD"],
+            ["radroots:price_unit", "lb"],
+            ["status", "active"]
+          ],
+          "content": "Carrots available this week.",
+          "sig": "bd96b50265a55196efd5cf9c9d81389f7ec9ab4fcbc6b69babd8c8bba05fdae5f4d8f0d813c22a2dd9dba1582a4fc2d1256b3a4df0d954bb4e9a496c6256b714"
+        }
+      },
+      "expected": {
+        "error": {
+          "kind": "invalid_profile"
+        },
+        "message": "classified listing is not an Operational Listing profile"
+      }
+    },
+    {
+      "id": "trade_validation_validate_operational_listing_event_generic_nip99_005",
+      "kind": "trade_validation.validate_operational_listing_event.invalid",
+      "input": {
+        "event": {
+          "id": "a0ec5543e05cb0a70b8dbd8b94a92b4880145ce072b3843499c1216c3be0491c",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "created_at": 1700000100,
+          "kind": 30402,
+          "tags": [
+            ["d", "generic-nip99"],
+            ["title", "Generic produce listing"],
+            ["price", "3", "CAD"]
+          ],
+          "content": "Standards-compatible marker-free listing.",
+          "sig": "eaef63ec0633a825d7534adf635b1c7910992dabbbc51f74986d3bffb15a5e3a1e62b5310e59cb808941029ee6252b80b7011ee18d57e1ce71c87dfc2193e08c"
+        }
+      },
+      "expected": {
+        "error": {
+          "kind": "invalid_profile"
+        },
+        "message": "classified listing is not an Operational Listing profile"
+      }
+    },
+    {
+      "id": "trade_validation_validate_operational_listing_event_ambiguous_profile_006",
+      "kind": "trade_validation.validate_operational_listing_event.invalid",
+      "input": {
+        "event": {
+          "id": "836ab6059aba9cbf2cae36b59b2b0573db8b9f8b109e41a0aaba81f5723d2d02",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "created_at": 1700000100,
+          "kind": 30402,
+          "tags": [
+            ["d", "mixed-markers"],
+            ["radroots:price_unit", "lb"],
+            ["radroots:primary_bin", "bin-a"]
+          ],
+          "content": "Mixed marker listing.",
+          "sig": "a7039386c4a976904bf14265c8c9c73d602a0e68457715a8af90feeee5e396d98e3874eaa2d58be9d02d7cd2616c7a411ef8057dd2b8266e40504dbec004ce9c"
+        }
+      },
+      "expected": {
+        "error": {
+          "kind": "invalid_profile"
+        },
+        "message": "classified listing is not an Operational Listing profile"
+      }
     }
   ]
 }

@@ -174,7 +174,6 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         contract::validate_event_contract_shape,
         farm::RadrootsFarmRef,
         ids::{
@@ -190,6 +189,11 @@ mod tests {
         },
         resource_area::RadrootsResourceAreaRef,
     };
+    use radroots_event_codec::verification::verify_nip01_event;
+    use radroots_nostr::prelude::{
+        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
+    };
+    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
 
     use crate::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
     use crate::operational_listing::validation::validate_operational_listing_event;
@@ -200,7 +204,7 @@ mod tests {
         build_operational_listing_mutation_draft,
     };
 
-    const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     fn d_tag(raw: &str) -> RadrootsDTag {
         RadrootsDTag::parse(raw).expect("d tag")
@@ -482,19 +486,15 @@ mod tests {
         let draft =
             build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
 
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-            id: draft.expected_event_id_str().to_owned(),
-            author: draft.expected_pubkey_str().to_owned(),
-            created_at: draft.created_at_u64(),
-            kind: draft.kind_u32(),
-            tags: draft.tags_as_vec(),
-            content: draft.content().to_owned(),
-            sig: "f".repeat(128),
-        })
-        .expect("listing event");
-        validate_event_contract_shape(&event, OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID)
+        let keys = RadrootsNostrKeys::new(
+            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX)
+                .expect("fixture secret key"),
+        );
+        let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed listing event");
+        validate_event_contract_shape(signed.envelope(), OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID)
             .expect("operational listing contract");
-        let validated = validate_operational_listing_event(&event).expect("validated listing");
+        let verified = verify_nip01_event(signed.envelope().clone()).expect("verified listing");
+        let validated = validate_operational_listing_event(&verified).expect("validated listing");
 
         assert_eq!(validated.seller_pubkey, SELLER);
         assert!(validated.listing_addr.contains(&format!(":{SELLER}:")));

@@ -1,5 +1,7 @@
 #[cfg(feature = "events")]
 pub mod application_handler;
+#[cfg(feature = "events")]
+pub mod food_availability;
 pub mod jobs;
 pub mod metadata;
 pub mod post;

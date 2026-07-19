@@ -1584,6 +1584,10 @@ mod tests {
             "invalid listing kind: 0"
         );
         assert_eq!(
+            RadrootsOperationalListingValidationError::InvalidProfile.to_string(),
+            "classified listing is not an Operational Listing profile"
+        );
+        assert_eq!(
             RadrootsOperationalListingValidationError::MissingListingId.to_string(),
             "missing listing id"
         );

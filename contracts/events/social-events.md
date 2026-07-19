@@ -259,8 +259,31 @@ Revision validation accepts two independently signature-verified events and re-a
 authored wire profile to each side; tolerant normalized or diagnostic-bearing projections cannot
 enter this comparison. Kind, author, `d`, and `published_at` must remain stable. The candidate must
 have a later `created_at`, or the lower event id when both timestamps are equal. Invalid previous
-and current inputs have side-specific errors. The profile contract does not implement signing,
-relay publication, replica selection, media upload, or client behavior.
+and current inputs have side-specific errors.
+
+With the `events` feature, `radroots_nostr_build_food_availability_event` fixes `created_at` during
+typed construction, derives the exact strict wire parts, and returns a sealed builder with no raw
+tag, content, or timestamp mutation. The builder supports local signing and, with the `client`
+feature, typed relay publication. Generic builder signing and client publication reject focused and
+mixed-marker kind-`30402` events before signer access. Marker-free generic NIP-99 and
+operational-only builders remain available for explicit compatibility, while relaying an already
+signed event remains transport-only and establishes no Radroots authoring claim.
+
+Legacy replica ingestion verifies kind-`30402` identifiers and signatures before acquiring its
+write transaction, then selects the raw addressable head before profile decoding. Only the
+Operational Listing partition can reach the legacy trade-product projection. A signature-valid,
+coordinate-valid, selected focused event or marker-free generic NIP-99 event advances the raw head
+as excluded; selected invalid focused, mixed-marker, and malformed operational profiles advance it
+as rejected. Every selected excluded or rejected replacement removes an older operational
+projection, so stale events cannot resurrect it. A signature failure changes neither the raw head
+nor the projection; a missing or invalid `d` tag fails before an addressable head can be selected.
+The public head-only helper rejects kind `30402`, which must use profile-aware ingestion so head and
+projection changes remain atomic.
+
+The typed Nostr boundary does not prove BUD-02 upload completion. Every media-bearing caller must
+obtain successful Blossom upload evidence before signing or publishing; byte-verified descriptors
+alone prove only local descriptor-to-byte agreement. Typed outbox persistence and upload-evidence
+bridging remain separate runtime responsibilities.
 
 ### Calendar Trust Layers
 

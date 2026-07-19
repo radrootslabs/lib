@@ -168,3 +168,17 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Add typed FoodAvailability encoding, signature-gated tolerant admission, strict signed-revision comparison, and partition-aware kind-30402 contract identification while advancing the event registry to version 4."
+
+[[changes]]
+id = "food-availability-publication-replica-boundary"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_field",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Reserve focused FoodAvailability signing and publication behind a sealed typed Nostr builder, require verified Operational Listing validation input, route replica kind-30402 heads before profile projection, and reject head-only kind-30402 ingestion."

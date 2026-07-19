@@ -27,6 +27,11 @@ publish policy both pass for the same source revision.
 - Operational listing authoring now emits canonical Markdown content from the
   tag-authoritative model. Tolerant inbound JSON inspection remains a decode
   compatibility boundary only and is not an authoring format.
+- Operational listing trade validation now requires a
+  `RadrootsSignatureVerifiedEvent` and rejects every non-operational
+  kind-`30402` marker partition before decoding. Event-store projection
+  reconstructs and verifies that typestate instead of trusting a plain stored
+  envelope.
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
   above `65535` instead of truncating them. Canonical-length author keys that
@@ -81,8 +86,19 @@ publish policy both pass for the same source revision.
   ordered image diagnostics, and excludes generic or operational listings.
   Strict revision comparison revalidates both signed events against authored
   wire semantics before enforcing a stable coordinate and `published_at` plus
-  NIP-01 replacement ordering. This adds no replica, signing, publication,
-  upload, raster-decoding, or network-availability claim.
+  NIP-01 replacement ordering.
+- Focused FoodAvailability signing and client publication now use a sealed
+  Nostr builder with a construction-time timestamp and no raw mutation escape.
+  Generic signing and client publication reject focused or mixed kind-`30402`
+  profiles before signer access; signed-event relay remains transport-only.
+  Typed signing and publication do not attest BUD-02 upload completion.
+- Legacy replica ingestion now verifies kind-`30402` signatures, selects the
+  raw addressable head before profile decoding, and sends only the Operational
+  Listing partition to its trade-product projection. Selected focused/generic
+  exclusions and invalid/ambiguous rejections remove an older projection while
+  advancing the head, preventing stale projection fallback. The public
+  head-only helper rejects kind `30402`; callers must use profile-aware
+  ingestion so the head and projection remain atomic.
 - Event-contract identification now selects Operational Listing only for its
   raw marker partition. Focused FoodAvailability is admission-only, while
   marker-free generic and mixed-marker NIP-99 events cannot be mislabeled as

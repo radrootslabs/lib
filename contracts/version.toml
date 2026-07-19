@@ -21,6 +21,7 @@ major_on = [
 ]
 minor_on = [
   "add_exported_type",
+  "add_exported_function",
   "add_exported_constant",
   "add_public_foundation_crate",
   "add_optional_field",

@@ -19,18 +19,27 @@ verifies their `Authorization: Nostr` HTTP values. It does not publish these
 ephemeral authorization events to relays. Pure BUD-11 claim parsing and policy
 validation remain in `radroots_blossom`.
 
-With the `events` feature, kind-1 root publication is available only through
-typed Update, PhotoUpdate, and Ask builders backed by the strict
-`radroots_event_codec` wire operations. The former free-form text-note post
-builder is removed. Reply construction remains a separate compatibility
-surface pending the dedicated strict NIP-10 contract; it is not used to author
-root product cards. Generic protocol builders reject kind-0 Profile events and
-unmarked root kind-1 events at both direct signing and client-publication
-boundaries. Kind-1 builders carrying an `e` tag remain available for thread
-compatibility. Typed media builders can sign or publish only after the owning
-runtime separately proves successful BUD-02 upload completion; their
-byte-verified descriptors do not attest upload completion. The generic net
-manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+The `events` feature is std-backed. With it, kind-1 root publication is
+available only through typed Update, PhotoUpdate, and Ask builders backed by
+the strict `radroots_event_codec` wire operations. The former free-form
+text-note post builder is removed. Reply construction remains a separate
+compatibility surface pending the dedicated strict NIP-10 contract; it is not
+used to author root product cards. Generic protocol builders reject kind-0
+Profile events and unmarked root kind-1 events at both direct signing and
+client-publication boundaries. Kind-1 builders carrying an `e` tag remain
+available for thread compatibility. Typed media builders can sign or publish
+only after the owning runtime separately proves successful BUD-02 upload
+completion; their byte-verified descriptors do not attest upload completion.
+The generic net manager intentionally exposes no direct PhotoUpdate or media
+Ask publisher.
+
+Focused FoodAvailability kind-30402 authoring likewise uses a sealed builder.
+Its `created_at` is fixed during strict construction and cannot be changed
+after wire validation. Generic direct signing and client publication reject
+focused or mixed FoodAvailability/Operational Listing markers before signer
+access; marker-free NIP-99 and operational-only compatibility builders remain
+available. Relaying an already signed event remains a transport operation and
+does not establish typed FoodAvailability authoring.
 
 The opaque generic-builder policy governs Radroots builder signing and client
 publication. It does not redefine the standard NIP-46 `sign_event` method or a

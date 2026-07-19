@@ -1424,11 +1424,11 @@ vector = "contracts/conformance/vectors/trade/reduce_records.v1.json"
 domain = "trade_validation"
 id = "trade_validation.validate_operational_listing_event"
 stability = "beta"
-inputs = ["RadrootsEventEnvelope"]
+inputs = ["RadrootsSignatureVerifiedEvent"]
 outputs = ["RadrootsOperationalListingTradeProjection"]
 error_class = "validation_error"
 deterministic = true
-signing = "native"
+signing = "none"
 transport = "native"
 
 [operations.trade_validation_validate_operational_listing_event.implementation]
@@ -1437,7 +1437,7 @@ rust_modules = [
   "crates/trade/src/operational_listing/validation.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
   "radroots_event::trade_validation::RadrootsOperationalListingValidationError",
   "radroots_trade::operational_listing::validation::RadrootsOperationalListingTradeProjection",
 ]

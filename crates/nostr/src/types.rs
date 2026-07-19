@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 use crate::error::RadrootsNostrError;
+use radroots_event::classified_listing::{
+    RadrootsClassifiedListingPartition, classify_classified_listing_marker_names,
+};
 
 pub type RadrootsNostrCoordinate = nostr::nips::nip01::Coordinate;
 pub type RadrootsNostrEvent = nostr::Event;
@@ -22,10 +25,12 @@ pub type RadrootsNostrUrl = nostr::Url;
 
 /// An opaque builder for generic Nostr events.
 ///
-/// Kind 0 profile events and unmarked root kind 1 events are reserved for
-/// typed Radroots authoring. Kind 1 events carrying an `e` tag remain
-/// available for thread compatibility. The policy is enforced before direct
-/// signing and before a client is allowed to consult its signer.
+/// Kind 0 profile events, unmarked root kind 1 events, and focused or mixed
+/// kind 30402 FoodAvailability marker partitions are reserved for typed
+/// Radroots authoring. Kind 1 events carrying an `e` tag, marker-free NIP-99,
+/// and operational-only kind 30402 events remain available for compatibility.
+/// The policy is enforced before direct signing and before a client is allowed
+/// to consult its signer.
 ///
 /// The upstream unsigned builder is intentionally inaccessible:
 ///
@@ -153,7 +158,23 @@ impl RadrootsNostrGenericEventBuilder {
                 .tags
                 .iter()
                 .any(|tag| tag.kind() == RadrootsNostrTagKind::e());
-        if is_profile || is_unmarked_root_post {
+        let classified_listing_partition =
+            (kind == radroots_event::kinds::KIND_CLASSIFIED_LISTING as u16).then(|| {
+                classify_classified_listing_marker_names(
+                    event
+                        .tags
+                        .iter()
+                        .map(|tag| tag.as_slice().first().map(|name| name.as_str())),
+                )
+            });
+        let is_reserved_focused_listing = matches!(
+            classified_listing_partition,
+            Some(
+                RadrootsClassifiedListingPartition::FocusedFoodAvailability
+                    | RadrootsClassifiedListingPartition::Ambiguous
+            )
+        );
+        if is_profile || is_unmarked_root_post || is_reserved_focused_listing {
             return Err(RadrootsNostrError::TypedAuthoringRequired { kind });
         }
         Ok(())

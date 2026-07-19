@@ -17,13 +17,9 @@ default = ["std"]
 std = []
 blossom = ["std", "dep:base64", "dep:radroots_blossom"]
 client = ["std", "dep:nostr-sdk", "dep:radroots_identity"]
-codec = [
-  "dep:radroots_event",
-  "dep:radroots_event_codec",
-  "radroots_event_codec/nostr",
-]
+codec = ["dep:radroots_event_codec", "radroots_event_codec/nostr"]
 events = [
-  "dep:radroots_event",
+  "std",
   "dep:radroots_event_codec",
   "radroots_event/std",
   "radroots_event/serde",
@@ -35,7 +31,7 @@ nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
 [dependencies]
 base64 = { workspace = true, optional = true }
 radroots_blossom = { workspace = true, optional = true, default-features = false }
-radroots_event = { workspace = true, optional = true, default-features = false }
+radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, optional = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [
   "std",
@@ -54,8 +50,13 @@ thiserror = { workspace = true }
 radroots_blossom = { workspace = true, default-features = false, features = [
   "std",
 ] }
+radroots_test_fixtures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[test]]
 name = "post_profile"
+required-features = ["events"]
+
+[[test]]
+name = "food_availability_profile"
 required-features = ["events"]

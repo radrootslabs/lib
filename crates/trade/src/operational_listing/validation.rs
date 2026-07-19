@@ -10,7 +10,7 @@ use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
 };
 use radroots_event::{
-    RadrootsEventEnvelope,
+    classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
     ids::RadrootsClassifiedListingAddress,
     kinds::is_classified_listing_kind,
     location::{has_textual_locality, is_public_geohash5},
@@ -21,7 +21,10 @@ use radroots_event::{
     trade_validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
 };
 
-use radroots_event_codec::operational_listing::decode::operational_listing_from_nostr_event;
+use radroots_event_codec::{
+    operational_listing::decode::operational_listing_from_nostr_event,
+    verification::RadrootsSignatureVerifiedEvent,
+};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
@@ -43,13 +46,31 @@ pub struct RadrootsOperationalListingTradeProjection {
     pub listing: RadrootsOperationalListing,
 }
 
+/// Validates a signature-verified Operational Listing event.
+///
+/// A plain envelope cannot cross this boundary:
+///
+/// ```compile_fail
+/// use radroots_event::RadrootsEventEnvelope;
+/// use radroots_trade::operational_listing::validation::validate_operational_listing_event;
+///
+/// fn validate_unverified(event: &RadrootsEventEnvelope) {
+///     let _ = validate_operational_listing_event(event);
+/// }
+/// ```
 pub fn validate_operational_listing_event(
-    event: &RadrootsEventEnvelope,
+    verified_event: &RadrootsSignatureVerifiedEvent,
 ) -> Result<RadrootsOperationalListingTradeProjection, OperationalListingValidationError> {
+    let event = verified_event.event();
     if !is_classified_listing_kind(event.kind_u32()) {
         return Err(OperationalListingValidationError::InvalidKind {
             kind: event.kind_u32(),
         });
+    }
+    if classify_classified_listing_tags(event.tags())
+        != RadrootsClassifiedListingPartition::OperationalListing
+    {
+        return Err(OperationalListingValidationError::InvalidProfile);
     }
 
     let listing = operational_listing_from_nostr_event(event)
@@ -186,12 +207,13 @@ fn validate_listing_location_geohash(
 #[cfg(test)]
 mod tests {
     use super::{OperationalListingValidationError, validate_operational_listing_event};
+    use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_event::{
-        RadrootsEventEnvelope,
+        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
         kinds::KIND_CLASSIFIED_LISTING,
@@ -201,9 +223,15 @@ mod tests {
             RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
         },
     };
+    use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
+    use radroots_nostr::prelude::radroots_event_from_nostr;
+    use radroots_test_fixtures::{
+        FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
+        FIXTURE_BOB_SECRET_KEY_HEX,
+    };
 
-    const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const OTHER_SELLER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
+    const OTHER_SELLER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;
 
     fn d_tag(raw: &str) -> RadrootsDTag {
         RadrootsDTag::parse(raw).expect("d tag")
@@ -275,7 +303,7 @@ mod tests {
         }
     }
 
-    fn base_event(listing: &RadrootsOperationalListing) -> RadrootsEventEnvelope {
+    fn base_event(listing: &RadrootsOperationalListing) -> RadrootsSignatureVerifiedEvent {
         let mut tags = vec![
             vec!["d".into(), listing.d_tag.to_string()],
             vec!["p".into(), listing.farm.pubkey.clone()],
@@ -381,17 +409,28 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(radroots_event::RadrootsEventEnvelopeParts {
-            id: "9".repeat(64),
-            author: author.to_string(),
-            created_at: 0,
-            kind,
-            tags,
+    ) -> RadrootsSignatureVerifiedEvent {
+        let secret = match author {
+            SELLER => FIXTURE_ALICE_SECRET_KEY_HEX,
+            OTHER_SELLER => FIXTURE_BOB_SECRET_KEY_HEX,
+            _ => panic!("test author must be an approved fixture identity"),
+        };
+        let keys = Keys::parse(secret).expect("fixture signing key");
+        let tags = tags
+            .into_iter()
+            .map(|tag| Tag::parse(tag).expect("test tag"))
+            .collect::<Vec<_>>();
+        let event = EventBuilder::new(
+            Kind::Custom(u16::try_from(kind).expect("test kind")),
             content,
-            sig: "f".repeat(128),
-        })
-        .expect("event")
+        )
+        .tags(tags)
+        .allow_self_tagging()
+        .custom_created_at(Timestamp::from_secs(1))
+        .sign_with_keys(&keys)
+        .expect("signed test event");
+        let envelope = radroots_event_from_nostr(&event).expect("event adapter");
+        verify_nip01_event(envelope).expect("verified test event")
     }
 
     fn assert_validation_err(
@@ -416,7 +455,7 @@ mod tests {
         let event = event_with_parts(
             SELLER,
             30403,
-            base_event(&listing).tags_as_vec(),
+            base_event(&listing).event().tags_as_vec(),
             String::new(),
         );
         let err = validate_operational_listing_event(&event).unwrap_err();
@@ -430,12 +469,7 @@ mod tests {
     fn validate_listing_rejects_missing_d_tag() {
         let event = event_with_parts(SELLER, KIND_CLASSIFIED_LISTING, Vec::new(), String::new());
         let err = validate_operational_listing_event(&event).unwrap_err();
-        assert_eq!(
-            err,
-            OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::MissingTag("d".to_string())
-            }
-        );
+        assert_eq!(err, OperationalListingValidationError::InvalidProfile);
     }
 
     #[test]
@@ -451,6 +485,7 @@ mod tests {
                 vec!["title".into(), "Coffee".into()],
                 vec!["category".into(), "coffee".into()],
                 vec!["summary".into(), "Single origin".into()],
+                vec!["radroots:primary_bin".into(), "bin-1".into()],
                 vec![
                     "quantity".into(),
                     "1".into(),
@@ -486,7 +521,7 @@ mod tests {
         let event = event_with_parts(
             OTHER_SELLER,
             KIND_CLASSIFIED_LISTING,
-            base_event(&listing).tags_as_vec(),
+            base_event(&listing).event().tags_as_vec(),
             String::new(),
         );
         let err = validate_operational_listing_event(&event).unwrap_err();
@@ -505,7 +540,12 @@ mod tests {
     #[test]
     fn validate_listing_rejects_invalid_kind() {
         let listing = base_listing();
-        let event = event_with_parts(SELLER, 0, base_event(&listing).tags_as_vec(), String::new());
+        let event = event_with_parts(
+            SELLER,
+            0,
+            base_event(&listing).event().tags_as_vec(),
+            String::new(),
+        );
         let err = validate_operational_listing_event(&event).unwrap_err();
         assert_eq!(
             err,
@@ -518,6 +558,24 @@ mod tests {
         let mut listing = base_listing();
         listing.product.title = " ".into();
         assert_validation_err(listing, OperationalListingValidationError::MissingTitle);
+    }
+
+    #[test]
+    fn tampered_envelope_cannot_reach_operational_validation() {
+        let verified = base_event(&base_listing());
+        let event = verified.into_event();
+        let tampered = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id: event.id_str().to_owned(),
+            author: event.author_str().to_owned(),
+            created_at: event.created_at_u64(),
+            kind: event.kind_u32(),
+            tags: event.tags_as_vec(),
+            content: "tampered".to_owned(),
+            sig: event.sig_str().to_owned(),
+        })
+        .expect("well-shaped tampered envelope");
+
+        assert!(verify_nip01_event(tampered).is_err());
     }
 
     #[test]
@@ -695,6 +753,7 @@ mod tests {
     fn validation_error_display_covers_all_variants() {
         let errors = vec![
             OperationalListingValidationError::InvalidKind { kind: 9 },
+            OperationalListingValidationError::InvalidProfile,
             OperationalListingValidationError::MissingListingId,
             OperationalListingValidationError::ListingEventNotFound {
                 listing_addr: "addr".into(),

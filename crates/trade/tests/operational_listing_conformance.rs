@@ -3,6 +3,7 @@
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
 use radroots_event::{RadrootsNip01EventWire, ids::RadrootsIdParseError};
+use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_nostr::prelude::radroots_event_from_nostr;
 use radroots_trade::operational_listing::{
     parse_classified_listing_address, validation::validate_operational_listing_event,
@@ -31,10 +32,13 @@ const ADDRESS_VECTOR_IDS: [&str; 7] = [
     "trade_parse_classified_listing_address_invalid_d_tag_007",
 ];
 
-const VALIDATION_VECTOR_IDS: [&str; 3] = [
+const VALIDATION_VECTOR_IDS: [&str; 6] = [
     "trade_validation_validate_operational_listing_event_valid_001",
     "trade_validation_validate_operational_listing_event_invalid_seller_002",
     "trade_validation_validate_operational_listing_event_missing_inventory_003",
+    "trade_validation_validate_operational_listing_event_focused_profile_004",
+    "trade_validation_validate_operational_listing_event_generic_nip99_005",
+    "trade_validation_validate_operational_listing_event_ambiguous_profile_006",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -199,7 +203,7 @@ fn address_error_value(error: &RadrootsIdParseError) -> Value {
     }
 }
 
-fn verified_event(vector: &Vector, keys: &Keys) -> radroots_event::RadrootsEventEnvelope {
+fn verified_event(vector: &Vector, keys: &Keys) -> RadrootsSignatureVerifiedEvent {
     assert_object_keys(&vector.input, &["event"], "input", &vector.id);
     let event_value = vector
         .input
@@ -262,16 +266,17 @@ fn verified_event(vector: &Vector, keys: &Keys) -> radroots_event::RadrootsEvent
     let adapted = radroots_event_from_nostr(&event)
         .unwrap_or_else(|error| panic!("{} failed Nostr adapter conversion: {error}", vector.id));
     assert_eq!(envelope, adapted, "{} conversion drift", vector.id);
-    envelope
+    verify_nip01_event(envelope)
+        .unwrap_or_else(|error| panic!("{} failed typed verification: {error}", vector.id))
 }
 
-fn validation_valid(vector: &Vector, event: &radroots_event::RadrootsEventEnvelope) {
+fn validation_valid(vector: &Vector, event: &RadrootsSignatureVerifiedEvent) {
     assert_object_keys(&vector.expected, &["projection"], "expected", &vector.id);
     let projection = validate_operational_listing_event(event)
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         projection.listing.farm.pubkey,
-        event.author_str(),
+        event.event().author_str(),
         "{} decoded farm author drift",
         vector.id
     );
@@ -279,7 +284,7 @@ fn validation_valid(vector: &Vector, event: &radroots_event::RadrootsEventEnvelo
     assert_eq!(actual, vector.expected["projection"], "{}", vector.id);
 }
 
-fn validation_invalid(vector: &Vector, event: &radroots_event::RadrootsEventEnvelope) {
+fn validation_invalid(vector: &Vector, event: &RadrootsSignatureVerifiedEvent) {
     assert_object_keys(
         &vector.expected,
         &["error", "message"],

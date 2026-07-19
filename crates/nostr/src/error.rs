@@ -38,6 +38,13 @@ pub enum RadrootsNostrError {
     EventWire(#[from] radroots_event::wire::RadrootsEventWireError),
 
     #[cfg(feature = "events")]
+    #[error("FoodAvailability encoding error: {0}")]
+    FoodAvailabilityEncode(
+        #[from]
+        radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError,
+    ),
+
+    #[cfg(feature = "events")]
     #[error("Signed event error: {0}")]
     SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
 

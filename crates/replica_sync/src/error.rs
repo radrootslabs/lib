@@ -4,6 +4,7 @@ use alloc::string::{String, ToString};
 use core::fmt;
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
+use radroots_event_codec::verification::RadrootsNip01VerificationError;
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_sql_core::error::SqlError;
 
@@ -12,6 +13,7 @@ pub enum RadrootsReplicaEventsError {
     Sql(ReplicaSchemaError<SqlError>),
     Encode(EventEncodeError),
     Parse(EventParseError),
+    Verification(RadrootsNip01VerificationError),
     InvalidSelector(String),
     InvalidData(String),
 }
@@ -22,6 +24,7 @@ impl fmt::Display for RadrootsReplicaEventsError {
             Self::Sql(err) => write!(f, "replica_sync.sql: {}", err.error),
             Self::Encode(err) => write!(f, "replica_sync.encode: {err}"),
             Self::Parse(err) => write!(f, "replica_sync.parse: {err}"),
+            Self::Verification(err) => write!(f, "replica_sync.verification: {err}"),
             Self::InvalidSelector(msg) => write!(f, "replica_sync.selector: {msg}"),
             Self::InvalidData(msg) => write!(f, "replica_sync.data: {msg}"),
         }
@@ -49,10 +52,17 @@ impl From<EventParseError> for RadrootsReplicaEventsError {
     }
 }
 
+impl From<RadrootsNip01VerificationError> for RadrootsReplicaEventsError {
+    fn from(err: RadrootsNip01VerificationError) -> Self {
+        Self::Verification(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::RadrootsReplicaEventsError;
     use radroots_event_codec::error::{EventEncodeError, EventParseError};
+    use radroots_event_codec::verification::RadrootsNip01VerificationError;
     use radroots_replica_schema::ReplicaSchemaError;
     use radroots_sql_core::error::SqlError;
 
@@ -66,6 +76,15 @@ mod tests {
 
         let parse_err = RadrootsReplicaEventsError::Parse(EventParseError::InvalidTag("d"));
         assert!(parse_err.to_string().contains("replica_sync.parse"));
+
+        let verification_err = RadrootsReplicaEventsError::Verification(
+            RadrootsNip01VerificationError::SignatureInvalid,
+        );
+        assert!(
+            verification_err
+                .to_string()
+                .contains("replica_sync.verification")
+        );
 
         let selector_err =
             RadrootsReplicaEventsError::InvalidSelector("selector missing".to_string());
@@ -88,5 +107,13 @@ mod tests {
         let parse_from: RadrootsReplicaEventsError =
             EventParseError::InvalidNumber("k", parse_number_err).into();
         assert!(parse_from.to_string().contains("replica_sync.parse"));
+
+        let verification_from: RadrootsReplicaEventsError =
+            RadrootsNip01VerificationError::SignatureInvalid.into();
+        assert!(
+            verification_from
+                .to_string()
+                .contains("replica_sync.verification")
+        );
     }
 }

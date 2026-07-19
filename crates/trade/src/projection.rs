@@ -4,13 +4,19 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
+    classified_listing::{
+        RadrootsClassifiedListingPartition, classify_classified_listing_tags,
+    },
     ids::{RadrootsEventId, RadrootsIdParseError, RadrootsClassifiedListingAddress, RadrootsOrderId},
     kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_classified_listing_kind, is_order_event_kind},
     operational_listing::{RadrootsOperationalListingAvailability, RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingStatus},
     order::RadrootsOrderEventType,
     tags::TAG_D,
 };
-use radroots_event_codec::order::{RadrootsOrderEnvelopeParseError, order_event_context_from_tags};
+use radroots_event_codec::{
+    order::{RadrootsOrderEnvelopeParseError, order_event_context_from_tags},
+    verification::{RadrootsNip01VerificationError, verify_nip01_event},
+};
 use radroots_event_store::{
     RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, RadrootsEventStoreError,
     RadrootsProjectionCursor, RadrootsStoredEvent,
@@ -62,6 +68,11 @@ pub enum RadrootsTradeProjectionError {
     InvalidStoredEnvelope {
         event_id: String,
         source: RadrootsEventEnvelopeError,
+    },
+    #[error("stored event {event_id} failed NIP-01 verification: {source}")]
+    StoredEventVerification {
+        event_id: String,
+        source: RadrootsNip01VerificationError,
     },
     #[error("stored event {event_id} created_at {created_at} exceeds sqlite integer range")]
     StoredCreatedAtRange { event_id: String, created_at: u64 },
@@ -222,7 +233,18 @@ pub async fn refresh_product_projections(
             transport_observation_count_for_event(store, &stored_event.event_id).await?;
         if is_classified_listing_kind(stored_event.kind) {
             let event = stored_event_to_nostr_event(stored_event)?;
-            let listing = validate_operational_listing_event(&event).map_err(|source| {
+            if classify_classified_listing_tags(event.tags())
+                != RadrootsClassifiedListingPartition::OperationalListing
+            {
+                continue;
+            }
+            let verified_event = verify_nip01_event(event).map_err(|source| {
+                RadrootsTradeProjectionError::StoredEventVerification {
+                    event_id: stored_event.event_id.clone(),
+                    source,
+                }
+            })?;
+            let listing = validate_operational_listing_event(&verified_event).map_err(|source| {
                 RadrootsTradeProjectionError::ListingValidation {
                     event_id: stored_event.event_id.clone(),
                     source,
