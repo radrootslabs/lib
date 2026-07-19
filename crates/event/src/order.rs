@@ -9,52 +9,18 @@ use alloc::{
 #[cfg(test)]
 use crate::ids::RadrootsOrderQuoteId;
 use crate::ids::{
-    RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey,
+    RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId, RadrootsPublicKey,
 };
 use crate::kinds::*;
+#[cfg(test)]
+use crate::operational_listing::RadrootsOperationalListingParseError;
 pub use crate::order_economics::*;
 #[cfg(test)]
-use crate::trade_validation::RadrootsTradeValidationListingError;
+use crate::trade_validation::RadrootsOperationalListingValidationError;
 use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney};
 
 pub const RADROOTS_COMMERCIAL_LISTING_DOMAIN: &str = "trade:listing";
 pub const RADROOTS_ORDER_ENVELOPE_VERSION: u16 = 1;
-
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsListingParseError {
-    InvalidKind(u32),
-    MissingTag(String),
-    InvalidTag(String),
-    InvalidNumber(String),
-    InvalidUnit,
-    InvalidCurrency,
-    InvalidJson(String),
-    InvalidDiscount(String),
-}
-
-impl core::fmt::Display for RadrootsListingParseError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::InvalidKind(kind) => write!(f, "invalid listing kind: {kind}"),
-            Self::MissingTag(tag) => write!(f, "missing required tag: {tag}"),
-            Self::InvalidTag(tag) => write!(f, "invalid tag: {tag}"),
-            Self::InvalidNumber(field) => write!(f, "invalid number: {field}"),
-            Self::InvalidUnit => write!(f, "invalid unit"),
-            Self::InvalidCurrency => write!(f, "invalid currency"),
-            Self::InvalidJson(field) => write!(f, "invalid json: {field}"),
-            Self::InvalidDiscount(kind) => write!(f, "invalid discount data for {kind}"),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for RadrootsListingParseError {}
 
 impl RadrootsOrderEconomics {
     pub fn canonicalize(&mut self) {
@@ -175,7 +141,7 @@ impl RadrootsOrderEconomics {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRequest {
     pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
     pub items: Vec<RadrootsOrderItem>,
@@ -255,7 +221,7 @@ impl RadrootsOrderDecisionOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderDecision {
     pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
     pub decision: RadrootsOrderDecisionOutcome,
@@ -281,7 +247,7 @@ impl RadrootsOrderDecision {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
     pub reason: String,
@@ -810,7 +776,7 @@ mod tests {
         pubkey('a')
     }
 
-    fn sample_listing_addr() -> RadrootsListingAddress {
+    fn sample_listing_addr() -> RadrootsClassifiedListingAddress {
         format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey())
             .parse()
             .unwrap()
@@ -1071,23 +1037,29 @@ mod tests {
     #[test]
     fn listing_parse_error_json_preserves_external_tagged_shape() {
         assert_eq!(
-            serde_json::to_value(RadrootsListingParseError::InvalidKind(KIND_PROFILE)).unwrap(),
+            serde_json::to_value(RadrootsOperationalListingParseError::InvalidKind(
+                KIND_PROFILE
+            ))
+            .unwrap(),
             serde_json::json!({ "InvalidKind": KIND_PROFILE })
         );
         assert_eq!(
-            serde_json::to_value(RadrootsListingParseError::MissingTag("price".into())).unwrap(),
+            serde_json::to_value(RadrootsOperationalListingParseError::MissingTag(
+                "price".into()
+            ))
+            .unwrap(),
             serde_json::json!({ "MissingTag": "price" })
         );
         assert_eq!(
-            serde_json::to_value(RadrootsListingParseError::InvalidUnit).unwrap(),
+            serde_json::to_value(RadrootsOperationalListingParseError::InvalidUnit).unwrap(),
             serde_json::json!("InvalidUnit")
         );
         assert_eq!(
-            serde_json::from_value::<RadrootsListingParseError>(serde_json::json!({
+            serde_json::from_value::<RadrootsOperationalListingParseError>(serde_json::json!({
                 "InvalidJson": "bins"
             }))
             .unwrap(),
-            RadrootsListingParseError::InvalidJson("bins".into())
+            RadrootsOperationalListingParseError::InvalidJson("bins".into())
         );
     }
 
@@ -1571,35 +1543,35 @@ mod tests {
     #[test]
     fn listing_parse_error_display_variants() {
         assert_eq!(
-            RadrootsListingParseError::InvalidKind(KIND_PROFILE).to_string(),
-            "invalid listing kind: 0"
+            RadrootsOperationalListingParseError::InvalidKind(KIND_PROFILE).to_string(),
+            "invalid operational listing kind: 0"
         );
         assert_eq!(
-            RadrootsListingParseError::MissingTag("price".into()).to_string(),
+            RadrootsOperationalListingParseError::MissingTag("price".into()).to_string(),
             "missing required tag: price"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidTag("farm".into()).to_string(),
+            RadrootsOperationalListingParseError::InvalidTag("farm".into()).to_string(),
             "invalid tag: farm"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidNumber("inventory".into()).to_string(),
+            RadrootsOperationalListingParseError::InvalidNumber("inventory".into()).to_string(),
             "invalid number: inventory"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidUnit.to_string(),
+            RadrootsOperationalListingParseError::InvalidUnit.to_string(),
             "invalid unit"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidCurrency.to_string(),
+            RadrootsOperationalListingParseError::InvalidCurrency.to_string(),
             "invalid currency"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidJson("bins".into()).to_string(),
+            RadrootsOperationalListingParseError::InvalidJson("bins".into()).to_string(),
             "invalid json: bins"
         );
         assert_eq!(
-            RadrootsListingParseError::InvalidDiscount("offer".into()).to_string(),
+            RadrootsOperationalListingParseError::InvalidDiscount("offer".into()).to_string(),
             "invalid discount data for offer"
         );
     }
@@ -1607,96 +1579,97 @@ mod tests {
     #[test]
     fn listing_validation_error_display_variants() {
         assert_eq!(
-            (RadrootsTradeValidationListingError::InvalidKind { kind: KIND_PROFILE }).to_string(),
+            (RadrootsOperationalListingValidationError::InvalidKind { kind: KIND_PROFILE })
+                .to_string(),
             "invalid listing kind: 0"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingListingId.to_string(),
+            RadrootsOperationalListingValidationError::MissingListingId.to_string(),
             "missing listing id"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::ListingEventNotFound {
+            RadrootsOperationalListingValidationError::ListingEventNotFound {
                 listing_addr: "listing-1".into(),
             }
             .to_string(),
             "listing event not found: listing-1"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::ListingEventFetchFailed {
+            RadrootsOperationalListingValidationError::ListingEventFetchFailed {
                 listing_addr: "listing-2".into(),
             }
             .to_string(),
             "listing event fetch failed: listing-2"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::ParseError {
-                error: RadrootsListingParseError::InvalidJson("payload".into()),
+            RadrootsOperationalListingValidationError::ParseError {
+                error: RadrootsOperationalListingParseError::InvalidJson("payload".into()),
             }
             .to_string(),
             "invalid listing data: invalid json: payload"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::InvalidSeller.to_string(),
+            RadrootsOperationalListingValidationError::InvalidSeller.to_string(),
             "listing author does not match farm pubkey"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingFarmProfile.to_string(),
+            RadrootsOperationalListingValidationError::MissingFarmProfile.to_string(),
             "missing farm profile"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingFarmRecord.to_string(),
+            RadrootsOperationalListingValidationError::MissingFarmRecord.to_string(),
             "missing farm record"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingTitle.to_string(),
+            RadrootsOperationalListingValidationError::MissingTitle.to_string(),
             "missing listing title"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingDescription.to_string(),
+            RadrootsOperationalListingValidationError::MissingDescription.to_string(),
             "missing listing description"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingProductType.to_string(),
+            RadrootsOperationalListingValidationError::MissingProductType.to_string(),
             "missing listing product type"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingBins.to_string(),
+            RadrootsOperationalListingValidationError::MissingBins.to_string(),
             "missing listing bins"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingPrimaryBin.to_string(),
+            RadrootsOperationalListingValidationError::MissingPrimaryBin.to_string(),
             "missing primary listing bin"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::InvalidBin.to_string(),
+            RadrootsOperationalListingValidationError::InvalidBin.to_string(),
             "invalid listing bin"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingPrice.to_string(),
+            RadrootsOperationalListingValidationError::MissingPrice.to_string(),
             "missing listing price"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::InvalidPrice.to_string(),
+            RadrootsOperationalListingValidationError::InvalidPrice.to_string(),
             "invalid listing price"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingInventory.to_string(),
+            RadrootsOperationalListingValidationError::MissingInventory.to_string(),
             "missing listing inventory"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::InvalidInventory.to_string(),
+            RadrootsOperationalListingValidationError::InvalidInventory.to_string(),
             "invalid listing inventory"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingAvailability.to_string(),
+            RadrootsOperationalListingValidationError::MissingAvailability.to_string(),
             "missing listing availability"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingLocation.to_string(),
+            RadrootsOperationalListingValidationError::MissingLocation.to_string(),
             "missing listing location"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingDeliveryMethod.to_string(),
+            RadrootsOperationalListingValidationError::MissingDeliveryMethod.to_string(),
             "missing listing delivery method"
         );
     }

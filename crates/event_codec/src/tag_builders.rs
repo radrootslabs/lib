@@ -15,10 +15,10 @@ use radroots_event::{
     document::RadrootsDocument, farm::RadrootsFarm, follow::RadrootsFollow,
     geochat::RadrootsGeoChat, gift_wrap::RadrootsGiftWrap, job_feedback::RadrootsJobFeedback,
     job_request::RadrootsJobRequest, job_result::RadrootsJobResult, list::RadrootsList,
-    list_set::RadrootsListSet, listing::RadrootsListing, message::RadrootsMessage,
-    message_file::RadrootsMessageFile, plot::RadrootsPlot, reaction::RadrootsReaction,
-    resource_area::RadrootsResourceArea, resource_cap::RadrootsResourceHarvestCap,
-    seal::RadrootsSeal,
+    list_set::RadrootsListSet, message::RadrootsMessage, message_file::RadrootsMessageFile,
+    operational_listing::RadrootsOperationalListing, plot::RadrootsPlot,
+    reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
+    resource_cap::RadrootsResourceHarvestCap, seal::RadrootsSeal,
 };
 
 use crate::app_data::encode::app_data_build_tags;
@@ -44,9 +44,9 @@ use crate::knowledge::encode::{
 };
 use crate::list::encode::list_build_tags;
 use crate::list_set::encode::list_set_build_tags;
-use crate::listing::tags::listing_tags;
 use crate::message::encode::message_build_tags;
 use crate::message_file::encode::message_file_build_tags;
+use crate::operational_listing::tags::operational_listing_tags;
 use crate::plot::encode::plot_build_tags;
 use crate::reaction::encode::reaction_build_tags;
 use crate::resource_area::encode::resource_area_build_tags;
@@ -58,11 +58,11 @@ pub trait RadrootsEventTagBuilder {
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error>;
 }
 
-impl RadrootsEventTagBuilder for RadrootsListing {
+impl RadrootsEventTagBuilder for RadrootsOperationalListing {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
-        listing_tags(self)
+        operational_listing_tags(self)
     }
 }
 

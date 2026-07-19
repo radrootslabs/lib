@@ -3,7 +3,7 @@
 use core::str::FromStr;
 
 use radroots_event::ids::{
-    RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId,
+    RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsOrderId,
     RadrootsPublicKey,
 };
 
@@ -65,7 +65,7 @@ impl FromStr for RadrootsTradeId {
 pub struct RadrootsTradeLocator {
     pub trade_id: RadrootsTradeId,
     pub root_event_id: Option<RadrootsEventId>,
-    pub listing_addr: Option<RadrootsListingAddress>,
+    pub listing_addr: Option<RadrootsClassifiedListingAddress>,
     pub buyer_pubkey: Option<RadrootsPublicKey>,
     pub seller_pubkey: Option<RadrootsPublicKey>,
 }
@@ -94,7 +94,7 @@ impl RadrootsTradeLocator {
         self
     }
 
-    pub fn with_listing_addr(mut self, listing_addr: RadrootsListingAddress) -> Self {
+    pub fn with_listing_addr(mut self, listing_addr: RadrootsClassifiedListingAddress) -> Self {
         self.listing_addr = Some(listing_addr);
         self
     }
@@ -117,7 +117,7 @@ impl RadrootsTradeLocator {
 pub struct RadrootsTradeLocatorCandidate {
     pub trade_id: RadrootsTradeId,
     pub root_event_id: RadrootsEventId,
-    pub listing_addr: RadrootsListingAddress,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
 }
@@ -137,7 +137,7 @@ impl RadrootsTradeLocatorCandidate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::kinds::KIND_LISTING;
+    use radroots_event::kinds::KIND_CLASSIFIED_LISTING;
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -154,9 +154,11 @@ mod tests {
         RadrootsPublicKey::parse(raw).expect("public key")
     }
 
-    fn listing_addr() -> RadrootsListingAddress {
-        RadrootsListingAddress::parse(format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"))
-            .expect("listing address")
+    fn listing_addr() -> RadrootsClassifiedListingAddress {
+        RadrootsClassifiedListingAddress::parse(format!(
+            "{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("listing address")
     }
 
     #[test]

@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
-    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsOrderId},
-    kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_listing_kind, is_order_event_kind},
-    listing::{RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingStatus},
+    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsClassifiedListingAddress, RadrootsOrderId},
+    kinds::{KIND_TRADE_VALIDATION_RECEIPT, is_classified_listing_kind, is_order_event_kind},
+    operational_listing::{RadrootsOperationalListingAvailability, RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingStatus},
     order::RadrootsOrderEventType,
     tags::TAG_D,
 };
@@ -20,7 +20,7 @@ use thiserror::Error;
 
 use crate::{
     identity::RadrootsTradeLocator,
-    listing::validation::{RadrootsTradeListing, validate_listing_event},
+    operational_listing::validation::{RadrootsOperationalListingTradeProjection, validate_operational_listing_event},
     order::{
         RadrootsGroupedOrderEventRecords, RadrootsOrderEventDecodeError, RadrootsOrderEventRecord,
         RadrootsOrderProjectionQueryResult, RadrootsTradeLocatorProjectionQueryResult,
@@ -68,7 +68,7 @@ pub enum RadrootsTradeProjectionError {
     #[error("stored listing event {event_id} failed validation: {source}")]
     ListingValidation {
         event_id: String,
-        source: radroots_event::trade_validation::RadrootsTradeValidationListingError,
+        source: radroots_event::trade_validation::RadrootsOperationalListingValidationError,
     },
     #[error("stored order event {event_id} could not decode as an order record: {source}")]
     OrderDecode {
@@ -96,7 +96,7 @@ pub enum RadrootsTradeProjectionError {
         source: RadrootsIdParseError,
     },
     #[error("stored listing projection has invalid listing_addr {listing_addr}: {source}")]
-    ListingAddress {
+    ClassifiedListingAddress {
         listing_addr: String,
         source: RadrootsIdParseError,
     },
@@ -145,7 +145,7 @@ impl RadrootsProjectionRefreshRequest {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsProjectionRefreshReceipt {
     pub scanned_events: usize,
-    pub listing_upserts: usize,
+    pub operational_listing_upserts: usize,
     pub trade_upserts: usize,
     pub validation_receipts: usize,
     pub transport_observations: i64,
@@ -153,8 +153,8 @@ pub struct RadrootsProjectionRefreshReceipt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsListingProjectionRow {
-    pub listing_addr: RadrootsListingAddress,
+pub struct RadrootsOperationalListingProjectionRow {
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub listing_event_id: String,
     pub seller_pubkey: String,
     pub title: String,
@@ -173,12 +173,12 @@ pub struct RadrootsListingProjectionRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsListingSearchRequest {
+pub struct RadrootsOperationalListingSearchRequest {
     pub query: String,
     pub limit: u32,
 }
 
-impl RadrootsListingSearchRequest {
+impl RadrootsOperationalListingSearchRequest {
     pub fn new(query: impl Into<String>) -> Self {
         Self {
             query: query.into(),
@@ -220,16 +220,17 @@ pub async fn refresh_product_projections(
         receipt.last_event_seq = Some(stored_event.seq);
         receipt.transport_observations +=
             transport_observation_count_for_event(store, &stored_event.event_id).await?;
-        if is_listing_kind(stored_event.kind) {
+        if is_classified_listing_kind(stored_event.kind) {
             let event = stored_event_to_nostr_event(stored_event)?;
-            let listing = validate_listing_event(&event).map_err(|source| {
+            let listing = validate_operational_listing_event(&event).map_err(|source| {
                 RadrootsTradeProjectionError::ListingValidation {
                     event_id: stored_event.event_id.clone(),
                     source,
                 }
             })?;
-            upsert_listing_projection(store, stored_event, &listing, updated_at_ms).await?;
-            receipt.listing_upserts += 1;
+            upsert_operational_listing_projection(store, stored_event, &listing, updated_at_ms)
+                .await?;
+            receipt.operational_listing_upserts += 1;
         } else if is_order_event_kind(stored_event.kind) {
             let event = stored_event_to_nostr_event(stored_event)?;
             let record = order_event_record_from_event(&event).map_err(|source| {
@@ -278,12 +279,12 @@ pub async fn refresh_product_projections(
     Ok(receipt)
 }
 
-pub async fn search_listing_projection(
+pub async fn search_operational_listing_projection(
     store: &RadrootsEventStore,
-    request: &RadrootsListingSearchRequest,
-) -> Result<Vec<RadrootsListingProjectionRow>, RadrootsTradeProjectionError> {
+    request: &RadrootsOperationalListingSearchRequest,
+) -> Result<Vec<RadrootsOperationalListingProjectionRow>, RadrootsTradeProjectionError> {
     request.validate()?;
-    let rows = if let Some(query) = listing_fts_query(&request.query) {
+    let rows = if let Some(query) = operational_listing_fts_query(&request.query) {
         sqlx::query(
             "SELECT p.listing_addr, p.listing_event_id, p.seller_pubkey, p.title, p.description, p.product_type, p.price_amount, p.price_currency, p.inventory_available, p.delivery_method, p.locality_primary, p.locality_city, p.locality_region, p.locality_country, p.geohash5, p.updated_at_ms FROM listing_projection p JOIN listing_search_fts f ON f.listing_addr = p.listing_addr WHERE listing_search_fts MATCH ? ORDER BY bm25(listing_search_fts), p.updated_at_ms DESC, p.listing_addr LIMIT ?",
         )
@@ -299,7 +300,9 @@ pub async fn search_listing_projection(
         .fetch_all(store.pool())
         .await?
     };
-    rows.into_iter().map(listing_projection_row).collect()
+    rows.into_iter()
+        .map(operational_listing_projection_row)
+        .collect()
 }
 
 pub async fn trade_projection_query_for_order_id(
@@ -343,10 +346,10 @@ pub async fn trade_projection_query_for_trade_locator(
     })
 }
 
-async fn upsert_listing_projection(
+async fn upsert_operational_listing_projection(
     store: &RadrootsEventStore,
     stored_event: &RadrootsStoredEvent,
-    listing: &RadrootsTradeListing,
+    listing: &RadrootsOperationalListingTradeProjection,
     updated_at_ms: i64,
 ) -> Result<(), RadrootsTradeProjectionError> {
     let listing_json = serde_json::to_string(&listing.listing).map_err(|source| {
@@ -538,7 +541,7 @@ async fn upsert_trade_projection_row(
     .bind(trade_workflow_status_label(&projection.status))
     .bind(bool_i64(projection.lifecycle_terminal))
     .bind(trade_rhi_state_label(&projection.status, projection.validation_receipt_event_id.as_ref()))
-    .bind(projection.listing_addr.as_ref().map(RadrootsListingAddress::as_str))
+    .bind(projection.listing_addr.as_ref().map(RadrootsClassifiedListingAddress::as_str))
     .bind(projection.buyer_pubkey.as_ref().map(|value| value.as_str()))
     .bind(projection.seller_pubkey.as_ref().map(|value| value.as_str()))
     .bind(projection.request_event_id.as_ref().map(|value| value.as_str()))
@@ -799,17 +802,17 @@ async fn transport_observation_count_for_event(
     Ok(row.try_get("count")?)
 }
 
-fn listing_projection_row(
+fn operational_listing_projection_row(
     row: sqlx::sqlite::SqliteRow,
-) -> Result<RadrootsListingProjectionRow, RadrootsTradeProjectionError> {
+) -> Result<RadrootsOperationalListingProjectionRow, RadrootsTradeProjectionError> {
     let listing_addr = row.try_get::<String, _>("listing_addr")?;
-    let listing_addr = RadrootsListingAddress::parse(&listing_addr).map_err(|source| {
-        RadrootsTradeProjectionError::ListingAddress {
+    let listing_addr = RadrootsClassifiedListingAddress::parse(&listing_addr).map_err(|source| {
+        RadrootsTradeProjectionError::ClassifiedListingAddress {
             listing_addr: listing_addr.clone(),
             source,
         }
     })?;
-    Ok(RadrootsListingProjectionRow {
+    Ok(RadrootsOperationalListingProjectionRow {
         listing_addr,
         listing_event_id: row.try_get("listing_event_id")?,
         seller_pubkey: row.try_get("seller_pubkey")?,
@@ -829,27 +832,27 @@ fn listing_projection_row(
     })
 }
 
-fn listing_availability_label(availability: &RadrootsListingAvailability) -> String {
+fn listing_availability_label(availability: &RadrootsOperationalListingAvailability) -> String {
     match availability {
-        RadrootsListingAvailability::Window { .. } => "window".to_owned(),
-        RadrootsListingAvailability::Status { status } => match status {
-            RadrootsListingStatus::Active => "active".to_owned(),
-            RadrootsListingStatus::Sold => "sold".to_owned(),
-            RadrootsListingStatus::Other { value } => value.trim().to_owned(),
+        RadrootsOperationalListingAvailability::Window { .. } => "window".to_owned(),
+        RadrootsOperationalListingAvailability::Status { status } => match status {
+            RadrootsOperationalListingStatus::Active => "active".to_owned(),
+            RadrootsOperationalListingStatus::Sold => "sold".to_owned(),
+            RadrootsOperationalListingStatus::Other { value } => value.trim().to_owned(),
         },
     }
 }
 
-fn listing_delivery_method_label(delivery_method: &RadrootsListingDeliveryMethod) -> String {
+fn listing_delivery_method_label(delivery_method: &RadrootsOperationalListingDeliveryMethod) -> String {
     match delivery_method {
-        RadrootsListingDeliveryMethod::Pickup => "pickup".to_owned(),
-        RadrootsListingDeliveryMethod::LocalDelivery => "local_delivery".to_owned(),
-        RadrootsListingDeliveryMethod::Shipping => "shipping".to_owned(),
-        RadrootsListingDeliveryMethod::Other { method } => method.trim().to_owned(),
+        RadrootsOperationalListingDeliveryMethod::Pickup => "pickup".to_owned(),
+        RadrootsOperationalListingDeliveryMethod::LocalDelivery => "local_delivery".to_owned(),
+        RadrootsOperationalListingDeliveryMethod::Shipping => "shipping".to_owned(),
+        RadrootsOperationalListingDeliveryMethod::Other { method } => method.trim().to_owned(),
     }
 }
 
-fn listing_locality_search_text(listing: &RadrootsTradeListing) -> String {
+fn listing_locality_search_text(listing: &RadrootsOperationalListingTradeProjection) -> String {
     [
         Some(listing.location.primary.as_str()),
         listing.location.city.as_deref(),
@@ -863,7 +866,7 @@ fn listing_locality_search_text(listing: &RadrootsTradeListing) -> String {
     .join(" ")
 }
 
-fn listing_fts_query(query: &str) -> Option<String> {
+fn operational_listing_fts_query(query: &str) -> Option<String> {
     let terms = query
         .split(|character: char| !character.is_alphanumeric())
         .map(str::trim)
@@ -921,10 +924,10 @@ mod tests {
         draft::RadrootsSignedEvent,
         farm::RadrootsFarmRef,
         ids::RadrootsOrderQuoteId,
-        kinds::KIND_LISTING,
-        listing::{
-            RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
-            RadrootsListingPublicLocation,
+        kinds::KIND_CLASSIFIED_LISTING,
+        operational_listing::{
+            RadrootsOperationalListing, RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+            RadrootsOperationalListingPublicLocation,
         },
         order::{
             RadrootsOrderDecision, RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem,
@@ -985,15 +988,15 @@ mod tests {
         raw.parse().expect("decimal")
     }
 
-    fn listing() -> RadrootsListing {
-        RadrootsListing {
+    fn listing() -> RadrootsOperationalListing {
+        RadrootsOperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("d tag"),
             published_at: Some(1_700_000_000),
             farm: RadrootsFarmRef {
                 pubkey: SELLER.to_owned(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "pea-shoots".to_owned(),
                 title: "Pea shoots".to_owned(),
                 category: "greens".to_owned(),
@@ -1005,7 +1008,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: "bin-1".parse().expect("bin"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-1".parse().expect("bin"),
                 quantity: RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::Each),
                 price_per_canonical_unit: RadrootsCoreQuantityPrice {
@@ -1022,11 +1025,11 @@ mod tests {
             plot: None,
             discounts: None,
             inventory_available: Some(decimal("9")),
-            availability: Some(RadrootsListingAvailability::Status {
-                status: RadrootsListingStatus::Active,
+            availability: Some(RadrootsOperationalListingAvailability::Status {
+                status: RadrootsOperationalListingStatus::Active,
             }),
-            delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-            location: Some(RadrootsListingPublicLocation {
+            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+            location: Some(RadrootsOperationalListingPublicLocation {
                 primary: "Old Town".to_owned(),
                 city: Some("Victoria".to_owned()),
                 region: Some("BC".to_owned()),
@@ -1038,7 +1041,7 @@ mod tests {
     }
 
     fn signed_listing_event() -> RadrootsSignedEvent {
-        let parts = radroots_event_codec::listing::encode::to_wire_parts(&listing())
+        let parts = radroots_event_codec::operational_listing::encode::to_wire_parts(&listing())
             .expect("listing parts");
         sign_parts(
             parts.kind,
@@ -1049,10 +1052,10 @@ mod tests {
         )
     }
 
-    fn listing_addr(event: &RadrootsSignedEvent) -> RadrootsListingAddress {
-        RadrootsListingAddress::parse(format!(
+    fn listing_addr(event: &RadrootsSignedEvent) -> RadrootsClassifiedListingAddress {
+        RadrootsClassifiedListingAddress::parse(format!(
             "{}:{}:{}",
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             event.pubkey_str(),
             listing().d_tag
         ))
@@ -1283,14 +1286,14 @@ mod tests {
                 .await
                 .expect("refresh");
         assert_eq!(refresh.scanned_events, 4);
-        assert_eq!(refresh.listing_upserts, 1);
+        assert_eq!(refresh.operational_listing_upserts, 1);
         assert_eq!(refresh.trade_upserts, 1);
         assert_eq!(refresh.validation_receipts, 1);
         assert_eq!(refresh.transport_observations, 1);
 
-        let rows = search_listing_projection(
+        let rows = search_operational_listing_projection(
             &store,
-            &RadrootsListingSearchRequest::new("pea victoria").with_limit(10),
+            &RadrootsOperationalListingSearchRequest::new("pea victoria").with_limit(10),
         )
         .await
         .expect("search");

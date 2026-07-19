@@ -75,7 +75,7 @@ source_files = [
   "crates/event/src/lib.rs",
   "crates/event/src/list.rs",
   "crates/event/src/list_set.rs",
-  "crates/event/src/listing.rs",
+  "crates/event/src/operational_listing.rs",
   "crates/event/src/message.rs",
   "crates/event/src/message_file.rs",
   "crates/event/src/order.rs",

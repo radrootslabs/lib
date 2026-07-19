@@ -1,0 +1,20 @@
+{
+  "suite": "trade_validation",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "trade_validation_validate_operational_listing_event_minimal_001",
+      "kind": "trade_validation.validate_operational_listing_event",
+      "input": {
+        "event": {
+          "kind": "classified_listing",
+          "content_shape": "operational_listing_json_or_markdown",
+          "tags_shape": "operational_listing_tags_full"
+        }
+      },
+      "expected": {
+        "validation_shape": "operational_listing_trade_projection"
+      }
+    }
+  ]
+}

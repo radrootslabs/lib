@@ -8,10 +8,10 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::kinds::KIND_LISTING;
+use radroots_event::kinds::KIND_CLASSIFIED_LISTING;
 use radroots_event::list::RadrootsListEntry;
 use radroots_event::list_set::RadrootsListSet;
-use radroots_event::listing::RadrootsListing;
+use radroots_event::operational_listing::RadrootsOperationalListing;
 use radroots_event::plot::RadrootsPlot;
 
 use crate::d_tag::validate_d_tag;
@@ -130,7 +130,7 @@ where
     })
 }
 
-pub fn farm_listings_list_set<I, S>(
+pub fn farm_operational_listings_list_set<I, S>(
     farm_id: &str,
     farm_pubkey: &str,
     listing_ids: I,
@@ -147,7 +147,7 @@ where
         }
         validate_d_tag(listing_id, "listing_id")?;
         let mut address = String::new();
-        address.push_str(&KIND_LISTING.to_string());
+        address.push_str(&KIND_CLASSIFIED_LISTING.to_string());
         address.push(':');
         address.push_str(farm_pubkey);
         address.push(':');
@@ -167,15 +167,15 @@ where
     })
 }
 
-pub fn farm_listings_list_set_from_listings<'a, I>(
+pub fn farm_operational_listings_list_set_from_listings<'a, I>(
     farm_id: &str,
     farm_pubkey: &str,
     listings: I,
 ) -> Result<RadrootsListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = &'a RadrootsListing>,
+    I: IntoIterator<Item = &'a RadrootsOperationalListing>,
 {
-    farm_listings_list_set(
+    farm_operational_listings_list_set(
         farm_id,
         farm_pubkey,
         listings.into_iter().map(|listing| listing.d_tag.as_str()),
@@ -267,19 +267,21 @@ mod tests {
             farm_plots_list_set(farm_id, farm_pubkey, ["invalid"]).expect_err("invalid plot_id");
         assert!(matches!(err, EventEncodeError::InvalidField("plot.d_tag")));
 
-        let listings = farm_listings_list_set(farm_id, farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
-            .expect("listings");
+        let listings =
+            farm_operational_listings_list_set(farm_id, farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
+                .expect("listings");
         assert_eq!(listings.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:listings");
         assert_eq!(listings.entries[0].tag, "a");
-        let err = farm_listings_list_set("invalid", farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
-            .expect_err("invalid farm id");
+        let err =
+            farm_operational_listings_list_set("invalid", farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
+                .expect_err("invalid farm id");
         assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
-        let err = farm_listings_list_set(farm_id, farm_pubkey, ["invalid"])
+        let err = farm_operational_listings_list_set(farm_id, farm_pubkey, ["invalid"])
             .expect_err("invalid listing_id");
         assert!(matches!(err, EventEncodeError::InvalidField("listing_id")));
 
-        let err =
-            farm_listings_list_set(farm_id, farm_pubkey, [" "]).expect_err("empty listing_id");
+        let err = farm_operational_listings_list_set(farm_id, farm_pubkey, [" "])
+            .expect_err("empty listing_id");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("listing_id")

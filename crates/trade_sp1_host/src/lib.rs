@@ -1782,7 +1782,7 @@ mod tests {
         verify_validation_receipt_event,
     };
     use radroots_trade_sp1_guest::{
-        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
+        RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
         RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
         RADROOTS_SP1_TRADE_WITNESS_VERSION, RadrootsSp1TradeCanonicalEventEvidence,
@@ -1859,7 +1859,7 @@ mod tests {
                     .to_string(),
                 signer_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                     .to_string(),
-                kind: RADROOTS_SP1_TRADE_KIND_LISTING,
+                kind: RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING,
                 canonical_event_hash:
                     "0x1010101010101010101010101010101010101010101010101010101010101010".to_string(),
                 signature_hash:

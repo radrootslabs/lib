@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-use crate::order::RadrootsListingParseError;
+use crate::operational_listing::RadrootsOperationalListingParseError;
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -16,12 +16,20 @@ use crate::order::RadrootsListingParseError;
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTradeValidationListingError {
-    InvalidKind { kind: u32 },
+pub enum RadrootsOperationalListingValidationError {
+    InvalidKind {
+        kind: u32,
+    },
     MissingListingId,
-    ListingEventNotFound { listing_addr: String },
-    ListingEventFetchFailed { listing_addr: String },
-    ParseError { error: RadrootsListingParseError },
+    ListingEventNotFound {
+        listing_addr: String,
+    },
+    ListingEventFetchFailed {
+        listing_addr: String,
+    },
+    ParseError {
+        error: RadrootsOperationalListingParseError,
+    },
     InvalidSeller,
     MissingFarmProfile,
     MissingFarmRecord,
@@ -43,7 +51,7 @@ pub enum RadrootsTradeValidationListingError {
     MissingDeliveryMethod,
 }
 
-impl core::fmt::Display for RadrootsTradeValidationListingError {
+impl core::fmt::Display for RadrootsOperationalListingValidationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidKind { kind } => write!(f, "invalid listing kind: {kind}"),
@@ -79,7 +87,7 @@ impl core::fmt::Display for RadrootsTradeValidationListingError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsTradeValidationListingError {}
+impl std::error::Error for RadrootsOperationalListingValidationError {}
 
 #[cfg(test)]
 mod tests {
@@ -88,19 +96,19 @@ mod tests {
     #[test]
     fn listing_validation_error_display_covers_location_variants() {
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingLocation.to_string(),
+            RadrootsOperationalListingValidationError::MissingLocation.to_string(),
             "missing listing location"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingLocationLocality.to_string(),
+            RadrootsOperationalListingValidationError::MissingLocationLocality.to_string(),
             "missing listing location locality"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::MissingLocationGeohash.to_string(),
+            RadrootsOperationalListingValidationError::MissingLocationGeohash.to_string(),
             "missing listing location geohash"
         );
         assert_eq!(
-            RadrootsTradeValidationListingError::InvalidLocationGeohash.to_string(),
+            RadrootsOperationalListingValidationError::InvalidLocationGeohash.to_string(),
             "invalid listing location geohash"
         );
     }

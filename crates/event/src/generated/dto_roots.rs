@@ -85,24 +85,40 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::list::RadrootsList>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list::RadrootsListEntry>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::list_set::RadrootsListSet>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListing>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingAvailability>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingBin>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingDeliveryMethod>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingImage>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingProduct>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingPublicLocation>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::RadrootsListingStatus>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::message::RadrootsMessage>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::message::RadrootsMessageRecipient>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::message_file::RadrootsMessageFile>(),
         ::dto_bindgen::export::RootDescriptor::new::<
             crate::message_file::RadrootsMessageFileDimensions,
         >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListing,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingAvailability,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingBin,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingDeliveryMethod,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingImage,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingParseError,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingProduct,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingPublicLocation,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::operational_listing::RadrootsOperationalListingStatus,
+        >(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsCommercialDomain>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsListingParseError>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderCancellation>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderDecision>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::order::RadrootsOrderDecisionOutcome>(),
@@ -155,7 +171,7 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::seal::RadrootsSeal>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade_validation::RadrootsTradeValidationListingError,
+            crate::trade_validation::RadrootsOperationalListingValidationError,
         >(),
     ]
 }

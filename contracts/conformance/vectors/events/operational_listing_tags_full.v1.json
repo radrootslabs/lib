@@ -3,8 +3,8 @@
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "listing_tags_full_minimal_001",
-      "kind": "listing_tags_full",
+      "id": "operational_listing_tags_full_minimal_001",
+      "kind": "operational_listing_tags_full",
       "input": {
         "d_tag": "listing-001",
         "farm": {

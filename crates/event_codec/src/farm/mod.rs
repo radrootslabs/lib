@@ -11,7 +11,7 @@ mod tests {
     use crate::farm::decode::{farm_from_event, parsed_from_event};
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
-        farm_listings_list_set_from_listings, farm_members_list_set,
+        farm_members_list_set, farm_operational_listings_list_set_from_listings,
         farm_plots_list_set_from_plots, member_of_farms_list_set,
     };
     use radroots_core::{
@@ -22,7 +22,10 @@ mod tests {
     use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
     #[cfg(feature = "serde_json")]
     use radroots_event::kinds::KIND_FARM;
-    use radroots_event::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
+    use radroots_event::operational_listing::{
+        RadrootsOperationalListing, RadrootsOperationalListingBin,
+        RadrootsOperationalListingProduct,
+    };
     use radroots_event::plot::RadrootsPlot;
 
     #[cfg(feature = "serde_json")]
@@ -475,14 +478,14 @@ mod tests {
 
     #[test]
     fn farm_listings_list_set_uses_listing_addresses() {
-        let listings = vec![RadrootsListing {
+        let listings = vec![RadrootsOperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "coffee".to_string(),
                 title: "Coffee".to_string(),
                 category: "coffee".to_string(),
@@ -494,7 +497,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1u32),
@@ -526,7 +529,7 @@ mod tests {
             images: None,
         }];
 
-        let listings_list = farm_listings_list_set_from_listings(
+        let listings_list = farm_operational_listings_list_set_from_listings(
             "AAAAAAAAAAAAAAAAAAAAAA",
             "farm_pubkey",
             &listings,

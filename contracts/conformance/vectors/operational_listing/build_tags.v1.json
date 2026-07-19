@@ -1,10 +1,10 @@
 {
-  "suite": "listing",
+  "suite": "operational_listing",
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "listing_build_tags_minimal_001",
-      "kind": "listing.build_tags",
+      "id": "operational_listing_build_tags_minimal_001",
+      "kind": "operational_listing.build_tags",
       "input": {
         "listing": {
           "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
@@ -22,7 +22,7 @@
         }
       },
       "expected": {
-        "tags_shape": "listing_tags"
+        "tags_shape": "operational_listing_tags"
       }
     }
   ]

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, string::ToString, vec::Vec};
+use alloc::{format, string::String, string::ToString, vec::Vec};
 
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
@@ -9,12 +9,15 @@ use std::{string::String, vec::Vec};
 use core::{borrow::Borrow, fmt, ops::Deref, str::FromStr};
 use url_nostd::Url;
 
+use crate::kinds::KIND_CLASSIFIED_LISTING;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsIdParseError {
     Empty,
     InvalidFormat,
     InvalidLength { expected: usize, actual: usize },
     InvalidCharacter,
+    UnexpectedKind { expected: u32, actual: u32 },
     TooLong { max: usize, actual: usize },
 }
 
@@ -30,6 +33,12 @@ impl fmt::Display for RadrootsIdParseError {
                 )
             }
             Self::InvalidCharacter => write!(f, "identifier contains an invalid character"),
+            Self::UnexpectedKind { expected, actual } => {
+                write!(
+                    f,
+                    "identifier kind {actual} does not match required kind {expected}"
+                )
+            }
             Self::TooLong { max, actual } => {
                 write!(f, "identifier length {actual} exceeds maximum length {max}")
             }
@@ -185,7 +194,10 @@ validated_string_id!(
     RadrootsAddressableCoordinate,
     validate_addressable_coordinate
 );
-validated_string_id!(RadrootsListingAddress, validate_addressable_coordinate);
+validated_string_id!(
+    RadrootsClassifiedListingAddress,
+    validate_classified_listing_address
+);
 validated_string_id!(RadrootsOrderId, validate_commercial_id);
 validated_string_id!(RadrootsOrderQuoteId, validate_commercial_id);
 validated_string_id!(RadrootsInventoryBinId, validate_commercial_id);
@@ -282,6 +294,20 @@ fn validate_economics_digest(value: &str) -> Result<String, RadrootsIdParseError
 fn validate_addressable_coordinate(value: &str) -> Result<String, RadrootsIdParseError> {
     parse_addressable_coordinate_parts(value)?;
     Ok(value.to_string())
+}
+
+fn validate_classified_listing_address(value: &str) -> Result<String, RadrootsIdParseError> {
+    let parts = parse_addressable_coordinate_parts(value)?;
+    if parts.kind != KIND_CLASSIFIED_LISTING {
+        return Err(RadrootsIdParseError::UnexpectedKind {
+            expected: KIND_CLASSIFIED_LISTING,
+            actual: parts.kind,
+        });
+    }
+    Ok(format!(
+        "{}:{}:{}",
+        KIND_CLASSIFIED_LISTING, parts.pubkey, parts.d_tag
+    ))
 }
 
 fn parse_addressable_coordinate_parts(
@@ -456,6 +482,10 @@ mod tests {
                 actual: 7,
             },
             RadrootsIdParseError::InvalidCharacter,
+            RadrootsIdParseError::UnexpectedKind {
+                expected: KIND_CLASSIFIED_LISTING,
+                actual: 30023,
+            },
             RadrootsIdParseError::TooLong {
                 max: 128,
                 actual: 129,
@@ -465,6 +495,14 @@ mod tests {
         for error in errors {
             assert!(!error.to_string().is_empty());
         }
+        assert_eq!(
+            RadrootsIdParseError::UnexpectedKind {
+                expected: KIND_CLASSIFIED_LISTING,
+                actual: 30023,
+            }
+            .to_string(),
+            "identifier kind 30023 does not match required kind 30402"
+        );
     }
 
     #[test]
@@ -528,12 +566,32 @@ mod tests {
             addr
         );
         assert_eq!(
-            RadrootsListingAddress::parse("30402:not_hex:listing-1").unwrap_err(),
+            RadrootsClassifiedListingAddress::parse("30402:not_hex:listing-1").unwrap_err(),
             RadrootsIdParseError::InvalidLength {
                 expected: 64,
                 actual: 7
             }
         );
+        assert_eq!(
+            RadrootsClassifiedListingAddress::parse(format!("30023:{}:listing-1", hex_64('0')))
+                .unwrap_err(),
+            RadrootsIdParseError::UnexpectedKind {
+                expected: KIND_CLASSIFIED_LISTING,
+                actual: 30023,
+            }
+        );
+        let canonical_pubkey = hex_64('a');
+        for noncanonical_kind in ["030402", "+30402"] {
+            assert_eq!(
+                RadrootsClassifiedListingAddress::parse(format!(
+                    "{noncanonical_kind}:{}:listing-1",
+                    hex_64('A')
+                ))
+                .expect("classified listing coordinate")
+                .as_str(),
+                format!("30402:{canonical_pubkey}:listing-1")
+            );
+        }
         assert_eq!(
             RadrootsAddressableCoordinate::parse("30402").unwrap_err(),
             RadrootsIdParseError::InvalidFormat
@@ -617,7 +675,7 @@ mod tests {
         assert_identifier_impls!(RadrootsEventSignature, hex_128('c').as_str());
         assert_identifier_impls!(RadrootsDTag, "listing-1");
         assert_identifier_impls!(RadrootsAddressableCoordinate, addressable.as_str());
-        assert_identifier_impls!(RadrootsListingAddress, addressable.as_str());
+        assert_identifier_impls!(RadrootsClassifiedListingAddress, addressable.as_str());
         assert_identifier_impls!(RadrootsOrderId, "order-1");
         assert_identifier_impls!(RadrootsOrderQuoteId, "quote-1");
         assert_identifier_impls!(RadrootsInventoryBinId, "bin-1");
@@ -800,8 +858,8 @@ mod tests {
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
-        struct MissingListingAddress {
-            value: RadrootsListingAddress,
+        struct MissingClassifiedListingAddress {
+            value: RadrootsClassifiedListingAddress,
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
@@ -841,7 +899,10 @@ mod tests {
         assert_eq!(missing_field_message::<MissingTradeCandidateId>(), missing);
         assert_eq!(missing_field_message::<MissingTradeMutationId>(), missing);
         assert_eq!(missing_field_message::<MissingDTag>(), missing);
-        assert_eq!(missing_field_message::<MissingListingAddress>(), missing);
+        assert_eq!(
+            missing_field_message::<MissingClassifiedListingAddress>(),
+            missing
+        );
         assert_eq!(
             missing_field_message::<MissingAddressableCoordinate>(),
             missing
@@ -852,10 +913,9 @@ mod tests {
 
         let order: RadrootsOrderId =
             serde_json::from_value(serde_json::json!("order-1")).expect("order from value");
-        let listing: RadrootsListingAddress = serde_json::from_value(serde_json::json!(format!(
-            "30402:{}:listing-1",
-            hex_64('a')
-        )))
+        let listing: RadrootsClassifiedListingAddress = serde_json::from_value(serde_json::json!(
+            format!("30402:{}:listing-1", hex_64('a'))
+        ))
         .expect("listing from value");
         let quote: RadrootsOrderQuoteId =
             serde_json::from_value(serde_json::json!("quote-1")).expect("quote from value");

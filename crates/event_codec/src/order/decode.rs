@@ -4,7 +4,9 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "serde_json")]
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
-    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsPublicKey},
+    ids::{
+        RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey,
+    },
     kinds::is_order_event_kind,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
@@ -124,7 +126,7 @@ pub fn order_envelope_from_event<T: DeserializeOwned>(
     if envelope.listing_addr != listing_addr {
         return Err(RadrootsOrderEnvelopeParseError::ListingAddrTagMismatch);
     }
-    RadrootsListingAddress::parse(&envelope.listing_addr)
+    RadrootsClassifiedListingAddress::parse(&envelope.listing_addr)
         .map_err(RadrootsOrderEnvelopeParseError::InvalidListingAddr)?;
 
     let tag_order_id = required_order_tag_value(&event_tags, TAG_D)?;
@@ -354,8 +356,8 @@ mod tests {
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
         ids::{
-            RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
-            RadrootsOrderQuoteId, RadrootsPublicKey,
+            RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsInventoryBinId,
+            RadrootsOrderId, RadrootsOrderQuoteId, RadrootsPublicKey,
         },
         kinds::{KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
         order::{
@@ -391,7 +393,7 @@ mod tests {
         seller_pubkey().into_string()
     }
 
-    fn listing_addr() -> RadrootsListingAddress {
+    fn listing_addr() -> RadrootsClassifiedListingAddress {
         format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey_wire())
             .parse()
             .unwrap()
@@ -564,7 +566,7 @@ mod tests {
     #[test]
     fn listing_address_roundtrips() {
         let raw = format!("30402:{}:listing-1", seller_pubkey_wire());
-        let addr = RadrootsListingAddress::parse(&raw).expect("parse listing address");
+        let addr = RadrootsClassifiedListingAddress::parse(&raw).expect("parse listing address");
         assert_eq!(addr.as_str(), raw);
     }
 
@@ -752,7 +754,7 @@ mod tests {
             RadrootsOrderPayloadError::MissingItems,
         );
         let invalid_listing_addr = RadrootsOrderEnvelopeParseError::InvalidListingAddr(
-            RadrootsListingAddress::parse("not-a-listing-address").unwrap_err(),
+            RadrootsClassifiedListingAddress::parse("not-a-listing-address").unwrap_err(),
         );
         let errors = [
             RadrootsOrderEnvelopeParseError::InvalidKind(3431),

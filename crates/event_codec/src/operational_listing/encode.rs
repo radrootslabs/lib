@@ -6,40 +6,42 @@ use alloc::{format, string::ToString};
 use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
-use radroots_event::kinds::{KIND_LISTING, is_listing_kind};
-use radroots_event::listing::RadrootsListing;
+use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
+use radroots_event::operational_listing::RadrootsOperationalListing;
 
 use crate::error::EventEncodeError;
-use crate::listing::tags::listing_tags;
+use crate::operational_listing::tags::operational_listing_tags;
 #[cfg(feature = "serde_json")]
-use crate::listing::tags::listing_tags_full;
+use crate::operational_listing::tags::operational_listing_tags_full;
 #[cfg(feature = "serde_json")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
 #[cfg(feature = "serde_json")]
-const DEFAULT_KIND: u32 = KIND_LISTING;
+const DEFAULT_KIND: u32 = KIND_CLASSIFIED_LISTING;
 
-pub fn listing_build_tags(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    listing_tags(listing)
+pub fn operational_listing_build_tags(
+    listing: &RadrootsOperationalListing,
+) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    operational_listing_tags(listing)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(
-    listing: &RadrootsListing,
+    listing: &RadrootsOperationalListing,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(listing, DEFAULT_KIND)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    listing: &RadrootsListing,
+    listing: &RadrootsOperationalListing,
     kind: u32,
 ) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
-    if !is_listing_kind(kind) {
+    if !is_classified_listing_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    let tags = listing_tags_full(listing)?;
-    let content = listing_markdown_content(listing);
+    let tags = operational_listing_tags_full(listing)?;
+    let content = operational_listing_markdown_content(listing);
     Ok(RadrootsNip01EventWireParts {
         kind,
         content,
@@ -48,24 +50,7 @@ pub fn to_wire_parts_with_kind(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_json_wire_parts_with_kind(
-    listing: &RadrootsListing,
-    kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
-    if !is_listing_kind(kind) {
-        return Err(EventEncodeError::InvalidKind(kind));
-    }
-    let tags = listing_tags_full(listing)?;
-    let content = serde_json::to_string(listing).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
-        kind,
-        content,
-        tags,
-    })
-}
-
-#[cfg(feature = "serde_json")]
-fn listing_markdown_content(listing: &RadrootsListing) -> String {
+fn operational_listing_markdown_content(listing: &RadrootsOperationalListing) -> String {
     let title = listing.product.title.trim();
     let summary = listing
         .product
@@ -93,22 +78,22 @@ mod tests {
     use radroots_event::{
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
-        listing::{RadrootsListingBin, RadrootsListingProduct},
+        operational_listing::{RadrootsOperationalListingBin, RadrootsOperationalListingProduct},
     };
 
     fn decimal(value: &str) -> RadrootsCoreDecimal {
         RadrootsCoreDecimal::from_str(value).expect("decimal")
     }
 
-    fn listing_with(title: &str, summary: Option<&str>) -> RadrootsListing {
-        RadrootsListing {
+    fn listing_with(title: &str, summary: Option<&str>) -> RadrootsOperationalListing {
+        RadrootsOperationalListing {
             d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "a".repeat(64),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "coffee".to_string(),
                 title: title.to_string(),
                 category: "produce".to_string(),
@@ -120,7 +105,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
                 quantity: RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassG),
                 price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
@@ -145,19 +130,22 @@ mod tests {
     }
 
     #[test]
-    fn listing_markdown_content_covers_title_summary_combinations() {
+    fn operational_listing_markdown_content_covers_title_summary_combinations() {
         assert_eq!(
-            listing_markdown_content(&listing_with("Coffee", Some("Washed"))),
+            operational_listing_markdown_content(&listing_with("Coffee", Some("Washed"))),
             "# Coffee\n\nWashed"
         );
         assert_eq!(
-            listing_markdown_content(&listing_with("Coffee", None)),
+            operational_listing_markdown_content(&listing_with("Coffee", None)),
             "# Coffee"
         );
         assert_eq!(
-            listing_markdown_content(&listing_with(" ", Some("Washed"))),
+            operational_listing_markdown_content(&listing_with(" ", Some("Washed"))),
             "Washed"
         );
-        assert_eq!(listing_markdown_content(&listing_with(" ", None)), "");
+        assert_eq!(
+            operational_listing_markdown_content(&listing_with(" ", None)),
+            ""
+        );
     }
 }

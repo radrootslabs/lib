@@ -428,7 +428,7 @@ mod tests {
         let request = RadrootsActorResolutionRequest::new(
             selector,
             RadrootsActorRole::Seller,
-            Some("radroots.listing.published.v1".to_owned()),
+            Some("radroots.operational_listing.published.v1".to_owned()),
         );
 
         assert_eq!(
@@ -436,7 +436,10 @@ mod tests {
             &RadrootsActorSelector::account_id("acct-field-01").expect("selector")
         );
         assert_eq!(request.required_role(), RadrootsActorRole::Seller);
-        assert_eq!(request.contract_id(), Some("radroots.listing.published.v1"));
+        assert_eq!(
+            request.contract_id(),
+            Some("radroots.operational_listing.published.v1")
+        );
     }
 
     #[test]

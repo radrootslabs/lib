@@ -7,9 +7,10 @@ this repository.
 
 ## Purpose
 
-The public social event substrate extends the Radroots event family beyond profile, farm, listing,
-and trade workflows while keeping relay runtime behavior, application projections, moderation
-services, and private Field business documents outside this repository's event-contract boundary.
+The public social event substrate extends the Radroots event family beyond profile, farm,
+operational listings, and trade workflows while keeping relay runtime behavior, application
+projections, moderation services, and private Field business documents outside this repository's
+event-contract boundary.
 
 The target implementation is standards-first and Radroots-named. Event models live in
 `radroots_event`, canonical encode/decode behavior lives in `radroots_event_codec`, and
@@ -27,8 +28,8 @@ authoring and admission profile are separate contract layers.
 ## Implementation Inventory
 
 The repository implements strict authored and verified-projected kind `1` post profiles, kind `1111`
-`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, stable listing
-records through `RadrootsListing`, articles, generic public file metadata, calendar date events,
+`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
+records through `RadrootsOperationalListing`, articles, generic public file metadata, calendar date events,
 calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
 
 The closeout contract requires:
@@ -38,7 +39,7 @@ The closeout contract requires:
 - ordinary kind-1 compatibility reads plus strict Update, PhotoUpdate, and Ask authoring
 - strict NIP-22 `RadrootsComment` behavior without legacy `e_root` or `e_prev` fallback tags
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
-- explicit optional `published_at` support for NIP-99 listing parity
+- explicit optional `published_at` support for NIP-99 classified-listing parity
 - NIP-65 relay-list validation evidence through `RadrootsList`
 - conformance vectors and canonical-event witnesses for every new or upgraded social event family
 
@@ -69,7 +70,8 @@ The production-v1 public social substrate includes:
   `RadrootsParsedNip52CalendarEventRsvp`, and strict admitted
   `RadrootsAdmittedCalendarEventRsvp` models for NIP-52 kind `31925`
 - `RadrootsReport` for NIP-56 kind `1984`
-- stable listing kind `30402` validation through `RadrootsListing`
+- operational-listing profile validation through `RadrootsOperationalListing` at NIP-99
+  classified-listing kind `30402`
 - relay-list kind `10002` validation through `RadrootsList`
 
 ## Contract Decisions
@@ -138,11 +140,11 @@ contract. Strict Profile, Update, PhotoUpdate, and Ask contracts are
 `TypedOnly`; `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft
 contracts remain `GenericDraft`. `RadrootsEventDraft::new` therefore rejects
 the strict Profile contract and all four governed kind-1 post contracts with
-`contract_not_draft_authorable`. Serialized drafts record registry version `2`
+`contract_not_draft_authorable`. Serialized drafts record registry version `3`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
 frozen-draft signing boundary repeats that validation, so stale version-`1`
-drafts must be rebuilt. Typed root posts enter Nostr signing and client
+and version-`2` drafts must be rebuilt. Typed root posts enter Nostr signing and client
 publication only through an opaque post builder that exposes timestamp
 selection and signing, but no raw tag/content mutation or public conversion to
 the upstream builder. The opaque generic builder rejects kind `0` and unmarked
@@ -317,17 +319,18 @@ format-safety policy. No calendar model upgrades an observed relay URL into eith
 or an availability guarantee.
 
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
-Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`
+Events, Market, Map, and Profile public-content candidates are explicit. Active NIP-99
+classified-listing kind `30402`
 can appear in public product surfaces. Report kind `1984` is a moderation/admin candidate, not
 normal feed content. Relay and HTTP auth kinds are transient and excluded from durable social and
 farm-ops candidate sets. Private farm operations candidates include the farm workspace manifest,
 farm CRDT change envelope, farm file metadata, and the supported NIP-29 group event subset.
 
-`RadrootsRelayList` is not a separate model type in the target contract. Stable listings are
-represented through `RadrootsListing`, and NIP-51 standard and list-set entries, including NIP-65
-relay metadata kind `10002`, are represented through `RadrootsList`. NIP-51 taxonomy may classify
-kind `31924` as a calendar list, but generic list and list-set decoding or authoring must reject that kind;
-only the calendar-specific model and codec may parse or publish it.
+`RadrootsRelayList` is not a separate model type in the target contract. Operational listing records
+are represented through `RadrootsOperationalListing`, and NIP-51 standard and list-set entries,
+including NIP-65 relay metadata kind `10002`, are represented through `RadrootsList`. NIP-51
+taxonomy may classify kind `31924` as a calendar list, but generic list and list-set decoding or
+authoring must reject that kind; only the calendar-specific model and codec may parse or publish it.
 
 ## Exclusions
 
@@ -350,7 +353,7 @@ this contract boundary.
 
 Every new social codec and every upgraded existing social codec must have deterministic valid and
 invalid conformance vectors before closeout. Upgraded vectors must include the strict comment,
-reaction, listing, farm, list, and list-set behavior whose public contract changes during the
+reaction, operational-listing, farm, list, and list-set behavior whose public contract changes during the
 refactor.
 
 Social vectors are repo-owned and synthetic. They must not depend on application relay state, local

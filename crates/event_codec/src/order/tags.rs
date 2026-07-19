@@ -254,7 +254,7 @@ mod tests {
     };
     use radroots_event::{
         RadrootsEventPtr,
-        kinds::KIND_LISTING,
+        kinds::KIND_CLASSIFIED_LISTING,
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
 
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_build_expected_tags() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = order_envelope_tags(
             "pubkey",
             listing_addr.as_str(),
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_include_listing_event_pointer_and_chain_refs() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let listing_event_id = event_id('a');
         let tags = order_envelope_tags(
             "buyer",
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_support_listing_event_without_relay() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let listing_event_id = event_id('b');
         let tags = order_envelope_tags(
             "buyer",
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_accept_str_listing_address() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = order_envelope_tags(
             "buyer",
             listing_addr.as_str(),
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_accept_str_listing_address_with_listing_event_only() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let listing_event_id = event_id('c');
         let tags = order_envelope_tags(
             "buyer",
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn order_envelope_tags_reject_empty_required_fields() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let listing_addr = format!("{KIND_CLASSIFIED_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
 
         let err = order_envelope_tags(" ", listing_addr.as_str(), None::<&str>, None, None, None)
             .expect_err("blank recipient");

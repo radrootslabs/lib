@@ -1,10 +1,10 @@
 {
-  "suite": "listing",
+  "suite": "operational_listing",
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "listing_build_draft_minimal_001",
-      "kind": "listing.build_draft",
+      "id": "operational_listing_build_draft_minimal_001",
+      "kind": "operational_listing.build_draft",
       "input": {
         "listing": {
           "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
@@ -23,9 +23,9 @@
       },
       "expected": {
         "wire_parts": {
-          "kind": "listing",
-          "content_shape": "listing_markdown_or_empty",
-          "tags_shape": "listing_tags_full"
+          "kind": "classified_listing",
+          "content_shape": "operational_listing_markdown_or_empty",
+          "tags_shape": "operational_listing_tags_full"
         }
       }
     }

@@ -170,9 +170,11 @@ mod tests {
     use super::*;
     use crate::RadrootsSignerError;
     use core::cell::Cell;
-    use radroots_event::contract::{RadrootsActorRole, event_contract};
+    use radroots_event::contract::{
+        RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsActorRole, event_contract,
+    };
     use radroots_event::ids::RadrootsPublicKey;
-    use radroots_event::kinds::{KIND_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
+    use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()
@@ -190,16 +192,38 @@ mod tests {
         RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
     }
 
-    fn listing_event_draft(pubkey: &str) -> RadrootsEventDraft {
+    fn operational_listing_event_draft(pubkey: &str) -> RadrootsEventDraft {
         RadrootsEventDraft::new(
-            "radroots.listing.published.v1",
-            KIND_LISTING,
+            "radroots.operational_listing.published.v1",
+            KIND_CLASSIFIED_LISTING,
             1_700_000_000,
-            vec![vec!["d".to_owned(), "listing-a".to_owned()]],
-            "{}",
+            vec![
+                vec!["d".to_owned(), "listing-a".to_owned()],
+                vec!["p".to_owned(), pubkey.to_owned()],
+                vec!["a".to_owned(), format!("30340:{pubkey}:farm-a")],
+                vec!["key".to_owned(), "carrots".to_owned()],
+                vec!["title".to_owned(), "Carrots".to_owned()],
+                vec!["category".to_owned(), "produce".to_owned()],
+                vec!["radroots:primary_bin".to_owned(), "field-bin".to_owned()],
+                vec![
+                    "radroots:bin".to_owned(),
+                    "field-bin".to_owned(),
+                    "1000".to_owned(),
+                    "g".to_owned(),
+                ],
+                vec![
+                    "radroots:price".to_owned(),
+                    "field-bin".to_owned(),
+                    "3".to_owned(),
+                    "CAD".to_owned(),
+                    "1".to_owned(),
+                    "lb".to_owned(),
+                ],
+            ],
+            "# Carrots",
             pubkey,
         )
-        .expect("listing event draft")
+        .expect("operational listing event draft")
     }
 
     #[derive(Default)]
@@ -368,7 +392,8 @@ mod tests {
 
     #[test]
     fn buyer_and_seller_contract_roles_match_current_contracts() {
-        let listing = event_contract("radroots.listing.published.v1").expect("listing contract");
+        let operational_listing = event_contract("radroots.operational_listing.published.v1")
+            .expect("operational listing contract");
         let trade_proposal =
             event_contract("radroots.trade.proposal.v1").expect("trade proposal contract");
         let trade_decision =
@@ -376,10 +401,10 @@ mod tests {
         let seller = seller_actor(hex_64('a').as_str());
         let buyer = buyer_actor(hex_64('b').as_str());
 
-        assert_eq!(listing.author_role, RadrootsActorRole::Seller);
-        assert!(authorize_actor_for_contract(&seller, listing).is_ok());
+        assert_eq!(operational_listing.author_role, RadrootsActorRole::Seller);
+        assert!(authorize_actor_for_contract(&seller, operational_listing).is_ok());
         assert!(matches!(
-            authorize_actor_for_contract(&buyer, listing),
+            authorize_actor_for_contract(&buyer, operational_listing),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
         assert!(authorize_actor_for_contract(&buyer, trade_proposal).is_ok());
@@ -397,7 +422,7 @@ mod tests {
 
     #[test]
     fn actor_pubkey_mismatch_fails() {
-        let draft = listing_event_draft(hex_64('a').as_str());
+        let draft = operational_listing_event_draft(hex_64('a').as_str());
         let actor = seller_actor(hex_64('b').as_str());
 
         assert!(matches!(
@@ -408,7 +433,7 @@ mod tests {
 
     #[test]
     fn signer_pubkey_mismatch_fails() {
-        let draft = listing_event_draft(hex_64('a').as_str());
+        let draft = operational_listing_event_draft(hex_64('a').as_str());
         let signer = StaticSigner::new(hex_64('b').as_str());
 
         assert!(matches!(
@@ -418,36 +443,39 @@ mod tests {
     }
 
     #[test]
-    fn draft_validation_failure_does_not_invoke_custom_signer() {
+    fn stale_v1_and_v2_draft_validation_failures_do_not_invoke_custom_signer() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = CountingSigner::new(pubkey.as_str());
 
-        let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
-            Err(RadrootsDraftError::ContractRegistryVersionMismatch {
-                expected: 2,
-                actual: 1,
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 3);
+        for actual in [1, 2] {
+            let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
+                Err(RadrootsDraftError::ContractRegistryVersionMismatch {
+                    expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+                    actual,
+                })
             })
-        })
-        .expect_err("stale draft validation must fail");
+            .expect_err("stale draft validation must fail");
 
-        assert!(matches!(
-            error,
-            RadrootsAuthorityError::DraftValidation(
-                RadrootsDraftError::ContractRegistryVersionMismatch {
-                    expected: 2,
-                    actual: 1
-                }
-            )
-        ));
+            assert_eq!(
+                error,
+                RadrootsAuthorityError::DraftValidation(
+                    RadrootsDraftError::ContractRegistryVersionMismatch {
+                        expected: 3,
+                        actual,
+                    }
+                )
+            );
+        }
         assert_eq!(signer.sign_invocations.get(), 0);
     }
 
     #[test]
     fn signer_explicit_id_mismatch_fails_before_authorized_signing() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::with_event_id(pubkey.as_str(), hex_64('e'));
 
@@ -462,7 +490,7 @@ mod tests {
     #[test]
     fn signed_event_created_at_mismatch_fails() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::with_overrides(
             pubkey.as_str(),
@@ -481,7 +509,7 @@ mod tests {
     #[test]
     fn signed_event_kind_mismatch_fails() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::with_overrides(
             pubkey.as_str(),
@@ -494,7 +522,7 @@ mod tests {
         assert!(matches!(
             sign_authorized_draft(&actor, &signer, &draft),
             Err(RadrootsAuthorityError::SignedEventKindMismatch {
-                expected_kind: KIND_LISTING,
+                expected_kind: KIND_CLASSIFIED_LISTING,
                 actual_kind: KIND_POST
             })
         ));
@@ -503,7 +531,7 @@ mod tests {
     #[test]
     fn signed_event_tags_mismatch_fails() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::with_overrides(
             pubkey.as_str(),
@@ -518,7 +546,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsAuthorityError::SignedEventTagsMismatch {
-                expected_len: 1,
+                expected_len: 9,
                 actual_len: 1
             }
         );
@@ -529,7 +557,7 @@ mod tests {
     #[test]
     fn signed_event_content_mismatch_fails() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::with_overrides(
             pubkey.as_str(),
@@ -544,7 +572,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsAuthorityError::SignedEventContentMismatch {
-                expected_len: 2,
+                expected_len: 9,
                 actual_len: 16
             }
         );
@@ -555,7 +583,7 @@ mod tests {
     #[test]
     fn signed_event_exactly_matching_draft_passes() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let signed = signed_event_from_draft(&draft);
 
         validate_signed_event_matches_draft(&signed, &draft).expect("signed event matches draft");
@@ -564,7 +592,7 @@ mod tests {
     #[test]
     fn signed_event_pubkey_mismatch_fails() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let signed = signed_event_from_parts(
             hex_64('b'),
             draft.created_at_u64(),
@@ -594,7 +622,7 @@ mod tests {
     #[test]
     fn static_signer_maps_invalid_signed_event_parts() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let signer = StaticSigner::with_event_id(pubkey.as_str(), "bad-id".to_owned());
 
         assert!(matches!(
@@ -606,7 +634,7 @@ mod tests {
     #[test]
     fn authorized_actor_and_signer_return_signed_event() {
         let pubkey = hex_64('a');
-        let draft = listing_event_draft(pubkey.as_str());
+        let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::new(pubkey.as_str());
 
@@ -614,7 +642,7 @@ mod tests {
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
         assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
-        assert_eq!(signed.kind(), KIND_LISTING);
+        assert_eq!(signed.kind(), KIND_CLASSIFIED_LISTING);
     }
 
     #[test]

@@ -15,6 +15,8 @@ const BINDING_DEPENDENCIES: &[&str] = &[
 
 const RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS: &[&str] = &[
     "KIND_LISTING_DRAFT",
+    "KIND_CLASSIFIED_LISTING_DRAFT",
+    "KIND_OPERATIONAL_LISTING_DRAFT",
     "KIND_ORDER_REVISION",
     "KIND_TRADE_QUESTION",
     "KIND_TRADE_ANSWER",
@@ -28,9 +30,15 @@ const RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS: &[&str] = &[
     "KIND_TRADE_TRANSITION_PROOF_REQUEST",
     "KIND_TRADE_TRANSITION_PROOF_RESULT",
     "RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT",
+    "RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING_DRAFT",
+    "RADROOTS_SP1_TRADE_KIND_OPERATIONAL_LISTING_DRAFT",
     "RadrootsListingDraft",
+    "RadrootsClassifiedListingDraft",
+    "RadrootsOperationalListingDraft",
     "RadrootsCanonicalListingDraft",
     "RadrootsListingDraftError",
+    "RadrootsClassifiedListingDraftError",
+    "RadrootsOperationalListingDraftError",
     "RadrootsOrderRevision",
     "RadrootsOrderRevisionId",
     "RadrootsTradeValidationListingRequest",
@@ -66,6 +74,53 @@ const RETIRED_PROTOCOL_EVENT_SURFACE_ALLOWED_PATHS: &[&str] = &[
     "crates/protocol_contract_v1/src/lib.rs",
     "tools/xtask/src/hygiene.rs",
 ];
+
+const RETIRED_LISTING_ALIAS_IDENTIFIER_TOKENS: &[&str] = &[
+    "KIND_LISTING",
+    "LISTING_EVENT_KINDS",
+    "is_listing_kind",
+    "is_listing_event_kind",
+    "RADROOTS_SP1_TRADE_KIND_LISTING",
+    "ListingTagOptions",
+    "ListingDecodeError",
+    "ListingParseError",
+    "ListingProjection",
+    "ListingInventoryAccounting",
+    "ListingAddress",
+    "ListingSnapshot",
+    "RADROOTS_LISTING_PRODUCT_TAG_KEYS",
+    "RadrootsCanonicalListingEdit",
+    "RadrootsPublicListingAddress",
+    "RadrootsPublicListingAddressError",
+    "RadrootsTradeListing",
+    "RadrootsTradeListingSubtotal",
+    "RadrootsTradeListingTotal",
+    "RadrootsTradeValidationListingError",
+    "farm_listings_list_set",
+    "farm_listings_list_set_from_listings",
+    "listing_from_event",
+    "listing_from_event_parts",
+    "listing_from_nostr_event",
+    "parse_listing_address",
+    "parse_listing_address_str",
+    "parse_listing_event",
+    "parse_public_listing_address",
+    "search_listing_projection",
+    "to_json_wire_parts_with_kind",
+    "validate_listing_event",
+    "listing_tags",
+    "listing_tags_with_options",
+    "listing_tags_full",
+    "listing_build_tags",
+    "decode_listing_from_event_parts",
+    "listing_markdown_content",
+    "build_listing_mutation_draft",
+    "canonicalize_listing_edit",
+    "reduce_listing_inventory_accounting",
+];
+
+const RETIRED_LISTING_ALIAS_IDENTIFIER_PREFIXES: &[&str] = &["RadrootsListing"];
+const RETIRED_LISTING_CONTRACT_ID: &str = "radroots.listing.published.v1";
 
 pub fn run(args: &[String], root: &Path) -> Result<(), String> {
     match args.first().map(String::as_str) {
@@ -111,6 +166,8 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             "RadrootsActiveOrder",
             "RadrootsActiveTrade",
             "RadrootsTradeListingParseError",
+            "RadrootsClassifiedListingTradeProjectionParseError",
+            "RadrootsOperationalListingTradeProjectionParseError",
             "RadrootsTradeDomain",
             "radroots_sdk::trade::",
             "TradeListingParseError",
@@ -185,6 +242,7 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         &["tools/xtask/src/hygiene.rs"],
         &mut failures,
     );
+    reject_retired_listing_aliases(root, &mut failures);
     reject_binding_dependencies(root, &mut failures);
     reject_forbidden_crate_paths(root, &mut failures);
     reject_existing_paths(
@@ -227,6 +285,133 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             failures.join("\n")
         ))
     }
+}
+
+fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
+    let rel_roots = [
+        PathBuf::from("crates"),
+        PathBuf::from("contracts"),
+        PathBuf::from("tools"),
+        PathBuf::from("build"),
+        PathBuf::from("dto_bindgen.toml"),
+    ];
+
+    for file in files_under(root, &rel_roots) {
+        let rel = display_path(root, &file);
+        if rel == "tools/xtask/src/hygiene.rs" {
+            continue;
+        }
+        if is_retired_listing_module_path(&rel) {
+            failures.push(format!(
+                "retired listing public aliases must not reappear: {rel}: legacy listing module path"
+            ));
+        }
+
+        let Ok(content) = fs::read_to_string(&file) else {
+            continue;
+        };
+        for (line_index, line) in content.lines().enumerate() {
+            if is_retired_listing_negative_guard(&rel, line) {
+                continue;
+            }
+
+            for token in RETIRED_LISTING_ALIAS_IDENTIFIER_TOKENS {
+                if contains_identifier_token(line, token) {
+                    failures.push(format!(
+                        "retired listing public aliases must not reappear: {}:{}: {}",
+                        rel,
+                        line_index + 1,
+                        line.trim()
+                    ));
+                }
+            }
+            for prefix in RETIRED_LISTING_ALIAS_IDENTIFIER_PREFIXES {
+                if contains_identifier_prefix(line, prefix) {
+                    failures.push(format!(
+                        "retired listing public aliases must not reappear: {}:{}: {}",
+                        rel,
+                        line_index + 1,
+                        line.trim()
+                    ));
+                }
+            }
+            if line.contains(RETIRED_LISTING_CONTRACT_ID) {
+                failures.push(format!(
+                    "retired listing public aliases must not reappear: {}:{}: {}",
+                    rel,
+                    line_index + 1,
+                    line.trim()
+                ));
+            }
+            if is_listing_module_scope(&rel) && contains_retired_listing_module_reference(line) {
+                failures.push(format!(
+                    "retired listing public aliases must not reappear: {}:{}: {}",
+                    rel,
+                    line_index + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
+}
+
+fn contains_identifier_token(line: &str, token: &str) -> bool {
+    line.match_indices(token).any(|(index, _)| {
+        let before = line[..index].chars().next_back();
+        let after = line[index + token.len()..].chars().next();
+        before.is_none_or(|ch| !is_identifier_continue(ch))
+            && after.is_none_or(|ch| !is_identifier_continue(ch))
+    })
+}
+
+fn contains_identifier_prefix(line: &str, prefix: &str) -> bool {
+    line.match_indices(prefix).any(|(index, _)| {
+        line[..index]
+            .chars()
+            .next_back()
+            .is_none_or(|ch| !is_identifier_continue(ch))
+    })
+}
+
+fn is_identifier_continue(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
+}
+
+fn is_retired_listing_module_path(rel: &str) -> bool {
+    is_listing_module_scope(rel)
+        && Path::new(rel).components().any(|component| {
+            component.as_os_str() == "listing"
+                || Path::new(component.as_os_str())
+                    .file_stem()
+                    .is_some_and(|stem| stem == "listing")
+        })
+}
+
+fn is_listing_module_scope(rel: &str) -> bool {
+    rel.starts_with("crates/event/src/")
+        || rel.starts_with("crates/event/tests/")
+        || rel.starts_with("crates/event_codec/src/")
+        || rel.starts_with("crates/event_codec/tests/")
+        || rel.starts_with("crates/trade/src/")
+        || rel.starts_with("crates/trade/tests/")
+        || rel.starts_with("contracts/conformance/vectors/")
+        || rel == "dto_bindgen.toml"
+}
+
+fn contains_retired_listing_module_reference(line: &str) -> bool {
+    line.match_indices("listing").any(|(index, _)| {
+        let before = &line[..index];
+        let after = line[index + "listing".len()..].chars().next();
+        let starts_module_segment =
+            before.ends_with("::") || before.trim_end().ends_with("mod") || before.ends_with('/');
+        starts_module_segment && after.is_none_or(|ch| !is_identifier_continue(ch))
+    })
+}
+
+fn is_retired_listing_negative_guard(rel: &str, line: &str) -> bool {
+    (rel == "crates/event/src/dto.rs" && line.contains("\"RadrootsListingCancel\""))
+        || (rel == "crates/event/src/contract.rs"
+            && line.contains("event_contract(\"radroots.listing.published.v1\").is_none()"))
 }
 
 fn reject_binding_dependencies(root: &Path, failures: &mut Vec<String>) {
@@ -404,7 +589,7 @@ fn is_raw_protocol_field(line: &str) -> bool {
 fn is_allowed_raw_boundary(struct_name: &str) -> bool {
     struct_name == "RadrootsOrderEnvelope"
         || struct_name == "RadrootsValidationReceiptTags"
-        || struct_name == "RadrootsTradeListing"
+        || struct_name == "RadrootsOperationalListingTradeProjection"
         || struct_name.ends_with("Projection")
         || struct_name.ends_with("Accounting")
         || struct_name.ends_with("Availability")
@@ -528,7 +713,7 @@ mod tests {
         write_file(
             &root,
             "crates/event/src/kinds.rs",
-            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\npub const KIND_LISTING_DRAFT: u32 = 30403;\n",
+            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\npub const KIND_TRADE_LISTING_VALIDATE_REQ: u64 = 5321;\npub const KIND_LISTING_DRAFT: u32 = 30403;\npub const KIND_CLASSIFIED_LISTING_DRAFT: u32 = 30403;\npub const KIND_LISTING: u32 = 30402;\n",
         );
         write_file(
             &root,
@@ -550,12 +735,69 @@ mod tests {
         assert!(err.contains("removed identifier 'tangle' must not reappear"));
         assert!(err.contains("removed trade and DVM kind constants must not reappear"));
         assert!(err.contains("retired V1 public event surfaces must not reappear"));
+        assert!(err.contains("retired listing public aliases must not reappear"));
         assert!(err.contains("wasm-bindgen"));
         assert!(err.contains("uniffi"));
         assert!(err.contains("crates/sql_wasm_bridge"));
         assert!(err.contains("scripts"));
         assert!(err.contains("contracts/sdk-exports"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn listing_alias_guard_is_token_and_path_aware() {
+        let clean_root = unique_temp_dir("listing_alias_clean");
+        write_file(
+            &clean_root,
+            "crates/event/src/kinds.rs",
+            "pub const CLASSIFIED_LISTING_EVENT_KINDS: [u32; 1] = [KIND_CLASSIFIED_LISTING];\n",
+        );
+        write_file(
+            &clean_root,
+            "crates/event/src/operational_listing.rs",
+            "pub struct RadrootsOperationalListing;\n",
+        );
+        validate_forbidden_identifiers(&clean_root).expect("new listing taxonomy is accepted");
+        let _ = fs::remove_dir_all(clean_root);
+
+        let dirty_root = unique_temp_dir("listing_alias_dirty");
+        write_file(
+            &dirty_root,
+            "crates/event/src/listing.rs",
+            "pub const LISTING_EVENT_KINDS: [u32; 1] = [KIND_LISTING];\n",
+        );
+        write_file(
+            &dirty_root,
+            "contracts/conformance/listing.json",
+            "{\"event_contract\":\"radroots.listing.published.v1\"}\n",
+        );
+        write_file(
+            &dirty_root,
+            "crates/event_codec/tests/listing.rs",
+            "#[test]\nfn legacy_module_path() {}\n",
+        );
+        write_file(
+            &dirty_root,
+            "contracts/conformance/vectors/listing/build_tags.v1.json",
+            "{}\n",
+        );
+        write_file(
+            &dirty_root,
+            "crates/event_codec/tests/retired_aliases.rs",
+            "use radroots_trade::{RadrootsPublicListingAddress, listing_from_event, listing_tags_with_options};\nconst _: &str = RADROOTS_LISTING_PRODUCT_TAG_KEYS;\n",
+        );
+        let err =
+            validate_forbidden_identifiers(&dirty_root).expect_err("old aliases are rejected");
+        assert!(err.contains("retired listing public aliases must not reappear"));
+        assert!(err.contains("legacy listing module path"));
+        assert!(err.contains(RETIRED_LISTING_CONTRACT_ID));
+        assert!(err.contains("crates/event_codec/tests/listing.rs"));
+        assert!(err.contains("RadrootsPublicListingAddress"));
+        assert!(err.contains("listing_from_event"));
+        assert!(err.contains("listing_tags_with_options"));
+        assert!(err.contains("contracts/conformance/vectors/listing/build_tags.v1.json"));
+        assert!(err.contains("RADROOTS_LISTING_PRODUCT_TAG_KEYS"));
+        let _ = fs::remove_dir_all(dirty_root);
     }
 
     #[test]

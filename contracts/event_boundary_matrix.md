@@ -31,6 +31,16 @@ an envelope whose id and signature it has independently verified and whose kind
 the corresponding parser accepted. Outbound authored models produce unsigned
 wire parts and require runtime signing and transport.
 
+## Classified and operational listing boundary rule
+
+Kind `30402` is the standard NIP-99 classified-listing kind and
+`RadrootsClassifiedListingAddress` is the exact coordinate authority for that
+kind. `RadrootsOperationalListing` is the richer
+`radroots.operational_listing.published.v1` profile accepted at the same kind;
+its typed codec, tags, and publication operations are exposed under the
+`operational_listing` domain. The standard kind identity does not by itself
+establish that an event satisfies the operational profile.
+
 ## Kind-1 post boundary rule
 
 Ordinary kind-1 events remain interoperable at the generic
@@ -80,7 +90,7 @@ implementation.
 | document | 30361 | RadrootsDocument | events.document.publish, events.document.list, events.document.get | requires `d` and pubkey tags; optional address tag |
 | resource_area | 30370 | RadrootsResourceArea | events.resource_area.publish, events.resource_area.list, events.resource_area.get | addressable; GCS location and `g` tag required |
 | resource_cap | 30371 | RadrootsResourceHarvestCap | events.resource_cap.publish, events.resource_cap.list, events.resource_cap.get | addressable; required address, pubkey, key, start, and end tags |
-| listing | 30402 | RadrootsListing | events.listing.publish, events.listing.list, events.listing.get | canonical Markdown content and tags; farm author required |
+| operational_listing | 30402 | RadrootsOperationalListing | events.operational_listing.publish, events.operational_listing.list, events.operational_listing.get | NIP-99 classified-listing kind with the richer Radroots operational profile; canonical Markdown content and tags; farm author required |
 | dvm_request | 5000-5999 | RadrootsJobRequest | events.dvm_request.publish, events.dvm_request.list, events.dvm_request.get | generic DVM request surface |
 | dvm_result | 6000-6999 | RadrootsJobResult | events.dvm_result.publish, events.dvm_result.list, events.dvm_result.get | generic DVM result surface |
 | dvm_feedback | 7000 | RadrootsJobFeedback | events.dvm_feedback.publish, events.dvm_feedback.list, events.dvm_feedback.get | generic DVM feedback surface |

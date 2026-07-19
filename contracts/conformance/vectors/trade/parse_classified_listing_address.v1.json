@@ -3,13 +3,13 @@
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "trade_parse_listing_address_minimal_001",
-      "kind": "trade.parse_listing_address",
+      "id": "trade_parse_classified_listing_address_minimal_001",
+      "kind": "trade.parse_classified_listing_address",
       "input": {
         "listing_addr": "30402:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:AAAAAAAAAAAAAAAAAAAAAg"
       },
       "expected": {
-        "address_shape": "trade_listing_address"
+        "address_shape": "classified_listing_address"
       }
     }
   ]

@@ -3,9 +3,9 @@ use dto_bindgen_core::{
     StructDef, TargetFieldNames, TargetOverride, TypeDef, TypeRef, WireFieldNames,
 };
 
-use crate::listing::{
-    model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal},
-    validation::RadrootsTradeListing,
+use crate::operational_listing::{
+    model::{RadrootsOperationalListingSubtotal, RadrootsOperationalListingTotal},
+    validation::RadrootsOperationalListingTradeProjection,
 };
 use crate::workflow::{
     RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
@@ -15,9 +15,9 @@ use crate::workflow::{
 
 pub fn dto_roots() -> [RootDescriptor; 12] {
     [
-        RootDescriptor::new::<RadrootsTradeListing>(),
-        RootDescriptor::new::<RadrootsTradeListingSubtotal>(),
-        RootDescriptor::new::<RadrootsTradeListingTotal>(),
+        RootDescriptor::new::<RadrootsOperationalListingTradeProjection>(),
+        RootDescriptor::new::<RadrootsOperationalListingSubtotal>(),
+        RootDescriptor::new::<RadrootsOperationalListingTotal>(),
         RootDescriptor::new::<RadrootsTradeNegotiationStateV1>(),
         RootDescriptor::new::<RadrootsTradeAgreementStateV1>(),
         RootDescriptor::new::<RadrootsTradeEvidenceStateV1>(),
@@ -30,145 +30,149 @@ pub fn dto_roots() -> [RootDescriptor; 12] {
     ]
 }
 
-impl Dto for RadrootsTradeListing {
+impl Dto for RadrootsOperationalListingTradeProjection {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeListing",
-            "RadrootsTradeListing",
-            span("crates/trade/src/listing/validation.rs", 25),
+            "RadrootsOperationalListingTradeProjection",
+            "RadrootsOperationalListingTradeProjection",
+            span("crates/trade/src/operational_listing/validation.rs", 25),
         )
         .with_field(field(
             "listing_id",
             "listing_id",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             26,
         ))
         .with_field(field(
             "listing_addr",
             "listing_addr",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             27,
         ))
         .with_field(field(
             "seller_pubkey",
             "seller_pubkey",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             28,
         ))
         .with_field(field(
             "title",
             "title",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             29,
         ))
         .with_field(field(
             "description",
             "description",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             30,
         ))
         .with_field(field(
             "product_type",
             "product_type",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             31,
         ))
         .with_field(field(
             "primary_bin_id",
             "primary_bin_id",
             String::describe(ctx),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             32,
         ))
         .with_field(field(
             "bin_quantity",
             "bin_quantity",
             ts_ref("RadrootsCoreQuantity"),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             33,
         ))
         .with_field(field(
             "unit",
             "unit",
             ts_ref("RadrootsCoreUnit"),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             34,
         ))
         .with_field(field(
             "unit_price",
             "unit_price",
             ts_ref("RadrootsCoreMoney"),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             35,
         ))
         .with_field(field(
             "inventory_available",
             "inventory_available",
             ts_ref("RadrootsCoreDecimal"),
-            "crates/trade/src/listing/validation.rs",
+            "crates/trade/src/operational_listing/validation.rs",
             36,
         ))
         .with_field(field(
             "availability",
             "availability",
-            ts_ref("RadrootsListingAvailability"),
-            "crates/trade/src/listing/validation.rs",
+            ts_ref("RadrootsOperationalListingAvailability"),
+            "crates/trade/src/operational_listing/validation.rs",
             37,
         ))
         .with_field(field(
             "location",
             "location",
-            ts_ref("RadrootsListingPublicLocation"),
-            "crates/trade/src/listing/validation.rs",
+            ts_ref("RadrootsOperationalListingPublicLocation"),
+            "crates/trade/src/operational_listing/validation.rs",
             38,
         ))
         .with_field(field(
             "delivery_method",
             "delivery_method",
-            ts_ref("RadrootsListingDeliveryMethod"),
-            "crates/trade/src/listing/validation.rs",
+            ts_ref("RadrootsOperationalListingDeliveryMethod"),
+            "crates/trade/src/operational_listing/validation.rs",
             39,
         ))
         .with_field(field(
             "listing",
             "listing",
-            ts_ref("RadrootsListing"),
-            "crates/trade/src/listing/validation.rs",
+            ts_ref("RadrootsOperationalListing"),
+            "crates/trade/src/operational_listing/validation.rs",
             40,
         ));
-        register(ctx, "RadrootsTradeListing", TypeDef::Struct(def))
+        register(
+            ctx,
+            "RadrootsOperationalListingTradeProjection",
+            TypeDef::Struct(def),
+        )
     }
 }
 
-impl Dto for RadrootsTradeListingSubtotal {
+impl Dto for RadrootsOperationalListingSubtotal {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        trade_listing_total_like(
+        operational_listing_total_like(
             ctx,
-            "RadrootsTradeListingSubtotal",
-            "crates/trade/src/listing/model.rs",
+            "RadrootsOperationalListingSubtotal",
+            "crates/trade/src/operational_listing/model.rs",
             3,
         )
     }
 }
 
-impl Dto for RadrootsTradeListingTotal {
+impl Dto for RadrootsOperationalListingTotal {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        trade_listing_total_like(
+        operational_listing_total_like(
             ctx,
-            "RadrootsTradeListingTotal",
-            "crates/trade/src/listing/model.rs",
+            "RadrootsOperationalListingTotal",
+            "crates/trade/src/operational_listing/model.rs",
             12,
         )
     }
 }
 
-fn trade_listing_total_like(
+fn operational_listing_total_like(
     ctx: &mut DescribeCtx,
     rust_ident: &str,
     file: &str,
@@ -240,9 +244,9 @@ mod tests {
     use super::dto_roots;
 
     const TRADE_SOURCE_ROOTS: &[&str] = &[
-        "RadrootsTradeListing",
-        "RadrootsTradeListingSubtotal",
-        "RadrootsTradeListingTotal",
+        "RadrootsOperationalListingTradeProjection",
+        "RadrootsOperationalListingSubtotal",
+        "RadrootsOperationalListingTotal",
         "RadrootsTradeNegotiationStateV1",
         "RadrootsTradeAgreementStateV1",
         "RadrootsTradeEvidenceStateV1",
@@ -276,8 +280,8 @@ mod tests {
     #[test]
     fn trade_source_fields_use_package_aliases_for_import_boundaries() {
         let registry = build_registry(dto_roots());
-        let listing = find_struct(&registry, "RadrootsTradeListing");
-        let subtotal = find_struct(&registry, "RadrootsTradeListingSubtotal");
+        let listing = find_struct(&registry, "RadrootsOperationalListingTradeProjection");
+        let subtotal = find_struct(&registry, "RadrootsOperationalListingSubtotal");
 
         assert_eq!(
             typescript_override_target(field_ty(listing, "inventory_available")),
@@ -285,7 +289,7 @@ mod tests {
         );
         assert_eq!(
             typescript_override_target(field_ty(listing, "listing")),
-            Some("RadrootsListing")
+            Some("RadrootsOperationalListing")
         );
         assert_eq!(
             typescript_override_target(field_ty(subtotal, "price_currency")),

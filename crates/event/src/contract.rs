@@ -18,7 +18,7 @@ use crate::{
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 2;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -50,6 +50,7 @@ pub enum RadrootsNostrStandard {
     Nip90,
     Nip94,
     Nip98,
+    Nip99,
     Radroots,
 }
 
@@ -86,8 +87,8 @@ pub enum RadrootsReducer {
     FarmOpsProjection,
     GroupProjection,
     KnowledgeProjection,
-    ListingInventoryAccounting,
-    ListingProjection,
+    OperationalListingInventoryAccounting,
+    OperationalListingProjection,
     MarketProjection,
     OrderProjection,
     ProfileProjection,
@@ -137,8 +138,8 @@ pub enum RadrootsTagSemantic {
     Identifier,
     Image,
     Kind,
-    ListingAddress,
-    ListingSnapshot,
+    ClassifiedListingAddress,
+    OperationalListingSnapshot,
     ListDescription,
     Location,
     Participant,
@@ -723,18 +724,137 @@ const TAG_STATUS: RadrootsTagContract = tag(
     RadrootsTagValueType::Text,
     false,
 );
-const TAG_CATEGORY: RadrootsTagContract = tag(
-    "category",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
-    false,
-);
 const TAG_IMAGE: RadrootsTagContract = tag(
     "image",
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::Image,
     RadrootsTagValueType::Url,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_FARM: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
+const TAG_OPERATIONAL_LISTING_PRODUCT_KEY: RadrootsTagContract = tag(
+    "key",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Category,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_TITLE: RadrootsTagContract = tag(
+    "title",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Title,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_CATEGORY: RadrootsTagContract = tag(
+    "category",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Category,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_PRIMARY_BIN: RadrootsTagContract = tag(
+    "radroots:primary_bin",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::OperationalListingSnapshot,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_BIN: RadrootsTagContract = tag(
+    "radroots:bin",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::OperationalListingSnapshot,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_PRICE: RadrootsTagContract = tag(
+    "radroots:price",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::Price,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_DISCOUNT: RadrootsTagContract = tag(
+    "radroots:discount",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Price,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_RESOURCE_AREA: RadrootsTagContract = tag(
+    "radroots:resource_area",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_PLOT: RadrootsTagContract = tag(
+    "radroots:plot",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_INVENTORY: RadrootsTagContract = tag(
+    "inventory",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::OperationalListingSnapshot,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_AVAILABILITY_START: RadrootsTagContract = tag(
+    "radroots:availability_start",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Status,
+    RadrootsTagValueType::UnixTimestamp,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_EXPIRES_AT: RadrootsTagContract = tag(
+    "expires_at",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Status,
+    RadrootsTagValueType::UnixTimestamp,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_DELIVERY: RadrootsTagContract = tag(
+    "delivery",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Reference,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_PROCESS: RadrootsTagContract = tag(
+    "process",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Category,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_LOT: RadrootsTagContract = tag(
+    "lot",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Reference,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_PROFILE: RadrootsTagContract = tag(
+    "profile",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Category,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_OPERATIONAL_LISTING_YEAR: RadrootsTagContract = tag(
+    "year",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Category,
+    RadrootsTagValueType::Text,
     false,
 );
 const TAG_CALENDAR_IMAGE: RadrootsTagContract = tag(
@@ -913,16 +1033,34 @@ const CALENDAR_RSVP_TAGS: &[RadrootsTagContract] = &[
     TAG_CALENDAR_RSVP_AUTHOR,
 ];
 const FARM_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_IMAGE];
-const LISTING_TAGS: &[RadrootsTagContract] = &[
+const OPERATIONAL_LISTING_TAGS: &[RadrootsTagContract] = &[
     TAG_D,
-    TAG_TITLE,
+    TAG_P_REQUIRED,
+    TAG_OPERATIONAL_LISTING_FARM,
+    TAG_OPERATIONAL_LISTING_PRODUCT_KEY,
+    TAG_OPERATIONAL_LISTING_TITLE,
+    TAG_OPERATIONAL_LISTING_CATEGORY,
     TAG_SUMMARY,
     TAG_PUBLISHED_AT,
+    TAG_OPERATIONAL_LISTING_PROCESS,
+    TAG_OPERATIONAL_LISTING_LOT,
+    TAG_OPERATIONAL_LISTING_PROFILE,
+    TAG_OPERATIONAL_LISTING_YEAR,
     TAG_LOCATION,
     TAG_PRICE,
     TAG_STATUS,
-    TAG_CATEGORY,
     TAG_IMAGE,
+    TAG_GEOHASH_OPTIONAL,
+    TAG_OPERATIONAL_LISTING_PRIMARY_BIN,
+    TAG_OPERATIONAL_LISTING_BIN,
+    TAG_OPERATIONAL_LISTING_PRICE,
+    TAG_OPERATIONAL_LISTING_DISCOUNT,
+    TAG_OPERATIONAL_LISTING_RESOURCE_AREA,
+    TAG_OPERATIONAL_LISTING_PLOT,
+    TAG_OPERATIONAL_LISTING_INVENTORY,
+    TAG_OPERATIONAL_LISTING_AVAILABILITY_START,
+    TAG_OPERATIONAL_LISTING_EXPIRES_AT,
+    TAG_OPERATIONAL_LISTING_DELIVERY,
 ];
 const TRADE_MUTATION_TAGS: &[RadrootsTagContract] =
     &[TAG_CONTRACT_REQUIRED, TAG_D, TAG_P_REQUIRED, TAG_E_MANY];
@@ -971,14 +1109,14 @@ const PROFILE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::ProfileProjectio
 const FARM_OPS_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::FarmOpsProjection];
 const GROUP_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::GroupProjection];
 const CALENDAR_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::CalendarProjection];
-const LISTING_REDUCERS: &[RadrootsReducer] = &[
-    RadrootsReducer::ListingProjection,
+const OPERATIONAL_LISTING_REDUCERS: &[RadrootsReducer] = &[
+    RadrootsReducer::OperationalListingProjection,
     RadrootsReducer::MarketProjection,
-    RadrootsReducer::ListingInventoryAccounting,
+    RadrootsReducer::OperationalListingInventoryAccounting,
 ];
 const TRADE_MUTATION_REDUCERS: &[RadrootsReducer] = &[
     RadrootsReducer::TradeProjection,
-    RadrootsReducer::ListingInventoryAccounting,
+    RadrootsReducer::OperationalListingInventoryAccounting,
 ];
 const TRADE_VALIDATION_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::TradeValidation];
 const RELAY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::NostrRelayPolicyProjection];
@@ -1737,12 +1875,12 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.farm.workspace_manifest.v1"]
     ),
     kind_contract!(
-        KIND_LISTING,
-        "KIND_LISTING",
-        "Listing",
+        KIND_CLASSIFIED_LISTING,
+        "KIND_CLASSIFIED_LISTING",
+        "Classified Listing",
         RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.listing.published.v1"]
+        RadrootsNostrStandard::Nip99,
+        ["radroots.operational_listing.published.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_SOURCE,
@@ -2945,17 +3083,17 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         FARM_OPS_REDUCERS
     ),
     event_contract!(
-        "radroots.listing.published.v1",
-        KIND_LISTING,
-        "Listing",
-        "RadrootsListing",
+        "radroots.operational_listing.published.v1",
+        KIND_CLASSIFIED_LISTING,
+        "Operational Listing",
+        "RadrootsOperationalListing",
         RadrootsEventClass::Addressable,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Seller,
-        RadrootsContentSchema::JsonObject,
+        RadrootsContentSchema::Markdown,
         RadrootsEventDiscriminator::KindOnly,
-        LISTING_TAGS,
-        LISTING_REDUCERS
+        OPERATIONAL_LISTING_TAGS,
+        OPERATIONAL_LISTING_REDUCERS
     ),
     experimental_event_contract!(
         "radroots.knowledge.source.v1",
@@ -3325,7 +3463,7 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_RESOURCE_HARVEST_CAP
         | KIND_FARM_WORKSPACE_MANIFEST
         | KIND_FARM_CRDT_CHANGE => RadrootsContractFamily::Farm,
-        KIND_LISTING => RadrootsContractFamily::Market,
+        KIND_CLASSIFIED_LISTING => RadrootsContractFamily::Market,
         KIND_TRADE_VALIDATION_RECEIPT
         | KIND_TRADE_PROPOSAL
         | KIND_TRADE_DECISION
@@ -3479,7 +3617,7 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
         Some(RadrootsContractFamily::Knowledge)
     } else if id.starts_with("radroots.list.") || id.starts_with("radroots.list_set.") {
         Some(RadrootsContractFamily::List)
-    } else if id.starts_with("radroots.listing.") {
+    } else if id.starts_with("radroots.operational_listing.") {
         Some(RadrootsContractFamily::Market)
     } else if id.starts_with("radroots.message.") {
         Some(RadrootsContractFamily::Message)
@@ -4962,6 +5100,49 @@ mod tests {
     }
 
     #[test]
+    fn classified_listing_kind_and_operational_profile_are_distinct() {
+        let kind = kind_contract(KIND_CLASSIFIED_LISTING).expect("classified listing kind");
+        assert_eq!(kind.canonical_constant, "KIND_CLASSIFIED_LISTING");
+        assert_eq!(kind.name, "Classified Listing");
+        assert_eq!(kind.class, RadrootsEventClass::Addressable);
+        assert_eq!(kind.standard, RadrootsNostrStandard::Nip99);
+        assert_eq!(
+            kind.accepted_event_contracts,
+            &["radroots.operational_listing.published.v1"]
+        );
+
+        let profile = event_contract("radroots.operational_listing.published.v1")
+            .expect("operational listing profile");
+        assert_eq!(profile.name, "Operational Listing");
+        assert_eq!(profile.payload_type, "RadrootsOperationalListing");
+        assert_eq!(profile.content_schema, RadrootsContentSchema::Markdown);
+        assert_eq!(profile.discriminator, RadrootsEventDiscriminator::KindOnly);
+        assert!(event_contract("radroots.listing.published.v1").is_none());
+
+        let seller = "a".repeat(64);
+        let tags = vec![
+            owned_tag(&["d", "carrots"]),
+            owned_tag(&["p", seller.as_str()]),
+            owned_tag(&["a", format!("30340:{seller}:victoria-farm").as_str()]),
+            owned_tag(&["key", "carrots"]),
+            owned_tag(&["title", "Carrots"]),
+            owned_tag(&["category", "produce"]),
+            owned_tag(&["radroots:primary_bin", "field-bin"]),
+            owned_tag(&["radroots:bin", "field-bin", "1000", "g"]),
+            owned_tag(&["radroots:price", "field-bin", "3", "CAD", "1", "lb"]),
+        ];
+        assert_eq!(
+            validate_event_contract_parts(
+                KIND_CLASSIFIED_LISTING,
+                &tags,
+                "# Carrots",
+                "radroots.operational_listing.published.v1",
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn event_contract_lookup_supports_many_contracts_per_kind() {
         let contracts = event_contracts_for_kind(KIND_LIST_SET_GENERIC).collect::<Vec<_>>();
         assert_eq!(contracts.len(), 6);
@@ -5048,7 +5229,7 @@ mod tests {
                 Some(RadrootsContractFamily::List),
             ),
             (
-                "radroots.listing.test.v1",
+                "radroots.operational_listing.test.v1",
                 Some(RadrootsContractFamily::Market),
             ),
             (
@@ -5082,7 +5263,7 @@ mod tests {
             (KIND_LIST_SET_GENERIC, RadrootsContractFamily::List),
             (KIND_CALENDAR_EVENT_RSVP, RadrootsContractFamily::Calendar),
             (KIND_FARM_CRDT_CHANGE, RadrootsContractFamily::Farm),
-            (KIND_LISTING, RadrootsContractFamily::Market),
+            (KIND_CLASSIFIED_LISTING, RadrootsContractFamily::Market),
             (KIND_TRADE_CANCELLATION, RadrootsContractFamily::Trade),
             (KIND_KNOWLEDGE_CLAIM, RadrootsContractFamily::Knowledge),
             (KIND_JOB_FEEDBACK, RadrootsContractFamily::Job),

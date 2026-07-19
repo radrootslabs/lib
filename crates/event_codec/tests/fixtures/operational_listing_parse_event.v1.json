@@ -1,10 +1,10 @@
 {
-  "suite": "operational_listing_parse_event",
+  "suite": "operational_listing",
   "contract_version": "1.0.0",
   "vectors": [
     {
       "id": "operational_listing_tags_override_json_content_001",
-      "kind": "listing.parse_event.valid",
+      "kind": "operational_listing.parse_event.valid",
       "input": {
         "event_kind": 30402,
         "content": "{\"product\":{\"title\":\"Content override\",\"category\":\"Content category\"},\"inventory_available\":\"99\"}",
@@ -37,7 +37,7 @@
     },
     {
       "id": "operational_listing_missing_d_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -58,7 +58,7 @@
     },
     {
       "id": "operational_listing_invalid_d_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -80,7 +80,7 @@
     },
     {
       "id": "operational_listing_invalid_number_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -102,7 +102,7 @@
     },
     {
       "id": "operational_listing_invalid_unit_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -124,7 +124,7 @@
     },
     {
       "id": "operational_listing_invalid_currency_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -146,7 +146,7 @@
     },
     {
       "id": "operational_listing_invalid_discount_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "# Widget",
@@ -169,7 +169,7 @@
     },
     {
       "id": "operational_listing_private_json_location_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 30402,
         "content": "{\"location\":{\"coordinates\":[1,2]}}",
@@ -191,7 +191,7 @@
     },
     {
       "id": "operational_listing_invalid_kind_001",
-      "kind": "listing.parse_event.invalid",
+      "kind": "operational_listing.parse_event.invalid",
       "input": {
         "event_kind": 0,
         "content": "# Widget",

@@ -22,14 +22,16 @@ use radroots_event::event_head::{
 };
 use radroots_event::ids::RadrootsEventId;
 use radroots_event::kinds::{
-    KIND_CALENDAR, KIND_FARM, KIND_LISTING, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind,
+    KIND_CALENDAR, KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_PLOT, KIND_PROFILE,
+    is_nip51_list_set_kind,
 };
-use radroots_event::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingStatus,
+use radroots_event::operational_listing::{
+    RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+    RadrootsOperationalListingBin, RadrootsOperationalListingStatus,
 };
 use radroots_event_codec::farm::decode as farm_decode;
 use radroots_event_codec::list_set::decode as list_set_decode;
-use radroots_event_codec::listing::decode as listing_decode;
+use radroots_event_codec::operational_listing::decode as listing_decode;
 use radroots_event_codec::plot::decode as plot_decode;
 use radroots_event_codec::profile::decode as profile_decode;
 use radroots_replica_schema::ReplicaSchemaError;
@@ -206,7 +208,7 @@ fn ingest_event_inner(
         KIND_PROFILE => ingest_profile_event(exec, event),
         KIND_FARM => ingest_farm_event(exec, event, factory),
         KIND_PLOT => ingest_plot_event(exec, event, factory),
-        KIND_LISTING => ingest_listing_event(exec, event),
+        KIND_CLASSIFIED_LISTING => ingest_listing_event(exec, event),
         kind if is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR => {
             ingest_list_set_event(exec, event)
         }
@@ -473,7 +475,7 @@ fn ingest_listing_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let listing = listing_decode::listing_from_event(
+    let listing = listing_decode::operational_listing_from_event(
         event.kind_u32(),
         &event.tags_as_vec(),
         event.content(),
@@ -561,7 +563,10 @@ fn ingest_list_set_event(
     ))
 }
 
-fn listing_event_addr(event: &RadrootsEventEnvelope, listing: &RadrootsListing) -> String {
+fn listing_event_addr(
+    event: &RadrootsEventEnvelope,
+    listing: &RadrootsOperationalListing,
+) -> String {
     format!(
         "{}:{}:{}",
         event.kind_u32(),
@@ -570,17 +575,17 @@ fn listing_event_addr(event: &RadrootsEventEnvelope, listing: &RadrootsListing) 
     )
 }
 
-fn listing_is_orderable(listing: &RadrootsListing) -> bool {
+fn listing_is_orderable(listing: &RadrootsOperationalListing) -> bool {
     match listing.availability.as_ref() {
-        Some(RadrootsListingAvailability::Status { status }) => {
-            matches!(status, RadrootsListingStatus::Active)
+        Some(RadrootsOperationalListingAvailability::Status { status }) => {
+            matches!(status, RadrootsOperationalListingStatus::Active)
         }
-        Some(RadrootsListingAvailability::Window { .. }) | None => true,
+        Some(RadrootsOperationalListingAvailability::Window { .. }) | None => true,
     }
 }
 
 fn trade_product_fields_from_listing(
-    listing: &RadrootsListing,
+    listing: &RadrootsOperationalListing,
     listing_addr: &str,
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
@@ -656,7 +661,7 @@ fn trade_product_fields_from_listing(
 }
 
 fn trade_product_notes_from_listing(
-    listing: &RadrootsListing,
+    listing: &RadrootsOperationalListing,
 ) -> Result<Option<String>, RadrootsReplicaEventsError> {
     let Some(discounts) = listing
         .discounts
@@ -674,8 +679,8 @@ fn trade_product_notes_from_listing(
 }
 
 fn primary_listing_bin(
-    listing: &RadrootsListing,
-) -> Result<&RadrootsListingBin, RadrootsReplicaEventsError> {
+    listing: &RadrootsOperationalListing,
+) -> Result<&RadrootsOperationalListingBin, RadrootsReplicaEventsError> {
     listing
         .bins
         .iter()
@@ -1542,7 +1547,7 @@ mod tests {
     use radroots_event::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
     use radroots_event::list::RadrootsListEntry;
     use radroots_event::list_set::RadrootsListSet;
-    use radroots_event::listing::RadrootsListingProduct;
+    use radroots_event::operational_listing::RadrootsOperationalListingProduct;
     use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation};
     use radroots_event::profile::{
         RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
@@ -1917,7 +1922,7 @@ mod tests {
             id,
             author,
             u64::from(created_at),
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             vec![
                 vec!["d".to_string(), d_tag.to_string()],
                 vec![
@@ -1968,15 +1973,15 @@ mod tests {
         "USD".parse().expect("currency")
     }
 
-    fn listing_model() -> RadrootsListing {
-        RadrootsListing {
+    fn listing_model() -> RadrootsOperationalListing {
+        RadrootsOperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".parse().expect("d tag"),
             published_at: Some(1),
             farm: RadrootsFarmRef {
                 pubkey: "c".repeat(64),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAZ".to_string(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "pasture-eggs".to_string(),
                 title: "Pasture Eggs".to_string(),
                 category: "eggs".to_string(),
@@ -1988,7 +1993,7 @@ mod tests {
                 year: Some("2026".to_string()),
             },
             primary_bin_id: "bin-a".parse().expect("primary bin id"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-a".parse().expect("bin id"),
                 quantity: RadrootsCoreQuantity::new(listing_decimal("12"), RadrootsCoreUnit::Each)
                     .with_label("unit label"),
@@ -2006,8 +2011,8 @@ mod tests {
             plot: None,
             discounts: Some(Vec::new()),
             inventory_available: Some(listing_decimal("5")),
-            availability: Some(RadrootsListingAvailability::Status {
-                status: RadrootsListingStatus::Active,
+            availability: Some(RadrootsOperationalListingAvailability::Status {
+                status: RadrootsOperationalListingStatus::Active,
             }),
             delivery_method: None,
             location: None,
@@ -2624,7 +2629,10 @@ mod tests {
 
         let seller_pubkey = "c".repeat(64);
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
-        let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
+        let listing_addr = format!(
+            "{}:{}:{}",
+            KIND_CLASSIFIED_LISTING, seller_pubkey, listing_d_tag
+        );
 
         let mut active = listing_event(
             500,
@@ -2750,7 +2758,7 @@ mod tests {
             &exec,
             &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
                 on: NostrEventHeadQueryBindValues::Key {
-                    key: event_head_key(KIND_LISTING, &seller_pubkey, listing_d_tag),
+                    key: event_head_key(KIND_CLASSIFIED_LISTING, &seller_pubkey, listing_d_tag),
                 },
             }),
         )
@@ -2789,7 +2797,10 @@ mod tests {
 
         let seller_pubkey = "c".repeat(64);
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAg";
-        let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
+        let listing_addr = format!(
+            "{}:{}:{}",
+            KIND_CLASSIFIED_LISTING, seller_pubkey, listing_d_tag
+        );
 
         let mut active = listing_event(
             600,

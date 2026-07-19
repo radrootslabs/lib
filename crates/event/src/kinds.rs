@@ -76,7 +76,7 @@ pub const KIND_ACCOUNT_CLAIM: u32 = 30380;
 pub const KIND_VALIDATOR_SET: u32 = 30381;
 pub const KIND_APP_DATA: u32 = 30078;
 pub const KIND_FARM_WORKSPACE_MANIFEST: u32 = KIND_APP_DATA;
-pub const KIND_LISTING: u32 = 30402;
+pub const KIND_CLASSIFIED_LISTING: u32 = 30402;
 pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 pub const KIND_GROUP_METADATA: u32 = 39000;
 pub const KIND_GROUP_ADMINS: u32 = 39001;
@@ -103,7 +103,7 @@ pub const KIND_TRADE_SELLER_RESERVATION_ASSERTION: u32 = 3475;
 pub const KIND_KNOWLEDGE_SOURCE: u32 = 30450;
 pub const KIND_EVIDENCE_BOUNTY: u32 = 30451;
 
-pub const LISTING_EVENT_KINDS: [u32; 1] = [KIND_LISTING];
+pub const CLASSIFIED_LISTING_EVENT_KINDS: [u32; 1] = [KIND_CLASSIFIED_LISTING];
 
 pub const WIKI_EVENT_KINDS: [u32; 3] = [
     KIND_WIKI_MERGE_REQUEST,
@@ -176,7 +176,7 @@ pub const TRADE_MUTATION_EVENT_KINDS: [u32; 5] = [
 pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 1] = [KIND_TRADE_VALIDATION_RECEIPT];
 
 pub const COMMERCIAL_EVENT_KINDS: [u32; 7] = [
-    KIND_LISTING,
+    KIND_CLASSIFIED_LISTING,
     KIND_TRADE_PROPOSAL,
     KIND_TRADE_DECISION,
     KIND_TRADE_REVISION_PROPOSAL,
@@ -196,7 +196,7 @@ pub const HOME_FEED_CANDIDATE_KINDS: [u32; 9] = [
     KIND_REPOST,
     KIND_GENERIC_REPOST,
     KIND_ARTICLE,
-    KIND_LISTING,
+    KIND_CLASSIFIED_LISTING,
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
     KIND_FARM,
@@ -210,11 +210,15 @@ pub const EVENTS_CANDIDATE_KINDS: [u32; 4] = [
     KIND_CALENDAR_EVENT_RSVP,
 ];
 
-pub const MARKET_CANDIDATE_KINDS: [u32; 3] = [KIND_LISTING, KIND_FARM, KIND_PUBLIC_FILE_METADATA];
+pub const MARKET_CANDIDATE_KINDS: [u32; 3] = [
+    KIND_CLASSIFIED_LISTING,
+    KIND_FARM,
+    KIND_PUBLIC_FILE_METADATA,
+];
 
 pub const MAP_CANDIDATE_KINDS: [u32; 7] = [
     KIND_FARM,
-    KIND_LISTING,
+    KIND_CLASSIFIED_LISTING,
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
     KIND_POST,
@@ -227,7 +231,7 @@ pub const PROFILE_PUBLIC_CONTENT_KINDS: [u32; 8] = [
     KIND_REPOST,
     KIND_GENERIC_REPOST,
     KIND_ARTICLE,
-    KIND_LISTING,
+    KIND_CLASSIFIED_LISTING,
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
     KIND_PUBLIC_FILE_METADATA,
@@ -313,13 +317,8 @@ pub const PRODUCTION_SOCIAL_KINDS: [u32; 4] = [
 ];
 
 #[inline]
-pub const fn is_listing_kind(kind: u32) -> bool {
-    kind == KIND_LISTING
-}
-
-#[inline]
-pub const fn is_listing_event_kind(kind: u32) -> bool {
-    is_listing_kind(kind)
+pub const fn is_classified_listing_kind(kind: u32) -> bool {
+    kind == KIND_CLASSIFIED_LISTING
 }
 
 #[inline]
@@ -440,7 +439,7 @@ pub const fn is_home_feed_candidate_kind(kind: u32) -> bool {
             | KIND_REPOST
             | KIND_GENERIC_REPOST
             | KIND_ARTICLE
-            | KIND_LISTING
+            | KIND_CLASSIFIED_LISTING
             | KIND_CALENDAR_DATE_EVENT
             | KIND_CALENDAR_TIME_EVENT
             | KIND_FARM
@@ -461,7 +460,10 @@ pub const fn is_events_candidate_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_market_candidate_kind(kind: u32) -> bool {
-    matches!(kind, KIND_LISTING | KIND_FARM | KIND_PUBLIC_FILE_METADATA)
+    matches!(
+        kind,
+        KIND_CLASSIFIED_LISTING | KIND_FARM | KIND_PUBLIC_FILE_METADATA
+    )
 }
 
 #[inline]
@@ -469,7 +471,7 @@ pub const fn is_map_candidate_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_FARM
-            | KIND_LISTING
+            | KIND_CLASSIFIED_LISTING
             | KIND_CALENDAR_DATE_EVENT
             | KIND_CALENDAR_TIME_EVENT
             | KIND_POST
@@ -486,7 +488,7 @@ pub const fn is_profile_public_content_kind(kind: u32) -> bool {
             | KIND_REPOST
             | KIND_GENERIC_REPOST
             | KIND_ARTICLE
-            | KIND_LISTING
+            | KIND_CLASSIFIED_LISTING
             | KIND_CALENDAR_DATE_EVENT
             | KIND_CALENDAR_TIME_EVENT
             | KIND_PUBLIC_FILE_METADATA
@@ -575,7 +577,7 @@ pub const fn is_trade_validation_event_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_commercial_event_kind(kind: u32) -> bool {
-    is_listing_event_kind(kind)
+    is_classified_listing_kind(kind)
         || is_trade_mutation_event_kind(kind)
         || is_trade_validation_event_kind(kind)
 }
@@ -748,7 +750,7 @@ mod tests {
         assert!(is_public_social_kind(KIND_CALENDAR));
         assert!(is_public_social_kind(KIND_CALENDAR_EVENT_RSVP));
         assert!(!is_public_social_kind(KIND_REPORT));
-        assert!(!is_public_social_kind(KIND_LISTING));
+        assert!(!is_public_social_kind(KIND_CLASSIFIED_LISTING));
         assert!(!is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
         assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
         assert!(!is_public_social_kind(KIND_FARM_WORKSPACE_MANIFEST));
@@ -826,7 +828,7 @@ mod tests {
         assert!(is_home_feed_candidate_kind(KIND_REPOST));
         assert!(is_home_feed_candidate_kind(KIND_GENERIC_REPOST));
         assert!(is_home_feed_candidate_kind(KIND_ARTICLE));
-        assert!(is_home_feed_candidate_kind(KIND_LISTING));
+        assert!(is_home_feed_candidate_kind(KIND_CLASSIFIED_LISTING));
         assert!(is_home_feed_candidate_kind(KIND_CALENDAR_DATE_EVENT));
         assert!(is_home_feed_candidate_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_home_feed_candidate_kind(KIND_FARM));
@@ -843,13 +845,13 @@ mod tests {
         assert!(!is_events_candidate_kind(KIND_POST));
         assert!(!is_events_candidate_kind(KIND_FARM_CRDT_CHANGE));
 
-        assert!(is_market_candidate_kind(KIND_LISTING));
+        assert!(is_market_candidate_kind(KIND_CLASSIFIED_LISTING));
         assert!(is_market_candidate_kind(KIND_FARM));
         assert!(is_market_candidate_kind(KIND_PUBLIC_FILE_METADATA));
         assert!(!is_market_candidate_kind(KIND_REPORT));
 
         assert!(is_map_candidate_kind(KIND_FARM));
-        assert!(is_map_candidate_kind(KIND_LISTING));
+        assert!(is_map_candidate_kind(KIND_CLASSIFIED_LISTING));
         assert!(is_map_candidate_kind(KIND_CALENDAR_DATE_EVENT));
         assert!(is_map_candidate_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_map_candidate_kind(KIND_POST));
@@ -861,7 +863,7 @@ mod tests {
         assert!(is_profile_public_content_kind(KIND_REPOST));
         assert!(is_profile_public_content_kind(KIND_GENERIC_REPOST));
         assert!(is_profile_public_content_kind(KIND_ARTICLE));
-        assert!(is_profile_public_content_kind(KIND_LISTING));
+        assert!(is_profile_public_content_kind(KIND_CLASSIFIED_LISTING));
         assert!(is_profile_public_content_kind(KIND_CALENDAR_DATE_EVENT));
         assert!(is_profile_public_content_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_profile_public_content_kind(KIND_PUBLIC_FILE_METADATA));
@@ -911,7 +913,7 @@ mod tests {
 
     #[test]
     fn classifies_commercial_event_kinds() {
-        assert_eq!(LISTING_EVENT_KINDS, [KIND_LISTING]);
+        assert_eq!(CLASSIFIED_LISTING_EVENT_KINDS, [KIND_CLASSIFIED_LISTING]);
         assert_eq!(
             ORDER_EVENT_KINDS,
             [
@@ -937,7 +939,7 @@ mod tests {
         assert_eq!(
             COMMERCIAL_EVENT_KINDS,
             [
-                KIND_LISTING,
+                KIND_CLASSIFIED_LISTING,
                 KIND_TRADE_PROPOSAL,
                 KIND_TRADE_DECISION,
                 KIND_TRADE_REVISION_PROPOSAL,
@@ -947,8 +949,8 @@ mod tests {
             ]
         );
 
-        assert!(is_listing_event_kind(KIND_LISTING));
-        assert!(!is_listing_event_kind(KIND_PROFILE));
+        assert!(is_classified_listing_kind(KIND_CLASSIFIED_LISTING));
+        assert!(!is_classified_listing_kind(KIND_PROFILE));
 
         assert!(is_order_event_kind(KIND_ORDER_REQUEST));
         assert!(is_order_event_kind(KIND_ORDER_DECISION));
@@ -989,7 +991,7 @@ mod tests {
         assert!(!is_trade_validation_event_kind(6322));
         assert!(!is_trade_validation_event_kind(3434));
 
-        assert!(is_commercial_event_kind(KIND_LISTING));
+        assert!(is_commercial_event_kind(KIND_CLASSIFIED_LISTING));
         assert!(is_commercial_event_kind(KIND_TRADE_PROPOSAL));
         assert!(is_commercial_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
         assert!(!is_commercial_event_kind(KIND_ORDER_REQUEST));

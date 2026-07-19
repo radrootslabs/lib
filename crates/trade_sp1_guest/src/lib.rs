@@ -12,7 +12,7 @@ pub const RADROOTS_SP1_TRADE_PROTOCOL_VERSION: &str = "radroots.trade.v1";
 pub const RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH: &str =
     "0x3d8f7f463904d71f2d0d14b1551450756697e51c7b658e10c6d5c20a7bc61f08";
 pub const RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET: &str = "trade.order_acceptance.v1";
-pub const RADROOTS_SP1_TRADE_KIND_LISTING: u32 = 30402;
+pub const RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING: u32 = 30402;
 pub const RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST: u32 = 3422;
 pub const RADROOTS_SP1_TRADE_KIND_ORDER_DECISION: u32 = 3423;
 
@@ -429,7 +429,7 @@ fn validate_event_evidence(
         &witness.listing_event_id,
         &witness.request.seller_pubkey,
         RadrootsSp1TradeEventEvidenceRole::Seller,
-        &[RADROOTS_SP1_TRADE_KIND_LISTING],
+        &[RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING],
         "listing",
     )?;
 
@@ -842,7 +842,7 @@ struct StateRootMaterial<'a> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
-        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
+        RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
         RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
         RADROOTS_SP1_TRADE_WITNESS_VERSION, RadrootsSp1TradeCanonicalEventEvidence,
@@ -908,7 +908,7 @@ mod tests {
                     .to_string(),
                 signer_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                     .to_string(),
-                kind: RADROOTS_SP1_TRADE_KIND_LISTING,
+                kind: RADROOTS_SP1_TRADE_KIND_CLASSIFIED_LISTING,
                 canonical_event_hash:
                     "0x1010101010101010101010101010101010101010101010101010101010101010".to_string(),
                 signature_hash:

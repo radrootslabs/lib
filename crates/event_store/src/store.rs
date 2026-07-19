@@ -1642,8 +1642,8 @@ mod tests {
     use nostr::EventBuilder;
     use radroots_event::draft::RadrootsSignedEvent;
     use radroots_event::event_head::event_head_candidate_for_event;
-    use radroots_event::ids::{RadrootsAddressableCoordinate, RadrootsInventoryBinId};
-    use radroots_event::kinds::{KIND_GEOCHAT, KIND_LISTING, KIND_POST, KIND_PROFILE};
+    use radroots_event::ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId};
+    use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_GEOCHAT, KIND_POST, KIND_PROFILE};
     use radroots_event::trade::{
         RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
         RADROOTS_TRADE_SCHEMA_VERSION, RadrootsFulfillmentProfileV1,
@@ -1726,8 +1726,8 @@ mod tests {
             farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
             lines: vec![RadrootsTradeCandidateLineV1 {
                 line_id: RadrootsDTag::parse("line-1").expect("line id"),
-                listing_addr: RadrootsAddressableCoordinate::parse(format!(
-                    "{KIND_LISTING}:{}:listing-1",
+                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+                    "{KIND_CLASSIFIED_LISTING}:{}:listing-1",
                     FIXTURE_ALICE_PUBLIC_KEY_HEX
                 ))
                 .expect("listing address"),
@@ -1941,7 +1941,7 @@ mod tests {
         serde_json::to_string(&wire).expect("raw json")
     }
 
-    fn listing_tags(d_tag: &str) -> Vec<Vec<String>> {
+    fn operational_listing_tags(d_tag: &str) -> Vec<Vec<String>> {
         vec![vec!["d".to_owned(), d_tag.to_owned()]]
     }
 
@@ -2754,7 +2754,7 @@ mod tests {
     #[tokio::test]
     async fn malformed_addressable_heads_are_not_projected() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let event = signed_event(KIND_LISTING, 16, Vec::new(), "{}");
+        let event = signed_event(KIND_CLASSIFIED_LISTING, 16, Vec::new(), "{}");
 
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(event.clone(), 2_270))
@@ -2781,13 +2781,23 @@ mod tests {
     #[tokio::test]
     async fn id_mismatch_addressable_raw_json_does_not_update_heads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let original = signed_event(KIND_LISTING, 17, listing_tags("listing-1"), "{}");
+        let original = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            17,
+            operational_listing_tags("listing-1"),
+            "{}",
+        );
         let first = store
             .ingest_event(RadrootsEventIngest::new(original.clone(), 2_300))
             .await
             .expect("first");
         let coordinate = head_coordinate_for_event(&original);
-        let invalid = signed_event(KIND_LISTING, 18, listing_tags("listing-1"), "{}");
+        let invalid = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            18,
+            operational_listing_tags("listing-1"),
+            "{}",
+        );
         let raw_json = tampered_content_raw_json(&invalid, "{\"tampered\":true}");
         let error = RadrootsEventIngest::from_raw_json(raw_json, 2_400).expect_err("id mismatch");
         let head = store
@@ -2804,16 +2814,21 @@ mod tests {
     #[tokio::test]
     async fn signature_invalid_addressable_events_do_not_update_heads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let original = signed_event(KIND_LISTING, 19, listing_tags("listing-2"), "{}");
+        let original = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            19,
+            operational_listing_tags("listing-2"),
+            "{}",
+        );
         store
             .ingest_event(RadrootsEventIngest::new(original.clone(), 2_500))
             .await
             .expect("first");
         let coordinate = head_coordinate_for_event(&original);
         let invalid = tamper_signature(&signed_event(
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             20,
-            listing_tags("listing-2"),
+            operational_listing_tags("listing-2"),
             "{}",
         ));
 
@@ -2842,16 +2857,21 @@ mod tests {
     #[tokio::test]
     async fn duplicate_invalid_addressable_events_do_not_update_heads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let original = signed_event(KIND_LISTING, 21, listing_tags("listing-3"), "{}");
+        let original = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            21,
+            operational_listing_tags("listing-3"),
+            "{}",
+        );
         store
             .ingest_event(RadrootsEventIngest::new(original.clone(), 2_700))
             .await
             .expect("original");
         let coordinate = head_coordinate_for_event(&original);
         let invalid = tamper_signature(&signed_event(
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             22,
-            listing_tags("listing-3"),
+            operational_listing_tags("listing-3"),
             "{}",
         ));
 
@@ -2886,7 +2906,12 @@ mod tests {
     #[tokio::test]
     async fn duplicate_verified_addressable_events_preserve_heads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let event = signed_event(KIND_LISTING, 23, listing_tags("listing-4"), "{}");
+        let event = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            23,
+            operational_listing_tags("listing-4"),
+            "{}",
+        );
         let coordinate = head_coordinate_for_event(&event);
 
         let first = store

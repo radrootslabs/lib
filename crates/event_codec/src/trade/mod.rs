@@ -215,8 +215,8 @@ mod tests {
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         ids::{
-            RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
-            RadrootsPublicKey, RadrootsTradeId,
+            RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
+            RadrootsInventoryBinId, RadrootsPublicKey, RadrootsTradeId,
         },
         trade::{
             RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
@@ -274,7 +274,7 @@ mod tests {
             farm_id: RadrootsDTag::parse("farm-1").unwrap(),
             lines: vec![RadrootsTradeCandidateLineV1 {
                 line_id: RadrootsDTag::parse("line-1").unwrap(),
-                listing_addr: RadrootsAddressableCoordinate::parse(format!(
+                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
                     hex_64('b')
                 ))

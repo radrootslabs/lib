@@ -1075,7 +1075,7 @@ fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> String {
 mod tests {
     use super::*;
     use radroots_event::{
-        ids::{RadrootsAddressableCoordinate, RadrootsInventoryBinId},
+        ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId},
         trade::{
             RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
             RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID,
@@ -1126,7 +1126,7 @@ mod tests {
             farm_id: dtag("farm-1"),
             lines: vec![RadrootsTradeCandidateLineV1 {
                 line_id: dtag(&format!("line-{line_suffix}")),
-                listing_addr: RadrootsAddressableCoordinate::parse(format!(
+                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-{line_suffix}",
                     hex_64('b')
                 ))

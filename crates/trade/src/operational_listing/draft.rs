@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+use core::fmt;
+
 #[cfg(not(feature = "std"))]
 use alloc::{format, string::ToString, vec::Vec};
 
@@ -12,42 +14,42 @@ use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::RadrootsActorRole,
     ids::{
-        RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey,
+        RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId,
+        RadrootsPublicKey,
     },
-    kinds::KIND_LISTING,
-    listing::RadrootsListing,
+    kinds::KIND_CLASSIFIED_LISTING,
+    operational_listing::RadrootsOperationalListing,
 };
-use thiserror::Error;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-pub struct RadrootsListingEditDocumentV1 {
-    pub listing: RadrootsListing,
+pub struct RadrootsOperationalListingEditDocumentV1 {
+    pub listing: RadrootsOperationalListing,
 }
 
-impl RadrootsListingEditDocumentV1 {
-    pub fn new(listing: RadrootsListing) -> Self {
+impl RadrootsOperationalListingEditDocumentV1 {
+    pub fn new(listing: RadrootsOperationalListing) -> Self {
         Self { listing }
     }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
-pub struct RadrootsCanonicalListingEdit {
-    listing: RadrootsListing,
+pub struct RadrootsOperationalListingCanonicalEdit {
+    listing: RadrootsOperationalListing,
     seller_pubkey: RadrootsPublicKey,
-    public_listing_addr: RadrootsListingAddress,
+    public_listing_addr: RadrootsClassifiedListingAddress,
 }
 
-impl RadrootsCanonicalListingEdit {
+impl RadrootsOperationalListingCanonicalEdit {
     pub fn new(
-        mut listing: RadrootsListing,
+        mut listing: RadrootsOperationalListing,
         seller_pubkey: RadrootsPublicKey,
-    ) -> Result<Self, RadrootsListingEditError> {
+    ) -> Result<Self, RadrootsOperationalListingEditError> {
         let farm_pubkey = RadrootsPublicKey::parse(listing.farm.pubkey.as_str())
-            .map_err(RadrootsListingEditError::InvalidFarmPubkey)?;
+            .map_err(RadrootsOperationalListingEditError::InvalidFarmPubkey)?;
         if farm_pubkey != seller_pubkey {
-            return Err(RadrootsListingEditError::FarmPubkeyMismatch {
+            return Err(RadrootsOperationalListingEditError::FarmPubkeyMismatch {
                 expected_pubkey: seller_pubkey,
                 actual_pubkey: farm_pubkey,
             });
@@ -55,8 +57,11 @@ impl RadrootsCanonicalListingEdit {
         listing.farm.pubkey = farm_pubkey.as_str().to_string();
         validate_listing_bins(&listing)?;
 
-        let public_listing_addr =
-            listing_addr(KIND_LISTING, &seller_pubkey, listing.d_tag.as_str());
+        let public_listing_addr = listing_addr(
+            KIND_CLASSIFIED_LISTING,
+            &seller_pubkey,
+            listing.d_tag.as_str(),
+        );
 
         Ok(Self {
             listing,
@@ -65,7 +70,7 @@ impl RadrootsCanonicalListingEdit {
         })
     }
 
-    pub fn listing(&self) -> &RadrootsListing {
+    pub fn listing(&self) -> &RadrootsOperationalListing {
         &self.listing
     }
 
@@ -73,33 +78,57 @@ impl RadrootsCanonicalListingEdit {
         &self.seller_pubkey
     }
 
-    pub fn public_listing_addr(&self) -> &RadrootsListingAddress {
+    pub fn public_listing_addr(&self) -> &RadrootsClassifiedListingAddress {
         &self.public_listing_addr
     }
 }
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub enum RadrootsListingEditError {
-    #[error("invalid listing edit farm pubkey: {0}")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsOperationalListingEditError {
     InvalidFarmPubkey(RadrootsIdParseError),
-    #[error("invalid listing edit address: {0}")]
-    InvalidListingAddress(RadrootsIdParseError),
-    #[error("listing edit actor does not satisfy required role {required_role:?}")]
-    ActorRoleUnsatisfied { required_role: RadrootsActorRole },
-    #[error("listing edit farm pubkey does not match seller")]
+    InvalidClassifiedListingAddress(RadrootsIdParseError),
+    ActorRoleUnsatisfied {
+        required_role: RadrootsActorRole,
+    },
     FarmPubkeyMismatch {
         expected_pubkey: RadrootsPublicKey,
         actual_pubkey: RadrootsPublicKey,
     },
-    #[error("listing edit primary bin is missing")]
     MissingPrimaryBin {
         primary_bin_id: RadrootsInventoryBinId,
     },
-    #[error("listing edit contains duplicate bin ID")]
-    DuplicateBinId { bin_id: RadrootsInventoryBinId },
+    DuplicateBinId {
+        bin_id: RadrootsInventoryBinId,
+    },
 }
 
-fn validate_listing_bins(listing: &RadrootsListing) -> Result<(), RadrootsListingEditError> {
+impl fmt::Display for RadrootsOperationalListingEditError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidFarmPubkey(error) => {
+                write!(f, "invalid listing edit farm pubkey: {error}")
+            }
+            Self::InvalidClassifiedListingAddress(error) => {
+                write!(f, "invalid listing edit address: {error}")
+            }
+            Self::ActorRoleUnsatisfied { required_role } => write!(
+                f,
+                "listing edit actor does not satisfy required role {required_role:?}"
+            ),
+            Self::FarmPubkeyMismatch { .. } => {
+                f.write_str("listing edit farm pubkey does not match seller")
+            }
+            Self::MissingPrimaryBin { .. } => f.write_str("listing edit primary bin is missing"),
+            Self::DuplicateBinId { .. } => f.write_str("listing edit contains duplicate bin ID"),
+        }
+    }
+}
+
+impl core::error::Error for RadrootsOperationalListingEditError {}
+
+fn validate_listing_bins(
+    listing: &RadrootsOperationalListing,
+) -> Result<(), RadrootsOperationalListingEditError> {
     let primary_bin_id = listing.primary_bin_id.clone();
     let mut seen_bin_ids = Vec::new();
     let mut primary_bin_found = false;
@@ -108,7 +137,7 @@ fn validate_listing_bins(listing: &RadrootsListing) -> Result<(), RadrootsListin
             .iter()
             .any(|seen_bin_id| seen_bin_id == &bin.bin_id)
         {
-            return Err(RadrootsListingEditError::DuplicateBinId {
+            return Err(RadrootsOperationalListingEditError::DuplicateBinId {
                 bin_id: bin.bin_id.clone(),
             });
         }
@@ -119,7 +148,7 @@ fn validate_listing_bins(listing: &RadrootsListing) -> Result<(), RadrootsListin
     }
 
     if !primary_bin_found {
-        return Err(RadrootsListingEditError::MissingPrimaryBin { primary_bin_id });
+        return Err(RadrootsOperationalListingEditError::MissingPrimaryBin { primary_bin_id });
     }
     Ok(())
 }
@@ -128,17 +157,17 @@ fn listing_addr(
     kind: u32,
     seller_pubkey: &RadrootsPublicKey,
     d_tag: &str,
-) -> RadrootsListingAddress {
-    RadrootsListingAddress::parse(format!("{kind}:{}:{d_tag}", seller_pubkey.as_str()))
+) -> RadrootsClassifiedListingAddress {
+    RadrootsClassifiedListingAddress::parse(format!("{kind}:{}:{d_tag}", seller_pubkey.as_str()))
         .expect("typed listing identity must form a listing address")
 }
 
-pub fn canonicalize_listing_edit(
+pub fn canonicalize_operational_listing_edit(
     actor: &RadrootsActorContext,
-    mut document: RadrootsListingEditDocumentV1,
-) -> Result<RadrootsCanonicalListingEdit, RadrootsListingEditError> {
+    mut document: RadrootsOperationalListingEditDocumentV1,
+) -> Result<RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditError> {
     if !actor.satisfies(RadrootsActorRole::Seller) {
-        return Err(RadrootsListingEditError::ActorRoleUnsatisfied {
+        return Err(RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
             required_role: RadrootsActorRole::Seller,
         });
     }
@@ -149,7 +178,7 @@ pub fn canonicalize_listing_edit(
         document.listing.farm.pubkey = seller_pubkey.as_str().to_string();
     }
 
-    RadrootsCanonicalListingEdit::new(document.listing, seller_pubkey)
+    RadrootsOperationalListingCanonicalEdit::new(document.listing, seller_pubkey)
 }
 
 #[cfg(test)]
@@ -162,14 +191,20 @@ mod tests {
     use radroots_event::{
         contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
-        ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
-        kinds::KIND_LISTING,
-        listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
+        ids::{
+            RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId,
+            RadrootsPublicKey,
+        },
+        kinds::KIND_CLASSIFIED_LISTING,
+        operational_listing::{
+            RadrootsOperationalListing, RadrootsOperationalListingBin,
+            RadrootsOperationalListingProduct,
+        },
     };
 
     use super::{
-        RadrootsCanonicalListingEdit, RadrootsListingEditDocumentV1, RadrootsListingEditError,
-        canonicalize_listing_edit,
+        RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,
+        RadrootsOperationalListingEditError, canonicalize_operational_listing_edit,
     };
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -183,15 +218,15 @@ mod tests {
         RadrootsInventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn listing() -> RadrootsListing {
-        RadrootsListing {
+    fn listing() -> RadrootsOperationalListing {
+        RadrootsOperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: SELLER.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "coffee".to_string(),
                 title: "Coffee".to_string(),
                 category: "coffee".to_string(),
@@ -203,7 +238,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1000u32),
@@ -246,7 +281,7 @@ mod tests {
 
     #[test]
     fn draft_document_wraps_listing() {
-        let document = RadrootsListingEditDocumentV1::new(listing());
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing());
 
         assert_eq!(document.listing.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
         assert_eq!(document.listing.product.title, "Coffee");
@@ -255,13 +290,13 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn draft_document_deserializes_as_untrusted_input() {
-        let json = serde_json::to_string(&RadrootsListingEditDocumentV1::new(listing()))
+        let json = serde_json::to_string(&RadrootsOperationalListingEditDocumentV1::new(listing()))
             .expect("serialize document");
 
-        let document: RadrootsListingEditDocumentV1 =
+        let document: RadrootsOperationalListingEditDocumentV1 =
             serde_json::from_str(&json).expect("deserialize document");
-        let canonical =
-            canonicalize_listing_edit(&seller_actor(), document).expect("canonical draft");
+        let canonical = canonicalize_operational_listing_edit(&seller_actor(), document)
+            .expect("canonical draft");
 
         assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
         assert_eq!(canonical.listing().product.title, "Coffee");
@@ -273,12 +308,13 @@ mod tests {
         let listing = listing();
 
         let canonical =
-            RadrootsCanonicalListingEdit::new(listing, seller_pubkey.clone()).expect("canonical");
+            RadrootsOperationalListingCanonicalEdit::new(listing, seller_pubkey.clone())
+                .expect("canonical");
 
         assert_eq!(canonical.seller_pubkey(), &seller_pubkey);
         assert_eq!(
             canonical.public_listing_addr().as_str(),
-            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+            format!("{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
         assert_eq!(canonical.listing().d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
     }
@@ -286,75 +322,75 @@ mod tests {
     #[test]
     fn listing_edit_error_variants_are_precise() {
         assert!(matches!(
-            RadrootsListingEditError::InvalidFarmPubkey(
+            RadrootsOperationalListingEditError::InvalidFarmPubkey(
                 RadrootsPublicKey::parse("bad").unwrap_err()
             ),
-            RadrootsListingEditError::InvalidFarmPubkey(_)
+            RadrootsOperationalListingEditError::InvalidFarmPubkey(_)
         ));
         assert!(matches!(
-            RadrootsListingEditError::InvalidListingAddress(
-                RadrootsListingAddress::parse("bad").unwrap_err()
+            RadrootsOperationalListingEditError::InvalidClassifiedListingAddress(
+                RadrootsClassifiedListingAddress::parse("bad").unwrap_err()
             ),
-            RadrootsListingEditError::InvalidListingAddress(_)
+            RadrootsOperationalListingEditError::InvalidClassifiedListingAddress(_)
         ));
     }
 
     #[test]
-    fn canonicalize_listing_edit_fills_missing_farm_pubkey_and_derives_address() {
+    fn canonicalize_operational_listing_edit_fills_missing_farm_pubkey_and_derives_address() {
         let mut listing = listing();
         listing.farm.pubkey.clear();
-        let document = RadrootsListingEditDocumentV1::new(listing);
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let canonical =
-            canonicalize_listing_edit(&seller_actor(), document).expect("canonical draft");
+        let canonical = canonicalize_operational_listing_edit(&seller_actor(), document)
+            .expect("canonical draft");
 
         assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
         assert_eq!(
             canonical.public_listing_addr().as_str(),
-            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+            format!("{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
         assert_eq!(canonical.listing().farm.pubkey, SELLER);
     }
 
     #[test]
-    fn canonicalize_listing_edit_rejects_non_seller_actor() {
-        let document = RadrootsListingEditDocumentV1::new(listing());
+    fn canonicalize_operational_listing_edit_rejects_non_seller_actor() {
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing());
 
-        let error = canonicalize_listing_edit(&buyer_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&buyer_actor(), document).unwrap_err();
 
         assert_eq!(
             error,
-            RadrootsListingEditError::ActorRoleUnsatisfied {
+            RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
                 required_role: RadrootsActorRole::Seller
             }
         );
     }
 
     #[test]
-    fn canonicalize_listing_edit_rejects_mismatched_farm_pubkey() {
+    fn canonicalize_operational_listing_edit_rejects_mismatched_farm_pubkey() {
         let mut listing = listing();
         listing.farm.pubkey = OTHER.to_string();
-        let document = RadrootsListingEditDocumentV1::new(listing);
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
 
         assert!(matches!(
             error,
-            RadrootsListingEditError::FarmPubkeyMismatch { .. }
+            RadrootsOperationalListingEditError::FarmPubkeyMismatch { .. }
         ));
     }
 
     #[test]
-    fn canonicalize_listing_edit_rejects_invalid_farm_pubkey() {
+    fn canonicalize_operational_listing_edit_rejects_invalid_farm_pubkey() {
         let mut listing = listing();
         listing.farm.pubkey = "bad".to_string();
-        let document = RadrootsListingEditDocumentV1::new(listing);
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
 
         assert!(matches!(
             error,
-            RadrootsListingEditError::InvalidFarmPubkey(_)
+            RadrootsOperationalListingEditError::InvalidFarmPubkey(_)
         ));
     }
 
@@ -363,7 +399,7 @@ mod tests {
         let mut listing = listing();
         listing.farm.pubkey = OTHER.to_string();
 
-        let error = RadrootsCanonicalListingEdit::new(
+        let error = RadrootsOperationalListingCanonicalEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
@@ -371,7 +407,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            RadrootsListingEditError::FarmPubkeyMismatch { .. }
+            RadrootsOperationalListingEditError::FarmPubkeyMismatch { .. }
         ));
     }
 
@@ -380,7 +416,7 @@ mod tests {
         let mut listing = listing();
         listing.farm.pubkey = "bad".to_string();
 
-        let error = RadrootsCanonicalListingEdit::new(
+        let error = RadrootsOperationalListingCanonicalEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
@@ -388,7 +424,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            RadrootsListingEditError::InvalidFarmPubkey(_)
+            RadrootsOperationalListingEditError::InvalidFarmPubkey(_)
         ));
     }
 
@@ -397,7 +433,7 @@ mod tests {
         let mut listing = listing();
         listing.farm.pubkey.clear();
 
-        let error = RadrootsCanonicalListingEdit::new(
+        let error = RadrootsOperationalListingCanonicalEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
@@ -405,21 +441,21 @@ mod tests {
 
         assert!(matches!(
             error,
-            RadrootsListingEditError::InvalidFarmPubkey(_)
+            RadrootsOperationalListingEditError::InvalidFarmPubkey(_)
         ));
     }
 
     #[test]
-    fn canonicalize_listing_edit_rejects_missing_primary_bin() {
+    fn canonicalize_operational_listing_edit_rejects_missing_primary_bin() {
         let mut listing = listing();
         listing.primary_bin_id = bin_id("bin-2");
-        let document = RadrootsListingEditDocumentV1::new(listing);
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
 
         assert_eq!(
             error,
-            RadrootsListingEditError::MissingPrimaryBin {
+            RadrootsOperationalListingEditError::MissingPrimaryBin {
                 primary_bin_id: bin_id("bin-2")
             }
         );
@@ -430,7 +466,7 @@ mod tests {
         let mut listing = listing();
         listing.primary_bin_id = bin_id("bin-2");
 
-        let error = RadrootsCanonicalListingEdit::new(
+        let error = RadrootsOperationalListingCanonicalEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
@@ -438,23 +474,23 @@ mod tests {
 
         assert_eq!(
             error,
-            RadrootsListingEditError::MissingPrimaryBin {
+            RadrootsOperationalListingEditError::MissingPrimaryBin {
                 primary_bin_id: bin_id("bin-2")
             }
         );
     }
 
     #[test]
-    fn canonicalize_listing_edit_rejects_duplicate_bin_ids() {
+    fn canonicalize_operational_listing_edit_rejects_duplicate_bin_ids() {
         let mut listing = listing();
         listing.bins.push(listing.bins[0].clone());
-        let document = RadrootsListingEditDocumentV1::new(listing);
+        let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
 
         assert_eq!(
             error,
-            RadrootsListingEditError::DuplicateBinId {
+            RadrootsOperationalListingEditError::DuplicateBinId {
                 bin_id: bin_id("bin-1")
             }
         );
@@ -465,7 +501,7 @@ mod tests {
         let mut listing = listing();
         listing.bins.push(listing.bins[0].clone());
 
-        let error = RadrootsCanonicalListingEdit::new(
+        let error = RadrootsOperationalListingCanonicalEdit::new(
             listing,
             RadrootsPublicKey::parse(SELLER).expect("seller"),
         )
@@ -473,7 +509,7 @@ mod tests {
 
         assert_eq!(
             error,
-            RadrootsListingEditError::DuplicateBinId {
+            RadrootsOperationalListingEditError::DuplicateBinId {
                 bin_id: bin_id("bin-1")
             }
         );

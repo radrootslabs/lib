@@ -294,10 +294,10 @@ mod tests {
             ),
             (
                 RadrootsAuthorityError::ActorRoleUnsatisfied {
-                    contract_id: "radroots.listing.published.v1".to_owned(),
+                    contract_id: "radroots.operational_listing.published.v1".to_owned(),
                     required_role: RadrootsActorRole::Seller,
                 },
-                "actor does not satisfy role Seller for contract `radroots.listing.published.v1`",
+                "actor does not satisfy role Seller for contract `radroots.operational_listing.published.v1`",
             ),
             (
                 RadrootsAuthorityError::ActorPubkeyMismatch {
@@ -407,24 +407,36 @@ mod tests {
     }
 
     #[test]
-    fn draft_validation_error_preserves_typed_source() {
-        let authority_error = RadrootsAuthorityError::DraftValidation(
-            radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
-                expected: 2,
-                actual: 1,
-            },
-        );
+    fn stale_v1_and_v2_draft_validation_errors_preserve_typed_sources() {
+        let cases = [
+            (
+                1,
+                "draft validation failed: event contract registry version mismatch: expected 3, got 1",
+                "event contract registry version mismatch: expected 3, got 1",
+            ),
+            (
+                2,
+                "draft validation failed: event contract registry version mismatch: expected 3, got 2",
+                "event contract registry version mismatch: expected 3, got 2",
+            ),
+        ];
 
-        assert_eq!(
-            authority_error.to_string(),
-            "draft validation failed: event contract registry version mismatch: expected 2, got 1"
-        );
-        assert_eq!(
-            authority_error
-                .source()
-                .expect("draft validation source")
-                .to_string(),
-            "event contract registry version mismatch: expected 2, got 1"
-        );
+        for (actual, expected_authority, expected_source) in cases {
+            let authority_error = RadrootsAuthorityError::DraftValidation(
+                radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
+                    expected: 3,
+                    actual,
+                },
+            );
+
+            assert_eq!(authority_error.to_string(), expected_authority);
+            assert_eq!(
+                authority_error
+                    .source()
+                    .expect("draft validation source")
+                    .to_string(),
+                expected_source
+            );
+        }
     }
 }

@@ -16,7 +16,9 @@ use radroots_event::kinds::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };
 use radroots_event::list_set::RadrootsListSet;
-use radroots_event::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
+use radroots_event::operational_listing::{
+    RadrootsOperationalListing, RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+};
 use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
 use radroots_event::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
@@ -40,9 +42,9 @@ use radroots_event_codec::farm::encode::{
     to_wire_parts_with_kind as farm_to_wire_parts_with_kind,
 };
 use radroots_event_codec::farm::list_sets::{
-    farm_listings_list_set, farm_listings_list_set_from_listings, farm_members_list_set,
-    farm_owners_list_set, farm_plots_list_set, farm_plots_list_set_from_plots,
-    farm_workers_list_set, member_of_farms_list_set,
+    farm_members_list_set, farm_operational_listings_list_set,
+    farm_operational_listings_list_set_from_listings, farm_owners_list_set, farm_plots_list_set,
+    farm_plots_list_set_from_plots, farm_workers_list_set, member_of_farms_list_set,
 };
 use radroots_event_codec::plot::encode::{
     plot_address, plot_build_tags, to_wire_parts as plot_to_wire_parts,
@@ -107,21 +109,21 @@ fn sample_gcs() -> RadrootsGcsLocation {
     }
 }
 
-fn sample_listing(d_tag: &str) -> RadrootsListing {
+fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
     let quantity =
         RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
     let price = RadrootsCoreQuantityPrice::new(
         RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
         quantity.clone(),
     );
-    RadrootsListing {
+    RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
-        product: RadrootsListingProduct {
+        product: RadrootsOperationalListingProduct {
             key: "sku".to_string(),
             title: "Widget".to_string(),
             category: "Tools".to_string(),
@@ -133,7 +135,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
             year: None,
         },
         primary_bin_id: bin_id("bin-1"),
-        bins: vec![RadrootsListingBin {
+        bins: vec![RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
@@ -877,11 +879,12 @@ fn structured_list_sets_cover_success_and_error_paths() {
     assert_eq!(plots.entries.len(), 1);
 
     let listings =
-        farm_listings_list_set(farm_id, TEST_PUBKEY_HEX, ["AAAAAAAAAAAAAAAAAAAAAg"]).unwrap();
+        farm_operational_listings_list_set(farm_id, TEST_PUBKEY_HEX, ["AAAAAAAAAAAAAAAAAAAAAg"])
+            .unwrap();
     assert_eq!(listings.d_tag, format!("farm:{farm_id}:listings"));
     assert_eq!(listings.entries.len(), 1);
 
-    let listings_from = farm_listings_list_set_from_listings(
+    let listings_from = farm_operational_listings_list_set_from_listings(
         farm_id,
         TEST_PUBKEY_HEX,
         [sample_listing("AAAAAAAAAAAAAAAAAAAAAg")].iter(),
@@ -921,7 +924,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
         err,
         EventEncodeError::EmptyRequiredField("entry.values")
     ));
-    let err = farm_listings_list_set(farm_id, TEST_PUBKEY_HEX, [" "]).unwrap_err();
+    let err = farm_operational_listings_list_set(farm_id, TEST_PUBKEY_HEX, [" "]).unwrap_err();
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("listing_id")

@@ -7,10 +7,10 @@ use radroots_event::{
     file_metadata::RadrootsFileMetadata,
     group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
     kinds::{
-        KIND_ARTICLE, KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_GROUP_METADATA, KIND_HTTP_AUTH,
-        KIND_LISTING, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH, KIND_REPORT,
-        is_home_feed_candidate_kind, is_market_candidate_kind, is_private_farm_ops_kind,
-        is_public_social_kind,
+        KIND_ARTICLE, KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_FARM_CRDT_CHANGE,
+        KIND_GROUP_METADATA, KIND_HTTP_AUTH, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH,
+        KIND_REPORT, is_home_feed_candidate_kind, is_market_candidate_kind,
+        is_private_farm_ops_kind, is_public_social_kind,
     },
     social::RadrootsSocialMediaDimensions,
 };
@@ -25,7 +25,7 @@ use radroots_event_codec::{
         decode::file_metadata_from_event, encode::to_wire_parts as public_file_to_wire_parts,
     },
     group::{decode::group_metadata_from_event, encode::group_metadata_to_wire_parts},
-    listing::decode::listing_from_event,
+    operational_listing::decode::operational_listing_from_event,
     post::decode::post_from_event,
 };
 
@@ -88,7 +88,7 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
         })
     ));
     assert!(matches!(
-        listing_from_event(KIND_FARM_CRDT_CHANGE, &[], "farm task"),
+        operational_listing_from_event(KIND_FARM_CRDT_CHANGE, &[], "farm task"),
         Err(EventParseError::InvalidKind {
             expected: "30402",
             got: KIND_FARM_CRDT_CHANGE
@@ -98,8 +98,8 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(is_public_social_kind(KIND_ARTICLE));
     assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
     assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
-    assert!(!is_public_social_kind(KIND_LISTING));
-    assert!(is_home_feed_candidate_kind(KIND_LISTING));
+    assert!(!is_public_social_kind(KIND_CLASSIFIED_LISTING));
+    assert!(is_home_feed_candidate_kind(KIND_CLASSIFIED_LISTING));
     assert!(is_home_feed_candidate_kind(KIND_FARM));
     assert!(is_home_feed_candidate_kind(KIND_PUBLIC_FILE_METADATA));
     assert!(!is_home_feed_candidate_kind(30403));
@@ -107,7 +107,7 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(!is_home_feed_candidate_kind(KIND_FARM_CRDT_CHANGE));
     assert!(!is_home_feed_candidate_kind(KIND_RELAY_AUTH));
     assert!(!is_home_feed_candidate_kind(KIND_HTTP_AUTH));
-    assert!(is_market_candidate_kind(KIND_LISTING));
+    assert!(is_market_candidate_kind(KIND_CLASSIFIED_LISTING));
     assert!(!is_market_candidate_kind(30403));
 }
 

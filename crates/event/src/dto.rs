@@ -82,7 +82,7 @@ mod tests {
         assert!(export_names.contains("RadrootsNip01EventWireDto"));
         assert!(export_names.contains("RadrootsSignedEventDto"));
         assert!(export_names.contains("RadrootsVerifiedSignedEventDto"));
-        assert!(export_names.contains("RadrootsListingImageSize"));
+        assert!(export_names.contains("RadrootsOperationalListingImageSize"));
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
         let registry = build_registry(dto_roots());
 
         let summary = registry
-            .struct_field_presence("RadrootsListingProduct", "summary")
+            .struct_field_presence("RadrootsOperationalListingProduct", "summary")
             .expect("summary field exists");
         assert!(!summary.required_on_deserialize);
         assert!(summary.nullable);
@@ -121,6 +121,7 @@ mod tests {
             "RadrootsOrderDiscountOffer",
             "RadrootsOrderDiscountDecision",
             "RadrootsListingCancel",
+            "RadrootsOperationalListingCancel",
             "RadrootsOrderChange",
             "RadrootsOrderResponse",
             "RadrootsOrderRevision",
@@ -144,7 +145,7 @@ mod tests {
             "RadrootsOrderDecision",
             "RadrootsOrderDecisionOutcome",
             "RadrootsOrderCancellation",
-            "RadrootsListingParseError",
+            "RadrootsOperationalListingParseError",
         ] {
             assert!(
                 rust_names.contains(source_root),

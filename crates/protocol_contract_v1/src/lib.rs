@@ -293,10 +293,10 @@ pub const PROTOCOL_EVENT_CATALOG_V1: &[ProtocolEventDescriptorV1] = &[
         purpose: "immutable one-validator set artifact signed by network authority",
     },
     ProtocolEventDescriptorV1 {
-        name: "listing",
+        name: "classified_listing",
         kind: 30402,
         event_class: ProtocolEventClassV1::Addressable,
-        purpose: "public listing aggregate and revision",
+        purpose: "NIP-99 classified listing",
     },
 ];
 
@@ -766,6 +766,24 @@ mod tests {
                 alloc::format!("retired event kind {kind}")
             );
         }
+    }
+
+    #[test]
+    fn classified_listing_catalog_entry_is_exact_nip_99_contract() {
+        let classified_listing = PROTOCOL_EVENT_CATALOG_V1
+            .iter()
+            .find(|event| event.kind == 30402)
+            .expect("kind 30402 catalog entry");
+
+        assert_eq!(
+            *classified_listing,
+            ProtocolEventDescriptorV1 {
+                name: "classified_listing",
+                kind: 30402,
+                event_class: ProtocolEventClassV1::Addressable,
+                purpose: "NIP-99 classified listing",
+            }
+        );
     }
 
     #[test]

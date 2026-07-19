@@ -3251,10 +3251,10 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxEr
 mod tests {
     use super::*;
     use radroots_event::ids::{
-        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
+        RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsPublicKey, RadrootsTradeId,
     };
-    use radroots_event::kinds::{KIND_GEOCHAT, KIND_LISTING};
+    use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_GEOCHAT};
     use radroots_event::trade::{
         RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
         RadrootsFulfillmentProfileV1, RadrootsTradeCancellationProfileV1,
@@ -3312,8 +3312,8 @@ mod tests {
             farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
             lines: vec![RadrootsTradeCandidateLineV1 {
                 line_id: RadrootsDTag::parse("line-1").expect("line id"),
-                listing_addr: RadrootsAddressableCoordinate::parse(format!(
-                    "{KIND_LISTING}:{}:listing-1",
+                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+                    "{KIND_CLASSIFIED_LISTING}:{}:listing-1",
                     FIXTURE_ALICE_PUBLIC_KEY_HEX
                 ))
                 .expect("listing address"),

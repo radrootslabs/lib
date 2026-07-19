@@ -6,11 +6,11 @@
       "id": "knowledge_manifest_fields_valid_001",
       "kind": "knowledge.contract_manifest_json.valid",
       "input": {
-        "registry": "radroots_event_contract_registry_v2"
+        "registry": "radroots_event_contract_registry_v3"
       },
       "expected": {
         "schema_version": 2,
-        "registry_version": 2,
+        "registry_version": 3,
         "required_fields": [
           "schema_version",
           "registry_version",

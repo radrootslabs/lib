@@ -3,12 +3,12 @@
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "social_listing_published_at_valid_001",
-      "kind": "social.listing.parse_event.valid",
+      "id": "social_operational_listing_published_at_valid_001",
+      "kind": "social.operational_listing.parse_event.valid",
       "input": {
         "event": {
           "kind": 30402,
-          "content_shape": "listing_markdown",
+          "content_shape": "operational_listing_markdown",
           "tags": [
             [
               "published_at",
@@ -23,12 +23,12 @@
       }
     },
     {
-      "id": "social_listing_published_at_invalid_002",
-      "kind": "social.listing.parse_event.invalid",
+      "id": "social_operational_listing_published_at_invalid_002",
+      "kind": "social.operational_listing.parse_event.invalid",
       "input": {
         "event": {
           "kind": 30402,
-          "content_shape": "listing_markdown",
+          "content_shape": "operational_listing_markdown",
           "tags": [
             [
               "published_at",
@@ -189,8 +189,8 @@
       "kind": "social.surface_kinds.classification.valid",
       "input": {
         "kinds": {
-          "active_listing": 30402,
-          "retired_listing_kind": 30403,
+          "classified_listing": 30402,
+          "retired_legacy_listing_kind": 30403,
           "report": 1984,
           "farm_crdt_change": 78,
           "relay_auth": 22242,
@@ -199,16 +199,16 @@
       },
       "expected": {
         "result": "ok",
-        "home_feed_active_listing": true,
-        "home_feed_retired_listing_kind": false,
+        "home_feed_classified_listing": true,
+        "home_feed_retired_legacy_listing_kind": false,
         "home_feed_report": false,
         "home_feed_farm_crdt_change": false,
         "home_feed_relay_auth": false,
         "home_feed_http_auth": false,
-        "market_active_listing": true,
-        "market_retired_listing_kind": false,
+        "market_classified_listing": true,
+        "market_retired_legacy_listing_kind": false,
         "moderation_report": true,
-        "retired_listing_kind_accepted": false,
+        "retired_legacy_listing_kind_accepted": false,
         "private_farm_ops_farm_crdt_change": true,
         "private_farm_ops_relay_auth": false,
         "private_farm_ops_http_auth": false

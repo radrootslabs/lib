@@ -50,7 +50,7 @@ pub mod seal;
 
 pub mod list;
 pub mod list_set;
-pub mod listing;
+pub mod operational_listing;
 pub mod order;
 pub mod trade;
 

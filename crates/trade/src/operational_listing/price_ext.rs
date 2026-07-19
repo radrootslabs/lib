@@ -1,41 +1,43 @@
-use crate::listing::model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal};
+use crate::operational_listing::model::{
+    RadrootsOperationalListingSubtotal, RadrootsOperationalListingTotal,
+};
 use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreQuantityPriceError,
     RadrootsCoreQuantityPriceOps,
 };
-use radroots_event::listing::RadrootsListingBin;
+use radroots_event::operational_listing::RadrootsOperationalListingBin;
 
 pub trait BinPricingExt {
-    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsTradeListingSubtotal;
-    fn total_for_count(&self, bin_count: u32) -> RadrootsTradeListingTotal;
+    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsOperationalListingSubtotal;
+    fn total_for_count(&self, bin_count: u32) -> RadrootsOperationalListingTotal;
 }
 
 pub trait BinPricingTryExt {
     fn try_subtotal_for_count(
         &self,
         bin_count: u32,
-    ) -> Result<RadrootsTradeListingSubtotal, RadrootsCoreQuantityPriceError>;
+    ) -> Result<RadrootsOperationalListingSubtotal, RadrootsCoreQuantityPriceError>;
     fn try_total_for_count(
         &self,
         bin_count: u32,
-    ) -> Result<RadrootsTradeListingTotal, RadrootsCoreQuantityPriceError>;
+    ) -> Result<RadrootsOperationalListingTotal, RadrootsCoreQuantityPriceError>;
 }
 
 #[inline]
-fn effective_quantity(bin: &RadrootsListingBin, bin_count: u32) -> RadrootsCoreQuantity {
+fn effective_quantity(bin: &RadrootsOperationalListingBin, bin_count: u32) -> RadrootsCoreQuantity {
     let amount = bin.quantity.amount * RadrootsCoreDecimal::from(bin_count);
     RadrootsCoreQuantity::new(amount, bin.quantity.unit)
 }
 
-impl BinPricingExt for RadrootsListingBin {
-    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsTradeListingSubtotal {
+impl BinPricingExt for RadrootsOperationalListingBin {
+    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsOperationalListingSubtotal {
         let effective_qty = effective_quantity(self, bin_count);
         let money = self
             .price_per_canonical_unit
             .cost_for_rounded(&effective_qty);
         let currency = money.currency;
 
-        RadrootsTradeListingSubtotal {
+        RadrootsOperationalListingSubtotal {
             price_amount: money,
             price_currency: currency,
             quantity_amount: effective_qty.amount,
@@ -43,9 +45,9 @@ impl BinPricingExt for RadrootsListingBin {
         }
     }
 
-    fn total_for_count(&self, bin_count: u32) -> RadrootsTradeListingTotal {
+    fn total_for_count(&self, bin_count: u32) -> RadrootsOperationalListingTotal {
         let sub = self.subtotal_for_count(bin_count);
-        RadrootsTradeListingTotal {
+        RadrootsOperationalListingTotal {
             price_amount: sub.price_amount,
             price_currency: sub.price_currency,
             quantity_amount: sub.quantity_amount,
@@ -54,18 +56,18 @@ impl BinPricingExt for RadrootsListingBin {
     }
 }
 
-impl BinPricingTryExt for RadrootsListingBin {
+impl BinPricingTryExt for RadrootsOperationalListingBin {
     fn try_subtotal_for_count(
         &self,
         bin_count: u32,
-    ) -> Result<RadrootsTradeListingSubtotal, RadrootsCoreQuantityPriceError> {
+    ) -> Result<RadrootsOperationalListingSubtotal, RadrootsCoreQuantityPriceError> {
         let effective_qty = effective_quantity(self, bin_count);
         let money = self
             .price_per_canonical_unit
             .try_cost_for_rounded(&effective_qty)?;
         let currency = money.currency;
 
-        Ok(RadrootsTradeListingSubtotal {
+        Ok(RadrootsOperationalListingSubtotal {
             price_amount: money,
             price_currency: currency,
             quantity_amount: effective_qty.amount,
@@ -76,9 +78,9 @@ impl BinPricingTryExt for RadrootsListingBin {
     fn try_total_for_count(
         &self,
         bin_count: u32,
-    ) -> Result<RadrootsTradeListingTotal, RadrootsCoreQuantityPriceError> {
+    ) -> Result<RadrootsOperationalListingTotal, RadrootsCoreQuantityPriceError> {
         let sub = self.try_subtotal_for_count(bin_count)?;
-        Ok(RadrootsTradeListingTotal {
+        Ok(RadrootsOperationalListingTotal {
             price_amount: sub.price_amount,
             price_currency: sub.price_currency,
             quantity_amount: sub.quantity_amount,
@@ -95,14 +97,14 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreUnit,
     };
     use radroots_event::ids::RadrootsInventoryBinId;
-    use radroots_event::listing::RadrootsListingBin;
+    use radroots_event::operational_listing::RadrootsOperationalListingBin;
 
     fn bin_id(raw: &str) -> RadrootsInventoryBinId {
         RadrootsInventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn valid_bin() -> RadrootsListingBin {
-        RadrootsListingBin {
+    fn valid_bin() -> RadrootsOperationalListingBin {
+        RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(2u32),
@@ -122,7 +124,7 @@ mod tests {
 
     #[test]
     fn try_subtotal_for_rejects_unit_mismatch() {
-        let bin = RadrootsListingBin {
+        let bin = RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1u32),
@@ -186,7 +188,7 @@ mod tests {
 
     #[test]
     fn try_total_for_count_propagates_subtotal_errors() {
-        let bin = RadrootsListingBin {
+        let bin = RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1u32),

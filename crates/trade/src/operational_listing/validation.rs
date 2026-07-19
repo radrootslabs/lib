@@ -1,30 +1,33 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String};
+use alloc::{
+    format,
+    string::{String, ToString},
+};
 
 use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
 };
 use radroots_event::{
     RadrootsEventEnvelope,
-    ids::RadrootsListingAddress,
-    kinds::is_listing_kind,
-    listing::{
-        RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-        RadrootsListingPublicLocation,
-    },
+    ids::RadrootsClassifiedListingAddress,
+    kinds::is_classified_listing_kind,
     location::{has_textual_locality, is_public_geohash5},
-    trade_validation::RadrootsTradeValidationListingError as TradeListingValidationError,
+    operational_listing::{
+        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+        RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingPublicLocation,
+    },
+    trade_validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
 };
 
-use radroots_event_codec::listing::decode::listing_from_nostr_event;
+use radroots_event_codec::operational_listing::decode::operational_listing_from_nostr_event;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-pub struct RadrootsTradeListing {
+pub struct RadrootsOperationalListingTradeProjection {
     pub listing_id: String,
-    pub listing_addr: String,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub seller_pubkey: String,
     pub title: String,
     pub description: String,
@@ -34,37 +37,36 @@ pub struct RadrootsTradeListing {
     pub unit: RadrootsCoreUnit,
     pub unit_price: RadrootsCoreMoney,
     pub inventory_available: RadrootsCoreDecimal,
-    pub availability: RadrootsListingAvailability,
-    pub location: RadrootsListingPublicLocation,
-    pub delivery_method: RadrootsListingDeliveryMethod,
-    pub listing: RadrootsListing,
+    pub availability: RadrootsOperationalListingAvailability,
+    pub location: RadrootsOperationalListingPublicLocation,
+    pub delivery_method: RadrootsOperationalListingDeliveryMethod,
+    pub listing: RadrootsOperationalListing,
 }
 
-pub fn validate_listing_event(
+pub fn validate_operational_listing_event(
     event: &RadrootsEventEnvelope,
-) -> Result<RadrootsTradeListing, TradeListingValidationError> {
-    if !is_listing_kind(event.kind_u32()) {
-        return Err(TradeListingValidationError::InvalidKind {
+) -> Result<RadrootsOperationalListingTradeProjection, OperationalListingValidationError> {
+    if !is_classified_listing_kind(event.kind_u32()) {
+        return Err(OperationalListingValidationError::InvalidKind {
             kind: event.kind_u32(),
         });
     }
 
-    let listing = listing_from_nostr_event(event)
-        .map_err(|error| TradeListingValidationError::ParseError { error })?;
+    let listing = operational_listing_from_nostr_event(event)
+        .map_err(|error| OperationalListingValidationError::ParseError { error })?;
     let listing_id = listing.d_tag.trim().to_string();
 
-    let seller_pubkey = event.author_str().to_owned();
+    let seller_pubkey = event.author_str().to_string();
     if listing.farm.pubkey != seller_pubkey {
-        return Err(TradeListingValidationError::InvalidSeller);
+        return Err(OperationalListingValidationError::InvalidSeller);
     }
     let listing_addr_raw = format!("{}:{}:{}", event.kind_u32(), seller_pubkey, listing_id);
-    let listing_addr = RadrootsListingAddress::parse(&listing_addr_raw)
-        .expect("validated listing identity must form a listing address")
-        .into_string();
+    let listing_addr = RadrootsClassifiedListingAddress::parse(&listing_addr_raw)
+        .expect("validated listing identity must form a listing address");
 
     let title = listing.product.title.trim().to_string();
     if title.is_empty() {
-        return Err(TradeListingValidationError::MissingTitle);
+        return Err(OperationalListingValidationError::MissingTitle);
     }
 
     let description = listing
@@ -74,7 +76,7 @@ pub fn validate_listing_event(
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     if description.is_empty() {
-        return Err(TradeListingValidationError::MissingDescription);
+        return Err(OperationalListingValidationError::MissingDescription);
     }
 
     let product_type = if !listing.product.category.trim().is_empty() {
@@ -83,30 +85,30 @@ pub fn validate_listing_event(
         listing.product.key.trim().to_string()
     };
     if product_type.is_empty() {
-        return Err(TradeListingValidationError::MissingProductType);
+        return Err(OperationalListingValidationError::MissingProductType);
     }
 
     if listing.bins.is_empty() {
-        return Err(TradeListingValidationError::MissingBins);
+        return Err(OperationalListingValidationError::MissingBins);
     }
     let primary_bin_id = listing.primary_bin_id.trim().to_string();
     let primary_bin = listing
         .bins
         .iter()
         .find(|bin| bin.bin_id == primary_bin_id)
-        .ok_or(TradeListingValidationError::MissingPrimaryBin)?;
+        .ok_or(OperationalListingValidationError::MissingPrimaryBin)?;
 
     if primary_bin.quantity.amount.is_sign_negative() {
-        return Err(TradeListingValidationError::InvalidBin);
+        return Err(OperationalListingValidationError::InvalidBin);
     }
     if !primary_bin.quantity.is_canonical() {
-        return Err(TradeListingValidationError::InvalidBin);
+        return Err(OperationalListingValidationError::InvalidBin);
     }
     if !primary_bin
         .price_per_canonical_unit
         .is_price_per_canonical_unit()
     {
-        return Err(TradeListingValidationError::InvalidPrice);
+        return Err(OperationalListingValidationError::InvalidPrice);
     }
     if primary_bin
         .price_per_canonical_unit
@@ -114,42 +116,42 @@ pub fn validate_listing_event(
         .amount
         .is_sign_negative()
     {
-        return Err(TradeListingValidationError::InvalidPrice);
+        return Err(OperationalListingValidationError::InvalidPrice);
     }
     if primary_bin.price_per_canonical_unit.quantity.unit != primary_bin.quantity.unit {
-        return Err(TradeListingValidationError::InvalidPrice);
+        return Err(OperationalListingValidationError::InvalidPrice);
     }
 
     let inventory_available = listing
         .inventory_available
-        .ok_or(TradeListingValidationError::MissingInventory)?;
+        .ok_or(OperationalListingValidationError::MissingInventory)?;
     if inventory_available.is_sign_negative() {
-        return Err(TradeListingValidationError::InvalidInventory);
+        return Err(OperationalListingValidationError::InvalidInventory);
     }
 
     let availability = listing
         .availability
         .clone()
-        .ok_or(TradeListingValidationError::MissingAvailability)?;
+        .ok_or(OperationalListingValidationError::MissingAvailability)?;
     let location = listing
         .location
         .clone()
-        .ok_or(TradeListingValidationError::MissingLocation)?;
+        .ok_or(OperationalListingValidationError::MissingLocation)?;
     if !has_textual_locality(
         &location.primary,
         location.city.as_deref(),
         location.region.as_deref(),
         location.country.as_deref(),
     ) {
-        return Err(TradeListingValidationError::MissingLocationLocality);
+        return Err(OperationalListingValidationError::MissingLocationLocality);
     }
     validate_listing_location_geohash(&location.geohash)?;
     let delivery_method = listing
         .delivery_method
         .clone()
-        .ok_or(TradeListingValidationError::MissingDeliveryMethod)?;
+        .ok_or(OperationalListingValidationError::MissingDeliveryMethod)?;
 
-    Ok(RadrootsTradeListing {
+    Ok(RadrootsOperationalListingTradeProjection {
         listing_id,
         listing_addr,
         seller_pubkey,
@@ -169,19 +171,21 @@ pub fn validate_listing_event(
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn validate_listing_location_geohash(geohash: &str) -> Result<(), TradeListingValidationError> {
+fn validate_listing_location_geohash(
+    geohash: &str,
+) -> Result<(), OperationalListingValidationError> {
     if geohash.trim().is_empty() {
-        return Err(TradeListingValidationError::MissingLocationGeohash);
+        return Err(OperationalListingValidationError::MissingLocationGeohash);
     }
     if !is_public_geohash5(geohash) {
-        return Err(TradeListingValidationError::InvalidLocationGeohash);
+        return Err(OperationalListingValidationError::InvalidLocationGeohash);
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TradeListingValidationError, validate_listing_event};
+    use super::{OperationalListingValidationError, validate_operational_listing_event};
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
@@ -190,10 +194,11 @@ mod tests {
         RadrootsEventEnvelope,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
-        kinds::KIND_LISTING,
-        listing::{
-            RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-            RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
+        kinds::KIND_CLASSIFIED_LISTING,
+        operational_listing::{
+            RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+            RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+            RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
         },
     };
 
@@ -208,15 +213,15 @@ mod tests {
         RadrootsInventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn base_listing() -> RadrootsListing {
-        RadrootsListing {
+    fn base_listing() -> RadrootsOperationalListing {
+        RadrootsOperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: SELLER.into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "coffee".into(),
                 title: "Coffee".into(),
                 category: "coffee".into(),
@@ -228,7 +233,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1000u32),
@@ -254,11 +259,12 @@ mod tests {
             plot: None,
             discounts: None,
             inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
-            availability: Some(RadrootsListingAvailability::Status {
-                status: radroots_event::listing::RadrootsListingStatus::Active,
+            availability: Some(RadrootsOperationalListingAvailability::Status {
+                status:
+                    radroots_event::operational_listing::RadrootsOperationalListingStatus::Active,
             }),
-            delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
-            location: Some(RadrootsListingPublicLocation {
+            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+            location: Some(RadrootsOperationalListingPublicLocation {
                 primary: "Farm".into(),
                 city: Some("Town".into()),
                 region: Some("Region".into()),
@@ -269,7 +275,7 @@ mod tests {
         }
     }
 
-    fn base_event(listing: &RadrootsListing) -> RadrootsEventEnvelope {
+    fn base_event(listing: &RadrootsOperationalListing) -> RadrootsEventEnvelope {
         let mut tags = vec![
             vec!["d".into(), listing.d_tag.to_string()],
             vec!["p".into(), listing.farm.pubkey.clone()],
@@ -318,17 +324,17 @@ mod tests {
         }
         if let Some(availability) = &listing.availability {
             match availability {
-                RadrootsListingAvailability::Status { status } => tags.push(vec![
+                RadrootsOperationalListingAvailability::Status { status } => tags.push(vec![
                     "status".into(),
                     match status {
-                        radroots_event::listing::RadrootsListingStatus::Active => "active".into(),
-                        radroots_event::listing::RadrootsListingStatus::Sold => "sold".into(),
-                        radroots_event::listing::RadrootsListingStatus::Other { value } => {
+                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Active => "active".into(),
+                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Sold => "sold".into(),
+                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Other { value } => {
                             value.clone()
                         }
                     },
                 ]),
-                RadrootsListingAvailability::Window { start, end } => {
+                RadrootsOperationalListingAvailability::Window { start, end } => {
                     if let Some(start) = start {
                         tags.push(vec![
                             "radroots:availability_start".into(),
@@ -344,10 +350,12 @@ mod tests {
         if let Some(delivery) = &listing.delivery_method {
             let mut tag = vec!["delivery".into()];
             match delivery {
-                RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
-                RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
-                RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
-                RadrootsListingDeliveryMethod::Other { method } => {
+                RadrootsOperationalListingDeliveryMethod::Pickup => tag.push("pickup".into()),
+                RadrootsOperationalListingDeliveryMethod::LocalDelivery => {
+                    tag.push("local_delivery".into())
+                }
+                RadrootsOperationalListingDeliveryMethod::Shipping => tag.push("shipping".into()),
+                RadrootsOperationalListingDeliveryMethod::Other { method } => {
                     tag.push("other".into());
                     tag.push(method.clone());
                 }
@@ -365,7 +373,7 @@ mod tests {
             tags.push(vec!["g".into(), location.geohash.clone()]);
         }
 
-        event_with_parts(SELLER, KIND_LISTING, tags, String::new())
+        event_with_parts(SELLER, KIND_CLASSIFIED_LISTING, tags, String::new())
     }
 
     fn event_with_parts(
@@ -386,9 +394,12 @@ mod tests {
         .expect("event")
     }
 
-    fn assert_validation_err(listing: RadrootsListing, expected: TradeListingValidationError) {
+    fn assert_validation_err(
+        listing: RadrootsOperationalListing,
+        expected: OperationalListingValidationError,
+    ) {
         let event = base_event(&listing);
-        let err = validate_listing_event(&event).unwrap_err();
+        let err = validate_operational_listing_event(&event).unwrap_err();
         assert_eq!(format!("{err}"), format!("{expected}"));
     }
 
@@ -396,7 +407,7 @@ mod tests {
     fn validate_listing_ok() {
         let listing = base_listing();
         let event = base_event(&listing);
-        assert!(validate_listing_event(&event).is_ok());
+        assert!(validate_operational_listing_event(&event).is_ok());
     }
 
     #[test]
@@ -408,21 +419,21 @@ mod tests {
             base_event(&listing).tags_as_vec(),
             String::new(),
         );
-        let err = validate_listing_event(&event).unwrap_err();
+        let err = validate_operational_listing_event(&event).unwrap_err();
         assert_eq!(
             err,
-            TradeListingValidationError::InvalidKind { kind: 30403 }
+            OperationalListingValidationError::InvalidKind { kind: 30403 }
         );
     }
 
     #[test]
     fn validate_listing_rejects_missing_d_tag() {
-        let event = event_with_parts(SELLER, KIND_LISTING, Vec::new(), String::new());
-        let err = validate_listing_event(&event).unwrap_err();
+        let event = event_with_parts(SELLER, KIND_CLASSIFIED_LISTING, Vec::new(), String::new());
+        let err = validate_operational_listing_event(&event).unwrap_err();
         assert_eq!(
             err,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::MissingTag("d".to_string())
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::MissingTag("d".to_string())
             }
         );
     }
@@ -431,7 +442,7 @@ mod tests {
     fn validate_listing_rejects_invalid_currency() {
         let event = event_with_parts(
             SELLER,
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             vec![
                 vec!["d".into(), "AAAAAAAAAAAAAAAAAAAAAg".into()],
                 vec!["p".into(), SELLER.into()],
@@ -465,7 +476,7 @@ mod tests {
             ],
             String::new(),
         );
-        let err = validate_listing_event(&event).unwrap_err();
+        let err = validate_operational_listing_event(&event).unwrap_err();
         assert!(format!("{err:?}").starts_with("ParseError"));
     }
 
@@ -474,12 +485,12 @@ mod tests {
         let listing = base_listing();
         let event = event_with_parts(
             OTHER_SELLER,
-            KIND_LISTING,
+            KIND_CLASSIFIED_LISTING,
             base_event(&listing).tags_as_vec(),
             String::new(),
         );
-        let err = validate_listing_event(&event).unwrap_err();
-        assert_eq!(err, TradeListingValidationError::InvalidSeller);
+        let err = validate_operational_listing_event(&event).unwrap_err();
+        assert_eq!(err, OperationalListingValidationError::InvalidSeller);
     }
 
     #[test]
@@ -487,30 +498,36 @@ mod tests {
         let mut listing = base_listing();
         listing.inventory_available = None;
         let event = base_event(&listing);
-        let err = validate_listing_event(&event).unwrap_err();
-        assert_eq!(err, TradeListingValidationError::MissingInventory);
+        let err = validate_operational_listing_event(&event).unwrap_err();
+        assert_eq!(err, OperationalListingValidationError::MissingInventory);
     }
 
     #[test]
     fn validate_listing_rejects_invalid_kind() {
         let listing = base_listing();
         let event = event_with_parts(SELLER, 0, base_event(&listing).tags_as_vec(), String::new());
-        let err = validate_listing_event(&event).unwrap_err();
-        assert_eq!(err, TradeListingValidationError::InvalidKind { kind: 0 });
+        let err = validate_operational_listing_event(&event).unwrap_err();
+        assert_eq!(
+            err,
+            OperationalListingValidationError::InvalidKind { kind: 0 }
+        );
     }
 
     #[test]
     fn validate_listing_rejects_missing_title() {
         let mut listing = base_listing();
         listing.product.title = " ".into();
-        assert_validation_err(listing, TradeListingValidationError::MissingTitle);
+        assert_validation_err(listing, OperationalListingValidationError::MissingTitle);
     }
 
     #[test]
     fn validate_listing_rejects_missing_description() {
         let mut listing = base_listing();
         listing.product.summary = Some(" ".into());
-        assert_validation_err(listing, TradeListingValidationError::MissingDescription);
+        assert_validation_err(
+            listing,
+            OperationalListingValidationError::MissingDescription,
+        );
     }
 
     #[test]
@@ -518,7 +535,10 @@ mod tests {
         let mut listing = base_listing();
         listing.product.category = " ".into();
         listing.product.key = " ".into();
-        assert_validation_err(listing, TradeListingValidationError::MissingProductType);
+        assert_validation_err(
+            listing,
+            OperationalListingValidationError::MissingProductType,
+        );
     }
 
     #[test]
@@ -527,8 +547,8 @@ mod tests {
         listing.bins.clear();
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("radroots:primary_bin".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
             },
         );
     }
@@ -544,8 +564,8 @@ mod tests {
         listing.primary_bin_id = bin_id("missing");
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("radroots:primary_bin".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
             },
         );
     }
@@ -554,7 +574,7 @@ mod tests {
     fn validate_listing_rejects_negative_quantity() {
         let mut listing = base_listing();
         listing.bins[0].quantity.amount = "-1".parse().unwrap();
-        assert_validation_err(listing, TradeListingValidationError::InvalidBin);
+        assert_validation_err(listing, OperationalListingValidationError::InvalidBin);
     }
 
     #[test]
@@ -563,8 +583,8 @@ mod tests {
         listing.bins[0].quantity.unit = RadrootsCoreUnit::MassKg;
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("radroots:bin".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:bin".into()),
             },
         );
     }
@@ -575,8 +595,8 @@ mod tests {
         listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("radroots:price".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
             },
         );
     }
@@ -585,7 +605,7 @@ mod tests {
     fn validate_listing_rejects_negative_price_amount() {
         let mut listing = base_listing();
         listing.bins[0].price_per_canonical_unit.amount.amount = "-1".parse().unwrap();
-        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+        assert_validation_err(listing, OperationalListingValidationError::InvalidPrice);
     }
 
     #[test]
@@ -594,8 +614,8 @@ mod tests {
         listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("radroots:price".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
             },
         );
     }
@@ -604,21 +624,24 @@ mod tests {
     fn validate_listing_rejects_negative_inventory() {
         let mut listing = base_listing();
         listing.inventory_available = Some("-1".parse().unwrap());
-        assert_validation_err(listing, TradeListingValidationError::InvalidInventory);
+        assert_validation_err(listing, OperationalListingValidationError::InvalidInventory);
     }
 
     #[test]
     fn validate_listing_rejects_missing_availability() {
         let mut listing = base_listing();
         listing.availability = None;
-        assert_validation_err(listing, TradeListingValidationError::MissingAvailability);
+        assert_validation_err(
+            listing,
+            OperationalListingValidationError::MissingAvailability,
+        );
     }
 
     #[test]
     fn validate_listing_rejects_missing_location() {
         let mut listing = base_listing();
         listing.location = None;
-        assert_validation_err(listing, TradeListingValidationError::MissingLocation);
+        assert_validation_err(listing, OperationalListingValidationError::MissingLocation);
     }
 
     #[test]
@@ -630,7 +653,7 @@ mod tests {
         location.country = None;
         assert_validation_err(
             listing,
-            TradeListingValidationError::MissingLocationLocality,
+            OperationalListingValidationError::MissingLocationLocality,
         );
     }
 
@@ -640,8 +663,8 @@ mod tests {
         listing.location.as_mut().expect("location").geohash = " ".into();
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("g".to_string()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -652,8 +675,8 @@ mod tests {
         listing.location.as_mut().expect("location").geohash = "9q8yyz".into();
         assert_validation_err(
             listing,
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("g".to_string()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -662,42 +685,45 @@ mod tests {
     fn validate_listing_rejects_missing_delivery_method() {
         let mut listing = base_listing();
         listing.delivery_method = None;
-        assert_validation_err(listing, TradeListingValidationError::MissingDeliveryMethod);
+        assert_validation_err(
+            listing,
+            OperationalListingValidationError::MissingDeliveryMethod,
+        );
     }
 
     #[test]
     fn validation_error_display_covers_all_variants() {
         let errors = vec![
-            TradeListingValidationError::InvalidKind { kind: 9 },
-            TradeListingValidationError::MissingListingId,
-            TradeListingValidationError::ListingEventNotFound {
+            OperationalListingValidationError::InvalidKind { kind: 9 },
+            OperationalListingValidationError::MissingListingId,
+            OperationalListingValidationError::ListingEventNotFound {
                 listing_addr: "addr".into(),
             },
-            TradeListingValidationError::ListingEventFetchFailed {
+            OperationalListingValidationError::ListingEventFetchFailed {
                 listing_addr: "addr".into(),
             },
-            TradeListingValidationError::ParseError {
-                error: crate::listing::ListingParseError::InvalidTag("d".into()),
+            OperationalListingValidationError::ParseError {
+                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("d".into()),
             },
-            TradeListingValidationError::InvalidSeller,
-            TradeListingValidationError::MissingFarmProfile,
-            TradeListingValidationError::MissingFarmRecord,
-            TradeListingValidationError::MissingTitle,
-            TradeListingValidationError::MissingDescription,
-            TradeListingValidationError::MissingProductType,
-            TradeListingValidationError::MissingBins,
-            TradeListingValidationError::MissingPrimaryBin,
-            TradeListingValidationError::InvalidBin,
-            TradeListingValidationError::MissingPrice,
-            TradeListingValidationError::InvalidPrice,
-            TradeListingValidationError::MissingInventory,
-            TradeListingValidationError::InvalidInventory,
-            TradeListingValidationError::MissingAvailability,
-            TradeListingValidationError::MissingLocation,
-            TradeListingValidationError::MissingLocationLocality,
-            TradeListingValidationError::MissingLocationGeohash,
-            TradeListingValidationError::InvalidLocationGeohash,
-            TradeListingValidationError::MissingDeliveryMethod,
+            OperationalListingValidationError::InvalidSeller,
+            OperationalListingValidationError::MissingFarmProfile,
+            OperationalListingValidationError::MissingFarmRecord,
+            OperationalListingValidationError::MissingTitle,
+            OperationalListingValidationError::MissingDescription,
+            OperationalListingValidationError::MissingProductType,
+            OperationalListingValidationError::MissingBins,
+            OperationalListingValidationError::MissingPrimaryBin,
+            OperationalListingValidationError::InvalidBin,
+            OperationalListingValidationError::MissingPrice,
+            OperationalListingValidationError::InvalidPrice,
+            OperationalListingValidationError::MissingInventory,
+            OperationalListingValidationError::InvalidInventory,
+            OperationalListingValidationError::MissingAvailability,
+            OperationalListingValidationError::MissingLocation,
+            OperationalListingValidationError::MissingLocationLocality,
+            OperationalListingValidationError::MissingLocationGeohash,
+            OperationalListingValidationError::InvalidLocationGeohash,
+            OperationalListingValidationError::MissingDeliveryMethod,
         ];
         for error in errors {
             assert!(!error.to_string().trim().is_empty());

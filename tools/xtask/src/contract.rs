@@ -52,8 +52,8 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 9] = [
         "crates/event_codec/tests/fixtures/calendar_radroots_profile.v1.json",
     ),
     (
-        "contracts/conformance/vectors/listing/parse_event.v1.json",
-        "crates/event_codec/tests/fixtures/listing_parse_event.v1.json",
+        "contracts/conformance/vectors/operational_listing/parse_event.v1.json",
+        "crates/event_codec/tests/fixtures/operational_listing_parse_event.v1.json",
     ),
     (
         "contracts/conformance/vectors/profile/metadata.v1.json",
@@ -1541,14 +1541,14 @@ const RESOURCE_CAP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const OPERATIONAL_LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
-        relative_path: "crates/event/src/listing.rs",
-        required_fragments: &["pub struct RadrootsListing"],
+        relative_path: "crates/event/src/operational_listing.rs",
+        required_fragments: &["pub struct RadrootsOperationalListing"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
-        required_fragments: &["pub const KIND_LISTING: u32 = 30402;"],
+        required_fragments: &["pub const KIND_CLASSIFIED_LISTING: u32 = 30402;"],
     },
 ];
 
@@ -2028,15 +2028,15 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
         witnesses: &RESOURCE_CAP_WITNESSES,
     },
     EventBoundaryExpectation {
-        domain: "listing",
+        domain: "operational_listing",
         kind: "30402",
-        radroots_type: "RadrootsListing",
+        radroots_type: "RadrootsOperationalListing",
         rpc_methods: &[
-            "events.listing.publish",
-            "events.listing.list",
-            "events.listing.get",
+            "events.operational_listing.publish",
+            "events.operational_listing.list",
+            "events.operational_listing.get",
         ],
-        witnesses: &LISTING_WITNESSES,
+        witnesses: &OPERATIONAL_LISTING_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "dvm_request",
@@ -6463,7 +6463,7 @@ version = "1.0.0"
 source = "synthetic"
 
 [public]
-domains = ["profile", "farm", "listing", "trade"]
+domains = ["profile", "farm", "operational_listing", "trade"]
 
 [shared_types]
 public = [
@@ -6473,11 +6473,11 @@ public = [
   "RadrootsEventEnvelope",
   "RadrootsEventRef",
   "RadrootsEventPtr",
-  "RadrootsListingAddress",
+  "RadrootsClassifiedListingAddress",
   "RadrootsAuthoredProfile",
   "RadrootsInboundProfileMetadata",
   "RadrootsFarm",
-  "RadrootsListing",
+  "RadrootsOperationalListing",
 ]
 
 [errors]
@@ -6505,23 +6505,23 @@ rust_types = ["radroots_event::profile::RadrootsAuthoredProfile"]
 [operations.profile_build_authored_draft.conformance]
 vector = "contracts/conformance/vectors/profile/metadata.v1.json"
 
-[operations.listing_build_draft]
-domain = "listing"
-id = "listing.build_draft"
+[operations.operational_listing_build_draft]
+domain = "operational_listing"
+id = "operational_listing.build_draft"
 stability = "beta"
-inputs = ["RadrootsListing"]
+inputs = ["RadrootsOperationalListing"]
 outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.listing_build_draft.implementation]
+[operations.operational_listing_build_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_event::listing::RadrootsListing"]
+rust_types = ["radroots_event::operational_listing::RadrootsOperationalListing"]
 
-[operations.listing_build_draft.conformance]
-vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
+[operations.operational_listing_build_draft.conformance]
+vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
 "#,
         );
         write_file(
@@ -6584,15 +6584,15 @@ vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
                 .join("contracts")
                 .join("conformance")
                 .join("vectors")
-                .join("listing")
+                .join("operational_listing")
                 .join("build_draft.v1.json"),
             r#"{
-  "suite": "listing",
+  "suite": "operational_listing",
   "contract_version": "1.0.0",
   "vectors": [
     {
-      "id": "listing_build_draft_minimal_001",
-      "kind": "listing.build_draft",
+      "id": "operational_listing_build_draft_minimal_001",
+      "kind": "operational_listing.build_draft",
       "input": {},
       "expected": {}
     }

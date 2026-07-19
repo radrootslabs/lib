@@ -300,6 +300,7 @@ fn standard_label(value: RadrootsNostrStandard) -> &'static str {
         RadrootsNostrStandard::Nip90 => "nip90",
         RadrootsNostrStandard::Nip94 => "nip94",
         RadrootsNostrStandard::Nip98 => "nip98",
+        RadrootsNostrStandard::Nip99 => "nip99",
         RadrootsNostrStandard::Radroots => "radroots",
     }
 }
@@ -376,8 +377,8 @@ fn tag_semantic_label(value: RadrootsTagSemantic) -> &'static str {
         RadrootsTagSemantic::Identifier => "identifier",
         RadrootsTagSemantic::Image => "image",
         RadrootsTagSemantic::Kind => "kind",
-        RadrootsTagSemantic::ListingAddress => "listing_address",
-        RadrootsTagSemantic::ListingSnapshot => "listing_snapshot",
+        RadrootsTagSemantic::ClassifiedListingAddress => "listing_address",
+        RadrootsTagSemantic::OperationalListingSnapshot => "listing_snapshot",
         RadrootsTagSemantic::ListDescription => "list_description",
         RadrootsTagSemantic::Location => "location",
         RadrootsTagSemantic::Participant => "participant",
@@ -434,8 +435,10 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
         RadrootsReducer::FarmOpsProjection => "farm_ops_projection",
         RadrootsReducer::GroupProjection => "group_projection",
         RadrootsReducer::KnowledgeProjection => "knowledge_projection",
-        RadrootsReducer::ListingInventoryAccounting => "listing_inventory_accounting",
-        RadrootsReducer::ListingProjection => "listing_projection",
+        RadrootsReducer::OperationalListingInventoryAccounting => {
+            "operational_listing_inventory_accounting"
+        }
+        RadrootsReducer::OperationalListingProjection => "operational_listing_projection",
         RadrootsReducer::MarketProjection => "market_projection",
         RadrootsReducer::OrderProjection => "order_projection",
         RadrootsReducer::ProfileProjection => "profile_projection",
@@ -443,5 +446,28 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
         RadrootsReducer::SocialProjection => "social_projection",
         RadrootsReducer::TradeProjection => "trade_projection",
         RadrootsReducer::TradeValidation => "trade_validation",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{reducer_label, standard_label};
+    use radroots_event::contract::{RadrootsNostrStandard, RadrootsReducer};
+
+    #[test]
+    fn classified_listing_standard_label_is_nip99() {
+        assert_eq!(standard_label(RadrootsNostrStandard::Nip99), "nip99");
+    }
+
+    #[test]
+    fn operational_listing_reducer_labels_are_unambiguous() {
+        assert_eq!(
+            reducer_label(RadrootsReducer::OperationalListingProjection),
+            "operational_listing_projection"
+        );
+        assert_eq!(
+            reducer_label(RadrootsReducer::OperationalListingInventoryAccounting),
+            "operational_listing_inventory_accounting"
+        );
     }
 }

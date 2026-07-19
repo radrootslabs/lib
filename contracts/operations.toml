@@ -9,7 +9,7 @@ domains = [
   "event",
   "profile",
   "farm",
-  "listing",
+  "operational_listing",
   "trade",
   "trade_validation",
   "social",
@@ -54,7 +54,7 @@ public = [
   "RadrootsEventHeadDecision",
   "RadrootsEventRef",
   "RadrootsEventPtr",
-  "RadrootsListingAddress",
+  "RadrootsClassifiedListingAddress",
   "RadrootsAuthoredImage",
   "RadrootsAuthoredImageError",
   "RadrootsNip05Identifier",
@@ -69,7 +69,7 @@ public = [
   "RadrootsNip05IdentityVerification",
   "RadrootsUnverifiedProfileMediaReference",
   "RadrootsFarm",
-  "RadrootsListing",
+  "RadrootsOperationalListing",
   "RadrootsPost",
   "RadrootsAuthoredPostError",
   "RadrootsPostImageDimensions",
@@ -515,69 +515,69 @@ rust_types = ["radroots_event::farm::RadrootsFarm"]
 [operations.farm_build_draft.conformance]
 vector = "contracts/conformance/vectors/farm/build_draft.v1.json"
 
-[operations.listing_build_tags]
-domain = "listing"
-id = "listing.build_tags"
+[operations.operational_listing_build_tags]
+domain = "operational_listing"
+id = "operational_listing.build_tags"
 stability = "beta"
-inputs = ["RadrootsListing"]
+inputs = ["RadrootsOperationalListing"]
 outputs = ["NostrTags"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.listing_build_tags.implementation]
+[operations.operational_listing_build_tags.implementation]
 rust_modules = [
-  "crates/event_codec/src/listing/encode.rs",
-  "crates/event_codec/src/listing/tags.rs",
+  "crates/event_codec/src/operational_listing/encode.rs",
+  "crates/event_codec/src/operational_listing/tags.rs",
 ]
-rust_types = ["radroots_event::listing::RadrootsListing"]
+rust_types = ["radroots_event::operational_listing::RadrootsOperationalListing"]
 
-[operations.listing_build_tags.conformance]
-vector = "contracts/conformance/vectors/listing/build_tags.v1.json"
+[operations.operational_listing_build_tags.conformance]
+vector = "contracts/conformance/vectors/operational_listing/build_tags.v1.json"
 
-[operations.listing_build_draft]
-domain = "listing"
-id = "listing.build_draft"
+[operations.operational_listing_build_draft]
+domain = "operational_listing"
+id = "operational_listing.build_draft"
 stability = "beta"
-inputs = ["RadrootsListing"]
+inputs = ["RadrootsOperationalListing"]
 outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.listing_build_draft.implementation]
+[operations.operational_listing_build_draft.implementation]
 rust_modules = [
-  "crates/event_codec/src/listing/encode.rs",
+  "crates/event_codec/src/operational_listing/encode.rs",
   "crates/event_codec/src/wire.rs",
 ]
-rust_types = ["radroots_event::listing::RadrootsListing"]
+rust_types = ["radroots_event::operational_listing::RadrootsOperationalListing"]
 
-[operations.listing_build_draft.conformance]
-vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
+[operations.operational_listing_build_draft.conformance]
+vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
 
-[operations.listing_parse_event]
-domain = "listing"
-id = "listing.parse_event"
+[operations.operational_listing_parse_event]
+domain = "operational_listing"
+id = "operational_listing.parse_event"
 stability = "beta"
 inputs = ["RadrootsEventEnvelope"]
-outputs = ["RadrootsListing"]
+outputs = ["RadrootsOperationalListing"]
 error_class = "parse_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.listing_parse_event.implementation]
-rust_modules = ["crates/event_codec/src/listing/decode.rs"]
+[operations.operational_listing_parse_event.implementation]
+rust_modules = ["crates/event_codec/src/operational_listing/decode.rs"]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
-  "radroots_event::order::RadrootsListingParseError",
-  "radroots_event::listing::RadrootsListing",
+  "radroots_event::operational_listing::RadrootsOperationalListingParseError",
+  "radroots_event::operational_listing::RadrootsOperationalListing",
 ]
 
-[operations.listing_parse_event.conformance]
-vector = "contracts/conformance/vectors/listing/parse_event.v1.json"
+[operations.operational_listing_parse_event.conformance]
+vector = "contracts/conformance/vectors/operational_listing/parse_event.v1.json"
 
 [operations.social_update_build_authored_draft]
 domain = "social"
@@ -1211,23 +1211,23 @@ rust_types = [
 [operations.trade_parse_mutation_event.conformance]
 vector = "contracts/conformance/vectors/trade/parse_mutation_event.v1.json"
 
-[operations.trade_parse_listing_address]
+[operations.trade_parse_classified_listing_address]
 domain = "trade"
-id = "trade.parse_listing_address"
+id = "trade.parse_classified_listing_address"
 stability = "beta"
 inputs = ["listing_addr"]
-outputs = ["RadrootsListingAddress"]
+outputs = ["RadrootsClassifiedListingAddress"]
 error_class = "address_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_parse_listing_address.implementation]
+[operations.trade_parse_classified_listing_address.implementation]
 rust_modules = ["crates/event/src/ids.rs"]
-rust_types = ["radroots_event::ids::RadrootsListingAddress"]
+rust_types = ["radroots_event::ids::RadrootsClassifiedListingAddress"]
 
-[operations.trade_parse_listing_address.conformance]
-vector = "contracts/conformance/vectors/trade/parse_listing_address.v1.json"
+[operations.trade_parse_classified_listing_address.conformance]
+vector = "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json"
 
 [operations.trade_reduce_records]
 domain = "trade"
@@ -1250,26 +1250,26 @@ rust_types = [
 [operations.trade_reduce_records.conformance]
 vector = "contracts/conformance/vectors/trade/reduce_records.v1.json"
 
-[operations.trade_validation_validate_listing_event]
+[operations.trade_validation_validate_operational_listing_event]
 domain = "trade_validation"
-id = "trade_validation.validate_listing_event"
+id = "trade_validation.validate_operational_listing_event"
 stability = "beta"
 inputs = ["RadrootsEventEnvelope"]
-outputs = ["TradeListingValidateResult"]
+outputs = ["RadrootsOperationalListingTradeProjection"]
 error_class = "validation_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_validation_validate_listing_event.implementation]
-rust_modules = ["crates/trade/src/listing/validation.rs"]
+[operations.trade_validation_validate_operational_listing_event.implementation]
+rust_modules = ["crates/trade/src/operational_listing/validation.rs"]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
-  "radroots_trade::listing::validation::RadrootsTradeListing",
+  "radroots_trade::operational_listing::validation::RadrootsOperationalListingTradeProjection",
 ]
 
-[operations.trade_validation_validate_listing_event.conformance]
-vector = "contracts/conformance/vectors/trade_validation/validate_listing_event.v1.json"
+[operations.trade_validation_validate_operational_listing_event.conformance]
+vector = "contracts/conformance/vectors/trade_validation/validate_operational_listing_event.v1.json"
 
 [operations.knowledge_contract_manifest_json]
 domain = "knowledge"

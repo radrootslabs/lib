@@ -6,7 +6,7 @@ extern crate alloc;
 #[cfg(feature = "dto-bindgen")]
 pub mod dto;
 pub mod identity;
-pub mod listing;
+pub mod operational_listing;
 pub mod prelude;
 #[cfg(feature = "serde_json")]
 pub mod validation_receipt;

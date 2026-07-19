@@ -13,9 +13,10 @@ use radroots_event::{
     farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef},
     gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
     ids::{RadrootsDTag, RadrootsInventoryBinId},
-    listing::{
-        RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingProduct, RadrootsListingPublicLocation,
+    operational_listing::{
+        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
     },
     plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef},
     resource_area::{RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef},
@@ -26,10 +27,13 @@ use radroots_event_codec::coop::list_sets::{coop_members_farms_list_set, coop_me
 use radroots_event_codec::document::encode::document_build_tags;
 use radroots_event_codec::error::EventEncodeError;
 use radroots_event_codec::farm::encode::{farm_build_tags, farm_ref_tags};
-use radroots_event_codec::farm::list_sets::{farm_listings_list_set, farm_members_list_set};
-use radroots_event_codec::listing::encode::listing_build_tags;
-use radroots_event_codec::listing::tags::{
-    ListingTagOptions, listing_tags_full, listing_tags_with_options,
+use radroots_event_codec::farm::list_sets::{
+    farm_members_list_set, farm_operational_listings_list_set,
+};
+use radroots_event_codec::operational_listing::encode::operational_listing_build_tags;
+use radroots_event_codec::operational_listing::tags::{
+    OperationalListingTagOptions, operational_listing_tags_full,
+    operational_listing_tags_with_options,
 };
 use radroots_event_codec::plot::encode::{plot_address, plot_build_tags};
 use radroots_event_codec::resource_area::encode::{
@@ -155,7 +159,7 @@ fn sample_plot() -> RadrootsPlot {
     }
 }
 
-fn sample_listing() -> RadrootsListing {
+fn sample_listing() -> RadrootsOperationalListing {
     let quantity =
         RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
     let price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
@@ -163,14 +167,14 @@ fn sample_listing() -> RadrootsListing {
         quantity.clone(),
     );
 
-    RadrootsListing {
+    RadrootsOperationalListing {
         d_tag: listing_d_tag(VALID_DOC_D_TAG),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         },
-        product: RadrootsListingProduct {
+        product: RadrootsOperationalListingProduct {
             key: "nutmeg".to_string(),
             title: "Nutmeg".to_string(),
             category: "spice".to_string(),
@@ -182,7 +186,7 @@ fn sample_listing() -> RadrootsListing {
             year: None,
         },
         primary_bin_id: bin_id("bin-1"),
-        bins: vec![RadrootsListingBin {
+        bins: vec![RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit,
@@ -196,11 +200,11 @@ fn sample_listing() -> RadrootsListing {
         plot: None,
         discounts: None,
         inventory_available: Some(decimal("12")),
-        availability: Some(RadrootsListingAvailability::Window {
+        availability: Some(RadrootsOperationalListingAvailability::Window {
             start: Some(1),
             end: Some(2),
         }),
-        delivery_method: Some(RadrootsListingDeliveryMethod::Shipping),
+        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Shipping),
         location: None,
         images: None,
     }
@@ -528,14 +532,14 @@ fn farm_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("entry.values")
     ));
 
-    let err = farm_listings_list_set(VALID_FARM_D_TAG, VALID_PUBKEY, [" "])
+    let err = farm_operational_listings_list_set(VALID_FARM_D_TAG, VALID_PUBKEY, [" "])
         .expect_err("empty listing id");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("listing_id")
     ));
 
-    let err = farm_listings_list_set(VALID_FARM_D_TAG, VALID_PUBKEY, ["invalid"])
+    let err = farm_operational_listings_list_set(VALID_FARM_D_TAG, VALID_PUBKEY, ["invalid"])
         .expect_err("invalid listing id");
     assert!(matches!(err, EventEncodeError::InvalidField("listing_id")));
 }
@@ -633,13 +637,13 @@ fn plot_encode_paths() {
 #[test]
 fn listing_encode_paths() {
     let listing = sample_listing();
-    let tags = listing_build_tags(&listing).expect("listing tags");
+    let tags = operational_listing_build_tags(&listing).expect("listing tags");
     assert!(
         tags.iter()
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("d"))
     );
 
-    let full_tags = listing_tags_full(&listing).expect("listing full tags");
+    let full_tags = operational_listing_tags_full(&listing).expect("listing full tags");
     assert!(full_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("inventory")
             && tag.get(1).map(|v| v.as_str()) == Some("12")
@@ -657,9 +661,10 @@ fn listing_encode_paths() {
             && tag.get(1).map(|v| v.as_str()) == Some("shipping")
     }));
 
-    let with_trade_fields: fn() -> ListingTagOptions = ListingTagOptions::with_trade_fields;
-    let option_tags =
-        listing_tags_with_options(&listing, with_trade_fields()).expect("listing option tags");
+    let with_trade_fields: fn() -> OperationalListingTagOptions =
+        OperationalListingTagOptions::with_trade_fields;
+    let option_tags = operational_listing_tags_with_options(&listing, with_trade_fields())
+        .expect("listing option tags");
     assert!(option_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("inventory")
             && tag.get(1).map(|v| v.as_str()) == Some("12")
@@ -673,27 +678,29 @@ fn listing_encode_paths() {
     listing_with_display_fallback.bins[0].display_amount = Some(decimal("1"));
     listing_with_display_fallback.bins[0].display_unit = Some(RadrootsCoreUnit::Each);
     listing_with_display_fallback.bins[0].display_label = None;
-    let display_tags =
-        listing_tags_with_options(&listing_with_display_fallback, ListingTagOptions::default())
-            .expect("listing tags with display fallback");
+    let display_tags = operational_listing_tags_with_options(
+        &listing_with_display_fallback,
+        OperationalListingTagOptions::default(),
+    )
+    .expect("listing tags with display fallback");
     assert!(display_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("radroots:bin")
             && tag.last().map(|v| v.as_str()) == Some("fallback-label")
     }));
 
     let mut listing_with_geohash = sample_listing();
-    listing_with_geohash.location = Some(RadrootsListingPublicLocation {
+    listing_with_geohash.location = Some(RadrootsOperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
         country: Some("PE".to_string()),
         geohash: "6gkzw".to_string(),
     });
-    let decoded_tags = listing_tags_with_options(
+    let decoded_tags = operational_listing_tags_with_options(
         &listing_with_geohash,
-        ListingTagOptions {
+        OperationalListingTagOptions {
             include_geohash: false,
-            ..ListingTagOptions::default()
+            ..OperationalListingTagOptions::default()
         },
     )
     .expect("listing tags without geohash tag");
@@ -704,32 +711,36 @@ fn listing_encode_paths() {
     );
 
     let mut listing_with_shared_geohash = sample_listing();
-    listing_with_shared_geohash.location = Some(RadrootsListingPublicLocation {
+    listing_with_shared_geohash.location = Some(RadrootsOperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
         country: Some("PE".to_string()),
         geohash: "6gkzw".to_string(),
     });
-    let shared_geohash_tags =
-        listing_tags_with_options(&listing_with_shared_geohash, ListingTagOptions::default())
-            .expect("listing tags with shared geohash");
+    let shared_geohash_tags = operational_listing_tags_with_options(
+        &listing_with_shared_geohash,
+        OperationalListingTagOptions::default(),
+    )
+    .expect("listing tags with shared geohash");
     assert!(shared_geohash_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("g")
             && tag.get(1).map(|v| v.as_str()) == Some("6gkzw")
     }));
 
     let mut listing_without_coordinates = sample_listing();
-    listing_without_coordinates.location = Some(RadrootsListingPublicLocation {
+    listing_without_coordinates.location = Some(RadrootsOperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
         country: Some("PE".to_string()),
         geohash: "6gkzw".to_string(),
     });
-    let no_coordinates_tags =
-        listing_tags_with_options(&listing_without_coordinates, ListingTagOptions::default())
-            .expect("listing tags without coordinates");
+    let no_coordinates_tags = operational_listing_tags_with_options(
+        &listing_without_coordinates,
+        OperationalListingTagOptions::default(),
+    )
+    .expect("listing tags without coordinates");
     assert!(
         !no_coordinates_tags
             .iter()
@@ -746,16 +757,18 @@ fn listing_encode_paths() {
     listing_with_blank_optionals.product.location = Some(" ".to_string());
     listing_with_blank_optionals.product.profile = Some("null".to_string());
     listing_with_blank_optionals.product.year = Some(" ".to_string());
-    listing_with_blank_optionals.location = Some(RadrootsListingPublicLocation {
+    listing_with_blank_optionals.location = Some(RadrootsOperationalListingPublicLocation {
         primary: " ".to_string(),
         city: Some(" ".to_string()),
         region: Some("null".to_string()),
         country: Some(" ".to_string()),
         geohash: "6gkzw".to_string(),
     });
-    let blank_optional_tags =
-        listing_tags_with_options(&listing_with_blank_optionals, ListingTagOptions::default())
-            .expect_err("blank public location is invalid");
+    let blank_optional_tags = operational_listing_tags_with_options(
+        &listing_with_blank_optionals,
+        OperationalListingTagOptions::default(),
+    )
+    .expect_err("blank public location is invalid");
     assert!(matches!(
         blank_optional_tags,
         EventEncodeError::EmptyRequiredField("location.primary")
@@ -766,9 +779,9 @@ fn listing_encode_paths() {
     listing_with_blank_product_optionals.product.location = Some(" ".to_string());
     listing_with_blank_product_optionals.product.profile = Some("null".to_string());
     listing_with_blank_product_optionals.product.year = Some(" ".to_string());
-    let blank_optional_tags = listing_tags_with_options(
+    let blank_optional_tags = operational_listing_tags_with_options(
         &listing_with_blank_product_optionals,
-        ListingTagOptions::default(),
+        OperationalListingTagOptions::default(),
     )
     .expect("listing tags with blank product optional values");
     assert!(
@@ -783,18 +796,18 @@ fn listing_encode_paths() {
     );
 
     let mut listing_without_geohash = sample_listing();
-    listing_without_geohash.location = Some(RadrootsListingPublicLocation {
+    listing_without_geohash.location = Some(RadrootsOperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
         country: Some("PE".to_string()),
         geohash: "6gkzw".to_string(),
     });
-    let without_geohash_tags = listing_tags_with_options(
+    let without_geohash_tags = operational_listing_tags_with_options(
         &listing_without_geohash,
-        ListingTagOptions {
+        OperationalListingTagOptions {
             include_geohash: false,
-            ..ListingTagOptions::default()
+            ..OperationalListingTagOptions::default()
         },
     )
     .expect("listing tags without geohash");
@@ -807,7 +820,7 @@ fn listing_encode_paths() {
     let mut listing_without_availability = sample_listing();
     listing_without_availability.availability = None;
     let no_availability_tags =
-        listing_tags_with_options(&listing_without_availability, with_trade_fields())
+        operational_listing_tags_with_options(&listing_without_availability, with_trade_fields())
             .expect("listing tags without availability");
     assert!(
         !no_availability_tags
@@ -816,8 +829,8 @@ fn listing_encode_paths() {
     );
 
     let mut listing_pickup = sample_listing();
-    listing_pickup.delivery_method = Some(RadrootsListingDeliveryMethod::Pickup);
-    let pickup_tags = listing_tags_with_options(&listing_pickup, with_trade_fields())
+    listing_pickup.delivery_method = Some(RadrootsOperationalListingDeliveryMethod::Pickup);
+    let pickup_tags = operational_listing_tags_with_options(&listing_pickup, with_trade_fields())
         .expect("listing tags with pickup delivery");
     assert!(pickup_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("delivery")
@@ -825,8 +838,8 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_local = sample_listing();
-    listing_local.delivery_method = Some(RadrootsListingDeliveryMethod::LocalDelivery);
-    let local_tags = listing_tags_with_options(&listing_local, with_trade_fields())
+    listing_local.delivery_method = Some(RadrootsOperationalListingDeliveryMethod::LocalDelivery);
+    let local_tags = operational_listing_tags_with_options(&listing_local, with_trade_fields())
         .expect("listing tags with local delivery");
     assert!(local_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("delivery")
@@ -834,11 +847,12 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_other_delivery = sample_listing();
-    listing_other_delivery.delivery_method = Some(RadrootsListingDeliveryMethod::Other {
-        method: "courier".to_string(),
-    });
+    listing_other_delivery.delivery_method =
+        Some(RadrootsOperationalListingDeliveryMethod::Other {
+            method: "courier".to_string(),
+        });
     let other_delivery_tags =
-        listing_tags_with_options(&listing_other_delivery, with_trade_fields())
+        operational_listing_tags_with_options(&listing_other_delivery, with_trade_fields())
             .expect("listing tags with other delivery");
     assert!(other_delivery_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("delivery")
@@ -849,8 +863,9 @@ fn listing_encode_paths() {
     let mut invalid = sample_listing();
     invalid.bins[0].display_price = None;
     invalid.bins[0].display_price_unit = Some(RadrootsCoreUnit::Each);
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("missing display price");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("missing display price");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.display_price")
@@ -862,8 +877,9 @@ fn listing_encode_paths() {
         RadrootsCoreCurrency::USD,
     ));
     invalid.bins[0].display_price_unit = None;
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("missing display price unit");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("missing display price unit");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.display_price_unit")
@@ -875,9 +891,11 @@ fn listing_encode_paths() {
         RadrootsCoreCurrency::USD,
     ));
     listing_with_display_price.bins[0].display_price_unit = Some(RadrootsCoreUnit::Each);
-    let display_price_tags =
-        listing_tags_with_options(&listing_with_display_price, ListingTagOptions::default())
-            .expect("listing tags with display price");
+    let display_price_tags = operational_listing_tags_with_options(
+        &listing_with_display_price,
+        OperationalListingTagOptions::default(),
+    )
+    .expect("listing tags with display price");
     assert!(display_price_tags.iter().any(|tag| {
         tag.first().map(|v| v.as_str()) == Some("radroots:price")
             && tag.get(6).map(|v| v.as_str()) == Some("10")
@@ -889,8 +907,9 @@ fn listing_encode_paths() {
         decimal("10"),
         RadrootsCoreCurrency::EUR,
     ));
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("display price currency mismatch");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("display price currency mismatch");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.display_price")
@@ -899,8 +918,9 @@ fn listing_encode_paths() {
     let mut invalid = sample_listing();
     invalid.bins[0].display_amount = None;
     invalid.bins[0].display_unit = Some(RadrootsCoreUnit::Each);
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("missing display amount");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("missing display amount");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.display_amount")
@@ -912,8 +932,9 @@ fn listing_encode_paths() {
         RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
         RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassG),
     );
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("non-canonical bin quantity");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("non-canonical bin quantity");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.quantity")
@@ -924,8 +945,9 @@ fn listing_encode_paths() {
         RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
         RadrootsCoreQuantity::new(decimal("2"), RadrootsCoreUnit::Each),
     );
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("price must be per canonical unit");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("price must be per canonical unit");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
@@ -936,8 +958,9 @@ fn listing_encode_paths() {
         RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
         RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassG),
     );
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("non-convertible bin total price");
+    let err =
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("non-convertible bin total price");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
@@ -945,7 +968,7 @@ fn listing_encode_paths() {
 
     let mut invalid = sample_listing();
     invalid.farm.d_tag = " ".to_string();
-    let err = listing_build_tags(&invalid).expect_err("empty listing farm d_tag");
+    let err = operational_listing_build_tags(&invalid).expect_err("empty listing farm d_tag");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("farm.d_tag")
@@ -954,7 +977,8 @@ fn listing_encode_paths() {
     let mut invalid = sample_listing();
     invalid.bins.clear();
     let err =
-        listing_tags_with_options(&invalid, ListingTagOptions::default()).expect_err("empty bins");
+        operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
+            .expect_err("empty bins");
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("bins")));
 }
 

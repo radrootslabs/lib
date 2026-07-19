@@ -12,7 +12,7 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::ids::{
-    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
+    RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
     RadrootsInventoryBinId, RadrootsPublicKey, RadrootsTradeCandidateId, RadrootsTradeId,
     RadrootsTradeMutationId,
 };
@@ -272,7 +272,7 @@ impl RadrootsTradeCandidateTermsV1 {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RadrootsTradeCandidateLineV1 {
     pub line_id: RadrootsDTag,
-    pub listing_addr: RadrootsAddressableCoordinate,
+    pub listing_addr: RadrootsClassifiedListingAddress,
     pub listing_event_id: RadrootsEventId,
     pub listing_snapshot_sha256: String,
     pub product_id: String,
@@ -1116,7 +1116,7 @@ mod tests {
             farm_id: RadrootsDTag::parse("farm-1").unwrap(),
             lines: vec![RadrootsTradeCandidateLineV1 {
                 line_id: RadrootsDTag::parse("line-1").unwrap(),
-                listing_addr: RadrootsAddressableCoordinate::parse(format!(
+                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
                     hex_64('b')
                 ))
@@ -1553,6 +1553,15 @@ mod tests {
             mutate(&mut value);
             assert!(value.validate().is_err());
         }
+    }
+
+    #[test]
+    fn trade_candidate_deserialization_rejects_non_classified_listing_coordinates() {
+        let mut value = serde_json::to_value(candidate()).expect("candidate json");
+        value["lines"][0]["listing_addr"] =
+            serde_json::json!(format!("30023:{}:listing-1", hex_64('b')));
+
+        assert!(serde_json::from_value::<RadrootsTradeCandidateTermsV1>(value).is_err());
     }
 
     #[test]

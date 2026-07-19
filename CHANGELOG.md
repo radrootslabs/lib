@@ -9,10 +9,18 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- NIP-99 kind `30402` now has an explicit two-level taxonomy: the standard
+  protocol kind and coordinate are **Classified Listing**, while the richer
+  Radroots farm, bin, inventory, and price profile is **Operational Listing**.
+  Public constants, types, functions, modules, operation IDs, and generated DTO
+  roots use those unambiguous names with no legacy `listing` aliases or modules.
 - Operational listing decoding now has one tag-authoritative implementation in
   `radroots_event_codec`. The typed parts decoder reports the established
   listing error taxonomy, and JSON content can no longer override canonical
   product, inventory, or bin tags in trade and replica consumers.
+- Operational listing authoring now emits canonical Markdown content from the
+  tag-authoritative model. Tolerant inbound JSON inspection remains a decode
+  compatibility boundary only and is not an authoring format.
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
   above `65535` instead of truncating them. Canonical-length author keys that
@@ -34,7 +42,7 @@ publish policy both pass for the same source revision.
   access; externally supplied unsigned events, NIP-46 signing, and signed-event
   relay remain explicit low-level Nostr interoperability with no typed product
   authoring claim.
-- Frozen drafts now carry event-contract registry version `2`, revalidate all
+- Frozen drafts now carry event-contract registry version `3`, revalidate all
   persisted fields and the recomputed event id during deserialization and
   signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
   authoring policies.
@@ -71,6 +79,11 @@ publish policy both pass for the same source revision.
 
 - The duplicate private operational listing parser in `radroots_trade` was
   removed; trade validation now consumes the canonical event codec.
+- The ambiguous `listing` source modules and public compatibility aliases were
+  removed. Consumers must migrate to the Classified Listing protocol names or
+  Operational Listing product names according to the API's responsibility.
+- The public operational-listing JSON wire-parts authoring helper was removed;
+  product authoring uses the canonical Markdown wire-parts path.
 - Legacy calendar event models and permissive calendar tag-builder authoring
   paths were removed.
 - Direct `RadrootsProfile` draft encoding and the identity profile publisher were
@@ -104,10 +117,13 @@ publish policy both pass for the same source revision.
   compatibility version instead of package SemVer. Existing backups stamped by
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
-- Persisted frozen drafts with event-contract registry version `1` are rejected
-  and must be reconstructed against registry version `2`; strict Profile plus
-  typed and read-only post contracts can no longer be reconstructed as generic
-  drafts.
+- Persisted frozen drafts with event-contract registry versions `1` or `2` are
+  rejected and must be reconstructed against registry version `3`; strict
+  Profile plus typed and read-only post contracts can no longer be
+  reconstructed as generic drafts.
+- This breaking capsule revision must not be pinned or published through
+  downstream product clients until `radroots_app_rt` is migrated, generated FFI
+  bindings are rebuilt, and downstream compile and contract qualification pass.
 - `radroots_event_from_nostr` now returns `Result<RadrootsEventEnvelope,
   RadrootsEventEnvelopeError>`; callers must handle hostile or oversized SDK
   events explicitly.
