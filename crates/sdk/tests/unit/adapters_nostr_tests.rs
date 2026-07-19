@@ -2,10 +2,9 @@ use super::{
     client_from_identity, configure_write_relays, connected_client_from_identity,
     connected_relay_urls, publish_signed_event, signerless_client, signerless_client_with_options,
 };
-use crate::adapters::signing::sign_parts_with_identity;
 use crate::identity::RadrootsIdentity;
 use core::time::Duration;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use nostr::{EventBuilder, Kind};
 use radroots_nostr::prelude::RadrootsNostrClientOptions;
 use tokio::runtime::Runtime;
 
@@ -72,15 +71,11 @@ fn relay_helpers_accept_empty_relay_sets_without_network_endpoints() {
             .expect("connected client");
         assert_eq!(connected_relay_urls(&connected).await, Vec::<String>::new());
 
-        let signed = sign_parts_with_identity(
-            &identity,
-            RadrootsNip01EventWireParts {
-                kind: 1,
-                content: "hello".to_owned(),
-                tags: Vec::new(),
-            },
-        )
-        .expect("signed event");
+        // Relay publication consumes an already-signed transport fixture; it
+        // does not expose an SDK event-authoring path.
+        let signed = EventBuilder::new(Kind::Custom(30_001), "hello")
+            .sign_with_keys(identity.keys())
+            .expect("signed event");
         let error = publish_signed_event(&connected, &signed)
             .await
             .expect_err("publish without relays");

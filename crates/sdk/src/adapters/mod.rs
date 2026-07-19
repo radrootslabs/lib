@@ -4,5 +4,3 @@ pub mod nostr;
 pub mod radrootsd;
 #[cfg(feature = "signer-adapters")]
 pub mod signer;
-#[cfg(feature = "signing")]
-pub mod signing;

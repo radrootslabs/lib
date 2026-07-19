@@ -91,3 +91,19 @@ fn active_sources_do_not_describe_compatibility_paths() {
         }
     }
 }
+
+#[test]
+fn sdk_does_not_expose_generic_wire_part_signing() {
+    let manifest = manifest_dir();
+    let lib = read_source(&manifest.join("src/lib.rs"));
+    let adapters = read_source(&manifest.join("src/adapters/mod.rs"));
+
+    assert!(!manifest.join("src/adapters/signing.rs").exists());
+    assert!(
+        !manifest
+            .join("tests/unit/adapters_signing_tests.rs")
+            .exists()
+    );
+    assert!(!lib.contains("feature = \"signing\",\n"));
+    assert!(!adapters.contains("pub mod signing"));
+}

@@ -102,7 +102,8 @@ Optional advanced substrate is explicitly feature-scoped:
 
 - `identity-models`: identity data types without local storage coupling
 - `identity-storage`: encrypted identity-file helpers
-- `signing`: Nostr builder and local signing adapters
+- `signing`: dependency substrate for curated Nostr adapters; it exposes no
+  generic builder or caller-constructed wire-part signing module
 - `transport-nostr-client`: Nostr relay WebSocket client and publish adapters
 - `signer-adapters`: SDK local-key and Myc NIP-46 signer providers plus configured-signer product
   write APIs

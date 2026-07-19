@@ -8,7 +8,6 @@ extern crate alloc;
 mod actor_json;
 #[cfg(any(
     feature = "radrootsd-execution",
-    feature = "signing",
     feature = "transport-nostr-client",
     feature = "signer-adapters"
 ))]

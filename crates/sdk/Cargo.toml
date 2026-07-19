@@ -45,7 +45,7 @@ identity-models = [
   "radroots_identity/std",
 ]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
-signing = ["dep:nostr", "dep:radroots_nostr", "nostr"]
+signing = ["dep:nostr", "dep:radroots_nostr", "nostr", "radroots_nostr/std"]
 transport-nostr-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
 radrootsd-execution = [
   "std",
