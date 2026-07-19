@@ -182,3 +182,18 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Reserve focused FoodAvailability signing and publication behind a sealed typed Nostr builder, require verified Operational Listing validation input, route replica kind-30402 heads before profile projection, and reject head-only kind-30402 ingestion."
+
+[[changes]]
+id = "strict-nip10-reply-contract"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_function",
+  "change_exported_function_signature",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace permissive unmarked reply authoring with strict marked direct and nested NIP-10 Reply types, signature-gated tolerant inbound projection with supplemental citations and advisory diagnostics, typed publication, and a registry-version-5 admission-only event contract."

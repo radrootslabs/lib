@@ -5,6 +5,8 @@ pub mod food_availability;
 pub mod jobs;
 pub mod metadata;
 pub mod post;
+#[cfg(feature = "events")]
+pub mod reply;
 
 extern crate alloc;
 #[cfg(any(feature = "events", test))]

@@ -49,8 +49,8 @@ impl RadrootsAdmittedRootPostEvent {
 
 /// A verified kind-1 event excluded from root-card admission by an `e` tag.
 ///
-/// This candidate carries no Reply claim. Slice 06 owns strict NIP-10 parsing
-/// and any later promotion into a semantic thread model.
+/// This candidate carries no Reply claim. Promotion into a semantic thread
+/// model is available only through the dedicated NIP-10 admission boundary.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsThreadExcludedPostCandidate {
     verified_event: RadrootsSignatureVerifiedEvent,

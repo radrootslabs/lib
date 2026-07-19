@@ -13,6 +13,8 @@ use crate::error::RadrootsNostrError;
 use crate::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
 #[cfg(feature = "events")]
 use crate::events::post::RadrootsNostrPostEventBuilder;
+#[cfg(feature = "events")]
+use crate::events::reply::RadrootsNostrNip10ReplyEventBuilder;
 use crate::types::{
     RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrEventStream, RadrootsNostrFilter,
     RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput,
@@ -245,11 +247,10 @@ impl RadrootsNostrClient {
 
     /// Publishes a generic event builder.
     ///
-    /// Kind 0 profiles, unmarked root kind 1 events, and focused or mixed kind
-    /// 30402 FoodAvailability marker partitions are rejected because their
-    /// product shape must come from typed authoring. Thread kind 1, marker-free
-    /// NIP-99, and operational-only kind 30402 builders remain available for
-    /// compatibility.
+    /// Kind 0 profiles, all kind 1 events, and focused or mixed kind 30402
+    /// FoodAvailability marker partitions are rejected because their product
+    /// shape must come from typed authoring. Marker-free NIP-99 and
+    /// operational-only kind 30402 builders remain available for compatibility.
     pub async fn send_event_builder(
         &self,
         event: RadrootsNostrGenericEventBuilder,
@@ -263,6 +264,18 @@ impl RadrootsNostrClient {
     pub async fn send_post_event_builder(
         &self,
         event: RadrootsNostrPostEventBuilder,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_builder(event.into_event_builder())
+            .await?)
+    }
+
+    /// Publishes a validated strict marked NIP-10 Reply.
+    #[cfg(feature = "events")]
+    pub async fn send_nip10_reply_event_builder(
+        &self,
+        event: RadrootsNostrNip10ReplyEventBuilder,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
         Ok(self
             .inner
@@ -330,6 +343,15 @@ pub async fn radroots_nostr_send_post_event(
     event: RadrootsNostrPostEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_post_event_builder(event).await
+}
+
+/// Publishes a validated strict marked NIP-10 Reply.
+#[cfg(feature = "events")]
+pub async fn radroots_nostr_send_nip10_reply_event(
+    client: &RadrootsNostrClient,
+    event: RadrootsNostrNip10ReplyEventBuilder,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    client.send_nip10_reply_event_builder(event).await
 }
 
 /// Publishes a validated focused FoodAvailability event.
@@ -447,26 +469,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn generic_builder_allows_e_tagged_thread_compatibility() {
+    async fn generic_builder_rejects_e_tagged_thread_before_signer_access() {
         let keys = RadrootsNostrKeys::new(
             RadrootsNostrSecretKey::from_slice(&[3_u8; 32]).expect("test secret key"),
         );
-        let parent_author = keys.public_key().to_hex();
         let client = RadrootsNostrClient::new(keys);
-        let builder = crate::events::post::radroots_nostr_build_post_reply_event(
-            "0000000000000000000000000000000000000000000000000000000000000000",
-            &parent_author,
-            "Reply",
-            None,
-        )
-        .expect("reply builder");
+        let builder = RadrootsNostrGenericEventBuilder::text_note("Reply").tag(
+            crate::types::RadrootsNostrTag::event(crate::types::RadrootsNostrEventId::all_zeros()),
+        );
 
         let error = client
             .send_event_builder(builder)
             .await
-            .expect_err("no relay is configured");
+            .expect_err("generic reply must fail before relay access");
 
-        assert!(matches!(error, RadrootsNostrError::ClientError(_)));
+        assert!(matches!(
+            error,
+            RadrootsNostrError::TypedAuthoringRequired { .. }
+        ));
     }
 
     #[cfg(feature = "events")]
@@ -483,6 +503,32 @@ mod tests {
 
         let error = client
             .send_post_event_builder(builder)
+            .await
+            .expect_err("no relay is configured");
+
+        assert!(matches!(error, RadrootsNostrError::ClientError(_)));
+    }
+
+    #[cfg(feature = "events")]
+    #[tokio::test]
+    async fn sealed_nip10_reply_builder_reaches_typed_client_publication() {
+        let keys = RadrootsNostrKeys::new(
+            RadrootsNostrSecretKey::from_slice(&[5_u8; 32]).expect("test secret key"),
+        );
+        let client = RadrootsNostrClient::new(keys);
+        let reference = radroots_event::reply::RadrootsNip10ReplyReference::parse(
+            "a".repeat(64),
+            "b".repeat(64),
+            None,
+        )
+        .expect("reference");
+        let reply = radroots_event::reply::RadrootsAuthoredNip10Reply::direct("Reply", reference)
+            .expect("reply");
+        let builder =
+            crate::events::reply::radroots_nostr_build_nip10_reply_event(&reply).expect("builder");
+
+        let error = client
+            .send_nip10_reply_event_builder(builder)
             .await
             .expect_err("no relay is configured");
 

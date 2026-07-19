@@ -1,14 +1,10 @@
-use alloc::{string::String, vec::Vec};
-
+#[cfg(feature = "events")]
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]
 use crate::types::RadrootsNostrEventBuilderUnchecked;
 #[cfg(feature = "events")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrKeys};
-use crate::types::{
-    RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
-    RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
-};
+use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
 
 #[cfg(feature = "events")]
 use radroots_event::post::{
@@ -91,29 +87,6 @@ pub fn radroots_nostr_post_events_filter(
         filter = filter.since(RadrootsNostrTimestamp::from(since));
     }
     filter
-}
-
-pub fn radroots_nostr_build_post_reply_event(
-    parent_event_id_hex: &str,
-    parent_author_hex: &str,
-    content: impl Into<String>,
-    root_event_id_hex: Option<&str>,
-) -> Result<RadrootsNostrGenericEventBuilder, RadrootsNostrError> {
-    let parent_id = RadrootsNostrEventId::from_hex(parent_event_id_hex)?;
-    let parent_pubkey = RadrootsNostrPublicKey::from_hex(parent_author_hex)?;
-    let mut tags: Vec<RadrootsNostrTag> = Vec::new();
-
-    if let Some(root_hex) = root_event_id_hex
-        && !root_hex.is_empty()
-        && let Ok(root_id) = RadrootsNostrEventId::from_hex(root_hex)
-    {
-        tags.push(RadrootsNostrTag::event(root_id));
-    }
-
-    tags.push(RadrootsNostrTag::event(parent_id));
-    tags.push(RadrootsNostrTag::public_key(parent_pubkey));
-
-    Ok(RadrootsNostrGenericEventBuilder::text_note(content).tags(tags))
 }
 
 #[cfg(feature = "events")]

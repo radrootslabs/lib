@@ -104,6 +104,9 @@ public = [
   "RadrootsAuthoredUpdate",
   "RadrootsAuthoredPhotoUpdate",
   "RadrootsAuthoredAsk",
+  "RadrootsNip10ReplyError",
+  "RadrootsNip10ReplyReference",
+  "RadrootsAuthoredNip10Reply",
   "RadrootsPostDiagnostic",
   "RadrootsPostClassification",
   "RadrootsInboundPostImeta",
@@ -113,6 +116,14 @@ public = [
   "RadrootsThreadExcludedPostCandidate",
   "RadrootsPostAdmissionOutcome",
   "RadrootsPostAdmissionError",
+  "RadrootsNip10ReplyStyle",
+  "RadrootsNip10ReplyDiagnostic",
+  "RadrootsInboundNip10EventReference",
+  "RadrootsInboundNip10Participant",
+  "RadrootsInboundNip10ReplyProjection",
+  "RadrootsNip10ReplyProjectionError",
+  "RadrootsAdmittedNip10ReplyEvent",
+  "RadrootsNip10ReplyAdmissionError",
   "RadrootsComment",
   "RadrootsReaction",
   "RadrootsArticle",
@@ -826,6 +837,97 @@ vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
 case_kinds = [
   "social.ask.build_authored_draft.valid",
   "social.ask.build_authored_draft.invalid",
+]
+
+[operations.social_reply_build_authored_draft]
+domain = "social"
+id = "social.reply.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredNip10Reply"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_reply_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/reply.rs",
+  "crates/event_codec/src/reply/authored.rs",
+]
+rust_types = [
+  "radroots_event::reply::RadrootsAuthoredNip10Reply",
+  "radroots_event::reply::RadrootsNip10ReplyError",
+  "radroots_event::reply::RadrootsNip10ReplyReference",
+]
+
+[operations.social_reply_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.reply.build_authored_draft.valid",
+  "social.reply.build_authored_draft.invalid",
+]
+
+[operations.social_reply_project_verified_event]
+domain = "social"
+id = "social.reply.project_verified_event"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsInboundNip10ReplyProjection"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_reply_project_verified_event.implementation]
+rust_modules = ["crates/event_codec/src/reply/inbound.rs"]
+rust_types = [
+  "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
+  "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
+  "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
+  "radroots_event_codec::reply::inbound::RadrootsNip10ReplyDiagnostic",
+  "radroots_event_codec::reply::inbound::RadrootsNip10ReplyProjectionError",
+  "radroots_event_codec::reply::inbound::RadrootsNip10ReplyStyle",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_reply_project_verified_event.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.reply.project_verified_event.valid",
+  "social.reply.project_verified_event.invalid",
+]
+
+[operations.social_reply_verify_and_admit_event]
+domain = "social"
+id = "social.reply.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsAdmittedNip10ReplyEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.social_reply_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/reply/admission.rs",
+  "crates/event_codec/src/reply/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::reply::admission::RadrootsAdmittedNip10ReplyEvent",
+  "radroots_event_codec::reply::admission::RadrootsNip10ReplyAdmissionError",
+  "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_reply_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/post/verified_profiles.v1.json"
+case_kinds = [
+  "social.reply.verify_and_admit_event.valid",
+  "social.reply.verify_and_admit_event.invalid",
 ]
 
 [operations.social_post_project_verified_event]

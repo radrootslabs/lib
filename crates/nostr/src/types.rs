@@ -25,12 +25,11 @@ pub type RadrootsNostrUrl = nostr::Url;
 
 /// An opaque builder for generic Nostr events.
 ///
-/// Kind 0 profile events, unmarked root kind 1 events, and focused or mixed
-/// kind 30402 FoodAvailability marker partitions are reserved for typed
-/// Radroots authoring. Kind 1 events carrying an `e` tag, marker-free NIP-99,
-/// and operational-only kind 30402 events remain available for compatibility.
-/// The policy is enforced before direct signing and before a client is allowed
-/// to consult its signer.
+/// Kind 0 profile events, all kind 1 events, and focused or mixed kind 30402
+/// FoodAvailability marker partitions are reserved for typed Radroots
+/// authoring. Marker-free NIP-99 and operational-only kind 30402 events remain
+/// available for compatibility. The policy is enforced before direct signing
+/// and before a client is allowed to consult its signer.
 ///
 /// The upstream unsigned builder is intentionally inaccessible:
 ///
@@ -153,11 +152,7 @@ impl RadrootsNostrGenericEventBuilder {
         let event = inspection.build(inspection_pubkey);
         let kind = event.kind.as_u16();
         let is_profile = kind == RadrootsNostrKind::Metadata.as_u16();
-        let is_unmarked_root_post = kind == RadrootsNostrKind::TextNote.as_u16()
-            && !event
-                .tags
-                .iter()
-                .any(|tag| tag.kind() == RadrootsNostrTagKind::e());
+        let is_reserved_post = kind == RadrootsNostrKind::TextNote.as_u16();
         let classified_listing_partition =
             (kind == radroots_event::kinds::KIND_CLASSIFIED_LISTING as u16).then(|| {
                 classify_classified_listing_marker_names(
@@ -174,7 +169,7 @@ impl RadrootsNostrGenericEventBuilder {
                     | RadrootsClassifiedListingPartition::Ambiguous
             )
         );
-        if is_profile || is_unmarked_root_post || is_reserved_focused_listing {
+        if is_profile || is_reserved_post || is_reserved_focused_listing {
             return Err(RadrootsNostrError::TypedAuthoringRequired { kind });
         }
         Ok(())
@@ -241,13 +236,17 @@ mod tests {
     }
 
     #[test]
-    fn generic_direct_signing_allows_thread_kind_one() {
-        let event = RadrootsNostrGenericEventBuilder::text_note("reply")
+    fn generic_direct_signing_rejects_thread_kind_one() {
+        let error = RadrootsNostrGenericEventBuilder::text_note("reply")
             .tag(RadrootsNostrTag::event(RadrootsNostrEventId::all_zeros()))
             .sign_with_keys(&keys())
-            .expect("e-tagged kind 1 remains generic-authorable");
+            .expect_err("all kind-1 authoring is typed");
 
-        assert_eq!(event.kind, RadrootsNostrKind::TextNote);
+        assert!(matches!(
+            error,
+            RadrootsNostrError::TypedAuthoringRequired { kind }
+                if kind == RadrootsNostrKind::TextNote.as_u16()
+        ));
     }
 
     #[test]

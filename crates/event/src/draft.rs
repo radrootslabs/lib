@@ -1075,6 +1075,7 @@ mod tests {
             ("radroots.social.update.v1", KIND_POST),
             ("radroots.social.photo_update.v1", KIND_POST),
             ("radroots.social.ask.v1", KIND_POST),
+            ("radroots.social.reply.v1", KIND_POST),
         ] {
             let error =
                 RadrootsEventDraft::new(contract_id, kind, 1, Vec::new(), "hello", hex_64('a'))
@@ -1096,11 +1097,13 @@ mod tests {
             serde_json::from_value(value.clone()).expect("validated roundtrip");
         assert_eq!(decoded, draft);
 
-        let mut tampered = value.clone();
-        tampered["contract_registry_version"] = serde_json::json!(1);
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
-            .expect_err("stale registry generation must fail");
-        assert!(error.to_string().contains("registry version mismatch"));
+        for stale_version in 1..RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
+            let mut tampered = value.clone();
+            tampered["contract_registry_version"] = serde_json::json!(stale_version);
+            let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+                .expect_err("stale registry generation must fail");
+            assert!(error.to_string().contains("registry version mismatch"));
+        }
 
         let mut tampered = value.clone();
         tampered["expected_event_id"] = serde_json::Value::String(hex_64('f'));

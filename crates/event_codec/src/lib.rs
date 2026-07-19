@@ -15,6 +15,7 @@ pub mod knowledge;
 pub mod manifest;
 pub mod parsed;
 pub mod profile;
+pub mod reply;
 pub mod report;
 pub mod repost;
 mod social_helpers;

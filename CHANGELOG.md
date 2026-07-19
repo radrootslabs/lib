@@ -47,13 +47,19 @@ publish policy both pass for the same source revision.
   separates every `e`-tagged event as a thread-excluded candidate without a
   Reply claim, and deterministically admits Ask, PhotoUpdate, or Update roots
   while preserving malformed media diagnostics.
+- NIP-10 Reply authoring now requires an opaque direct or nested type and emits
+  exact marked `root`/`reply` event references plus required participant
+  references. Verified inbound projection accepts preferred marked and
+  deprecated positional threading, preserves valid supplemental references as
+  citations, and retains malformed advisory metadata as ordered diagnostics
+  while keeping every admitted Reply out of root-card classification.
 - Typed root posts now enter signing and client publication through an opaque
   builder with no raw tag/content mutation. Generic builder direct signing and
-  client publication reject kind `0` plus unmarked kind `1` before signer
-  access; externally supplied unsigned events, NIP-46 signing, and signed-event
-  relay remain explicit low-level Nostr interoperability with no typed product
+  client publication reject kind `0` plus every kind `1` before signer access;
+  externally supplied unsigned events, NIP-46 signing, and signed-event relay
+  remain explicit low-level Nostr interoperability with no typed product
   authoring claim.
-- Frozen drafts now carry event-contract registry version `4`, revalidate all
+- Frozen drafts now carry event-contract registry version `5`, revalidate all
   persisted fields and the recomputed event id during deserialization and
   signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
   authoring policies.
@@ -115,6 +121,11 @@ publish policy both pass for the same source revision.
   metadata retention, and stable rejection codes. Operation-owned vectors also
   execute every typed post authoring, projection, and admission function and
   compare complete deterministic outputs.
+- Raw signed NIP-10 vectors execute marked direct and nested Replies, marked
+  supplemental citations, deprecated positional empty-marker author hints,
+  malformed middle-citation tolerance, participant and relay validation,
+  classifier precedence, signature-gated admission, and stable invalid-case
+  codes through the public owning APIs.
 
 ### Removed
 
@@ -141,9 +152,13 @@ publish policy both pass for the same source revision.
   protocol's unsigned event explicitly.
 - Permissive `RadrootsPost` tag authoring, the free-form Nostr post builder, and
   the generic net custom publisher were removed. Product-root publication now
-  requires one of the strict authored Update, PhotoUpdate, or Ask states; the
-  generic protocol builder remains only behind a root-kind-`1` publication
-  guard and for non-product interoperability.
+  requires one of the strict authored Update, PhotoUpdate, or Ask states.
+  Generic kind-1 authoring is no longer available through the generic protocol
+  builder; non-product interoperability remains available only for
+  non-reserved kinds.
+- The permissive post-reply builder and raw-string net reply publisher were
+  removed. Reply signing and client publication now require the typed NIP-10
+  Reply boundary.
 
 ### Compatibility
 
@@ -158,9 +173,9 @@ publish policy both pass for the same source revision.
   compatibility version instead of package SemVer. Existing backups stamped by
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
-- Persisted frozen drafts with event-contract registry versions `1`, `2`, or
-  `3` are rejected and must be reconstructed against registry version `4`; strict
-  Profile plus typed and read-only post contracts can no longer be
+- Persisted frozen drafts with event-contract registry versions `1`, `2`, `3`,
+  or `4` are rejected and must be reconstructed against registry version `5`;
+  strict Profile plus typed and read-only post contracts can no longer be
   reconstructed as generic drafts.
 - This breaking capsule revision must not be pinned or published through
   downstream product clients until `radroots_app_rt` is migrated, generated FFI

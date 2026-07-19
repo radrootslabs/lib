@@ -22,7 +22,7 @@ use crate::{
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 4;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -539,6 +539,20 @@ const TAG_E_MANY: RadrootsTagContract = tag(
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::EventPointer,
     RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP10_E_REQUIRED: RadrootsTagContract = tag(
+    "e",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::EventPointer,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP10_P_OPTIONAL: RadrootsTagContract = tag(
+    "p",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Participant,
+    RadrootsTagValueType::PublicKey,
     true,
 );
 const TAG_KIND: RadrootsTagContract = tag(
@@ -1179,6 +1193,7 @@ const EVIDENCE_BOUNTY_TAGS: &[RadrootsTagContract] = &[
 const SOCIAL_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::SocialProjection];
 const PHOTO_UPDATE_TAGS: &[RadrootsTagContract] = &[TAG_IMETA_REQUIRED_MANY];
 const ASK_TAGS: &[RadrootsTagContract] = &[TAG_ASK_MARKER, TAG_IMETA_OPTIONAL_MANY];
+const NIP10_REPLY_TAGS: &[RadrootsTagContract] = &[TAG_NIP10_E_REQUIRED, TAG_NIP10_P_OPTIONAL];
 const PROFILE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::ProfileProjection];
 const FARM_OPS_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::FarmOpsProjection];
 const GROUP_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::GroupProjection];
@@ -1379,7 +1394,8 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
             "radroots.social.post.v1",
             "radroots.social.update.v1",
             "radroots.social.photo_update.v1",
-            "radroots.social.ask.v1"
+            "radroots.social.ask.v1",
+            "radroots.social.reply.v1"
         ]
     ),
     kind_contract!(
@@ -2183,6 +2199,20 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventAuthoringPolicy::TypedOnly,
         RadrootsEventDiscriminator::AdmissionOnly,
         ASK_TAGS,
+        SOCIAL_REDUCERS
+    ),
+    event_contract_with_authoring_policy!(
+        "radroots.social.reply.v1",
+        KIND_POST,
+        "NIP-10 Reply",
+        "RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::TypedOnly,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        NIP10_REPLY_TAGS,
         SOCIAL_REDUCERS
     ),
     event_contract!(
@@ -5613,6 +5643,7 @@ mod tests {
             "radroots.social.update.v1",
             "radroots.social.photo_update.v1",
             "radroots.social.ask.v1",
+            "radroots.social.reply.v1",
         ] {
             let contract = event_contract(id).expect(id);
             assert_eq!(

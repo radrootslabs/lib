@@ -21,17 +21,27 @@ validation remain in `radroots_blossom`.
 
 The `events` feature is std-backed. With it, kind-1 root publication is
 available only through typed Update, PhotoUpdate, and Ask builders backed by
-the strict `radroots_event_codec` wire operations. The former free-form
-text-note post builder is removed. Reply construction remains a separate
-compatibility surface pending the dedicated strict NIP-10 contract; it is not
-used to author root product cards. Generic protocol builders reject kind-0
-Profile events and unmarked root kind-1 events at both direct signing and
-client-publication boundaries. Kind-1 builders carrying an `e` tag remain
-available for thread compatibility. Typed media builders can sign or publish
-only after the owning runtime separately proves successful BUD-02 upload
-completion; their byte-verified descriptors do not attest upload completion.
-The generic net manager intentionally exposes no direct PhotoUpdate or media
-Ask publisher.
+the strict `radroots_event_codec` wire operations. NIP-10 Reply publication is
+separately available through the typed direct or nested Reply model and its
+sealed builder. Authored Replies always emit marked `root` and optional
+`reply` event references plus the required referenced-author `p` tags.
+Verified inbound projection also accepts deprecated positional NIP-10
+references for interoperability and preserves valid supplemental unmarked `e`
+references as citations. Empty marker slots remain absent even when an optional
+fifth-element author hint is present. Missing or malformed advisory
+participant, middle citation, relay, and referenced-author metadata is retained
+as ordered diagnostics instead of erasing an unambiguous Reply. A Reply remains
+thread content and can never enter root-card admission. Reply admission proves
+the Reply event's NIP-01 id and signature; it does not prove that a referenced
+target exists, is kind `1`, or was authored by the declared referenced author.
+
+The former free-form text-note post builder is removed. Generic protocol
+builders reject kind-0 Profile events and every kind-1 event at both direct
+signing and client-publication boundaries. Typed media builders can sign or
+publish only after the owning runtime separately proves successful BUD-02
+upload completion; their byte-verified descriptors do not attest upload
+completion. The generic net manager intentionally exposes no direct
+PhotoUpdate or media Ask publisher.
 
 Focused FoodAvailability kind-30402 authoring likewise uses a sealed builder.
 Its `created_at` is fixed during strict construction and cannot be changed

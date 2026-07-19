@@ -93,7 +93,7 @@ only. Successful BUD-02 upload completion and any raster, retrievability, or
 availability checks remain runtime responsibilities before signing or
 publication.
 
-## Kind-1 post boundary rule
+## Kind-1 post and Reply boundary rule
 
 Ordinary kind-1 events remain interoperable at the generic
 `radroots.social.post.v1` read boundary. Product projection first requires a
@@ -104,9 +104,30 @@ thread-excluded candidates in distinct public variants. Exact subtype registry
 contracts are admission-only and cannot be selected by unsigned kind/tag
 matching. New root publication uses the strict authored types and a sealed
 Nostr builder with no raw tag/content mutation; generic builder publication
-rejects unmarked kind `1` before signing. The legacy mutable `RadrootsPost`
+rejects every kind `1` event before signing. The legacy mutable `RadrootsPost`
 decoder is compatibility-only and has no authored encoder or tag-builder
 implementation.
+
+NIP-10 Reply is a separate typed kind-1 boundary. Strict direct authoring emits
+one marked `root` event reference and its referenced-author `p` tag. Strict
+nested authoring adds one distinct marked `reply` parent and its author,
+deduplicating equal authors. Inbound Reply projection requires NIP-01
+verification but tolerates both preferred marked and deprecated positional
+NIP-10 references. Valid supplemental unmarked `e` references remain citations;
+malformed supplemental references are ignored with ordered diagnostics.
+Empty marker slots remain absent for positional root, parent, and citation
+references even when a fifth-element author hint is present; malformed
+intermediate citations do not erase valid positional anchors.
+Advisory `p`, relay, and referenced-author metadata is projected best-effort
+rather than promoted to a validity gate. Positional replies remain thread
+enrichment, and a Reply carrying Ask or media metadata cannot be promoted as a
+root card.
+
+Reply admission proves the Reply envelope's id, signature, and bounded NIP-10
+structure. It does not prove that a referenced event exists, has kind `1`, has
+a valid signature, was authored by the declared referenced author, or is
+available from a relay. Signed-event relay remains generic transport rather
+than a typed Reply-authoring boundary.
 
 ## Coverage matrix
 
@@ -115,6 +136,7 @@ implementation.
 | profile | 0 | RadrootsAuthoredProfile / RadrootsInboundProfileMetadata | events.profile.publish, events.profile.list, events.profile.get | publish must use `profile.build_authored_draft`; inbound projection must use `profile.parse_inbound_metadata`; authored output is deterministic JSON with no marker tag |
 | follow | 3 | RadrootsFollow | events.follow.publish, events.follow.list, events.follow.get | replaceable event |
 | post | 1 | RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; any `e` tag produces a thread-excluded candidate without a Reply claim |
+| reply | 1 | RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder | social.reply.build_authored_draft, social.reply.project_verified_event, social.reply.verify_and_admit_event | strict marked direct/nested NIP-10 authoring; verified marked or positional inbound admission with advisory-metadata diagnostics; never a root card; target existence, kind, author, and relay availability are not proven |
 | comment | 1111 | RadrootsComment | events.comment.publish, events.comment.list, events.comment.get | requires root and parent tags |
 | reaction | 7 | RadrootsReaction | events.reaction.publish, events.reaction.list, events.reaction.get | requires event, pubkey, or address tags |
 | repost | 6 | RadrootsRepost | events.repost.publish, events.repost.list, events.repost.get | NIP-18 kind-1 repost surface |

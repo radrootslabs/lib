@@ -4,13 +4,15 @@ mod test_fixtures;
 use std::borrow::Cow;
 
 use nostr::nips::nip04;
+#[cfg(feature = "events")]
+use radroots_event::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
 use radroots_nostr::error::RadrootsNostrTagsResolveError;
 use radroots_nostr::events::jobs::{
     radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,
 };
-use radroots_nostr::events::post::{
-    radroots_nostr_build_post_reply_event, radroots_nostr_post_events_filter,
-};
+use radroots_nostr::events::post::radroots_nostr_post_events_filter;
+#[cfg(feature = "events")]
+use radroots_nostr::events::reply::radroots_nostr_build_nip10_reply_event;
 use radroots_nostr::filter::{
     radroots_nostr_filter_kind, radroots_nostr_filter_new_events, radroots_nostr_filter_tag,
     radroots_nostr_kind,
@@ -112,55 +114,58 @@ fn job_event_builders_are_callable() {
 
 #[test]
 fn post_helpers_cover_success_and_error_paths() {
-    let keys = make_keys();
-    let parent = text_event_with_tags(&keys, Vec::new());
-    let parent_id_hex = parent.id.to_hex();
-    let author_hex = parent.pubkey.to_hex();
-    let root_id_hex = parent.id.to_hex();
-
     let _ = radroots_nostr_post_events_filter(None, None);
     let _ = radroots_nostr_post_events_filter(Some(10), Some(1_700_000_000));
 
-    let reply_ok = radroots_nostr_build_post_reply_event(
-        &parent_id_hex,
-        &author_hex,
-        "reply",
-        Some(root_id_hex.as_str()),
-    )
-    .expect("reply event builder");
-    let _ = reply_ok
-        .sign_with_keys(&keys)
-        .expect("reply signs through the generic boundary");
+    #[cfg(feature = "events")]
+    {
+        let keys = make_keys();
+        let root = nostr::EventBuilder::text_note("root")
+            .sign_with_keys(&keys)
+            .expect("root");
+        let parent = nostr::EventBuilder::text_note("parent")
+            .sign_with_keys(&keys)
+            .expect("parent");
+        let author_hex = root.pubkey.to_hex();
 
-    let reply_invalid_root = radroots_nostr_build_post_reply_event(
-        &parent_id_hex,
-        &author_hex,
-        "reply",
-        Some("not-hex-root"),
-    )
-    .expect("reply builder with invalid optional root");
-    let _ = reply_invalid_root
-        .sign_with_keys(&keys)
-        .expect("reply with invalid optional root signs");
-    let reply_empty_root =
-        radroots_nostr_build_post_reply_event(&parent_id_hex, &author_hex, "reply", Some(""))
-            .expect("reply builder with empty optional root");
-    let _ = reply_empty_root
-        .sign_with_keys(&keys)
-        .expect("reply with empty optional root signs");
-    let reply_none_root =
-        radroots_nostr_build_post_reply_event(&parent_id_hex, &author_hex, "reply", None)
-            .expect("reply builder without optional root");
-    let _ = reply_none_root
-        .sign_with_keys(&keys)
-        .expect("reply without optional root signs");
+        let root_reference = RadrootsNip10ReplyReference::parse(
+            root.id.to_hex(),
+            &author_hex,
+            Some(RELAY_PRIMARY_WSS),
+        )
+        .expect("root reference");
+        let direct = RadrootsAuthoredNip10Reply::direct("direct reply", root_reference.clone())
+            .expect("direct reply");
+        let direct_builder =
+            radroots_nostr_build_nip10_reply_event(&direct).expect("direct reply builder");
+        let _ = direct_builder
+            .sign_with_keys(&keys)
+            .expect("direct reply signs through the typed boundary");
 
-    let invalid_parent = radroots_nostr_build_post_reply_event("bad", &author_hex, "reply", None);
-    assert!(invalid_parent.is_err());
+        let parent_reference =
+            RadrootsNip10ReplyReference::parse(parent.id.to_hex(), &author_hex, None)
+                .expect("parent reference");
+        let nested =
+            RadrootsAuthoredNip10Reply::nested("nested reply", root_reference, parent_reference)
+                .expect("nested reply");
+        let nested_builder =
+            radroots_nostr_build_nip10_reply_event(&nested).expect("nested reply builder");
+        let _ = nested_builder
+            .sign_with_keys(&keys)
+            .expect("nested reply signs through the typed boundary");
 
-    let invalid_author =
-        radroots_nostr_build_post_reply_event(&parent_id_hex, "bad", "reply", None);
-    assert!(invalid_author.is_err());
+        assert!(RadrootsNip10ReplyReference::parse("bad", &author_hex, None).is_err());
+        assert!(RadrootsNip10ReplyReference::parse(root.id.to_hex(), "bad", None).is_err());
+        assert!(
+            RadrootsNip10ReplyReference::parse(
+                root.id.to_hex(),
+                &author_hex,
+                Some("https://relay.example"),
+            )
+            .is_err()
+        );
+        assert!(RadrootsAuthoredNip10Reply::direct(" ", nested.root().clone()).is_err());
+    }
 }
 
 #[test]

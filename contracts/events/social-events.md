@@ -20,14 +20,17 @@ Calendar behavior is based on
 [NIP-52](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/52.md)
 and its collection metadata uses
 [NIP-51](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/51.md),
-both at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
+while text-note Reply threading follows
+[NIP-10](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/10.md),
+all at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
 Blossom primitives governed by the protocol pin in
 [`blossom-media.md`](blossom-media.md). The upstream NIP-52 rules and the stricter Radroots
 authoring and admission profile are separate contract layers.
 
 ## Implementation Inventory
 
-The repository implements strict authored and verified-projected kind `1` post profiles, kind `1111`
+The repository implements strict authored and verified-projected kind `1` root-post profiles, a
+separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, kind `1111`
 `RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
 records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
 FoodAvailability authored, verified-admission, and revision contract, articles, generic public file
@@ -39,6 +42,7 @@ The closeout contract requires:
 - complete model and codec coverage for the approved public social event families
 - kind and tag constants for the approved NIP surface
 - ordinary kind-1 compatibility reads plus strict Update, PhotoUpdate, and Ask authoring
+- strict marked direct and nested NIP-10 Reply authoring plus tolerant positional inbound admission
 - strict NIP-22 `RadrootsComment` behavior without legacy `e_root` or `e_prev` fallback tags
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 classified-listing parity
@@ -52,6 +56,9 @@ The MVP public social substrate includes:
 - strict `RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, and
   `RadrootsAuthoredAsk` publication types plus verified tolerant projection for
   ordinary NIP-01 kind `1` events
+- strict `RadrootsAuthoredNip10Reply` direct and nested publication plus
+  `RadrootsInboundNip10ReplyProjection` for marked and deprecated positional
+  inbound NIP-10 replies
 - `RadrootsArticle` for NIP-23 kind `30023` long-form content
 - generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
 - strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
@@ -141,21 +148,68 @@ Update, PhotoUpdate, and Ask contracts use `AdmissionOnly` and are returned only
 by the verified projection/admission boundary.
 
 The event-contract registry assigns an explicit authoring policy to every
-contract. Strict Profile, Update, PhotoUpdate, and Ask contracts are
+contract. Strict Profile, Update, PhotoUpdate, Ask, and NIP-10 Reply contracts are
 `TypedOnly`; `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft
 contracts remain `GenericDraft`. `RadrootsEventDraft::new` therefore rejects
-the strict Profile contract and all four governed kind-1 post contracts with
-`contract_not_draft_authorable`. Serialized drafts record registry version `4`
+the strict Profile contract and every governed kind-1 contract with
+`contract_not_draft_authorable`. Serialized drafts record registry version `5`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
-frozen-draft signing boundary repeats that validation, so stale version-`1`, version-`2`, and
-version-`3` drafts must be rebuilt. Typed root posts enter Nostr signing and client
-publication only through an opaque post builder that exposes timestamp
-selection and signing, but no raw tag/content mutation or public conversion to
-the upstream builder. The opaque generic builder rejects kind `0` and unmarked
-kind `1` at both direct signing and client publication before a signer is
-consulted; `e`-tagged kind-1 builders remain a thread-compatibility surface and
-cannot enter root-card admission.
+frozen-draft signing boundary repeats that validation, so stale version-`1` through version-`4`
+drafts must be rebuilt. Typed root posts and Replies enter Nostr signing and client
+publication only through opaque profile-specific builders that expose
+timestamp selection and signing, but no raw tag/content mutation or public
+conversion to the upstream builder. The opaque generic builder rejects kind `0` and every
+kind `1` event at both direct signing and client publication before a signer is
+consulted.
+
+### NIP-10 Reply Trust Layers
+
+`RadrootsAuthoredNip10Reply` is an opaque, bounded authoring state. Direct
+Replies contain one root reference; nested Replies contain one root and one
+distinct parent reference. Each reference carries a validated 64-character
+lowercase event id, a referenced-author pubkey, and an optional `ws` or `wss`
+relay hint. Content is non-whitespace and shares the root-post content,
+tag-element, total-tag-byte, and compact signed-wire budgets.
+
+Strict authoring is deterministic. A direct Reply emits
+`["e",<root-id>,<relay-or-empty>,"root"]` followed by the root author's
+two-element `p` tag. A nested Reply emits the root `e` tag, then
+`["e",<parent-id>,<relay-or-empty>,"reply"]`, then the root and parent author
+`p` tags in that order; equal authors are emitted once. No other authored tag
+shape is accepted. Signing and client publication are exposed only through the
+sealed `RadrootsNostrNip10ReplyEventBuilder`.
+
+Inbound projection requires a signature-and-id verified envelope. It accepts
+preferred marked `e` references, including the optional NIP-10 author hint, and
+supplemental unmarked `e` citations in the same event. An empty marker slot is
+treated as absent so a citation may retain its optional fifth-element author
+hint. Malformed supplemental references are ignored with ordered diagnostics
+without erasing an otherwise unambiguous marked Reply. The projection also
+accepts deprecated positional references where the first `e` tag is the root,
+the last is the parent, and intermediates are citations. Empty marker slots
+remain absent in this mode, including when a fifth-element author hint exists.
+Malformed intermediate citations become diagnostics; malformed root or parent
+anchors remain hard failures. Because NIP-10 makes
+participant propagation, relay hints, and referenced-author hints advisory,
+blank content or absent `p` tags do not erase an otherwise unambiguous inbound
+Reply. Malformed optional relay, author-hint, citation, and participant metadata is
+retained in the verified envelope and exposed as ordered typed diagnostics;
+valid values are projected best-effort. This tolerant read-side behavior never
+weakens strict authored output.
+
+The registry's Reply `e` and `p` tag contracts describe normalized qualifying
+semantic references. They do not claim that every malformed optional raw tag
+retained by the verified envelope is itself a valid identifier-bearing tag.
+
+Any `e` tag excludes a kind-1 event from root-card admission before Ask or
+media classification. A thread-excluded candidate can be promoted only by the
+separate NIP-10 Reply admission boundary; a Reply carrying Ask or media
+metadata therefore remains a Reply and never becomes a root card. Admission
+proves only the Reply envelope's NIP-01 id and signature plus its NIP-10
+structure. It does not retrieve a referenced event or prove its existence,
+kind, signature, author, relay availability, or relationship to the declared
+author hint.
 
 The signer backend's externally supplied unsigned-event operation and the
 standard NIP-46 `sign_event` method are explicit low-level interoperability
@@ -164,13 +218,14 @@ they do not confer a Radroots typed product-authoring claim and are not product
 authoring entry points. Relaying an already signed event is likewise a generic
 transport operation with no Radroots authoring claim.
 
-Each post operation owns exact valid and invalid case kinds in
+Each post and Reply operation owns exact valid and invalid case kinds in
 `contracts/operations.toml`. The canonical and packaged conformance suites
 execute every public Update, PhotoUpdate, and Ask authoring function, verified
-projection, and admission function; they compare complete deterministic wire
-parts or projections and enforce stable negative error codes. Xtask validation
-pins the complete post-operation namespace, ownership metadata, public types,
-and exact case-id-to-kind corpus; it rejects missing, duplicate, unclaimed,
+projection, admission function, and NIP-10 Reply authoring, projection, and
+admission boundary; they compare complete deterministic wire parts or
+projections and enforce stable negative error codes. Xtask validation pins the
+complete operation namespaces, ownership metadata, public types, and exact
+case-id-to-kind corpus; it rejects missing, duplicate, unclaimed,
 mis-prefixed, or substituted cases.
 
 `RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,

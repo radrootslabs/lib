@@ -13,6 +13,7 @@ use radroots_event::{
         RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError,
         RadrootsAuthoredPostImage, RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
     },
+    reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyError, RadrootsNip10ReplyReference},
     wire::RadrootsNip01EventWireParts,
 };
 use radroots_event_codec::post::{
@@ -22,6 +23,15 @@ use radroots_event_codec::post::{
         authored_update_to_wire_parts,
     },
     inbound::{RadrootsInboundPostProjection, RadrootsPostClassification, RadrootsPostDiagnostic},
+};
+use radroots_event_codec::reply::{
+    admission::verify_and_admit_nip10_reply_event,
+    authored::authored_nip10_reply_to_wire_parts,
+    inbound::{
+        RadrootsInboundNip10EventReference, RadrootsInboundNip10Participant,
+        RadrootsInboundNip10ReplyProjection, RadrootsNip10ReplyDiagnostic, RadrootsNip10ReplyStyle,
+        project_verified_nip10_reply_event,
+    },
 };
 use radroots_event_codec::{
     post::inbound::project_verified_post_event, verification::verify_nip01_event,
@@ -33,7 +43,7 @@ const PACKAGED_VECTORS: &str = include_str!("fixtures/post_verified_profiles.v1.
 const WORKSPACE_VECTOR_PATH: &str =
     "../../contracts/conformance/vectors/post/verified_profiles.v1.json";
 const WORKSPACE_CONTRACT_MARKER_PATH: &str = "../../contracts/manifest.toml";
-const EXPECTED_VECTOR_CASES: [(&str, &str); 27] = [
+const EXPECTED_VECTOR_CASES: [(&str, &str); 54] = [
     (
         "admit_signed_duplicate_normalized_ask_marker",
         "social.post.verify_and_admit_event.invalid",
@@ -53,6 +63,18 @@ const EXPECTED_VECTOR_CASES: [(&str, &str); 27] = [
     (
         "admit_signed_kind_20_is_not_photo_update",
         "social.post.verify_and_admit_event.invalid",
+    ),
+    (
+        "admit_signed_nip10_invalid_signature",
+        "social.reply.verify_and_admit_event.invalid",
+    ),
+    (
+        "admit_signed_nip10_marked_direct",
+        "social.reply.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_nip10_positional_direct",
+        "social.reply.verify_and_admit_event.valid",
     ),
     (
         "admit_signed_normalized_ask_precedes_malformed_media",
@@ -75,6 +97,22 @@ const EXPECTED_VECTOR_CASES: [(&str, &str); 27] = [
         "social.ask.build_authored_draft.invalid",
     ),
     ("authored_ask_wire", "social.ask.build_authored_draft.valid"),
+    (
+        "authored_nip10_ambiguous_parent",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_direct_wire",
+        "social.reply.build_authored_draft.valid",
+    ),
+    (
+        "authored_nip10_invalid_event_id",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_nested_wire",
+        "social.reply.build_authored_draft.valid",
+    ),
     (
         "authored_photo_update_mime_underscore",
         "social.photo_update.build_authored_draft.invalid",
@@ -118,6 +156,86 @@ const EXPECTED_VECTOR_CASES: [(&str, &str); 27] = [
     (
         "project_signed_mixed_imeta_is_update",
         "social.post.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_ambiguous_same_reference",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_author_hint_mismatch",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_blank_content",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_event_id",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_invalid_relay",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_author_hint_tolerated",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_participant_tolerated",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_lone_reply_marker",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_marked_direct",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_with_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_with_malformed_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_nested_reordered",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_missing_author",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_direct",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_direct_with_author_hint",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_many",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_many_with_author_hints",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_malformed_middle_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_precedes_ask_and_media",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_unknown_marker",
+        "social.reply.project_verified_event.invalid",
     ),
     (
         "project_signed_normalized_ask_precedes_malformed_media",
@@ -237,6 +355,61 @@ fn execute(vector: &Vector) {
                 .expect_err("invalid authored Ask must fail");
             assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
         }
+        "social.reply.build_authored_draft.valid" => {
+            let reply = authored_reply(vector)
+                .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
+            let first = authored_nip10_reply_to_wire_parts(&reply);
+            let second = authored_nip10_reply_to_wire_parts(&reply);
+            assert_eq!(first, second, "{} repeat encoding drifted", vector.id);
+            assert_eq!(wire_parts_value(&first), vector.expected, "{}", vector.id);
+        }
+        "social.reply.build_authored_draft.invalid" => {
+            let error = authored_reply(vector).expect_err("invalid authored Reply must fail");
+            assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
+        }
+        "social.reply.project_verified_event.valid" => {
+            let envelope = canonical_envelope(input_str(vector, "event_json"));
+            let verified = verify_nip01_event(envelope)
+                .unwrap_or_else(|error| panic!("{} verification failed: {error}", vector.id));
+            let projection = project_verified_nip10_reply_event(&verified)
+                .unwrap_or_else(|error| panic!("{} projection failed: {error}", vector.id));
+            assert_eq!(
+                reply_projection_value(&projection),
+                vector.expected,
+                "{}",
+                vector.id
+            );
+        }
+        "social.reply.project_verified_event.invalid" => {
+            let envelope = canonical_envelope(input_str(vector, "event_json"));
+            let verified = verify_nip01_event(envelope)
+                .unwrap_or_else(|error| panic!("{} verification failed: {error}", vector.id));
+            let error = project_verified_nip10_reply_event(&verified)
+                .expect_err("invalid verified Reply projection must fail");
+            assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
+        }
+        "social.reply.verify_and_admit_event.valid" => {
+            let envelope = canonical_envelope(input_str(vector, "event_json"));
+            let expected_envelope = envelope.clone();
+            let admitted = verify_and_admit_nip10_reply_event(envelope)
+                .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
+            assert_eq!(admitted.event(), &expected_envelope, "{}", vector.id);
+            let actual = json!({
+                "contract_id": admitted.contract().id,
+                "style": reply_style_label(admitted.projection().style()),
+                "direct": admitted.projection().is_direct(),
+            });
+            let (verified, projection) = admitted.into_parts();
+            assert_eq!(verified.event(), &expected_envelope, "{}", vector.id);
+            assert_eq!(projection.contract_id(), "radroots.social.reply.v1");
+            assert_eq!(actual, vector.expected, "{}", vector.id);
+        }
+        "social.reply.verify_and_admit_event.invalid" => {
+            let envelope = canonical_envelope(input_str(vector, "event_json"));
+            let error = verify_and_admit_nip10_reply_event(envelope)
+                .expect_err("invalid signed Reply vector must fail");
+            assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
+        }
         "social.post.project_verified_event.valid" => {
             let envelope = canonical_envelope(input_str(vector, "event_json"));
             let verified = verify_nip01_event(envelope)
@@ -339,12 +512,97 @@ fn projection_value(projection: &RadrootsInboundPostProjection) -> Value {
     })
 }
 
+fn reply_projection_value(projection: &RadrootsInboundNip10ReplyProjection) -> Value {
+    json!({
+        "style": reply_style_label(projection.style()),
+        "contract_id": projection.contract_id(),
+        "direct": projection.is_direct(),
+        "root": reply_event_reference_value(projection.root()),
+        "parent": projection.reply_reference().map(reply_event_reference_value),
+        "citations": projection
+            .citations()
+            .iter()
+            .map(reply_event_reference_value)
+            .collect::<Vec<_>>(),
+        "participants": projection
+            .participants()
+            .iter()
+            .map(reply_participant_value)
+            .collect::<Vec<_>>(),
+        "diagnostics": projection
+            .diagnostics()
+            .iter()
+            .map(reply_diagnostic_value)
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn reply_event_reference_value(reference: &RadrootsInboundNip10EventReference) -> Value {
+    json!({
+        "tag_index": reference.tag_index(),
+        "raw_tag": reference.raw_tag(),
+        "event_id": reference.event_id().as_str(),
+        "relay": reference.relay().map(|relay| relay.as_str()),
+        "author_hint": reference.author_hint().map(|author| author.as_str()),
+    })
+}
+
+fn reply_participant_value(participant: &RadrootsInboundNip10Participant) -> Value {
+    json!({
+        "tag_index": participant.tag_index(),
+        "raw_tag": participant.raw_tag(),
+        "pubkey": participant.pubkey().as_str(),
+        "relay": participant.relay().map(|relay| relay.as_str()),
+    })
+}
+
+fn reply_diagnostic_value(diagnostic: &RadrootsNip10ReplyDiagnostic) -> Value {
+    json!({
+        "code": diagnostic.code(),
+        "tag_index": diagnostic.tag_index(),
+        "raw_tag": diagnostic.raw_tag(),
+    })
+}
+
 fn wire_parts_value(parts: &RadrootsNip01EventWireParts) -> Value {
     json!({
         "kind": parts.kind,
         "content": parts.content,
         "tags": parts.tags,
     })
+}
+
+fn authored_reply(vector: &Vector) -> Result<RadrootsAuthoredNip10Reply, RadrootsNip10ReplyError> {
+    let root = authored_reply_reference(vector, &vector.input["root"])?;
+    match vector.input.get("parent") {
+        None | Some(Value::Null) => {
+            RadrootsAuthoredNip10Reply::direct(input_str(vector, "content"), root)
+        }
+        Some(parent) => RadrootsAuthoredNip10Reply::nested(
+            input_str(vector, "content"),
+            root,
+            authored_reply_reference(vector, parent)?,
+        ),
+    }
+}
+
+fn authored_reply_reference(
+    vector: &Vector,
+    input: &Value,
+) -> Result<RadrootsNip10ReplyReference, RadrootsNip10ReplyError> {
+    let relay = match input.get("relay") {
+        None | Some(Value::Null) => None,
+        Some(relay) => Some(
+            relay
+                .as_str()
+                .unwrap_or_else(|| panic!("{} Reply relay must be a string or null", vector.id)),
+        ),
+    };
+    RadrootsNip10ReplyReference::parse(
+        value_str(vector, input, "event_id"),
+        value_str(vector, input, "author"),
+        relay,
+    )
 }
 
 fn authored_images(
@@ -419,6 +677,14 @@ fn classification_label(classification: RadrootsPostClassification) -> &'static 
         RadrootsPostClassification::Update => "update",
         RadrootsPostClassification::PhotoUpdate => "photo_update",
         RadrootsPostClassification::Ask => "ask",
+        _ => "future",
+    }
+}
+
+fn reply_style_label(style: RadrootsNip10ReplyStyle) -> &'static str {
+    match style {
+        RadrootsNip10ReplyStyle::Marked => "marked",
+        RadrootsNip10ReplyStyle::LegacyPositional => "legacy_positional",
         _ => "future",
     }
 }

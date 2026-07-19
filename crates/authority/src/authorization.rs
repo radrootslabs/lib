@@ -449,8 +449,8 @@ mod tests {
         let actor = seller_actor(pubkey.as_str());
         let signer = CountingSigner::new(pubkey.as_str());
 
-        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 4);
-        for actual in [1, 2, 3] {
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 5);
+        for actual in [1, 2, 3, 4] {
             let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
                 Err(RadrootsDraftError::ContractRegistryVersionMismatch {
                     expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
@@ -463,7 +463,7 @@ mod tests {
                 error,
                 RadrootsAuthorityError::DraftValidation(
                     RadrootsDraftError::ContractRegistryVersionMismatch {
-                        expected: 4,
+                        expected: 5,
                         actual,
                     }
                 )

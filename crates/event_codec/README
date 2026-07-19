@@ -41,6 +41,14 @@ remain ordered; malformed media becomes diagnostic Update unless a valid Ask
 marker takes precedence. Structural inbound URLs remain unverified and no
 network retrieval occurs.
 
+The Reply codec deterministically emits strict marked direct and nested NIP-10
+wire parts from `RadrootsAuthoredNip10Reply`. Its inbound boundary projects
+only signature-and-id verified kind-1 envelopes, accepts marked and deprecated
+positional thread anchors, retains valid supplemental citations, and reports
+malformed advisory relay, author, participant, and citation metadata through
+ordered diagnostics. Root and parent ambiguity or malformed hard anchors
+remain projection failures.
+
 The FoodAvailability codec owns four boundaries for the focused
 `radroots.food.availability.v1` kind-`30402` profile. Strict details plus
 `created_at` produce bounded unsigned wire parts whose tag order is exactly

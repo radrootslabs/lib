@@ -1,9 +1,13 @@
 use crate::error::{NetError, Result};
-use radroots_event::post::{RadrootsAuthoredUpdate, RadrootsPost};
+use radroots_event::{
+    post::{RadrootsAuthoredUpdate, RadrootsPost},
+    reply::RadrootsAuthoredNip10Reply,
+};
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
-    radroots_nostr_build_post_reply_event, radroots_nostr_build_update_event,
-    radroots_nostr_fetch_post_events, radroots_nostr_send_event, radroots_nostr_send_post_event,
+    radroots_nostr_build_nip10_reply_event, radroots_nostr_build_update_event,
+    radroots_nostr_fetch_post_events, radroots_nostr_send_nip10_reply_event,
+    radroots_nostr_send_post_event,
 };
 
 use crate::nostr_client::manager::NostrClientManager;
@@ -24,46 +28,26 @@ impl NostrClientManager {
         rt.block_on(async move { this.publish_update_event(&update).await })
     }
 
-    pub async fn publish_post_reply_event(
+    pub async fn publish_nip10_reply_event(
         &self,
-        parent_event_id_hex: String,
-        parent_author_hex: String,
-        content: String,
-        root_event_id_hex: Option<String>,
+        reply: &RadrootsAuthoredNip10Reply,
     ) -> Result<String> {
-        let builder = radroots_nostr_build_post_reply_event(
-            &parent_event_id_hex,
-            &parent_author_hex,
-            content,
-            root_event_id_hex.as_deref(),
-        )
-        .map_err(|e| NetError::Msg(e.to_string()))?;
-
-        let out = radroots_nostr_send_event(&self.inner.client, builder)
+        let builder = radroots_nostr_build_nip10_reply_event(reply)
+            .map_err(|e| NetError::Msg(e.to_string()))?;
+        let out = radroots_nostr_send_nip10_reply_event(&self.inner.client, builder)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
 
         Ok(out.val.to_string())
     }
 
-    pub fn publish_post_reply_event_blocking(
+    pub fn publish_nip10_reply_event_blocking(
         &self,
-        parent_event_id_hex: String,
-        parent_author_hex: String,
-        content: String,
-        root_event_id_hex: Option<String>,
+        reply: RadrootsAuthoredNip10Reply,
     ) -> Result<String> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
-        rt.block_on(async move {
-            this.publish_post_reply_event(
-                parent_event_id_hex,
-                parent_author_hex,
-                content,
-                root_event_id_hex,
-            )
-            .await
-        })
+        rt.block_on(async move { this.publish_nip10_reply_event(&reply).await })
     }
 
     /// Fetches generic kind-1 compatibility projections without claiming

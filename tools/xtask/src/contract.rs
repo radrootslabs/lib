@@ -171,7 +171,7 @@ const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsParsedNip52CalendarEventRsvp",
     "RadrootsAdmittedCalendarEventRsvp",
 ];
-const REQUIRED_POST_PUBLIC_TYPES: [&str; 22] = [
+const REQUIRED_POST_PUBLIC_TYPES: [&str; 33] = [
     "RadrootsBlossomApprovedBlobUrl",
     "RadrootsBlossomByteVerifiedDescriptor",
     "RadrootsNip01EventWireParts",
@@ -185,6 +185,9 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 22] = [
     "RadrootsAuthoredUpdate",
     "RadrootsAuthoredPhotoUpdate",
     "RadrootsAuthoredAsk",
+    "RadrootsNip10ReplyError",
+    "RadrootsNip10ReplyReference",
+    "RadrootsAuthoredNip10Reply",
     "RadrootsPostDiagnostic",
     "RadrootsPostClassification",
     "RadrootsInboundPostImeta",
@@ -194,6 +197,14 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 22] = [
     "RadrootsThreadExcludedPostCandidate",
     "RadrootsPostAdmissionOutcome",
     "RadrootsPostAdmissionError",
+    "RadrootsNip10ReplyStyle",
+    "RadrootsNip10ReplyDiagnostic",
+    "RadrootsInboundNip10EventReference",
+    "RadrootsInboundNip10Participant",
+    "RadrootsInboundNip10ReplyProjection",
+    "RadrootsNip10ReplyProjectionError",
+    "RadrootsAdmittedNip10ReplyEvent",
+    "RadrootsNip10ReplyAdmissionError",
 ];
 const REQUIRED_FOOD_AVAILABILITY_PUBLIC_TYPES: [&str; 31] = [
     "RadrootsBlossomByteVerifiedDescriptor",
@@ -481,7 +492,7 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
 ];
-const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 5] = [
+const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_update_build_authored_draft",
         id: "social.update.build_authored_draft",
@@ -549,6 +560,73 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 5] = [
         ],
     },
     PostOperationExpectation {
+        key: "social_reply_build_authored_draft",
+        id: "social.reply.build_authored_draft",
+        inputs: &["RadrootsAuthoredNip10Reply"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/reply.rs",
+            "crates/event_codec/src/reply/authored.rs",
+        ],
+        rust_types: &[
+            "radroots_event::reply::RadrootsAuthoredNip10Reply",
+            "radroots_event::reply::RadrootsNip10ReplyError",
+            "radroots_event::reply::RadrootsNip10ReplyReference",
+        ],
+        case_kinds: &[
+            "social.reply.build_authored_draft.valid",
+            "social.reply.build_authored_draft.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_reply_project_verified_event",
+        id: "social.reply.project_verified_event",
+        inputs: &["RadrootsSignatureVerifiedEvent"],
+        outputs: &["RadrootsInboundNip10ReplyProjection"],
+        error_class: "parse_error",
+        signing: "none",
+        rust_modules: &["crates/event_codec/src/reply/inbound.rs"],
+        rust_types: &[
+            "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
+            "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
+            "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
+            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyDiagnostic",
+            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyProjectionError",
+            "radroots_event_codec::reply::inbound::RadrootsNip10ReplyStyle",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "social.reply.project_verified_event.valid",
+            "social.reply.project_verified_event.invalid",
+        ],
+    },
+    PostOperationExpectation {
+        key: "social_reply_verify_and_admit_event",
+        id: "social.reply.verify_and_admit_event",
+        inputs: &["RadrootsEventEnvelope"],
+        outputs: &["RadrootsAdmittedNip10ReplyEvent"],
+        error_class: "admission_error",
+        signing: "nip01",
+        rust_modules: &[
+            "crates/event_codec/src/reply/admission.rs",
+            "crates/event_codec/src/reply/inbound.rs",
+            "crates/event_codec/src/verification.rs",
+        ],
+        rust_types: &[
+            "radroots_event::RadrootsEventEnvelope",
+            "radroots_event_codec::reply::admission::RadrootsAdmittedNip10ReplyEvent",
+            "radroots_event_codec::reply::admission::RadrootsNip10ReplyAdmissionError",
+            "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "social.reply.verify_and_admit_event.valid",
+            "social.reply.verify_and_admit_event.invalid",
+        ],
+    },
+    PostOperationExpectation {
         key: "social_post_project_verified_event",
         id: "social.post.project_verified_event",
         inputs: &["RadrootsSignatureVerifiedEvent"],
@@ -596,19 +674,21 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 5] = [
         ],
     },
 ];
-const POST_OPERATION_KEY_PREFIXES: [&str; 4] = [
+const POST_OPERATION_KEY_PREFIXES: [&str; 5] = [
     "social_update_",
     "social_photo_update_",
     "social_ask_",
+    "social_reply_",
     "social_post_",
 ];
-const POST_OPERATION_ID_PREFIXES: [&str; 4] = [
+const POST_OPERATION_ID_PREFIXES: [&str; 5] = [
     "social.update.",
     "social.photo_update.",
     "social.ask.",
+    "social.reply.",
     "social.post.",
 ];
-const POST_VECTOR_EXPECTATIONS: [(&str, &str); 27] = [
+const POST_VECTOR_EXPECTATIONS: [(&str, &str); 54] = [
     (
         "authored_update_wire",
         "social.update.build_authored_draft.valid",
@@ -629,6 +709,114 @@ const POST_VECTOR_EXPECTATIONS: [(&str, &str); 27] = [
     (
         "authored_ask_blank",
         "social.ask.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_direct_wire",
+        "social.reply.build_authored_draft.valid",
+    ),
+    (
+        "authored_nip10_nested_wire",
+        "social.reply.build_authored_draft.valid",
+    ),
+    (
+        "authored_nip10_ambiguous_parent",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_event_id",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "project_signed_nip10_marked_direct",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_with_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_with_malformed_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_marked_nested_reordered",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_direct",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_direct_with_author_hint",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_many",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_many_with_author_hints",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_positional_malformed_middle_citation",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_precedes_ask_and_media",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_relay",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_ambiguous_same_reference",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_missing_author",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_event_id",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_author_hint_mismatch",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_blank_content",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_author_hint_tolerated",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_invalid_participant_tolerated",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_lone_reply_marker",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "project_signed_nip10_unknown_marker",
+        "social.reply.project_verified_event.invalid",
+    ),
+    (
+        "admit_signed_nip10_marked_direct",
+        "social.reply.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_nip10_positional_direct",
+        "social.reply.verify_and_admit_event.valid",
+    ),
+    (
+        "admit_signed_nip10_invalid_signature",
+        "social.reply.verify_and_admit_event.invalid",
     ),
     (
         "project_signed_update",
@@ -1480,6 +1668,37 @@ const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
     },
 ];
 
+const REPLY_WITNESSES: [EventBoundarySourceWitness; 4] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/reply.rs",
+        required_fragments: &[
+            "pub struct RadrootsNip10ReplyReference",
+            "pub struct RadrootsAuthoredNip10Reply",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/reply/inbound.rs",
+        required_fragments: &[
+            "pub struct RadrootsInboundNip10ReplyProjection",
+            "pub fn project_verified_nip10_reply_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/reply/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedNip10ReplyEvent",
+            "pub fn verify_and_admit_nip10_reply_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/events/reply.rs",
+        required_fragments: &[
+            "pub struct RadrootsNostrNip10ReplyEventBuilder",
+            "pub fn radroots_nostr_build_nip10_reply_event",
+        ],
+    },
+];
+
 const COMMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/comment.rs",
@@ -2107,7 +2326,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 43] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -2136,6 +2355,17 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
         radroots_type: "RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection",
         rpc_methods: &["events.post.publish", "events.post.list", "events.post.get"],
         witnesses: &POST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "reply",
+        kind: "1",
+        radroots_type: "RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder",
+        rpc_methods: &[
+            "social.reply.build_authored_draft",
+            "social.reply.project_verified_event",
+            "social.reply.verify_and_admit_event",
+        ],
+        witnesses: &REPLY_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "comment",
