@@ -4,10 +4,7 @@ use alloc::string::{String, ToString};
 use core::fmt;
 
 use radroots_event::RadrootsEventEnvelope;
-use radroots_event::contract::{
-    RadrootsContractValidationError, RadrootsEventContract,
-    validate_event_contract as validate_radroots_event_contract,
-};
+use radroots_event::contract::RadrootsContractValidationError;
 use radroots_event::knowledge::{
     RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
     RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
@@ -24,34 +21,8 @@ use crate::knowledge::decode::{
     wiki_redirect_from_event,
 };
 use crate::parsed::RadrootsParsedEvent;
-use crate::verification::{
-    RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent, verify_nip01_event,
-};
-
-/// A NIP-01 verified event whose Radroots contract shape has been validated.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsContractValidatedEvent {
-    event: RadrootsEventEnvelope,
-    contract: &'static RadrootsEventContract,
-}
-
-impl RadrootsContractValidatedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
-        &self.event
-    }
-
-    pub fn contract(&self) -> &'static RadrootsEventContract {
-        self.contract
-    }
-
-    pub fn contract_id(&self) -> &'static str {
-        self.contract.id
-    }
-
-    pub fn into_event(self) -> RadrootsEventEnvelope {
-        self.event
-    }
-}
+pub use crate::verification::{RadrootsContractValidatedEvent, validate_event_contract};
+use crate::verification::{RadrootsNip01VerificationError, verify_nip01_event};
 
 #[derive(Debug)]
 pub enum RadrootsDecodeError {
@@ -146,53 +117,47 @@ impl RadrootsDecodedEvent {
     }
 }
 
-pub fn validate_event_contract(
-    event: RadrootsSignatureVerifiedEvent,
-) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
-    let event = event.into_event();
-    let contract = validate_radroots_event_contract(&event)?;
-    Ok(RadrootsContractValidatedEvent { event, contract })
-}
-
 pub fn decode_validated_event(
     event: RadrootsContractValidatedEvent,
 ) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
-    match event.contract.id {
+    let contract_id = event.contract_id();
+    let event = event.into_event();
+    match contract_id {
         "radroots.wiki.article.v1" => Ok(RadrootsDecodedEvent::WikiArticle(
-            wiki_article_from_event(event.event)?,
+            wiki_article_from_event(event)?,
         )),
         "radroots.wiki.redirect.v1" => Ok(RadrootsDecodedEvent::WikiRedirect(
-            wiki_redirect_from_event(event.event)?,
+            wiki_redirect_from_event(event)?,
         )),
         "radroots.wiki.merge_request.v1" => Ok(RadrootsDecodedEvent::WikiMergeRequest(
-            wiki_merge_request_from_event(event.event)?,
+            wiki_merge_request_from_event(event)?,
         )),
         "radroots.knowledge.source.v1" => Ok(RadrootsDecodedEvent::KnowledgeSource(
-            knowledge_source_from_event(event.event)?,
+            knowledge_source_from_event(event)?,
         )),
         "radroots.knowledge.claim.v1" => Ok(RadrootsDecodedEvent::KnowledgeClaim(
-            knowledge_claim_from_event(event.event)?,
+            knowledge_claim_from_event(event)?,
         )),
         "radroots.knowledge.relation.v1" => Ok(RadrootsDecodedEvent::KnowledgeRelation(
-            knowledge_relation_from_event(event.event)?,
+            knowledge_relation_from_event(event)?,
         )),
         "radroots.knowledge.review.v1" => Ok(RadrootsDecodedEvent::KnowledgeReview(
-            knowledge_review_from_event(event.event)?,
+            knowledge_review_from_event(event)?,
         )),
         "radroots.knowledge.field_report.v1" => Ok(RadrootsDecodedEvent::KnowledgeFieldReport(
-            knowledge_field_report_from_event(event.event)?,
+            knowledge_field_report_from_event(event)?,
         )),
         "radroots.knowledge.evidence_bounty.v1" => Ok(RadrootsDecodedEvent::EvidenceBounty(
-            evidence_bounty_from_event(event.event)?,
+            evidence_bounty_from_event(event)?,
         )),
         "radroots.knowledge.change_proposal.v1" => {
             Ok(RadrootsDecodedEvent::KnowledgeChangeProposal(
-                knowledge_change_proposal_from_event(event.event)?,
+                knowledge_change_proposal_from_event(event)?,
             ))
         }
         "radroots.knowledge.contribution_attestation.v1" => {
             Ok(RadrootsDecodedEvent::ContributionAttestation(
-                contribution_attestation_from_event(event.event)?,
+                contribution_attestation_from_event(event)?,
             ))
         }
         contract_id => Err(RadrootsDecodeError::UnsupportedContract {

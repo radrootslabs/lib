@@ -5,8 +5,8 @@ use core::time::Duration;
 use futures::future::BoxFuture;
 use nostr::{JsonUtil, filter::MatchEventOptions};
 use radroots_event_store::{
-    RadrootsEventContractStatus, RadrootsEventIngest, RadrootsEventStore,
-    RadrootsTransportObservation, RadrootsTransportObservationType,
+    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventPersistence,
+    RadrootsEventStore, RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
 use radroots_transport::RadrootsTransportKind;
@@ -235,12 +235,15 @@ pub struct RadrootsRelayFetchEventReceipt {
     pub event_id: Option<String>,
     pub inserted: bool,
     pub duplicate: bool,
+    pub not_persisted: bool,
     pub unsupported: bool,
+    pub invalid: bool,
     pub malformed: bool,
     pub out_of_filter: bool,
     pub skipped_over_limit: bool,
-    pub projection_eligible: bool,
-    pub verification_status: Option<String>,
+    pub valid_stream_eligible: bool,
+    pub admission_status: Option<String>,
+    pub admission_code: Option<String>,
     pub message: Option<String>,
 }
 
@@ -278,10 +281,12 @@ pub struct RadrootsRelayFetchedEventsReceipt {
 pub struct RadrootsRelayFetchReceipt {
     pub inserted_count: usize,
     pub duplicate_count: usize,
+    pub not_persisted_count: usize,
     pub malformed_count: usize,
     pub out_of_filter_count: usize,
     pub skipped_over_limit_count: usize,
     pub unsupported_count: usize,
+    pub invalid_count: usize,
     pub eose_count: usize,
     pub closed_count: usize,
     pub notice_count: usize,
@@ -379,62 +384,61 @@ where
                             event_id: Some(raw_event.id.to_hex()),
                             inserted: false,
                             duplicate: false,
+                            not_persisted: false,
                             unsupported: false,
+                            invalid: false,
                             malformed: true,
                             out_of_filter: false,
                             skipped_over_limit: false,
-                            projection_eligible: false,
-                            verification_status: None,
+                            valid_stream_eligible: false,
+                            admission_status: None,
+                            admission_code: None,
                             message: Some(error.to_string()),
                         });
                         continue;
                     }
                 };
-                match event_store.ingest_event(ingest).await {
-                    Ok(store_receipt) => {
-                        let unsupported =
-                            store_receipt.contract_status != RadrootsEventContractStatus::Supported;
-                        if store_receipt.inserted {
-                            receipt.inserted_count += 1;
-                        } else {
-                            receipt.duplicate_count += 1;
-                        }
-                        if unsupported {
-                            receipt.unsupported_count += 1;
-                        }
-                        receipt.events.push(RadrootsRelayFetchEventReceipt {
-                            relay_url,
-                            event_id: Some(store_receipt.event_id),
-                            inserted: store_receipt.inserted,
-                            duplicate: !store_receipt.inserted,
-                            unsupported,
-                            malformed: false,
-                            out_of_filter: false,
-                            skipped_over_limit: false,
-                            projection_eligible: store_receipt.projection_eligible,
-                            verification_status: Some(
-                                store_receipt.verification_status.as_str().to_owned(),
-                            ),
-                            message: None,
-                        });
+                let store_receipt = event_store.ingest_event(ingest).await?;
+                let unsupported =
+                    store_receipt.admission_status == RadrootsEventAdmissionStatus::Unsupported;
+                let invalid =
+                    store_receipt.admission_status == RadrootsEventAdmissionStatus::Invalid;
+                let (inserted, duplicate, not_persisted) = match store_receipt.persistence {
+                    RadrootsEventPersistence::Inserted { .. } => {
+                        receipt.inserted_count += 1;
+                        (true, false, false)
                     }
-                    Err(error) => {
-                        receipt.malformed_count += 1;
-                        receipt.events.push(RadrootsRelayFetchEventReceipt {
-                            relay_url,
-                            event_id: Some(raw_event.id.to_hex()),
-                            inserted: false,
-                            duplicate: false,
-                            unsupported: false,
-                            malformed: true,
-                            out_of_filter: false,
-                            skipped_over_limit: false,
-                            projection_eligible: false,
-                            verification_status: None,
-                            message: Some(error.to_string()),
-                        });
+                    RadrootsEventPersistence::Duplicate { .. } => {
+                        receipt.duplicate_count += 1;
+                        (false, true, false)
                     }
+                    RadrootsEventPersistence::NotPersisted => {
+                        receipt.not_persisted_count += 1;
+                        (false, false, true)
+                    }
+                };
+                if unsupported {
+                    receipt.unsupported_count += 1;
                 }
+                if invalid {
+                    receipt.invalid_count += 1;
+                }
+                receipt.events.push(RadrootsRelayFetchEventReceipt {
+                    relay_url,
+                    event_id: Some(store_receipt.event_id),
+                    inserted,
+                    duplicate,
+                    not_persisted,
+                    unsupported,
+                    invalid,
+                    malformed: false,
+                    out_of_filter: false,
+                    skipped_over_limit: false,
+                    valid_stream_eligible: store_receipt.valid_stream_eligible,
+                    admission_status: Some(store_receipt.admission_status.as_str().to_owned()),
+                    admission_code: store_receipt.admission_code,
+                    message: None,
+                });
             }
         }
     }
@@ -510,10 +514,12 @@ impl RadrootsRelayFetchReceipt {
         Self {
             inserted_count: 0,
             duplicate_count: 0,
+            not_persisted_count: 0,
             malformed_count: processed.malformed_count,
             out_of_filter_count: processed.out_of_filter_count,
             skipped_over_limit_count: processed.skipped_over_limit_count,
             unsupported_count: 0,
+            invalid_count: 0,
             eose_count: processed.eose_count,
             closed_count: processed.closed_count,
             notice_count: processed.notice_count,
@@ -566,12 +572,15 @@ fn process_relay_fetch_items(
                                 event_id: None,
                                 inserted: false,
                                 duplicate: false,
+                                not_persisted: false,
                                 unsupported: false,
+                                invalid: false,
                                 malformed: true,
                                 out_of_filter: false,
                                 skipped_over_limit: false,
-                                projection_eligible: false,
-                                verification_status: None,
+                                valid_stream_eligible: false,
+                                admission_status: None,
+                                admission_code: None,
                                 message: Some("event JSON parse failed".to_owned()),
                             },
                         ));
@@ -587,12 +596,15 @@ fn process_relay_fetch_items(
                                 event_id: Some(raw_event.id.to_hex()),
                                 inserted: false,
                                 duplicate: false,
+                                not_persisted: false,
                                 unsupported: false,
+                                invalid: false,
                                 malformed: false,
                                 out_of_filter: true,
                                 skipped_over_limit: false,
-                                projection_eligible: false,
-                                verification_status: None,
+                                valid_stream_eligible: false,
+                                admission_status: None,
+                                admission_code: None,
                                 message: Some("event did not match relay fetch filters".to_owned()),
                             },
                         ));
@@ -608,12 +620,15 @@ fn process_relay_fetch_items(
                                 event_id: Some(raw_event.id.to_hex()),
                                 inserted: false,
                                 duplicate: false,
+                                not_persisted: false,
                                 unsupported: false,
+                                invalid: false,
                                 malformed: false,
                                 out_of_filter: false,
                                 skipped_over_limit: true,
-                                projection_eligible: false,
-                                verification_status: None,
+                                valid_stream_eligible: false,
+                                admission_status: None,
+                                admission_code: None,
                                 message: Some(
                                     "accepted relay fetch event limit reached".to_owned(),
                                 ),
@@ -679,12 +694,15 @@ fn accepted_fetch_event_receipt(
         event_id: Some(event.event.id.to_hex()),
         inserted: false,
         duplicate: false,
+        not_persisted: false,
         unsupported: false,
+        invalid: false,
         malformed: false,
         out_of_filter: false,
         skipped_over_limit: false,
-        projection_eligible: false,
-        verification_status: None,
+        valid_stream_eligible: false,
+        admission_status: None,
+        admission_code: None,
         message: Some("event accepted by relay fetch filters".to_owned()),
     }
 }

@@ -30,6 +30,18 @@ is independent of the optional `knowledge` decoder. The `nostr` feature exposes
 `RadrootsSignatureVerifiedEvent` and rejects event kinds above `u16::MAX`
 instead of truncating them.
 
+With `serde_json`, `admission::admit_verified_event` is the central contract
+boundary over an already verified event. It preserves typed admitted Profile,
+root Post, Reply, Comment, DeletionRequest, and FoodAvailability values, while
+other registered events must pass complete registry shape validation and
+return `ContractValidated`. Kind `1` is tested as a root Post before the exact
+thread-excluded candidate may be promoted to Reply. Kind `30402` is partitioned
+as focused Food, Operational Listing, generic NIP-99, or ambiguous before any
+profile validation; a valid excluded Operational Listing falls back to the
+registry, while generic and mixed-marker candidates remain distinct failures.
+The operation never accepts an unverified envelope and does not sign, publish,
+select event heads, evaluate deletion effects, or mutate storage.
+
 The post codec exposes deterministic authored wire builders and a separate
 verified-event projection. Update emits no profile tags, PhotoUpdate emits
 strict ordered NIP-92 `imeta`, and Ask emits one exact `t=radroots-ask` marker

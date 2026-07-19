@@ -1,6 +1,10 @@
 use core::fmt;
 
-use radroots_event::{RadrootsEventEnvelope, kinds::KIND_PROFILE};
+use radroots_event::{
+    RadrootsEventEnvelope,
+    contract::{RadrootsEventContract, event_contract},
+    kinds::KIND_PROFILE,
+};
 
 use crate::profile::inbound::{
     RadrootsInboundProfileMetadata, RadrootsProfileMetadataParseError,
@@ -28,6 +32,11 @@ impl RadrootsAdmittedProfileEvent {
 
     pub fn metadata(&self) -> &RadrootsInboundProfileMetadata {
         &self.metadata
+    }
+
+    pub fn contract(&self) -> &'static RadrootsEventContract {
+        event_contract("radroots.profile.metadata.v1")
+            .expect("Profile metadata contract is registry-owned")
     }
 
     pub fn into_parts(

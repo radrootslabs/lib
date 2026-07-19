@@ -9,6 +9,32 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Trusted event-contract admission now has one signature-verified entry point.
+  Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
+  retain typed admitted values; other registered events require full contract
+  shape validation, while unsupported matching and invalid shapes remain
+  distinct failures.
+- Event-store ingest now verifies before durable admission, retains every
+  verified durable candidate for registry-independent raw-head reduction, and
+  separates immutable valid-stream replay from current visibility. Explicit
+  raw, valid, raw-head, visibility, and visible-head APIs replace ambiguous
+  projection/head reads; projection cursors require an expected version and a
+  monotonic prior-sequence compare-and-swap. Verified ephemeral events receive
+  an explicit not-persisted outcome and allocate no raw sequence, tags,
+  observations, or heads.
+- Nostr fetch-ingest receipts now distinguish admitted, unsupported, invalid,
+  malformed, inserted, duplicate, and ephemeral not-persisted events, carry
+  stable admission codes when classification occurs, and name valid-stream
+  eligibility directly. Local event-store failures now abort fetch ingest as
+  operational errors instead of being reported as malformed relay input.
+- Generic outbox APIs now reject every NIP-16 ephemeral event before durable
+  queue persistence. Live-only events, including NIP-42 relay-auth and NIP-98
+  HTTP-auth signatures, remain owned by their transport exchanges. Externally
+  supplied SQLite pools now validate their backing mode and configure every
+  connection before migration or writes.
+- Retired trade order-workflow and product-projection source files that were no
+  longer compiled or exported have been removed. Current FoodAvailability
+  projection ownership remains with the event store.
 - Blossom blob URLs now validate complete raw Unicode text before URL parsing
   and exact raw ASCII DNS label grammar before returning a typed value. Unicode
   control/format text, implicit IDNA conversion, empty labels, underscores,
@@ -91,6 +117,10 @@ publish policy both pass for the same source revision.
 
 ### Added
 
+- A fixed signed central-admission corpus executes every admitted variant,
+  Update/PhotoUpdate/Ask root classification, Post-to-Reply promotion,
+  Operational Listing fallback from Food exclusion, generic NIP-99 exclusion,
+  unsupported kinds, malformed registered shapes, and ambiguous Food markers.
 - Generic protocol builders can now finalize into an opaque checked external
   signing request. The request preserves the standard unsigned-event JSON wire
   shape while preventing raw mutation or unchecked reconstruction, and it

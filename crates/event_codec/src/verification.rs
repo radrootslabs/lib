@@ -6,13 +6,17 @@ use core::fmt;
 use core::str::FromStr;
 
 use radroots_event::RadrootsEventEnvelope;
+use radroots_event::contract::{
+    RadrootsContractValidationError, RadrootsEventContract,
+    validate_event_contract as validate_radroots_event_contract,
+};
 use radroots_event::ids::RadrootsEventId;
 use radroots_event::wire::compute_canonical_nip01_event_id;
 
 #[cfg(feature = "knowledge")]
 pub use crate::knowledge::verification::{
-    RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
-    decode_validated_event, validate_event_contract, verify_and_decode_radroots_event,
+    RadrootsDecodeError, RadrootsDecodedEvent, decode_validated_event,
+    verify_and_decode_radroots_event,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +46,39 @@ impl RadrootsSignatureVerifiedEvent {
 
     pub fn into_event(self) -> RadrootsEventEnvelope {
         self.event
+    }
+}
+
+/// A NIP-01 verified event whose registry-selected contract shape is valid.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsContractValidatedEvent {
+    verified_event: RadrootsSignatureVerifiedEvent,
+    contract: &'static RadrootsEventContract,
+}
+
+impl RadrootsContractValidatedEvent {
+    pub fn verified_event(&self) -> &RadrootsSignatureVerifiedEvent {
+        &self.verified_event
+    }
+
+    pub fn event(&self) -> &RadrootsEventEnvelope {
+        self.verified_event.event()
+    }
+
+    pub fn contract(&self) -> &'static RadrootsEventContract {
+        self.contract
+    }
+
+    pub fn contract_id(&self) -> &'static str {
+        self.contract.id
+    }
+
+    pub fn into_verified_event(self) -> RadrootsSignatureVerifiedEvent {
+        self.verified_event
+    }
+
+    pub fn into_event(self) -> RadrootsEventEnvelope {
+        self.verified_event.into_event()
     }
 }
 
@@ -94,6 +131,11 @@ impl std::error::Error for RadrootsNip01VerificationError {}
 pub fn verify_event_id(
     event: RadrootsEventEnvelope,
 ) -> Result<RadrootsIdVerifiedEvent, RadrootsNip01VerificationError> {
+    u16::try_from(event.kind_u32()).map_err(|_| {
+        RadrootsNip01VerificationError::KindOutOfRange {
+            kind: event.kind_u32(),
+        }
+    })?;
     RadrootsEventId::parse(event.id_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     let expected = compute_canonical_nip01_event_id(
@@ -138,6 +180,17 @@ pub fn verify_nip01_event(
     event: RadrootsEventEnvelope,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
     verify_event_signature(verify_event_id(event)?)
+}
+
+/// Applies full registry contract-shape validation to an already verified event.
+pub fn validate_event_contract(
+    event: RadrootsSignatureVerifiedEvent,
+) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
+    let contract = validate_radroots_event_contract(event.event())?;
+    Ok(RadrootsContractValidatedEvent {
+        verified_event: event,
+        contract,
+    })
 }
 
 #[cfg(feature = "nostr")]
@@ -242,6 +295,36 @@ mod tests {
             assert_eq!(error.code(), expected);
             assert!(!error.to_string().is_empty());
         }
+    }
+
+    #[test]
+    fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
+        let original = signed_max_kind_event();
+        let kind = u32::from(u16::MAX) + 1;
+        let id = compute_canonical_nip01_event_id(
+            original.author_str(),
+            original.created_at_u64(),
+            kind,
+            &original.tags_as_vec(),
+            original.content(),
+        )
+        .expect("canonical hash remains mechanically computable")
+        .into_string();
+        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id,
+            author: original.author_str().to_owned(),
+            created_at: original.created_at_u64(),
+            kind,
+            tags: original.tags_as_vec(),
+            content: original.content().to_owned(),
+            sig: original.sig_str().to_owned(),
+        })
+        .expect("base envelope permits the wider internal kind representation");
+
+        assert_eq!(
+            verify_event_id(event),
+            Err(RadrootsNip01VerificationError::KindOutOfRange { kind })
+        );
     }
 
     fn signed_max_kind_event() -> RadrootsEventEnvelope {

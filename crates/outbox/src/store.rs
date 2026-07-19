@@ -14,6 +14,7 @@ use crate::model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
+use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
     RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
@@ -33,11 +34,12 @@ use radroots_transport::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteQueryResult};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult};
 use sqlx::{Row, SqlitePool};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::str::FromStr;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct RadrootsOutbox {
@@ -51,7 +53,7 @@ impl RadrootsOutbox {
             .max_connections(1)
             .connect_with(options)
             .await?;
-        configure_connection(&pool, false).await?;
+        configure_pool(&pool, false).await?;
         apply_up(&pool).await?;
         Ok(Self { pool })
     }
@@ -64,7 +66,7 @@ impl RadrootsOutbox {
             .max_connections(1)
             .connect_with(options)
             .await?;
-        configure_connection(&pool, true).await?;
+        configure_pool(&pool, true).await?;
         apply_up(&pool).await?;
         Ok(Self { pool })
     }
@@ -73,7 +75,7 @@ impl RadrootsOutbox {
         pool: SqlitePool,
         file_backed: bool,
     ) -> Result<Self, RadrootsOutboxError> {
-        configure_connection(&pool, file_backed).await?;
+        configure_pool(&pool, file_backed).await?;
         apply_up(&pool).await?;
         Ok(Self { pool })
     }
@@ -151,7 +153,7 @@ impl RadrootsOutbox {
         &self,
         input: &RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
-        ensure_not_trade_mutation_draft(&input.draft)?;
+        ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -252,7 +254,7 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        ensure_not_trade_mutation_draft(&input.draft)?;
+        ensure_generic_outbox_draft_allowed(&input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
@@ -350,7 +352,7 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        ensure_not_trade_mutation_draft(&input.draft)?;
+        ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -773,7 +775,7 @@ impl RadrootsOutbox {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        ensure_not_trade_mutation_draft(&input.draft)?;
+        ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
@@ -1231,13 +1233,14 @@ impl RadrootsOutbox {
             observed_at_ms,
         )
         .expect("the static local outbox transport URI must remain valid");
-        let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
+        let ingest = RadrootsEventIngest::from_signed_event(signed_event.clone(), observed_at_ms)?
             .with_observation(observation);
         let receipt = event_store.ingest_event(ingest).await?;
+        let event_store_inserted = receipt.persistence.is_inserted();
         let changed = sqlx::query(
             "UPDATE outbox_event SET event_store_ingested = 1, event_store_inserted = ?, event_store_ingested_at_ms = ?, state = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
-        .bind(bool_i64(receipt.inserted))
+        .bind(bool_i64(event_store_inserted))
         .bind(observed_at_ms)
         .bind(RadrootsOutboxEventState::Publishing.as_str())
         .bind(observed_at_ms)
@@ -1251,7 +1254,7 @@ impl RadrootsOutbox {
             outbox_event_id,
             event_id: receipt.event_id,
             already_ingested: false,
-            event_store_inserted: receipt.inserted,
+            event_store_inserted,
         })
     }
 
@@ -1799,20 +1802,52 @@ fn publish_lifecycle_from_plan_evaluation<'a>(
     }
 }
 
-async fn configure_connection(
-    pool: &SqlitePool,
-    file_backed: bool,
-) -> Result<(), RadrootsOutboxError> {
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(pool)
-        .await?;
-    sqlx::query("PRAGMA busy_timeout = 5000")
-        .execute(pool)
-        .await?;
-    if file_backed {
-        sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(pool)
+async fn configure_pool(pool: &SqlitePool, file_backed: bool) -> Result<(), RadrootsOutboxError> {
+    let max_connections = pool.options().get_max_connections();
+    let existing_options = pool.connect_options();
+    let main_filename: String =
+        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
+            .fetch_one(pool)
             .await?;
+    let database_is_memory = main_filename.is_empty();
+    if file_backed == database_is_memory {
+        return Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
+            file_backed,
+            filename: main_filename,
+        });
+    }
+    if !file_backed && max_connections != 1 {
+        return Err(RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount {
+            actual: max_connections,
+        });
+    }
+
+    let mut connect_options = existing_options
+        .as_ref()
+        .clone()
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_millis(5_000));
+    if file_backed {
+        connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
+    }
+    pool.set_connect_options(connect_options);
+
+    let mut connections = Vec::with_capacity(max_connections as usize);
+    for _ in 0..max_connections {
+        connections.push(pool.acquire().await?);
+    }
+    for connection in &mut connections {
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut **connection)
+            .await?;
+        sqlx::query("PRAGMA busy_timeout = 5000")
+            .execute(&mut **connection)
+            .await?;
+        if file_backed {
+            sqlx::query("PRAGMA journal_mode = WAL")
+                .execute(&mut **connection)
+                .await?;
+        }
     }
     Ok(())
 }
@@ -2684,6 +2719,22 @@ fn event_from_row(
         });
     }
     let state = RadrootsOutboxEventState::parse(row.try_get::<String, _>("state")?.as_str())?;
+    let event_store_ingested = stored_bool(
+        "outbox_event.event_store_ingested",
+        row.try_get("event_store_ingested")?,
+    )?;
+    let event_store_inserted = stored_bool(
+        "outbox_event.event_store_inserted",
+        row.try_get("event_store_inserted")?,
+    )?;
+    let event_store_ingested_at_ms: Option<i64> = row.try_get("event_store_ingested_at_ms")?;
+    if (!event_store_ingested && (event_store_inserted || event_store_ingested_at_ms.is_some()))
+        || (event_store_ingested && event_store_ingested_at_ms.is_none())
+    {
+        return Err(
+            RadrootsOutboxError::StoredEventStoreIngestStateInconsistent { outbox_event_id },
+        );
+    }
     Ok(RadrootsOutboxEventRecord {
         outbox_event_id,
         operation_id: row.try_get("operation_id")?,
@@ -2700,9 +2751,9 @@ fn event_from_row(
         active_delivery_plan_id: row.try_get("active_delivery_plan_id")?,
         next_attempt_after_ms: row.try_get("next_attempt_after_ms")?,
         last_error: row.try_get("last_error")?,
-        event_store_ingested: row.try_get::<i64, _>("event_store_ingested")? != 0,
-        event_store_inserted: row.try_get::<i64, _>("event_store_inserted")? != 0,
-        event_store_ingested_at_ms: row.try_get("event_store_ingested_at_ms")?,
+        event_store_ingested,
+        event_store_inserted,
+        event_store_ingested_at_ms,
         created_at_ms: row.try_get("created_at_ms")?,
         updated_at_ms: row.try_get("updated_at_ms")?,
     })
@@ -3080,9 +3131,16 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-fn ensure_not_trade_mutation_draft(draft: &RadrootsEventDraft) -> Result<(), RadrootsOutboxError> {
+fn ensure_generic_outbox_draft_allowed(
+    draft: &RadrootsEventDraft,
+) -> Result<(), RadrootsOutboxError> {
     if TRADE_MUTATION_EVENT_KINDS.contains(&draft.kind_u32()) {
         return Err(RadrootsOutboxError::TradeMutationRequiresSemanticOutbox);
+    }
+    if draft.kind().class() == RadrootsEventKindClass::Ephemeral {
+        return Err(RadrootsOutboxError::EphemeralEventNotQueueable {
+            kind: draft.kind_u32(),
+        });
     }
     Ok(())
 }
@@ -3242,6 +3300,14 @@ fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
 
+fn stored_bool(field: &'static str, value: i64) -> Result<bool, RadrootsOutboxError> {
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(RadrootsOutboxError::InvalidStoredBoolean { field, value }),
+    }
+}
+
 fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxError> {
     u32::try_from(value).map_err(|_| RadrootsOutboxError::IntegerRange { field, value })
 }
@@ -3254,7 +3320,9 @@ mod tests {
         RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsPublicKey, RadrootsTradeId,
     };
-    use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_GEOCHAT};
+    use radroots_event::kinds::{
+        KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
+    };
     use radroots_event::trade::{
         RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
         RadrootsFulfillmentProfileV1, RadrootsTradeCancellationProfileV1,
@@ -3291,14 +3359,26 @@ mod tests {
 
     fn generic_draft(expected_pubkey: &str, content: &str) -> RadrootsEventDraft {
         RadrootsEventDraft::new(
-            "radroots.social.geochat.v1",
-            KIND_GEOCHAT,
+            "radroots.social.follow_list.v1",
+            KIND_FOLLOW,
             1_700_000_000,
-            vec![vec!["t".to_owned(), "soil".to_owned()]],
-            content,
+            Vec::new(),
+            format!(r#"{{"label":"{content}"}}"#),
             expected_pubkey,
         )
         .expect("generic draft")
+    }
+
+    fn durable_draft(expected_pubkey: &str, label: &str) -> RadrootsEventDraft {
+        RadrootsEventDraft::new(
+            "radroots.social.follow_list.v1",
+            KIND_FOLLOW,
+            1_700_000_000,
+            Vec::new(),
+            format!(r#"{{"label":"{label}"}}"#),
+            expected_pubkey,
+        )
+        .expect("durable draft")
     }
 
     fn candidate_terms() -> RadrootsTradeCandidateTermsV1 {
@@ -4202,6 +4282,109 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn open_pool_configures_every_file_connection_and_rejects_unsafe_memory_pools() {
+        let memory_options = SqliteConnectOptions::from_str("sqlite::memory:")
+            .expect("memory options")
+            .foreign_keys(false);
+        let memory_pool = SqlitePoolOptions::new()
+            .max_connections(2)
+            .connect_with(memory_options)
+            .await
+            .expect("memory pool");
+        let memory_error = match RadrootsOutbox::open_pool(memory_pool, false).await {
+            Ok(_) => panic!("multi-connection memory pool must be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                memory_error,
+                RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount { actual: 2 }
+            ),
+            "{memory_error:?}"
+        );
+
+        let mislabeled_memory_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::from_str("sqlite::memory:")
+                    .expect("memory options")
+                    .foreign_keys(false),
+            )
+            .await
+            .expect("mislabeled memory pool");
+        assert!(matches!(
+            RadrootsOutbox::open_pool(mislabeled_memory_pool, true).await,
+            Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
+                file_backed: true,
+                ..
+            })
+        ));
+        for memory_url in ["sqlite://?mode=memory", "sqlite://named?mode=memory"] {
+            let mode_memory_pool = SqlitePoolOptions::new()
+                .max_connections(2)
+                .connect_with(
+                    SqliteConnectOptions::from_str(memory_url)
+                        .expect("mode-memory options")
+                        .foreign_keys(false),
+                )
+                .await
+                .expect("mode-memory pool");
+            assert!(matches!(
+                RadrootsOutbox::open_pool(mode_memory_pool, false).await,
+                Err(RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount { actual: 2 })
+            ));
+
+            let mislabeled_mode_memory_pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::from_str(memory_url)
+                        .expect("mode-memory options")
+                        .foreign_keys(false),
+                )
+                .await
+                .expect("mislabeled mode-memory pool");
+            assert!(matches!(
+                RadrootsOutbox::open_pool(mislabeled_mode_memory_pool, true).await,
+                Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
+                    file_backed: true,
+                    ..
+                })
+            ));
+        }
+
+        let directory = tempfile::tempdir().expect("tempdir");
+        let file_path = directory.path().join("multi-connection-outbox.sqlite");
+        let file_options = SqliteConnectOptions::new()
+            .filename(&file_path)
+            .create_if_missing(true)
+            .foreign_keys(false);
+        let file_pool = SqlitePoolOptions::new()
+            .max_connections(3)
+            .connect_with(file_options)
+            .await
+            .expect("file pool");
+        let outbox = RadrootsOutbox::open_pool(file_pool, true)
+            .await
+            .expect("file outbox");
+        let mut connections = Vec::new();
+        for _ in 0..3 {
+            connections.push(outbox.pool().acquire().await.expect("connection"));
+        }
+        for connection in &mut connections {
+            let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("foreign keys");
+            let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("busy timeout");
+            assert_eq!(foreign_keys, 1);
+            assert_eq!(busy_timeout, 5_000);
+        }
+    }
+
+    #[tokio::test]
     async fn defensive_storage_decoding_and_remaining_idempotency_edges_are_explicit() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "defensive storage");
@@ -4461,6 +4644,63 @@ mod tests {
             .execute(outbox.pool())
             .await
             .expect("restore event id");
+
+        sqlx::query("UPDATE outbox_event SET event_store_ingested = 2 WHERE outbox_event_id = ?")
+            .bind(signed_receipt.outbox_event_id)
+            .execute(outbox.pool())
+            .await
+            .expect("corrupt event-store ingested flag");
+        assert!(matches!(
+            outbox.get_event(signed_receipt.outbox_event_id).await,
+            Err(RadrootsOutboxError::InvalidStoredBoolean {
+                field: "outbox_event.event_store_ingested",
+                value: 2,
+            })
+        ));
+        sqlx::query(
+            "UPDATE outbox_event SET event_store_ingested = 1, event_store_inserted = 2 WHERE outbox_event_id = ?",
+        )
+        .bind(signed_receipt.outbox_event_id)
+        .execute(outbox.pool())
+        .await
+        .expect("corrupt event-store inserted flag");
+        assert!(matches!(
+            outbox.get_event(signed_receipt.outbox_event_id).await,
+            Err(RadrootsOutboxError::InvalidStoredBoolean {
+                field: "outbox_event.event_store_inserted",
+                value: 2,
+            })
+        ));
+        sqlx::query(
+            "UPDATE outbox_event SET event_store_ingested = 0, event_store_inserted = 1 WHERE outbox_event_id = ?",
+        )
+        .bind(signed_receipt.outbox_event_id)
+        .execute(outbox.pool())
+        .await
+        .expect("corrupt event-store cross-field state");
+        assert!(matches!(
+            outbox.get_event(signed_receipt.outbox_event_id).await,
+            Err(RadrootsOutboxError::StoredEventStoreIngestStateInconsistent { .. })
+        ));
+        sqlx::query(
+            "UPDATE outbox_event SET event_store_ingested = 1, event_store_inserted = 0, event_store_ingested_at_ms = NULL WHERE outbox_event_id = ?",
+        )
+        .bind(signed_receipt.outbox_event_id)
+        .execute(outbox.pool())
+        .await
+        .expect("corrupt event-store timestamp state");
+        assert!(matches!(
+            outbox.get_event(signed_receipt.outbox_event_id).await,
+            Err(RadrootsOutboxError::StoredEventStoreIngestStateInconsistent { .. })
+        ));
+        sqlx::query(
+            "UPDATE outbox_event SET event_store_ingested = 1, event_store_inserted = 1, event_store_ingested_at_ms = ? WHERE outbox_event_id = ?",
+        )
+        .bind(event.event_store_ingested_at_ms)
+        .bind(signed_receipt.outbox_event_id)
+        .execute(outbox.pool())
+        .await
+        .expect("restore event-store ingest state");
 
         sqlx::query("UPDATE outbox_delivery_plan SET satisfaction_policy = 'invalid' WHERE delivery_plan_id = ?")
             .bind(plans[0].delivery_plan_id)
@@ -5149,6 +5389,66 @@ mod tests {
             signed_err,
             RadrootsOutboxError::TradeMutationRequiresSemanticOutbox
         ));
+        assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
+    }
+
+    #[tokio::test]
+    async fn generic_enqueue_rejects_all_ephemeral_drafts_before_persistence() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+
+        for (contract_id, kind, content) in [
+            ("radroots.social.geochat.v1", KIND_GEOCHAT, "transient"),
+            ("radroots.relay.auth.v1", KIND_RELAY_AUTH, "{}"),
+            ("radroots.http.auth.v1", KIND_HTTP_AUTH, "{}"),
+        ] {
+            let draft = RadrootsEventDraft::new(
+                contract_id,
+                kind,
+                1_700_000_000,
+                Vec::new(),
+                content,
+                FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            )
+            .expect("ephemeral draft");
+            let signed_event =
+                radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed");
+
+            let unsigned_error = outbox
+                .enqueue_operation(operation_input(draft.clone(), 1_000))
+                .await
+                .expect_err("unsigned ephemeral event must not be queued");
+            assert!(matches!(
+                unsigned_error,
+                RadrootsOutboxError::EphemeralEventNotQueueable {
+                    kind: rejected_kind
+                } if rejected_kind == kind
+            ));
+
+            let signed_input = signed_operation_input(draft, signed_event, 1_100);
+            let preflight_error = outbox
+                .preflight_signed_operation_idempotency(&signed_input)
+                .await
+                .expect_err("ephemeral preflight must fail");
+            assert!(matches!(
+                preflight_error,
+                RadrootsOutboxError::EphemeralEventNotQueueable {
+                    kind: rejected_kind
+                } if rejected_kind == kind
+            ));
+            let signed_error = outbox
+                .enqueue_signed_operation(signed_input)
+                .await
+                .expect_err("signed ephemeral event must not be queued");
+            assert!(matches!(
+                signed_error,
+                RadrootsOutboxError::EphemeralEventNotQueueable {
+                    kind: rejected_kind
+                } if rejected_kind == kind
+            ));
+        }
+
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);
@@ -7606,7 +7906,7 @@ mod tests {
         let event_store = RadrootsEventStore::open_memory()
             .await
             .expect("event store");
-        let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "local ingest");
+        let draft = durable_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "local ingest");
         let receipt = outbox
             .enqueue_operation(operation_input(draft, 1_000))
             .await
@@ -7639,12 +7939,14 @@ mod tests {
             .expect("first ingest");
         assert_eq!(first.event_id, signed.id_str());
         assert!(!first.already_ingested);
+        assert!(first.event_store_inserted);
 
         let second = outbox
             .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_300)
             .await
             .expect("second ingest");
         assert!(second.already_ingested);
+        assert!(!second.event_store_inserted);
         let observations = event_store
             .observations_for_event(signed.id_str())
             .await
@@ -7659,5 +7961,73 @@ mod tests {
         assert_eq!(observations[0].observation_count, 1);
         assert_eq!(observations[0].first_observed_at_ms, 2_200);
         assert_eq!(observations[0].last_observed_at_ms, 2_200);
+        assert_eq!(
+            event_store
+                .status_summary()
+                .await
+                .expect("event-store summary")
+                .total_events,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn local_ingest_rejects_an_invalid_signature_without_marking_the_outbox_or_store() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let event_store = RadrootsEventStore::open_memory()
+            .await
+            .expect("event store");
+        let draft = durable_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "invalid local signature");
+        let receipt = outbox
+            .enqueue_operation(operation_input(draft, 1_000))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_event("signer", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let signed =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
+        let mut wire = signed.wire().clone();
+        wire.sig = "0".repeat(128);
+        let raw_json = serde_json::to_string(&wire).expect("invalid-signature wire JSON");
+        let invalid_signed = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+            .expect("event id remains valid when only the signature changes");
+        outbox
+            .complete_signing(
+                receipt.outbox_event_id,
+                claimed.claim_token.as_str(),
+                invalid_signed,
+                1_100,
+            )
+            .await
+            .expect("complete signing");
+        outbox
+            .claim_next_ready_event("publisher", "claim-b", 3_000, 1_100)
+            .await
+            .expect("claim")
+            .expect("publish claim");
+
+        let error = outbox
+            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_200)
+            .await
+            .expect_err("invalid signature must fail before local storage");
+        assert!(matches!(error, RadrootsOutboxError::EventStore(_)));
+
+        let stored_outbox = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("outbox lookup")
+            .expect("outbox event");
+        assert!(!stored_outbox.event_store_ingested);
+        assert_eq!(
+            event_store
+                .status_summary()
+                .await
+                .expect("event-store summary")
+                .total_events,
+            0
+        );
     }
 }

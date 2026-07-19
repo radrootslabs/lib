@@ -1,0 +1,334 @@
+{
+  "suite": "verified_event_admission",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "event_admit_verified_profile_001",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f",
+          "pubkey": "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+          "created_at": 1800000100,
+          "kind": 0,
+          "tags": [],
+          "content": "{\"display_name\":\"Moss Street Farm\",\"bot\":false,\"website\":\"https://mossstreet.example\",\"picture\":42}",
+          "sig": "e5448d11671bcf73aa8d56941aff9df46d4e9fb250596671950e5f3c9d747440523efd33d8b9ff4f2a2ef1bd4b79e0a7cf5850132172b1db4b642ef2b348f721"
+        }
+      },
+      "expected": {
+        "variant": "profile",
+        "contract_id": "radroots.profile.metadata.v1",
+        "event_id": "b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f"
+      }
+    },
+    {
+      "id": "event_admit_verified_root_update_002",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "fb3f42caf9db337a7f1c0d49cd8ba5191f08dc1c419ed0640f7ea48a924e3bf3",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1781632860,
+          "kind": 1,
+          "tags": [],
+          "content": "The first strawberries are ready.",
+          "sig": "dba0a86fee54304c2b419742f186e74d7edca5fc7234c8aa294651de9bc2f16bf829d46f36ec759a767c4ccd1841a73243eae89afd5f6c89b2243491bfbb5f50"
+        }
+      },
+      "expected": {
+        "variant": "root_post",
+        "contract_id": "radroots.social.update.v1",
+        "event_id": "fb3f42caf9db337a7f1c0d49cd8ba5191f08dc1c419ed0640f7ea48a924e3bf3"
+      }
+    },
+    {
+      "id": "event_admit_verified_root_photo_update_003",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "f06df29688089218b10424a85a070ecd9fe0e7143bf24622fdd5f031fbe00029",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1781635400,
+          "kind": 1,
+          "tags": [
+            [
+              "imeta",
+              "url https://cdn.example/harvest.webp",
+              "x aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "m image/webp",
+              "dim 1200x900",
+              "size 12345",
+              "alt Harvest"
+            ]
+          ],
+          "content": "Harvest https://cdn.example/harvest.webp",
+          "sig": "2f0863959b972f639d028c65d9ca0c2b62d5ad57530ad4c810e67941d1d50ab249488f570b9905095db2df18440aac399907dda5ca0e8289c49e625ce8b0b28b"
+        }
+      },
+      "expected": {
+        "variant": "root_post",
+        "contract_id": "radroots.social.photo_update.v1",
+        "event_id": "f06df29688089218b10424a85a070ecd9fe0e7143bf24622fdd5f031fbe00029"
+      }
+    },
+    {
+      "id": "event_admit_verified_root_ask_004",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "5d15a6d516260b6d6cf4a7f2a22fcd349c2bee302fda2c92fa1679996290a1ac",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1781635220,
+          "kind": 1,
+          "tags": [
+            ["t", " RADROOTS-ASK "],
+            ["imeta", "url https://cdn.example/leaf.webp", "x malformed"]
+          ],
+          "content": "Question https://cdn.example/leaf.webp",
+          "sig": "538636b2d163d1a392f4c3fced234ba6af5c9b3f1fc66e3bdbbe374287cf4e62adec6369056a3f096be1b268451c2fb25040ae8e0d67188284c2da18832c20d1"
+        }
+      },
+      "expected": {
+        "variant": "root_post",
+        "contract_id": "radroots.social.ask.v1",
+        "event_id": "5d15a6d516260b6d6cf4a7f2a22fcd349c2bee302fda2c92fa1679996290a1ac"
+      }
+    },
+    {
+      "id": "event_admit_verified_post_to_reply_005",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "2340fc3fec291f4d4429bf13bf23cc3b7ec8589aa5e6426a5fc5a25bfcf1a896",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1781000001,
+          "kind": 1,
+          "tags": [
+            [
+              "e",
+              "1111111111111111111111111111111111111111111111111111111111111111",
+              "",
+              "root"
+            ],
+            ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+          ],
+          "content": "Direct reply",
+          "sig": "16afb66cf2e30450a1055d697044b0f27835352553f32f7ac8d18387cc27861dfde3bb820a8882c00f933c13d4c967df5d5db986cc228a80dd3d291841bf08cd"
+        }
+      },
+      "expected": {
+        "variant": "reply",
+        "contract_id": "radroots.social.reply.v1",
+        "event_id": "2340fc3fec291f4d4429bf13bf23cc3b7ec8589aa5e6426a5fc5a25bfcf1a896"
+      }
+    },
+    {
+      "id": "event_admit_verified_comment_006",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "3e424094d13c2870de9e63f295e54ffc68caf00caa125021236a8011d611c6a1",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "created_at": 1800000200,
+          "kind": 1111,
+          "tags": [
+            ["E", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "wss://victoria.example", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"],
+            ["K", "30402"],
+            ["P", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af", "wss://victoria.example"],
+            ["e", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "wss://victoria.example", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"],
+            ["k", "30402"],
+            ["p", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af", "wss://victoria.example"]
+          ],
+          "content": "Are these carrots available Saturday?",
+          "sig": "bdec382660fb50d0c3beb8f57b7f0a3b89cea7469b02b5e92e476550bd61f2d3ce7cdcec538d2a8ad8ab5c19807717af798c36a2e05a4b949b628b4993b9ebd1"
+        }
+      },
+      "expected": {
+        "variant": "comment",
+        "contract_id": "radroots.social.comment.v1",
+        "event_id": "3e424094d13c2870de9e63f295e54ffc68caf00caa125021236a8011d611c6a1"
+      }
+    },
+    {
+      "id": "event_admit_verified_deletion_request_007",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "00d55f2b604090c5eb56a9e445de1e1c31fc86690fd2f368e5a7b7a8ea37a08f",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 50,
+          "kind": 5,
+          "tags": [
+            ["e", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+          ],
+          "content": "",
+          "sig": "58cfd1dc2401701c5121367820b0fbac7e5a05f184bd781a8918731a1ed4a8f2e50dee2260ff1b8c4b9c1ac7767e376d9860aabf5fb46dcf460b0cdac215ad3c"
+        }
+      },
+      "expected": {
+        "variant": "deletion_request",
+        "contract_id": "radroots.social.deletion_request.v1",
+        "event_id": "00d55f2b604090c5eb56a9e445de1e1c31fc86690fd2f368e5a7b7a8ea37a08f"
+      }
+    },
+    {
+      "id": "event_admit_verified_food_availability_008",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "794251d2341134908ee28526447cb8a54bdd608917166fd3678f65e578fbb8c7",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1700000060,
+          "kind": 30402,
+          "tags": [
+            ["d", "nantes-carrots"],
+            ["title", "Nantes Carrots"],
+            ["summary", "Fresh bunches"],
+            ["published_at", "1700000000"],
+            ["location", "Central Saanich, BC"],
+            ["price", "3", "CAD"],
+            ["radroots:price_unit", "lb"],
+            ["status", "active"],
+            ["t", "vegetables"],
+            ["g", "c28hr"]
+          ],
+          "content": "Carrots available this week.",
+          "sig": "b9d0da50b69689fdd71adc0d698b3e2d04e53c94ec31e23496b4d2fdb96bc1719c5d626881f407682f287f2a5d2bc57159f70a8cd3d1aaae96bd1394c5b1ea0a"
+        }
+      },
+      "expected": {
+        "variant": "food_availability",
+        "contract_id": "radroots.food.availability.v1",
+        "event_id": "794251d2341134908ee28526447cb8a54bdd608917166fd3678f65e578fbb8c7"
+      }
+    },
+    {
+      "id": "event_admit_verified_operational_fallback_009",
+      "kind": "event.admit_verified.valid",
+      "input": {
+        "event": {
+          "id": "6739ed38175521d1b8a64592ec3407332ee24449e1e7353fd8f721c0995b9d8f",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "created_at": 1700000000,
+          "kind": 30402,
+          "tags": [
+            ["d", "AAAAAAAAAAAAAAAAAAAAAg"],
+            ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"],
+            ["a", "30340:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:AAAAAAAAAAAAAAAAAAAAAA"],
+            ["key", "carrot-nantes"],
+            ["title", "Nantes Carrots"],
+            ["category", "produce"],
+            ["summary", "Fresh bunches harvested in Saanich"],
+            ["published_at", "1700000000"],
+            ["radroots:primary_bin", "bunch"],
+            ["radroots:bin", "bunch", "1", "each"],
+            ["radroots:price", "bunch", "4", "CAD", "1", "each"],
+            ["price", "4", "CAD"],
+            ["inventory", "24"],
+            ["status", "active"],
+            ["delivery", "pickup"],
+            ["location", "Saanich Peninsula", "Victoria", "BC", "CA"],
+            ["g", "c28hr"]
+          ],
+          "content": "# Nantes Carrots\n\nFresh bunches harvested in Saanich",
+          "sig": "ef3413c4ac4be3f748fcb51b3e5b9b03c590f5f814dbd6ab3f2f2c26dbc87eb1347cefbe97abacce60f0c4530848695e766d3a950350c72089813b3318a3f944"
+        }
+      },
+      "expected": {
+        "variant": "contract_validated",
+        "contract_id": "radroots.operational_listing.published.v1",
+        "event_id": "6739ed38175521d1b8a64592ec3407332ee24449e1e7353fd8f721c0995b9d8f"
+      }
+    },
+    {
+      "id": "event_admit_verified_unsupported_kind_010",
+      "kind": "event.admit_verified.invalid",
+      "input": {
+        "event": {
+          "id": "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958",
+          "pubkey": "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+          "created_at": 1800000104,
+          "kind": 65535,
+          "tags": [],
+          "content": "maximum-kind",
+          "sig": "d79b19843a0bfd769c02c73866d44a3a06f7b11e107a5257971b60e700aa25565802fd3a7eed4042fe8db7d709a465e5f61478eb8291178831bf48f6b0980671"
+        }
+      },
+      "expected": {
+        "error_variant": "contract_match",
+        "error_code": "unsupported_kind",
+        "event_id": "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958"
+      }
+    },
+    {
+      "id": "event_admit_verified_generic_nip99_excluded_011",
+      "kind": "event.admit_verified.invalid",
+      "input": {
+        "event": {
+          "id": "0d65719b6e73a64f55d95c38ba46e25e222a893d4ec0cdfe83747b1269118d3d",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1700000060,
+          "kind": 30402,
+          "tags": [
+            ["d", "generic-offer"],
+            ["title", "Generic Offer"]
+          ],
+          "content": "Carrots available this week.",
+          "sig": "e533df401a4c6ddfd7dcfd2b3525e9fb8938748dcdc9492aa617ec50d966554511853704929b88b7fe791f3a36659f341b20245182574dd5e5353fa80f57d441"
+        }
+      },
+      "expected": {
+        "error_variant": "contract_match",
+        "error_code": "unsupported_shape",
+        "event_id": "0d65719b6e73a64f55d95c38ba46e25e222a893d4ec0cdfe83747b1269118d3d"
+      }
+    },
+    {
+      "id": "event_admit_verified_operational_invalid_shape_012",
+      "kind": "event.admit_verified.invalid",
+      "input": {
+        "event": {
+          "id": "c9e41f7d91b036e21fdce11ab88a5eda6cc19c93875f160f7632b1a844a59d40",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1700000060,
+          "kind": 30402,
+          "tags": [
+            ["radroots:bin"],
+            ["delivery"]
+          ],
+          "content": "Carrots available this week.",
+          "sig": "1fc38e6183061bb64f2337941b96a6cc75067b85aa46b4780bd395f62961b54569872c51090bec9f97185add686e3e6e11a1aa0c593d63266c433a614f2d90af"
+        }
+      },
+      "expected": {
+        "error_variant": "contract_validation",
+        "error_code": "missing_tag",
+        "event_id": "c9e41f7d91b036e21fdce11ab88a5eda6cc19c93875f160f7632b1a844a59d40"
+      }
+    },
+    {
+      "id": "event_admit_verified_ambiguous_food_markers_013",
+      "kind": "event.admit_verified.invalid",
+      "input": {
+        "event": {
+          "id": "1e40dd34180c85871cc1a7369290876e004d56890ebca9a619f4c1f61e46d866",
+          "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "created_at": 1700000060,
+          "kind": 30402,
+          "tags": [
+            ["radroots:price_unit"],
+            ["radroots:price"]
+          ],
+          "content": "Carrots available this week.",
+          "sig": "1da60ee3d831adae2aeb61df60c2e14f7168b696cf50a9362f326119d5c4d5a03dd8d6da1c9b10a29c3dd4ffbbfbe76404d758ee149bb56b13e2fe14eece385f"
+        }
+      },
+      "expected": {
+        "error_variant": "food_availability",
+        "error_code": "food_profile_ambiguous",
+        "event_id": "1e40dd34180c85871cc1a7369290876e004d56890ebca9a619f4c1f61e46d866"
+      }
+    }
+  ]
+}

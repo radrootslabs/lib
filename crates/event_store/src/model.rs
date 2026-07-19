@@ -1,8 +1,5 @@
 use crate::RadrootsEventStoreError;
-use radroots_event::RadrootsEventEnvelope;
-use radroots_event::contract::{
-    RadrootsContractMatchError, RadrootsEventClass, RadrootsTagSemantic, RadrootsTagValueType,
-};
+use radroots_event::contract::{RadrootsTagSemantic, RadrootsTagValueType};
 use radroots_event::draft::RadrootsSignedEvent;
 use radroots_event::event_head::RadrootsEventHeadDecision;
 use radroots_event::ids::{
@@ -11,80 +8,33 @@ use radroots_event::ids::{
 };
 use radroots_event::trade::RadrootsTradeMutationKindV1;
 use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::{RadrootsEventEnvelope, RadrootsEventKind, RadrootsEventKindClass};
+use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventVerificationStatus {
-    NotChecked,
-    IdVerified,
-    Verified,
-    IdMismatch,
-    SignatureInvalid,
-    MalformedEnvelope,
+pub enum RadrootsEventAdmissionStatus {
+    Admitted,
+    Unsupported,
+    Invalid,
 }
 
-impl RadrootsEventVerificationStatus {
+impl RadrootsEventAdmissionStatus {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::NotChecked => "not_checked",
-            Self::IdVerified => "id_verified",
-            Self::Verified => "verified",
-            Self::IdMismatch => "id_mismatch",
-            Self::SignatureInvalid => "signature_invalid",
-            Self::MalformedEnvelope => "malformed_envelope",
+            Self::Admitted => "admitted",
+            Self::Unsupported => "unsupported",
+            Self::Invalid => "invalid",
         }
     }
 
     pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
         match value {
-            "not_checked" => Ok(Self::NotChecked),
-            "id_verified" => Ok(Self::IdVerified),
-            "verified" => Ok(Self::Verified),
-            "id_mismatch" => Ok(Self::IdMismatch),
-            "signature_invalid" => Ok(Self::SignatureInvalid),
-            "malformed_envelope" => Ok(Self::MalformedEnvelope),
-            _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
-                field: "verification_status",
-                value: value.to_owned(),
-            }),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventContractStatus {
-    Supported,
-    UnsupportedKind(u32),
-    UnsupportedShape(u32),
-    AmbiguousShape(u32),
-}
-
-impl RadrootsEventContractStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Supported => "supported",
-            Self::UnsupportedKind(_) => "unsupported_kind",
-            Self::UnsupportedShape(_) => "unsupported_shape",
-            Self::AmbiguousShape(_) => "ambiguous_shape",
-        }
-    }
-
-    pub fn from_match_error(error: RadrootsContractMatchError) -> Self {
-        match error {
-            RadrootsContractMatchError::UnsupportedKind(kind) => Self::UnsupportedKind(kind),
-            RadrootsContractMatchError::UnsupportedShape(kind) => Self::UnsupportedShape(kind),
-            RadrootsContractMatchError::AmbiguousShape(kind) => Self::AmbiguousShape(kind),
-        }
-    }
-
-    pub fn parse(value: &str, kind: u32) -> Result<Self, RadrootsEventStoreError> {
-        match value {
-            "supported" => Ok(Self::Supported),
-            "unsupported_kind" => Ok(Self::UnsupportedKind(kind)),
-            "unsupported_shape" => Ok(Self::UnsupportedShape(kind)),
-            "ambiguous_shape" => Ok(Self::AmbiguousShape(kind)),
+            "admitted" => Ok(Self::Admitted),
+            "unsupported" => Ok(Self::Unsupported),
+            "invalid" => Ok(Self::Invalid),
             _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
                 field: "contract_status",
                 value: value.to_owned(),
@@ -111,12 +61,12 @@ impl StoredEventClass {
         }
     }
 
-    pub fn from_event_class(value: RadrootsEventClass) -> Self {
+    pub fn from_event_kind_class(value: RadrootsEventKindClass) -> Self {
         match value {
-            RadrootsEventClass::Regular => Self::Regular,
-            RadrootsEventClass::Replaceable => Self::Replaceable,
-            RadrootsEventClass::Addressable => Self::Addressable,
-            RadrootsEventClass::Ephemeral => Self::Ephemeral,
+            RadrootsEventKindClass::Regular => Self::Regular,
+            RadrootsEventKindClass::Replaceable => Self::Replaceable,
+            RadrootsEventKindClass::Ephemeral => Self::Ephemeral,
+            RadrootsEventKindClass::Addressable => Self::Addressable,
         }
     }
 
@@ -222,18 +172,30 @@ impl RadrootsTransportObservation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventIngest {
-    pub signed_event: RadrootsSignedEvent,
-    pub observed_at_ms: i64,
-    pub transport_observation: Option<RadrootsTransportObservation>,
+    verified_event: RadrootsSignatureVerifiedEvent,
+    raw_json: String,
+    observed_at_ms: i64,
+    transport_observation: Option<RadrootsTransportObservation>,
 }
 
 impl RadrootsEventIngest {
-    pub fn new(signed_event: RadrootsSignedEvent, observed_at_ms: i64) -> Self {
-        Self {
-            signed_event,
+    #[cfg(test)]
+    pub(crate) fn new(signed_event: RadrootsSignedEvent, observed_at_ms: i64) -> Self {
+        Self::from_signed_event(signed_event, observed_at_ms)
+            .expect("test event must have a valid NIP-01 signature")
+    }
+
+    pub fn from_signed_event(
+        signed_event: RadrootsSignedEvent,
+        observed_at_ms: i64,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        let verified_event = verify_nip01_event(signed_event.envelope().clone())?;
+        Ok(Self {
+            verified_event,
+            raw_json: signed_event.raw_json().to_owned(),
             observed_at_ms,
             transport_observation: None,
-        }
+        })
     }
 
     pub fn from_raw_json(
@@ -243,7 +205,7 @@ impl RadrootsEventIngest {
         let raw_json = raw_json.into();
         let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
         let signed_event = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)?;
-        Ok(Self::new(signed_event, observed_at_ms))
+        Self::from_signed_event(signed_event, observed_at_ms)
     }
 
     pub fn with_observation(mut self, observation: RadrootsTransportObservation) -> Self {
@@ -252,28 +214,38 @@ impl RadrootsEventIngest {
     }
 
     pub fn event(&self) -> &RadrootsEventEnvelope {
-        self.signed_event.envelope()
+        self.verified_event.event()
+    }
+
+    pub fn verified_event(&self) -> &RadrootsSignatureVerifiedEvent {
+        &self.verified_event
     }
 
     pub fn raw_json(&self) -> &str {
-        self.signed_event.raw_json()
+        self.raw_json.as_str()
+    }
+
+    pub fn observed_at_ms(&self) -> i64 {
+        self.observed_at_ms
+    }
+
+    pub fn transport_observation(&self) -> Option<&RadrootsTransportObservation> {
+        self.transport_observation.as_ref()
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventHeadStoreDecision {
+pub enum RadrootsRawHeadDecision {
     Applied,
     NotHeadSelected,
     NotPersisted,
-    NotProjectionEligible,
     SkippedDuplicate,
     SkippedOlder,
     SkippedSameTimestampHigherEventId,
-    Malformed,
-    Unsupported,
+    MalformedCoordinate,
 }
 
-impl RadrootsEventHeadStoreDecision {
+impl RadrootsRawHeadDecision {
     pub fn from_protocol(value: &RadrootsEventHeadDecision) -> Self {
         match value {
             RadrootsEventHeadDecision::Applied(_) => Self::Applied,
@@ -282,34 +254,57 @@ impl RadrootsEventHeadStoreDecision {
             RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId => {
                 Self::SkippedSameTimestampHigherEventId
             }
-            RadrootsEventHeadDecision::CoordinateMismatch => Self::Malformed,
+            RadrootsEventHeadDecision::CoordinateMismatch => Self::MalformedCoordinate,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsEventPersistence {
+    Inserted { seq: i64 },
+    Duplicate { seq: i64 },
+    NotPersisted,
+}
+
+impl RadrootsEventPersistence {
+    pub const fn sequence(&self) -> Option<i64> {
+        match self {
+            Self::Inserted { seq } | Self::Duplicate { seq } => Some(*seq),
+            Self::NotPersisted => None,
+        }
+    }
+
+    pub const fn is_inserted(&self) -> bool {
+        matches!(self, Self::Inserted { .. })
+    }
+
+    pub const fn is_duplicate(&self) -> bool {
+        matches!(self, Self::Duplicate { .. })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventIngestReceipt {
-    pub seq: i64,
+    pub persistence: RadrootsEventPersistence,
     pub event_id: String,
-    pub inserted: bool,
-    pub verification_status: RadrootsEventVerificationStatus,
-    pub contract_status: RadrootsEventContractStatus,
+    pub admission_status: RadrootsEventAdmissionStatus,
+    pub admission_code: Option<String>,
     pub contract_id: Option<String>,
-    pub projection_eligible: bool,
-    pub head_decision: RadrootsEventHeadStoreDecision,
+    pub valid_stream_eligible: bool,
+    pub raw_head_decision: RadrootsRawHeadDecision,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventStoreStatusSummary {
     pub total_events: i64,
-    pub projection_eligible_events: i64,
+    pub valid_stream_events: i64,
     pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsStoredEvent {
+pub struct RadrootsStoredRawEvent {
     pub seq: i64,
     pub event_id: String,
     pub pubkey: String,
@@ -319,13 +314,65 @@ pub struct RadrootsStoredEvent {
     pub content: String,
     pub sig: String,
     pub raw_json: String,
-    pub verification_status: RadrootsEventVerificationStatus,
-    pub contract_status: RadrootsEventContractStatus,
+    pub admission_status: RadrootsEventAdmissionStatus,
     pub contract_id: Option<String>,
-    pub event_class: Option<StoredEventClass>,
-    pub projection_eligible: bool,
+    pub event_class: StoredEventClass,
+    pub valid_stream_eligible: bool,
     pub inserted_at_ms: i64,
     pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredValidEvent {
+    raw_event: RadrootsStoredRawEvent,
+}
+
+impl RadrootsStoredValidEvent {
+    pub(crate) fn try_from_raw(
+        raw_event: RadrootsStoredRawEvent,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        let expected_class =
+            StoredEventClass::from_event_kind_class(RadrootsEventKind::new(raw_event.kind).class());
+        if raw_event.admission_status != RadrootsEventAdmissionStatus::Admitted
+            || raw_event.event_class != expected_class
+            || raw_event.event_class == StoredEventClass::Ephemeral
+            || !raw_event.valid_stream_eligible
+        {
+            return Err(
+                RadrootsEventStoreError::StoredRawEventClassificationInconsistent {
+                    event_id: raw_event.event_id,
+                },
+            );
+        }
+        Ok(Self { raw_event })
+    }
+
+    pub fn raw_event(&self) -> &RadrootsStoredRawEvent {
+        &self.raw_event
+    }
+
+    pub fn into_raw_event(self) -> RadrootsStoredRawEvent {
+        self.raw_event
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredVisibleEvent {
+    valid_event: RadrootsStoredValidEvent,
+}
+
+impl RadrootsStoredVisibleEvent {
+    pub(crate) fn new(valid_event: RadrootsStoredValidEvent) -> Self {
+        Self { valid_event }
+    }
+
+    pub fn valid_event(&self) -> &RadrootsStoredValidEvent {
+        &self.valid_event
+    }
+
+    pub fn into_valid_event(self) -> RadrootsStoredValidEvent {
+        self.valid_event
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -341,7 +388,7 @@ pub struct RadrootsStoredEventTag {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsStoredEventHead {
+pub struct RadrootsStoredRawEventHead {
     pub coordinate_type: StoredEventClass,
     pub kind: u32,
     pub pubkey: String,
@@ -349,6 +396,37 @@ pub struct RadrootsStoredEventHead {
     pub event_id: String,
     pub created_at: u64,
     pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsStoredVisibleEventHead {
+    raw_head: RadrootsStoredRawEventHead,
+    event: RadrootsStoredVisibleEvent,
+}
+
+impl RadrootsStoredVisibleEventHead {
+    pub(crate) fn new(
+        raw_head: RadrootsStoredRawEventHead,
+        event: RadrootsStoredVisibleEvent,
+    ) -> Self {
+        Self { raw_head, event }
+    }
+
+    pub fn raw_head(&self) -> &RadrootsStoredRawEventHead {
+        &self.raw_head
+    }
+
+    pub fn event(&self) -> &RadrootsStoredVisibleEvent {
+        &self.event
+    }
+}
+
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsEventVisibility {
+    Visible,
+    NotAdmitted,
+    NotCurrent { raw_head_event_id: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -539,63 +617,30 @@ mod tests {
     use radroots_event::event_head::{
         RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     };
-    use radroots_event::ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey};
+    use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 
     #[test]
-    fn contract_status_event_class_and_observation_values_roundtrip() {
-        assert_eq!(
-            RadrootsEventContractStatus::from_match_error(
-                RadrootsContractMatchError::UnsupportedKind(7)
-            ),
-            RadrootsEventContractStatus::UnsupportedKind(7)
-        );
-        assert_eq!(
-            RadrootsEventContractStatus::from_match_error(
-                RadrootsContractMatchError::UnsupportedShape(8)
-            ),
-            RadrootsEventContractStatus::UnsupportedShape(8)
-        );
-        assert_eq!(
-            RadrootsEventContractStatus::from_match_error(
-                RadrootsContractMatchError::AmbiguousShape(9)
-            ),
-            RadrootsEventContractStatus::AmbiguousShape(9)
-        );
-
+    fn admission_status_event_class_and_observation_values_roundtrip() {
         for (status, expected) in [
-            (RadrootsEventContractStatus::Supported, "supported"),
-            (
-                RadrootsEventContractStatus::UnsupportedKind(1),
-                "unsupported_kind",
-            ),
-            (
-                RadrootsEventContractStatus::UnsupportedShape(2),
-                "unsupported_shape",
-            ),
-            (
-                RadrootsEventContractStatus::AmbiguousShape(3),
-                "ambiguous_shape",
-            ),
+            (RadrootsEventAdmissionStatus::Admitted, "admitted"),
+            (RadrootsEventAdmissionStatus::Unsupported, "unsupported"),
+            (RadrootsEventAdmissionStatus::Invalid, "invalid"),
         ] {
             assert_eq!(status.as_str(), expected);
             assert_eq!(
-                RadrootsEventContractStatus::parse(expected, 99).expect("status"),
-                match status {
-                    RadrootsEventContractStatus::Supported =>
-                        RadrootsEventContractStatus::Supported,
-                    RadrootsEventContractStatus::UnsupportedKind(_) => {
-                        RadrootsEventContractStatus::UnsupportedKind(99)
-                    }
-                    RadrootsEventContractStatus::UnsupportedShape(_) => {
-                        RadrootsEventContractStatus::UnsupportedShape(99)
-                    }
-                    RadrootsEventContractStatus::AmbiguousShape(_) => {
-                        RadrootsEventContractStatus::AmbiguousShape(99)
-                    }
-                }
+                RadrootsEventAdmissionStatus::parse(expected).expect("status"),
+                status
             );
         }
-        assert!(RadrootsEventContractStatus::parse("bad", 1).is_err());
+        for legacy in [
+            "supported",
+            "unsupported_kind",
+            "unsupported_shape",
+            "ambiguous_shape",
+        ] {
+            assert!(RadrootsEventAdmissionStatus::parse(legacy).is_err());
+        }
+        assert!(RadrootsEventAdmissionStatus::parse("bad").is_err());
 
         for class in [
             StoredEventClass::Regular,
@@ -609,22 +654,35 @@ mod tests {
             );
         }
         assert_eq!(
-            StoredEventClass::from_event_class(RadrootsEventClass::Regular),
+            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Regular),
             StoredEventClass::Regular
         );
         assert_eq!(
-            StoredEventClass::from_event_class(RadrootsEventClass::Replaceable),
+            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Replaceable),
             StoredEventClass::Replaceable
         );
         assert_eq!(
-            StoredEventClass::from_event_class(RadrootsEventClass::Addressable),
+            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Addressable),
             StoredEventClass::Addressable
         );
         assert_eq!(
-            StoredEventClass::from_event_class(RadrootsEventClass::Ephemeral),
+            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Ephemeral),
             StoredEventClass::Ephemeral
         );
         assert!(StoredEventClass::parse("bad").is_err());
+
+        let inserted = RadrootsEventPersistence::Inserted { seq: 7 };
+        assert_eq!(inserted.sequence(), Some(7));
+        assert!(inserted.is_inserted());
+        assert!(!inserted.is_duplicate());
+        let duplicate = RadrootsEventPersistence::Duplicate { seq: 7 };
+        assert_eq!(duplicate.sequence(), Some(7));
+        assert!(!duplicate.is_inserted());
+        assert!(duplicate.is_duplicate());
+        let not_persisted = RadrootsEventPersistence::NotPersisted;
+        assert_eq!(not_persisted.sequence(), None);
+        assert!(!not_persisted.is_inserted());
+        assert!(!not_persisted.is_duplicate());
 
         for observation_type in [
             RadrootsTransportObservationType::Fetch,
@@ -678,7 +736,7 @@ mod tests {
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             )
             .expect("pubkey"),
-            d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
+            d_tag: "opaque d value".to_owned(),
         };
         let current = RadrootsCurrentEventHead {
             coordinate,
@@ -690,32 +748,26 @@ mod tests {
         };
 
         assert_eq!(
-            RadrootsEventHeadStoreDecision::from_protocol(&RadrootsEventHeadDecision::Applied(
-                current
-            )),
-            RadrootsEventHeadStoreDecision::Applied
+            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::Applied(current)),
+            RadrootsRawHeadDecision::Applied
         );
         assert_eq!(
-            RadrootsEventHeadStoreDecision::from_protocol(
-                &RadrootsEventHeadDecision::SkippedDuplicate
-            ),
-            RadrootsEventHeadStoreDecision::SkippedDuplicate
+            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::SkippedDuplicate),
+            RadrootsRawHeadDecision::SkippedDuplicate
         );
         assert_eq!(
-            RadrootsEventHeadStoreDecision::from_protocol(&RadrootsEventHeadDecision::SkippedOlder),
-            RadrootsEventHeadStoreDecision::SkippedOlder
+            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::SkippedOlder),
+            RadrootsRawHeadDecision::SkippedOlder
         );
         assert_eq!(
-            RadrootsEventHeadStoreDecision::from_protocol(
+            RadrootsRawHeadDecision::from_protocol(
                 &RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId
             ),
-            RadrootsEventHeadStoreDecision::SkippedSameTimestampHigherEventId
+            RadrootsRawHeadDecision::SkippedSameTimestampHigherEventId
         );
         assert_eq!(
-            RadrootsEventHeadStoreDecision::from_protocol(
-                &RadrootsEventHeadDecision::CoordinateMismatch
-            ),
-            RadrootsEventHeadStoreDecision::Malformed
+            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::CoordinateMismatch),
+            RadrootsRawHeadDecision::MalformedCoordinate
         );
 
         for (semantic, expected) in [

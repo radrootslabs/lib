@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
+mod admission_authority;
 mod comment_authority;
 mod deletion_authority;
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
+use admission_authority::validate_admission_operation_authority;
 use comment_authority::{
     COMMENT_CASE_KINDS, COMMENT_CONFORMANCE_VECTOR_RELATIVE, COMMENT_OPERATION_EXPECTATIONS,
     COMMENT_VECTOR_EXPECTATIONS, REQUIRED_COMMENT_PUBLIC_TYPES,
@@ -47,7 +49,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 18] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 19] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -79,6 +81,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 18] = [
     (
         "contracts/conformance/vectors/deletion/suppression.v1.json",
         "crates/event_codec/tests/fixtures/deletion_suppression.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/event/verified_admission.v1.json",
+        "crates/event_codec/tests/fixtures/verified_admission.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -5431,6 +5437,7 @@ fn validate_capsule_operation_authority(
     )?;
     validate_comment_operation_authority(operations_manifest, workspace_root)?;
     validate_deletion_operation_authority(operations_manifest, workspace_root)?;
+    validate_admission_operation_authority(operations_manifest, workspace_root)?;
     validate_post_operation_authority(operations_manifest, workspace_root)?;
     validate_calendar_operation_authority(operations_manifest, &shared_types)?;
     validate_food_availability_operation_authority(operations_manifest, workspace_root)
@@ -8420,6 +8427,18 @@ mod tests {
         (manifest, vector)
     }
 
+    fn current_admission_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
+        let root = workspace_root();
+        let manifest =
+            parse_toml::<OperationsContractManifest>(&root.join("contracts/operations.toml"))
+                .expect("current operations manifest");
+        let vector = parse_json::<ConformanceVectorFile>(
+            &root.join(admission_authority::ADMISSION_CONFORMANCE_VECTOR_RELATIVE),
+        )
+        .expect("current verified admission conformance vector");
+        (manifest, vector)
+    }
+
     fn current_comment_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
         let root = workspace_root();
         let manifest =
@@ -9282,6 +9301,47 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let error = validate_post_operation_inventory(&manifest, &vector)
             .expect_err("post vector count drift must fail");
         assert!(error.contains("post conformance vector inventory drift"));
+    }
+
+    #[test]
+    fn verified_admission_authority_rejects_manifest_fixture_and_secret_drift() {
+        let (manifest, vector) = current_admission_authority();
+        admission_authority::validate_admission_operation_inventory(&manifest, &vector)
+            .expect("current verified admission authority");
+
+        let (mut manifest, vector) = current_admission_authority();
+        manifest.operations.remove("event_admit_verified");
+        let error = admission_authority::validate_admission_operation_inventory(&manifest, &vector)
+            .expect_err("missing central admission operation must fail");
+        assert!(error.contains("operation authority drift"), "{error}");
+
+        let (mut manifest, vector) = current_admission_authority();
+        manifest
+            .shared_types
+            .public
+            .retain(|value| value != "RadrootsEventAdmissionError");
+        let error = admission_authority::validate_admission_operation_inventory(&manifest, &vector)
+            .expect_err("missing central admission public type must fail");
+        assert!(error.contains("requires shared public type"), "{error}");
+
+        let (manifest, mut vector) = current_admission_authority();
+        vector.vectors[0]
+            .input
+            .as_object_mut()
+            .expect("admission input")
+            .insert(
+                "secret_key".to_string(),
+                Value::String("forbidden".to_string()),
+            );
+        let error = admission_authority::validate_admission_operation_inventory(&manifest, &vector)
+            .expect_err("fixture secret material must fail exact input inventory");
+        assert!(error.contains("field inventory drift"), "{error}");
+
+        let (manifest, mut vector) = current_admission_authority();
+        vector.vectors[0].id = "renamed_admission_case".to_string();
+        let error = admission_authority::validate_admission_operation_inventory(&manifest, &vector)
+            .expect_err("renamed admission vector must fail exact inventory");
+        assert!(error.contains("unexpected id"), "{error}");
     }
 
     #[test]

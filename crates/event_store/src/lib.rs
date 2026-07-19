@@ -16,14 +16,15 @@ pub use error::RadrootsEventStoreError;
 pub use migrations::{EVENT_STORE_MIGRATION_DOWN, EVENT_STORE_MIGRATION_UP};
 #[cfg(feature = "sqlite")]
 pub use model::{
-    RadrootsEventContractStatus, RadrootsEventHeadStoreDecision, RadrootsEventIngest,
-    RadrootsEventIngestReceipt, RadrootsEventStoreStatusSummary, RadrootsEventVerificationStatus,
-    RadrootsProjectionCursor, RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag,
-    RadrootsStoredSellerReservation, RadrootsStoredSellerReservationLine,
-    RadrootsStoredTradeMissingParent, RadrootsStoredTradeMutation,
-    RadrootsStoredTradeMutationParent, RadrootsStoredTradeTransportEnvelope,
-    RadrootsTradeProjectionCheckpoint, RadrootsTransportObservation,
-    RadrootsTransportObservationType, StoredEventClass,
+    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
+    RadrootsEventPersistence, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
+    RadrootsProjectionCursor, RadrootsRawHeadDecision, RadrootsStoredEventTag,
+    RadrootsStoredRawEvent, RadrootsStoredRawEventHead, RadrootsStoredSellerReservation,
+    RadrootsStoredSellerReservationLine, RadrootsStoredTradeMissingParent,
+    RadrootsStoredTradeMutation, RadrootsStoredTradeMutationParent,
+    RadrootsStoredTradeTransportEnvelope, RadrootsStoredValidEvent, RadrootsStoredVisibleEvent,
+    RadrootsStoredVisibleEventHead, RadrootsTradeProjectionCheckpoint,
+    RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
 };
 #[cfg(feature = "sqlite")]
 pub use store::{

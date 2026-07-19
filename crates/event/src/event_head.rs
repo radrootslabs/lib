@@ -8,7 +8,7 @@ use crate::contract::{
 };
 use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey};
 use crate::tags::TAG_D;
-use crate::{RadrootsEventEnvelope, RadrootsEventTag};
+use crate::{RadrootsEventEnvelope, RadrootsEventKindClass, RadrootsEventTag};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsEventHeadCoordinate {
@@ -19,7 +19,7 @@ pub enum RadrootsEventHeadCoordinate {
     Addressable {
         kind: u32,
         pubkey: RadrootsPublicKey,
-        d_tag: RadrootsDTag,
+        d_tag: String,
     },
 }
 
@@ -104,7 +104,7 @@ pub fn event_head_candidate_for_class(
                 RadrootsEventHeadCoordinate::Addressable {
                     kind: event.kind_u32(),
                     pubkey,
-                    d_tag,
+                    d_tag: d_tag.into_string(),
                 }
             };
             RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
@@ -114,6 +114,38 @@ pub fn event_head_candidate_for_class(
             })
         }
     }
+}
+
+/// Derives the raw NIP-01 head candidate from the numeric event-kind class.
+///
+/// This deliberately does not identify or validate a Radroots product
+/// contract. Raw replacement ordering must include every signature-verified
+/// replaceable or addressable event, including unsupported product shapes.
+pub fn event_head_candidate_for_nip01_event(
+    event: &RadrootsEventEnvelope,
+) -> RadrootsEventHeadCandidateResult {
+    let coordinate = match event.kind_class() {
+        RadrootsEventKindClass::Regular => {
+            return RadrootsEventHeadCandidateResult::NotHeadSelected;
+        }
+        RadrootsEventKindClass::Ephemeral => {
+            return RadrootsEventHeadCandidateResult::NotPersisted;
+        }
+        RadrootsEventKindClass::Replaceable => RadrootsEventHeadCoordinate::Replaceable {
+            kind: event.kind_u32(),
+            pubkey: event.author().clone(),
+        },
+        RadrootsEventKindClass::Addressable => RadrootsEventHeadCoordinate::Addressable {
+            kind: event.kind_u32(),
+            pubkey: event.author().clone(),
+            d_tag: String::from(first_tag_value(event.tag_slices(), TAG_D).unwrap_or("")),
+        },
+    };
+    RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
+        coordinate,
+        event_id: event.id().clone(),
+        created_at: event.created_at_u64(),
+    })
 }
 
 pub fn event_head_candidate_for_contract(
@@ -282,7 +314,7 @@ mod tests {
             RadrootsEventHeadCoordinate::Addressable {
                 kind: 30023,
                 pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
-                d_tag: RadrootsDTag::parse("article-1").unwrap()
+                d_tag: "article-1".to_owned()
             }
         );
     }
@@ -372,6 +404,98 @@ mod tests {
     }
 
     #[test]
+    fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() {
+        let replaceable = event(19_999, &hex_64('1'), &hex_64('a'), 1, Vec::new());
+        let replaceable = expect_candidate(event_head_candidate_for_nip01_event(&replaceable));
+        assert_eq!(
+            replaceable.coordinate,
+            RadrootsEventHeadCoordinate::Replaceable {
+                kind: 19_999,
+                pubkey: RadrootsPublicKey::parse(hex_64('a')).unwrap(),
+            }
+        );
+
+        let addressable = event(
+            39_999,
+            &hex_64('2'),
+            &hex_64('b'),
+            2,
+            vec![vec![TAG_D.to_string(), "unsupported".to_string()]],
+        );
+        let addressable = expect_candidate(event_head_candidate_for_nip01_event(&addressable));
+        assert_eq!(
+            addressable.coordinate,
+            RadrootsEventHeadCoordinate::Addressable {
+                kind: 39_999,
+                pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+                d_tag: "unsupported".to_owned(),
+            }
+        );
+
+        let regular = event(40_000, &hex_64('3'), &hex_64('c'), 3, Vec::new());
+        assert_eq!(
+            event_head_candidate_for_nip01_event(&regular),
+            RadrootsEventHeadCandidateResult::NotHeadSelected
+        );
+    }
+
+    #[test]
+    fn raw_nip01_addressable_coordinates_treat_d_as_opaque_protocol_data() {
+        for (tags, expected) in [
+            (Vec::new(), ""),
+            (vec![vec![TAG_D.to_owned(), String::new()]], ""),
+            (
+                vec![
+                    vec![TAG_D.to_owned()],
+                    vec![TAG_D.to_owned(), "ignored".to_owned()],
+                ],
+                "",
+            ),
+            (
+                vec![vec![TAG_D.to_owned(), "not a product d".to_owned()]],
+                "not a product d",
+            ),
+            (
+                vec![vec![TAG_D.to_owned(), "line\nbreak".to_owned()]],
+                "line\nbreak",
+            ),
+            (
+                vec![
+                    vec![TAG_D.to_owned(), "first value".to_owned()],
+                    vec![TAG_D.to_owned(), "second-value".to_owned()],
+                ],
+                "first value",
+            ),
+        ] {
+            let event = event(39_999, &hex_64('2'), &hex_64('b'), 2, tags);
+            let candidate = expect_candidate(event_head_candidate_for_nip01_event(&event));
+            assert_eq!(
+                candidate.coordinate,
+                RadrootsEventHeadCoordinate::Addressable {
+                    kind: 39_999,
+                    pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+                    d_tag: expected.to_owned(),
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn product_addressable_coordinates_retain_strict_d_validation() {
+        for tags in [
+            Vec::new(),
+            vec![vec![TAG_D.to_owned(), String::new()]],
+            vec![vec![TAG_D.to_owned(), "not a product d".to_owned()]],
+        ] {
+            let event = event(30_023, &hex_64('2'), &hex_64('b'), 2, tags);
+            assert!(matches!(
+                event_head_candidate_for_class(&event, RadrootsEventClass::Addressable),
+                RadrootsEventHeadCandidateResult::Malformed(_)
+            ));
+        }
+    }
+
+    #[test]
     fn contract_bridge_uses_addressable_event_classes() {
         let event = event(
             KIND_LIST_SET_GENERIC,
@@ -386,7 +510,7 @@ mod tests {
             RadrootsEventHeadCoordinate::Addressable {
                 kind: KIND_LIST_SET_GENERIC,
                 pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
-                d_tag: RadrootsDTag::parse("member_of.farms").unwrap()
+                d_tag: "member_of.farms".to_owned()
             }
         );
     }

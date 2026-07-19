@@ -23,6 +23,8 @@ pub mod tag_builders;
 pub mod verification;
 pub mod wire;
 
+#[cfg(feature = "serde_json")]
+pub mod admission;
 pub mod app_data;
 pub mod article;
 pub mod calendar;
@@ -69,12 +71,13 @@ pub use manifest::{
     contract_manifest_sha256, knowledge_contract_manifest,
 };
 pub use tag_builders::RadrootsEventTagBuilder;
+pub use verification::{
+    RadrootsContractValidatedEvent, RadrootsIdVerifiedEvent, RadrootsNip01VerificationError,
+    RadrootsSignatureVerifiedEvent, validate_event_contract, verify_event_id,
+    verify_event_signature, verify_nip01_event,
+};
 #[cfg(feature = "knowledge")]
 pub use verification::{
-    RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
-    decode_validated_event, validate_event_contract, verify_and_decode_radroots_event,
-};
-pub use verification::{
-    RadrootsIdVerifiedEvent, RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent,
-    verify_event_id, verify_event_signature, verify_nip01_event,
+    RadrootsDecodeError, RadrootsDecodedEvent, decode_validated_event,
+    verify_and_decode_radroots_event,
 };

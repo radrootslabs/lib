@@ -1,9 +1,9 @@
 use futures::future::BoxFuture;
 use nostr::{EventBuilder, JsonUtil};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::kinds::{KIND_GEOCHAT, KIND_POST};
+use radroots_event::kinds::{KIND_FOLLOW, KIND_GEOCHAT, KIND_POST};
 use radroots_event_store::{
-    RadrootsEventStore, RadrootsEventVerificationStatus, RadrootsTransportObservationRow,
+    RadrootsEventAdmissionStatus, RadrootsEventStore, RadrootsTransportObservationRow,
     RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{
@@ -229,13 +229,23 @@ fn signed_post(content: &str) -> RadrootsSignedEvent {
     signed_event_with_kind_and_hashtag(content, KIND_POST, "soil")
 }
 
+fn signed_ephemeral(content: &str) -> RadrootsSignedEvent {
+    let raw_event = test_event_builder(KIND_GEOCHAT, content, Vec::new())
+        .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
+        .sign_with_keys(&fixture_keys())
+        .expect("signed ephemeral event");
+    let raw_json = raw_event.as_json();
+    let wire = radroots_event::wire::RadrootsNip01EventWire::parse_json(&raw_json).expect("wire");
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+}
+
 fn generic_draft(content: &str) -> RadrootsEventDraft {
     RadrootsEventDraft::new(
-        "radroots.social.geochat.v1",
-        KIND_GEOCHAT,
+        "radroots.social.follow_list.v1",
+        KIND_FOLLOW,
         1_700_000_000,
-        vec![vec!["t".to_owned(), "soil".to_owned()]],
-        content,
+        Vec::new(),
+        serde_json::json!({ "label": content }).to_string(),
         FIXTURE_ALICE_PUBLIC_KEY_HEX,
     )
     .expect("generic draft")
@@ -367,6 +377,26 @@ fn unsupported_raw_event() -> String {
         .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_001))
         .sign_with_keys(&fixture_keys())
         .expect("signed unsupported event");
+    event.as_json()
+}
+
+fn invalid_contract_shape_raw_event() -> String {
+    let event = test_event_builder(
+        KIND_POST,
+        "invalid reply",
+        vec![
+            vec!["t".to_owned(), "soil".to_owned()],
+            vec![
+                "e".to_owned(),
+                "invalid-event-id".to_owned(),
+                String::new(),
+                "root".to_owned(),
+            ],
+        ],
+    )
+    .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_002))
+    .sign_with_keys(&fixture_keys())
+    .expect("signed contract-invalid event");
     event.as_json()
 }
 
@@ -1375,13 +1405,18 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: tampered_raw_event(),
+            raw_json: invalid_contract_shape_raw_event(),
             observed_at_ms: 1_003,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
+            raw_json: tampered_raw_event(),
             observed_at_ms: 1_004,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_TERTIARY_WSS.to_owned(),
+            raw_json: "{not json".to_owned(),
+            observed_at_ms: 1_005,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1405,13 +1440,65 @@ async fn fetch_ingests_events_and_records_transport_observations() {
             .await
             .expect("fetch ingest");
 
-    assert_eq!(receipt.inserted_count, 2);
+    assert_eq!(receipt.inserted_count, 3);
     assert_eq!(receipt.duplicate_count, 1);
+    assert_eq!(receipt.not_persisted_count, 0);
     assert_eq!(receipt.unsupported_count, 1);
+    assert_eq!(receipt.invalid_count, 1);
     assert_eq!(receipt.malformed_count, 2);
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 2);
     assert_eq!(receipt.notice_count, 1);
+    assert_eq!(
+        receipt.inserted_count,
+        receipt.events.iter().filter(|event| event.inserted).count()
+    );
+    assert_eq!(
+        receipt.duplicate_count,
+        receipt
+            .events
+            .iter()
+            .filter(|event| event.duplicate)
+            .count()
+    );
+    assert_eq!(
+        receipt.not_persisted_count,
+        receipt
+            .events
+            .iter()
+            .filter(|event| event.not_persisted)
+            .count()
+    );
+    assert_eq!(
+        receipt.unsupported_count,
+        receipt
+            .events
+            .iter()
+            .filter(|event| event.unsupported)
+            .count()
+    );
+    assert_eq!(
+        receipt.invalid_count,
+        receipt.events.iter().filter(|event| event.invalid).count()
+    );
+    assert_eq!(
+        receipt.malformed_count,
+        receipt
+            .events
+            .iter()
+            .filter(|event| event.malformed)
+            .count()
+    );
+    assert!(receipt.events.iter().all(|event| {
+        usize::from(event.inserted)
+            + usize::from(event.duplicate)
+            + usize::from(event.not_persisted)
+            <= 1
+            && usize::from(event.unsupported)
+                + usize::from(event.invalid)
+                + usize::from(event.malformed)
+                <= 1
+    }));
     assert_eq!(receipt.relay_outcomes.len(), 4);
     assert_eq!(receipt.relay_outcomes[0].relay_url, RELAY_PRIMARY_WSS);
     assert_eq!(
@@ -1443,24 +1530,72 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     );
     assert!(receipt.relay_outcomes[3].relay_outcome.is_none());
     assert_eq!(
-        receipt.events[0].verification_status.as_deref(),
-        Some(RadrootsEventVerificationStatus::Verified.as_str())
+        receipt.events[0].admission_status.as_deref(),
+        Some(RadrootsEventAdmissionStatus::Admitted.as_str())
     );
-    assert!(receipt.events[0].projection_eligible);
+    assert!(receipt.events[0].valid_stream_eligible);
     assert_eq!(
-        receipt.events[1].verification_status.as_deref(),
-        Some(RadrootsEventVerificationStatus::Verified.as_str())
+        receipt.events[1].admission_status.as_deref(),
+        Some(RadrootsEventAdmissionStatus::Admitted.as_str())
     );
-    assert!(!receipt.events[1].projection_eligible);
+    assert!(receipt.events[1].valid_stream_eligible);
     assert_eq!(
-        receipt.events[2].verification_status.as_deref(),
-        Some(RadrootsEventVerificationStatus::Verified.as_str())
+        receipt.events[2].admission_status.as_deref(),
+        Some(RadrootsEventAdmissionStatus::Unsupported.as_str())
     );
-    assert!(!receipt.events[2].projection_eligible);
-    assert_eq!(receipt.events[3].verification_status, None);
-    assert!(!receipt.events[3].projection_eligible);
-    assert_eq!(receipt.events[4].verification_status, None);
-    assert!(!receipt.events[4].projection_eligible);
+    assert!(receipt.events[2].unsupported);
+    assert!(!receipt.events[2].invalid);
+    assert_eq!(
+        receipt.events[2].admission_code.as_deref(),
+        Some("unsupported_kind")
+    );
+    assert!(!receipt.events[2].valid_stream_eligible);
+    assert_eq!(
+        receipt.events[3].admission_status.as_deref(),
+        Some(RadrootsEventAdmissionStatus::Invalid.as_str())
+    );
+    assert!(!receipt.events[3].unsupported);
+    assert!(receipt.events[3].invalid);
+    assert_eq!(
+        receipt.events[3].admission_code.as_deref(),
+        Some("reply_event_id_invalid")
+    );
+    assert!(!receipt.events[3].valid_stream_eligible);
+    assert_eq!(receipt.events[4].admission_status, None);
+    assert!(!receipt.events[4].valid_stream_eligible);
+    assert_eq!(receipt.events[5].admission_status, None);
+    assert!(!receipt.events[5].valid_stream_eligible);
+
+    let serialized = serde_json::to_value(&receipt).expect("serialized fetch receipt");
+    assert!(serialized.get("invalid_count").is_some());
+    assert!(serialized.get("not_persisted_count").is_some());
+    let serialized_event = serialized["events"][0]
+        .as_object()
+        .expect("serialized event receipt");
+    assert_eq!(serialized_event.len(), 14);
+    for field in [
+        "relay_url",
+        "event_id",
+        "inserted",
+        "duplicate",
+        "not_persisted",
+        "unsupported",
+        "invalid",
+        "malformed",
+        "out_of_filter",
+        "skipped_over_limit",
+        "valid_stream_eligible",
+        "admission_status",
+        "admission_code",
+        "message",
+    ] {
+        assert!(
+            serialized_event.contains_key(field),
+            "serialized receipt must contain {field}"
+        );
+    }
+    assert!(!serialized_event.contains_key("projection_eligible"));
+    assert!(!serialized_event.contains_key("verification_status"));
 
     let observations = store
         .observations_for_event(signed.id_str())
@@ -1474,6 +1609,72 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         RadrootsTransportObservationType::Fetch
     );
     assert_eq!(observations[0].observation_count, 2);
+}
+
+#[tokio::test]
+async fn fetch_reports_ephemeral_events_as_not_persisted_without_duplicate_or_store_state() {
+    let signed = signed_ephemeral("live geochat");
+    let event_id = signed.id_str().to_owned();
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: signed.raw_json().to_owned(),
+            observed_at_ms: 1_010,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: signed.raw_json().to_owned(),
+            observed_at_ms: 1_011,
+        },
+    ]);
+    let filter = RadrootsNostrFilter::new()
+        .kind(RadrootsNostrKind::Custom(
+            u16::try_from(KIND_GEOCHAT).expect("ephemeral kind"),
+        ))
+        .limit(10);
+    let request = RadrootsRelayFetchRequest::fetch(1_010, 10, [filter])
+        .expect("ephemeral fetch request")
+        .with_relay_urls([RELAY_PRIMARY_WSS]);
+
+    let receipt = fetch_and_ingest_relay_events(&adapter, &store, request)
+        .await
+        .expect("ephemeral fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 0);
+    assert_eq!(receipt.duplicate_count, 0);
+    assert_eq!(receipt.not_persisted_count, 2);
+    assert_eq!(receipt.malformed_count, 0);
+    assert_eq!(receipt.unsupported_count, 0);
+    assert_eq!(receipt.invalid_count, 0);
+    assert_eq!(receipt.events.len(), 2);
+    assert!(receipt.events.iter().all(|event| {
+        !event.inserted
+            && !event.duplicate
+            && event.not_persisted
+            && event.admission_status.as_deref()
+                == Some(RadrootsEventAdmissionStatus::Admitted.as_str())
+            && event.admission_code.is_none()
+            && !event.valid_stream_eligible
+    }));
+    assert!(
+        store
+            .raw_event(event_id.as_str())
+            .await
+            .expect("raw event")
+            .is_none()
+    );
+    assert!(
+        store
+            .observations_for_event(event_id.as_str())
+            .await
+            .expect("observations")
+            .is_empty()
+    );
+    let summary = store.status_summary().await.expect("status summary");
+    assert_eq!(summary.total_events, 0);
+    assert_eq!(summary.valid_stream_events, 0);
+    assert_eq!(summary.transport_observations, 0);
 }
 
 #[tokio::test]
@@ -1532,21 +1733,21 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     assert!(receipt.events[2].out_of_filter);
     assert!(
         store
-            .get_event(accepted.id_str())
+            .raw_event(accepted.id_str())
             .await
             .expect("accepted lookup")
             .is_some()
     );
     assert!(
         store
-            .get_event(wrong_tag.id_str())
+            .raw_event(wrong_tag.id_str())
             .await
             .expect("wrong tag lookup")
             .is_none()
     );
     assert!(
         store
-            .get_event(wrong_kind_event_id.as_str())
+            .raw_event(wrong_kind_event_id.as_str())
             .await
             .expect("wrong kind lookup")
             .is_none()
@@ -1634,21 +1835,21 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
     );
     assert!(
         store
-            .get_event(accepted_id.as_str())
+            .raw_event(accepted_id.as_str())
             .await
             .expect("accepted lookup")
             .is_some()
     );
     assert!(
         store
-            .get_event(skipped_id.as_str())
+            .raw_event(skipped_id.as_str())
             .await
             .expect("skipped lookup")
             .is_none()
     );
     assert!(
         store
-            .get_event(wrong_tag_id.as_str())
+            .raw_event(wrong_tag_id.as_str())
             .await
             .expect("wrong tag lookup")
             .is_none()
@@ -1782,7 +1983,7 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
     assert_eq!(receipt.eose_count, 1);
     assert!(
         store
-            .get_event(accepted_id.as_str())
+            .raw_event(accepted_id.as_str())
             .await
             .expect("accepted lookup")
             .is_none()
@@ -1790,7 +1991,7 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
 }
 
 #[tokio::test]
-async fn fetch_subscription_mode_and_store_errors_are_reported() {
+async fn fetch_subscription_mode_and_store_errors_are_propagated() {
     let signed = signed_post("subscription");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
@@ -1826,15 +2027,12 @@ async fn fetch_subscription_mode_and_store_errors_are_reported() {
         raw_json: signed.raw_json().to_owned(),
         observed_at_ms: 1_210,
     }]);
-    let receipt =
+    let error =
         fetch_and_ingest_relay_events(&adapter, &closed_store, post_relay_fetch_request(1_210, 10))
             .await
-            .expect("fetch ingest");
+            .expect_err("closed local store must fail the fetch ingest");
 
-    assert_eq!(receipt.inserted_count, 0);
-    assert_eq!(receipt.malformed_count, 1);
-    assert!(receipt.events[0].malformed);
-    assert!(receipt.events[0].message.is_some());
+    assert!(matches!(error, RadrootsRelayTransportError::EventStore(_)));
 }
 
 #[tokio::test]
@@ -3485,11 +3683,14 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
     assert_eq!(receipt.duplicate_count, 0);
     assert_eq!(receipt.malformed_count, 0);
     assert_eq!(receipt.unsupported_count, 0);
+    assert_eq!(receipt.invalid_count, 0);
     assert_eq!(receipt.events.len(), 1_000);
-    assert!(receipt.events.iter().all(|event| event.projection_eligible));
-    let replay = store
-        .events_since_cursor("fetch-smoke", 1_000)
-        .await
-        .expect("replay");
+    assert!(
+        receipt
+            .events
+            .iter()
+            .all(|event| event.valid_stream_eligible)
+    );
+    let replay = store.valid_stream_after(0, 1_000).await.expect("replay");
     assert_eq!(replay.len(), 1_000);
 }

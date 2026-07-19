@@ -20,6 +20,31 @@ contract package.
 - `domains.<domain>.<subdomain>.<action>`
 - standard actions: `publish`, `get`, `list`, `validate`, `encode`, `decode`
 
+## General verified admission rule
+
+`event.admit_verified` is the single trusted contract-admission boundary for a
+`RadrootsSignatureVerifiedEvent`. It never accepts a bare envelope or performs
+signature verification implicitly. Profile, root Post, Reply, Comment,
+DeletionRequest, and focused FoodAvailability candidates retain their exact
+typed admitted values. All other registered candidates must pass complete
+registry shape validation before returning `ContractValidated`.
+
+Kind `1` routing is ordered: root Post admission runs first, and only its exact
+thread-excluded candidate may proceed to NIP-10 Reply admission. A thread-shaped
+event that fails Reply admission is invalid rather than a generic root Post.
+Kind `30402` routing partitions raw marker names before validation. Focused Food
+is admitted through its typed profile; an excluded Operational Listing may
+fall back to complete registry validation; marker-free generic NIP-99 remains
+unsupported; mixed focused and operational markers remain an explicit
+ambiguity error.
+
+Unsupported kind/shape matching and contract/profile validation failures are
+distinct `RadrootsEventAdmissionError` variants with stable codes. Successful
+admission proves only the verified envelope and the selected product or
+registry contract. It does not sign, publish, upload media, select a NIP-01
+head, authorize a deletion, evaluate suppression, mutate storage, or establish
+reference existence or relay availability.
+
 ## Calendar boundary rule
 
 Calendar kinds `31922` through `31925` expose separate authored,

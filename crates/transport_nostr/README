@@ -1,3 +1,15 @@
 # radroots_transport_nostr
 
-Deterministic Nostr relay transport substrate for exact signed-event publish, fetch ingest, and outbox delivery target coordination.
+Deterministic Nostr relay transport substrate for exact signed-event publish,
+fetch ingest, and outbox delivery target coordination.
+
+Fetch ingest verifies each accepted relay event before storage. Per-event
+receipts distinguish unsupported contracts, invalid registered shapes, malformed
+NIP-01 input, ephemeral events that were not persisted, and immutable
+valid-stream eligibility. `admission_code` carries the stable classifier
+diagnostic when the store performed classification; it is absent for duplicates
+because the baseline schema does not persist that code. Inserted, duplicate, and
+not-persisted outcomes have separate flags and aggregate counts.
+Local event-store failures abort the operation and remain typed transport
+errors, so callers can retry without confusing storage failure with bad relay
+input.

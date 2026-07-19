@@ -1,14 +1,9 @@
 #![forbid(unsafe_code)]
 
-use alloc::vec::Vec;
-use core::str::FromStr;
-
-use crate::types::{
-    RadrootsNostrEvent as RadrootsNostrRawEvent, RadrootsNostrEventId, RadrootsNostrKind,
-    RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
-};
-use nostr::secp256k1::schnorr::Signature;
 use radroots_event::RadrootsEventEnvelope;
+use radroots_event_codec::verification::{
+    RadrootsNip01VerificationError, verify_event_id, verify_nip01_event,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsNostrEventVerification {
@@ -22,49 +17,38 @@ pub enum RadrootsNostrEventVerification {
 pub fn radroots_nostr_verify_event(
     event: &RadrootsEventEnvelope,
 ) -> RadrootsNostrEventVerification {
-    let Some(raw_event) = raw_event_from_radroots(event) else {
-        return RadrootsNostrEventVerification::MalformedEnvelope;
-    };
-    if !raw_event.verify_id() {
-        return RadrootsNostrEventVerification::IdMismatch;
+    match verify_nip01_event(event.clone()) {
+        Ok(_) => RadrootsNostrEventVerification::Verified,
+        Err(error) => verification_error_status(&error),
     }
-    if !raw_event.verify_signature() {
-        return RadrootsNostrEventVerification::SignatureInvalid;
-    }
-    RadrootsNostrEventVerification::Verified
 }
 
 pub fn radroots_nostr_verify_event_id(
     event: &RadrootsEventEnvelope,
 ) -> RadrootsNostrEventVerification {
-    let Some(raw_event) = raw_event_from_radroots(event) else {
-        return RadrootsNostrEventVerification::MalformedEnvelope;
-    };
-    if raw_event.verify_id() {
-        RadrootsNostrEventVerification::IdVerified
-    } else {
-        RadrootsNostrEventVerification::IdMismatch
+    match verify_event_id(event.clone()) {
+        Ok(_) => RadrootsNostrEventVerification::IdVerified,
+        Err(error) => verification_error_status(&error),
     }
 }
 
-fn raw_event_from_radroots(event: &RadrootsEventEnvelope) -> Option<RadrootsNostrRawEvent> {
-    let id = RadrootsNostrEventId::from_hex(event.id_str()).ok()?;
-    let public_key = RadrootsNostrPublicKey::from_hex(event.author_str()).ok()?;
-    let kind_u16 = u16::try_from(event.kind_u32()).ok()?;
-    let mut tags = Vec::with_capacity(event.tag_slices().len());
-    for tag in event.tag_slices() {
-        tags.push(RadrootsNostrTag::parse(tag.as_slice().to_vec()).ok()?);
+fn verification_error_status(
+    error: &RadrootsNip01VerificationError,
+) -> RadrootsNostrEventVerification {
+    match error {
+        RadrootsNip01VerificationError::IdMismatch { .. } => {
+            RadrootsNostrEventVerification::IdMismatch
+        }
+        RadrootsNip01VerificationError::SignatureInvalid => {
+            RadrootsNostrEventVerification::SignatureInvalid
+        }
+        RadrootsNip01VerificationError::MalformedEnvelope
+        | RadrootsNip01VerificationError::KindOutOfRange { .. }
+        | RadrootsNip01VerificationError::SignatureVerificationUnavailable => {
+            RadrootsNostrEventVerification::MalformedEnvelope
+        }
+        _ => RadrootsNostrEventVerification::MalformedEnvelope,
     }
-    let sig = Signature::from_str(event.sig_str()).ok()?;
-    Some(RadrootsNostrRawEvent::new(
-        id,
-        public_key,
-        RadrootsNostrTimestamp::from_secs(event.created_at_u64()),
-        RadrootsNostrKind::Custom(kind_u16),
-        tags,
-        event.content().to_owned(),
-        sig,
-    ))
 }
 
 #[cfg(test)]
@@ -73,8 +57,10 @@ mod tests {
     use crate::event_convert::radroots_event_from_nostr;
     use crate::events::radroots_nostr_build_event_unchecked;
     use crate::test_fixtures::FIXTURE_ALICE;
-    use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
-    use radroots_event::{RadrootsEventEnvelopeParts, kinds::KIND_POST};
+    use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp};
+    use radroots_event::{
+        RadrootsEventEnvelopeParts, kinds::KIND_POST, wire::compute_canonical_nip01_event_id,
+    };
 
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =
@@ -163,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_malformed_envelope_for_unparseable_wire_fields() {
+    fn out_of_range_kind_precedes_id_mismatch() {
         let original = signed_event();
         let event = envelope_with(
             &original,
@@ -174,6 +160,44 @@ mod tests {
 
         assert_eq!(
             radroots_nostr_verify_event(&event),
+            RadrootsNostrEventVerification::MalformedEnvelope
+        );
+        assert_eq!(
+            radroots_nostr_verify_event_id(&event),
+            RadrootsNostrEventVerification::MalformedEnvelope
+        );
+    }
+
+    #[test]
+    fn reports_malformed_envelope_for_id_valid_out_of_range_kind() {
+        let original = signed_event();
+        let kind = u32::from(u16::MAX) + 1;
+        let id = compute_canonical_nip01_event_id(
+            original.author_str(),
+            original.created_at_u64(),
+            kind,
+            &original.tags_as_vec(),
+            original.content(),
+        )
+        .expect("canonical id")
+        .into_string();
+        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            id,
+            author: original.author_str().to_owned(),
+            created_at: original.created_at_u64(),
+            kind,
+            tags: original.tags_as_vec(),
+            content: original.content().to_owned(),
+            sig: original.sig_str().to_owned(),
+        })
+        .expect("envelope");
+
+        assert_eq!(
+            radroots_nostr_verify_event(&event),
+            RadrootsNostrEventVerification::MalformedEnvelope
+        );
+        assert_eq!(
+            radroots_nostr_verify_event_id(&event),
             RadrootsNostrEventVerification::MalformedEnvelope
         );
     }

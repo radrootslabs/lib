@@ -23,6 +23,7 @@ events = [
   "dep:radroots_event_codec",
   "radroots_event/std",
   "radroots_event/serde",
+  "radroots_event_codec/nostr",
   "radroots_event_codec/serde_json",
   "radroots_event_codec/std",
 ]

@@ -21,9 +21,10 @@ radroots_event = { workspace = true, default-features = false, features = [
   "std",
   "serde",
 ] }
-radroots_nostr = { workspace = true, default-features = false, features = [
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "nostr",
+  "serde_json",
   "std",
-  "events",
 ] }
 radroots_transport = { workspace = true, default-features = false }
 hex = { workspace = true }

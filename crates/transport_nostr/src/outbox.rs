@@ -1008,7 +1008,7 @@ async fn ingest_publish_observation(
     if let Some(message) = message {
         observation = observation.with_redacted_message(message);
     }
-    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
+    let ingest = RadrootsEventIngest::from_signed_event(signed_event.clone(), observed_at_ms)?
         .with_observation(observation);
     event_store.ingest_event(ingest).await?;
     Ok(())

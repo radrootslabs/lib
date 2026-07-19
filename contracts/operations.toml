@@ -49,6 +49,9 @@ public = [
   "RadrootsIdVerifiedEvent",
   "RadrootsSignatureVerifiedEvent",
   "RadrootsNip01VerificationError",
+  "RadrootsContractValidatedEvent",
+  "RadrootsAdmittedEvent",
+  "RadrootsEventAdmissionError",
   "RadrootsEventHeadCoordinate",
   "RadrootsEventHeadCandidate",
   "RadrootsCurrentEventHead",
@@ -469,6 +472,33 @@ rust_types = [
 
 [operations.event_verify_nip01.conformance]
 vector = "contracts/conformance/vectors/profile/verified_event.v1.json"
+
+[operations.event_admit_verified]
+domain = "event"
+id = "event.admit_verified"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsAdmittedEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.event_admit_verified.implementation]
+rust_modules = [
+  "crates/event_codec/src/admission.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event_codec::admission::RadrootsAdmittedEvent",
+  "radroots_event_codec::admission::RadrootsEventAdmissionError",
+  "radroots_event_codec::verification::RadrootsContractValidatedEvent",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.event_admit_verified.conformance]
+vector = "contracts/conformance/vectors/event/verified_admission.v1.json"
+case_kinds = ["event.admit_verified.valid", "event.admit_verified.invalid"]
 
 [operations.event_select_head]
 domain = "event"

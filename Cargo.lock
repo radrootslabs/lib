@@ -4359,7 +4359,7 @@ dependencies = [
  "hex",
  "nostr",
  "radroots_event",
- "radroots_nostr",
+ "radroots_event_codec",
  "radroots_transport",
  "serde",
  "serde_json",

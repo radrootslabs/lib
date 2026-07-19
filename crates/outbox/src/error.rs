@@ -32,6 +32,17 @@ pub enum RadrootsOutboxError {
     #[error("trade mutation drafts require the semantic trade mutation outbox API")]
     TradeMutationRequiresSemanticOutbox,
 
+    #[error("ephemeral event kind {kind} cannot enter the durable generic outbox")]
+    EphemeralEventNotQueueable { kind: u32 },
+
+    #[error("in-memory SQLite pools must have exactly one connection; configured {actual}")]
+    UnsafeInMemoryPoolConnectionCount { actual: u32 },
+
+    #[error(
+        "SQLite pool backing does not match file_backed={file_backed}: configured filename {filename}"
+    )]
+    SqlitePoolBackingMismatch { file_backed: bool, filename: String },
+
     #[error(
         "trade mutation outbox metadata does not match the canonical mutation content: {field}"
     )]
@@ -42,6 +53,12 @@ pub enum RadrootsOutboxError {
 
     #[error("Invalid stored enum for {field}: {value}")]
     InvalidStoredEnum { field: &'static str, value: String },
+
+    #[error("invalid stored boolean value {value} for {field}; expected 0 or 1")]
+    InvalidStoredBoolean { field: &'static str, value: i64 },
+
+    #[error("stored event-store ingest state is inconsistent for outbox event {outbox_event_id}")]
+    StoredEventStoreIngestStateInconsistent { outbox_event_id: i64 },
 
     #[error("Invalid stored identifier for {field}: {value}")]
     InvalidStoredIdentifier { field: &'static str, value: String },

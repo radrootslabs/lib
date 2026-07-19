@@ -264,3 +264,47 @@ semver_impacts = [
   "add_conformance_vector",
 ]
 summary = "Add a pure deterministic NIP-09 evaluator that returns canonical suppression decisions and evidence for same-author event and inclusive address targets while preserving immutable events, kind-5 immunity, advisory-kind irrelevance, and storage ownership boundaries."
+
+[[changes]]
+id = "central-verified-event-admission"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Add one signature-verified event admission operation that preserves typed product admissions, applies complete registry validation to generic contracts, and distinguishes unsupported matching, invalid shapes, Post-to-Reply routing, and kind-30402 profile exclusions."
+
+[[changes]]
+id = "event-store-validity-visibility-split"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_field",
+  "add_enum_variant",
+  "remove_exported_type",
+  "remove_exported_field",
+  "remove_exported_function",
+  "change_exported_field_type",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace projection-eligible event-store APIs with signature-verified durable raw storage, typed ephemeral non-persistence, stable valid-stream eligibility, registry-independent NIP-01 heads keyed by protocol-opaque address identifiers, exact visible heads without stale fallback, and versioned monotonic cursor compare-and-swap."
+
+[[changes]]
+id = "nostr-fetch-admission-receipts"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_field",
+  "remove_exported_field",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace serialized fetch-receipt verification/projection fields with admission status, stable admission code, valid-stream eligibility, and distinct invalid and ephemeral non-persistence outcomes and counts; propagate local event-store failures instead of classifying them as malformed relay events."
+
+[[changes]]
+id = "outbox-ephemeral-event-policy"
+classification = "breaking"
+semver_impacts = ["add_enum_variant", "change_exported_algorithm_behavior"]
+summary = "Reject every NIP-16 ephemeral event from all generic durable-outbox entry points, keep transient events inside their owning live transport exchanges, and validate and configure every externally supplied SQLite pool connection before migration or writes."

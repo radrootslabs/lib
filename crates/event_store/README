@@ -1,3 +1,75 @@
 # radroots_event_store
 
-SQLx-backed canonical event-envelope storage for Rad Roots protocol events.
+SQLx-backed canonical event-envelope storage for Radroots protocol events.
+
+## Ingest boundary
+
+`RadrootsEventIngest::from_signed_event` and `from_raw_json` verify the NIP-01
+identifier and signature before constructing an ingest value. The store applies
+`radroots_event_codec::admission::admit_verified_event` only to that verified
+typestate. A failed signature never enters trusted contract validation or the
+durable raw-event sequence.
+
+The ingest receipt reports admission status and its stable failure code
+separately from `valid_stream_eligible` and the raw-head decision. Admission may
+be `Admitted`, `Unsupported`, or `Invalid`; unsupported registry matching is
+not interchangeable with a registered contract or typed profile that failed
+validation. The failure code is present when that ingest performed the durable
+classification. A duplicate returns the immutable stored status and eligibility
+without pretending that the baseline schema persisted the original diagnostic
+code.
+
+## Read surfaces
+
+The public read APIs name their authority explicitly:
+
+- `raw_event`, `raw_events_after`, and `raw_events_by_tag` expose
+  signature-verified stored envelopes, including unsupported or invalid product
+  contracts.
+- `valid_event`, `valid_stream_after`, `valid_stream_by_tag`, and
+  `valid_stream_by_contract_and_tag` expose admitted durable events. Eligibility
+  is recorded at ingest and independent of arrival order or head selection, so
+  both old and new valid revisions remain replayable through the store API.
+- `raw_event_head` exposes the NIP-01 replaceable/addressable winner selected
+  from every verified durable candidate before product admission. An
+  addressable raw coordinate uses the first `d` tag value verbatim as an opaque
+  protocol identifier; a missing `d` tag or missing first value becomes the
+  empty identifier. Product-contract admission may impose stricter `d` rules
+  independently.
+- `event_visibility`, `visible_event`, and `visible_event_head` expose current
+  product visibility. A visible head is the exact raw head only when that event
+  is admitted; an unsupported or invalid winning raw head yields no older
+  fallback. Non-head durable revisions report `NotCurrent`.
+
+Verified ephemeral events are classified but never written to the raw sequence,
+tags, observations, or heads. Their ingest receipt carries
+`RadrootsEventPersistence::NotPersisted`; repeated delivery remains live-only
+and is never reported as a durable duplicate.
+
+Deletion suppression is not stored by this baseline schema. A later additive
+migration extends the same visibility boundary; deletion evaluation does not
+rewrite raw envelopes through the event-store API.
+
+The current event-store API is append-only, but the byte-pinned `0001` schema
+and the exposed SQLx pool do not prevent direct SQL mutation. Database-enforced
+raw-event immutability belongs to the later additive migration.
+
+`open_pool` inspects the opened main database rather than trusting URL text,
+validates the declared backing mode, rejects multi-connection in-memory pools,
+and configures every file-pool connection with foreign-key enforcement and the
+required busy timeout before migrations or writes.
+
+## Projection cursors
+
+`projection_cursor` requires the caller's expected projection version.
+`compare_and_swap_projection_cursor` requires an expected prior sequence for an
+existing cursor, rejects version mismatch and sequence regression, and reports
+conflicting writers. Callers must reset or rebuild derived state after a
+version mismatch. Persisted source-generation identity belongs to the later
+additive migration; the byte-pinned `0001_event_store` migration is not
+rewritten and no generation is fabricated here.
+
+The historical SQLite column name `projection_eligible` remains an internal
+`0001` compatibility detail. Public APIs and models use
+`valid_stream_eligible`; the old mixed projection/head meaning is not part of
+the current contract.
