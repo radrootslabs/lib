@@ -30,6 +30,43 @@ image-typed byte-verified Blossom descriptor. That descriptor state is not an
 upload receipt; BUD-02 completion remains a runtime prerequisite before
 signing.
 
+Kind `30402` has a raw, allocation-free marker partition before profile-specific
+tag-shape validation. Presence of `radroots:price_unit` or `radroots:quantity` selects
+the focused FoodAvailability marker family; presence of
+`radroots:primary_bin`, `radroots:bin`, or `radroots:price` selects the richer
+Operational Listing marker family. Focused-only, operational-only, marker-free
+generic NIP-99, and mixed-marker events produce
+`RadrootsClassifiedListingPartition::{FocusedFoodAvailability,
+OperationalListing, GenericNip99, Ambiguous}` respectively. A malformed
+one-element tag still contributes its raw first name, and marker matching is
+case-sensitive. `classify_classified_listing_tags` and the borrowed-slice
+variant inspect neither kind, tag values, nor tag arity.
+
+The FoodAvailability module provides `RadrootsFoodAvailabilityDetails` and
+checked identifier, text, publication timestamp, price, currency, unit,
+quantity, status, image-dimension, and image values. Content contains at least
+one scalar outside Unicode whitespace and U+001C through U+001F, and is bounded
+to 131072 UTF-8 bytes. Identifiers reject whitespace plus Unicode control and
+format characters; title, summary, and location use trimmed, nonempty,
+control-free text bounded to 4096 UTF-8 bytes. Food units are closed to `g`,
+`kg`, `lb`, `oz`, `each`, `dozen`, `bunch`, `punnet`, `bag`, and `basket`.
+Price permits zero; quantity is strictly positive and uses the price unit.
+Image dimensions use two nonzero canonical `u32` decimal values in
+`WIDTHxHEIGHT` form. Details accept at most 64 images, require unique image URLs
+and Blossom digests, and accept only `RadrootsAuthoredImage` values that already
+prove local descriptor-to-byte agreement. Details retain nonzero `published_at`
+for later replacement checks and can validate that it is not later than a
+supplied `created_at`; this checkpoint does not compare revisions or prove
+timestamp stability across them.
+
+These checked details are domain input, not a signable authored draft or wire
+event. This checkpoint supplies no FoodAvailability tag codec, event-contract
+registry entry, relay admission, signing, publication, upload receipt, raster
+decoding, network retrieval, or availability proof. Successful BUD-02 upload
+and any required media decoding or retrievability checks remain separate
+runtime responsibilities before a later publication boundary may sign an
+event.
+
 The calendar module keeps three different states explicit for NIP-52 kinds
 `31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,
 a tolerant baseline NIP-52 projection, and a strict Radroots-admitted

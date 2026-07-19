@@ -68,6 +68,17 @@ publish policy both pass for the same source revision.
 
 ### Added
 
+- Kind `30402` now has one allocation-free raw marker-name partition that
+  distinguishes focused FoodAvailability, richer Operational Listing,
+  marker-free generic NIP-99, and mixed ambiguous inputs before profile
+  tag-shape validation.
+- FoodAvailability now has strict domain and authored-media input primitives
+  for bounded identifiers and text, canonical decimal price and quantity,
+  uppercase currency, the closed ten-unit food vocabulary, active or sold
+  status, timestamps, dimensions, and at most 64 unique byte-verified Blossom
+  images. These details are not yet a signable authored draft and add no codec,
+  admission, registry, replica, publication, upload, raster-decoding, or
+  network-availability claim.
 - Verified Profile admission binds a signed exact kind-`0` envelope to the
   tolerant metadata projection, accepts standard tagless events, and exposes
   deterministic equal-time lowest-id replacement vectors.

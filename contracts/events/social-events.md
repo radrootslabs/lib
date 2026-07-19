@@ -29,7 +29,8 @@ authoring and admission profile are separate contract layers.
 
 The repository implements strict authored and verified-projected kind `1` post profiles, kind `1111`
 `RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
-records through `RadrootsOperationalListing`, articles, generic public file metadata, calendar date events,
+records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
+FoodAvailability domain primitives, articles, generic public file metadata, calendar date events,
 calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
 
 The closeout contract requires:
@@ -72,6 +73,9 @@ The production-v1 public social substrate includes:
 - `RadrootsReport` for NIP-56 kind `1984`
 - operational-listing profile validation through `RadrootsOperationalListing` at NIP-99
   classified-listing kind `30402`
+- validated FoodAvailability details and a raw marker-name partition for focused, operational,
+  generic NIP-99, and ambiguous kind-`30402` inputs; the focused codec and admission boundary are
+  not part of this checkpoint
 - relay-list kind `10002` validation through `RadrootsList`
 
 ## Contract Decisions
@@ -184,6 +188,48 @@ Generic public `RadrootsFileMetadata` remains separate from private `RadrootsFar
 though both use kind `1063`. The public generic model must cover the current simple NIP-94 tags,
 including URL, MIME type, SHA-256 hash, original hash, size, dimensions, blurhash, thumbnail, image,
 summary, alt text, fallback, `magnet`, `i`, and `service`.
+
+### FoodAvailability Domain Boundary
+
+Kind `30402` routing first inspects only the raw first element of each tag. The focused marker set is
+exactly `radroots:price_unit` and `radroots:quantity`; the Operational Listing marker set is exactly
+`radroots:primary_bin`, `radroots:bin`, and `radroots:price`. Focused-only, operational-only,
+marker-free generic NIP-99, and mixed-marker inputs are distinct partition results. This happens
+before profile tag-shape validation, so a malformed one-element marker still counts. Matching is
+exact and case-sensitive. `RadrootsClassifiedListingPartition` names those results
+`FocusedFoodAvailability`, `OperationalListing`, `GenericNip99`, and `Ambiguous`. The partition is
+allocation-free, does not inspect the event kind, marker values, or tag arity, and does not establish
+that either profile is valid.
+
+`RadrootsFoodAvailabilityDetails` and its focused domain values are checked before construction.
+The identifier is 1 through 512 UTF-8 bytes, contains no whitespace, and contains no Unicode
+control or format character. Content must contain at least one scalar outside Unicode whitespace
+and the information-separator range U+001C through U+001F, and is bounded to
+131072 UTF-8 bytes; it is not normalized or subjected to the stricter metadata-text policy. Title,
+summary, and location are trimmed, nonempty, control-free text bounded to 4096 UTF-8 bytes.
+`published_at` is a canonical nonzero `u64` decimal and can be checked as no later than a supplied
+`created_at`.
+
+Price and optional quantity are canonical unsigned plain decimals with at most 28 ASCII digits
+excluding the optional decimal point. Price may be zero; quantity must be positive. Currency is
+exactly three uppercase ASCII letters. The dedicated unit vocabulary is `g`, `kg`, `lb`, `oz`,
+`each`, `dozen`, `bunch`, `punnet`, `bag`, and `basket`, and quantity uses the same unit as price.
+Status is exactly `active` or `sold`.
+
+Image dimensions are two nonzero canonical `u32` decimal components in `WIDTHxHEIGHT` form.
+Validated details accept no more than 64 images, reject duplicate URLs or Blossom digests, and
+accept only `RadrootsAuthoredImage` values backed by an approved, byte-verified image descriptor.
+That proof establishes local descriptor-to-byte agreement only. It does not establish BUD-02 upload
+completion, decoded raster dimensions, content safety, retrieval, reachability, or network
+availability.
+
+The details model deliberately has no farm, bin, route, pickup, delivery, order, checkout, or other
+commerce-workflow field. It retains `published_at` as input for later replacement checks, but this
+checkpoint does not compare revisions or prove its stability. The model is not serializable and is
+not a signable authored draft; it emits no tags or wire event. This checkpoint adds no
+FoodAvailability codec, registry identity, verified inbound admission, revision validator, replica
+projection, signing, publication, or client behavior; those boundaries require separate executable
+contract work.
 
 ### Calendar Trust Layers
 
@@ -319,9 +365,10 @@ format-safety policy. No calendar model upgrades an observed relay URL into eith
 or an availability guarantee.
 
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
-Events, Market, Map, and Profile public-content candidates are explicit. Active NIP-99
-classified-listing kind `30402`
-can appear in public product surfaces. Report kind `1984` is a moderation/admin candidate, not
+Events, Market, Map, and Profile public-content candidates are explicit. A kind-`30402` value alone
+does not select FoodAvailability: raw marker partitioning first distinguishes focused,
+operational, generic NIP-99, and ambiguous candidates. Full FoodAvailability admission remains a
+later boundary. Report kind `1984` is a moderation/admin candidate, not
 normal feed content. Relay and HTTP auth kinds are transient and excluded from durable social and
 farm-ops candidate sets. Private farm operations candidates include the farm workspace manifest,
 farm CRDT change envelope, farm file metadata, and the supported NIP-29 group event subset.

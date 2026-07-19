@@ -41,6 +41,25 @@ its typed codec, tags, and publication operations are exposed under the
 `operational_listing` domain. The standard kind identity does not by itself
 establish that an event satisfies the operational profile.
 
+Raw tag-name presence partitions the standard kind before profile tag-shape
+validation. `radroots:price_unit` and `radroots:quantity` are focused
+FoodAvailability markers. `radroots:primary_bin`, `radroots:bin`, and
+`radroots:price` are Operational Listing markers. Focused-only,
+operational-only, marker-free generic NIP-99, and mixed-marker inputs classify
+as `FocusedFoodAvailability`, `OperationalListing`, `GenericNip99`, and
+`Ambiguous`; malformed tags still contribute their first element, and names
+are case-sensitive. This central partition does not inspect kind, values, or
+arity and does not validate either profile.
+
+The current FoodAvailability boundary exposes strict domain and authored-media
+input primitives only. Its validated details contain no farm, bin, route,
+pickup, delivery, order, or checkout fields, but they are not yet a signable
+authored draft. No FoodAvailability codec, registry contract, inbound
+admission, operation, replica projection, publication path, or client behavior
+is established by this checkpoint. A validated image proves local Blossom
+descriptor-to-byte agreement only; it does not prove upload completion, raster
+decoding, reachability, or network availability.
+
 ## Kind-1 post boundary rule
 
 Ordinary kind-1 events remain interoperable at the generic

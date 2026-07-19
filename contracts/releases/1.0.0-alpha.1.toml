@@ -145,3 +145,13 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Reject raw Unicode normalization, implicit IDNA, and invalid ASCII DNS labels before constructing Blossom blob URL, approval, or byte-verification typestates."
+
+[[changes]]
+id = "food-availability-domain-foundation"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_constant",
+  "add_enum_variant",
+]
+summary = "Add raw kind-30402 profile partitioning and validated FoodAvailability domain and media-input primitives without claiming a codec, authored draft, admission, signing, or publication boundary."

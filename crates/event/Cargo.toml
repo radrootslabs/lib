@@ -42,6 +42,7 @@ serde_json = { workspace = true, default-features = false, features = [
 ] }
 secp256k1 = { workspace = true, optional = true }
 sha2 = { workspace = true, default-features = false }
+unicode-general-category = { workspace = true }
 url_nostd = { workspace = true }
 
 [dev-dependencies]
