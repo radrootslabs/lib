@@ -159,6 +159,11 @@ publish policy both pass for the same source revision.
   creates and transports a request only; it provides no target lookup,
   authorship decision, deletion authorization, store mutation, relay-effect,
   or deletion-effect semantics.
+- NIP-09 suppression evaluation is now a separate pure operation over one
+  signature-verified candidate and admitted requests. It enforces same-author
+  direct-event and inclusive address-cutoff rules, keeps kind `5` immune,
+  ignores advisory kinds, returns canonical evidence independent of input
+  order, and never mutates raw events or storage.
 
 ### Removed
 

@@ -109,7 +109,8 @@ valid shapes, diagnostics, exact and over-limit budgets, stable error
 precedence, and NIP-01 admission without secret keys, mutation recipes, or
 ambient state.
 
-The Deletion codec implements the request-only boundary of
+The Deletion codec implements the request and pure suppression-evaluation
+boundaries of
 [NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md).
 `authored_nip09_deletion_request_to_wire_parts` emits canonical two-element
 `e` targets, then `a` targets, then the complete unique ascending set of `k`
@@ -125,10 +126,23 @@ this boundary.
 `verify_and_admit_nip09_deletion_request_event` binds the projection to the
 verified request envelope. It does not authorize or apply a deletion, look up
 a target, compare authors, compute an address cutoff, suppress an event, or
-mutate storage. The exact operation namespace is
+mutate storage.
+
+`evaluate_nip09_suppression` is a separate pure operation over one
+`RadrootsSignatureVerifiedEvent` candidate and admitted deletion requests. It
+returns an explicit `RadrootsNip09SuppressionDecision` with canonical evidence
+without changing any input or touching a store. Kind `5` is immune. Other
+candidates require the request author to equal the candidate author. An exact
+event-id target applies independently of timestamps; a canonical address
+target applies through the inclusive maximum qualifying request timestamp, so
+a later replacement is not suppressed. Advisory `k` values do not affect the
+result, and request order cannot affect the decision.
+
+The exact operation namespace is
 `social.deletion_request.build_authored_draft`,
-`social.deletion_request.project_verified_event`, and
-`social.deletion_request.verify_and_admit_event`. Registry v7 makes
+`social.deletion_request.project_verified_event`,
+`social.deletion_request.verify_and_admit_event`, and
+`social.deletion_request.evaluate_suppression`. Registry v7 makes
 `radroots.social.deletion_request.v1` `TypedOnly` for authoring and
 `AdmissionOnly` for matching, with generic kind-`5` authoring and publication
 reserved.
@@ -140,6 +154,13 @@ JSON, expected projections contain no effect-authority output, and executable
 cases cover canonical authoring, tolerant verified projection, diagnostics,
 exact and over-limit resource budgets, precedence, and admission without
 shipping keys, seeds, generators, or mutation recipes.
+
+The separate
+`contracts/conformance/vectors/deletion/suppression.v1.json` corpus and its
+byte-identical packaged fixture execute the evaluator's same-author, direct
+event, inclusive address-cutoff, later-replacement, pre-target request,
+kind-`5` immunity, and deterministic evidence behavior. These vectors govern a
+decision value only and claim no persistent store effect.
 
 The FoodAvailability codec owns four boundaries for the focused
 `radroots.food.availability.v1` kind-`30402` profile. Strict details plus

@@ -162,6 +162,11 @@ public = [
   "RadrootsNip09DeletionProjectionError",
   "RadrootsAdmittedNip09DeletionRequestEvent",
   "RadrootsNip09DeletionAdmissionError",
+  "RadrootsNip09SuppressionOutcome",
+  "RadrootsNip09SuppressionReason",
+  "RadrootsNip09EventReferenceEvidence",
+  "RadrootsNip09AddressReferenceEvidence",
+  "RadrootsNip09SuppressionDecision",
   "RadrootsReaction",
   "RadrootsArticle",
   "RadrootsFileMetadata",
@@ -1242,6 +1247,36 @@ case_kinds = [
   "social.deletion_request.verify_and_admit_event.valid",
   "social.deletion_request.verify_and_admit_event.invalid",
 ]
+
+[operations.social_deletion_request_evaluate_suppression]
+domain = "social"
+id = "social.deletion_request.evaluate_suppression"
+stability = "beta"
+inputs = [
+  "RadrootsSignatureVerifiedEvent",
+  "RadrootsAdmittedNip09DeletionRequestEvent[]",
+]
+outputs = ["RadrootsNip09SuppressionDecision"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_deletion_request_evaluate_suppression.implementation]
+rust_modules = ["crates/event_codec/src/deletion/evaluator.rs"]
+rust_types = [
+  "radroots_event_codec::deletion::admission::RadrootsAdmittedNip09DeletionRequestEvent",
+  "radroots_event_codec::deletion::evaluator::RadrootsNip09AddressReferenceEvidence",
+  "radroots_event_codec::deletion::evaluator::RadrootsNip09EventReferenceEvidence",
+  "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionDecision",
+  "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionOutcome",
+  "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionReason",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_deletion_request_evaluate_suppression.conformance]
+vector = "contracts/conformance/vectors/deletion/suppression.v1.json"
+case_kinds = ["social.deletion_request.evaluate_suppression.valid"]
 
 [operations.social_reaction_build_tags]
 domain = "social"

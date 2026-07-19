@@ -36,11 +36,12 @@ authoring and admission profile are separate contract layers.
 The repository implements strict authored and verified-projected kind `1` root-post profiles, a
 separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, a strict-authored and
 tolerant verified-inbound kind `1111` NIP-22 Comment profile, a strict-authored and tolerant
-verified-inbound kind `5` NIP-09 deletion-request profile, kind `7` `RadrootsReaction`, generic
-`RadrootsList` entries, operational listing records through `RadrootsOperationalListing`, the raw
-kind-`30402` profile partition and validated FoodAvailability authored, verified-admission, and
-revision contract, articles, generic public file metadata, calendar date events, calendar time
-events, reposts, generic reposts, calendar collections, RSVP events, and reports.
+verified-inbound kind `5` NIP-09 deletion-request profile with pure deterministic suppression
+evaluation, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
+records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
+FoodAvailability authored, verified-admission, and revision contract, articles, generic public
+file metadata, calendar date events, calendar time events, reposts, generic reposts, calendar
+collections, RSVP events, and reports.
 
 The closeout contract requires:
 
@@ -54,8 +55,8 @@ The closeout contract requires:
   `e_prev` authority
 - strict NIP-09 `RadrootsAuthoredNip09DeletionRequest`,
   `RadrootsInboundNip09DeletionProjection`, and
-  `RadrootsAdmittedNip09DeletionRequestEvent` request behavior without
-  deletion-effect authority
+  `RadrootsAdmittedNip09DeletionRequestEvent` request behavior plus a separate
+  pure `RadrootsNip09SuppressionDecision` evaluator without storage authority
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 classified-listing parity
 - NIP-65 relay-list validation evidence through `RadrootsList`
@@ -78,7 +79,8 @@ The MVP public social substrate includes:
 - strict `RadrootsAuthoredNip09DeletionRequest` publication plus
   `RadrootsInboundNip09DeletionProjection` and
   `RadrootsAdmittedNip09DeletionRequestEvent` for effect-free kind-`5` NIP-09
-  event and address deletion requests
+  event and address deletion requests, followed by pure deterministic
+  suppression evaluation over verified targets and admitted requests
 - `RadrootsArticle` for NIP-23 kind `30023` long-form content
 - generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
 - strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
@@ -362,12 +364,27 @@ envelope whose NIP-01 id and Schnorr signature were verified. Admission proves
 only a valid bounded deletion request. It does not look up a target, establish
 same-author authorization, calculate an address cutoff, replace or suppress an
 event, mutate a store, or decide whether another deletion request is immune.
-Those are downstream evaluator and storage responsibilities.
+Those remain separate evaluator and storage responsibilities.
+
+`evaluate_nip09_suppression` is the pure evaluator boundary. It accepts one
+signature-verified candidate event and a set of admitted deletion requests,
+never mutates either input, reads no clock or store, and returns an explicit
+decision with canonically ordered evidence. A kind-`5` candidate is always
+immune. Every other candidate can be suppressed only by a request from the
+same author. An `e` target is time-independent: an exact event-id match
+qualifies even when the request predates the candidate. An `a` target must
+match the candidate's canonical replaceable or addressable coordinate and
+suppresses revisions whose `created_at` is less than or equal to the inclusive
+maximum cutoff among qualifying requests. A later replacement remains
+unsuppressed. Advisory `k` tags never participate in authorization or
+suppression. Request ordering and repeated qualifying inputs cannot change the
+decision.
 
 The complete public operation namespace is exactly
 `social.deletion_request.build_authored_draft`,
-`social.deletion_request.project_verified_event`, and
-`social.deletion_request.verify_and_admit_event`. Contract
+`social.deletion_request.project_verified_event`,
+`social.deletion_request.verify_and_admit_event`, and
+`social.deletion_request.evaluate_suppression`. Contract
 `radroots.social.deletion_request.v1` is registry-v7 `TypedOnly` for authoring
 and `AdmissionOnly` for unsigned matching. Generic kind-`5` signing and client
 publication are reserved before signer access.
@@ -382,6 +399,14 @@ complete compact fixed signed event JSON. The byte-identical packaged mirror
 contains no secret or private key, nsec, seed, generator, mutation, base, or
 boundary-expansion recipe, and expected projections expose no authorization,
 suppression, or store-mutation effect.
+
+Suppression behavior is governed separately by
+`contracts/conformance/vectors/deletion/suppression.v1.json` and its
+byte-identical packaged mirror. Its fixed inputs exercise direct event targets,
+inclusive address cutoffs, later replacements, requests that predate their
+targets, kind-`5` immunity, unrelated authors, mixed qualifying requests, and
+input-order independence. The evaluator produces evidence only; neither
+fixture nor operation authorizes a store mutation.
 
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.

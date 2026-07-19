@@ -253,3 +253,14 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Add strict effect-free NIP-09 deletion-request authoring, verified tolerant projection and admission, sealed publication, exact operation authority, and a fixed self-contained conformance corpus while advancing the event registry to version 7 and reserving generic kind-5 authoring."
+
+[[changes]]
+id = "pure-nip09-suppression-evaluator"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Add a pure deterministic NIP-09 evaluator that returns canonical suppression decisions and evidence for same-author event and inclusive address targets while preserving immutable events, kind-5 immunity, advisory-kind irrelevance, and storage ownership boundaries."

@@ -211,19 +211,34 @@ unprovable, so a differing `k` advisory is not promoted to a conflict.
 Admission proves only that the kind-`5` request envelope and bounded request
 profile are valid. It performs no target lookup, same-author authorization,
 address cutoff evaluation, replacement or suppression decision, store
-mutation, or deletion-request immunity evaluation. The event-contract registry
-v7 classifies `radroots.social.deletion_request.v1` as `TypedOnly` for
-authoring and `AdmissionOnly` for matching. Generic kind-`5` signing and client
-publication fail before signer access.
+mutation, or deletion-request immunity evaluation.
+
+The separate pure evaluator accepts a signature-verified candidate and
+admitted deletion requests. It never mutates an event or store. Kind `5` is
+immune; every other suppression requires equal request and candidate authors.
+An exact `e` target is time-independent. An exact canonical `a` target applies
+through the inclusive maximum qualifying request timestamp, so a later
+replacement remains visible. Advisory `k` values are ignored. The decision and
+its canonical evidence are independent of request order and repeated
+qualifying inputs.
+
+The event-contract registry v7 classifies
+`radroots.social.deletion_request.v1` as `TypedOnly` for authoring and
+`AdmissionOnly` for matching. Generic kind-`5` signing and client publication
+fail before signer access.
 
 The complete operation surface is exactly
 `social.deletion_request.build_authored_draft`,
-`social.deletion_request.project_verified_event`, and
-`social.deletion_request.verify_and_admit_event`. Content is limited to 131072
+`social.deletion_request.project_verified_event`,
+`social.deletion_request.verify_and_admit_event`, and
+`social.deletion_request.evaluate_suppression`. Content is limited to 131072
 UTF-8 bytes, a request to 1024 tags, all tags to 4096 elements including names,
 each element to 4096 UTF-8 bytes, aggregate tag bytes to 131072, and compact
-signed wire JSON to 262144 bytes. The canonical fixed 80-case corpus is
+signed wire JSON to 262144 bytes. The canonical fixed 80-case request corpus is
 `contracts/conformance/vectors/deletion/verified_profile.v1.json`.
+Pure effect evaluation has the separate canonical
+`contracts/conformance/vectors/deletion/suppression.v1.json` corpus and does
+not weaken or add effect fields to the request corpus.
 
 ## Coverage matrix
 
@@ -234,7 +249,7 @@ signed wire JSON to 262144 bytes. The canonical fixed 80-case corpus is
 | post | 1 | RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; any `e` tag produces a thread-excluded candidate without a Reply claim |
 | reply | 1 | RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder | social.reply.build_authored_draft, social.reply.project_verified_event, social.reply.verify_and_admit_event | strict marked direct/nested NIP-10 authoring; verified marked or positional inbound admission with advisory-metadata diagnostics; never a root card; target existence, kind, author, and relay availability are not proven |
 | comment | 1111 | RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder | social.comment.build_authored_draft, social.comment.project_verified_event, social.comment.verify_and_admit_event | strict NIP-22 event/address roots limited to kinds `30402`, `31922`, and `31923`; tolerant verified projection; registry-v7 typed-only authoring and admission-only matching |
-| deletion_request | 5 | RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNostrNip09DeletionRequestEventBuilder | social.deletion_request.build_authored_draft, social.deletion_request.project_verified_event, social.deletion_request.verify_and_admit_event | effect-free NIP-09 request authoring and verified projection; event and replaceable/addressable targets; advisory kind diagnostics; registry-v7 typed-only authoring and admission-only matching |
+| deletion_request | 5 | RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / RadrootsNostrNip09DeletionRequestEventBuilder | social.deletion_request.build_authored_draft, social.deletion_request.project_verified_event, social.deletion_request.verify_and_admit_event, social.deletion_request.evaluate_suppression | effect-free NIP-09 request authoring and verified projection plus pure immutable suppression evaluation; same-author direct event targets and inclusive address cutoffs; kind-5 immunity; advisory kinds ignored; registry-v7 typed-only authoring and admission-only matching |
 | reaction | 7 | RadrootsReaction | events.reaction.publish, events.reaction.list, events.reaction.get | requires event, pubkey, or address tags |
 | repost | 6 | RadrootsRepost | events.repost.publish, events.repost.list, events.repost.get | NIP-18 kind-1 repost surface |
 | generic_repost | 16 | RadrootsGenericRepost | events.generic_repost.publish, events.generic_repost.list, events.generic_repost.get | NIP-18 generic repost surface |

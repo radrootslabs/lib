@@ -2,8 +2,10 @@ use super::DeletionOperationExpectation;
 
 pub(super) const DELETION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/deletion/verified_profile.v1.json";
+pub(super) const DELETION_SUPPRESSION_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/deletion/suppression.v1.json";
 
-pub(super) const REQUIRED_DELETION_PUBLIC_TYPES: [&str; 18] = [
+pub(super) const REQUIRED_DELETION_PUBLIC_TYPES: [&str; 23] = [
     "RadrootsNip01EventWireParts",
     "RadrootsEventEnvelope",
     "RadrootsSignatureVerifiedEvent",
@@ -22,12 +24,18 @@ pub(super) const REQUIRED_DELETION_PUBLIC_TYPES: [&str; 18] = [
     "RadrootsNip09DeletionProjectionError",
     "RadrootsAdmittedNip09DeletionRequestEvent",
     "RadrootsNip09DeletionAdmissionError",
+    "RadrootsNip09SuppressionOutcome",
+    "RadrootsNip09SuppressionReason",
+    "RadrootsNip09EventReferenceEvidence",
+    "RadrootsNip09AddressReferenceEvidence",
+    "RadrootsNip09SuppressionDecision",
 ];
 
-pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation; 3] = [
+pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation; 4] = [
     DeletionOperationExpectation {
         key: "social_deletion_request_build_authored_draft",
         id: "social.deletion_request.build_authored_draft",
+        vector: DELETION_CONFORMANCE_VECTOR_RELATIVE,
         inputs: &["RadrootsAuthoredNip09DeletionRequest"],
         outputs: &["RadrootsNip01EventWireParts"],
         error_class: "encode_error",
@@ -52,6 +60,7 @@ pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation;
     DeletionOperationExpectation {
         key: "social_deletion_request_project_verified_event",
         id: "social.deletion_request.project_verified_event",
+        vector: DELETION_CONFORMANCE_VECTOR_RELATIVE,
         inputs: &["RadrootsSignatureVerifiedEvent"],
         outputs: &["RadrootsInboundNip09DeletionProjection"],
         error_class: "parse_error",
@@ -77,6 +86,7 @@ pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation;
     DeletionOperationExpectation {
         key: "social_deletion_request_verify_and_admit_event",
         id: "social.deletion_request.verify_and_admit_event",
+        vector: DELETION_CONFORMANCE_VECTOR_RELATIVE,
         inputs: &["RadrootsEventEnvelope"],
         outputs: &["RadrootsAdmittedNip09DeletionRequestEvent"],
         error_class: "admission_error",
@@ -99,15 +109,39 @@ pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation;
             "social.deletion_request.verify_and_admit_event.invalid",
         ],
     },
+    DeletionOperationExpectation {
+        key: "social_deletion_request_evaluate_suppression",
+        id: "social.deletion_request.evaluate_suppression",
+        vector: DELETION_SUPPRESSION_CONFORMANCE_VECTOR_RELATIVE,
+        inputs: &[
+            "RadrootsSignatureVerifiedEvent",
+            "RadrootsAdmittedNip09DeletionRequestEvent[]",
+        ],
+        outputs: &["RadrootsNip09SuppressionDecision"],
+        error_class: "validation_error",
+        signing: "none",
+        rust_modules: &["crates/event_codec/src/deletion/evaluator.rs"],
+        rust_types: &[
+            "radroots_event_codec::deletion::admission::RadrootsAdmittedNip09DeletionRequestEvent",
+            "radroots_event_codec::deletion::evaluator::RadrootsNip09AddressReferenceEvidence",
+            "radroots_event_codec::deletion::evaluator::RadrootsNip09EventReferenceEvidence",
+            "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionDecision",
+            "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionOutcome",
+            "radroots_event_codec::deletion::evaluator::RadrootsNip09SuppressionReason",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &["social.deletion_request.evaluate_suppression.valid"],
+    },
 ];
 
-pub(super) const DELETION_CASE_KINDS: [&str; 6] = [
+pub(super) const DELETION_CASE_KINDS: [&str; 7] = [
     "social.deletion_request.build_authored_draft.valid",
     "social.deletion_request.build_authored_draft.invalid",
     "social.deletion_request.project_verified_event.valid",
     "social.deletion_request.project_verified_event.invalid",
     "social.deletion_request.verify_and_admit_event.valid",
     "social.deletion_request.verify_and_admit_event.invalid",
+    "social.deletion_request.evaluate_suppression.valid",
 ];
 
 pub(super) const DELETION_AUTHORED_VALID_IDS: [&str; 14] = [
@@ -206,4 +240,39 @@ pub(super) const DELETION_ADMIT_INVALID_IDS: [&str; 5] = [
     "nip09_admit_wrong_kind",
     "nip09_admit_invalid_target",
     "nip09_admit_target_missing",
+];
+
+pub(super) const DELETION_SUPPRESSION_VALID_IDS: [&str; 32] = [
+    "nip09_suppress_no_requests_visible",
+    "nip09_suppress_same_author_event_reference",
+    "nip09_suppress_same_author_nonmatching_reference",
+    "nip09_suppress_wrong_author_exact_event_reference",
+    "nip09_suppress_event_reference_predates_target",
+    "nip09_suppress_deletion_request_immune_event_reference",
+    "nip09_suppress_deletion_request_immune_mixed_references",
+    "nip09_suppress_address_cutoff_before_target",
+    "nip09_suppress_address_cutoff_equal_target",
+    "nip09_suppress_address_cutoff_after_target",
+    "nip09_suppress_address_wrong_kind",
+    "nip09_suppress_address_wrong_identifier",
+    "nip09_suppress_address_wrong_pubkey",
+    "nip09_suppress_wrong_author_address_reference",
+    "nip09_suppress_replaceable_kind_0",
+    "nip09_suppress_replaceable_kind_3",
+    "nip09_suppress_replaceable_kind_10000",
+    "nip09_suppress_replaceable_kind_19999",
+    "nip09_suppress_addressable_kind_30000_empty_identifier",
+    "nip09_suppress_addressable_kind_39999_opaque_identifier",
+    "nip09_suppress_combined_event_and_address_references",
+    "nip09_suppress_event_reference_with_stale_address",
+    "nip09_suppress_kind_advisory_diagnostics_ignored",
+    "nip09_suppress_duplicate_raw_targets_deduplicated",
+    "nip09_suppress_max_address_cutoff_forward_order",
+    "nip09_suppress_max_address_cutoff_reverse_order",
+    "nip09_suppress_later_revision_survives_address_cutoff",
+    "nip09_suppress_equal_max_cutoff_uses_lowest_request_id",
+    "nip09_suppress_multiple_event_references_use_lowest_request_id",
+    "nip09_suppress_repeated_request_is_idempotent",
+    "nip09_suppress_unauthorized_event_plus_stale_authorized_address",
+    "nip09_suppress_exact_event_deletes_later_replacement",
 ];
