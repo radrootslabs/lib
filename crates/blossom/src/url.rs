@@ -2,6 +2,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use core::{fmt, str::FromStr};
+use unicode_general_category::{GeneralCategory, get_general_category};
 use url_nostd::{Host, Url};
 
 use crate::{RadrootsBlossomError, RadrootsBlossomHashPath};
@@ -14,11 +15,7 @@ pub struct RadrootsBlossomBlobUrl {
 
 impl RadrootsBlossomBlobUrl {
     pub fn parse(value: &str) -> Result<Self, RadrootsBlossomError> {
-        if !value.contains("://")
-            || value
-                .chars()
-                .any(|character| character.is_whitespace() || character.is_control())
-        {
+        if !value.contains("://") || !raw_url_text_is_valid(value) {
             return Err(RadrootsBlossomError::InvalidBlobUrl);
         }
         let url = Url::parse(value).map_err(|_| RadrootsBlossomError::InvalidBlobUrl)?;
@@ -163,12 +160,45 @@ fn validate_authority(value: &str, url: &Url) -> Result<(), RadrootsBlossomError
             Ok(0) | Err(_) => return Err(RadrootsBlossomError::InvalidBlobUrl),
         }
     }
-    if let Some(Host::Ipv4(address)) = url.host()
-        && raw_host != address.to_string()
-    {
-        return Err(RadrootsBlossomError::InvalidBlobUrl);
+    match url.host() {
+        Some(Host::Domain(_)) if !raw_dns_host_is_valid(raw_host) => {
+            return Err(RadrootsBlossomError::InvalidBlobUrl);
+        }
+        Some(Host::Ipv4(address)) if raw_host != address.to_string() => {
+            return Err(RadrootsBlossomError::InvalidBlobUrl);
+        }
+        Some(_) => {}
+        None => return Err(RadrootsBlossomError::InvalidBlobUrl),
     }
     Ok(())
+}
+
+fn raw_url_text_is_valid(value: &str) -> bool {
+    !value.chars().any(|character| {
+        character.is_whitespace()
+            || matches!(
+                get_general_category(character),
+                GeneralCategory::Control | GeneralCategory::Format
+            )
+    })
+}
+
+fn raw_dns_host_is_valid(host: &str) -> bool {
+    !host.is_empty()
+        && host.is_ascii()
+        && host.len() <= 253
+        && host.split('.').all(raw_dns_label_is_valid)
+}
+
+fn raw_dns_label_is_valid(label: &str) -> bool {
+    let bytes = label.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 63
+        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
 }
 
 fn raw_authority(value: &str) -> &str {
@@ -206,7 +236,10 @@ fn raw_authority_port(value: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::{format, string::ToString};
+    use alloc::{
+        format,
+        string::{String, ToString},
+    };
 
     const HASH: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
@@ -256,8 +289,6 @@ mod tests {
             "http://192.168.1.2",
             "http://10.0.0.2",
             "http://[::]",
-            "http://.localhost",
-            "http://a..localhost",
         ] {
             let parsed = RadrootsBlossomBlobUrl::parse(&url(origin)).unwrap();
             assert!(!parsed.is_https());
@@ -357,6 +388,8 @@ mod tests {
             format!("https://cdn.example.com/{HASH}.txt\n"),
             format!("https://cdn.example.com/{HASH}.txt\t"),
             format!("https://cdn.example.com/{HASH}.txt\u{7f}"),
+            format!("https://media\u{200b}.example/{HASH}.txt"),
+            format!("https://media\u{2060}.example/{HASH}.txt"),
         ] {
             assert_eq!(
                 RadrootsBlossomBlobUrl::parse(&value),
@@ -376,5 +409,53 @@ mod tests {
                 "{origin}"
             );
         }
+    }
+
+    #[test]
+    fn raw_dns_authority_is_validated_from_preserved_input() {
+        for origin in [
+            "https://média.example",
+            "https://foo_bar.example",
+            "https://-foo.example",
+            "https://foo-.example",
+            "https://foo..example",
+            "https://.example",
+            "https://example.",
+        ] {
+            assert_eq!(
+                RadrootsBlossomBlobUrl::parse(&url(origin)),
+                Err(RadrootsBlossomError::InvalidBlobUrl),
+                "{origin}"
+            );
+        }
+
+        let label_too_long = "a".repeat(64);
+        assert_eq!(
+            RadrootsBlossomBlobUrl::parse(&url(&format!("https://{label_too_long}.example"))),
+            Err(RadrootsBlossomError::InvalidBlobUrl)
+        );
+        let host_too_long = format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(62)
+        );
+        assert!(host_too_long.len() > 253);
+        assert_eq!(
+            RadrootsBlossomBlobUrl::parse(&url(&format!("https://{host_too_long}"))),
+            Err(RadrootsBlossomError::InvalidBlobUrl)
+        );
+
+        let maximum_host = format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(61)
+        );
+        assert_eq!(maximum_host.len(), 253);
+        assert!(RadrootsBlossomBlobUrl::parse(&url(&format!("https://{maximum_host}"))).is_ok());
+        assert!(RadrootsBlossomBlobUrl::parse(&url("https://xn--mdia-9oa.example")).is_ok());
     }
 }

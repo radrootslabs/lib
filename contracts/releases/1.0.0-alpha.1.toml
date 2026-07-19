@@ -136,3 +136,12 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Separate the standard NIP-99 Classified Listing kind and coordinate authority from the richer Radroots Operational Listing profile, operations, codecs, and conformance namespace."
+
+[[changes]]
+id = "blossom-raw-authority-validation"
+classification = "breaking"
+semver_impacts = [
+  "add_conformance_vector",
+  "change_exported_algorithm_behavior",
+]
+summary = "Reject raw Unicode normalization, implicit IDNA, and invalid ASCII DNS labels before constructing Blossom blob URL, approval, or byte-verification typestates."

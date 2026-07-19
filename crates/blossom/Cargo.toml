@@ -21,6 +21,7 @@ std = ["serde?/std", "sha2/std", "url_nostd/std"]
 mediatype = { workspace = true }
 serde = { workspace = true, optional = true }
 sha2 = { workspace = true }
+unicode-general-category = { workspace = true }
 url_nostd = { workspace = true }
 
 [dev-dependencies]

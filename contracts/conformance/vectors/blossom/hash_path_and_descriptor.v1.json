@@ -433,6 +433,104 @@
       }
     },
     {
+      "id": "blossom_blob_url_explicit_punycode_accepted_036e",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "https://xn--mdia-9oa.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "xn--mdia-9oa.example",
+        "port": null,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "png"
+      }
+    },
+    {
+      "id": "blossom_blob_url_format_character_rejected_036f",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media\u200b.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_implicit_idna_rejected_036g",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://m\u00e9dia.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_underscore_label_rejected_036h",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media_store.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_edge_hyphen_rejected_036i",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://-media.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_empty_label_rejected_036j",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://media..example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_oversized_label_rejected_036k",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
+      "id": "blossom_blob_url_maximum_dns_host_accepted_036l",
+      "kind": "blossom.blob_url.parse.valid",
+      "input": {
+        "url": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "port": null,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "extension": "png"
+      }
+    },
+    {
+      "id": "blossom_blob_url_oversized_dns_host_rejected_036m",
+      "kind": "blossom.blob_url.parse.invalid",
+      "input": {
+        "url": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+      },
+      "expected": {
+        "error": "invalid_blob_url"
+      }
+    },
+    {
       "id": "blossom_reference_https_public_approved_037",
       "kind": "blossom.reference_policy.valid",
       "input": {
@@ -552,13 +650,13 @@
       }
     },
     {
-      "id": "blossom_reference_http_absolute_localhost_name_rejected_048",
-      "kind": "blossom.reference_policy.invalid",
+      "id": "blossom_blob_url_absolute_localhost_name_rejected_048",
+      "kind": "blossom.blob_url.parse.invalid",
       "input": {
         "url": "http://localhost./ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
       },
       "expected": {
-        "error": "insecure_blob_url"
+        "error": "invalid_blob_url"
       }
     },
     {

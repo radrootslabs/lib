@@ -66,6 +66,9 @@ A `RadrootsBlossomBlobUrl` is an absolute structural BUD-01 URL with these invar
 - the scheme is `http` or `https`, compared case-insensitively and exposed canonically in lowercase
 - the authority contains one nonempty DNS hostname, canonical dotted-decimal IPv4 address, or
   bracketed IPv6 address and may contain a valid decimal port
+- raw DNS hostnames are ASCII, at most 253 bytes, and consist of dot-separated 1-through-63-byte
+  labels containing only ASCII letters, digits, or interior hyphens; URL-parser-valid explicit
+  ASCII punycode is accepted, while implicit IDNA conversion of a raw Unicode hostname is rejected
 - user information is forbidden
 - the path is exactly one root hash path
 - query and fragment components are forbidden
@@ -73,11 +76,14 @@ A `RadrootsBlossomBlobUrl` is an absolute structural BUD-01 URL with these invar
 - an optional safe extension is parsed independently from the digest
 
 Scheme and DNS host case are canonicalized to lowercase by the URL parser. Extension case is
-preserved. Noncanonical, shortened, octal, hexadecimal, or otherwise ambiguous IPv4 spellings are
-rejected before a typed URL is returned; this prevents approval behavior from changing after a
-serialization round trip. Raw user-information delimiters, whitespace, control characters,
-percent-encoded path data, malformed or zero ports, unbracketed IPv6 addresses, and additional path
-segments are also rejected before URL-parser normalization can discard or reinterpret them.
+preserved. Before parsing, the complete raw URL rejects whitespace plus Unicode general categories
+`Cc` and `Cf`. After structural parsing, the preserved raw authority is checked before a typed URL
+is returned: DNS labels must begin and end with an ASCII alphanumeric character, and noncanonical,
+shortened, octal, hexadecimal, or otherwise ambiguous IPv4 spellings are rejected. These checks
+prevent approval behavior from changing after a serialization round trip. Raw user-information
+delimiters, invalid or implicit-IDNA DNS names, percent-encoded path data, malformed or zero ports,
+unbracketed IPv6 addresses, and additional path segments are also rejected before parser
+normalization can enter a typed value.
 
 Structural validity proves only that the URL has a BUD-01-compatible shape. It does not approve the
 transport scheme, perform DNS resolution, follow a redirect, issue `HEAD` or `GET`, or establish

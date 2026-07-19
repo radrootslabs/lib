@@ -9,6 +9,12 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Blossom blob URLs now validate complete raw Unicode text before URL parsing
+  and exact raw ASCII DNS label grammar before returning a typed value. Unicode
+  control/format text, implicit IDNA conversion, empty labels, underscores,
+  edge hyphens, and oversized DNS names can no longer enter approved or
+  byte-verified media typestates; URL-parser-valid explicit ASCII punycode and
+  canonical IP authorities remain supported.
 - NIP-99 kind `30402` now has an explicit two-level taxonomy: the standard
   protocol kind and coordinate are **Classified Listing**, while the richer
   Radroots farm, bin, inventory, and price profile is **Operational Listing**.

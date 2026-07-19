@@ -200,6 +200,7 @@ tracing = { version = "0.1", default-features = false }
 tracing-appender = { version = "0.2" }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }
+unicode-general-category = { version = "=1.1.0" }
 url = { version = "2" }
 url_nostd = { package = "url", version = "2", default-features = false }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
