@@ -23,6 +23,77 @@ pub type RadrootsNostrTagStandard = nostr::TagStandard;
 pub type RadrootsNostrTimestamp = nostr::Timestamp;
 pub type RadrootsNostrUrl = nostr::Url;
 
+/// A checked generic event prepared for an external signer.
+///
+/// The request is created only after generic authoring policy succeeds. It
+/// serializes as the standard Nostr unsigned-event object expected by signer
+/// helpers, but it exposes no raw unsigned event, mutation, or unchecked
+/// deserialization boundary.
+///
+/// ```compile_fail
+/// use radroots_nostr::prelude::RadrootsNostrExternalSigningRequest;
+///
+/// let _: RadrootsNostrExternalSigningRequest =
+///     serde_json::from_str("{}").expect("request");
+/// ```
+#[must_use = "external signing requests must be completed by a signer"]
+pub struct RadrootsNostrExternalSigningRequest {
+    unsigned_event: nostr::UnsignedEvent,
+    expected_event_id: RadrootsNostrEventId,
+    expected_public_key: RadrootsNostrPublicKey,
+}
+
+impl RadrootsNostrExternalSigningRequest {
+    pub fn expected_event_id(&self) -> RadrootsNostrEventId {
+        self.expected_event_id
+    }
+
+    pub fn expected_public_key(&self) -> RadrootsNostrPublicKey {
+        self.expected_public_key
+    }
+
+    /// Accepts an external signing result only when it is the exact requested
+    /// event and its NIP-01 identifier and signature are valid.
+    pub fn complete(
+        self,
+        event: RadrootsNostrEvent,
+    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+        if event.pubkey != self.expected_public_key {
+            return Err(RadrootsNostrError::ExternalSigningAuthorMismatch {
+                expected: self.expected_public_key,
+                actual: event.pubkey,
+            });
+        }
+        if event.id != self.expected_event_id {
+            return Err(RadrootsNostrError::ExternalSigningEventIdMismatch {
+                expected: self.expected_event_id,
+                actual: event.id,
+            });
+        }
+        event
+            .verify()
+            .map_err(RadrootsNostrError::ExternalSigningEventInvalid)?;
+        Ok(event)
+    }
+
+    fn sign_with_keys(
+        self,
+        keys: &RadrootsNostrKeys,
+    ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+        let event = self.unsigned_event.clone().sign_with_keys(keys)?;
+        self.complete(event)
+    }
+}
+
+impl serde::Serialize for RadrootsNostrExternalSigningRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.unsigned_event.serialize(serializer)
+    }
+}
+
 /// An opaque builder for generic Nostr events.
 ///
 /// Kind 0 profile events, all kind 1 events, all kind 5 deletion requests, kind
@@ -123,8 +194,24 @@ impl RadrootsNostrGenericEventBuilder {
         self,
         keys: &RadrootsNostrKeys,
     ) -> Result<RadrootsNostrEvent, RadrootsNostrError> {
+        self.into_external_signing_request(keys.public_key())?
+            .sign_with_keys(keys)
+    }
+
+    /// Finalizes a generic event for an external signer after enforcing typed
+    /// authoring reservations.
+    pub fn into_external_signing_request(
+        self,
+        public_key: RadrootsNostrPublicKey,
+    ) -> Result<RadrootsNostrExternalSigningRequest, RadrootsNostrError> {
         self.validate_generic_authoring_policy()?;
-        Ok(self.inner.sign_with_keys(keys)?)
+        let mut unsigned_event = self.inner.build(public_key);
+        let expected_event_id = unsigned_event.id();
+        Ok(RadrootsNostrExternalSigningRequest {
+            unsigned_event,
+            expected_event_id,
+            expected_public_key: public_key,
+        })
     }
 
     pub(crate) fn from_unchecked(inner: RadrootsNostrEventBuilderUnchecked) -> Self {
@@ -280,5 +367,127 @@ mod tests {
                 .expect("generic kind signs");
 
         assert_eq!(event.kind.as_u16(), 30_001);
+    }
+
+    #[test]
+    fn external_signing_request_serializes_as_canonical_unsigned_event() {
+        let keys = keys();
+        let request =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "protocol")
+                .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+                .into_external_signing_request(keys.public_key())
+                .expect("checked request");
+        let expected_event_id = request.expected_event_id();
+
+        let encoded = serde_json::to_vec(&request).expect("serialize request");
+        let unsigned_event: nostr::UnsignedEvent =
+            serde_json::from_slice(&encoded).expect("standard unsigned event");
+
+        assert_eq!(unsigned_event.id, Some(expected_event_id));
+        assert_eq!(unsigned_event.pubkey, keys.public_key());
+        assert_eq!(unsigned_event.created_at.as_secs(), 1_234);
+        assert_eq!(unsigned_event.kind.as_u16(), 24_133);
+        assert_eq!(unsigned_event.content, "protocol");
+        unsigned_event.verify_id().expect("canonical event id");
+    }
+
+    #[test]
+    fn external_signing_request_rejects_reserved_authoring_before_finalization() {
+        let error = match RadrootsNostrGenericEventBuilder::text_note("reserved")
+            .into_external_signing_request(keys().public_key())
+        {
+            Ok(_) => panic!("kind 1 remains typed-only"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            RadrootsNostrError::TypedAuthoringRequired { kind }
+                if kind == RadrootsNostrKind::TextNote.as_u16()
+        ));
+    }
+
+    #[test]
+    fn external_signing_request_accepts_only_the_exact_valid_event() {
+        let keys = keys();
+        let request =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "protocol")
+                .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+                .into_external_signing_request(keys.public_key())
+                .expect("checked request");
+        let unsigned_event: nostr::UnsignedEvent =
+            serde_json::from_value(serde_json::to_value(&request).expect("request value"))
+                .expect("unsigned event");
+        let valid_event = unsigned_event
+            .sign_with_keys(&keys)
+            .expect("valid signing result");
+
+        let wrong_author =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "protocol")
+                .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+                .sign_with_keys(&RadrootsNostrKeys::generate())
+                .expect("other author event");
+        assert!(matches!(
+            request.complete(wrong_author),
+            Err(RadrootsNostrError::ExternalSigningAuthorMismatch { .. })
+        ));
+
+        let request =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "protocol")
+                .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+                .into_external_signing_request(keys.public_key())
+                .expect("checked request");
+        let wrong_event_id =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "different")
+                .sign_with_keys(&keys)
+                .expect("different event");
+        assert!(matches!(
+            request.complete(wrong_event_id),
+            Err(RadrootsNostrError::ExternalSigningEventIdMismatch { .. })
+        ));
+
+        for mutate in [
+            |event: &mut RadrootsNostrEvent| event.content.push_str(" tampered"),
+            |event: &mut RadrootsNostrEvent| {
+                event.kind = RadrootsNostrKind::Custom(24_134);
+            },
+            |event: &mut RadrootsNostrEvent| {
+                event.tags = nostr::Tags::from_list(vec![RadrootsNostrTag::custom(
+                    RadrootsNostrTagKind::custom("x"),
+                    ["tampered"],
+                )]);
+            },
+        ] {
+            let request = RadrootsNostrGenericEventBuilder::new(
+                RadrootsNostrKind::Custom(24_133),
+                "protocol",
+            )
+            .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+            .into_external_signing_request(keys.public_key())
+            .expect("checked request");
+            let mut tampered = valid_event.clone();
+            mutate(&mut tampered);
+            assert!(matches!(
+                request.complete(tampered),
+                Err(RadrootsNostrError::ExternalSigningEventInvalid(_))
+            ));
+        }
+
+        let other_signature =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "different")
+                .sign_with_keys(&keys)
+                .expect("other event")
+                .sig;
+        let request =
+            RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Custom(24_133), "protocol")
+                .custom_created_at(RadrootsNostrTimestamp::from_secs(1_234))
+                .into_external_signing_request(keys.public_key())
+                .expect("checked request");
+        let mut invalid_signature = valid_event;
+        invalid_signature.sig = other_signature;
+        assert!(matches!(
+            request.complete(invalid_signature),
+            Err(RadrootsNostrError::ExternalSigningEventInvalid(_))
+        ));
     }
 }

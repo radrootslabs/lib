@@ -127,9 +127,10 @@ pub mod prelude {
     };
     pub use crate::tags::*;
     pub use crate::types::{
-        RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrFilter,
-        RadrootsNostrFromBech32, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys,
-        RadrootsNostrKind, RadrootsNostrMetadata, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
+        RadrootsNostrCoordinate, RadrootsNostrEvent, RadrootsNostrEventId,
+        RadrootsNostrExternalSigningRequest, RadrootsNostrFilter, RadrootsNostrFromBech32,
+        RadrootsNostrGenericEventBuilder, RadrootsNostrKeys, RadrootsNostrKind,
+        RadrootsNostrMetadata, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
         RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId,
         RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard, RadrootsNostrTimestamp,
         RadrootsNostrToBech32, RadrootsNostrUrl,

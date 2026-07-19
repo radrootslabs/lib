@@ -20,6 +20,21 @@ pub enum RadrootsNostrError {
     #[error("Nostr event kind {kind} requires typed authoring")]
     TypedAuthoringRequired { kind: u16 },
 
+    #[error("External signing author mismatch: expected {expected}, got {actual}")]
+    ExternalSigningAuthorMismatch {
+        expected: nostr::PublicKey,
+        actual: nostr::PublicKey,
+    },
+
+    #[error("External signing event ID mismatch: expected {expected}, got {actual}")]
+    ExternalSigningEventIdMismatch {
+        expected: nostr::EventId,
+        actual: nostr::EventId,
+    },
+
+    #[error("External signing event is invalid: {0}")]
+    ExternalSigningEventInvalid(#[source] nostr::event::Error),
+
     #[error("Event error: {0}")]
     EventError(#[from] nostr::event::Error),
 

@@ -91,6 +91,10 @@ publish policy both pass for the same source revision.
 
 ### Added
 
+- Generic protocol builders can now finalize into an opaque checked external
+  signing request. The request preserves the standard unsigned-event JSON wire
+  shape while preventing raw mutation or unchecked reconstruction, and it
+  accepts only an exact author/id match with a valid NIP-01 signature.
 - Kind `30402` now has one allocation-free raw marker-name partition that
   distinguishes focused FoodAvailability, richer Operational Listing,
   marker-free generic NIP-99, and mixed ambiguous inputs before profile

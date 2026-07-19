@@ -110,6 +110,14 @@ explicit low-level Nostr interoperability boundaries; their outputs carry no
 Radroots typed product-authoring claim and are not product authoring entry
 points.
 
+Generic protocol events that require an external custody provider finalize
+through `RadrootsNostrExternalSigningRequest`. The opaque request is available
+without the relay-client feature and serializes as a standard unsigned Nostr
+event only after generic typed-authoring reservations pass. It accepts a
+returned event only when the author and canonical event id match the request
+and the complete NIP-01 event verifies. It exposes no raw mutable builder,
+unsigned-event conversion, or unchecked deserialization path.
+
 ## Portable relay-client lifecycle
 
 With the `client` feature, callers can subscribe and publish to selected relay

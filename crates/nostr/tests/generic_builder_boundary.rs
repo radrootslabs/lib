@@ -34,6 +34,14 @@ fn public_source_does_not_expose_the_upstream_event_builder() {
             "impl AsRef<nostr::EventBuilder> for RadrootsNostrGenericEventBuilder",
             "impl From<RadrootsNostrGenericEventBuilder> for nostr::EventBuilder",
             "impl Into<nostr::EventBuilder> for RadrootsNostrGenericEventBuilder",
+            "impl Deref for RadrootsNostrExternalSigningRequest",
+            "impl AsRef<nostr::UnsignedEvent> for RadrootsNostrExternalSigningRequest",
+            "impl From<RadrootsNostrExternalSigningRequest> for nostr::UnsignedEvent",
+            "impl Into<nostr::UnsignedEvent> for RadrootsNostrExternalSigningRequest",
+            "impl Deserialize for RadrootsNostrExternalSigningRequest",
+            "fn into_unsigned_event",
+            "fn as_unsigned_event",
+            "fn unsigned_event_mut",
         ] {
             if normalized.contains(forbidden) {
                 findings.push(format!(
