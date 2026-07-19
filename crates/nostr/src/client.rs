@@ -16,6 +16,8 @@ use crate::events::deletion::RadrootsNostrNip09DeletionRequestEventBuilder;
 #[cfg(feature = "events")]
 use crate::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
 #[cfg(feature = "events")]
+use crate::events::metadata::RadrootsNostrProfileEventBuilder;
+#[cfg(feature = "events")]
 use crate::events::post::RadrootsNostrPostEventBuilder;
 #[cfg(feature = "events")]
 use crate::events::reply::RadrootsNostrNip10ReplyEventBuilder;
@@ -264,6 +266,20 @@ impl RadrootsNostrClient {
         Ok(self.inner.send_event_builder(event).await?)
     }
 
+    /// Publishes a validated kind-0 Profile replacement snapshot.
+    ///
+    /// Media-bearing callers must prove successful BUD-02 upload first.
+    #[cfg(feature = "events")]
+    pub async fn send_profile_event_builder(
+        &self,
+        event: RadrootsNostrProfileEventBuilder,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_builder(event.into_event_builder())
+            .await?)
+    }
+
     /// Publishes a validated root post through the sealed typed boundary.
     #[cfg(feature = "events")]
     pub async fn send_post_event_builder(
@@ -365,6 +381,17 @@ pub async fn radroots_nostr_send_event(
     event: RadrootsNostrGenericEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_event_builder(event).await
+}
+
+/// Publishes a validated kind-0 Profile replacement snapshot.
+///
+/// Media-bearing callers must prove successful BUD-02 upload first.
+#[cfg(feature = "events")]
+pub async fn radroots_nostr_send_profile_event(
+    client: &RadrootsNostrClient,
+    event: RadrootsNostrProfileEventBuilder,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    client.send_profile_event_builder(event).await
 }
 
 /// Publishes a validated root post through the sealed typed boundary.

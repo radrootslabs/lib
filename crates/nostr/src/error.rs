@@ -60,6 +60,12 @@ pub enum RadrootsNostrError {
     ),
 
     #[cfg(feature = "events")]
+    #[error("Profile encoding error: {0}")]
+    ProfileEncode(
+        #[from] radroots_event_codec::profile::authored::RadrootsAuthoredProfileEncodeError,
+    ),
+
+    #[cfg(feature = "events")]
     #[error("Signed event error: {0}")]
     SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
 

@@ -118,6 +118,13 @@ returned event only when the author and canonical event id match the request
 and the complete NIP-01 event verifies. It exposes no raw mutable builder,
 unsigned-event conversion, or unchecked deserialization path.
 
+Strict kind-0 Profile publication uses
+`RadrootsNostrProfileEventBuilder`, constructed only from
+`RadrootsAuthoredProfile`. The sealed wrapper permits timestamp selection and
+local signing or client publication, but no raw kind, content, or tag
+mutation. A media-bearing Profile still requires runtime-owned proof of
+successful BUD-02 upload before it reaches this authoring boundary.
+
 ## Portable relay-client lifecycle
 
 With the `client` feature, callers can subscribe and publish to selected relay

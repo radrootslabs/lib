@@ -23,6 +23,7 @@ events = [
   "dep:radroots_event_codec",
   "radroots_event/std",
   "radroots_event/serde",
+  "radroots_event_codec/serde_json",
   "radroots_event_codec/std",
 ]
 http = ["dep:reqwest"]
@@ -55,6 +56,10 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[test]]
 name = "post_profile"
+required-features = ["events"]
+
+[[test]]
+name = "profile_event_builder"
 required-features = ["events"]
 
 [[test]]
