@@ -147,6 +147,21 @@ public = [
   "RadrootsNip22CommentProjectionError",
   "RadrootsAdmittedNip22CommentEvent",
   "RadrootsNip22CommentAdmissionError",
+  "RadrootsNip01Coordinate",
+  "RadrootsNip01CoordinateParts",
+  "RadrootsNip01CoordinateParseError",
+  "RadrootsNip09DeletionError",
+  "RadrootsNip09DeletionEventTarget",
+  "RadrootsNip09DeletionAddressTarget",
+  "RadrootsAuthoredNip09DeletionRequest",
+  "RadrootsNip09DeletionDiagnostic",
+  "RadrootsInboundNip09DeletionEventTarget",
+  "RadrootsInboundNip09DeletionAddressTarget",
+  "RadrootsInboundNip09DeletionKindAdvisory",
+  "RadrootsInboundNip09DeletionProjection",
+  "RadrootsNip09DeletionProjectionError",
+  "RadrootsAdmittedNip09DeletionRequestEvent",
+  "RadrootsNip09DeletionAdmissionError",
   "RadrootsReaction",
   "RadrootsArticle",
   "RadrootsFileMetadata",
@@ -1128,6 +1143,104 @@ vector = "contracts/conformance/vectors/comment/verified_profile.v1.json"
 case_kinds = [
   "social.comment.verify_and_admit_event.valid",
   "social.comment.verify_and_admit_event.invalid",
+]
+
+[operations.social_deletion_request_build_authored_draft]
+domain = "social"
+id = "social.deletion_request.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsAuthoredNip09DeletionRequest"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_deletion_request_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/deletion.rs",
+  "crates/event_codec/src/deletion/authored.rs",
+]
+rust_types = [
+  "radroots_event::deletion::RadrootsAuthoredNip09DeletionRequest",
+  "radroots_event::deletion::RadrootsNip09DeletionAddressTarget",
+  "radroots_event::deletion::RadrootsNip09DeletionError",
+  "radroots_event::deletion::RadrootsNip09DeletionEventTarget",
+  "radroots_event::ids::RadrootsNip01Coordinate",
+  "radroots_event::wire::RadrootsNip01EventWireParts",
+]
+
+[operations.social_deletion_request_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/deletion/verified_profile.v1.json"
+case_kinds = [
+  "social.deletion_request.build_authored_draft.valid",
+  "social.deletion_request.build_authored_draft.invalid",
+]
+
+[operations.social_deletion_request_project_verified_event]
+domain = "social"
+id = "social.deletion_request.project_verified_event"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsInboundNip09DeletionProjection"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_deletion_request_project_verified_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/deletion/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionAddressTarget",
+  "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionEventTarget",
+  "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionKindAdvisory",
+  "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionProjection",
+  "radroots_event_codec::deletion::inbound::RadrootsNip09DeletionDiagnostic",
+  "radroots_event_codec::deletion::inbound::RadrootsNip09DeletionProjectionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_deletion_request_project_verified_event.conformance]
+vector = "contracts/conformance/vectors/deletion/verified_profile.v1.json"
+case_kinds = [
+  "social.deletion_request.project_verified_event.valid",
+  "social.deletion_request.project_verified_event.invalid",
+]
+
+[operations.social_deletion_request_verify_and_admit_event]
+domain = "social"
+id = "social.deletion_request.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsAdmittedNip09DeletionRequestEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.social_deletion_request_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/deletion/admission.rs",
+  "crates/event_codec/src/deletion/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::deletion::admission::RadrootsAdmittedNip09DeletionRequestEvent",
+  "radroots_event_codec::deletion::admission::RadrootsNip09DeletionAdmissionError",
+  "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionProjection",
+  "radroots_event_codec::deletion::inbound::RadrootsNip09DeletionProjectionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_deletion_request_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/deletion/verified_profile.v1.json"
+case_kinds = [
+  "social.deletion_request.verify_and_admit_event.valid",
+  "social.deletion_request.verify_and_admit_event.invalid",
 ]
 
 [operations.social_reaction_build_tags]

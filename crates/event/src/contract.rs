@@ -15,14 +15,14 @@ use crate::{
         classify_classified_listing_raw_tags,
     },
     ids::{
-        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
-        relay_url_is_valid,
+        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsNip01Coordinate,
+        RadrootsPublicKey, relay_url_is_valid,
     },
     kinds::*,
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 6;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -146,6 +146,7 @@ pub enum RadrootsTagSemantic {
     OperationalListingSnapshot,
     ListDescription,
     Location,
+    Nip01Coordinate,
     Participant,
     PreviousEvent,
     Price,
@@ -181,6 +182,7 @@ pub enum RadrootsTagValueType {
     Geohash,
     IanaTimeZoneId,
     Kind,
+    Nip01Coordinate,
     PublicKey,
     RelayUrl,
     Sha256,
@@ -539,6 +541,27 @@ const TAG_E_MANY: RadrootsTagContract = tag(
     RadrootsTagCardinality::OptionalMany,
     RadrootsTagSemantic::EventPointer,
     RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP09_E_TARGET: RadrootsTagContract = tag(
+    "e",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::EventPointer,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP09_A_TARGET: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Nip01Coordinate,
+    RadrootsTagValueType::Nip01Coordinate,
+    true,
+);
+const TAG_NIP09_K_ADVISORY: RadrootsTagContract = tag(
+    "k",
+    RadrootsTagCardinality::OptionalMany,
+    RadrootsTagSemantic::Kind,
+    RadrootsTagValueType::Kind,
     true,
 );
 const TAG_NIP10_E_REQUIRED: RadrootsTagContract = tag(
@@ -1092,6 +1115,8 @@ const NO_TAGS: &[RadrootsTagContract] = &[];
 const D_TAGS: &[RadrootsTagContract] = &[TAG_D];
 const P_TAGS: &[RadrootsTagContract] = &[TAG_P_MANY];
 const EVENT_POINTER_TAGS: &[RadrootsTagContract] = &[TAG_E_MANY, TAG_P_MANY, TAG_KIND];
+const NIP09_DELETION_TAGS: &[RadrootsTagContract] =
+    &[TAG_NIP09_E_TARGET, TAG_NIP09_A_TARGET, TAG_NIP09_K_ADVISORY];
 const NIP22_COMMENT_TAGS: &[RadrootsTagContract] = &[
     TAG_NIP22_E_ROOT,
     TAG_NIP22_A_ROOT,
@@ -1471,6 +1496,14 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         RadrootsEventClass::Replaceable,
         RadrootsNostrStandard::Nip01,
         ["radroots.social.follow_list.v1"]
+    ),
+    kind_contract!(
+        KIND_DELETION_REQUEST,
+        "KIND_DELETION_REQUEST",
+        "Deletion Request",
+        RadrootsEventClass::Regular,
+        RadrootsNostrStandard::Nip09,
+        ["radroots.social.deletion_request.v1"]
     ),
     kind_contract!(
         KIND_REPOST,
@@ -2293,6 +2326,20 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventDiscriminator::KindOnly,
         P_TAGS,
         PROFILE_REDUCERS
+    ),
+    event_contract_with_authoring_policy!(
+        "radroots.social.deletion_request.v1",
+        KIND_DELETION_REQUEST,
+        "Deletion Request",
+        "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection",
+        RadrootsEventClass::Regular,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Any,
+        RadrootsContentSchema::PlainText,
+        RadrootsEventAuthoringPolicy::TypedOnly,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        NIP09_DELETION_TAGS,
+        SOCIAL_REDUCERS
     ),
     event_contract!(
         "radroots.social.repost.v1",
@@ -3596,8 +3643,15 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         KIND_SEAL | KIND_MESSAGE | KIND_MESSAGE_FILE | KIND_GIFT_WRAP => {
             RadrootsContractFamily::Message
         }
-        KIND_COMMENT | KIND_GEOCHAT | KIND_POST | KIND_REACTION | KIND_REPOST
-        | KIND_GENERIC_REPOST | KIND_ARTICLE | KIND_FILE_METADATA => RadrootsContractFamily::Social,
+        KIND_COMMENT
+        | KIND_DELETION_REQUEST
+        | KIND_GEOCHAT
+        | KIND_POST
+        | KIND_REACTION
+        | KIND_REPOST
+        | KIND_GENERIC_REPOST
+        | KIND_ARTICLE
+        | KIND_FILE_METADATA => RadrootsContractFamily::Social,
         KIND_RELAY_AUTH | KIND_HTTP_AUTH => RadrootsContractFamily::Relay,
         KIND_GROUP_PUT_USER
         | KIND_GROUP_REMOVE_USER
@@ -3972,6 +4026,7 @@ fn tag_value_is_valid(tag: &[String], value_type: RadrootsTagValueType) -> bool 
         RadrootsTagValueType::Geohash => geohash_is_valid(value),
         RadrootsTagValueType::IanaTimeZoneId => RadrootsIanaTimeZoneId::parse(value).is_ok(),
         RadrootsTagValueType::Kind => value.parse::<u32>().is_ok(),
+        RadrootsTagValueType::Nip01Coordinate => RadrootsNip01Coordinate::parse(value).is_ok(),
         RadrootsTagValueType::PublicKey => RadrootsPublicKey::parse(value).is_ok(),
         RadrootsTagValueType::RelayUrl => relay_url_is_valid(value),
         RadrootsTagValueType::Text => visible_text_is_valid(value),
@@ -4048,6 +4103,7 @@ fn tag_value_type_expectation(value_type: RadrootsTagValueType) -> &'static str 
         RadrootsTagValueType::Geohash => "geohash",
         RadrootsTagValueType::IanaTimeZoneId => "canonical_iana_time_zone_id",
         RadrootsTagValueType::Kind => "kind",
+        RadrootsTagValueType::Nip01Coordinate => "nip01_coordinate",
         RadrootsTagValueType::PublicKey => "public_key",
         RadrootsTagValueType::RelayUrl => "relay_url",
         RadrootsTagValueType::Sha256 => "sha256",
@@ -5743,7 +5799,7 @@ mod tests {
 
     #[test]
     fn nip22_comment_contract_is_typed_and_admission_only() {
-        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 6);
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 7);
 
         let kind = kind_contract(KIND_COMMENT).expect("Comment kind");
         assert_eq!(kind.canonical_constant, "KIND_COMMENT");
@@ -5791,6 +5847,108 @@ mod tests {
             validate_event_contract_parts(KIND_COMMENT, &[], "Comment", contract.id),
             Err(RadrootsContractValidationError::AdmissionRequired {
                 contract_id: "radroots.social.comment.v1",
+            })
+        );
+    }
+
+    #[test]
+    fn nip09_deletion_request_contract_is_typed_and_admission_only() {
+        use crate::deletion::{
+            RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
+            RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
+            RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
+            RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,
+            RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES, RADROOTS_NIP09_DELETION_TARGET_KIND_MAX,
+        };
+
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 7);
+
+        let kind = kind_contract(KIND_DELETION_REQUEST).expect("deletion request kind");
+        assert_eq!(kind.canonical_constant, "KIND_DELETION_REQUEST");
+        assert_eq!(kind.kind, 5);
+        assert_eq!(kind.class, RadrootsEventClass::Regular);
+        assert_eq!(kind.standard, RadrootsNostrStandard::Nip09);
+        assert_eq!(
+            kind.accepted_event_contracts,
+            &["radroots.social.deletion_request.v1"]
+        );
+
+        let contract = event_contract("radroots.social.deletion_request.v1")
+            .expect("NIP-09 deletion request contract");
+        assert_eq!(
+            contract.payload_type,
+            "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection"
+        );
+        assert_eq!(contract.kind, KIND_DELETION_REQUEST);
+        assert_eq!(contract.class, RadrootsEventClass::Regular);
+        assert_eq!(contract.privacy, RadrootsEventPrivacy::Public);
+        assert_eq!(contract.author_role, RadrootsActorRole::Any);
+        assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
+        assert_eq!(
+            contract.authoring_policy,
+            RadrootsEventAuthoringPolicy::TypedOnly
+        );
+        assert_eq!(
+            contract.discriminator,
+            RadrootsEventDiscriminator::AdmissionOnly
+        );
+        assert_eq!(contract.reducers, &[RadrootsReducer::SocialProjection]);
+        assert_eq!(
+            event_contract_family(contract),
+            Some(RadrootsContractFamily::Social)
+        );
+        assert_eq!(
+            contract
+                .tags
+                .iter()
+                .map(|tag| (
+                    tag.name,
+                    tag.cardinality,
+                    tag.semantic,
+                    tag.value_type,
+                    tag.relay_indexed,
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "e",
+                    RadrootsTagCardinality::OptionalMany,
+                    RadrootsTagSemantic::EventPointer,
+                    RadrootsTagValueType::EventId,
+                    true,
+                ),
+                (
+                    "a",
+                    RadrootsTagCardinality::OptionalMany,
+                    RadrootsTagSemantic::Nip01Coordinate,
+                    RadrootsTagValueType::Nip01Coordinate,
+                    true,
+                ),
+                (
+                    "k",
+                    RadrootsTagCardinality::OptionalMany,
+                    RadrootsTagSemantic::Kind,
+                    RadrootsTagValueType::Kind,
+                    true,
+                ),
+            ]
+        );
+        assert_eq!(
+            (
+                RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
+                RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
+                RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,
+                RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES,
+                RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES,
+                RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
+                RADROOTS_NIP09_DELETION_TARGET_KIND_MAX,
+            ),
+            (131_072, 1_024, 4_096, 4_096, 131_072, 262_144, 65_535)
+        );
+        assert_eq!(
+            validate_event_contract_parts(KIND_DELETION_REQUEST, &[], "superseded", contract.id,),
+            Err(RadrootsContractValidationError::AdmissionRequired {
+                contract_id: "radroots.social.deletion_request.v1",
             })
         );
     }
@@ -6289,6 +6447,7 @@ mod tests {
         let event_id = hex_64('a');
         let public_key = hex_64('b');
         let coordinate = format!("{KIND_WIKI_ARTICLE}:{public_key}:soil");
+        let replaceable_coordinate = format!("0:{public_key}:");
         let valid_pointer = vec![
             "source".to_owned(),
             event_id.clone(),
@@ -6317,6 +6476,14 @@ mod tests {
         assert!(!tag_value_is_valid(
             &owned_tag(&["a", "30818:not-hex:soil"]),
             RadrootsTagValueType::AddressableCoordinate
+        ));
+        assert!(tag_value_is_valid(
+            &owned_tag(&["a", replaceable_coordinate.as_str()]),
+            RadrootsTagValueType::Nip01Coordinate
+        ));
+        assert!(!tag_value_is_valid(
+            &owned_tag(&["a", format!("0:{public_key}:profile").as_str()]),
+            RadrootsTagValueType::Nip01Coordinate
         ));
         assert!(tag_value_is_valid(
             &owned_tag(&["contract", "radroots.knowledge.claim.v1"]),
@@ -6510,6 +6677,7 @@ mod tests {
             (RadrootsTagValueType::EventPointer, "event_pointer"),
             (RadrootsTagValueType::Geohash, "geohash"),
             (RadrootsTagValueType::Kind, "kind"),
+            (RadrootsTagValueType::Nip01Coordinate, "nip01_coordinate"),
             (RadrootsTagValueType::PublicKey, "public_key"),
             (RadrootsTagValueType::RelayUrl, "relay_url"),
             (RadrootsTagValueType::Sha256, "sha256"),

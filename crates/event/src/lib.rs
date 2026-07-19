@@ -17,6 +17,7 @@ pub mod classified_listing;
 pub mod comment;
 pub mod contract;
 pub mod coop;
+pub mod deletion;
 pub mod document;
 pub mod draft;
 #[cfg(feature = "dto-bindgen")]

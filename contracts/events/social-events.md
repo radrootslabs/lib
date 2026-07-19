@@ -22,6 +22,8 @@ and its collection metadata uses
 [NIP-51](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/51.md),
 while text-note Reply threading follows
 [NIP-10](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/10.md),
+deletion requests follow
+[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md),
 and kind-`1111` Comment threading follows
 [NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md),
 all at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
@@ -33,7 +35,8 @@ authoring and admission profile are separate contract layers.
 
 The repository implements strict authored and verified-projected kind `1` root-post profiles, a
 separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, a strict-authored and
-tolerant verified-inbound kind `1111` NIP-22 Comment profile, kind `7` `RadrootsReaction`, generic
+tolerant verified-inbound kind `1111` NIP-22 Comment profile, a strict-authored and tolerant
+verified-inbound kind `5` NIP-09 deletion-request profile, kind `7` `RadrootsReaction`, generic
 `RadrootsList` entries, operational listing records through `RadrootsOperationalListing`, the raw
 kind-`30402` profile partition and validated FoodAvailability authored, verified-admission, and
 revision contract, articles, generic public file metadata, calendar date events, calendar time
@@ -49,6 +52,10 @@ The closeout contract requires:
   `RadrootsInboundNip22CommentProjection`, and
   `RadrootsAdmittedNip22CommentEvent` behavior without legacy `e_root` or
   `e_prev` authority
+- strict NIP-09 `RadrootsAuthoredNip09DeletionRequest`,
+  `RadrootsInboundNip09DeletionProjection`, and
+  `RadrootsAdmittedNip09DeletionRequestEvent` request behavior without
+  deletion-effect authority
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 classified-listing parity
 - NIP-65 relay-list validation evidence through `RadrootsList`
@@ -68,6 +75,10 @@ The MVP public social substrate includes:
   `RadrootsInboundNip22CommentProjection` and
   `RadrootsAdmittedNip22CommentEvent` for kind-`1111` NIP-22 Comments rooted
   only in kind `30402`, `31922`, or `31923`
+- strict `RadrootsAuthoredNip09DeletionRequest` publication plus
+  `RadrootsInboundNip09DeletionProjection` and
+  `RadrootsAdmittedNip09DeletionRequestEvent` for effect-free kind-`5` NIP-09
+  event and address deletion requests
 - `RadrootsArticle` for NIP-23 kind `30023` long-form content
 - generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
 - strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
@@ -157,21 +168,23 @@ Update, PhotoUpdate, and Ask contracts use `AdmissionOnly` and are returned only
 by the verified projection/admission boundary.
 
 The event-contract registry assigns an explicit authoring policy to every
-contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, and NIP-22
-Comment contracts are `TypedOnly`; `radroots.social.post.v1` is `ReadOnly`;
-ordinary generic-draft contracts remain `GenericDraft`.
+contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, NIP-22
+Comment, and NIP-09 Deletion Request contracts are `TypedOnly`;
+`radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft contracts
+remain `GenericDraft`.
 `RadrootsEventDraft::new` therefore rejects the strict Profile contract and
-every governed kind-1 or kind-1111 contract with
-`contract_not_draft_authorable`. Serialized drafts record registry version `6`
+every governed kind-1, kind-5, or kind-1111 contract with
+`contract_not_draft_authorable`. Serialized drafts record registry version `7`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
 frozen-draft signing boundary repeats that validation, so stale version-`1`
-through version-`5` drafts must be rebuilt. Typed root posts, Replies, and
-Comments enter Nostr signing and client publication only through opaque
-profile-specific builders that expose timestamp selection and signing, but no
-raw tag/content mutation or public conversion to the upstream builder. The
-opaque generic builder rejects kind `0`, every kind `1` event, and kind `1111`
-at both direct signing and client publication before a signer is consulted.
+through version-`6` drafts must be rebuilt. Typed root posts, Replies,
+Comments, and Deletion Requests enter Nostr signing and client publication
+only through opaque typed builders that expose timestamp selection and
+signing, but no raw tag/content mutation or public conversion to the upstream
+builder. The opaque generic builder rejects kind `0`, every kind `1` event,
+kind `5`, and kind `1111` at both direct signing and client publication before
+a signer is consulted.
 
 ### NIP-10 Reply Trust Layers
 
@@ -306,7 +319,7 @@ The complete public operation namespace is exactly
 `social.comment.build_authored_draft`,
 `social.comment.project_verified_event`, and
 `social.comment.verify_and_admit_event`. Contract
-`radroots.social.comment.v1` is registry-v6 `TypedOnly` for authoring and
+`radroots.social.comment.v1` is registry-v7 `TypedOnly` for authoring and
 `AdmissionOnly` for unsigned matching. Generic kind-`1111` signing and client
 publication are reserved before signer access.
 
@@ -316,6 +329,59 @@ explicit, and every projection or admission case carries its complete fixed
 signed event JSON rather than a mutation recipe, secret key, or generated base.
 The packaged mirror is byte-identical and exercises exact valid projections,
 diagnostics, resource boundaries, error precedence, and NIP-01 admission.
+
+### NIP-09 Deletion Request Trust Layers
+
+The strict Radroots
+[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md)
+profile is kind `5`. `RadrootsAuthoredNip09DeletionRequest` is an opaque,
+non-Serde authoring state that requires at least one valid `e` event-id target
+or `a` NIP-01 replaceable/addressable coordinate. Each event target has a
+caller-asserted kind advisory in `0..=65535`. Replaceable coordinates of kind
+`0`, `3`, or `10000..=19999` require an empty identifier; addressable
+coordinates of kind `30000..=39999` preserve an opaque identifier.
+
+Authored construction normalizes and sorts event ids and coordinates, rejects
+duplicates after normalization, derives the complete unique ascending kind
+set, and emits two-element tags in exact `e`, `a`, then `k` groups. Event
+target kind values and inbound `k` tags remain advisory: the authoring and
+projection layers do not retrieve the referenced event or prove its kind.
+
+`project_verified_nip09_deletion_request_event` accepts only a
+`RadrootsSignatureVerifiedEvent`. It enforces kind `5` and the request resource
+budgets before target parsing. Unknown tags and trailing target elements remain
+in exact raw order. Valid targets are deduplicated by normalized identity,
+retain first-seen tag provenance, and are exposed in canonical sorted views.
+Malformed `e` or `a` targets are hard errors. Malformed, noncanonical, or
+duplicate `k` advisories produce ordered diagnostics. When a request contains
+only address targets, a valid advisory outside the target-coordinate kinds is
+also diagnosed; an event target makes that correspondence unprovable.
+
+`RadrootsAdmittedNip09DeletionRequestEvent` binds the projection to the exact
+envelope whose NIP-01 id and Schnorr signature were verified. Admission proves
+only a valid bounded deletion request. It does not look up a target, establish
+same-author authorization, calculate an address cutoff, replace or suppress an
+event, mutate a store, or decide whether another deletion request is immune.
+Those are downstream evaluator and storage responsibilities.
+
+The complete public operation namespace is exactly
+`social.deletion_request.build_authored_draft`,
+`social.deletion_request.project_verified_event`, and
+`social.deletion_request.verify_and_admit_event`. Contract
+`radroots.social.deletion_request.v1` is registry-v7 `TypedOnly` for authoring
+and `AdmissionOnly` for unsigned matching. Generic kind-`5` signing and client
+publication are reserved before signer access.
+
+Deletion-request content is limited to 131072 UTF-8 bytes, a request to 1024
+tags, all tags to 4096 elements including tag names, each element to 4096 UTF-8
+bytes, aggregate tag-element bytes to 131072, and the compact signed event to
+262144 bytes. The canonical 80-case self-contained corpus is
+`contracts/conformance/vectors/deletion/verified_profile.v1.json`. Authored
+inputs are explicit and every projection or admission input contains one
+complete compact fixed signed event JSON. The byte-identical packaged mirror
+contains no secret or private key, nsec, seed, generator, mutation, base, or
+boundary-expansion recipe, and expected projections expose no authorization,
+suppression, or store-mutation effect.
 
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.

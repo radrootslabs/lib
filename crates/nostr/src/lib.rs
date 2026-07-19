@@ -62,7 +62,8 @@ pub mod prelude {
 
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::client::{
-        radroots_nostr_send_food_availability_event, radroots_nostr_send_nip10_reply_event,
+        radroots_nostr_send_food_availability_event,
+        radroots_nostr_send_nip09_deletion_request_event, radroots_nostr_send_nip10_reply_event,
         radroots_nostr_send_nip22_comment_event, radroots_nostr_send_post_event,
     };
 
@@ -80,6 +81,12 @@ pub mod prelude {
     #[cfg(feature = "events")]
     pub use crate::events::comment::{
         RadrootsNostrNip22CommentEventBuilder, radroots_nostr_build_nip22_comment_event,
+    };
+
+    #[cfg(feature = "events")]
+    pub use crate::events::deletion::{
+        RadrootsNostrNip09DeletionRequestEventBuilder,
+        radroots_nostr_build_nip09_deletion_request_event,
     };
 
     #[cfg(feature = "events")]

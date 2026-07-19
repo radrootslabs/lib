@@ -63,8 +63,8 @@ and a final author hint. Address and participant references contain two
 elements plus an optional relay; an address root's current-revision `e` tag has
 no author hint. A direct `k` repeats the root kind and a nested `k` is `1111`.
 
-The event-contract registry v6 classifies `radroots.social.comment.v1` as
-`TypedOnly` and `AdmissionOnly`; serialized registry versions `1` through `5`
+The event-contract registry v7 classifies `radroots.social.comment.v1` as
+`TypedOnly` and `AdmissionOnly`; serialized registry versions `1` through `6`
 are stale. Generic kind-`1111` draft and signing paths cannot claim the typed
 contract. The Comment resource profile limits content to 131072 UTF-8 bytes,
 tags to 1024, total tag elements including names to 4096, each element to 4096
@@ -77,6 +77,23 @@ admission. The three governed Comment operations are
 `social.comment.verify_and_admit_event`; they and the canonical self-contained
 114-case corpus are owned by `radroots_event_codec` and
 `contracts/conformance`.
+
+The Deletion module implements the effect-free request layer of
+[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md).
+`RadrootsAuthoredNip09DeletionRequest` requires at least one validated event-id
+or replaceable/addressable coordinate target. Event targets carry a
+caller-asserted kind advisory in `0..=65535`; this is metadata rather than
+proof of the target event. Address coordinates accept NIP-01 replaceable kinds
+`0`, `3`, and `10000..=19999` only with an empty identifier, and addressable
+kinds `30000..=39999` with an opaque identifier.
+
+Construction canonicalizes event targets by event id, address targets by
+coordinate, and unique derived kind advisories in ascending order. Duplicate
+normalized targets are rejected. The request enforces the shared content, tag,
+element, aggregate-tag-byte, and compact signed-event budgets before it can
+reach signing. It represents only a kind-`5` protocol request: it does not
+retrieve a target, prove same-author authority, compute an address cutoff,
+suppress content, mutate a store, or make a deletion request itself deletable.
 
 Kind `30402` has a raw, allocation-free marker partition before profile-specific
 tag-shape validation. Presence of `radroots:price_unit` or `radroots:quantity` selects

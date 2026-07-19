@@ -1,15 +1,23 @@
 #![forbid(unsafe_code)]
 
 mod comment_authority;
+mod deletion_authority;
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
 use comment_authority::{
     COMMENT_CASE_KINDS, COMMENT_CONFORMANCE_VECTOR_RELATIVE, COMMENT_OPERATION_EXPECTATIONS,
     COMMENT_VECTOR_EXPECTATIONS, REQUIRED_COMMENT_PUBLIC_TYPES,
 };
+use deletion_authority::{
+    DELETION_ADMIT_INVALID_IDS, DELETION_ADMIT_VALID_IDS, DELETION_AUTHORED_INVALID_IDS,
+    DELETION_AUTHORED_VALID_IDS, DELETION_CASE_KINDS, DELETION_CONFORMANCE_VECTOR_RELATIVE,
+    DELETION_OPERATION_EXPECTATIONS, DELETION_PROJECT_INVALID_IDS, DELETION_PROJECT_VALID_IDS,
+    REQUIRED_DELETION_PUBLIC_TYPES,
+};
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -38,7 +46,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 16] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 17] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -62,6 +70,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 16] = [
     (
         "contracts/conformance/vectors/comment/verified_profile.v1.json",
         "crates/event_codec/tests/fixtures/comment_verified_profile.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/deletion/verified_profile.v1.json",
+        "crates/event_codec/tests/fixtures/deletion_verified_profile.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -1416,6 +1428,18 @@ pub struct PublicOperationConformance {
     pub case_kinds: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DeletionConformanceRawEvent {
+    id: String,
+    pubkey: String,
+    created_at: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
 #[derive(Clone, Copy)]
 struct CalendarOperationExpectation {
     key: &'static str,
@@ -1443,6 +1467,19 @@ struct PostOperationExpectation {
 
 #[derive(Clone, Copy)]
 struct CommentOperationExpectation {
+    key: &'static str,
+    id: &'static str,
+    inputs: &'static [&'static str],
+    outputs: &'static [&'static str],
+    error_class: &'static str,
+    signing: &'static str,
+    rust_modules: &'static [&'static str],
+    rust_types: &'static [&'static str],
+    case_kinds: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
+struct DeletionOperationExpectation {
     key: &'static str,
     id: &'static str,
     inputs: &'static [&'static str],
@@ -1820,6 +1857,46 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
         required_fragments: &["pub const KIND_COMMENT: u32 = 1111;"],
+    },
+];
+
+const DELETION_WITNESSES: [EventBoundarySourceWitness; 7] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/deletion.rs",
+        required_fragments: &["pub struct RadrootsAuthoredNip09DeletionRequest"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/deletion/authored.rs",
+        required_fragments: &["pub fn authored_nip09_deletion_request_to_wire_parts"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/deletion/inbound.rs",
+        required_fragments: &[
+            "pub struct RadrootsInboundNip09DeletionProjection",
+            "pub fn project_verified_nip09_deletion_request_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/deletion/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedNip09DeletionRequestEvent",
+            "pub fn verify_and_admit_nip09_deletion_request_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/events/deletion.rs",
+        required_fragments: &[
+            "pub struct RadrootsNostrNip09DeletionRequestEventBuilder",
+            "pub fn radroots_nostr_build_nip09_deletion_request_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/client.rs",
+        required_fragments: &["pub async fn send_nip09_deletion_request_event_builder"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/kinds.rs",
+        required_fragments: &["pub const KIND_DELETION_REQUEST: u32 = 5;"],
     },
 ];
 
@@ -2439,7 +2516,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 43] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -2490,6 +2567,17 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 43] = [
             "social.comment.verify_and_admit_event",
         ],
         witnesses: &COMMENT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "deletion_request",
+        kind: "5",
+        radroots_type: "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNostrNip09DeletionRequestEventBuilder",
+        rpc_methods: &[
+            "social.deletion_request.build_authored_draft",
+            "social.deletion_request.project_verified_event",
+            "social.deletion_request.verify_and_admit_event",
+        ],
+        witnesses: &DELETION_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "reaction",
@@ -4027,9 +4115,34 @@ fn validate_all_conformance_vectors(
         ));
     }
     let canonical_comment_path = workspace_root.join(COMMENT_CONFORMANCE_VECTOR_RELATIVE);
+    let canonical_deletion_path = workspace_root.join(DELETION_CONFORMANCE_VECTOR_RELATIVE);
     for path in paths {
         let vector = validate_conformance_vector_file(&path, contract_version)?;
         validate_comment_vector_namespace(&path, &canonical_comment_path, &vector)?;
+        validate_deletion_vector_namespace(&path, &canonical_deletion_path, &vector)?;
+    }
+    Ok(())
+}
+
+fn validate_deletion_vector_namespace(
+    path: &Path,
+    canonical_path: &Path,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    if path == canonical_path {
+        return Ok(());
+    }
+    if let Some(entry) = vector
+        .vectors
+        .iter()
+        .find(|entry| entry.kind.starts_with("social.deletion_request."))
+    {
+        return Err(format!(
+            "deletion conformance case kind {} in {} is outside canonical vector {}",
+            entry.kind,
+            path.display(),
+            canonical_path.display()
+        ));
     }
     Ok(())
 }
@@ -5290,6 +5403,7 @@ fn validate_capsule_operation_authority(
         "shared_types.public",
     )?;
     validate_comment_operation_authority(operations_manifest, workspace_root)?;
+    validate_deletion_operation_authority(operations_manifest, workspace_root)?;
     validate_post_operation_authority(operations_manifest, workspace_root)?;
     validate_calendar_operation_authority(operations_manifest, &shared_types)?;
     validate_food_availability_operation_authority(operations_manifest, workspace_root)
@@ -5746,6 +5860,556 @@ fn validate_comment_operation_sequence(
     {
         return Err(format!(
             "comment operation {operation_key} {field} drift: expected {:?}, got {:?}",
+            expected, actual
+        ));
+    }
+    Ok(())
+}
+
+fn validate_deletion_operation_authority(
+    manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let vector = validate_conformance_vector_file(
+        &workspace_root.join(DELETION_CONFORMANCE_VECTOR_RELATIVE),
+        &manifest.contract.version,
+    )?;
+    validate_deletion_operation_inventory(manifest, &vector)
+}
+
+fn validate_deletion_operation_inventory(
+    manifest: &OperationsContractManifest,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    let shared_types = collect_non_empty_set(
+        &manifest.shared_types.public,
+        "deletion operation shared_types.public",
+    )?;
+    let expected_public_types = REQUIRED_DELETION_PUBLIC_TYPES
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let actual_public_types = shared_types
+        .iter()
+        .map(String::as_str)
+        .filter(|name| {
+            name.contains("Nip09Deletion")
+                || name.starts_with("RadrootsNip01Coordinate")
+                || matches!(
+                    *name,
+                    "RadrootsNip01EventWireParts"
+                        | "RadrootsEventEnvelope"
+                        | "RadrootsSignatureVerifiedEvent"
+                )
+        })
+        .collect::<BTreeSet<_>>();
+    if actual_public_types != expected_public_types {
+        return Err(format!(
+            "deletion operation public-type authority drift: expected {:?}, got {:?}",
+            expected_public_types, actual_public_types
+        ));
+    }
+
+    let expected_keys = DELETION_OPERATION_EXPECTATIONS
+        .iter()
+        .map(|expectation| expectation.key.to_string())
+        .collect::<BTreeSet<_>>();
+    let actual_keys = manifest
+        .operations
+        .iter()
+        .filter(|(key, operation)| {
+            operation.conformance.vector == DELETION_CONFORMANCE_VECTOR_RELATIVE
+                || key.starts_with("social_deletion_request_")
+                || operation.id.starts_with("social.deletion_request.")
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        let missing = expected_keys
+            .difference(&actual_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let unexpected = actual_keys
+            .difference(&expected_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "deletion operation authority drift: missing {}; unexpected {}",
+            join_set(&missing),
+            join_set(&unexpected)
+        ));
+    }
+
+    let mut owners = BTreeMap::new();
+    for expected in DELETION_OPERATION_EXPECTATIONS {
+        let operation = manifest
+            .operations
+            .get(expected.key)
+            .ok_or_else(|| format!("deletion operation {} is required", expected.key))?;
+        validate_deletion_operation_scalar(expected.key, "domain", &operation.domain, "social")?;
+        validate_deletion_operation_scalar(expected.key, "id", &operation.id, expected.id)?;
+        validate_deletion_operation_scalar(
+            expected.key,
+            "stability",
+            &operation.stability,
+            "beta",
+        )?;
+        validate_deletion_operation_scalar(
+            expected.key,
+            "error_class",
+            &operation.error_class,
+            expected.error_class,
+        )?;
+        validate_deletion_operation_scalar(
+            expected.key,
+            "signing",
+            &operation.signing,
+            expected.signing,
+        )?;
+        validate_deletion_operation_scalar(
+            expected.key,
+            "transport",
+            &operation.transport,
+            "none",
+        )?;
+        if !operation.deterministic {
+            return Err(format!(
+                "deletion operation {} deterministic drift: expected true, got false",
+                expected.key
+            ));
+        }
+        validate_deletion_operation_sequence(
+            expected.key,
+            "inputs",
+            &operation.inputs,
+            expected.inputs,
+        )?;
+        validate_deletion_operation_sequence(
+            expected.key,
+            "outputs",
+            &operation.outputs,
+            expected.outputs,
+        )?;
+        validate_deletion_operation_sequence(
+            expected.key,
+            "implementation.rust_modules",
+            &operation.implementation.rust_modules,
+            expected.rust_modules,
+        )?;
+        validate_deletion_operation_sequence(
+            expected.key,
+            "implementation.rust_types",
+            &operation.implementation.rust_types,
+            expected.rust_types,
+        )?;
+        validate_deletion_operation_scalar(
+            expected.key,
+            "conformance.vector",
+            &operation.conformance.vector,
+            DELETION_CONFORMANCE_VECTOR_RELATIVE,
+        )?;
+        validate_operation_case_kinds(operation, vector)?;
+        if !operation
+            .conformance
+            .case_kinds
+            .iter()
+            .map(String::as_str)
+            .eq(expected.case_kinds.iter().copied())
+        {
+            return Err(format!(
+                "deletion operation {} conformance.case_kinds drift: expected {:?}, got {:?}",
+                expected.key, expected.case_kinds, operation.conformance.case_kinds
+            ));
+        }
+        for case_kind in &operation.conformance.case_kinds {
+            if let Some(previous) = owners.insert(case_kind.as_str(), expected.key) {
+                return Err(format!(
+                    "deletion conformance case kind {case_kind} is multiply claimed by {previous} and {}",
+                    expected.key
+                ));
+            }
+        }
+    }
+
+    let expected_case_kinds = DELETION_CASE_KINDS.into_iter().collect::<BTreeSet<_>>();
+    let actual_case_kinds = owners.keys().copied().collect::<BTreeSet<_>>();
+    if actual_case_kinds != expected_case_kinds {
+        return Err(format!(
+            "deletion conformance case-kind authority drift: expected {:?}, got {:?}",
+            expected_case_kinds, actual_case_kinds
+        ));
+    }
+
+    let mut actual_inventory = BTreeMap::new();
+    for entry in &vector.vectors {
+        validate_deletion_vector_shape(entry)?;
+        if actual_inventory
+            .insert(entry.id.as_str(), entry.kind.as_str())
+            .is_some()
+        {
+            return Err(format!(
+                "deletion conformance vector inventory has duplicate id {}",
+                entry.id
+            ));
+        }
+        if !entry.id.starts_with("nip09_") {
+            return Err(format!(
+                "deletion conformance vector id {} must use the nip09_ prefix",
+                entry.id
+            ));
+        }
+        if !owners.contains_key(entry.kind.as_str()) {
+            return Err(format!(
+                "deletion conformance vector kind {} is not claimed by exactly one operation",
+                entry.kind
+            ));
+        }
+    }
+    let mut expected_inventory = BTreeMap::new();
+    for (ids, kind) in [
+        (
+            DELETION_AUTHORED_VALID_IDS.as_slice(),
+            "social.deletion_request.build_authored_draft.valid",
+        ),
+        (
+            DELETION_AUTHORED_INVALID_IDS.as_slice(),
+            "social.deletion_request.build_authored_draft.invalid",
+        ),
+        (
+            DELETION_PROJECT_VALID_IDS.as_slice(),
+            "social.deletion_request.project_verified_event.valid",
+        ),
+        (
+            DELETION_PROJECT_INVALID_IDS.as_slice(),
+            "social.deletion_request.project_verified_event.invalid",
+        ),
+        (
+            DELETION_ADMIT_VALID_IDS.as_slice(),
+            "social.deletion_request.verify_and_admit_event.valid",
+        ),
+        (
+            DELETION_ADMIT_INVALID_IDS.as_slice(),
+            "social.deletion_request.verify_and_admit_event.invalid",
+        ),
+    ] {
+        for id in ids {
+            if expected_inventory.insert(*id, kind).is_some() {
+                return Err(format!(
+                    "deletion authority contains duplicate expected vector id {id}"
+                ));
+            }
+        }
+    }
+    if actual_inventory != expected_inventory {
+        return Err(format!(
+            "deletion conformance vector inventory drift: expected {:?}, got {:?}",
+            expected_inventory, actual_inventory
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_deletion_vector_shape(entry: &ConformanceVectorEntry) -> Result<(), String> {
+    validate_deletion_forbidden_metadata(&entry.input, &format!("{}.input", entry.id))?;
+    validate_deletion_forbidden_metadata(&entry.expected, &format!("{}.expected", entry.id))?;
+
+    let input = deletion_object(&entry.input, &format!("{} input", entry.id))?;
+    let is_authored = entry
+        .kind
+        .starts_with("social.deletion_request.build_authored_draft.");
+    let is_valid = entry.kind.ends_with(".valid");
+    if is_authored {
+        validate_deletion_object_keys(
+            input,
+            &format!("{} input", entry.id),
+            &["address_targets", "content", "event_targets"],
+        )?;
+        if !input.get("content").is_some_and(Value::is_string) {
+            return Err(format!(
+                "deletion vector {} input.content must be a string",
+                entry.id
+            ));
+        }
+        let event_targets = input
+            .get("event_targets")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                format!(
+                    "deletion vector {} input.event_targets must be an array",
+                    entry.id
+                )
+            })?;
+        for (index, target) in event_targets.iter().enumerate() {
+            let target = deletion_object(
+                target,
+                &format!("{} input.event_targets[{index}]", entry.id),
+            )?;
+            validate_deletion_object_keys(
+                target,
+                &format!("{} input.event_targets[{index}]", entry.id),
+                &["event_id", "kind"],
+            )?;
+            if !target.get("event_id").is_some_and(Value::is_string)
+                || !target.get("kind").is_some_and(Value::is_u64)
+            {
+                return Err(format!(
+                    "deletion vector {} input.event_targets[{index}] must contain string event_id and unsigned kind",
+                    entry.id
+                ));
+            }
+        }
+        let address_targets = input
+            .get("address_targets")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                format!(
+                    "deletion vector {} input.address_targets must be an array",
+                    entry.id
+                )
+            })?;
+        if !address_targets.iter().all(Value::is_string) {
+            return Err(format!(
+                "deletion vector {} input.address_targets must contain only strings",
+                entry.id
+            ));
+        }
+    } else {
+        validate_deletion_object_keys(input, &format!("{} input", entry.id), &["event_json"])?;
+        let event_json = input
+            .get("event_json")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                format!(
+                    "deletion vector {} input.event_json must be a string",
+                    entry.id
+                )
+            })?;
+        if contains_nsec_material(event_json) {
+            return Err(format!(
+                "deletion vector {} input.event_json contains forbidden nsec material",
+                entry.id
+            ));
+        }
+        let raw =
+            serde_json::from_str::<DeletionConformanceRawEvent>(event_json).map_err(|error| {
+                format!(
+                    "deletion vector {} input.event_json has invalid fixed event shape: {error}",
+                    entry.id
+                )
+            })?;
+        let canonical = serde_json::to_string(&raw).map_err(|error| {
+            format!(
+                "deletion vector {} input.event_json cannot be reserialized: {error}",
+                entry.id
+            )
+        })?;
+        if canonical != event_json {
+            return Err(format!(
+                "deletion vector {} input.event_json must be compact canonical JSON",
+                entry.id
+            ));
+        }
+    }
+
+    let expected = deletion_object(&entry.expected, &format!("{} expected", entry.id))?;
+    if !is_valid {
+        validate_deletion_object_keys(expected, &format!("{} expected", entry.id), &["error"])?;
+        if !expected
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| !error.is_empty())
+        {
+            return Err(format!(
+                "deletion vector {} expected.error must be a non-empty string",
+                entry.id
+            ));
+        }
+    } else if is_authored {
+        validate_deletion_object_keys(
+            expected,
+            &format!("{} expected", entry.id),
+            &["content", "kind", "tags"],
+        )?;
+        if expected.get("kind").and_then(Value::as_u64) != Some(5)
+            || !expected.get("content").is_some_and(Value::is_string)
+            || !expected.get("tags").is_some_and(Value::is_array)
+        {
+            return Err(format!(
+                "deletion vector {} authored expected output must contain kind 5, string content, and tags",
+                entry.id
+            ));
+        }
+    } else {
+        validate_deletion_object_keys(
+            expected,
+            &format!("{} expected", entry.id),
+            &[
+                "address_targets",
+                "contract_id",
+                "diagnostics",
+                "event_targets",
+                "kind_advisories",
+                "raw_tags",
+            ],
+        )?;
+        if expected.get("contract_id").and_then(Value::as_str)
+            != Some("radroots.social.deletion_request.v1")
+        {
+            return Err(format!(
+                "deletion vector {} expected.contract_id drifted",
+                entry.id
+            ));
+        }
+        for field in [
+            "address_targets",
+            "diagnostics",
+            "event_targets",
+            "kind_advisories",
+            "raw_tags",
+        ] {
+            if !expected.get(field).is_some_and(Value::is_array) {
+                return Err(format!(
+                    "deletion vector {} expected.{field} must be an array",
+                    entry.id
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+const APPROVED_FIXTURE_SECRET_TEXT_SHA256: [&str; 4] = [
+    "abd5b64bb0a9a0b9b2e928edb278d0f4d442d16e620ac56570c354a040f4e01a",
+    "619b2fc89e98c17205800071802b3f06e12b05b79401da800b8b13aa8597d240",
+    "82e759d54455fbfa5b9c58367b37f1fbc3d54becc097dcdf71fa48ee0af6b2a6",
+    "510b06b0d391a517860b8e406cdc827b0481f2e449c9817b73adad07f4ff02a7",
+];
+
+fn validate_deletion_forbidden_metadata(value: &Value, path: &str) -> Result<(), String> {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                if is_deletion_forbidden_metadata_key(key) {
+                    return Err(format!(
+                        "deletion vector contains forbidden metadata key {path}.{key}"
+                    ));
+                }
+                validate_deletion_forbidden_metadata(child, &format!("{path}.{key}"))?;
+            }
+        }
+        Value::Array(values) => {
+            for (index, child) in values.iter().enumerate() {
+                validate_deletion_forbidden_metadata(child, &format!("{path}[{index}]"))?;
+            }
+        }
+        Value::String(string) => {
+            if contains_nsec_material(string) {
+                return Err(format!(
+                    "deletion vector contains forbidden nsec material at {path}"
+                ));
+            }
+            if contains_approved_fixture_secret(string) {
+                return Err(format!(
+                    "deletion vector contains forbidden approved fixture secret material at {path}"
+                ));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn is_deletion_forbidden_metadata_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
+    matches!(normalized.as_str(), "base" | "mutation")
+        || normalized.contains("seed")
+        || normalized.contains("generator")
+        || normalized.contains("recipe")
+        || normalized.contains("secret_key")
+        || normalized.contains("private_key")
+        || normalized.contains("signing_key")
+        || normalized.contains("boundary")
+        || normalized.contains("authorization")
+        || normalized.contains("authorized")
+        || normalized.contains("cutoff")
+        || normalized.contains("evaluator")
+        || normalized.contains("store_mutation")
+        || normalized.contains("suppression")
+        || normalized.contains("suppressed")
+        || normalized == "effect"
+        || normalized.ends_with("_effect")
+        || normalized == "effects"
+}
+
+fn contains_nsec_material(value: &str) -> bool {
+    value.to_ascii_lowercase().contains("nsec1")
+}
+
+fn contains_approved_fixture_secret(value: &str) -> bool {
+    value
+        .to_ascii_lowercase()
+        .as_bytes()
+        .windows(64)
+        .filter(|window| window.iter().all(u8::is_ascii_hexdigit))
+        .any(|window| {
+            let digest = hex::encode(Sha256::digest(window));
+            APPROVED_FIXTURE_SECRET_TEXT_SHA256.contains(&digest.as_str())
+        })
+}
+
+fn deletion_object<'a>(
+    value: &'a Value,
+    label: &str,
+) -> Result<&'a serde_json::Map<String, Value>, String> {
+    value
+        .as_object()
+        .ok_or_else(|| format!("deletion vector {label} must be an object"))
+}
+
+fn validate_deletion_object_keys(
+    object: &serde_json::Map<String, Value>,
+    label: &str,
+    expected: &[&str],
+) -> Result<(), String> {
+    let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    let expected = expected.iter().copied().collect::<BTreeSet<_>>();
+    if actual != expected {
+        return Err(format!(
+            "deletion vector {label} keys drift: expected {:?}, got {:?}",
+            expected, actual
+        ));
+    }
+    Ok(())
+}
+
+fn validate_deletion_operation_scalar(
+    operation_key: &str,
+    field: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if actual != expected {
+        return Err(format!(
+            "deletion operation {operation_key} {field} drift: expected {expected}, got {actual}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_deletion_operation_sequence(
+    operation_key: &str,
+    field: &str,
+    actual: &[String],
+    expected: &[&str],
+) -> Result<(), String> {
+    if !actual
+        .iter()
+        .map(String::as_str)
+        .eq(expected.iter().copied())
+    {
+        return Err(format!(
+            "deletion operation {operation_key} {field} drift: expected {:?}, got {:?}",
             expected, actual
         ));
     }
@@ -7321,6 +7985,17 @@ mod tests {
         (manifest, vector)
     }
 
+    fn current_deletion_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
+        let root = workspace_root();
+        let manifest =
+            parse_toml::<OperationsContractManifest>(&root.join("contracts/operations.toml"))
+                .expect("current operations manifest");
+        let vector =
+            parse_json::<ConformanceVectorFile>(&root.join(DELETION_CONFORMANCE_VECTOR_RELATIVE))
+                .expect("current deletion conformance vector");
+        (manifest, vector)
+    }
+
     fn current_food_availability_authority() -> (OperationsContractManifest, ConformanceVectorFile)
     {
         let root = workspace_root();
@@ -8354,6 +9029,193 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     }
 
     #[test]
+    fn deletion_operation_authority_rejects_contract_drift() {
+        let (manifest, vector) = current_deletion_authority();
+        validate_deletion_operation_inventory(&manifest, &vector)
+            .expect("current deletion operation authority");
+
+        let (mut manifest, vector) = current_deletion_authority();
+        manifest
+            .operations
+            .remove("social_deletion_request_project_verified_event");
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("missing deletion operation must fail");
+        assert!(
+            error.contains("deletion operation authority drift"),
+            "{error}"
+        );
+
+        let (mut manifest, vector) = current_deletion_authority();
+        manifest
+            .shared_types
+            .public
+            .push("RadrootsNip09DeletionUnauthorizedEffect".to_string());
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("unexpected deletion public type must fail");
+        assert!(
+            error.contains("deletion operation public-type authority drift"),
+            "{error}"
+        );
+
+        let (mut manifest, vector) = current_deletion_authority();
+        manifest
+            .operations
+            .get_mut("social_deletion_request_verify_and_admit_event")
+            .expect("admission operation")
+            .conformance
+            .case_kinds
+            .pop();
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("missing deletion case kind must fail");
+        assert!(error.contains("conformance.case_kinds drift"), "{error}");
+    }
+
+    #[test]
+    fn deletion_operation_authority_rejects_vector_inventory_drift() {
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_authored_event_target_min_kind_empty_content")
+            .expect("authored deletion vector")
+            .id = "nip09_authored_event_target_min_kind_replacement".to_string();
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("same-count deletion vector ID replacement must fail");
+        assert!(
+            error.contains("deletion conformance vector inventory drift"),
+            "{error}"
+        );
+
+        let (manifest, mut vector) = current_deletion_authority();
+        let source = vector
+            .vectors
+            .iter()
+            .find(|entry| entry.id == "nip09_project_signed_event_target_without_k")
+            .expect("valid signed deletion vector");
+        let input = source.input.clone();
+        let expected = source.expected.clone();
+        vector.vectors.push(ConformanceVectorEntry {
+            id: "nip09_unclaimed_case".to_string(),
+            kind: "social.deletion_request.unclaimed.valid".to_string(),
+            input,
+            expected,
+        });
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("unclaimed deletion vector kind must fail");
+        assert!(
+            error.contains("is not claimed by exactly one operation"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn deletion_operation_authority_rejects_generation_and_effect_metadata() {
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_authored_event_target_min_kind_empty_content")
+            .expect("authored deletion vector")
+            .input
+            .as_object_mut()
+            .expect("authored input")
+            .insert("SeEd".to_string(), Value::from(7_u64));
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("generation seed metadata must fail");
+        assert!(error.contains("forbidden metadata key"), "{error}");
+
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_project_signed_event_target_without_k")
+            .expect("signed deletion vector")
+            .input
+            .as_object_mut()
+            .expect("signed input")
+            .insert("trace".to_string(), Value::Bool(true));
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("extra signed input key must fail");
+        assert!(error.contains("input keys drift"), "{error}");
+
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_project_signed_event_target_without_k")
+            .expect("signed deletion vector")
+            .expected
+            .as_object_mut()
+            .expect("projection expected")
+            .insert("AuThOrIzAtIoN".to_string(), Value::Bool(true));
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("effect-authority output must fail");
+        assert!(error.contains("forbidden metadata key"), "{error}");
+
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_admit_signed_event_target")
+            .expect("admission deletion vector")
+            .input
+            .as_object_mut()
+            .expect("signed input")
+            .insert(
+                "event_json".to_string(),
+                Value::String(r#"{"content":"NSEC1FORBIDDEN"}"#.to_string()),
+            );
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("nsec material must fail");
+        assert!(error.contains("forbidden nsec material"), "{error}");
+
+        let (manifest, mut vector) = current_deletion_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "nip09_admit_signed_event_target")
+            .expect("admission deletion vector")
+            .input
+            .as_object_mut()
+            .expect("signed input")
+            .insert(
+                "event_json".to_string(),
+                Value::String(
+                    r#"{"content":"prefix10C5304D6C9AE3A1A16F7860F1CC8F5E3A76225A2663B3A989A0D775919B7DF5suffix"}"#
+                        .to_string(),
+                ),
+            );
+        let error = validate_deletion_operation_inventory(&manifest, &vector)
+            .expect_err("approved fixture secret material must fail");
+        assert!(
+            error.contains("forbidden approved fixture secret material"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn deletion_vector_namespace_rejects_alternate_owners() {
+        let canonical = PathBuf::from(DELETION_CONFORMANCE_VECTOR_RELATIVE);
+        let alternate = PathBuf::from("contracts/conformance/vectors/social/mvp.v1.json");
+        let vector = ConformanceVectorFile {
+            suite: "alternate".to_string(),
+            contract_version: "1.0.0".to_string(),
+            vectors: vec![ConformanceVectorEntry {
+                id: "nip09_alternate".to_string(),
+                kind: "social.deletion_request.build_authored_draft.valid".to_string(),
+                input: Value::Object(Default::default()),
+                expected: Value::Object(Default::default()),
+            }],
+        };
+
+        let error = validate_deletion_vector_namespace(&alternate, &canonical, &vector)
+            .expect_err("alternate deletion vector namespace must fail");
+        assert!(error.contains("outside canonical vector"), "{error}");
+        validate_deletion_vector_namespace(&canonical, &canonical, &vector)
+            .expect("canonical deletion vector owns the namespace");
+    }
+
+    #[test]
     fn food_availability_operation_authority_rejects_contract_drift() {
         let (manifest, vector) = current_food_availability_authority();
         validate_food_availability_operation_inventory(&manifest, &vector)
@@ -8893,6 +9755,34 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let err = validate_canonical_event_boundary_with_override(&root, Some(override_path))
             .expect_err("message kind drift should fail");
         assert!(err.contains("message kind drift"));
+
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn canonical_event_boundary_rejects_deletion_operation_drift() {
+        let root = workspace_root();
+        let matrix_path =
+            resolve_event_boundary_matrix_path_with_override(&root, None).expect("matrix path");
+        let raw = fs::read_to_string(&matrix_path).expect("read matrix");
+        let (preamble, table) = raw
+            .split_once("## Coverage matrix")
+            .expect("coverage matrix marker");
+        let drifted = format!(
+            "{preamble}## Coverage matrix{}",
+            table.replacen(
+                "social.deletion_request.project_verified_event",
+                "social.deletion_request.project_unverified_event",
+                1,
+            )
+        );
+        let temp = temp_root("deletion_event_boundary_drift");
+        let override_path = temp.join("spec-coverage.md");
+        write_file(&override_path, &drifted);
+
+        let error = validate_canonical_event_boundary_with_override(&root, Some(override_path))
+            .expect_err("deletion operation drift must fail");
+        assert!(error.contains("deletion_request rpc drift"), "{error}");
 
         let _ = fs::remove_dir_all(temp);
     }

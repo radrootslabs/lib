@@ -862,8 +862,8 @@ fn nip01_event_id_preimage_for_valid_pubkey(
 mod tests {
     use super::*;
     use crate::kinds::{
-        KIND_COMMENT, KIND_FARM_CRDT_CHANGE, KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM,
-        KIND_KNOWLEDGE_SOURCE, KIND_POST, KIND_PROFILE,
+        KIND_COMMENT, KIND_DELETION_REQUEST, KIND_FARM_CRDT_CHANGE, KIND_GEOCHAT,
+        KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE, KIND_POST, KIND_PROFILE,
     };
 
     fn hex_64(character: char) -> String {
@@ -1076,6 +1076,7 @@ mod tests {
             ("radroots.social.photo_update.v1", KIND_POST),
             ("radroots.social.ask.v1", KIND_POST),
             ("radroots.social.reply.v1", KIND_POST),
+            ("radroots.social.deletion_request.v1", KIND_DELETION_REQUEST),
             ("radroots.social.comment.v1", KIND_COMMENT),
         ] {
             let error =

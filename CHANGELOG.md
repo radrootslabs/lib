@@ -71,7 +71,7 @@ publish policy both pass for the same source revision.
   externally supplied unsigned events, NIP-46 signing, and signed-event relay
   remain explicit low-level Nostr interoperability with no typed product
   authoring claim.
-- Frozen drafts now carry event-contract registry version `6`, revalidate all
+- Frozen drafts now carry event-contract registry version `7`, revalidate all
   persisted fields and the recomputed event id during deserialization and
   signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
   authoring policies.
@@ -143,6 +143,18 @@ publish policy both pass for the same source revision.
   admission, Unicode, precedence, and exact resource-limit expectations.
   Projection and admission inputs are self-contained signed event JSON, and
   the packaged fixture is byte-identical to the canonical contract vector.
+- Generic NIP-01 coordinates now validate canonical
+  `kind:pubkey:identifier` values with the correct replaceable and addressable
+  kind rules. Strict NIP-09 authoring emits deterministic kind-`5` `e`, `a`,
+  and derived `k` tags, while tolerant verified projection preserves advisory
+  diagnostics and admission keeps the projection bound to its
+  signature-verified envelope. Fixed contract-owned conformance vectors cover the
+  authored, projection, admission, and resource-boundary operations.
+- NIP-09 deletion requests now enter signing and client publication through a
+  sealed typed builder with no raw kind, content, or tag mutation. This surface
+  creates and transports a request only; it provides no target lookup,
+  authorship decision, deletion authorization, store mutation, relay-effect,
+  or deletion-effect semantics.
 
 ### Removed
 
@@ -197,13 +209,18 @@ publish policy both pass for the same source revision.
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
 - Persisted frozen drafts with event-contract registry versions `1` through
-  `5` are rejected and must be reconstructed against registry version `6`;
+  `6` are rejected and must be reconstructed against registry version `7`;
   strict Profile plus typed and read-only post contracts can no longer be
   reconstructed as generic drafts.
 - Generic builder signing and client publication reject kind `1111` before
   signer access. Product Comment publication must use the sealed NIP-22
   builder; relaying an already signed event remains a generic transport
   operation without a typed authoring claim.
+- Generic builder signing and client publication reject every kind `5` before
+  signer access. Product deletion-request publication must use the sealed
+  NIP-09 builder; externally supplied unsigned events, NIP-46 signing, and
+  relaying an already signed event remain low-level interoperability operations
+  without a typed authoring or deletion-effect claim.
 - This breaking capsule revision must not be pinned or published through
   downstream product clients until `radroots_app_rt` is migrated, generated FFI
   bindings are rebuilt, and downstream compile and contract qualification pass.

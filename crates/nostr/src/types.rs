@@ -25,11 +25,12 @@ pub type RadrootsNostrUrl = nostr::Url;
 
 /// An opaque builder for generic Nostr events.
 ///
-/// Kind 0 profile events, all kind 1 events, kind 1111 comments, and focused or
-/// mixed kind 30402 FoodAvailability marker partitions are reserved for typed
-/// Radroots authoring. Marker-free NIP-99 and operational-only kind 30402
-/// events remain available for compatibility. The policy is enforced before
-/// direct signing and before a client is allowed to consult its signer.
+/// Kind 0 profile events, all kind 1 events, all kind 5 deletion requests, kind
+/// 1111 comments, and focused or mixed kind 30402 FoodAvailability marker
+/// partitions are reserved for typed Radroots authoring. Marker-free NIP-99
+/// and operational-only kind 30402 events remain available for compatibility.
+/// The policy is enforced before direct signing and before a client is allowed
+/// to consult its signer.
 ///
 /// The upstream unsigned builder is intentionally inaccessible:
 ///
@@ -153,6 +154,8 @@ impl RadrootsNostrGenericEventBuilder {
         let kind = event.kind.as_u16();
         let is_profile = kind == RadrootsNostrKind::Metadata.as_u16();
         let is_reserved_post = kind == RadrootsNostrKind::TextNote.as_u16();
+        let is_reserved_deletion_request =
+            kind == radroots_event::kinds::KIND_DELETION_REQUEST as u16;
         let is_reserved_comment = kind == radroots_event::kinds::KIND_COMMENT as u16;
         let classified_listing_partition =
             (kind == radroots_event::kinds::KIND_CLASSIFIED_LISTING as u16).then(|| {
@@ -170,7 +173,12 @@ impl RadrootsNostrGenericEventBuilder {
                     | RadrootsClassifiedListingPartition::Ambiguous
             )
         );
-        if is_profile || is_reserved_post || is_reserved_comment || is_reserved_focused_listing {
+        if is_profile
+            || is_reserved_post
+            || is_reserved_deletion_request
+            || is_reserved_comment
+            || is_reserved_focused_listing
+        {
             return Err(RadrootsNostrError::TypedAuthoringRequired { kind });
         }
         Ok(())
@@ -226,6 +234,13 @@ mod tests {
             (
                 RadrootsNostrGenericEventBuilder::text_note("root post"),
                 RadrootsNostrKind::TextNote.as_u16(),
+            ),
+            (
+                RadrootsNostrGenericEventBuilder::new(
+                    RadrootsNostrKind::Custom(radroots_event::kinds::KIND_DELETION_REQUEST as u16),
+                    "Deletion request",
+                ),
+                radroots_event::kinds::KIND_DELETION_REQUEST as u16,
             ),
             (
                 RadrootsNostrGenericEventBuilder::new(

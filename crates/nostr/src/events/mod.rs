@@ -3,6 +3,8 @@ pub mod application_handler;
 #[cfg(feature = "events")]
 pub mod comment;
 #[cfg(feature = "events")]
+pub mod deletion;
+#[cfg(feature = "events")]
 pub mod food_availability;
 pub mod jobs;
 pub mod metadata;

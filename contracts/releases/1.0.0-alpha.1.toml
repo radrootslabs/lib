@@ -239,3 +239,17 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace the Reply-owned RadrootsNip10RelayHint with the shared RadrootsNostrRelayHint protocol primitive and migrate NIP-10 Reply and NIP-22 Comment references to that canonical byte-stable profile."
+
+[[changes]]
+id = "strict-nip09-deletion-request-contract"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Add strict effect-free NIP-09 deletion-request authoring, verified tolerant projection and admission, sealed publication, exact operation authority, and a fixed self-contained conformance corpus while advancing the event registry to version 7 and reserving generic kind-5 authoring."

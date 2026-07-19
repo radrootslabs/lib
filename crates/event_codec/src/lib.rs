@@ -28,6 +28,7 @@ pub mod article;
 pub mod calendar;
 pub mod comment;
 pub mod coop;
+pub mod deletion;
 pub mod document;
 pub mod farm;
 pub mod farm_crdt;

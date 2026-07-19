@@ -205,6 +205,248 @@ validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
 validated_string_id!(RadrootsEventPointer, validate_hex_64);
 validated_string_id!(RadrootsRelayUrl, validate_relay_url);
 
+/// Radroots tag-element policy for a NIP-01 coordinate.
+///
+/// NIP-01 does not define this resource limit.
+pub const RADROOTS_NIP01_COORDINATE_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES;
+
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsNip01CoordinateParseError {
+    Empty,
+    InvalidFormat,
+    Pubkey(RadrootsIdParseError),
+    UnsupportedKind { actual: u32 },
+    IdentifierMustBeEmpty { kind: u32 },
+    TooLong { max: usize, actual: usize },
+}
+
+impl fmt::Display for RadrootsNip01CoordinateParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => formatter.write_str("NIP-01 coordinate is empty"),
+            Self::InvalidFormat => formatter.write_str("NIP-01 coordinate has invalid format"),
+            Self::Pubkey(error) => {
+                write!(formatter, "NIP-01 coordinate pubkey is invalid: {error}")
+            }
+            Self::UnsupportedKind { actual } => write!(
+                formatter,
+                "NIP-01 coordinate kind {actual} is not replaceable or addressable"
+            ),
+            Self::IdentifierMustBeEmpty { kind } => write!(
+                formatter,
+                "NIP-01 coordinate identifier must be empty for replaceable kind {kind}"
+            ),
+            Self::TooLong { max, actual } => write!(
+                formatter,
+                "NIP-01 coordinate is {actual} bytes; Radroots tag-element max is {max}"
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RadrootsNip01CoordinateParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Pubkey(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsNip01CoordinateParts {
+    pub kind: u32,
+    pub pubkey: RadrootsPublicKey,
+    pub identifier: String,
+}
+
+impl RadrootsNip01CoordinateParts {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsNip01CoordinateParseError> {
+        RadrootsNip01Coordinate::parse(value).map(RadrootsNip01Coordinate::into_parts)
+    }
+}
+
+/// A canonical NIP-01 replaceable or addressable event coordinate.
+///
+/// Parsing splits only the first two `:` delimiters. The remaining identifier
+/// is opaque protocol data and is preserved byte-for-byte.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsNip01Coordinate {
+    canonical: String,
+    kind: u32,
+    pubkey: RadrootsPublicKey,
+    identifier: String,
+}
+
+impl RadrootsNip01Coordinate {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsNip01CoordinateParseError> {
+        let value = value.as_ref();
+        if value.is_empty() {
+            return Err(RadrootsNip01CoordinateParseError::Empty);
+        }
+        if value.len() > RADROOTS_NIP01_COORDINATE_MAX_BYTES {
+            return Err(RadrootsNip01CoordinateParseError::TooLong {
+                max: RADROOTS_NIP01_COORDINATE_MAX_BYTES,
+                actual: value.len(),
+            });
+        }
+
+        let (kind, remainder) = value
+            .split_once(':')
+            .ok_or(RadrootsNip01CoordinateParseError::InvalidFormat)?;
+        let (pubkey, identifier) = remainder
+            .split_once(':')
+            .ok_or(RadrootsNip01CoordinateParseError::InvalidFormat)?;
+        let kind = kind
+            .parse::<u32>()
+            .map_err(|_| RadrootsNip01CoordinateParseError::InvalidFormat)?;
+        let requires_empty_identifier = matches!(kind, 0 | 3) || (10_000..=19_999).contains(&kind);
+        if !requires_empty_identifier && !(30_000..=39_999).contains(&kind) {
+            return Err(RadrootsNip01CoordinateParseError::UnsupportedKind { actual: kind });
+        }
+        if requires_empty_identifier && !identifier.is_empty() {
+            return Err(RadrootsNip01CoordinateParseError::IdentifierMustBeEmpty { kind });
+        }
+
+        let pubkey =
+            RadrootsPublicKey::parse(pubkey).map_err(RadrootsNip01CoordinateParseError::Pubkey)?;
+        let identifier = identifier.to_string();
+        let canonical = format!("{kind}:{pubkey}:{identifier}");
+        Ok(Self {
+            canonical,
+            kind,
+            pubkey,
+            identifier,
+        })
+    }
+
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        self.canonical.as_str()
+    }
+
+    #[inline]
+    pub const fn kind(&self) -> u32 {
+        self.kind
+    }
+
+    #[inline]
+    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+        &self.pubkey
+    }
+
+    #[inline]
+    pub fn identifier(&self) -> &str {
+        self.identifier.as_str()
+    }
+
+    #[inline]
+    pub fn parts(&self) -> RadrootsNip01CoordinateParts {
+        RadrootsNip01CoordinateParts {
+            kind: self.kind,
+            pubkey: self.pubkey.clone(),
+            identifier: self.identifier.clone(),
+        }
+    }
+
+    #[inline]
+    pub fn into_parts(self) -> RadrootsNip01CoordinateParts {
+        RadrootsNip01CoordinateParts {
+            kind: self.kind,
+            pubkey: self.pubkey,
+            identifier: self.identifier,
+        }
+    }
+
+    #[inline]
+    pub fn into_string(self) -> String {
+        self.canonical
+    }
+}
+
+impl AsRef<str> for RadrootsNip01Coordinate {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Deref for RadrootsNip01Coordinate {
+    type Target = str;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl Borrow<str> for RadrootsNip01Coordinate {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<RadrootsNip01Coordinate> for String {
+    #[inline]
+    fn from(value: RadrootsNip01Coordinate) -> Self {
+        value.into_string()
+    }
+}
+
+impl fmt::Display for RadrootsNip01Coordinate {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RadrootsNip01Coordinate {
+    type Err = RadrootsNip01CoordinateParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for RadrootsNip01Coordinate {
+    type Error = RadrootsNip01CoordinateParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for RadrootsNip01Coordinate {
+    type Error = RadrootsNip01CoordinateParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+#[cfg(any(feature = "serde", test))]
+impl serde::Serialize for RadrootsNip01Coordinate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+#[cfg(any(feature = "serde", test))]
+impl<'de> serde::Deserialize<'de> for RadrootsNip01Coordinate {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsAddressableCoordinateParts {
     pub kind: u32,
@@ -615,6 +857,178 @@ mod tests {
         assert_eq!(parts.kind, 30402);
         assert_eq!(parts.pubkey.as_str(), hex_64('a'));
         assert_eq!(parts.d_tag.as_str(), "farm:farm-1:members");
+    }
+
+    #[test]
+    fn nip01_coordinates_cover_replaceable_and_addressable_kinds() {
+        for kind in [0, 3, 10_000, 19_999] {
+            let coordinate = RadrootsNip01Coordinate::parse(format!("+0{kind}:{}:", hex_64('A')))
+                .expect("replaceable coordinate");
+            assert_eq!(coordinate.kind(), kind);
+            assert_eq!(coordinate.pubkey().as_str(), hex_64('a'));
+            assert_eq!(coordinate.identifier(), "");
+            assert_eq!(coordinate.as_str(), format!("{kind}:{}:", hex_64('a')));
+        }
+
+        for kind in [30_000, 39_999] {
+            let coordinate = RadrootsNip01Coordinate::parse(format!("{kind}:{}:", hex_64('b')))
+                .expect("empty addressable coordinate");
+            assert_eq!(coordinate.kind(), kind);
+            assert_eq!(coordinate.identifier(), "");
+        }
+    }
+
+    #[test]
+    fn nip01_coordinate_identifier_is_opaque_after_second_colon() {
+        let identifier = "  victoria:\u{0000}seed:\u{2603}\n";
+        let coordinate =
+            RadrootsNip01Coordinate::parse(format!("030402:{}:{identifier}", hex_64('A')))
+                .expect("opaque addressable coordinate");
+
+        assert_eq!(coordinate.kind(), 30_402);
+        assert_eq!(coordinate.pubkey().as_str(), hex_64('a'));
+        assert_eq!(coordinate.identifier().as_bytes(), identifier.as_bytes());
+        assert_eq!(
+            coordinate.as_str().as_bytes(),
+            format!("30402:{}:{identifier}", hex_64('a')).as_bytes()
+        );
+        let parts = coordinate.parts();
+        assert_eq!(parts.kind, 30_402);
+        assert_eq!(parts.pubkey.as_str(), hex_64('a'));
+        assert_eq!(parts.identifier.as_bytes(), identifier.as_bytes());
+        assert_eq!(
+            RadrootsNip01CoordinateParts::parse(coordinate.as_str()).expect("parts"),
+            parts
+        );
+    }
+
+    #[test]
+    fn nip01_coordinates_reject_unsupported_shapes_and_kinds() {
+        let pubkey = hex_64('a');
+        assert_eq!(
+            RadrootsNip01Coordinate::parse("").unwrap_err(),
+            RadrootsNip01CoordinateParseError::Empty
+        );
+        assert_eq!(
+            RadrootsNip01Coordinate::parse("30000").unwrap_err(),
+            RadrootsNip01CoordinateParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsNip01Coordinate::parse("30000:bad:identifier").unwrap_err(),
+            RadrootsNip01CoordinateParseError::Pubkey(RadrootsIdParseError::InvalidLength {
+                expected: 64,
+                actual: 3
+            })
+        );
+        for kind in [1, 9_999, 20_000, 29_999, 40_000, u32::MAX] {
+            assert_eq!(
+                RadrootsNip01Coordinate::parse(format!("{kind}:{pubkey}:")).unwrap_err(),
+                RadrootsNip01CoordinateParseError::UnsupportedKind { actual: kind }
+            );
+        }
+        for kind in [0, 3, 10_000, 19_999] {
+            assert_eq!(
+                RadrootsNip01Coordinate::parse(format!("{kind}:{pubkey}:not-empty")).unwrap_err(),
+                RadrootsNip01CoordinateParseError::IdentifierMustBeEmpty { kind }
+            );
+        }
+        assert_eq!(
+            RadrootsNip01Coordinate::parse(format!("30000:{pubkey}")).unwrap_err(),
+            RadrootsNip01CoordinateParseError::InvalidFormat
+        );
+    }
+
+    #[test]
+    fn nip01_coordinate_errors_and_policy_limit_are_explicit() {
+        assert_eq!(
+            RADROOTS_NIP01_COORDINATE_MAX_BYTES,
+            crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES
+        );
+        let errors = [
+            RadrootsNip01CoordinateParseError::Empty,
+            RadrootsNip01CoordinateParseError::InvalidFormat,
+            RadrootsNip01CoordinateParseError::Pubkey(RadrootsIdParseError::InvalidCharacter),
+            RadrootsNip01CoordinateParseError::UnsupportedKind { actual: 20_000 },
+            RadrootsNip01CoordinateParseError::IdentifierMustBeEmpty { kind: 10_000 },
+            RadrootsNip01CoordinateParseError::TooLong {
+                max: RADROOTS_NIP01_COORDINATE_MAX_BYTES,
+                actual: RADROOTS_NIP01_COORDINATE_MAX_BYTES + 1,
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn nip01_coordinate_enforces_entire_element_byte_limit() {
+        let prefix = format!("30000:{}:", hex_64('a'));
+        let exact = format!(
+            "{prefix}{}",
+            "x".repeat(RADROOTS_NIP01_COORDINATE_MAX_BYTES - prefix.len())
+        );
+        let coordinate =
+            RadrootsNip01Coordinate::parse(&exact).expect("exact coordinate byte limit");
+        assert_eq!(
+            coordinate.as_str().len(),
+            RADROOTS_NIP01_COORDINATE_MAX_BYTES
+        );
+
+        assert_eq!(
+            RadrootsNip01Coordinate::parse(format!("{exact}x")).unwrap_err(),
+            RadrootsNip01CoordinateParseError::TooLong {
+                max: RADROOTS_NIP01_COORDINATE_MAX_BYTES,
+                actual: RADROOTS_NIP01_COORDINATE_MAX_BYTES + 1,
+            }
+        );
+    }
+
+    #[test]
+    fn nip01_coordinate_enforces_multibyte_boundary_by_utf8_bytes() {
+        let prefix = format!("30000:{}:", hex_64('a'));
+        let remaining = RADROOTS_NIP01_COORDINATE_MAX_BYTES - prefix.len();
+        let identifier = format!("{}x", "\u{00e9}".repeat((remaining - 1) / 2));
+        let exact = format!("{prefix}{identifier}");
+        assert_eq!(exact.len(), RADROOTS_NIP01_COORDINATE_MAX_BYTES);
+        RadrootsNip01Coordinate::parse(&exact).expect("exact multibyte coordinate limit");
+
+        let overflow = format!("{exact}x");
+        assert_eq!(
+            RadrootsNip01Coordinate::parse(&overflow).unwrap_err(),
+            RadrootsNip01CoordinateParseError::TooLong {
+                max: RADROOTS_NIP01_COORDINATE_MAX_BYTES,
+                actual: RADROOTS_NIP01_COORDINATE_MAX_BYTES + 1,
+            }
+        );
+    }
+
+    #[test]
+    fn nip01_coordinate_exposes_string_traits_and_validating_serde() {
+        let value = format!("30000:{}:farm:victoria", hex_64('a'));
+        let coordinate = RadrootsNip01Coordinate::parse(&value).expect("coordinate");
+        assert_eq!(coordinate.as_ref(), value);
+        assert_eq!(&*coordinate, value);
+        assert_eq!(
+            <RadrootsNip01Coordinate as Borrow<str>>::borrow(&coordinate),
+            value
+        );
+        assert_eq!(coordinate.to_string(), value);
+        assert_eq!(
+            RadrootsNip01Coordinate::from_str(&value).expect("from str"),
+            coordinate
+        );
+        assert_eq!(
+            RadrootsNip01Coordinate::try_from(value.clone()).expect("try from string"),
+            coordinate
+        );
+        assert_eq!(String::from(coordinate.clone()), value);
+
+        let encoded = serde_json::to_string(&coordinate).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<RadrootsNip01Coordinate>(&encoded).expect("deserialize"),
+            coordinate
+        );
+        assert!(serde_json::from_str::<RadrootsNip01Coordinate>("\"1:bad:\"").is_err());
     }
 
     #[test]

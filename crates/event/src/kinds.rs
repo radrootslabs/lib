@@ -1,6 +1,7 @@
 pub const KIND_PROFILE: u32 = 0;
 pub const KIND_POST: u32 = 1;
 pub const KIND_FOLLOW: u32 = 3;
+pub const KIND_DELETION_REQUEST: u32 = 5;
 pub const KIND_REPOST: u32 = 6;
 pub const KIND_REACTION: u32 = 7;
 pub const KIND_SEAL: u32 = 13;
@@ -274,8 +275,9 @@ pub const PRIVATE_FARM_OPS_KINDS: [u32; 16] = [
     KIND_GROUP_LEAVE_REQUEST,
 ];
 
-pub const PUBLIC_SOCIAL_KINDS: [u32; 11] = [
+pub const PUBLIC_SOCIAL_KINDS: [u32; 12] = [
     KIND_POST,
+    KIND_DELETION_REQUEST,
     KIND_REPOST,
     KIND_REACTION,
     KIND_GENERIC_REPOST,
@@ -288,8 +290,9 @@ pub const PUBLIC_SOCIAL_KINDS: [u32; 11] = [
     KIND_CALENDAR_EVENT_RSVP,
 ];
 
-pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 10] = [
+pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 11] = [
     KIND_POST,
+    KIND_DELETION_REQUEST,
     KIND_REPOST,
     KIND_REACTION,
     KIND_GENERIC_REPOST,
@@ -301,8 +304,9 @@ pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 10] = [
     KIND_CALENDAR_EVENT_RSVP,
 ];
 
-pub const MVP_SOCIAL_KINDS: [u32; 6] = [
+pub const MVP_SOCIAL_KINDS: [u32; 7] = [
     KIND_POST,
+    KIND_DELETION_REQUEST,
     KIND_PUBLIC_FILE_METADATA,
     KIND_COMMENT,
     KIND_ARTICLE,
@@ -337,6 +341,7 @@ pub const fn is_unambiguous_public_social_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_POST
+            | KIND_DELETION_REQUEST
             | KIND_REPOST
             | KIND_REACTION
             | KIND_GENERIC_REPOST
@@ -359,6 +364,7 @@ pub const fn is_mvp_social_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_POST
+            | KIND_DELETION_REQUEST
             | KIND_PUBLIC_FILE_METADATA
             | KIND_COMMENT
             | KIND_ARTICLE
@@ -721,6 +727,7 @@ mod tests {
 
     #[test]
     fn exposes_social_event_kind_constants() {
+        assert_eq!(KIND_DELETION_REQUEST, 5);
         assert_eq!(KIND_REPOST, 6);
         assert_eq!(KIND_GENERIC_REPOST, 16);
         assert_eq!(KIND_REPORT, 1984);
@@ -733,12 +740,13 @@ mod tests {
 
     #[test]
     fn classifies_public_social_kinds() {
-        assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 11);
-        assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 10);
-        assert_eq!(MVP_SOCIAL_KINDS.len(), 6);
+        assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 12);
+        assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 11);
+        assert_eq!(MVP_SOCIAL_KINDS.len(), 7);
         assert_eq!(PRODUCTION_SOCIAL_KINDS.len(), 4);
 
         assert!(is_public_social_kind(KIND_POST));
+        assert!(is_public_social_kind(KIND_DELETION_REQUEST));
         assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
         assert!(is_public_file_metadata_kind(KIND_PUBLIC_FILE_METADATA));
         assert!(!is_public_file_metadata_kind(KIND_POST));
@@ -759,6 +767,7 @@ mod tests {
 
         assert!(is_mvp_social_kind(KIND_ARTICLE));
         assert!(is_mvp_social_kind(KIND_COMMENT));
+        assert!(is_mvp_social_kind(KIND_DELETION_REQUEST));
         assert!(!is_mvp_social_kind(KIND_REPORT));
         assert!(!is_production_social_kind(KIND_REPORT));
         assert!(!is_production_social_kind(KIND_ARTICLE));
@@ -767,6 +776,7 @@ mod tests {
             KIND_PUBLIC_FILE_METADATA
         ));
         assert!(is_unambiguous_public_social_kind(KIND_ARTICLE));
+        assert!(is_unambiguous_public_social_kind(KIND_DELETION_REQUEST));
     }
 
     #[test]

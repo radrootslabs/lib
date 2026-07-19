@@ -61,17 +61,29 @@ authority projection, and `RadrootsAdmittedNip22CommentEvent` keeps it bound to
 the verified envelope. Malformed optional relay or participant metadata
 remains diagnostic, while cardinality, unsupported roots, coordinate
 conflicts, and valid-but-conflicting author hints fail admission. Admission
-does not prove any referenced target or relay. The registry-v6 contract is
+does not prove any referenced target or relay. The registry-v7 contract is
 `TypedOnly` for authoring and `AdmissionOnly` for matching, with registry
-versions `1` through `5` stale.
+versions `1` through `6` stale.
+
+Strict
+[NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md)
+deletion-request publication is exposed through the sealed
+`RadrootsNostrNip09DeletionRequestEventBuilder`. Its only input is a checked
+`RadrootsAuthoredNip09DeletionRequest`; callers may choose the timestamp and
+sign or publish, but cannot mutate the kind, content, or canonical `e`, `a`,
+and derived `k` tags. Generic kind-5 builders are rejected before signer
+access. Admission proves only the signed deletion-request event and its typed
+projection. It does not prove target authorship, existence, deletion
+authorization, applicability, relay handling, or any deletion effect.
 
 The former free-form text-note post builder is removed. Generic protocol
-builders reject kind-0 Profile events, every kind-1 event, and kind-1111
-Comments at both direct signing and client-publication boundaries before
-signer access. Typed media builders can sign or publish only after the owning
-runtime separately proves successful BUD-02 upload completion; their
-byte-verified descriptors do not attest upload completion. The generic net
-manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+builders reject kind-0 Profile events, every kind-1 event, every kind-5
+deletion request, and kind-1111 Comments at both direct signing and
+client-publication boundaries before signer access. Typed media builders can
+sign or publish only after the owning runtime separately proves successful
+BUD-02 upload completion; their byte-verified descriptors do not attest upload
+completion. The generic net manager intentionally exposes no direct
+PhotoUpdate or media Ask publisher.
 
 The complete governed Comment operation namespace remains
 `social.comment.build_authored_draft`,
