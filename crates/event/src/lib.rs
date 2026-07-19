@@ -58,6 +58,7 @@ pub mod profile;
 pub mod reaction;
 pub mod relay_auth;
 pub mod relay_document;
+pub mod relay_hint;
 pub mod reply;
 pub mod report;
 pub mod repost;

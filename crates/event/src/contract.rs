@@ -22,7 +22,7 @@ use crate::{
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 5;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 6;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -555,6 +555,62 @@ const TAG_NIP10_P_OPTIONAL: RadrootsTagContract = tag(
     RadrootsTagValueType::PublicKey,
     true,
 );
+const TAG_NIP22_E_ROOT: RadrootsTagContract = tag(
+    "E",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::RootEvent,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP22_A_ROOT: RadrootsTagContract = tag(
+    "A",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
+const TAG_NIP22_K_ROOT: RadrootsTagContract = tag(
+    "K",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Kind,
+    RadrootsTagValueType::Kind,
+    true,
+);
+const TAG_NIP22_P_ROOT: RadrootsTagContract = tag(
+    "P",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Participant,
+    RadrootsTagValueType::PublicKey,
+    true,
+);
+const TAG_NIP22_A_PARENT: RadrootsTagContract = tag(
+    "a",
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::AddressableCoordinate,
+    RadrootsTagValueType::AddressableCoordinate,
+    true,
+);
+const TAG_NIP22_E_PARENT: RadrootsTagContract = tag(
+    "e",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::EventPointer,
+    RadrootsTagValueType::EventId,
+    true,
+);
+const TAG_NIP22_K_PARENT: RadrootsTagContract = tag(
+    "k",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Kind,
+    RadrootsTagValueType::Kind,
+    true,
+);
+const TAG_NIP22_P_PARENT: RadrootsTagContract = tag(
+    "p",
+    RadrootsTagCardinality::RequiredMany,
+    RadrootsTagSemantic::Participant,
+    RadrootsTagValueType::PublicKey,
+    true,
+);
 const TAG_KIND: RadrootsTagContract = tag(
     "k",
     RadrootsTagCardinality::OptionalOne,
@@ -1036,6 +1092,16 @@ const NO_TAGS: &[RadrootsTagContract] = &[];
 const D_TAGS: &[RadrootsTagContract] = &[TAG_D];
 const P_TAGS: &[RadrootsTagContract] = &[TAG_P_MANY];
 const EVENT_POINTER_TAGS: &[RadrootsTagContract] = &[TAG_E_MANY, TAG_P_MANY, TAG_KIND];
+const NIP22_COMMENT_TAGS: &[RadrootsTagContract] = &[
+    TAG_NIP22_E_ROOT,
+    TAG_NIP22_A_ROOT,
+    TAG_NIP22_K_ROOT,
+    TAG_NIP22_P_ROOT,
+    TAG_NIP22_A_PARENT,
+    TAG_NIP22_E_PARENT,
+    TAG_NIP22_K_PARENT,
+    TAG_NIP22_P_PARENT,
+];
 const LIST_TAGS: &[RadrootsTagContract] = &[TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY, TAG_RELAY];
 const LIST_SET_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY];
 const PROFILE_TAGS: &[RadrootsTagContract] = &[TAG_P_MANY];
@@ -2345,17 +2411,18 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         FILE_METADATA_TAGS,
         SOCIAL_REDUCERS
     ),
-    event_contract!(
+    event_contract_with_authoring_policy!(
         "radroots.social.comment.v1",
         KIND_COMMENT,
         "Comment",
-        "RadrootsComment",
+        "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
-        EVENT_POINTER_TAGS,
+        RadrootsEventAuthoringPolicy::TypedOnly,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        NIP22_COMMENT_TAGS,
         SOCIAL_REDUCERS
     ),
     event_contract!(
@@ -5671,6 +5738,60 @@ mod tests {
                 .expect("generic-draft control contract")
                 .authoring_policy,
             RadrootsEventAuthoringPolicy::GenericDraft
+        );
+    }
+
+    #[test]
+    fn nip22_comment_contract_is_typed_and_admission_only() {
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 6);
+
+        let kind = kind_contract(KIND_COMMENT).expect("Comment kind");
+        assert_eq!(kind.canonical_constant, "KIND_COMMENT");
+        assert_eq!(kind.kind, 1111);
+        assert_eq!(kind.class, RadrootsEventClass::Regular);
+        assert_eq!(kind.standard, RadrootsNostrStandard::Nip22);
+        assert_eq!(
+            kind.accepted_event_contracts,
+            &["radroots.social.comment.v1"]
+        );
+
+        let contract =
+            event_contract("radroots.social.comment.v1").expect("NIP-22 Comment contract");
+        assert_eq!(
+            contract.payload_type,
+            "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection"
+        );
+        assert_eq!(contract.kind, KIND_COMMENT);
+        assert_eq!(contract.class, RadrootsEventClass::Regular);
+        assert_eq!(contract.privacy, RadrootsEventPrivacy::Public);
+        assert_eq!(contract.author_role, RadrootsActorRole::Any);
+        assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
+        assert_eq!(
+            contract.authoring_policy,
+            RadrootsEventAuthoringPolicy::TypedOnly
+        );
+        assert_eq!(
+            contract.discriminator,
+            RadrootsEventDiscriminator::AdmissionOnly
+        );
+        assert_eq!(contract.reducers, &[RadrootsReducer::SocialProjection]);
+        assert_eq!(
+            event_contract_family(contract),
+            Some(RadrootsContractFamily::Social)
+        );
+        assert_eq!(
+            contract.tags.iter().map(|tag| tag.name).collect::<Vec<_>>(),
+            vec!["E", "A", "K", "P", "a", "e", "k", "p"]
+        );
+        assert!(
+            contract.tags.iter().all(|tag| tag.relay_indexed),
+            "every single-letter NIP-22 tag must remain relay-indexed"
+        );
+        assert_eq!(
+            validate_event_contract_parts(KIND_COMMENT, &[], "Comment", contract.id),
+            Err(RadrootsContractValidationError::AdmissionRequired {
+                contract_id: "radroots.social.comment.v1",
+            })
         );
     }
 

@@ -301,9 +301,10 @@ pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 10] = [
     KIND_CALENDAR_EVENT_RSVP,
 ];
 
-pub const MVP_SOCIAL_KINDS: [u32; 5] = [
+pub const MVP_SOCIAL_KINDS: [u32; 6] = [
     KIND_POST,
     KIND_PUBLIC_FILE_METADATA,
+    KIND_COMMENT,
     KIND_ARTICLE,
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
@@ -359,6 +360,7 @@ pub const fn is_mvp_social_kind(kind: u32) -> bool {
         kind,
         KIND_POST
             | KIND_PUBLIC_FILE_METADATA
+            | KIND_COMMENT
             | KIND_ARTICLE
             | KIND_CALENDAR_DATE_EVENT
             | KIND_CALENDAR_TIME_EVENT
@@ -733,7 +735,7 @@ mod tests {
     fn classifies_public_social_kinds() {
         assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 11);
         assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 10);
-        assert_eq!(MVP_SOCIAL_KINDS.len(), 5);
+        assert_eq!(MVP_SOCIAL_KINDS.len(), 6);
         assert_eq!(PRODUCTION_SOCIAL_KINDS.len(), 4);
 
         assert!(is_public_social_kind(KIND_POST));
@@ -756,6 +758,7 @@ mod tests {
         assert!(!is_public_social_kind(KIND_FARM_WORKSPACE_MANIFEST));
 
         assert!(is_mvp_social_kind(KIND_ARTICLE));
+        assert!(is_mvp_social_kind(KIND_COMMENT));
         assert!(!is_mvp_social_kind(KIND_REPORT));
         assert!(!is_production_social_kind(KIND_REPORT));
         assert!(!is_production_social_kind(KIND_ARTICLE));

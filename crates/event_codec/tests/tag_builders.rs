@@ -8,7 +8,6 @@ use radroots_core::{
 };
 use radroots_event::RadrootsEventPtr;
 use radroots_event::app_data::RadrootsAppData;
-use radroots_event::comment::RadrootsComment;
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
@@ -171,17 +170,6 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         content: "payload".to_string(),
     };
     assert!(!app_data.build_tags().unwrap().is_empty());
-
-    let comment = RadrootsComment {
-        root: sample_social_target(
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        ),
-        parent: sample_social_target(
-            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        ),
-        content: "hello".to_string(),
-    };
-    assert!(!comment.build_tags().unwrap().is_empty());
 
     let reaction = RadrootsReaction {
         target: sample_social_target(

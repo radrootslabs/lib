@@ -209,3 +209,33 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace generic URL normalization for NIP-10 relay hints with one portable canonical profile, reject noncanonical hints during strict authoring, and preserve rejected inbound hints verbatim in ordered diagnostics."
+
+[[changes]]
+id = "strict-nip22-comment-contract"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_type",
+  "remove_exported_function",
+  "remove_exported_module",
+  "remove_exported_trait_impl",
+  "change_exported_function_signature",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace the permissive Comment model and codecs with a strict kind-1111 NIP-22 authored contract, signature-gated tolerant projection and admission, sealed publication, exact operation authority, and a fixed self-contained conformance corpus while advancing the event registry to version 6."
+
+[[changes]]
+id = "shared-canonical-nostr-relay-hint"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "remove_exported_type",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace the Reply-owned RadrootsNip10RelayHint with the shared RadrootsNostrRelayHint protocol primitive and migrate NIP-10 Reply and NIP-22 Comment references to that canonical byte-stable profile."

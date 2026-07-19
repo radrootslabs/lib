@@ -35,22 +35,53 @@ thread content and can never enter root-card admission. Reply admission proves
 the Reply event's NIP-01 id and signature; it does not prove that a referenced
 target exists, is kind `1`, or was authored by the declared referenced author.
 
-Reply authoring and verified projection share the portable
-`RadrootsNip10RelayHint` profile rather than the generic relay URL type. It
+Strict
+[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
+Comment publication is separately exposed through
+`RadrootsNostrNip22CommentEventBuilder`. Its only input is a checked
+`RadrootsAuthoredNip22Comment`; callers may choose the timestamp and sign or
+publish, but cannot mutate the kind, content, or canonical
+root, parent, kind, and participant tags. The profile admits event or address
+roots only for kinds `30402`, `31922`, and `31923`; it has no external
+`I`/`i` or kind-`1` root surface.
+
+Reply and Comment authoring and verified projection share the portable
+`RadrootsNostrRelayHint` profile rather than the generic relay URL type. It
 accepts only exact lowercase `ws://` or `wss://` visible-ASCII URLs with a
 canonical lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6
 authority, an optional canonical port `1..65535`, and RFC 3986
 path-abempty/query syntax using uppercase `%HH` escapes. Rejected inbound hints
 remain verbatim in ordered raw-tag diagnostics. The hint profile does not own
-the Reply boundary's separate 4,096-byte tag-element budget.
+the event boundary's separate 4,096-byte tag-element budget.
+
+Inbound Comment projection is owned by `radroots_event_codec` and accepts only
+an id-and-signature verified kind-`1111` envelope.
+`RadrootsInboundNip22CommentProjection` retains the order-independent
+authority projection, and `RadrootsAdmittedNip22CommentEvent` keeps it bound to
+the verified envelope. Malformed optional relay or participant metadata
+remains diagnostic, while cardinality, unsupported roots, coordinate
+conflicts, and valid-but-conflicting author hints fail admission. Admission
+does not prove any referenced target or relay. The registry-v6 contract is
+`TypedOnly` for authoring and `AdmissionOnly` for matching, with registry
+versions `1` through `5` stale.
 
 The former free-form text-note post builder is removed. Generic protocol
-builders reject kind-0 Profile events and every kind-1 event at both direct
-signing and client-publication boundaries. Typed media builders can sign or
-publish only after the owning runtime separately proves successful BUD-02
-upload completion; their byte-verified descriptors do not attest upload
-completion. The generic net manager intentionally exposes no direct
-PhotoUpdate or media Ask publisher.
+builders reject kind-0 Profile events, every kind-1 event, and kind-1111
+Comments at both direct signing and client-publication boundaries before
+signer access. Typed media builders can sign or publish only after the owning
+runtime separately proves successful BUD-02 upload completion; their
+byte-verified descriptors do not attest upload completion. The generic net
+manager intentionally exposes no direct PhotoUpdate or media Ask publisher.
+
+The complete governed Comment operation namespace remains
+`social.comment.build_authored_draft`,
+`social.comment.project_verified_event`, and
+`social.comment.verify_and_admit_event`. The typed builder and client
+publication surface consume that strict contract; they do not add a fourth
+wire operation. Comment inputs retain the 131072-byte content, 1024-tag,
+4096-total-element, 4096-byte element, 131072-byte aggregate tag, and
+262144-byte compact signed-wire ceilings proven by the canonical
+self-contained 114-case conformance corpus.
 
 Focused FoodAvailability kind-30402 authoring likewise uses a sealed builder.
 Its `created_at` is fixed during strict construction and cannot be changed

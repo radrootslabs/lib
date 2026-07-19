@@ -411,30 +411,35 @@ mod tests {
         let cases = [
             (
                 1,
-                "draft validation failed: event contract registry version mismatch: expected 5, got 1",
-                "event contract registry version mismatch: expected 5, got 1",
+                "draft validation failed: event contract registry version mismatch: expected 6, got 1",
+                "event contract registry version mismatch: expected 6, got 1",
             ),
             (
                 2,
-                "draft validation failed: event contract registry version mismatch: expected 5, got 2",
-                "event contract registry version mismatch: expected 5, got 2",
+                "draft validation failed: event contract registry version mismatch: expected 6, got 2",
+                "event contract registry version mismatch: expected 6, got 2",
             ),
             (
                 3,
-                "draft validation failed: event contract registry version mismatch: expected 5, got 3",
-                "event contract registry version mismatch: expected 5, got 3",
+                "draft validation failed: event contract registry version mismatch: expected 6, got 3",
+                "event contract registry version mismatch: expected 6, got 3",
             ),
             (
                 4,
-                "draft validation failed: event contract registry version mismatch: expected 5, got 4",
-                "event contract registry version mismatch: expected 5, got 4",
+                "draft validation failed: event contract registry version mismatch: expected 6, got 4",
+                "event contract registry version mismatch: expected 6, got 4",
+            ),
+            (
+                5,
+                "draft validation failed: event contract registry version mismatch: expected 6, got 5",
+                "event contract registry version mismatch: expected 6, got 5",
             ),
         ];
 
         for (actual, expected_authority, expected_source) in cases {
             let authority_error = RadrootsAuthorityError::DraftValidation(
                 radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
-                    expected: 5,
+                    expected: 6,
                     actual,
                 },
             );

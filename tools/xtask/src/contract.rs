@@ -1,6 +1,12 @@
 #![forbid(unsafe_code)]
 
+mod comment_authority;
+
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
+use comment_authority::{
+    COMMENT_CASE_KINDS, COMMENT_CONFORMANCE_VECTOR_RELATIVE, COMMENT_OPERATION_EXPECTATIONS,
+    COMMENT_VECTOR_EXPECTATIONS, REQUIRED_COMMENT_PUBLIC_TYPES,
+};
 use semver::Version;
 use serde::Deserialize;
 use serde_json::Value;
@@ -32,7 +38,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 15] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 16] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -52,6 +58,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 15] = [
     (
         "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
         "crates/event_codec/tests/fixtures/calendar_radroots_profile.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/comment/verified_profile.v1.json",
+        "crates/event_codec/tests/fixtures/comment_verified_profile.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -120,7 +130,7 @@ const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
     "dto_bindgen_core",
     "dto_bindgen_macros",
 ];
-const RETIRED_OPERATION_EVENT_NAMES: [&str; 13] = [
+const RETIRED_OPERATION_EVENT_NAMES: [&str; 15] = [
     "WireEventParts",
     "RadrootsFrozenEventDraft",
     "RadrootsNostrEvent",
@@ -134,6 +144,8 @@ const RETIRED_OPERATION_EVENT_NAMES: [&str; 13] = [
     "RadrootsCalendar",
     "RadrootsCalendarEventRsvp",
     "RadrootsCalendarRsvp",
+    "RadrootsComment",
+    "RadrootsNip10RelayHint",
 ];
 const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsNip01EventWireParts",
@@ -186,7 +198,7 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsAuthoredPhotoUpdate",
     "RadrootsAuthoredAsk",
     "RadrootsNip10ReplyError",
-    "RadrootsNip10RelayHint",
+    "RadrootsNostrRelayHint",
     "RadrootsNip10ReplyReference",
     "RadrootsAuthoredNip10Reply",
     "RadrootsPostDiagnostic",
@@ -568,13 +580,14 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
+            "crates/event/src/relay_hint.rs",
             "crates/event/src/reply.rs",
             "crates/event_codec/src/reply/authored.rs",
         ],
         rust_types: &[
             "radroots_event::reply::RadrootsAuthoredNip10Reply",
             "radroots_event::reply::RadrootsNip10ReplyError",
-            "radroots_event::reply::RadrootsNip10RelayHint",
+            "radroots_event::relay_hint::RadrootsNostrRelayHint",
             "radroots_event::reply::RadrootsNip10ReplyReference",
         ],
         case_kinds: &[
@@ -589,9 +602,12 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         outputs: &["RadrootsInboundNip10ReplyProjection"],
         error_class: "parse_error",
         signing: "none",
-        rust_modules: &["crates/event_codec/src/reply/inbound.rs"],
+        rust_modules: &[
+            "crates/event/src/relay_hint.rs",
+            "crates/event_codec/src/reply/inbound.rs",
+        ],
         rust_types: &[
-            "radroots_event::reply::RadrootsNip10RelayHint",
+            "radroots_event::relay_hint::RadrootsNostrRelayHint",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -1426,6 +1442,19 @@ struct PostOperationExpectation {
 }
 
 #[derive(Clone, Copy)]
+struct CommentOperationExpectation {
+    key: &'static str,
+    id: &'static str,
+    inputs: &'static [&'static str],
+    outputs: &'static [&'static str],
+    error_class: &'static str,
+    signing: &'static str,
+    rust_modules: &'static [&'static str],
+    rust_types: &'static [&'static str],
+    case_kinds: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
 struct FoodAvailabilityOperationExpectation {
     key: &'static str,
     id: &'static str,
@@ -1512,7 +1541,7 @@ pub struct ContractBundle {
     pub manifest: ContractManifest,
     pub version: VersionPolicy,
     pub replica: ReplicaContractManifest,
-    pub operations_manifest: Option<OperationsContractManifest>,
+    pub operations_manifest: OperationsContractManifest,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1711,11 +1740,14 @@ const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
     },
 ];
 
-const REPLY_WITNESSES: [EventBoundarySourceWitness; 4] = [
+const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/relay_hint.rs",
+        required_fragments: &["pub struct RadrootsNostrRelayHint"],
+    },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/reply.rs",
         required_fragments: &[
-            "pub struct RadrootsNip10RelayHint",
             "pub struct RadrootsNip10ReplyReference",
             "pub struct RadrootsAuthoredNip10Reply",
         ],
@@ -1743,10 +1775,47 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
 ];
 
-const COMMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/relay_hint.rs",
+        required_fragments: &["pub struct RadrootsNostrRelayHint"],
+    },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/comment.rs",
-        required_fragments: &["pub struct RadrootsComment"],
+        required_fragments: &[
+            "pub enum RadrootsNip22CommentRoot",
+            "pub enum RadrootsNip22CommentPosition",
+            "pub struct RadrootsAuthoredNip22Comment",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/comment/authored.rs",
+        required_fragments: &["pub fn authored_nip22_comment_to_wire_parts"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/comment/inbound.rs",
+        required_fragments: &[
+            "pub struct RadrootsInboundNip22CommentProjection",
+            "pub fn project_verified_nip22_comment_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/comment/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedNip22CommentEvent",
+            "pub fn verify_and_admit_nip22_comment_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/events/comment.rs",
+        required_fragments: &[
+            "pub struct RadrootsNostrNip22CommentEventBuilder",
+            "pub fn radroots_nostr_build_nip22_comment_event",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/client.rs",
+        required_fragments: &["pub async fn send_nip22_comment_event_builder"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2414,11 +2483,11 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 43] = [
     EventBoundaryExpectation {
         domain: "comment",
         kind: "1111",
-        radroots_type: "RadrootsComment",
+        radroots_type: "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder",
         rpc_methods: &[
-            "events.comment.publish",
-            "events.comment.list",
-            "events.comment.get",
+            "social.comment.build_authored_draft",
+            "social.comment.project_verified_event",
+            "social.comment.verify_and_admit_event",
         ],
         witnesses: &COMMENT_WITNESSES,
     },
@@ -3492,12 +3561,10 @@ fn validate_contract_version_lockstep(bundle: &ContractBundle) -> Result<(), Str
             bundle.version.contract.version, contract_version
         ));
     }
-    if let Some(operations) = bundle.operations_manifest.as_ref()
-        && operations.contract.version != contract_version
-    {
+    if bundle.operations_manifest.contract.version != contract_version {
         return Err(format!(
             "operations contract version {} must match manifest contract version {}",
-            operations.contract.version, contract_version
+            bundle.operations_manifest.contract.version, contract_version
         ));
     }
     Ok(())
@@ -3623,7 +3690,6 @@ fn valid_release_change_id(value: &str) -> bool {
 fn validate_release_record(
     workspace_root: &Path,
     contract_version: &str,
-    requires_operations: bool,
     semver: &SemverRules,
 ) -> Result<(), String> {
     let current_version = parse_semver_version(contract_version)?;
@@ -3710,8 +3776,7 @@ fn validate_release_record(
             ));
         }
         let path = workspace_root.join(actual);
-        let required = actual != "contracts/operations.toml" || requires_operations;
-        if required && (directory && !path.is_dir() || !directory && !path.is_file()) {
+        if directory && !path.is_dir() || !directory && !path.is_file() {
             return Err(format!("release artifact {actual} does not exist"));
         }
     }
@@ -3879,12 +3944,7 @@ fn validate_version_governance(
     validate_contract_version_lockstep(bundle)?;
     let version = bundle.manifest.contract.version.as_str();
     validate_workspace_version_lockstep(workspace_root, version)?;
-    validate_release_record(
-        workspace_root,
-        version,
-        bundle.operations_manifest.is_some(),
-        &bundle.version.semver,
-    )?;
+    validate_release_record(workspace_root, version, &bundle.version.semver)?;
     validate_conformance_vector_mirrors(workspace_root)
 }
 
@@ -3966,8 +4026,33 @@ fn validate_all_conformance_vectors(
             vectors_dir.display()
         ));
     }
+    let canonical_comment_path = workspace_root.join(COMMENT_CONFORMANCE_VECTOR_RELATIVE);
     for path in paths {
-        validate_conformance_vector_file(&path, contract_version)?;
+        let vector = validate_conformance_vector_file(&path, contract_version)?;
+        validate_comment_vector_namespace(&path, &canonical_comment_path, &vector)?;
+    }
+    Ok(())
+}
+
+fn validate_comment_vector_namespace(
+    path: &Path,
+    canonical_path: &Path,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    if path == canonical_path {
+        return Ok(());
+    }
+    if let Some(entry) = vector
+        .vectors
+        .iter()
+        .find(|entry| entry.kind.starts_with("social.comment."))
+    {
+        return Err(format!(
+            "comment conformance case kind {} in {} is outside canonical vector {}",
+            entry.kind,
+            path.display(),
+            canonical_path.display()
+        ));
     }
     Ok(())
 }
@@ -4367,13 +4452,7 @@ fn resolve_release_contract_path_with_override(
     Ok(None)
 }
 
-fn resolve_release_contract_path(workspace_root: &Path) -> Result<Option<PathBuf>, String> {
-    resolve_release_contract_path_with_override(
-        workspace_root,
-        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
-    )
-}
-
+#[cfg(test)]
 fn load_release_contract(
     workspace_root: &Path,
     contract_root: &Path,
@@ -5199,15 +5278,21 @@ fn validate_operations_contract(
         validate_operation_case_kinds(operation, &vector)?;
     }
 
-    if domains.contains("social") {
-        validate_calendar_operation_authority(operations_manifest, &shared_types)?;
-        validate_post_operation_authority(operations_manifest, workspace_root)?;
-    }
-    if domains.contains("food_availability") {
-        validate_food_availability_operation_authority(operations_manifest, workspace_root)?;
-    }
-
     Ok(())
+}
+
+fn validate_capsule_operation_authority(
+    operations_manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let shared_types = collect_non_empty_set(
+        &operations_manifest.shared_types.public,
+        "shared_types.public",
+    )?;
+    validate_comment_operation_authority(operations_manifest, workspace_root)?;
+    validate_post_operation_authority(operations_manifest, workspace_root)?;
+    validate_calendar_operation_authority(operations_manifest, &shared_types)?;
+    validate_food_availability_operation_authority(operations_manifest, workspace_root)
 }
 
 fn validate_operation_case_kinds(
@@ -5450,6 +5535,217 @@ fn validate_post_operation_sequence(
     {
         return Err(format!(
             "post operation {operation_key} {field} drift: expected {:?}, got {:?}",
+            expected, actual
+        ));
+    }
+    Ok(())
+}
+
+fn validate_comment_operation_authority(
+    manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let vector = validate_conformance_vector_file(
+        &workspace_root.join(COMMENT_CONFORMANCE_VECTOR_RELATIVE),
+        &manifest.contract.version,
+    )?;
+    validate_comment_operation_inventory(manifest, &vector)
+}
+
+fn validate_comment_operation_inventory(
+    manifest: &OperationsContractManifest,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    let shared_types = collect_non_empty_set(
+        &manifest.shared_types.public,
+        "comment operation shared_types.public",
+    )?;
+    for required in REQUIRED_COMMENT_PUBLIC_TYPES {
+        if !shared_types.contains(required) {
+            return Err(format!(
+                "comment operation authority requires shared public type {required}"
+            ));
+        }
+    }
+
+    let expected_keys = COMMENT_OPERATION_EXPECTATIONS
+        .iter()
+        .map(|expectation| expectation.key.to_string())
+        .collect::<BTreeSet<_>>();
+    let actual_keys = manifest
+        .operations
+        .iter()
+        .filter(|(key, operation)| {
+            operation.conformance.vector == COMMENT_CONFORMANCE_VECTOR_RELATIVE
+                || key.starts_with("social_comment_")
+                || operation.id.starts_with("social.comment.")
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        let missing = expected_keys
+            .difference(&actual_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let unexpected = actual_keys
+            .difference(&expected_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "comment operation authority drift: missing {}; unexpected {}",
+            join_set(&missing),
+            join_set(&unexpected)
+        ));
+    }
+
+    let mut owners = BTreeMap::new();
+    for expected in COMMENT_OPERATION_EXPECTATIONS {
+        let operation = manifest
+            .operations
+            .get(expected.key)
+            .ok_or_else(|| format!("comment operation {} is required", expected.key))?;
+        validate_comment_operation_scalar(expected.key, "domain", &operation.domain, "social")?;
+        validate_comment_operation_scalar(expected.key, "id", &operation.id, expected.id)?;
+        validate_comment_operation_scalar(expected.key, "stability", &operation.stability, "beta")?;
+        validate_comment_operation_scalar(
+            expected.key,
+            "error_class",
+            &operation.error_class,
+            expected.error_class,
+        )?;
+        validate_comment_operation_scalar(
+            expected.key,
+            "signing",
+            &operation.signing,
+            expected.signing,
+        )?;
+        validate_comment_operation_scalar(expected.key, "transport", &operation.transport, "none")?;
+        if !operation.deterministic {
+            return Err(format!(
+                "comment operation {} deterministic drift: expected true, got false",
+                expected.key
+            ));
+        }
+        validate_comment_operation_sequence(
+            expected.key,
+            "inputs",
+            &operation.inputs,
+            expected.inputs,
+        )?;
+        validate_comment_operation_sequence(
+            expected.key,
+            "outputs",
+            &operation.outputs,
+            expected.outputs,
+        )?;
+        validate_comment_operation_sequence(
+            expected.key,
+            "implementation.rust_modules",
+            &operation.implementation.rust_modules,
+            expected.rust_modules,
+        )?;
+        validate_comment_operation_sequence(
+            expected.key,
+            "implementation.rust_types",
+            &operation.implementation.rust_types,
+            expected.rust_types,
+        )?;
+        validate_comment_operation_scalar(
+            expected.key,
+            "conformance.vector",
+            &operation.conformance.vector,
+            COMMENT_CONFORMANCE_VECTOR_RELATIVE,
+        )?;
+        validate_operation_case_kinds(operation, vector)?;
+        if !operation
+            .conformance
+            .case_kinds
+            .iter()
+            .map(String::as_str)
+            .eq(expected.case_kinds.iter().copied())
+        {
+            return Err(format!(
+                "comment operation {} conformance.case_kinds drift: expected {:?}, got {:?}",
+                expected.key, expected.case_kinds, operation.conformance.case_kinds
+            ));
+        }
+        for case_kind in &operation.conformance.case_kinds {
+            if let Some(previous) = owners.insert(case_kind.as_str(), expected.key) {
+                return Err(format!(
+                    "comment conformance case kind {case_kind} is multiply claimed by {previous} and {}",
+                    expected.key
+                ));
+            }
+        }
+    }
+
+    let expected_case_kinds = COMMENT_CASE_KINDS.into_iter().collect::<BTreeSet<_>>();
+    let actual_case_kinds = owners.keys().copied().collect::<BTreeSet<_>>();
+    if actual_case_kinds != expected_case_kinds {
+        return Err(format!(
+            "comment conformance case-kind authority drift: expected {:?}, got {:?}",
+            expected_case_kinds, actual_case_kinds
+        ));
+    }
+
+    let mut actual_inventory = BTreeMap::new();
+    for entry in &vector.vectors {
+        if actual_inventory
+            .insert(entry.id.as_str(), entry.kind.as_str())
+            .is_some()
+        {
+            return Err(format!(
+                "comment conformance vector inventory has duplicate id {}",
+                entry.id
+            ));
+        }
+        if !owners.contains_key(entry.kind.as_str()) {
+            return Err(format!(
+                "comment conformance vector kind {} is not claimed by exactly one operation",
+                entry.kind
+            ));
+        }
+    }
+    let expected_inventory = COMMENT_VECTOR_EXPECTATIONS
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    if actual_inventory != expected_inventory {
+        return Err(format!(
+            "comment conformance vector inventory drift: expected {:?}, got {:?}",
+            expected_inventory, actual_inventory
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_comment_operation_scalar(
+    operation_key: &str,
+    field: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if actual != expected {
+        return Err(format!(
+            "comment operation {operation_key} {field} drift: expected {expected}, got {actual}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_comment_operation_sequence(
+    operation_key: &str,
+    field: &str,
+    actual: &[String],
+    expected: &[&str],
+) -> Result<(), String> {
+    if !actual
+        .iter()
+        .map(String::as_str)
+        .eq(expected.iter().copied())
+    {
+        return Err(format!(
+            "comment operation {operation_key} {field} drift: expected {:?}, got {:?}",
             expected, actual
         ));
     }
@@ -6377,6 +6673,7 @@ fn publish_config_is_non_public(publish: Option<&PackagePublish>) -> bool {
     matches!(publish, Some(PackagePublish::Bool(false)))
 }
 
+#[cfg(test)]
 fn validate_release_publish_policy(
     workspace_root: &Path,
     contract_root: &Path,
@@ -6531,6 +6828,13 @@ fn validate_release_publish_policy(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum OperationAuthorityProfile {
+    CapsuleCanonical,
+    #[cfg(test)]
+    Generic,
+}
+
 pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     validate_release_preflight_with_override(workspace_root, None)
 }
@@ -6539,10 +6843,23 @@ pub fn validate_release_preflight_with_override(
     workspace_root: &Path,
     release_policy_override: Option<PathBuf>,
 ) -> Result<(), String> {
+    validate_release_preflight_with_override_and_profile(
+        workspace_root,
+        release_policy_override,
+        OperationAuthorityProfile::CapsuleCanonical,
+    )
+}
+
+fn validate_release_preflight_with_override_and_profile(
+    workspace_root: &Path,
+    release_policy_override: Option<PathBuf>,
+    authority_profile: OperationAuthorityProfile,
+) -> Result<(), String> {
     let bundle = load_contract_bundle(workspace_root)?;
-    validate_contract_bundle_with_release_policy_override(
+    validate_contract_bundle_with_release_policy_override_and_profile(
         &bundle,
         release_policy_override.clone(),
+        authority_profile,
     )?;
     let release =
         load_release_contract_with_override(workspace_root, &bundle.root, release_policy_override)?;
@@ -6571,6 +6888,18 @@ pub fn validate_release_preflight_with_override(
 fn validate_contract_bundle_with_release_policy_override(
     bundle: &ContractBundle,
     release_policy_override: Option<PathBuf>,
+) -> Result<(), String> {
+    validate_contract_bundle_with_release_policy_override_and_profile(
+        bundle,
+        release_policy_override,
+        OperationAuthorityProfile::CapsuleCanonical,
+    )
+}
+
+fn validate_contract_bundle_with_release_policy_override_and_profile(
+    bundle: &ContractBundle,
+    release_policy_override: Option<PathBuf>,
+    authority_profile: OperationAuthorityProfile,
 ) -> Result<(), String> {
     if bundle.manifest.contract.name.trim().is_empty() {
         return Err("contract name is required".to_string());
@@ -6619,8 +6948,12 @@ fn validate_contract_bundle_with_release_policy_override(
         .parent()
         .expect("contract root must have a workspace parent");
     validate_replica_contract(bundle, workspace_root)?;
-    if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
-        validate_operations_contract(bundle, operations_manifest, workspace_root)?;
+    validate_operations_contract(bundle, &bundle.operations_manifest, workspace_root)?;
+    if matches!(
+        authority_profile,
+        OperationAuthorityProfile::CapsuleCanonical
+    ) {
+        validate_capsule_operation_authority(&bundle.operations_manifest, workspace_root)?;
     }
     validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
@@ -6889,14 +7222,8 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
     let version = parse_toml::<VersionPolicy>(&root.join("version.toml"))?;
     let replica =
         parse_toml::<ReplicaContractManifest>(&workspace_root.join(REPLICA_CONTRACT_RELATIVE))?;
-    let operations_manifest_path = root.join("operations.toml");
-    let operations_manifest = if operations_manifest_path.is_file() {
-        Some(parse_toml::<OperationsContractManifest>(
-            &operations_manifest_path,
-        )?)
-    } else {
-        None
-    };
+    let operations_manifest =
+        parse_toml::<OperationsContractManifest>(&root.join("operations.toml"))?;
     Ok(ContractBundle {
         root,
         manifest,
@@ -6920,71 +7247,10 @@ fn reject_legacy_contract_roots(workspace_root: &Path) -> Result<(), String> {
 }
 
 pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
-    if bundle.manifest.contract.name.trim().is_empty() {
-        return Err("contract name is required".to_string());
-    }
-    if bundle.manifest.contract.version.trim().is_empty() {
-        return Err("contract version is required".to_string());
-    }
-    if bundle.manifest.contract.source.trim().is_empty() {
-        return Err("contract source is required".to_string());
-    }
-    if bundle.manifest.surface.model_crates.is_empty() {
-        return Err("contract surface.model_crates must not be empty".to_string());
-    }
-    if bundle.manifest.surface.algorithm_crates.is_empty() {
-        return Err("contract surface.algorithm_crates must not be empty".to_string());
-    }
-    validate_surface_metadata(&bundle.manifest.surface)?;
-    if bundle.version.contract.version.trim().is_empty() {
-        return Err("version.contract.version is required".to_string());
-    }
-    if bundle.version.contract.stability.trim().is_empty() {
-        return Err("version.contract.stability is required".to_string());
-    }
-    if bundle.version.semver.major_on.is_empty()
-        || bundle.version.semver.minor_on.is_empty()
-        || bundle.version.semver.patch_on.is_empty()
-    {
-        return Err("version.semver rules must all be non-empty".to_string());
-    }
-    if !bundle.version.release_integrity.requires_conformance_pass {
-        return Err("release_integrity.requires_conformance_pass must be true".to_string());
-    }
-    if !bundle
-        .version
-        .release_integrity
-        .requires_contract_manifest_diff
-    {
-        return Err("release_integrity.requires_contract_manifest_diff must be true".to_string());
-    }
-    if !bundle.version.release_integrity.requires_release_notes {
-        return Err("release_integrity.requires_release_notes must be true".to_string());
-    }
-    validate_policy_metadata(&bundle.manifest.policy)?;
-    let workspace_root = bundle
-        .root
-        .parent()
-        .expect("contract root must have a workspace parent");
-    validate_replica_contract(bundle, workspace_root)?;
-    if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
-        validate_operations_contract(bundle, operations_manifest, workspace_root)?;
-    }
-    validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
-    validate_core_unit_dimension_variant_order(workspace_root)?;
-    validate_coverage_policy_parity(workspace_root, &bundle.root)?;
-    validate_version_governance(bundle, workspace_root)?;
-    if resolve_release_contract_path(workspace_root)
-        .expect("validated release contract path resolution should not fail")
-        .is_some()
-    {
-        validate_release_publish_policy(
-            workspace_root,
-            &bundle.root,
-            bundle.version.contract.version.as_str(),
-        )?;
-    }
-    Ok(())
+    validate_contract_bundle_with_release_policy_override(
+        bundle,
+        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
+    )
 }
 
 #[cfg(test)]
@@ -7017,6 +7283,22 @@ mod tests {
             .expect("canonical workspace root")
     }
 
+    fn validate_generic_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
+        validate_contract_bundle_with_release_policy_override_and_profile(
+            bundle,
+            None,
+            OperationAuthorityProfile::Generic,
+        )
+    }
+
+    fn validate_generic_release_preflight(workspace_root: &Path) -> Result<(), String> {
+        validate_release_preflight_with_override_and_profile(
+            workspace_root,
+            None,
+            OperationAuthorityProfile::Generic,
+        )
+    }
+
     fn current_post_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
         let root = workspace_root();
         let manifest =
@@ -7025,6 +7307,17 @@ mod tests {
         let vector =
             parse_json::<ConformanceVectorFile>(&root.join(POST_CONFORMANCE_VECTOR_RELATIVE))
                 .expect("current post conformance vector");
+        (manifest, vector)
+    }
+
+    fn current_comment_authority() -> (OperationsContractManifest, ConformanceVectorFile) {
+        let root = workspace_root();
+        let manifest =
+            parse_toml::<OperationsContractManifest>(&root.join("contracts/operations.toml"))
+                .expect("current operations manifest");
+        let vector =
+            parse_json::<ConformanceVectorFile>(&root.join(COMMENT_CONFORMANCE_VECTOR_RELATIVE))
+                .expect("current Comment conformance vector");
         (manifest, vector)
     }
 
@@ -7419,6 +7712,7 @@ crates = ["radroots_a"]
                 passing_coverage_row("radroots_b"),
             ],
         );
+        add_operation_contract_files(&root);
         root
     }
 
@@ -7866,7 +8160,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let (mut manifest, vector) = current_post_authority();
         let mut unexpected = manifest
             .operations
-            .remove("social_comment_build_tags")
+            .remove("social_reaction_build_tags")
             .expect("unrelated social operation");
         unexpected.id = "social.update.shadow".to_string();
         manifest
@@ -7946,6 +8240,117 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let error = validate_post_operation_inventory(&manifest, &vector)
             .expect_err("post vector ID-to-kind drift must fail");
         assert!(error.contains("post conformance vector inventory drift"));
+    }
+
+    #[test]
+    fn comment_operation_authority_rejects_contract_drift() {
+        let (manifest, vector) = current_comment_authority();
+        validate_comment_operation_inventory(&manifest, &vector)
+            .expect("current Comment operation authority");
+
+        let (mut manifest, vector) = current_comment_authority();
+        manifest
+            .operations
+            .remove("social_comment_build_authored_draft");
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("missing Comment operation must fail");
+        assert!(
+            error.contains("comment operation authority drift"),
+            "{error}"
+        );
+
+        let (mut manifest, vector) = current_comment_authority();
+        let renamed = manifest
+            .operations
+            .remove("social_comment_project_verified_event")
+            .expect("Comment projection operation");
+        manifest
+            .operations
+            .insert("social_comment_project_event".to_string(), renamed);
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("renamed Comment operation must fail");
+        assert!(
+            error.contains("comment operation authority drift"),
+            "{error}"
+        );
+        assert!(error.contains("social_comment_project_event"), "{error}");
+
+        let (mut manifest, vector) = current_comment_authority();
+        manifest
+            .operations
+            .get_mut("social_comment_verify_and_admit_event")
+            .expect("Comment admission operation")
+            .signing = "none".to_string();
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("Comment operation metadata drift must fail");
+        assert!(error.contains("signing drift"), "{error}");
+
+        let (mut manifest, vector) = current_comment_authority();
+        manifest
+            .shared_types
+            .public
+            .retain(|value| value != "RadrootsInboundNip22TopLevelEventReference");
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("required Comment public type removal must fail");
+        assert!(
+            error.contains(
+                "comment operation authority requires shared public type RadrootsInboundNip22TopLevelEventReference"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn comment_operation_authority_rejects_vector_inventory_drift() {
+        let (manifest, mut vector) = current_comment_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "authored_top_event_listing")
+            .expect("authored top-level event case")
+            .id = "authored_top_event_listing_replacement".to_string();
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("same-count Comment vector ID replacement must fail");
+        assert!(
+            error.contains("comment conformance vector inventory drift"),
+            "{error}"
+        );
+
+        let (manifest, mut vector) = current_comment_authority();
+        vector.vectors.push(ConformanceVectorEntry {
+            id: "unclaimed_comment_case".to_string(),
+            kind: "social.comment.project_verified_event.shadow".to_string(),
+            input: Value::Object(Default::default()),
+            expected: Value::Object(Default::default()),
+        });
+        let error = validate_comment_operation_inventory(&manifest, &vector)
+            .expect_err("unclaimed Comment vector kind must fail");
+        assert!(
+            error.contains("is not claimed by exactly one operation"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn comment_vector_namespace_rejects_legacy_owners() {
+        let canonical = PathBuf::from(COMMENT_CONFORMANCE_VECTOR_RELATIVE);
+        let legacy = PathBuf::from("contracts/conformance/vectors/social/mvp.v1.json");
+        let vector = ConformanceVectorFile {
+            suite: "legacy".to_string(),
+            contract_version: "1.0.0".to_string(),
+            vectors: vec![ConformanceVectorEntry {
+                id: "legacy_comment".to_string(),
+                kind: "social.comment.build_tags".to_string(),
+                input: Value::Object(Default::default()),
+                expected: Value::Object(Default::default()),
+            }],
+        };
+
+        let error = validate_comment_vector_namespace(&legacy, &canonical, &vector)
+            .expect_err("legacy Comment vector namespace must fail");
+        assert!(error.contains("outside canonical vector"), "{error}");
+        validate_comment_vector_namespace(&canonical, &canonical, &vector)
+            .expect("canonical Comment vector owns the namespace");
     }
 
     #[test]
@@ -8299,7 +8704,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     fn release_record_and_conformance_mirror_validation_reject_drift() {
         let root = create_synthetic_workspace("release_record_drift");
         let bundle = load_contract_bundle(&root).expect("load synthetic contract");
-        validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+        validate_release_record(&root, "1.0.0", &bundle.version.semver)
             .expect("validate release record");
 
         let record_path = root.join("contracts/releases/1.0.0.toml");
@@ -8308,7 +8713,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             &record_path,
             &record.replace("status = \"unreleased\"", "status = \"pending\""),
         );
-        let status_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+        let status_error = validate_release_record(&root, "1.0.0", &bundle.version.semver)
             .expect_err("unsupported release status must fail");
         assert!(status_error.contains("must be unreleased, released, or yanked"));
 
@@ -8320,7 +8725,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             ),
         );
         let replica_artifact_error =
-            validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+            validate_release_record(&root, "1.0.0", &bundle.version.semver)
                 .expect_err("noncanonical replica artifact must fail");
         assert!(replica_artifact_error.contains(
             "release artifact path contracts/replica-v1.toml must use canonical path contracts/replica.toml"
@@ -8328,9 +8733,36 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
 
         write_file(
             &record_path,
+            &record.replace(
+                "operations = \"contracts/operations.toml\"",
+                "operations = \"contracts/operations-v1.toml\"",
+            ),
+        );
+        let operations_artifact_error =
+            validate_release_record(&root, "1.0.0", &bundle.version.semver)
+                .expect_err("noncanonical operations artifact must fail");
+        assert!(operations_artifact_error.contains(
+            "release artifact path contracts/operations-v1.toml must use canonical path contracts/operations.toml"
+        ));
+
+        write_file(&record_path, &record);
+        let operations_path = root.join("contracts").join("operations.toml");
+        let operations = fs::read_to_string(&operations_path).expect("read operations manifest");
+        fs::remove_file(&operations_path).expect("remove operations manifest");
+        let missing_operations_error =
+            validate_release_record(&root, "1.0.0", &bundle.version.semver)
+                .expect_err("missing operations artifact must fail");
+        assert!(
+            missing_operations_error
+                .contains("release artifact contracts/operations.toml does not exist")
+        );
+        write_file(&operations_path, &operations);
+
+        write_file(
+            &record_path,
             &record.replace("id = \"synthetic-major-release\"", "id = \"Bad_Id\""),
         );
-        let id_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+        let id_error = validate_release_record(&root, "1.0.0", &bundle.version.semver)
             .expect_err("invalid release change id must fail");
         assert!(id_error.contains("lowercase kebab-case"));
         write_file(&record_path, &record);
@@ -8342,9 +8774,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 "semver_impacts = [\"fix\"]",
             ),
         );
-        let classification_error =
-            validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
-                .expect_err("classification and semver impact mismatch must fail");
+        let classification_error = validate_release_record(&root, "1.0.0", &bundle.version.semver)
+            .expect_err("classification and semver impact mismatch must fail");
         assert!(classification_error.contains("does not match its governed semver impacts"));
 
         write_file(
@@ -8354,13 +8785,13 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 "semver_impacts = [\"unknown-impact\"]",
             ),
         );
-        let impact_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+        let impact_error = validate_release_record(&root, "1.0.0", &bundle.version.semver)
             .expect_err("unknown semver impact must fail");
         assert!(impact_error.contains("is not governed by contracts/version.toml"));
         write_file(&record_path, &record);
 
         write_file(&root.join(CHANGELOG_RELATIVE), "# Changelog\n");
-        let notes_error = validate_release_record(&root, "1.0.0", false, &bundle.version.semver)
+        let notes_error = validate_release_record(&root, "1.0.0", &bundle.version.semver)
             .expect_err("missing release notes must fail");
         assert!(notes_error.contains("missing heading"));
 
@@ -8378,10 +8809,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     fn calendar_operation_authority_reports_exact_signature_drift() {
         let root = workspace_root();
         let mut bundle = load_contract_bundle(&root).expect("load contract");
-        let manifest = bundle
-            .operations_manifest
-            .as_mut()
-            .expect("operations manifest");
+        let manifest = &mut bundle.operations_manifest;
         let shared_types =
             collect_non_empty_set(&manifest.shared_types.public, "shared_types.public")
                 .expect("shared public types");
@@ -8400,10 +8828,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     fn calendar_operation_authority_reports_obsolete_operation_drift() {
         let root = workspace_root();
         let mut bundle = load_contract_bundle(&root).expect("load contract");
-        let manifest = bundle
-            .operations_manifest
-            .as_mut()
-            .expect("operations manifest");
+        let manifest = &mut bundle.operations_manifest;
         let shared_types =
             collect_non_empty_set(&manifest.shared_types.public, "shared_types.public")
                 .expect("shared public types");
@@ -8426,10 +8851,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     fn calendar_operation_authority_reports_obsolete_rsvp_operation_drift() {
         let root = workspace_root();
         let mut bundle = load_contract_bundle(&root).expect("load contract");
-        let manifest = bundle
-            .operations_manifest
-            .as_mut()
-            .expect("operations manifest");
+        let manifest = &mut bundle.operations_manifest;
         let shared_types =
             collect_non_empty_set(&manifest.shared_types.public, "shared_types.public")
                 .expect("shared public types");
@@ -8480,7 +8902,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let root = create_synthetic_workspace("operation_contract_bundle");
         add_operation_contract_files(&root);
         let bundle = load_contract_bundle(&root).expect("load contract");
-        validate_contract_bundle(&bundle).expect("validate contract");
+        validate_generic_contract_bundle(&bundle).expect("validate contract");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -8897,8 +9319,8 @@ readme = { workspace = true }
     fn synthetic_workspace_validates_contract_and_release_preflight() {
         let root = create_synthetic_workspace("synthetic_valid");
         let bundle = load_contract_bundle(&root).expect("load synthetic bundle");
-        validate_contract_bundle(&bundle).expect("validate synthetic bundle");
-        validate_release_preflight(&root).expect("validate synthetic preflight");
+        validate_generic_contract_bundle(&bundle).expect("validate synthetic bundle");
+        validate_generic_release_preflight(&root).expect("validate synthetic preflight");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -9647,7 +10069,8 @@ readme = "README"
 dto_bindgen_core = { path = "../../dto_bindgen_core", version = "0.1.0", optional = true }
 "#,
         );
-        let path_err = validate_release_preflight(&root).expect_err("public path DTO dependency");
+        let path_err =
+            validate_generic_release_preflight(&root).expect_err("public path DTO dependency");
         assert!(path_err.contains("radroots_a dependencies.dto_bindgen_core"));
         assert!(path_err.contains("not a path source"));
 
@@ -9683,8 +10106,8 @@ readme = "README"
 dto_bindgen = { workspace = true, optional = true }
 "#,
         );
-        let git_err =
-            validate_release_preflight(&root).expect_err("public workspace git DTO dependency");
+        let git_err = validate_generic_release_preflight(&root)
+            .expect_err("public workspace git DTO dependency");
         assert!(git_err.contains("radroots_a dependencies.dto_bindgen"));
         assert!(git_err.contains("not a git source"));
 
@@ -9714,7 +10137,7 @@ publish = false
 dto_bindgen = { workspace = true, optional = true }
 "#,
         );
-        validate_release_preflight(&root)
+        validate_generic_release_preflight(&root)
             .expect("internal DTO tooling source does not block public publish policy");
 
         let _ = fs::remove_dir_all(root);
@@ -9727,7 +10150,7 @@ dto_bindgen = { workspace = true, optional = true }
         let assert_bundle_error = |expected: &str, mutator: fn(&mut ContractBundle)| {
             let mut bundle = load_contract_bundle(&root).expect("load bundle");
             mutator(&mut bundle);
-            let err = match validate_contract_bundle(&bundle) {
+            let err = match validate_generic_contract_bundle(&bundle) {
                 Ok(()) => panic!("expected bundle validation error: {expected}"),
                 Err(err) => err,
             };
@@ -9871,6 +10294,58 @@ rust_package = "radroots_sdk"
     }
 
     #[test]
+    fn load_contract_bundle_requires_operations_manifest() {
+        let root = create_synthetic_workspace("missing_operations_manifest");
+        fs::remove_file(root.join("contracts").join("operations.toml"))
+            .expect("remove operations manifest");
+
+        let error = load_contract_bundle(&root).expect_err("missing operations manifest");
+        assert!(error.contains("operations.toml"), "{error}");
+        assert!(error.contains("read"), "{error}");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capsule_operation_authority_cannot_be_disabled_by_domain_removal() {
+        let root = workspace_root();
+
+        let mut social_bundle = load_contract_bundle(&root).expect("load current contract");
+        social_bundle
+            .operations_manifest
+            .public
+            .domains
+            .retain(|domain| domain != "social");
+        social_bundle
+            .operations_manifest
+            .operations
+            .retain(|_, operation| operation.domain != "social");
+        let social_error = validate_contract_bundle(&social_bundle)
+            .expect_err("removing social authority must fail");
+        assert!(
+            social_error.contains("comment operation authority drift"),
+            "{social_error}"
+        );
+
+        let mut food_bundle = load_contract_bundle(&root).expect("load current contract");
+        food_bundle
+            .operations_manifest
+            .public
+            .domains
+            .retain(|domain| domain != "food_availability");
+        food_bundle
+            .operations_manifest
+            .operations
+            .retain(|_, operation| operation.domain != "food_availability");
+        let food_error = validate_contract_bundle(&food_bundle)
+            .expect_err("removing FoodAvailability authority must fail");
+        assert!(
+            food_error.contains("food availability operation authority drift"),
+            "{food_error}"
+        );
+    }
+
+    #[test]
     fn validate_contract_bundle_reports_operation_contract_errors() {
         let root = create_synthetic_workspace("operation_contract_bundle_errors");
         add_operation_contract_files(&root);
@@ -9878,26 +10353,19 @@ rust_package = "radroots_sdk"
         let assert_bundle_error = |expected: &str, mutator: fn(&mut ContractBundle)| {
             let mut bundle = load_contract_bundle(&root).expect("load bundle");
             mutator(&mut bundle);
-            let err = validate_contract_bundle(&bundle).expect_err("bundle validation error");
+            let err =
+                validate_generic_contract_bundle(&bundle).expect_err("bundle validation error");
             assert!(err.contains(expected), "expected `{expected}` in `{err}`");
         };
 
         assert_bundle_error("public.domains must not be empty", |bundle| {
-            bundle
-                .operations_manifest
-                .as_mut()
-                .expect("operations manifest")
-                .public
-                .domains
-                .clear();
+            bundle.operations_manifest.public.domains.clear();
         });
         assert_bundle_error(
             "shared_types.public uses retired event type RadrootsNostrEvent",
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .shared_types
                     .public
                     .push("RadrootsNostrEvent".to_string());
@@ -9908,8 +10376,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .shared_types
                     .public
                     .push("RadrootsInboundCalendarDateEvent".to_string());
@@ -9920,8 +10386,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .shared_types
                     .public
                     .push("RadrootsCalendar".to_string());
@@ -9932,8 +10396,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .shared_types
                     .public
                     .push("RadrootsCalendarEventRsvp".to_string());
@@ -9944,8 +10406,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .shared_types
                     .public
                     .push("RadrootsCalendarRsvp".to_string());
@@ -9956,8 +10416,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .operations
                     .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
@@ -9970,8 +10428,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .operations
                     .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
@@ -9984,8 +10440,6 @@ rust_package = "radroots_sdk"
             |bundle| {
                 bundle
                     .operations_manifest
-                    .as_mut()
-                    .expect("operations manifest")
                     .operations
                     .get_mut("profile_build_authored_draft")
                     .expect("profile operation")
@@ -10003,7 +10457,8 @@ rust_package = "radroots_sdk"
         add_operation_contract_files(&missing_schema_root);
         let _ = fs::remove_file(conformance_schema_path(&missing_schema_root));
         let bundle = load_contract_bundle(&missing_schema_root).expect("load bundle");
-        let err = validate_contract_bundle(&bundle).expect_err("missing schema should fail");
+        let err =
+            validate_generic_contract_bundle(&bundle).expect_err("missing schema should fail");
         assert!(err.contains("vector.schema.json"));
         let _ = fs::remove_dir_all(&missing_schema_root);
 
@@ -10030,7 +10485,8 @@ rust_package = "radroots_sdk"
 "#,
         );
         let bundle = load_contract_bundle(&invalid_vector_root).expect("load bundle");
-        let err = validate_contract_bundle(&bundle).expect_err("invalid vector should fail");
+        let err =
+            validate_generic_contract_bundle(&bundle).expect_err("invalid vector should fail");
         assert!(err.contains("metadata.v1.json"));
         assert!(err.contains("parse"));
         let _ = fs::remove_dir_all(&invalid_vector_root);
@@ -10040,14 +10496,12 @@ rust_package = "radroots_sdk"
         let mut bundle = load_contract_bundle(&root).expect("load bundle");
         bundle
             .operations_manifest
-            .as_mut()
-            .expect("operations manifest")
             .operations
             .get_mut("profile_build_authored_draft")
             .expect("profile operation")
             .conformance
             .vector = "conformance/vectors/profile/metadata.v1.json".to_string();
-        let err = validate_contract_bundle(&bundle).expect_err("legacy path should fail");
+        let err = validate_generic_contract_bundle(&bundle).expect_err("legacy path should fail");
         assert!(err.contains("must live under contracts/conformance/"));
         let _ = fs::remove_dir_all(root);
     }
@@ -10461,8 +10915,8 @@ crates = ["radroots_a"]
         );
 
         let bundle = load_contract_bundle(&root).expect("load root release policy bundle");
-        validate_contract_bundle(&bundle).expect("validate root release policy bundle");
-        validate_release_preflight(&root).expect("validate root release policy preflight");
+        validate_generic_contract_bundle(&bundle).expect("validate root release policy bundle");
+        validate_generic_release_preflight(&root).expect("validate root release policy preflight");
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -10537,8 +10991,8 @@ crates = ["radroots_a"]
     #[test]
     fn validate_release_preflight_reports_each_stage_error() {
         let missing_contract_root = temp_root("preflight_missing_contract");
-        let missing_contract_err =
-            validate_release_preflight(&missing_contract_root).expect_err("missing contract");
+        let missing_contract_err = validate_generic_release_preflight(&missing_contract_root)
+            .expect_err("missing contract");
         assert!(missing_contract_err.contains("manifest.toml"));
         let _ = fs::remove_dir_all(&missing_contract_root);
 
@@ -10561,21 +11015,21 @@ require_conformance_vectors = true
 "#,
         );
         let invalid_bundle_err =
-            validate_release_preflight(&invalid_bundle).expect_err("bundle validation");
+            validate_generic_release_preflight(&invalid_bundle).expect_err("bundle validation");
         assert!(invalid_bundle_err.contains("contract policy flags must all be true"));
         let _ = fs::remove_dir_all(&invalid_bundle);
 
         let missing_release = create_synthetic_workspace("preflight_missing_release");
         let _ = fs::remove_file(root_release_policy_path(&missing_release));
         let missing_release_err =
-            validate_release_preflight(&missing_release).expect_err("missing release");
+            validate_generic_release_preflight(&missing_release).expect_err("missing release");
         assert!(missing_release_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
         let _ = fs::remove_dir_all(&missing_release);
 
         let missing_required = create_synthetic_workspace("preflight_missing_required");
         let _ = fs::remove_file(missing_required.join("contracts").join("coverage.toml"));
-        let missing_required_err =
-            validate_release_preflight(&missing_required).expect_err("missing required list");
+        let missing_required_err = validate_generic_release_preflight(&missing_required)
+            .expect_err("missing required list");
         assert!(missing_required_err.contains("coverage.toml"));
         let _ = fs::remove_dir_all(&missing_required);
 
@@ -10595,8 +11049,8 @@ crates = ["radroots_b"]
 crates = ["radroots_a"]
 "#,
         );
-        let duplicate_publish_err =
-            validate_release_preflight(&duplicate_publish).expect_err("duplicate publish crates");
+        let duplicate_publish_err = validate_generic_release_preflight(&duplicate_publish)
+            .expect_err("duplicate publish crates");
         assert!(duplicate_publish_err.contains("publish.crates has duplicate crate"));
         let _ = fs::remove_dir_all(&duplicate_publish);
 
@@ -10605,8 +11059,8 @@ crates = ["radroots_a"]
             &duplicate_required.join("contracts").join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
-        let duplicate_required_err =
-            validate_release_preflight(&duplicate_required).expect_err("duplicate required crates");
+        let duplicate_required_err = validate_generic_release_preflight(&duplicate_required)
+            .expect_err("duplicate required crates");
         assert!(duplicate_required_err.contains("duplicate crate"));
         let _ = fs::remove_dir_all(&duplicate_required);
 
@@ -10620,8 +11074,8 @@ version = "1.0.0"
 edition = "2024"
 "#,
         );
-        let publish_metadata_err =
-            validate_release_preflight(&publish_metadata).expect_err("publish metadata validation");
+        let publish_metadata_err = validate_generic_release_preflight(&publish_metadata)
+            .expect_err("publish metadata validation");
         assert!(publish_metadata_err.contains("must define a non-empty package.description"));
         let _ = fs::remove_dir_all(&publish_metadata);
 
@@ -10633,7 +11087,7 @@ edition = "2024"
                 .join("coverage-refresh.tsv"),
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n",
         );
-        let missing_coverage_row_err = validate_release_preflight(&missing_coverage_row)
+        let missing_coverage_row_err = validate_generic_release_preflight(&missing_coverage_row)
             .expect_err("required coverage refresh row missing");
         assert!(missing_coverage_row_err.contains("missing from coverage-refresh.tsv"));
         let _ = fs::remove_dir_all(&missing_coverage_row);
@@ -10673,7 +11127,7 @@ Volume,
 }
 "#,
         );
-        let core_err = validate_contract_bundle(&bundle).expect_err("core unit mismatch");
+        let core_err = validate_generic_contract_bundle(&bundle).expect_err("core unit mismatch");
         assert!(core_err.contains("variant order must be"));
 
         write_file(
@@ -10698,7 +11152,8 @@ require_branches = false
 crates = ["radroots_a", "radroots_b"]
 "#,
         );
-        let policy_err = validate_contract_bundle(&bundle).expect_err("coverage policy validation");
+        let policy_err =
+            validate_generic_contract_bundle(&bundle).expect_err("coverage policy validation");
         assert!(policy_err.contains("100/100/100/100"));
 
         let _ = fs::remove_dir_all(&root);
@@ -10942,7 +11397,8 @@ crates = []
 "#,
         );
         let bundle = load_contract_bundle(&release_error_root).expect("load release error bundle");
-        let release_err = validate_contract_bundle(&bundle).expect_err("release policy failure");
+        let release_err =
+            validate_generic_contract_bundle(&bundle).expect_err("release policy failure");
         assert!(release_err.contains("publish_order.crates is missing publish crates"));
         let _ = fs::remove_dir_all(&release_error_root);
     }

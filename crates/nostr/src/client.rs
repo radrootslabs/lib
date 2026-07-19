@@ -10,6 +10,8 @@ use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]
+use crate::events::comment::RadrootsNostrNip22CommentEventBuilder;
+#[cfg(feature = "events")]
 use crate::events::food_availability::RadrootsNostrFoodAvailabilityEventBuilder;
 #[cfg(feature = "events")]
 use crate::events::post::RadrootsNostrPostEventBuilder;
@@ -247,10 +249,11 @@ impl RadrootsNostrClient {
 
     /// Publishes a generic event builder.
     ///
-    /// Kind 0 profiles, all kind 1 events, and focused or mixed kind 30402
-    /// FoodAvailability marker partitions are rejected because their product
-    /// shape must come from typed authoring. Marker-free NIP-99 and
-    /// operational-only kind 30402 builders remain available for compatibility.
+    /// Kind 0 profiles, all kind 1 events, kind 1111 Comments, and focused or
+    /// mixed kind 30402 FoodAvailability marker partitions are rejected
+    /// because their product shape must come from typed authoring. Marker-free
+    /// NIP-99 and operational-only kind 30402 builders remain available for
+    /// compatibility.
     pub async fn send_event_builder(
         &self,
         event: RadrootsNostrGenericEventBuilder,
@@ -276,6 +279,18 @@ impl RadrootsNostrClient {
     pub async fn send_nip10_reply_event_builder(
         &self,
         event: RadrootsNostrNip10ReplyEventBuilder,
+    ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+        Ok(self
+            .inner
+            .send_event_builder(event.into_event_builder())
+            .await?)
+    }
+
+    /// Publishes a validated strict NIP-22 Comment.
+    #[cfg(feature = "events")]
+    pub async fn send_nip22_comment_event_builder(
+        &self,
+        event: RadrootsNostrNip22CommentEventBuilder,
     ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
         Ok(self
             .inner
@@ -352,6 +367,15 @@ pub async fn radroots_nostr_send_nip10_reply_event(
     event: RadrootsNostrNip10ReplyEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     client.send_nip10_reply_event_builder(event).await
+}
+
+/// Publishes a validated strict NIP-22 Comment.
+#[cfg(feature = "events")]
+pub async fn radroots_nostr_send_nip22_comment_event(
+    client: &RadrootsNostrClient,
+    event: RadrootsNostrNip22CommentEventBuilder,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    client.send_nip22_comment_event_builder(event).await
 }
 
 /// Publishes a validated focused FoodAvailability event.
@@ -432,6 +456,7 @@ mod tests {
     async fn generic_builder_rejects_all_typed_authoring_reservations_before_signer_access() {
         let client = RadrootsNostrClient::new_signerless();
         let raw_kind_one = RadrootsNostrKind::Custom(RadrootsNostrKind::TextNote.as_u16());
+        let comment = RadrootsNostrKind::Custom(radroots_event::kinds::KIND_COMMENT as u16);
         let classified_listing = RadrootsNostrKind::Custom(30_402);
         let builders = vec![
             RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Metadata, "{}"),
@@ -445,6 +470,7 @@ mod tests {
                 ])
                 .expect("image metadata"),
             ]),
+            RadrootsNostrGenericEventBuilder::new(comment, "Raw Comment"),
             RadrootsNostrGenericEventBuilder::new(classified_listing, "Focused").tag(
                 RadrootsNostrTag::parse(["radroots:price_unit", "lb"]).expect("focused marker"),
             ),

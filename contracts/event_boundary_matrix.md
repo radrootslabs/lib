@@ -123,7 +123,8 @@ rather than promoted to a validity gate. Positional replies remain thread
 enrichment, and a Reply carrying Ask or media metadata cannot be promoted as a
 root card.
 
-Authored and projected NIP-10 relay hints share one portable canonical profile:
+Authored and projected NIP-10 Reply and NIP-22 Comment relay hints share the
+portable `RadrootsNostrRelayHint` profile:
 exact lowercase `ws://` or `wss://`, visible ASCII, canonical lowercase DNS or
 four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, optional canonical port
 `1..65535`, and RFC 3986 path-abempty/query syntax with uppercase `%HH`
@@ -139,6 +140,55 @@ a valid signature, was authored by the declared referenced author, or is
 available from a relay. Signed-event relay remains generic transport rather
 than a typed Reply-authoring boundary.
 
+## NIP-22 Comment boundary rule
+
+The strict Radroots
+[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
+profile is kind `1111`. Its root is exactly one `E` event id or `A`
+addressable coordinate, with matching singleton `K` root-kind and `P`
+root-author authority. Supported root kinds are only classified listings
+(`30402`), calendar date events (`31922`), and calendar time events (`31923`).
+External `I`/`i` roots and parents and ordinary kind-`1` roots are outside this
+profile.
+
+Strict authoring exposes `RadrootsAuthoredNip22Comment` for top-level event,
+top-level address, and nested Comment positions. It emits exact ordered
+`E,K,P,e,k,p` for a top-level event, `A,K,P,a,e,k,p` for a top-level
+address, and `E,K,P,e,k,p` or `A,K,P,e,k,p` for a nested event or address
+root. Authored event references have four elements with an explicit relay slot
+and final author hint. Address and participant references have two elements
+plus an optional relay; the current-revision `e` reference on a top-level
+address Comment has no author hint. Direct `k` repeats the root kind, while
+nested `k` is `1111`.
+
+`RadrootsInboundNip22CommentProjection` accepts only an id-and-signature
+verified event. It resolves authority independently of tag order and enforces
+its cardinality, shape, canonical kind, coordinate-kind, author, and parent
+relationships. Unknown tags, `q` tags, distinct unselected `p` mentions, and
+the exact raw tags remain inspectable. Inbound NIP-22 reference event IDs,
+public keys, and coordinate-author hex accept either ASCII hex case; typed
+values normalize to lowercase while raw tags retain their original spelling.
+Malformed advisory relay or participant metadata is retained as ordered
+diagnostics, while valid hints that conflict with `P` or selected `p` authority
+are hard failures.
+`RadrootsAdmittedNip22CommentEvent` binds the result to the verified envelope;
+it does not prove reference existence, target signatures, target authorship, or
+relay availability.
+
+The event-contract registry v6 classifies `radroots.social.comment.v1` as
+`TypedOnly` for authoring and `AdmissionOnly` for matching. Registry versions
+`1` through `5` are stale. Generic kind-`1111` signing and client publication
+fail before signer access. The complete operation surface is exactly
+`social.comment.build_authored_draft`,
+`social.comment.project_verified_event`, and
+`social.comment.verify_and_admit_event`.
+
+Comment content is limited to 131072 UTF-8 bytes, a Comment to 1024 tags, all
+tags to 4096 elements including names, each element to 4096 UTF-8 bytes,
+aggregate tag bytes to 131072, and compact signed wire JSON to 262144 bytes.
+The canonical self-contained 114-case corpus is
+`contracts/conformance/vectors/comment/verified_profile.v1.json`.
+
 ## Coverage matrix
 
 | Domain | Kind | Radroots Type | RPC Methods | Notes |
@@ -147,7 +197,7 @@ than a typed Reply-authoring boundary.
 | follow | 3 | RadrootsFollow | events.follow.publish, events.follow.list, events.follow.get | replaceable event |
 | post | 1 | RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection | events.post.publish, events.post.list, events.post.get | ordinary kind-1 reads remain generic; exact root-card subtypes require verified admission; any `e` tag produces a thread-excluded candidate without a Reply claim |
 | reply | 1 | RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder | social.reply.build_authored_draft, social.reply.project_verified_event, social.reply.verify_and_admit_event | strict marked direct/nested NIP-10 authoring; verified marked or positional inbound admission with advisory-metadata diagnostics; never a root card; target existence, kind, author, and relay availability are not proven |
-| comment | 1111 | RadrootsComment | events.comment.publish, events.comment.list, events.comment.get | requires root and parent tags |
+| comment | 1111 | RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder | social.comment.build_authored_draft, social.comment.project_verified_event, social.comment.verify_and_admit_event | strict NIP-22 event/address roots limited to kinds `30402`, `31922`, and `31923`; tolerant verified projection; registry-v6 typed-only authoring and admission-only matching |
 | reaction | 7 | RadrootsReaction | events.reaction.publish, events.reaction.list, events.reaction.get | requires event, pubkey, or address tags |
 | repost | 6 | RadrootsRepost | events.repost.publish, events.repost.list, events.repost.get | NIP-18 kind-1 repost surface |
 | generic_repost | 16 | RadrootsGenericRepost | events.generic_repost.publish, events.generic_repost.list, events.generic_repost.get | NIP-18 generic repost surface |

@@ -11,18 +11,17 @@ use radroots_event::knowledge::{
     RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
 use radroots_event::{
-    app_data::RadrootsAppData, comment::RadrootsComment, coop::RadrootsCoop,
-    document::RadrootsDocument, farm::RadrootsFarm, follow::RadrootsFollow,
-    geochat::RadrootsGeoChat, gift_wrap::RadrootsGiftWrap, job_feedback::RadrootsJobFeedback,
-    job_request::RadrootsJobRequest, job_result::RadrootsJobResult, list::RadrootsList,
-    list_set::RadrootsListSet, message::RadrootsMessage, message_file::RadrootsMessageFile,
+    app_data::RadrootsAppData, coop::RadrootsCoop, document::RadrootsDocument, farm::RadrootsFarm,
+    follow::RadrootsFollow, geochat::RadrootsGeoChat, gift_wrap::RadrootsGiftWrap,
+    job_feedback::RadrootsJobFeedback, job_request::RadrootsJobRequest,
+    job_result::RadrootsJobResult, list::RadrootsList, list_set::RadrootsListSet,
+    message::RadrootsMessage, message_file::RadrootsMessageFile,
     operational_listing::RadrootsOperationalListing, plot::RadrootsPlot,
     reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
     resource_cap::RadrootsResourceHarvestCap, seal::RadrootsSeal,
 };
 
 use crate::app_data::encode::app_data_build_tags;
-use crate::comment::encode::comment_build_tags;
 use crate::coop::encode::coop_build_tags;
 use crate::document::encode::document_build_tags;
 use crate::error::EventEncodeError;
@@ -71,14 +70,6 @@ impl RadrootsEventTagBuilder for RadrootsAppData {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         app_data_build_tags(self)
-    }
-}
-
-impl RadrootsEventTagBuilder for RadrootsComment {
-    type Error = EventEncodeError;
-
-    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
-        comment_build_tags(self)
     }
 }
 

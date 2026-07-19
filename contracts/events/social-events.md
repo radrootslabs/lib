@@ -22,6 +22,8 @@ and its collection metadata uses
 [NIP-51](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/51.md),
 while text-note Reply threading follows
 [NIP-10](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/10.md),
+and kind-`1111` Comment threading follows
+[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md),
 all at NIPs commit `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91`. Calendar media uses the public
 Blossom primitives governed by the protocol pin in
 [`blossom-media.md`](blossom-media.md). The upstream NIP-52 rules and the stricter Radroots
@@ -30,12 +32,12 @@ authoring and admission profile are separate contract layers.
 ## Implementation Inventory
 
 The repository implements strict authored and verified-projected kind `1` root-post profiles, a
-separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, kind `1111`
-`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
-records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
-FoodAvailability authored, verified-admission, and revision contract, articles, generic public file
-metadata, calendar date events, calendar time events, reposts, generic reposts, calendar
-collections, RSVP events, and reports.
+separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, a strict-authored and
+tolerant verified-inbound kind `1111` NIP-22 Comment profile, kind `7` `RadrootsReaction`, generic
+`RadrootsList` entries, operational listing records through `RadrootsOperationalListing`, the raw
+kind-`30402` profile partition and validated FoodAvailability authored, verified-admission, and
+revision contract, articles, generic public file metadata, calendar date events, calendar time
+events, reposts, generic reposts, calendar collections, RSVP events, and reports.
 
 The closeout contract requires:
 
@@ -43,7 +45,10 @@ The closeout contract requires:
 - kind and tag constants for the approved NIP surface
 - ordinary kind-1 compatibility reads plus strict Update, PhotoUpdate, and Ask authoring
 - strict marked direct and nested NIP-10 Reply authoring plus tolerant positional inbound admission
-- strict NIP-22 `RadrootsComment` behavior without legacy `e_root` or `e_prev` fallback tags
+- strict NIP-22 `RadrootsAuthoredNip22Comment`,
+  `RadrootsInboundNip22CommentProjection`, and
+  `RadrootsAdmittedNip22CommentEvent` behavior without legacy `e_root` or
+  `e_prev` authority
 - strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 classified-listing parity
 - NIP-65 relay-list validation evidence through `RadrootsList`
@@ -59,6 +64,10 @@ The MVP public social substrate includes:
 - strict `RadrootsAuthoredNip10Reply` direct and nested publication plus
   `RadrootsInboundNip10ReplyProjection` for marked and deprecated positional
   inbound NIP-10 replies
+- strict `RadrootsAuthoredNip22Comment` publication plus
+  `RadrootsInboundNip22CommentProjection` and
+  `RadrootsAdmittedNip22CommentEvent` for kind-`1111` NIP-22 Comments rooted
+  only in kind `30402`, `31922`, or `31923`
 - `RadrootsArticle` for NIP-23 kind `30023` long-form content
 - generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
 - strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
@@ -148,20 +157,21 @@ Update, PhotoUpdate, and Ask contracts use `AdmissionOnly` and are returned only
 by the verified projection/admission boundary.
 
 The event-contract registry assigns an explicit authoring policy to every
-contract. Strict Profile, Update, PhotoUpdate, Ask, and NIP-10 Reply contracts are
-`TypedOnly`; `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft
-contracts remain `GenericDraft`. `RadrootsEventDraft::new` therefore rejects
-the strict Profile contract and every governed kind-1 contract with
-`contract_not_draft_authorable`. Serialized drafts record registry version `5`
+contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, and NIP-22
+Comment contracts are `TypedOnly`; `radroots.social.post.v1` is `ReadOnly`;
+ordinary generic-draft contracts remain `GenericDraft`.
+`RadrootsEventDraft::new` therefore rejects the strict Profile contract and
+every governed kind-1 or kind-1111 contract with
+`contract_not_draft_authorable`. Serialized drafts record registry version `6`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
-frozen-draft signing boundary repeats that validation, so stale version-`1` through version-`4`
-drafts must be rebuilt. Typed root posts and Replies enter Nostr signing and client
-publication only through opaque profile-specific builders that expose
-timestamp selection and signing, but no raw tag/content mutation or public
-conversion to the upstream builder. The opaque generic builder rejects kind `0` and every
-kind `1` event at both direct signing and client publication before a signer is
-consulted.
+frozen-draft signing boundary repeats that validation, so stale version-`1`
+through version-`5` drafts must be rebuilt. Typed root posts, Replies, and
+Comments enter Nostr signing and client publication only through opaque
+profile-specific builders that expose timestamp selection and signing, but no
+raw tag/content mutation or public conversion to the upstream builder. The
+opaque generic builder rejects kind `0`, every kind `1` event, and kind `1111`
+at both direct signing and client publication before a signer is consulted.
 
 ### NIP-10 Reply Trust Layers
 
@@ -169,7 +179,7 @@ consulted.
 Replies contain one root reference; nested Replies contain one root and one
 distinct parent reference. Each reference carries a validated 64-character
 lowercase event id, a referenced-author pubkey, and an optional
-`RadrootsNip10RelayHint`. The relay hint profile accepts only byte-stable ASCII
+`RadrootsNostrRelayHint`. The relay hint profile accepts only byte-stable ASCII
 WebSocket URLs: an exact lowercase `ws://` or `wss://` scheme; a canonical
 lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6 authority;
 an optional canonical decimal port from `1` through `65535`; and an RFC 3986
@@ -210,7 +220,7 @@ participant propagation, relay hints, and referenced-author hints advisory,
 blank content or absent `p` tags do not erase an otherwise unambiguous inbound
 Reply. Malformed optional relay, author-hint, citation, and participant metadata is
 retained in the verified envelope and exposed as ordered typed diagnostics;
-valid relay hints are projected through the same `RadrootsNip10RelayHint`
+valid relay hints are projected through the same `RadrootsNostrRelayHint`
 profile used for authoring, and rejected hints remain verbatim in the ordered
 diagnostic's raw tag. This tolerant read-side behavior never weakens strict
 authored output.
@@ -245,11 +255,67 @@ complete operation namespaces, ownership metadata, public types, and exact
 case-id-to-kind corpus; it rejects missing, duplicate, unclaimed,
 mis-prefixed, or substituted cases.
 
-`RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,
-address, and external roots or parents through `E`/`e`, `A`/`a`, and `I`/`i` tags with matching
-`K`/`k` kind metadata. Canonical encode and decode must reject ordinary kind `1` short text note
-targets; kind `1` replies belong to NIP-10 text-note reply semantics instead. Canonical decode must
-reject legacy `e_root` and `e_prev` fallback tags.
+### NIP-22 Comment Trust Layers
+
+The strict Radroots [NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
+profile is kind `1111` and admits only event or address roots whose `K` kind is
+`30402`, `31922`, or `31923`. External `I`/`i` authority is unsupported, and
+kind `1` is deliberately excluded because text-note threads use the separate
+NIP-10 Reply boundary. Legacy `e_root` and `e_prev` tags have no authority in
+this contract.
+
+`RadrootsAuthoredNip22Comment` is an opaque, non-Serde authoring state. Canonical
+tag order is `E,K,P,e,k,p` for a top-level event root,
+`A,K,P,a,e,k,p` for a top-level address root, and
+`E,K,P,e,k,p` or `A,K,P,e,k,p` for a nested event or address root,
+respectively. Authored `E` and parent or direct `e` event references always
+have four elements, retaining an empty relay slot when needed and ending with
+the asserted author hint. Authored `A`, `a`, `P`, and `p` tags have two
+elements plus an optional relay. The address-root revision `e` tag has two
+elements plus an optional relay and never an author hint. Top-level `k`
+repeats the supported root kind; nested `k` is exactly `1111`.
+
+Inbound projection accepts only a `RadrootsSignatureVerifiedEvent` and resolves
+the `E`/`A`, `K`, `P`, `e`/`a`, `k`, and selected `p` authority independently
+of tag order. Cardinality, shape, canonical numeric spelling, supported kind,
+coordinate kind and author, event author hints, and direct or nested
+relationships are hard validity rules. Supplemental unknown tags, `q` tags,
+and unselected valid lowercase `p` mentions remain available through the exact
+raw tags and projection. Inbound NIP-22 reference event IDs, public keys, and
+coordinate-author hex accept either ASCII hex case; typed projection normalizes
+those values to lowercase while exact raw tags retain the original spelling.
+Invalid advisory relay and participant metadata is reported through stable
+ordered diagnostics; a well-formed author hint that conflicts with required
+`P` or selected `p` authority is a hard error. This tolerance does not broaden
+the supported roots or authored forms.
+
+`RadrootsAdmittedNip22CommentEvent` keeps the projection bound to the envelope
+whose NIP-01 id and Schnorr signature were verified. Admission proves the
+Comment event and its strict profile only. It does not retrieve a root,
+revision, or parent or prove that the referenced event exists, carries the
+asserted kind, was signed by the asserted author, or is available at a relay.
+
+NIP-10 Reply and NIP-22 Comment references share
+`RadrootsNostrRelayHint`. Relay syntax is independent of the Comment resource
+profile: content is limited to 131072 UTF-8 bytes, a Comment to 1024 tags, all
+tags to 4096 elements including tag names, each element to 4096 UTF-8 bytes,
+aggregate tag-element bytes to 131072, and the compact signed event to 262144
+bytes.
+
+The complete public operation namespace is exactly
+`social.comment.build_authored_draft`,
+`social.comment.project_verified_event`, and
+`social.comment.verify_and_admit_event`. Contract
+`radroots.social.comment.v1` is registry-v6 `TypedOnly` for authoring and
+`AdmissionOnly` for unsigned matching. Generic kind-`1111` signing and client
+publication are reserved before signer access.
+
+`contracts/conformance/vectors/comment/verified_profile.v1.json` is the
+canonical 114-case self-contained Comment corpus. Its authored inputs are
+explicit, and every projection or admission case carries its complete fixed
+signed event JSON rather than a mutation recipe, secret key, or generated base.
+The packaged mirror is byte-identical and exercises exact valid projections,
+diagnostics, resource boundaries, error precedence, and NIP-01 admission.
 
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.
@@ -527,9 +593,10 @@ this contract boundary.
 Every new social codec and every upgraded existing social codec must have deterministic valid and
 invalid conformance vectors before closeout. The FoodAvailability profile vector assigns exact
 valid and invalid case kinds to strict authoring, verified projection, combined verification and
-admission, and revision validation. Other upgraded vectors must include the strict comment,
-reaction, operational-listing, farm, list, and list-set behavior whose public contract changes
-during the refactor.
+admission, and revision validation. The canonical NIP-22 Comment vector assigns all 114 exact
+case ids and kinds to its three governed operations and has a byte-identical packaged fixture.
+Other upgraded vectors must include reaction, operational-listing, farm, list, and list-set
+behavior whose public contract changes during the refactor.
 
 Social vectors are repo-owned and synthetic. They must not depend on application relay state, local
 databases, external services, root fixture catalogs, or ambient machine state.

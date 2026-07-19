@@ -63,7 +63,7 @@ pub mod prelude {
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::client::{
         radroots_nostr_send_food_availability_event, radroots_nostr_send_nip10_reply_event,
-        radroots_nostr_send_post_event,
+        radroots_nostr_send_nip22_comment_event, radroots_nostr_send_post_event,
     };
 
     pub use crate::error::{RadrootsNostrError, RadrootsNostrTagsResolveError};
@@ -75,6 +75,11 @@ pub mod prelude {
     pub use crate::events::{
         jobs::{radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result},
         post::radroots_nostr_post_events_filter,
+    };
+
+    #[cfg(feature = "events")]
+    pub use crate::events::comment::{
+        RadrootsNostrNip22CommentEventBuilder, radroots_nostr_build_nip22_comment_event,
     };
 
     #[cfg(feature = "events")]

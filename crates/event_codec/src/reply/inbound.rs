@@ -11,7 +11,7 @@ use radroots_event::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
-    reply::RadrootsNip10RelayHint,
+    relay_hint::RadrootsNostrRelayHint,
 };
 
 use crate::verification::RadrootsSignatureVerifiedEvent;
@@ -146,7 +146,7 @@ pub struct RadrootsInboundNip10EventReference {
     tag_index: usize,
     raw_tag: Vec<String>,
     event_id: RadrootsEventId,
-    relay: Option<RadrootsNip10RelayHint>,
+    relay: Option<RadrootsNostrRelayHint>,
     author_hint: Option<RadrootsPublicKey>,
 }
 
@@ -163,7 +163,7 @@ impl RadrootsInboundNip10EventReference {
         &self.event_id
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNip10RelayHint> {
+    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -177,7 +177,7 @@ pub struct RadrootsInboundNip10Participant {
     tag_index: usize,
     raw_tag: Vec<String>,
     pubkey: RadrootsPublicKey,
-    relay: Option<RadrootsNip10RelayHint>,
+    relay: Option<RadrootsNostrRelayHint>,
 }
 
 impl RadrootsInboundNip10Participant {
@@ -193,7 +193,7 @@ impl RadrootsInboundNip10Participant {
         &self.pubkey
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNip10RelayHint> {
+    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
         self.relay.as_ref()
     }
 }
@@ -737,10 +737,10 @@ fn project_participants(
 
 fn parse_relay_hint(
     value: Option<&str>,
-) -> Result<Option<RadrootsNip10RelayHint>, RadrootsIdParseError> {
+) -> Result<Option<RadrootsNostrRelayHint>, RadrootsIdParseError> {
     match value {
         None | Some("") => Ok(None),
-        Some(value) => RadrootsNip10RelayHint::parse(value).map(Some),
+        Some(value) => RadrootsNostrRelayHint::parse(value).map(Some),
     }
 }
 
@@ -1009,7 +1009,7 @@ mod tests {
             "a".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1 - prefix.len())
         );
         assert_eq!(relay.len(), RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1);
-        RadrootsNip10RelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
+        RadrootsNostrRelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
 
         let tags = vec![
             vec!["e".to_string(), "a".repeat(64), relay, "root".to_string()],

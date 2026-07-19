@@ -105,7 +105,7 @@ public = [
   "RadrootsAuthoredPhotoUpdate",
   "RadrootsAuthoredAsk",
   "RadrootsNip10ReplyError",
-  "RadrootsNip10RelayHint",
+  "RadrootsNostrRelayHint",
   "RadrootsNip10ReplyReference",
   "RadrootsAuthoredNip10Reply",
   "RadrootsPostDiagnostic",
@@ -125,7 +125,28 @@ public = [
   "RadrootsNip10ReplyProjectionError",
   "RadrootsAdmittedNip10ReplyEvent",
   "RadrootsNip10ReplyAdmissionError",
-  "RadrootsComment",
+  "RadrootsNip22CommentError",
+  "RadrootsNip22CommentRootKind",
+  "RadrootsNip22EventRootReference",
+  "RadrootsNip22AddressRootReference",
+  "RadrootsNip22CommentParentReference",
+  "RadrootsNip22CommentRoot",
+  "RadrootsNip22CommentPosition",
+  "RadrootsAuthoredNip22Comment",
+  "RadrootsNip22CommentDiagnostic",
+  "RadrootsInboundNip22Participant",
+  "RadrootsInboundNip22EventRoot",
+  "RadrootsInboundNip22AddressRoot",
+  "RadrootsInboundNip22CommentRoot",
+  "RadrootsInboundNip22CommentParent",
+  "RadrootsInboundNip22CurrentRevision",
+  "RadrootsInboundNip22TopLevelEventReference",
+  "RadrootsInboundNip22TopLevelAddressReference",
+  "RadrootsInboundNip22CommentPosition",
+  "RadrootsInboundNip22CommentProjection",
+  "RadrootsNip22CommentProjectionError",
+  "RadrootsAdmittedNip22CommentEvent",
+  "RadrootsNip22CommentAdmissionError",
   "RadrootsReaction",
   "RadrootsArticle",
   "RadrootsFileMetadata",
@@ -853,13 +874,14 @@ transport = "none"
 
 [operations.social_reply_build_authored_draft.implementation]
 rust_modules = [
+  "crates/event/src/relay_hint.rs",
   "crates/event/src/reply.rs",
   "crates/event_codec/src/reply/authored.rs",
 ]
 rust_types = [
   "radroots_event::reply::RadrootsAuthoredNip10Reply",
   "radroots_event::reply::RadrootsNip10ReplyError",
-  "radroots_event::reply::RadrootsNip10RelayHint",
+  "radroots_event::relay_hint::RadrootsNostrRelayHint",
   "radroots_event::reply::RadrootsNip10ReplyReference",
 ]
 
@@ -882,9 +904,12 @@ signing = "none"
 transport = "none"
 
 [operations.social_reply_project_verified_event.implementation]
-rust_modules = ["crates/event_codec/src/reply/inbound.rs"]
+rust_modules = [
+  "crates/event/src/relay_hint.rs",
+  "crates/event_codec/src/reply/inbound.rs",
+]
 rust_types = [
-  "radroots_event::reply::RadrootsNip10RelayHint",
+  "radroots_event::relay_hint::RadrootsNostrRelayHint",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -996,23 +1021,114 @@ case_kinds = [
   "social.post.verify_and_admit_event.invalid",
 ]
 
-[operations.social_comment_build_tags]
+[operations.social_comment_build_authored_draft]
 domain = "social"
-id = "social.comment.build_tags"
+id = "social.comment.build_authored_draft"
 stability = "beta"
-inputs = ["RadrootsComment"]
-outputs = ["NostrTags"]
+inputs = ["RadrootsAuthoredNip22Comment"]
+outputs = ["RadrootsNip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
-signing = "native"
-transport = "native"
+signing = "none"
+transport = "none"
 
-[operations.social_comment_build_tags.implementation]
-rust_modules = ["crates/event_codec/src/comment/encode.rs"]
-rust_types = ["radroots_event::comment::RadrootsComment"]
+[operations.social_comment_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/comment.rs",
+  "crates/event/src/relay_hint.rs",
+  "crates/event_codec/src/comment/authored.rs",
+]
+rust_types = [
+  "radroots_event::comment::RadrootsAuthoredNip22Comment",
+  "radroots_event::comment::RadrootsNip22AddressRootReference",
+  "radroots_event::comment::RadrootsNip22CommentError",
+  "radroots_event::comment::RadrootsNip22CommentParentReference",
+  "radroots_event::comment::RadrootsNip22CommentPosition",
+  "radroots_event::comment::RadrootsNip22CommentRoot",
+  "radroots_event::comment::RadrootsNip22CommentRootKind",
+  "radroots_event::comment::RadrootsNip22EventRootReference",
+  "radroots_event::relay_hint::RadrootsNostrRelayHint",
+  "radroots_event::wire::RadrootsNip01EventWireParts",
+]
 
-[operations.social_comment_build_tags.conformance]
-vector = "contracts/conformance/vectors/social/mvp.v1.json"
+[operations.social_comment_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/comment/verified_profile.v1.json"
+case_kinds = [
+  "social.comment.build_authored_draft.valid",
+  "social.comment.build_authored_draft.invalid",
+]
+
+[operations.social_comment_project_verified_event]
+domain = "social"
+id = "social.comment.project_verified_event"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsInboundNip22CommentProjection"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.social_comment_project_verified_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/comment/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22AddressRoot",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentParent",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentPosition",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentProjection",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentRoot",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CurrentRevision",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22EventRoot",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22Participant",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22TopLevelAddressReference",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22TopLevelEventReference",
+  "radroots_event_codec::comment::inbound::RadrootsNip22CommentDiagnostic",
+  "radroots_event_codec::comment::inbound::RadrootsNip22CommentProjectionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_comment_project_verified_event.conformance]
+vector = "contracts/conformance/vectors/comment/verified_profile.v1.json"
+case_kinds = [
+  "social.comment.project_verified_event.valid",
+  "social.comment.project_verified_event.invalid",
+]
+
+[operations.social_comment_verify_and_admit_event]
+domain = "social"
+id = "social.comment.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsAdmittedNip22CommentEvent"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.social_comment_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/comment/admission.rs",
+  "crates/event_codec/src/comment/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::comment::admission::RadrootsAdmittedNip22CommentEvent",
+  "radroots_event_codec::comment::admission::RadrootsNip22CommentAdmissionError",
+  "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentProjection",
+  "radroots_event_codec::comment::inbound::RadrootsNip22CommentProjectionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.social_comment_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/comment/verified_profile.v1.json"
+case_kinds = [
+  "social.comment.verify_and_admit_event.valid",
+  "social.comment.verify_and_admit_event.invalid",
+]
 
 [operations.social_reaction_build_tags]
 domain = "social"

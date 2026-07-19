@@ -49,16 +49,65 @@ malformed advisory relay, author, participant, and citation metadata through
 ordered diagnostics. Root and parent ambiguity or malformed hard anchors
 remain projection failures.
 
-Authored and inbound relay metadata uses the shared
-`RadrootsNip10RelayHint` profile: exact lowercase `ws://` or `wss://`, visible
-ASCII, canonical lowercase DNS or four-octet IPv4 or bracketed pure-hex RFC
-5952 IPv6, canonical optional port `1..65535`, and RFC 3986
+Authored and inbound NIP-10 Reply and NIP-22 Comment relay metadata uses the
+shared `RadrootsNostrRelayHint` profile: exact lowercase `ws://` or `wss://`,
+visible ASCII, canonical lowercase DNS or four-octet IPv4 or bracketed
+pure-hex RFC 5952 IPv6, canonical optional port `1..65535`, and RFC 3986
 path-abempty/query syntax with uppercase `%HH` escapes. IDNA or
 percent-encoded hosts, legacy IPv4, userinfo, fragments, controls,
 backslashes, and normalization-dependent forms are rejected. Inbound
 projection ignores an invalid advisory hint while preserving its exact raw tag
-in ordered diagnostics. Relay syntax remains independent from the 4,096-byte
-Reply tag-element budget.
+in ordered diagnostics. Relay syntax remains independent from each event
+profile's 4,096-byte tag-element budget.
+
+The Comment codec implements the strict Radroots
+[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
+kind-`1111` profile for event or address roots of kind `30402`, `31922`, or
+`31923`. It rejects external `I`/`i` authority and kind-`1` roots.
+`authored_nip22_comment_to_wire_parts` emits only canonical order:
+`E,K,P,e,k,p` for a top-level event, `A,K,P,a,e,k,p` for a top-level
+address, and `E,K,P,e,k,p` or `A,K,P,e,k,p` for a nested event or address.
+Event `E` and parent or direct `e` references always have four elements with a
+relay slot and author hint. Address and participant references have two
+elements plus an optional relay; a top-level address Comment's revision `e`
+has no author hint. Direct `k` repeats the root kind and nested `k` is exactly
+`1111`.
+
+`project_verified_nip22_comment_event` accepts only a
+`RadrootsSignatureVerifiedEvent`. It resolves the `E`/`A`, `K`, `P`, `e`/`a`,
+`k`, and selected `p` authority independently of tag order and treats invalid
+cardinality, shapes, noncanonical kinds, unsupported roots, coordinate
+conflicts, and valid-but-conflicting author hints as hard errors. It preserves
+exact raw tags, supplemental unknown and `q` tags, and distinct unselected
+lowercase `p` mentions. Inbound NIP-22 reference event IDs, public keys, and
+coordinate-author hex accept either ASCII hex case; typed values normalize to
+lowercase while raw tags retain the original spelling. Malformed advisory relay
+and participant metadata produce ordered diagnostics without weakening the
+required authority.
+`verify_and_admit_nip22_comment_event` first verifies the NIP-01 id and Schnorr
+signature, then binds that envelope to
+`RadrootsInboundNip22CommentProjection` in
+`RadrootsAdmittedNip22CommentEvent`; it does not verify any referenced event or
+relay.
+
+The exact Comment operation namespace is
+`social.comment.build_authored_draft`,
+`social.comment.project_verified_event`, and
+`social.comment.verify_and_admit_event`. Registry v6 makes
+`radroots.social.comment.v1` `TypedOnly` for authoring and `AdmissionOnly` for
+matching; registry versions `1` through `5` are stale. Content is limited to
+131072 UTF-8 bytes, a Comment to 1024 tags, all tags to 4096 elements including
+tag names, each element to 4096 bytes, aggregate tag bytes to 131072, and
+compact signed wire JSON to 262144 bytes.
+
+The canonical 114-case self-contained Comment corpus is
+`contracts/conformance/vectors/comment/verified_profile.v1.json`; the packaged
+fixture is byte-identical. Projection and admission cases contain fixed signed
+event JSON, while authored cases contain explicit checked inputs and complete
+wire expectations. The runner consumes these records directly and covers
+valid shapes, diagnostics, exact and over-limit budgets, stable error
+precedence, and NIP-01 admission without secret keys, mutation recipes, or
+ambient state.
 
 The FoodAvailability codec owns four boundaries for the focused
 `radroots.food.availability.v1` kind-`30402` profile. Strict details plus

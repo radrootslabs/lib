@@ -53,18 +53,25 @@ publish policy both pass for the same source revision.
   deprecated positional threading, preserves valid supplemental references as
   citations, and retains malformed advisory metadata as ordered diagnostics
   while keeping every admitted Reply out of root-card classification.
-- Authored and projected NIP-10 relay hints now use one portable, canonical
-  visible-ASCII WebSocket URL profile instead of generic URL normalization.
-  Strict authoring rejects noncanonical hints; tolerant verified projection
-  preserves rejected hints verbatim in ordered raw-tag diagnostics. Relay
-  syntax remains separate from Reply wire-size budgets.
+- Authored and projected NIP-10 Reply and NIP-22 Comment relay hints now share
+  `RadrootsNostrRelayHint`, one portable, canonical visible-ASCII WebSocket URL
+  profile instead of generic URL normalization. Strict authoring rejects
+  noncanonical hints; tolerant verified projection preserves rejected hints
+  verbatim in ordered raw-tag diagnostics. Relay syntax remains separate from
+  each event profile's wire-size budgets.
+- Kind `1111` Comment handling now uses distinct opaque authored, verified
+  projection, admitted-event, and sealed Nostr publication states. The strict
+  NIP-22 profile supports only event or address roots for classified-listing
+  kind `30402` and calendar kinds `31922` and `31923`; ordinary kind `1` and
+  external `I`/`i` references are rejected. Legacy pseudo-thread tags carry no
+  Comment authority, are never authored, and remain raw supplemental input.
 - Typed root posts now enter signing and client publication through an opaque
   builder with no raw tag/content mutation. Generic builder direct signing and
   client publication reject kind `0` plus every kind `1` before signer access;
   externally supplied unsigned events, NIP-46 signing, and signed-event relay
   remain explicit low-level Nostr interoperability with no typed product
   authoring claim.
-- Frozen drafts now carry event-contract registry version `5`, revalidate all
+- Frozen drafts now carry event-contract registry version `6`, revalidate all
   persisted fields and the recomputed event id during deserialization and
   signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
   authoring policies.
@@ -131,6 +138,11 @@ publish policy both pass for the same source revision.
   malformed middle-citation tolerance, participant and relay validation,
   classifier precedence, signature-gated admission, and stable invalid-case
   codes through the public owning APIs.
+- The fixed 114-case NIP-22 corpus executes all three governed Comment
+  operations with complete authored wire, verified projection, diagnostic,
+  admission, Unicode, precedence, and exact resource-limit expectations.
+  Projection and admission inputs are self-contained signed event JSON, and
+  the packaged fixture is byte-identical to the canonical contract vector.
 
 ### Removed
 
@@ -164,6 +176,12 @@ publish policy both pass for the same source revision.
 - The permissive post-reply builder and raw-string net reply publisher were
   removed. Reply signing and client publication now require the typed NIP-10
   Reply boundary.
+- The legacy `RadrootsComment` DTO/Serde model, permissive Comment
+  encode/decode modules, and their public functions were removed. Comment
+  authoring now requires `RadrootsAuthoredNip22Comment`, while inbound use must
+  pass through verified projection or admission.
+- The Reply-owned `RadrootsNip10RelayHint` name was removed. Callers must use
+  the shared `RadrootsNostrRelayHint` type for canonical Nostr tag relay hints.
 
 ### Compatibility
 
@@ -178,10 +196,14 @@ publish policy both pass for the same source revision.
   compatibility version instead of package SemVer. Existing backups stamped by
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
-- Persisted frozen drafts with event-contract registry versions `1`, `2`, `3`,
-  or `4` are rejected and must be reconstructed against registry version `5`;
+- Persisted frozen drafts with event-contract registry versions `1` through
+  `5` are rejected and must be reconstructed against registry version `6`;
   strict Profile plus typed and read-only post contracts can no longer be
   reconstructed as generic drafts.
+- Generic builder signing and client publication reject kind `1111` before
+  signer access. Product Comment publication must use the sealed NIP-22
+  builder; relaying an already signed event remains a generic transport
+  operation without a typed authoring claim.
 - This breaking capsule revision must not be pinned or published through
   downstream product clients until `radroots_app_rt` is migrated, generated FFI
   bindings are rebuilt, and downstream compile and contract qualification pass.

@@ -30,22 +30,53 @@ image-typed byte-verified Blossom descriptor. That descriptor state is not an
 upload receipt; BUD-02 completion remains a runtime prerequisite before
 signing.
 
-The Reply module exposes opaque `RadrootsNip10RelayHint`,
-`RadrootsNip10ReplyReference`, and `RadrootsAuthoredNip10Reply` types for strict
-direct and nested kind-1 authoring. The relay hint is a byte-stable subset of
-WebSocket URLs: exact lowercase `ws://` or `wss://`, visible ASCII, canonical
-lowercase DNS or four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6,
-canonical optional port `1..65535`, and RFC 3986 path-abempty/query syntax
-with uppercase `%HH` escapes. It rejects IDNA and percent-encoded hosts,
-legacy IPv4, userinfo, fragments, controls, backslashes, and
-normalization-dependent spellings.
+The shared relay-hint module exposes `RadrootsNostrRelayHint` for NIP-10 Reply
+and NIP-22 Comment references. It is a byte-stable subset of WebSocket URLs:
+exact lowercase `ws://` or `wss://`, visible ASCII, canonical lowercase DNS or
+four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, canonical optional port
+`1..65535`, and RFC 3986 path-abempty/query syntax with uppercase `%HH`
+escapes. It rejects IDNA and percent-encoded hosts, legacy IPv4, userinfo,
+fragments, controls, backslashes, and normalization-dependent spellings.
 
-References carry a validated event id, referenced author, and optional
-canonical relay hint; construction emits either one marked root or distinct
-marked root and parent references. Relay-hint syntax is not a wire-size claim:
-Reply construction separately enforces the 4,096-byte tag-element ceiling.
-These values prove syntax and authored shape, not target existence, target
-kind, signature, author, or relay availability.
+The Reply module exposes opaque `RadrootsNip10ReplyReference` and
+`RadrootsAuthoredNip10Reply` types for strict direct and nested kind-1
+authoring. References carry a validated event id, referenced author, and
+optional shared relay hint; construction emits either one marked root or
+distinct marked root and parent references. Relay-hint syntax is not a
+wire-size claim: Reply construction separately enforces the 4,096-byte
+tag-element ceiling. These values prove syntax and authored shape, not target
+existence, target kind, signature, author, or relay availability.
+
+The Comment module implements the strict Radroots
+[NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
+kind-`1111` profile. `RadrootsAuthoredNip22Comment` and its opaque event-root,
+address-root, parent, position, and root-kind values admit only kind-`30402`,
+kind-`31922`, or kind-`31923` event or address roots. External `I`/`i`
+references and kind-`1` roots are unsupported. The authored model has no Serde
+construction path.
+
+Canonical authoring emits `E,K,P,e,k,p` for a top-level event root,
+`A,K,P,a,e,k,p` for a top-level address root, or `E,K,P,e,k,p` and
+`A,K,P,e,k,p` for nested event and address roots. Event references always
+contain four elements, including an empty relay position when no hint exists
+and a final author hint. Address and participant references contain two
+elements plus an optional relay; an address root's current-revision `e` tag has
+no author hint. A direct `k` repeats the root kind and a nested `k` is `1111`.
+
+The event-contract registry v6 classifies `radroots.social.comment.v1` as
+`TypedOnly` and `AdmissionOnly`; serialized registry versions `1` through `5`
+are stale. Generic kind-`1111` draft and signing paths cannot claim the typed
+contract. The Comment resource profile limits content to 131072 UTF-8 bytes,
+tags to 1024, total tag elements including names to 4096, each element to 4096
+bytes, aggregate tag bytes to 131072, and compact signed wire JSON to 262144
+bytes. `RadrootsInboundNip22CommentProjection` and
+`RadrootsAdmittedNip22CommentEvent` provide verified inbound projection and
+admission. The three governed Comment operations are
+`social.comment.build_authored_draft`,
+`social.comment.project_verified_event`, and
+`social.comment.verify_and_admit_event`; they and the canonical self-contained
+114-case corpus are owned by `radroots_event_codec` and
+`contracts/conformance`.
 
 Kind `30402` has a raw, allocation-free marker partition before profile-specific
 tag-shape validation. Presence of `radroots:price_unit` or `radroots:quantity` selects

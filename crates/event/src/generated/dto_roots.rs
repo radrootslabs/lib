@@ -7,7 +7,6 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::RadrootsEventRef>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::account::RadrootsAccountClaim>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::app_data::RadrootsAppData>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::comment::RadrootsComment>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::coop::RadrootsCoop>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::coop::RadrootsCoopLocation>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::coop::RadrootsCoopRef>(),

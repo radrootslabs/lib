@@ -64,3 +64,7 @@ required-features = ["events"]
 [[test]]
 name = "nip10_reply_profile"
 required-features = ["codec", "events"]
+
+[[test]]
+name = "nip22_comment_profile"
+required-features = ["codec", "events"]
