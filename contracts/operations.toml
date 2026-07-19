@@ -1216,18 +1216,29 @@ domain = "trade"
 id = "trade.parse_classified_listing_address"
 stability = "beta"
 inputs = ["listing_addr"]
-outputs = ["RadrootsClassifiedListingAddress"]
+outputs = ["RadrootsClassifiedListingAddressParts"]
 error_class = "address_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
 [operations.trade_parse_classified_listing_address.implementation]
-rust_modules = ["crates/event/src/ids.rs"]
-rust_types = ["radroots_event::ids::RadrootsClassifiedListingAddress"]
+rust_modules = [
+  "crates/event/src/ids.rs",
+  "crates/trade/src/operational_listing/mod.rs",
+]
+rust_types = [
+  "radroots_event::ids::RadrootsClassifiedListingAddress",
+  "radroots_event::ids::RadrootsIdParseError",
+  "radroots_trade::operational_listing::RadrootsClassifiedListingAddressParts",
+]
 
 [operations.trade_parse_classified_listing_address.conformance]
 vector = "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json"
+case_kinds = [
+  "trade.parse_classified_listing_address.valid",
+  "trade.parse_classified_listing_address.invalid",
+]
 
 [operations.trade_reduce_records]
 domain = "trade"
@@ -1262,14 +1273,22 @@ signing = "native"
 transport = "native"
 
 [operations.trade_validation_validate_operational_listing_event.implementation]
-rust_modules = ["crates/trade/src/operational_listing/validation.rs"]
+rust_modules = [
+  "crates/event/src/trade_validation.rs",
+  "crates/trade/src/operational_listing/validation.rs",
+]
 rust_types = [
   "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::trade_validation::RadrootsOperationalListingValidationError",
   "radroots_trade::operational_listing::validation::RadrootsOperationalListingTradeProjection",
 ]
 
 [operations.trade_validation_validate_operational_listing_event.conformance]
 vector = "contracts/conformance/vectors/trade_validation/validate_operational_listing_event.v1.json"
+case_kinds = [
+  "trade_validation.validate_operational_listing_event.valid",
+  "trade_validation.validate_operational_listing_event.invalid",
+]
 
 [operations.knowledge_contract_manifest_json]
 domain = "knowledge"

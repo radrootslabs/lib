@@ -30,7 +30,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 9] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 14] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -52,6 +52,18 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 9] = [
         "crates/event_codec/tests/fixtures/calendar_radroots_profile.v1.json",
     ),
     (
+        "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
+        "crates/event_codec/tests/fixtures/operational_listing_tags_full.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/operational_listing/build_draft.v1.json",
+        "crates/event_codec/tests/fixtures/operational_listing_build_draft.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/operational_listing/build_tags.v1.json",
+        "crates/event_codec/tests/fixtures/operational_listing_build_tags.v1.json",
+    ),
+    (
         "contracts/conformance/vectors/operational_listing/parse_event.v1.json",
         "crates/event_codec/tests/fixtures/operational_listing_parse_event.v1.json",
     ),
@@ -66,6 +78,14 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 9] = [
     (
         "contracts/conformance/vectors/post/verified_profiles.v1.json",
         "crates/event_codec/tests/fixtures/post_verified_profiles.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json",
+        "crates/trade/tests/fixtures/parse_classified_listing_address.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/trade_validation/validate_operational_listing_event.v1.json",
+        "crates/trade/tests/fixtures/validate_operational_listing_event.v1.json",
     ),
 ];
 const KNOWLEDGE_MVP_SUPPORT_CONTRACT_IDS: [&str; 8] = [
@@ -6579,14 +6599,7 @@ vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
                 .join("metadata.v1.json"),
             SYNTHETIC_CONFORMANCE_VECTOR,
         );
-        write_file(
-            &root
-                .join("contracts")
-                .join("conformance")
-                .join("vectors")
-                .join("operational_listing")
-                .join("build_draft.v1.json"),
-            r#"{
+        let operational_listing_vector = r#"{
   "suite": "operational_listing",
   "contract_version": "1.0.0",
   "vectors": [
@@ -6598,7 +6611,24 @@ vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
     }
   ]
 }
-"#,
+"#;
+        write_file(
+            &root
+                .join("contracts")
+                .join("conformance")
+                .join("vectors")
+                .join("operational_listing")
+                .join("build_draft.v1.json"),
+            operational_listing_vector,
+        );
+        write_file(
+            &root
+                .join("crates")
+                .join("event_codec")
+                .join("tests")
+                .join("fixtures")
+                .join("operational_listing_build_draft.v1.json"),
+            operational_listing_vector,
         );
     }
 
